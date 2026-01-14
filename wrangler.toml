@@ -1,0 +1,28 @@
+name = "minefolio"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "./build/client"
+
+# 環境変数（ローカル開発用）
+[vars]
+APP_URL = "http://localhost:5173"
+
+# 本番環境変数
+[env.production.vars]
+APP_URL = "https://minefolio.pages.dev"
+
+[[d1_databases]]
+binding = "minefolio_db"
+database_name = "minefolio-db"
+database_id = "9250eb59-9aa9-4bff-8ed3-6e58d8baf139"
+
+# Cron Triggers
+[triggers]
+crons = [
+  "0 0 * * *",  # MCID同期 (毎日0:00 UTC)
+  "0 1 * * *",  # Speedrun.com同期 (毎日1:00 UTC)
+]
+
+# KV Namespaces（オプション）
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your_kv_namespace_id"

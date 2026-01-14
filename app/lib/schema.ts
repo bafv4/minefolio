@@ -1,0 +1,441 @@
+import { createId } from "@paralleldrive/cuid2";
+import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
+
+// ============================================
+// 1. users（ユーザー）
+// ============================================
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  discordId: text("discord_id").unique().notNull(),
+  mcid: text("mcid").unique().notNull(),
+  uuid: text("uuid").unique().notNull(),
+  displayName: text("display_name"),
+  discordAvatar: text("discord_avatar"),
+  bio: text("bio"),
+  hasImported: integer("has_imported", { mode: "boolean" }).default(false).notNull(),
+
+  // プロフィール設定
+  profileVisibility: text("profile_visibility", { enum: ["public", "unlisted", "private"] }).default("public").notNull(),
+  location: text("location"),
+  pronouns: text("pronouns"),
+
+  // Speedrun.com連携
+  speedruncomUsername: text("speedruncom_username"),
+  speedruncomId: text("speedruncom_id"),
+  speedruncomLastSync: integer("speedruncom_last_sync", { mode: "timestamp" }),
+
+  // 統計
+  profileViews: integer("profile_views").default(0).notNull(),
+  lastActive: integer("last_active", { mode: "timestamp" }),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_users_discord_id").on(table.discordId),
+  index("idx_users_mcid").on(table.mcid),
+  index("idx_users_uuid").on(table.uuid),
+  index("idx_users_speedruncom_id").on(table.speedruncomId),
+]);
+
+// ============================================
+// 2. player_configs（プレイヤー設定）
+// ============================================
+export const playerConfigs = sqliteTable("player_configs", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+
+  // キーボード設定
+  keyboardLayout: text("keyboard_layout", { enum: ["JIS", "US", "JIS_TKL", "US_TKL"] }),
+  keyboardModel: text("keyboard_model"),
+
+  // マウス設定
+  mouseDpi: integer("mouse_dpi"),
+  gameSensitivity: real("game_sensitivity"),
+  windowsSpeed: integer("windows_speed"),
+  mouseAcceleration: integer("mouse_acceleration", { mode: "boolean" }).default(false),
+  rawInput: integer("raw_input", { mode: "boolean" }).default(true),
+  cm360: real("cm360"),
+  mouseModel: text("mouse_model"),
+
+  // ゲーム内設定
+  toggleSprint: integer("toggle_sprint", { mode: "boolean" }),
+  toggleSneak: integer("toggle_sneak", { mode: "boolean" }),
+  autoJump: integer("auto_jump", { mode: "boolean" }),
+  gameLanguage: text("game_language"),
+
+  // 指割り当て（JSON）
+  fingerAssignments: text("finger_assignments"), // JSON.stringify/parse
+
+  // その他
+  notes: text("notes"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+// ============================================
+// 3. keybindings（キーバインド）
+// ============================================
+export const keybindings = sqliteTable("keybindings", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  keyCode: text("key_code").notNull(),
+  category: text("category", { enum: ["movement", "combat", "inventory", "ui"] }).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_keybindings_user_action").on(table.userId, table.action),
+  index("idx_keybindings_user_id").on(table.userId),
+  index("idx_keybindings_category").on(table.category),
+]);
+
+// ============================================
+// 4. custom_keys（カスタムキー定義）
+// ============================================
+export const customKeys = sqliteTable("custom_keys", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  keyCode: text("key_code").notNull(),
+  keyName: text("key_name").notNull(),
+  category: text("category", { enum: ["mouse", "keyboard"] }).notNull(),
+  position: text("position"), // JSON { x: number, y: number }
+  size: text("size"), // JSON { width: number, height: number }
+  notes: text("notes"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_custom_keys_user_keycode").on(table.userId, table.keyCode),
+]);
+
+// ============================================
+// 5. key_remaps（キーリマップ）
+// ============================================
+export const keyRemaps = sqliteTable("key_remaps", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sourceKey: text("source_key").notNull(),
+  targetKey: text("target_key"),
+  software: text("software"),
+  notes: text("notes"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_key_remaps_user_source").on(table.userId, table.sourceKey),
+]);
+
+// ============================================
+// 6. external_tools（外部ツール連携）
+// ============================================
+export const externalTools = sqliteTable("external_tools", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  triggerKey: text("trigger_key").notNull(),
+  toolName: text("tool_name").notNull(),
+  actionName: text("action_name").notNull(),
+  description: text("description"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_external_tools_user_trigger_tool").on(table.userId, table.triggerKey, table.toolName),
+]);
+
+// ============================================
+// 7. item_layouts（アイテム配置）
+// ============================================
+export const itemLayouts = sqliteTable("item_layouts", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  segment: text("segment").notNull(), // "overworld" | "nether" | "end" | "stronghold" | "custom_*"
+  slots: text("slots").notNull(), // JSON配列
+  offhand: text("offhand"), // JSON配列
+  notes: text("notes"),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_item_layouts_user_segment").on(table.userId, table.segment),
+]);
+
+// ============================================
+// 8. search_crafts（サーチクラフト）
+// ============================================
+export const searchCrafts = sqliteTable("search_crafts", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sequence: integer("sequence").notNull(),
+  items: text("items").notNull(), // JSON配列
+  keys: text("keys").notNull(), // JSON配列
+  searchStr: text("search_str"),
+  comment: text("comment"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_search_crafts_user_sequence").on(table.userId, table.sequence),
+]);
+
+// ============================================
+// 9. social_links（ソーシャルリンク）
+// ============================================
+export const socialLinks = sqliteTable("social_links", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  platform: text("platform", { enum: ["speedruncom", "youtube", "twitch", "twitter", "discord", "custom"] }).notNull(),
+  url: text("url").notNull(),
+  username: text("username"),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_social_links_user_platform").on(table.userId, table.platform),
+]);
+
+// ============================================
+// 10. category_records（記録・目標統合）
+// ============================================
+export const categoryRecords = sqliteTable("category_records", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // カテゴリ情報
+  category: text("category").notNull(),
+  categoryDisplayName: text("category_display_name").notNull(),
+  subcategory: text("subcategory"),
+  version: text("version"),
+
+  // 記録タイプ
+  recordType: text("record_type", { enum: ["speedruncom", "ranked", "custom"] }).notNull(),
+
+  // 自己ベスト（手動入力用）
+  personalBest: integer("personal_best"), // ミリ秒
+  pbDate: integer("pb_date", { mode: "timestamp" }),
+  pbVideoUrl: text("pb_video_url"),
+  pbNotes: text("pb_notes"),
+
+  // 目標
+  targetTime: integer("target_time"), // ミリ秒
+  targetDeadline: integer("target_deadline", { mode: "timestamp" }),
+  targetNotes: text("target_notes"),
+  achieved: integer("achieved", { mode: "boolean" }).default(false).notNull(),
+  achievedAt: integer("achieved_at", { mode: "timestamp" }),
+
+  // 表示設定
+  isVisible: integer("is_visible", { mode: "boolean" }).default(true).notNull(),
+  isFeatured: integer("is_featured", { mode: "boolean" }).default(false).notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_category_records_user_category_type").on(table.userId, table.category, table.recordType),
+  index("idx_category_records_user_id").on(table.userId),
+  index("idx_category_records_category").on(table.category),
+  index("idx_category_records_type").on(table.recordType),
+  index("idx_category_records_featured").on(table.isFeatured),
+]);
+
+// ============================================
+// 11. custom_fields（カスタム項目）
+// ============================================
+export const customFields = sqliteTable("custom_fields", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fieldName: text("field_name").notNull(),
+  fieldValue: text("field_value").notNull(),
+  fieldType: text("field_type", { enum: ["text", "number", "url", "date"] }).default("text").notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+// ============================================
+// 12. external_stats（外部サービス統計キャッシュ）
+// ============================================
+export const externalStats = sqliteTable("external_stats", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  service: text("service", { enum: ["speedruncom", "ranked"] }).notNull(),
+  data: text("data").notNull(), // JSON
+  lastFetched: integer("last_fetched", { mode: "timestamp" }).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_external_stats_user_service").on(table.userId, table.service),
+  index("idx_external_stats_user_id").on(table.userId),
+  index("idx_external_stats_service").on(table.service),
+]);
+
+// ============================================
+// Better Auth 用テーブル
+// ============================================
+export const authUsers = sqliteTable("auth_users", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" }),
+  image: text("image"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const authSessions = sqliteTable("auth_sessions", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  token: text("token").unique().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const authAccounts = sqliteTable("auth_accounts", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const authVerifications = sqliteTable("auth_verifications", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+// ============================================
+// Relations（リレーション定義）
+// ============================================
+export const usersRelations = relations(users, ({ one, many }) => ({
+  playerConfig: one(playerConfigs, {
+    fields: [users.id],
+    references: [playerConfigs.userId],
+  }),
+  keybindings: many(keybindings),
+  customKeys: many(customKeys),
+  keyRemaps: many(keyRemaps),
+  externalTools: many(externalTools),
+  itemLayouts: many(itemLayouts),
+  searchCrafts: many(searchCrafts),
+  socialLinks: many(socialLinks),
+  categoryRecords: many(categoryRecords),
+  customFields: many(customFields),
+  externalStats: many(externalStats),
+}));
+
+export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
+  user: one(users, {
+    fields: [playerConfigs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const keybindingsRelations = relations(keybindings, ({ one }) => ({
+  user: one(users, {
+    fields: [keybindings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const customKeysRelations = relations(customKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [customKeys.userId],
+    references: [users.id],
+  }),
+}));
+
+export const keyRemapsRelations = relations(keyRemaps, ({ one }) => ({
+  user: one(users, {
+    fields: [keyRemaps.userId],
+    references: [users.id],
+  }),
+}));
+
+export const externalToolsRelations = relations(externalTools, ({ one }) => ({
+  user: one(users, {
+    fields: [externalTools.userId],
+    references: [users.id],
+  }),
+}));
+
+export const itemLayoutsRelations = relations(itemLayouts, ({ one }) => ({
+  user: one(users, {
+    fields: [itemLayouts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const searchCraftsRelations = relations(searchCrafts, ({ one }) => ({
+  user: one(users, {
+    fields: [searchCrafts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const socialLinksRelations = relations(socialLinks, ({ one }) => ({
+  user: one(users, {
+    fields: [socialLinks.userId],
+    references: [users.id],
+  }),
+}));
+
+export const categoryRecordsRelations = relations(categoryRecords, ({ one }) => ({
+  user: one(users, {
+    fields: [categoryRecords.userId],
+    references: [users.id],
+  }),
+}));
+
+export const customFieldsRelations = relations(customFields, ({ one }) => ({
+  user: one(users, {
+    fields: [customFields.userId],
+    references: [users.id],
+  }),
+}));
+
+export const externalStatsRelations = relations(externalStats, ({ one }) => ({
+  user: one(users, {
+    fields: [externalStats.userId],
+    references: [users.id],
+  }),
+}));
+
+// ============================================
+// 型エクスポート
+// ============================================
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type PlayerConfig = typeof playerConfigs.$inferSelect;
+export type NewPlayerConfig = typeof playerConfigs.$inferInsert;
+export type Keybinding = typeof keybindings.$inferSelect;
+export type NewKeybinding = typeof keybindings.$inferInsert;
+export type CustomKey = typeof customKeys.$inferSelect;
+export type KeyRemap = typeof keyRemaps.$inferSelect;
+export type ExternalTool = typeof externalTools.$inferSelect;
+export type ItemLayout = typeof itemLayouts.$inferSelect;
+export type SearchCraft = typeof searchCrafts.$inferSelect;
+export type SocialLink = typeof socialLinks.$inferSelect;
+export type CategoryRecord = typeof categoryRecords.$inferSelect;
+export type CustomField = typeof customFields.$inferSelect;
+export type ExternalStat = typeof externalStats.$inferSelect;
