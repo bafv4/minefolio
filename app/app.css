@@ -4,8 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Zen Kaku Gothic New", "Inter", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
+    "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 html,
@@ -56,6 +58,11 @@ body {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-finger-pinky: var(--finger-pinky);
+  --color-finger-ring: var(--finger-ring);
+  --color-finger-middle: var(--finger-middle);
+  --color-finger-index: var(--finger-index);
+  --color-finger-thumb: var(--finger-thumb);
 }
 
 :root {
@@ -91,6 +98,31 @@ body {
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* Semantic colors */
+  --success: oklch(0.723 0.191 142.303);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.129 0.042 264.695);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(1 0 0);
+
+  /* Keybinding category colors */
+  --key-movement: oklch(0.723 0.191 142.303);
+  --key-combat: oklch(0.623 0.214 259.815);
+  --key-inventory: oklch(0.828 0.189 84.429);
+  --key-hotbar: oklch(0.577 0.245 27.325);
+  --key-ui: oklch(0.627 0.265 303.9);
+
+  /* Finger assignment colors (pastel) */
+  --finger-pinky: oklch(0.85 0.12 350);
+  --finger-ring: oklch(0.82 0.12 290);
+  --finger-middle: oklch(0.85 0.10 230);
+  --finger-index: oklch(0.82 0.12 175);
+  --finger-thumb: oklch(0.85 0.12 145);
+
+  /* Discord brand color */
+  --discord: oklch(0.546 0.195 270.769);
 }
 
 .dark {
@@ -125,6 +157,28 @@ body {
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+
+  /* Semantic colors (dark mode adjustments) */
+  --success: oklch(0.792 0.209 151.711);
+  --success-foreground: oklch(0.129 0.042 264.695);
+  --warning: oklch(0.852 0.199 91.936);
+  --warning-foreground: oklch(0.129 0.042 264.695);
+  --info: oklch(0.707 0.165 254.624);
+  --info-foreground: oklch(0.129 0.042 264.695);
+
+  /* Keybinding category colors (brighter for dark mode) */
+  --key-movement: oklch(0.792 0.209 151.711);
+  --key-combat: oklch(0.707 0.165 254.624);
+  --key-inventory: oklch(0.852 0.199 91.936);
+  --key-hotbar: oklch(0.704 0.191 22.216);
+  --key-ui: oklch(0.714 0.203 305.504);
+
+  /* Finger assignment colors (darker for dark mode) */
+  --finger-pinky: oklch(0.55 0.15 350);
+  --finger-ring: oklch(0.52 0.15 290);
+  --finger-middle: oklch(0.55 0.12 230);
+  --finger-index: oklch(0.52 0.15 175);
+  --finger-thumb: oklch(0.55 0.15 145);
 }
 
 @layer base {
@@ -133,5 +187,47 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Interactive elements cursor styles */
+  a,
+  button,
+  [role="button"],
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"],
+  select {
+    cursor: pointer;
+  }
+
+  input:not([type="submit"]):not([type="button"]):not([type="reset"]),
+  textarea {
+    cursor: text;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  button:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* Focus visible styles for accessibility */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Interactive link styles */
+  .link-hover {
+    @apply transition-colors duration-200 hover:text-primary;
+  }
+
+  /* Minecraft pixelated image style */
+  .pixelated {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
   }
 }

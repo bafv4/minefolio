@@ -17,8 +17,17 @@ export const users = sqliteTable("users", {
 
   // プロフィール設定
   profileVisibility: text("profile_visibility", { enum: ["public", "unlisted", "private"] }).default("public").notNull(),
+  profilePose: text("profile_pose", { enum: ["standing", "walking", "waving"] }).default("waving"),
   location: text("location"),
   pronouns: text("pronouns"),
+  defaultProfileTab: text("default_profile_tab", { enum: ["keybindings", "records", "devices", "settings"] }).default("keybindings"),
+  featuredVideoUrl: text("featured_video_url"),
+
+  // プレイヤー情報
+  mainEdition: text("main_edition", { enum: ["java", "bedrock"] }),
+  mainPlatform: text("main_platform", { enum: ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] }),
+  role: text("role", { enum: ["viewer", "runner"] }),
+  shortBio: text("short_bio"),
 
   // Speedrun.com連携
   speedruncomUsername: text("speedruncom_username"),
@@ -53,6 +62,7 @@ export const playerConfigs = sqliteTable("player_configs", {
   mouseDpi: integer("mouse_dpi"),
   gameSensitivity: real("game_sensitivity"),
   windowsSpeed: integer("windows_speed"),
+  windowsSpeedMultiplier: real("windows_speed_multiplier"), // 独自係数（小数）、設定時はwindowsSpeedより優先
   mouseAcceleration: integer("mouse_acceleration", { mode: "boolean" }).default(false),
   rawInput: integer("raw_input", { mode: "boolean" }).default(true),
   cm360: real("cm360"),
@@ -63,6 +73,8 @@ export const playerConfigs = sqliteTable("player_configs", {
   toggleSneak: integer("toggle_sneak", { mode: "boolean" }),
   autoJump: integer("auto_jump", { mode: "boolean" }),
   gameLanguage: text("game_language"),
+  fov: integer("fov"),
+  guiScale: integer("gui_scale"),
 
   // 指割り当て（JSON）
   fingerAssignments: text("finger_assignments"), // JSON.stringify/parse
@@ -187,9 +199,8 @@ export const searchCrafts = sqliteTable("search_crafts", {
 export const socialLinks = sqliteTable("social_links", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  platform: text("platform", { enum: ["speedruncom", "youtube", "twitch", "twitter", "discord", "custom"] }).notNull(),
-  url: text("url").notNull(),
-  username: text("username"),
+  platform: text("platform", { enum: ["speedruncom", "youtube", "twitch", "twitter"] }).notNull(),
+  identifier: text("identifier").notNull(), // ユーザー名やチャンネルID
   displayOrder: integer("display_order").default(0).notNull(),
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//private/tmp/claude/-Users-bafv4-dev-minefolio/tasks/**)"
+    ]
+  }
+}

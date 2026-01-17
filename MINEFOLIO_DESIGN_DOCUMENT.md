@@ -1,8 +1,8 @@
 # Minefolio - 総合設計書（最終版）
 
-**バージョン**: 1.0 Final  
-**最終更新**: 2026年1月  
-**プロジェクト名**: Minefolio  
+**バージョン**: 1.1
+**最終更新**: 2026年1月17日
+**プロジェクト名**: Minefolio
 **説明**: Minecraft Java Edition スピードランナーのための総合ポートフォリオサイト
 
 ---
@@ -19,6 +19,8 @@
 8. [外部サービス連携](#8-外部サービス連携)
 9. [実装優先順位](#9-実装優先順位)
 10. [UI/UXコンセプト](#10-uiuxコンセプト)
+11. [実装変更履歴](#11-実装変更履歴)
+12. [未実装項目一覧](#12-未実装項目一覧)
 
 ---
 
@@ -451,21 +453,23 @@ git push origin main
   discordAvatar: string? // Discord avatar URL
   bio: text? // 自己紹介（Markdown対応）
   hasImported: boolean (default: false) // 既存データインポート済みフラグ
-  
+
   // プロフィール設定
   profileVisibility: string (default: "public") // "public" | "unlisted" | "private"
   location: string? // "Japan", "USA", etc.
   pronouns: string? // "he/him", "she/her", "they/them", etc.
-  
+  defaultProfileTab: string (default: "keybindings") // "keybindings" | "records" | "devices" | "settings"
+  featuredVideoUrl: string? // おすすめ動画（YouTube URL）
+
   // Speedrun.com連携
   speedruncomUsername: string? // Speedrun.comユーザー名
   speedruncomId: string? // Speedrun.com User ID（API用）
   speedruncomLastSync: timestamp? // 最終同期日時
-  
+
   // 統計
   profileViews: integer (default: 0)
   lastActive: timestamp?
-  
+
   createdAt: timestamp (default: now())
   updatedAt: timestamp (default: now())
 }
@@ -483,11 +487,11 @@ CREATE INDEX idx_users_speedruncom_id ON users(speedruncom_id);
 {
   id: string (cuid, PK)
   userId: string (FK: users.id, unique, NOT NULL)
-  
+
   // キーボード設定
   keyboardLayout: string? // "JIS" | "US" | "JIS_TKL" | "US_TKL"
   keyboardModel: string? // 機種名
-  
+
   // マウス設定
   mouseDpi: integer?
   gameSensitivity: real? // 0.0 - 1.0
@@ -496,19 +500,21 @@ CREATE INDEX idx_users_speedruncom_id ON users(speedruncom_id);
   rawInput: boolean (default: true)
   cm360: real? // 自動計算値
   mouseModel: string?
-  
+
   // ゲーム内設定
   toggleSprint: boolean?
   toggleSneak: boolean?
   autoJump: boolean?
   gameLanguage: string?
-  
+  fov: integer? // 視野角（30-110）
+  guiScale: integer? // GUIスケール（1-4）
+
   // 指割り当て（JSON）
   fingerAssignments: json? // { "KeyW": ["left-middle"], "Space": ["left-thumb", "right-thumb"] }
-  
+
   // その他
   notes: text?
-  
+
   createdAt: timestamp
   updatedAt: timestamp
 }
@@ -1258,103 +1264,122 @@ export const routes = [
     children: [
       // ホーム（プレイヤー一覧）
       { index: true, element: <Home /> },
-      
+
       // 認証
       { path: "login", element: <Login /> },
       { path: "onboarding", element: <Onboarding /> },
       { path: "import", element: <Import /> },
-      
+
       // プレイヤープロフィール
-      { 
-        path: "player/:mcid", 
+      {
+        path: "player/:mcid",
         element: <PlayerProfile />,
-        children: [
-          { index: true, element: <ProfileOverview /> },
-          { path: "keybindings", element: <ProfileKeybindings /> },
-          { path: "devices", element: <ProfileDevices /> },
-          { path: "items", element: <ProfileItems /> },
-        ]
       },
-      
+
       // 自分のプロフィール編集
       {
         path: "me",
         element: <ProtectedLayout />,
         children: [
           { index: true, element: <MyProfile /> },
-          { path: "edit", element: <EditProfile /> },
+          { path: "edit", element: <EditProfile /> },      // ソーシャルリンク統合
           { path: "records", element: <EditRecords /> },
-          { path: "social", element: <EditSocialLinks /> },
           { path: "keybindings", element: <EditKeybindings /> },
           { path: "devices", element: <EditDevices /> },
+          // 以下はナビから非表示（ファイルは残す）
           { path: "items", element: <EditItemLayouts /> },
           { path: "search-craft", element: <EditSearchCraft /> },
         ],
       },
-      
-      // 一覧・ランキング
+
+      // 一覧
       { path: "browse", element: <Browse /> },
-      { path: "browse/keybindings", element: <BrowseKeybindings /> },
-      { path: "browse/devices", element: <BrowseDevices /> },
-      { path: "rankings", element: <Rankings /> },
-      { path: "rankings/elo", element: <RankingsElo /> },
-      { path: "rankings/:category", element: <RankingsCategory /> },
-      
-      // 統計
-      { path: "stats", element: <Stats /> },
-      { path: "stats/keys", element: <KeyStats /> },
-      { path: "stats/devices", element: <DeviceStats /> },
-      
-      // 検索
-      { path: "search", element: <Search /> },
     ],
   },
 ];
 ```
 
-### 7.2 主要画面
+### 7.2 ナビゲーション構成
 
-#### 7.2.1 Home（プレイヤー一覧）
+#### ヘッダーナビ
+```
+ホーム | プレイヤー一覧
+```
+※ランキング、統計はナビから削除
+
+#### ダッシュボードナビ（/me）
+```
+概要 | プロフィール編集 | 記録 | キー配置 | デバイス
+```
+※ソーシャルリンクはプロフィール編集に統合、アイテム配置・サーチクラフトはナビから非表示
+
+### 7.3 主要画面
+
+#### 7.3.1 Home（プレイヤー一覧）
+
+**キャッチコピー:** `MCSR Portfolio`
+
+**CTAボタン:**
+- `プロフィールを作る` → ログインページへ
+- `ランナーを探す` → プレイヤー一覧へ
 
 **表示内容**:
-- ヒーローセクション
+- ヒーローセクション（キャッチコピー、CTAボタン）
 - 検索バー
-- フィルター（カテゴリー、Elo）
-- プレイヤーカード（4列グリッド）
+- プレイヤーカード（3列グリッド）
 - ページネーション
 
-#### 7.2.2 ProfileOverview（記録・目標統合表示）
+#### 7.3.2 プレイヤーカード
 
-```tsx
-<Card>
-  <CardHeader>
-    <CardTitle>Records & Goals</CardTitle>
-  </CardHeader>
-  
-  <CardContent className="space-y-4">
-    {records.map(record => (
-      <RecordCard key={record.id} record={record} />
-    ))}
-  </CardContent>
-</Card>
+```
+┌─────────────────────┐
+│  [アバター]          │
+│  表示名              │
+│  @mcid              │
+│  "短いbio..."        │  ← bioがあれば表示（2行まで）
+│  📍 場所            │
+└─────────────────────┘
 ```
 
-**RecordCard**:
-- カテゴリ名（Featured Badge、External Badge）
-- Personal Best（外部APIまたは手動入力）
-  - タイム、ランク、日付、動画リンク
-- Target Time（目標タイム）
-  - 期限、達成状況
-- Progress Bar（目標がある場合）
+- 注目記録は削除
+- bioがなければbio欄は非表示
 
-#### 7.2.3 EditRecords（記録・目標編集）
+#### 7.3.3 プロフィール編集（/me/edit）
 
-**表示内容**:
-- Speedrun.com連携状態
-- 記録一覧
-  - 外部連携カテゴリ（PB表示のみ、目標設定可能）
-  - カスタムカテゴリ（PB・目標両方編集可能）
-- カスタムカテゴリ追加フォーム
+**セクション構成:**
+```
+アバター
+├── Minecraftアカウントと同期（表示のみ）
+
+基本情報
+├── 表示名
+├── 自己紹介（bio）
+├── 場所
+└── 代名詞
+
+ソーシャルリンク（統合）
+├── プラットフォーム選択 + URL（複数追加可能）
+└── 表示名（任意）
+
+おすすめ動画
+└── YouTube URL（1つ）
+
+プロフィール設定
+├── 公開設定（public/unlisted/private）
+└── デフォルト表示タブ（keybindings/records/devices/settings）
+```
+
+#### 7.3.4 プロフィールページ（/player/:mcid）
+
+**デフォルトタブ:** ユーザーが設定可能
+
+**タブ構成:**
+- キー配置
+- 記録
+- デバイス
+- 設定（FOV、GUIスケール追加）
+
+**おすすめ動画:** YouTube埋め込み表示
 
 ---
 
@@ -1681,22 +1706,28 @@ code, pre {
 
 ```tsx
 <Card className="group hover:shadow-xl transition-all">
-  <CardHeader>
-    <Avatar size="lg" />
-    <Badge>{location}</Badge>
-  </CardHeader>
-  <CardContent>
-    <h3>{displayName}</h3>
-    <p>@{mcid}</p>
-    {featuredPB && (
-      <div className="mt-4">
-        <span>{featuredCategory}</span>
-        <p className="text-2xl font-mono">{formatTime(featuredPB)}</p>
+  <CardContent className="p-4">
+    <div className="flex items-start gap-4">
+      <Avatar className="w-16 h-16 rounded-lg" />
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-lg truncate">{displayName ?? mcid}</h3>
+        <p className="text-muted-foreground text-sm">@{mcid}</p>
+        {bio && (
+          <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{bio}</p>
+        )}
+        {location && (
+          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            {location}
+          </p>
+        )}
       </div>
-    )}
+    </div>
   </CardContent>
 </Card>
 ```
+
+※注目記録（featuredPB）は削除、bioを表示
 
 #### RecordCard
 
@@ -1752,6 +1783,180 @@ LEGACY_API_URL=https://mchotkeys.vercel.app
 - **Mojang API**: https://wiki.vg/Mojang_API
 - **Speedrun.com API**: https://github.com/speedruncomorg/api
 - **Neon PostgreSQL**: https://neon.tech/
+
+---
+
+---
+
+## 11. 実装変更履歴
+
+### 2026年1月 - Phase 1実装
+
+#### 11.1 基盤構築（完了）
+- ✅ React Router v7 + Cloudflare Pages プロジェクトセットアップ
+- ✅ Drizzle ORM + Cloudflare D1 (SQLite) 構成
+- ✅ Better Auth + Discord OAuth 認証
+- ✅ 全テーブル定義・マイグレーション
+
+#### 11.2 認証・インポート機能（完了）
+- ✅ Discord OAuth ログインフロー
+- ✅ Onboarding（MCID登録 + Mojang API検証）
+- ✅ レガシーデータインポート（MCSRer Hotkeysから）
+
+#### 11.3 キーバインド機能（完了）
+- ✅ キーバインド表示・編集機能
+- ✅ インポートされたキーバインドの反映
+- ✅ VirtualKeyboardコンポーネント（JIS/US/TKL対応）
+
+#### 11.4 設計変更点
+
+##### データベース変更
+| 項目 | 設計書 | 実装 |
+|------|--------|------|
+| データベース | PostgreSQL (Neon) | SQLite (Cloudflare D1) |
+| social_links.url | `url` カラム | `identifier` カラムに変更（ユーザー名保存用） |
+| social_links.username | 存在 | 廃止（identifierに統合） |
+| users.profilePose | なし | 追加（3Dスキンのポーズ設定） |
+| discord連携 | social_linksに保存 | platformから削除（discordIdで代替） |
+| custom連携 | 対応 | platformから削除（現状未対応） |
+
+##### キーバインド変更
+| 項目 | 設計書 | 実装 |
+|------|--------|------|
+| toggleHud (F1) | 存在 | 廃止 |
+| swapHands | swapHands | offhand に名称変更 |
+| 標準キー数 | 27個 | 26個（toggleHud廃止） |
+
+##### UI変更
+| 画面 | 設計書 | 実装 |
+|------|--------|------|
+| プロフィールページレイアウト | タブのみ | 2カラム（左サイドバー + 右タブ） |
+| bio表示 | Markdown対応 | Markdown対応 + h1タグ対応 |
+| デバイス設定表示 | 感度・cm360表示 | 感度とcm360を別行に分離表示 |
+| ダッシュボードナビ | 概要タブあり | 概要タブ廃止（プロフィール編集がデフォルト） |
+| ソーシャルリンク | 別ページ | プロフィール編集に統合 |
+
+##### プロフィールページ2カラムレイアウト
+```
+┌──────────────────────────────────────────────────────────┐
+│                     ヘッダー                             │
+├─────────────────┬────────────────────────────────────────┤
+│ [3Dスキン]      │ 注目記録                                │
+│                 │ ┌────────────────────────────────────┐ │
+│ 表示名          │ │ カテゴリ名 | PB | ランク            │ │
+│ @mcid           │ └────────────────────────────────────┘ │
+│ 📍 場所         │                                        │
+│ 代名詞          │ タブ: キー配置 | 記録 | デバイス | 設定  │
+│ 👁 閲覧数       │ ┌────────────────────────────────────┐ │
+│                 │ │                                    │ │
+│ ソーシャルリンク │ │     タブコンテンツ                  │ │
+│ [Twitter]       │ │                                    │ │
+│ [YouTube]       │ │                                    │ │
+│ [Twitch]        │ │                                    │ │
+│                 │ │                                    │ │
+│ Bio (Markdown)  │ │                                    │ │
+│                 │ └────────────────────────────────────┘ │
+│                 │                                        │
+│ おすすめ動画    │                                        │
+│ [YouTube埋込]   │                                        │
+└─────────────────┴────────────────────────────────────────┘
+```
+- モバイル: 縦方向に折り返し（flex-col）
+- デスクトップ: 2カラム（lg:flex-row）
+
+---
+
+## 12. 未実装項目一覧
+
+### 12.1 高優先度（コア機能）
+
+#### Speedrun.com連携
+- [ ] `/api/me/speedruncom/connect` - 連携API
+- [ ] `/api/me/speedruncom/sync` - 手動同期API
+- [ ] `/api/me/speedruncom/disconnect` - 連携解除API
+- [ ] カテゴリ自動作成ロジック
+- [ ] 記録の外部APIマージ表示
+
+#### MCSR Ranked連携
+- [ ] Ranked API統合
+- [ ] Elo・ランク・勝率表示
+- [ ] Rankedレコード自動作成
+
+#### 記録・目標機能
+- [ ] `/me/records` 編集画面の完全実装
+- [ ] 目標設定UI
+- [ ] 進捗表示（プログレスバー）
+- [ ] 記録達成通知
+
+### 12.2 中優先度
+
+#### コミュニティ機能
+- [ ] `/stats` - キー使用統計ページ
+- [ ] `/rankings` - カテゴリ別ランキングページ
+- [ ] プレイヤー検索・フィルター機能強化
+- [ ] `/api/stats/keys` - キー使用統計API
+- [ ] `/api/stats/devices` - デバイス統計API
+
+#### VirtualKeyboard強化
+- [ ] 指割り当て表示（fingerAssignments）
+- [ ] カスタムキー追加UI（custom_keys）
+- [ ] キーリマップ表示（key_remaps）
+- [ ] 外部ツール連携表示（external_tools）
+
+#### デバイス設定
+- [ ] FOV・GUIスケールの表示（スキーマは実装済み）
+- [ ] デバイスモデル選択UI改善
+
+### 12.3 低優先度
+
+#### アイテム配置・サーチクラフト
+- [ ] `/me/items` - アイテム配置編集（ナビから非表示、ファイルは存在）
+- [ ] `/me/search-craft` - サーチクラフト編集（ナビから非表示、ファイルは存在）
+- [ ] アイテムアイコン表示
+- [ ] ホットバースロット可視化
+
+#### Cron同期
+- [ ] MCID同期（毎日0:00 UTC）
+- [ ] Speedrun.com統計同期（毎日1:00 UTC）
+- [ ] Worker Cron Trigger実装
+
+#### その他
+- [ ] PaceMan統計画像埋め込み
+- [ ] カスタムフィールド（custom_fields）UI
+- [ ] プロフィール閲覧数のリアルタイム更新
+- [ ] i18n（多言語対応）
+
+### 12.4 実装済みルート
+
+| ルート | 状態 | 備考 |
+|--------|------|------|
+| `/` (home) | ✅ 実装済み | プレイヤー一覧、検索 |
+| `/login` | ✅ 実装済み | Discord OAuth |
+| `/onboarding` | ✅ 実装済み | MCID登録 |
+| `/browse` | ✅ 実装済み | プレイヤー一覧 |
+| `/player/:mcid` | ✅ 実装済み | 2カラムレイアウト |
+| `/me` | ✅ 実装済み | ダッシュボード |
+| `/me/edit` | ✅ 実装済み | プロフィール+ソーシャルリンク |
+| `/me/keybindings` | ✅ 実装済み | キーバインド編集 |
+| `/me/devices` | ✅ 実装済み | デバイス設定 |
+| `/me/records` | 🔶 一部実装 | 基本UIのみ |
+| `/me/items` | 🔶 ファイル存在 | ナビ非表示 |
+| `/me/search-craft` | 🔶 ファイル存在 | ナビ非表示 |
+| `/stats` | 🔶 ファイル存在 | ナビ非表示 |
+| `/rankings` | 🔶 ファイル存在 | ナビ非表示 |
+
+### 12.5 実装済みAPI
+
+| API | 状態 | 備考 |
+|-----|------|------|
+| `/api/auth/*` | ✅ 実装済み | Better Auth |
+| プレイヤー一覧取得 | ✅ 実装済み | loader内 |
+| プレイヤー詳細取得 | ✅ 実装済み | loader内 |
+| プロフィール更新 | ✅ 実装済み | action内 |
+| キーバインド更新 | ✅ 実装済み | action内 |
+| デバイス設定更新 | ✅ 実装済み | action内 |
+| ソーシャルリンク管理 | ✅ 実装済み | action内 |
+| レガシーインポート | ✅ 実装済み | `/api/import/*` |
 
 ---
 

@@ -128,7 +128,7 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
   }
 }
 
-// Crafatar（頭のアバター画像）URLを生成
+// Crafatar（顔アバター画像）URLを生成
 export function getCraftarAvatarUrl(
   uuid: string,
   size: number = 64,
@@ -140,6 +140,20 @@ export function getCraftarAvatarUrl(
     ...(overlay && { overlay: "true" }),
   });
   return `https://crafatar.com/avatars/${uuidWithoutHyphens}?${params}`;
+}
+
+// Crafatar（全身レンダリング画像）URLを生成
+export function getCraftarBodyUrl(
+  uuid: string,
+  size: number = 128,
+  overlay: boolean = true
+): string {
+  const uuidWithoutHyphens = uuid.replace(/-/g, "");
+  const params = new URLSearchParams({
+    size: size.toString(),
+    ...(overlay && { overlay: "true" }),
+  });
+  return `https://crafatar.com/renders/body/${uuidWithoutHyphens}?${params}`;
 }
 
 // UUIDをハイフン付きフォーマットに変換
