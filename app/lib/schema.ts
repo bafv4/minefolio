@@ -354,6 +354,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   externalStats: many(externalStats),
   configPresets: many(configPresets),
   configHistory: many(configHistory),
+  favorites: many(favorites),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -521,3 +522,26 @@ export type ConfigPreset = typeof configPresets.$inferSelect;
 export type NewConfigPreset = typeof configPresets.$inferInsert;
 export type ConfigHistoryEntry = typeof configHistory.$inferSelect;
 export type NewConfigHistoryEntry = typeof configHistory.$inferInsert;
+
+// ============================================
+// 15. favorites（お気に入りプレイヤー）
+// ============================================
+export const favorites = sqliteTable("favorites", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  favoriteMcid: text("favorite_mcid").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_favorites_user_mcid").on(table.userId, table.favoriteMcid),
+  index("idx_favorites_user_id").on(table.userId),
+]);
+
+export const favoritesRelations = relations(favorites, ({ one }) => ({
+  user: one(users, {
+    fields: [favorites.userId],
+    references: [users.id],
+  }),
+}));
+
+export type Favorite = typeof favorites.$inferSelect;
+export type NewFavorite = typeof favorites.$inferInsert;

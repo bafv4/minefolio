@@ -3,7 +3,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and } from "drizzle-orm";
-import { favorites } from "./schema-favorites";
+import { favorites } from "./schema";
 
 const FAVORITES_COOKIE_NAME = "minefolio_favorites";
 const MAX_FAVORITES = 50;
