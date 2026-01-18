@@ -84,7 +84,7 @@ export function Header({ user }: HeaderProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <div className="flex items-center justify-start gap-2 p-2">
+                  <div className="flex items-center justify-start gap-2 px-2 py-4 md:py-2">
                     <div className="flex flex-col space-y-0.5">
                       <p className="text-sm font-medium">
                         {user.displayName ?? user.mcid}

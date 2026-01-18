@@ -53,9 +53,9 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // 外部からshowが指定されている場合はそれを優先
+    // 外部からshowが指定されている場合はそれを優先（承諾状態に関係なく表示）
     if (externalShow !== undefined) {
-      setIsVisible(externalShow && hasConsent === null);
+      setIsVisible(externalShow && hasConsent !== true);
       return;
     }
 
@@ -82,8 +82,12 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
     onDecline?.();
   };
 
-  if (!isVisible || hasConsent !== null) {
-    return null;
+  // 外部からshowが指定されている場合は、承諾済みでも表示しない
+  if (externalShow !== undefined) {
+    if (!isVisible) return null;
+  } else {
+    // 自動表示の場合は、承諾済みなら表示しない
+    if (!isVisible || hasConsent !== null) return null;
   }
 
   return (

@@ -39,7 +39,8 @@ export function FavoriteButton({
 
   // Cookie未承諾時のクリックハンドラー
   const handleClick = (e: React.MouseEvent) => {
-    if (hasConsent === null || hasConsent === false) {
+    // Cookie未承諾の場合、常にバナーを表示
+    if (hasConsent !== true) {
       e.preventDefault();
       setShowConsentBanner(true);
     }
