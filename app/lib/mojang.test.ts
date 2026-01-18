@@ -1,6 +1,6 @@
 // Mojang API ユニットテスト
 import { describe, it, expect } from "vitest";
-import { formatUuid, getSplitLabel, getSplitOrder } from "./mojang";
+import { formatUuid } from "./mojang";
 
 describe("Mojang API utilities", () => {
   describe("formatUuid", () => {

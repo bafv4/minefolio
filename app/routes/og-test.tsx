@@ -1,5 +1,4 @@
 // OGP画像テスト用ページ
-import type { Route } from "./+types/og-test";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";

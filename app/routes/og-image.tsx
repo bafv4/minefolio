@@ -1,12 +1,11 @@
 // OGP画像生成API
 // プレイヤープロフィール用の動的OGP画像を生成
-import type { Route } from "./+types/og-image";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { getCraftarAvatarUrl } from "@/lib/mojang";
 
-export async function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ request, context }: { request: Request; context: any }) {
   const url = new URL(request.url);
   const mcid = url.searchParams.get("mcid");
 

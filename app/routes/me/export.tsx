@@ -1,9 +1,8 @@
 // データエクスポート機能
-import type { Route } from "./+types/export";
 import { Download, FileJson, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { auth } from "@/lib/auth";
+import { createAuth } from "@/lib/auth";
 import { redirect } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -11,14 +10,19 @@ import {
   users,
   playerConfigs,
   keybindings,
-  devices,
-  presets,
-  records,
+  customKeys,
+  keyRemaps,
+  configPresets,
+  categoryRecords,
   socialLinks,
 } from "@/lib/schema";
+import { getOptionalSession } from "@/lib/session";
 
-export async function loader({ request, context }: Route.LoaderArgs) {
-  const session = await auth.api.getSession({ headers: request.headers });
+export async function loader({ request, context }: { request: Request; context: any }) {
+  const { env } = context.cloudflare;
+  const db = drizzle(env.DB);
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   if (!session?.user) {
     return redirect("/login");
@@ -27,8 +31,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return { user: session.user };
 }
 
-export async function action({ request, context }: Route.ActionArgs) {
-  const session = await auth.api.getSession({ headers: request.headers });
+export async function action({ request, context }: { request: Request; context: any }) {
+  const { env } = context.cloudflare;
+  const db = drizzle(env.DB);
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,14 +48,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "Invalid format" }, { status: 400 });
   }
 
-  const db = drizzle(context.cloudflare.env.DB);
-
   // すべてのユーザーデータを取得
   const [
     userData,
     configData,
     keybindingsData,
-    devicesData,
+    customKeysData,
+    keyRemapsData,
     presetsData,
     recordsData,
     socialLinksData,
@@ -56,9 +62,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     db.select().from(users).where(eq(users.id, session.user.id)).get(),
     db.select().from(playerConfigs).where(eq(playerConfigs.userId, session.user.id)).get(),
     db.select().from(keybindings).where(eq(keybindings.userId, session.user.id)).all(),
-    db.select().from(devices).where(eq(devices.userId, session.user.id)).all(),
-    db.select().from(presets).where(eq(presets.userId, session.user.id)).all(),
-    db.select().from(records).where(eq(records.userId, session.user.id)).all(),
+    db.select().from(customKeys).where(eq(customKeys.userId, session.user.id)).all(),
+    db.select().from(keyRemaps).where(eq(keyRemaps.userId, session.user.id)).all(),
+    db.select().from(configPresets).where(eq(configPresets.userId, session.user.id)).all(),
+    db.select().from(categoryRecords).where(eq(categoryRecords.userId, session.user.id)).all(),
     db.select().from(socialLinks).where(eq(socialLinks.userId, session.user.id)).all(),
   ]);
 
@@ -66,7 +73,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     user: userData,
     config: configData,
     keybindings: keybindingsData,
-    devices: devicesData,
+    customKeys: customKeysData,
+    keyRemaps: keyRemapsData,
     presets: presetsData,
     records: recordsData,
     socialLinks: socialLinksData,
@@ -100,7 +108,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   return Response.json({ error: "Invalid format" }, { status: 400 });
 }
 
-export default function ExportPage({ loaderData }: Route.ComponentProps) {
+export default function ExportPage() {
   return (
     <div className="container max-w-4xl py-8">
       <h1 className="text-3xl font-bold mb-6">データエクスポート</h1>

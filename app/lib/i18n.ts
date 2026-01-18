@@ -385,7 +385,9 @@ export function t<
   params?: Record<string, string | number>,
   locale: Locale = defaultLocale
 ): string {
-  const translation = translations[locale][category][key] as string;
+  const localeTranslations = translations[locale];
+  const categoryTranslations = localeTranslations[category as keyof typeof localeTranslations];
+  const translation = categoryTranslations[key as keyof typeof categoryTranslations] as string;
 
   if (!params) return translation;
 

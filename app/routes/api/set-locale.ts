@@ -1,8 +1,7 @@
 // ロケール設定API
-import type { Route } from "./+types/set-locale";
 import { createLocaleCookieValue, type Locale } from "@/lib/i18n";
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request }: { request: Request }) {
   const formData = await request.formData();
   const locale = formData.get("locale") as string;
 
