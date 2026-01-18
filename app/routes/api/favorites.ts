@@ -30,13 +30,29 @@ export async function action({ request }: Route.ActionArgs) {
 
   const cookieValue = createFavoritesCookieValue(newFavorites);
 
-  // リファラーにリダイレクト
-  const referer = request.headers.get("Referer") || "/";
+  // リファラーにリダイレクト（安全性チェック付き）
+  let redirectUrl = "/";
+  const referer = request.headers.get("Referer");
+
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const requestUrl = new URL(request.url);
+
+      // 同一オリジンの場合のみリダイレクトを許可
+      if (refererUrl.origin === requestUrl.origin) {
+        redirectUrl = refererUrl.pathname + refererUrl.search + refererUrl.hash;
+      }
+    } catch {
+      // URL解析エラーの場合は "/" にフォールバック
+      redirectUrl = "/";
+    }
+  }
 
   return new Response(null, {
     status: 302,
     headers: {
-      Location: referer,
+      Location: redirectUrl,
       "Set-Cookie": cookieValue,
     },
   });

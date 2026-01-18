@@ -188,9 +188,20 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: "プラットフォームとIDは必須です" };
     }
 
-    // IDの形式をバリデーション（基本的な文字チェック）
-    if (!/^[\w\-@.]+$/.test(identifier)) {
-      return { error: "IDに使用できない文字が含まれています" };
+    // 長さチェック
+    if (identifier.length > 100) {
+      return { error: "IDは100文字以下にしてください" };
+    }
+
+    // IDの形式をバリデーション（より厳格なチェック）
+    // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
+    if (!/^[\w\-]+$/.test(identifier)) {
+      return { error: "IDには英数字、ハイフン、アンダースコアのみ使用できます" };
+    }
+
+    // 先頭と末尾のハイフン/アンダースコアを禁止
+    if (/^[-_]|[-_]$/.test(identifier)) {
+      return { error: "IDの先頭と末尾にハイフンやアンダースコアは使用できません" };
     }
 
     try {
@@ -342,8 +353,17 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (featuredVideoUrl) {
     try {
       const videoUrl = new URL(featuredVideoUrl);
-      if (!videoUrl.hostname.includes("youtube.com") && !videoUrl.hostname.includes("youtu.be")) {
-        return { error: "動画URLはYouTubeのURLを入力してください" };
+
+      // プロトコルチェック: http/https のみ許可
+      if (!videoUrl.protocol.startsWith('http')) {
+        return { error: "動画URLの形式が正しくありません" };
+      }
+
+      // 許可されたYouTubeホスト名のリスト
+      const allowedYouTubeHosts = ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'];
+
+      if (!allowedYouTubeHosts.includes(videoUrl.hostname)) {
+        return { error: "動画URLはYouTubeのURLを入力してください（youtube.com, youtu.be のみ）" };
       }
     } catch {
       return { error: "動画URLの形式が正しくありません" };
@@ -540,6 +560,14 @@ export default function EditProfilePage() {
     shortBio: user.shortBio ?? "",
     speedruncomUsername: user.speedruncomUsername ?? "",
   });
+
+  // selectedPoseをformValuesに同期
+  useEffect(() => {
+    setFormValues((prev) => ({
+      ...prev,
+      profilePose: selectedPose,
+    }));
+  }, [selectedPose]);
 
   // 変更チェック
   const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);

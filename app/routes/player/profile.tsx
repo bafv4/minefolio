@@ -81,6 +81,7 @@ import { getActionLabel, getKeyLabel, type FingerType } from "@/lib/keybindings"
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
 import Markdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -747,7 +748,7 @@ export default function PlayerProfilePage() {
               </CardHeader>
               <CardContent className="pt-0 pb-4">
                 <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
-                  <Markdown>{player.bio}</Markdown>
+                  <Markdown rehypePlugins={[rehypeSanitize]}>{player.bio}</Markdown>
                 </div>
               </CardContent>
             </Card>

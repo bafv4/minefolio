@@ -75,6 +75,13 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
 
       setError(null);
 
+      // ファイルサイズチェック（最大1MB）
+      const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+      if (file.size > MAX_FILE_SIZE) {
+        setError("ファイルサイズが大きすぎます（最大1MB）");
+        return;
+      }
+
       try {
         const content = await file.text();
 

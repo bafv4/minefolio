@@ -1,87 +1,123 @@
-# Welcome to React Router!
+# Minefolio
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Minecraftスピードランナーのポートフォリオプラットフォーム
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## 機能
 
-## Features
+- プロフィール管理（キーバインド、デバイス設定、記録）
+- 外部API連携（Speedrun.com、PaceMan、Twitch、YouTube）
+- プレイヤー検索・比較
+- Cloudflare Pages + D1（SQLite）でデプロイ
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+## 技術スタック
 
-## Getting Started
+- React 19 + React Router 7
+- TypeScript
+- TailwindCSS 4
+- Drizzle ORM
+- better-auth
+- Cloudflare Pages & D1
 
-### Installation
+## セットアップ
 
-Install the dependencies:
-
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
+### 1. 依存関係のインストール
 
 ```bash
-npm run dev
+pnpm install
 ```
 
-Your application will be available at `http://localhost:5173`.
+### 2. 環境変数の設定
 
-## Building for Production
-
-Create a production build:
+`.env.example`をコピーして`.dev.vars`を作成し、必要な環境変数を設定してください。
 
 ```bash
-npm run build
+cp .env.example .dev.vars
 ```
 
-## Deployment
+必要な環境変数:
 
-### Docker Deployment
+- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`: Discord OAuth認証用
+- `BETTER_AUTH_SECRET`: セッション暗号化用（`openssl rand -base64 32`で生成）
+- `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`: Twitchストリーム連携用
+- `YOUTUBE_API_KEY`: YouTube動画連携用
+- `APP_URL`: アプリケーションのURL
 
-To build and run using Docker:
+**⚠️ 重要**: API キーは絶対にGitにコミットしないでください。`.dev.vars`は`.gitignore`に含まれています。
+
+### 3. データベースのセットアップ
+
+ローカル開発用のD1データベースを作成:
 
 ```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+pnpm wrangler d1 create minefolio_db --local
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
+マイグレーション実行:
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
+```bash
+pnpm db:local
 ```
 
-## Styling
+### 4. 開発サーバーの起動
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
+```bash
+pnpm dev
+```
 
----
+アプリケーションは `http://localhost:5173` で利用可能です。
 
-Built with ❤️ using React Router.
+## Cloudflare Pagesへのデプロイ
+
+### 環境変数の設定
+
+Cloudflare Dashboardで以下の環境変数を設定してください:
+
+1. Settings > Environment variables に移動
+2. 以下の変数を追加:
+   - `DISCORD_CLIENT_ID`
+   - `DISCORD_CLIENT_SECRET`
+   - `BETTER_AUTH_SECRET`
+   - `TWITCH_CLIENT_ID`
+   - `TWITCH_CLIENT_SECRET`
+   - `YOUTUBE_API_KEY`
+   - `APP_URL`（本番URL）
+
+### デプロイコマンド
+
+```bash
+pnpm deploy
+```
+
+## データベース管理
+
+```bash
+# スキーマ変更を生成
+pnpm db:generate
+
+# ローカルDBにマイグレーション
+pnpm db:local
+
+# 本番DBにマイグレーション
+pnpm db:remote
+
+# Drizzle Studio起動
+pnpm db:studio
+```
+
+## スクリプト
+
+- `pnpm dev`: 開発サーバー起動
+- `pnpm build`: 本番ビルド
+- `pnpm start`: 本番サーバー起動
+- `pnpm typecheck`: 型チェック
+- `pnpm deploy`: Cloudflare Pagesにデプロイ
+
+## セキュリティ
+
+- すべてのAPIキーは環境変数で管理
+- `.dev.vars`ファイルは`.gitignore`に含まれており、Gitにコミットされません
+- 本番環境ではCloudflare Dashboardで環境変数を設定
+
+## ライセンス
+
+MIT

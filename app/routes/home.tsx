@@ -21,6 +21,7 @@ import {
   Compass,
   UserCheck,
   History,
+  AlertCircle,
 } from "lucide-react";
 import type { PaceManLiveRun, PaceManRecentRun } from "@/lib/paceman";
 import type { TwitchStream } from "@/lib/twitch";
@@ -106,13 +107,19 @@ interface RecentPacesResponse {
 
 // セクション全体のローディングスケルトン
 function SectionSkeleton({ columns = 4 }: { columns?: number }) {
+  // Tailwindのgrid-colsクラスをcolumns値に応じて動的に選択
+  const gridColsClass =
+    columns === 3 ? "lg:grid-cols-3" :
+    columns === 4 ? "lg:grid-cols-4" :
+    "lg:grid-cols-4"; // デフォルト
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <Skeleton className="h-5 w-5 rounded" />
         <Skeleton className="h-6 w-32" />
       </div>
-      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${columns} gap-4`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-4`}>
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} className="h-24 rounded-lg" />
         ))}
@@ -140,6 +147,12 @@ export default function HomePage() {
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [loadingPaces, setLoadingPaces] = useState(true);
 
+  // エラー状態
+  const [errorLiveRuns, setErrorLiveRuns] = useState(false);
+  const [errorStreams, setErrorStreams] = useState(false);
+  const [errorVideos, setErrorVideos] = useState(false);
+  const [errorPaces, setErrorPaces] = useState(false);
+
   // 遅延読み込み
   useEffect(() => {
     // ライブペース取得
@@ -151,21 +164,30 @@ export default function HomePage() {
           setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to fetch live runs:", err);
+        setErrorLiveRuns(true);
+      })
       .finally(() => setLoadingLiveRuns(false));
 
     // Twitch配信取得
     fetch("/api/home-feed?type=twitch-streams")
       .then((res) => res.json() as Promise<TwitchStreamsResponse>)
       .then((data) => setLiveStreams(data.liveStreams || []))
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to fetch Twitch streams:", err);
+        setErrorStreams(true);
+      })
       .finally(() => setLoadingStreams(false));
 
     // YouTube動画取得
     fetch("/api/home-feed?type=youtube-videos")
       .then((res) => res.json() as Promise<YouTubeVideosResponse>)
       .then((data) => setRecentVideos(data.recentVideos || []))
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to fetch YouTube videos:", err);
+        setErrorVideos(true);
+      })
       .finally(() => setLoadingVideos(false));
 
     // 最近のペース取得
@@ -177,7 +199,10 @@ export default function HomePage() {
           setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to fetch recent paces:", err);
+        setErrorPaces(true);
+      })
       .finally(() => setLoadingPaces(false));
   }, []);
 
@@ -233,6 +258,17 @@ export default function HomePage() {
       {/* Twitch 配信中 */}
       {loadingStreams ? (
         <SectionSkeleton columns={3} />
+      ) : errorStreams ? (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Radio className="h-5 w-5 text-red-500" />
+            <h2 className="text-xl font-bold">配信中</h2>
+          </div>
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>配信情報の取得に失敗しました</p>
+          </div>
+        </section>
       ) : liveStreams.length > 0 ? (
         <section className="space-y-4">
           <div className="flex items-center gap-2">

@@ -4,11 +4,11 @@ pages_build_output_dir = "./build/client"
 
 # 環境変数（ローカル開発用）
 # 本番環境では Cloudflare Dashboard で設定
+# ローカル開発では .dev.vars ファイルに設定してください
 [vars]
 APP_URL = "http://localhost:5173"
-TWITCH_CLIENT_ID = "f4qfx7v3psgugwnm2eri97bqvvdllf"
-TWITCH_CLIENT_SECRET = "3mobtiz74xn8wtupqnm8bt8gxxxzgx"
-YOUTUBE_API_KEY = "AIzaSyALHW8rIlMGwFtcicyal9vApm0T_MHqp_w"
+# TWITCH_CLIENT_ID と TWITCH_CLIENT_SECRET は .dev.vars または Cloudflare Dashboard で設定
+# YOUTUBE_API_KEY は .dev.vars または Cloudflare Dashboard で設定
 
 # 本番環境変数
 [env.production.vars]

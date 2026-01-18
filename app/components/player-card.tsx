@@ -2,6 +2,12 @@ import { Link } from "react-router";
 import { MapPin, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PlayerCardProps {
   player: {
@@ -38,9 +44,20 @@ export function PlayerCard({ player }: PlayerCardProps) {
               <MinecraftAvatar uuid={player.uuid} size={48} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold truncate">
-                {player.displayName ?? player.mcid}
-              </h3>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <h3 className="font-bold truncate">
+                      {player.displayName ?? player.mcid}
+                    </h3>
+                  </TooltipTrigger>
+                  {(player.displayName ?? player.mcid).length > 20 && (
+                    <TooltipContent>
+                      <p>{player.displayName ?? player.mcid}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
               <p className="text-muted-foreground text-sm">@{player.mcid}</p>
               {player.shortBio && (
                 <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
