@@ -1,8 +1,10 @@
 import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { users } from "@/lib/schema";
-import { desc, asc, like, sql } from "drizzle-orm";
+import { desc, asc, like, sql, eq } from "drizzle-orm";
 import { PlayerCard } from "@/components/player-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,7 +33,19 @@ const PLAYERS_PER_PAGE = 12;
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { env } = context.cloudflare;
   const db = createDb(env.DB);
+  const auth = createAuth(db, env);
   const url = new URL(request.url);
+
+  // セッションをチェックしてユーザーが登録済みか確認
+  const session = await getOptionalSession(request, auth);
+  let isRegistered = false;
+  if (session) {
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    isRegistered = !!existingUser;
+  }
 
   const search = url.searchParams.get("q") ?? "";
   const sort = url.searchParams.get("sort") ?? "recent";
@@ -86,11 +100,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     currentPage: page,
     search,
     sort,
+    isRegistered,
   };
 }
 
 export default function HomePage() {
-  const { players, totalPlayers, totalPages, currentPage, search, sort } =
+  const { players, totalPlayers, totalPages, currentPage, search, sort, isRegistered } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -128,17 +143,16 @@ export default function HomePage() {
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Minecraft Speedrunning + Portfolio
         </p>
-        <div className="flex justify-center gap-4 pt-4">
-          <Button asChild size="lg">
-            <Link to="/login">
-              プロフィールを作る
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-          <Button variant="outline" size="lg" asChild>
-            <Link to="/browse">ランナーを探す</Link>
-          </Button>
-        </div>
+        {!isRegistered && (
+          <div className="flex justify-center gap-4 pt-4">
+            <Button asChild size="lg">
+              <Link to="/login">
+                プロフィールを作る
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
       </section>
 
       {/* Players Section */}

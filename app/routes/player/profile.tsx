@@ -1,11 +1,12 @@
-import { useLoaderData, Link, useParams } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
 import { lazy, Suspense } from "react";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets } from "@/lib/schema";
 import { eq, asc, desc } from "drizzle-orm";
+import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
 import {
   MinecraftItemIcon,
   formatItemName,
@@ -83,6 +84,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   MapPin,
   Trophy,
   Keyboard,
@@ -99,7 +107,15 @@ import {
   Video,
   Package,
   Search,
+  BarChart3,
+  Swords,
+  Timer,
+  GitCompare,
+  Save,
 } from "lucide-react";
+import { ShareButton } from "@/components/share-button";
+import { FavoriteButton } from "@/components/favorite-button";
+import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
 
 // Windowsポインター速度の乗数（6/11がデフォルト）
 // https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
@@ -158,12 +174,31 @@ export const meta: Route.MetaFunction = ({ data }) => {
   if (!data?.player) {
     return [{ title: "プレイヤーが見つかりません - Minefolio" }];
   }
+
+  const displayName = data.player.displayName ?? data.player.mcid;
+  const description = data.player.shortBio
+    ? `${displayName} - ${data.player.shortBio}`
+    : `${displayName}のMinecraftスピードランポートフォリオ、キー配置、自己ベストを表示。`;
+
+  // OGP画像URL（Crafatar APIを使用したスキン画像）
+  const ogImageUrl = `https://crafatar.com/renders/body/${data.player.uuid}?overlay=true&scale=4`;
+  const profileUrl = `https://minefolio.pages.dev/player/${data.player.mcid}`;
+
   return [
-    { title: `${data.player.displayName ?? data.player.mcid} - Minefolio` },
-    {
-      name: "description",
-      content: `${data.player.displayName ?? data.player.mcid}のMinecraftスピードランポートフォリオ、キー配置、自己ベストを表示。`,
-    },
+    { title: `${displayName} - Minefolio` },
+    { name: "description", content: description },
+    // Open Graph
+    { property: "og:title", content: `${displayName} - Minefolio` },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImageUrl },
+    { property: "og:url", content: profileUrl },
+    { property: "og:type", content: "profile" },
+    { property: "og:site_name", content: "Minefolio" },
+    // Twitter Card
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: `${displayName} - Minefolio` },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImageUrl },
   ];
 };
 
@@ -174,6 +209,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   const { mcid } = params;
+  const url = new URL(request.url);
+  const presetId = url.searchParams.get("preset");
 
   // Fetch player with all related data
   const player = await db.query.users.findFirst({
@@ -185,7 +222,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       },
       categoryRecords: {
         where: eq(categoryRecords.isVisible, true),
-        orderBy: [desc(categoryRecords.isFeatured), asc(categoryRecords.displayOrder)],
+        orderBy: [asc(categoryRecords.displayOrder)],
       },
       socialLinks: {
         orderBy: [asc(socialLinks.displayOrder)],
@@ -204,6 +241,83 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     throw new Response("プレイヤーが見つかりません", { status: 404 });
   }
 
+  // プリセット一覧を取得
+  const presets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, player.id),
+    orderBy: [desc(configPresets.isActive), desc(configPresets.updatedAt)],
+    columns: {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      keybindingsData: true,
+      playerConfigData: true,
+      remapsData: true,
+      fingerAssignmentsData: true,
+    },
+  });
+
+  // 選択されたプリセットのデータを適用
+  let activePresetId: string | null = null;
+  let displayKeybindings = player.keybindings;
+  let displayPlayerConfig = player.playerConfig;
+  let displayKeyRemaps = player.keyRemaps;
+
+  if (presetId && presets.length > 0) {
+    const selectedPreset = presets.find((p) => p.id === presetId);
+    if (selectedPreset) {
+      activePresetId = selectedPreset.id;
+
+      // プリセットのキーバインドを適用
+      if (selectedPreset.keybindingsData) {
+        const presetKeybindings = JSON.parse(selectedPreset.keybindingsData) as Array<{
+          action: string;
+          keyCode: string;
+          category: string;
+        }>;
+        displayKeybindings = presetKeybindings.map((kb, idx) => ({
+          id: `preset-${idx}`,
+          userId: player.id,
+          action: kb.action,
+          keyCode: kb.keyCode,
+          category: kb.category as "movement" | "combat" | "inventory" | "ui",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
+
+      // プリセットのプレイヤー設定を適用
+      if (selectedPreset.playerConfigData) {
+        const presetConfig = JSON.parse(selectedPreset.playerConfigData);
+        displayPlayerConfig = {
+          ...player.playerConfig,
+          ...presetConfig,
+          fingerAssignments: selectedPreset.fingerAssignmentsData ?? player.playerConfig?.fingerAssignments,
+        } as typeof player.playerConfig;
+      }
+
+      // プリセットのリマップを適用
+      if (selectedPreset.remapsData) {
+        const presetRemaps = JSON.parse(selectedPreset.remapsData) as Array<{
+          sourceKey: string;
+          targetKey: string | null;
+          software: string | null;
+          notes: string | null;
+        }>;
+        displayKeyRemaps = presetRemaps.map((r, idx) => ({
+          id: `preset-remap-${idx}`,
+          userId: player.id,
+          sourceKey: r.sourceKey,
+          targetKey: r.targetKey,
+          software: r.software,
+          notes: r.notes,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
+    }
+  }
+
   // Check if current user is viewing their own profile
   let isOwner = false;
   if (session) {
@@ -213,11 +327,63 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     isOwner = currentUser?.id === player.id;
   }
 
-  return { player, isOwner };
+  // 外部サービスから統計情報を取得（エラーが発生しても空オブジェクトを返す）
+  let externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>> = {};
+  try {
+    externalStats = await fetchAllExternalStats(
+      player.mcid,
+      player.speedruncomUsername
+    );
+  } catch (error) {
+    console.error("Failed to fetch external stats:", error);
+  }
+
+  // 非表示記録IDをパース
+  const hiddenSpeedrunRecords: string[] = player.hiddenSpeedrunRecords
+    ? JSON.parse(player.hiddenSpeedrunRecords)
+    : [];
+
+  // お気に入り状態を確認
+  const cookieHeader = request.headers.get("Cookie");
+  const favorites = getFavoritesFromCookie(cookieHeader);
+  const isFavorited = isFavorite(favorites, mcid);
+
+  return {
+    player: {
+      ...player,
+      keybindings: displayKeybindings,
+      playerConfig: displayPlayerConfig,
+      keyRemaps: displayKeyRemaps,
+    },
+    isOwner,
+    externalStats,
+    hiddenSpeedrunRecords,
+    isFavorited,
+    presets: presets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      isActive: p.isActive,
+    })),
+    activePresetId,
+  };
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner } = useLoaderData<typeof loader>();
+  const { player, isOwner, externalStats, hiddenSpeedrunRecords, isFavorited, presets, activePresetId } = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // プリセット選択ハンドラー
+  const handlePresetChange = (presetId: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (presetId === "current") {
+      newParams.delete("preset");
+    } else {
+      newParams.set("preset", presetId);
+    }
+    navigate(`?${newParams.toString()}`, { preventScrollReset: true });
+  };
 
   // 廃止されたアクションを除外
   const deprecatedActions = ["toggleHud"];
@@ -255,9 +421,6 @@ export default function PlayerProfilePage() {
     targetKey: r.targetKey,
   }));
 
-  // Featured records
-  const featuredRecords = player.categoryRecords.filter((r) => r.isFeatured);
-  const otherRecords = player.categoryRecords.filter((r) => !r.isFeatured);
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
@@ -334,15 +497,30 @@ export default function PlayerProfilePage() {
           </div>
         </div>
 
-        {/* Edit Button for Owner */}
-        {isOwner && (
-          <Button asChild className="w-full">
-            <Link to="/me/edit">
-              <Pencil className="mr-2 h-4 w-4" />
-              プロフィールを編集
-            </Link>
-          </Button>
-        )}
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-2">
+          {isOwner && (
+            <Button asChild className="w-full">
+              <Link to="/me/edit">
+                <Pencil className="mr-2 h-4 w-4" />
+                プロフィールを編集
+              </Link>
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />
+            <ShareButton
+              title={`${player.displayName ?? player.mcid} - Minefolio`}
+              description={player.shortBio ?? undefined}
+            />
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/compare?p1=${player.mcid}`}>
+                <GitCompare className="h-4 w-4 mr-2" />
+                比較
+              </Link>
+            </Button>
+          </div>
+        </div>
 
         {/* Social Links */}
         {player.socialLinks.length > 0 && (
@@ -399,21 +577,6 @@ export default function PlayerProfilePage() {
 
       {/* Right Content - Tabs */}
       <main className="flex-1 min-w-0 space-y-6">
-        {/* Featured Records */}
-        {featuredRecords.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-              注目の記録
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {featuredRecords.map((record) => (
-                <RecordCard key={record.id} record={record} featured />
-              ))}
-            </div>
-          </section>
-        )}
-
         {/* Tabs for different sections */}
         <Tabs defaultValue={player.defaultProfileTab ?? "keybindings"} className="space-y-6">
         <TabsList className="flex-wrap h-auto gap-2">
@@ -421,9 +584,9 @@ export default function PlayerProfilePage() {
             <Keyboard className="h-4 w-4" />
             キー配置
           </TabsTrigger>
-          <TabsTrigger value="records" className="gap-2">
-            <Trophy className="h-4 w-4" />
-            記録
+          <TabsTrigger value="stats" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Stats
           </TabsTrigger>
           <TabsTrigger value="items" className="gap-2">
             <Package className="h-4 w-4" />
@@ -442,6 +605,40 @@ export default function PlayerProfilePage() {
             設定
           </TabsTrigger>
         </TabsList>
+
+        {/* Preset Selector */}
+        {presets.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Save className="h-4 w-4" />
+              <span>プリセット:</span>
+            </div>
+            <Select
+              value={activePresetId ?? "current"}
+              onValueChange={handlePresetChange}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="現在の設定" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">
+                  現在の設定
+                </SelectItem>
+                {presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                    {preset.isActive && " (適用中)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activePresetId && (
+              <Badge variant="secondary" className="text-xs">
+                プリセット表示中
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Keybindings Tab */}
         <TabsContent value="keybindings" className="space-y-6">
@@ -535,19 +732,234 @@ export default function PlayerProfilePage() {
           )}
         </TabsContent>
 
-        {/* Records Tab */}
-        <TabsContent value="records" className="space-y-6">
-          {otherRecords.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {otherRecords.map((record) => (
-                <RecordCard key={record.id} record={record} />
-              ))}
-            </div>
-          ) : (
+        {/* Stats Tab */}
+        <TabsContent value="stats" className="space-y-6">
+          {/* MCSR Ranked Section */}
+          {externalStats.ranked?.isRegistered && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Swords className="h-5 w-5" />
+                  MCSR Ranked
+                </CardTitle>
+                <CardDescription>
+                  Ranked対戦の統計情報
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {externalStats.ranked.user?.eloRate && (
+                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                      <p className="text-2xl font-bold">{externalStats.ranked.user.eloRate}</p>
+                      <p className="text-xs text-muted-foreground">Elo レート</p>
+                    </div>
+                  )}
+                  {externalStats.ranked.user?.eloRank && (
+                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                      <p className="text-2xl font-bold">#{externalStats.ranked.user.eloRank}</p>
+                      <p className="text-xs text-muted-foreground">ランキング</p>
+                    </div>
+                  )}
+                  {externalStats.ranked.seasonData && (
+                    <>
+                      <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                        <p className="text-2xl font-bold">
+                          {externalStats.ranked.seasonData.records.win}W - {externalStats.ranked.seasonData.records.lose}L
+                        </p>
+                        <p className="text-xs text-muted-foreground">今シーズン戦績</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* PB表示（全期間 / 今シーズン） */}
+                {externalStats.ranked.seasonData && (
+                  typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" ||
+                  typeof externalStats.ranked.seasonData.bestTime === "number"
+                ) ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" && (
+                      <div className="p-3 bg-secondary/30 rounded-lg">
+                        <p className="text-xs text-muted-foreground mb-1">全期間 PB</p>
+                        <p className="text-xl font-mono font-bold">
+                          {formatTime(externalStats.ranked.seasonData.bestTimeAllTime)}
+                        </p>
+                      </div>
+                    )}
+                    {typeof externalStats.ranked.seasonData.bestTime === "number" && (
+                      <div className="p-3 bg-secondary/30 rounded-lg">
+                        <p className="text-xs text-muted-foreground mb-1">今シーズン PB</p>
+                        <p className="text-xl font-mono font-bold">
+                          {formatTime(externalStats.ranked.seasonData.bestTime)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Eloレートグラフ */}
+                {externalStats.ranked.recentMatches.length > 1 && (
+                  <EloRateGraph matches={externalStats.ranked.recentMatches} />
+                )}
+
+                {/* 最近のマッチ */}
+                {externalStats.ranked.recentMatches.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">最近のマッチ</h4>
+                    <div className="space-y-1">
+                      {externalStats.ranked.recentMatches.slice(0, 5).map((match) => (
+                        <div
+                          key={match.id}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded text-sm",
+                            match.result === "win" && "bg-green-500/10",
+                            match.result === "lose" && "bg-red-500/10",
+                            match.result === "draw" && "bg-yellow-500/10"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
+                              className="w-12 justify-center"
+                            >
+                              {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
+                            </Badge>
+                            <span>vs {match.opponentNickname}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {match.time && (
+                              <span className="font-mono text-muted-foreground">
+                                {formatTime(match.time)}
+                              </span>
+                            )}
+                            <span className={cn(
+                              "font-medium",
+                              match.eloChange > 0 && "text-green-500",
+                              match.eloChange < 0 && "text-red-500"
+                            )}>
+                              {match.eloChange > 0 ? "+" : ""}{match.eloChange}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* PaceMan Section - リンクのみ */}
+          {externalStats.paceman?.isRegistered && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Timer className="h-5 w-5" />
+                  PaceMan Stats
+                </CardTitle>
+                <CardDescription>
+                  ペース統計・リセット情報
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline" className="w-full">
+                  <a
+                    href={`https://paceman.gg/stats/player/${encodeURIComponent(player.mcid)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    PaceMan Statsで詳細を見る
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Speedrun.com Section */}
+          {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5" />
+                  Speedrun.com
+                </CardTitle>
+                <CardDescription>
+                  公式記録（Minecraft関連）
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {externalStats.speedruncom.personalBests
+                    .filter((pb) => !hiddenSpeedrunRecords.includes(pb.run.id))
+                    .slice(0, 6)
+                    .map((pb) => (
+                      <div
+                        key={pb.run.id}
+                        className="p-3 bg-secondary/50 rounded-lg space-y-1"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm truncate">
+                            {pb.category?.data?.name ?? "Unknown"}
+                          </span>
+                          <Badge variant="outline" className="shrink-0">
+                            #{pb.place}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {pb.game?.data?.names?.international ?? "Unknown Game"}
+                        </p>
+                        {(pb.platformName || pb.versionName) && (
+                          <p className="text-xs text-muted-foreground">
+                            {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                          </p>
+                        )}
+                        <p className="text-xl font-mono font-bold">
+                          {formatTime(pb.run.times.primary_t * 1000)}
+                        </p>
+                        {pb.run.weblink && (
+                          <a
+                            href={pb.run.weblink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            記録を見る
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* カスタム記録 */}
+          {player.categoryRecords.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  カスタム記録
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {player.categoryRecords.map((record) => (
+                    <RecordCard key={record.id} record={record} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* データがない場合 */}
+          {(!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
             <EmptyState
-              icon={<Trophy className="h-12 w-12" />}
-              title="記録なし"
-              description="このプレイヤーはまだ記録を追加していません。"
+              icon={<BarChart3 className="h-12 w-12" />}
+              title="統計データなし"
+              description="外部サービスからの統計データがありません。"
             />
           )}
         </TabsContent>
@@ -768,6 +1180,121 @@ export default function PlayerProfilePage() {
         </TabsContent>
       </Tabs>
       </main>
+    </div>
+  );
+}
+
+// Eloレートグラフコンポーネント
+function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
+  // マッチを古い順に並べ替え（グラフ表示用）
+  const sortedMatches = [...matches].reverse();
+
+  if (sortedMatches.length < 2) return null;
+
+  // Eloレートの配列を作成
+  const eloHistory = sortedMatches.map((m) => m.eloAfter);
+  const minElo = Math.min(...eloHistory);
+  const maxElo = Math.max(...eloHistory);
+  const range = maxElo - minElo || 100; // 変動がない場合のデフォルト
+
+  // グラフのサイズ
+  const width = 300;
+  const height = 80;
+  const padding = { top: 10, bottom: 20, left: 0, right: 0 };
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+
+  // ポイントの計算
+  const points = eloHistory.map((elo, i) => {
+    const x = padding.left + (i / (eloHistory.length - 1)) * graphWidth;
+    const y = padding.top + graphHeight - ((elo - minElo) / range) * graphHeight;
+    return { x, y, elo };
+  });
+
+  // SVGパスの作成
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+  // グラデーション用のエリアパス
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`;
+
+  // 最初と最後のEloの変化
+  const eloChange = eloHistory[eloHistory.length - 1] - eloHistory[0];
+  const isPositive = eloChange >= 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium text-muted-foreground">Eloレート推移（直近{matches.length}試合）</h4>
+        <span className={cn(
+          "text-sm font-medium",
+          isPositive ? "text-green-500" : "text-red-500"
+        )}>
+          {isPositive ? "+" : ""}{eloChange}
+        </span>
+      </div>
+      <div className="bg-secondary/30 rounded-lg p-3">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full h-auto"
+          style={{ maxHeight: "100px" }}
+        >
+          {/* グラデーションの定義 */}
+          <defs>
+            <linearGradient id="eloGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor={isPositive ? "#22c55e" : "#ef4444"} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={isPositive ? "#22c55e" : "#ef4444"} stopOpacity="0.05" />
+            </linearGradient>
+          </defs>
+
+          {/* エリア塗りつぶし */}
+          <path d={areaPath} fill="url(#eloGradient)" />
+
+          {/* ライン */}
+          <path
+            d={linePath}
+            fill="none"
+            stroke={isPositive ? "#22c55e" : "#ef4444"}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* ポイント（最初と最後のみ） */}
+          <circle
+            cx={points[0].x}
+            cy={points[0].y}
+            r="3"
+            fill={isPositive ? "#22c55e" : "#ef4444"}
+          />
+          <circle
+            cx={points[points.length - 1].x}
+            cy={points[points.length - 1].y}
+            r="4"
+            fill={isPositive ? "#22c55e" : "#ef4444"}
+          />
+
+          {/* 最小・最大ラベル */}
+          <text
+            x={padding.left}
+            y={height - 4}
+            fontSize="10"
+            fill="currentColor"
+            className="text-muted-foreground"
+          >
+            {eloHistory[0]}
+          </text>
+          <text
+            x={width - padding.right}
+            y={height - 4}
+            fontSize="10"
+            fill="currentColor"
+            className="text-muted-foreground"
+            textAnchor="end"
+          >
+            {eloHistory[eloHistory.length - 1]}
+          </text>
+        </svg>
+      </div>
     </div>
   );
 }
@@ -1140,7 +1667,6 @@ function SearchCraftCard({
 
 function RecordCard({
   record,
-  featured,
 }: {
   record: {
     id: string;
@@ -1153,10 +1679,9 @@ function RecordCard({
     pbVideoUrl: string | null;
     pbNotes: string | null;
   };
-  featured?: boolean;
 }) {
   return (
-    <Card className={featured ? "border-yellow-500/50 bg-yellow-500/5" : ""}>
+    <Card>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div>
@@ -1167,7 +1692,6 @@ function RecordCard({
               <CardDescription>{record.subcategory}</CardDescription>
             )}
           </div>
-          {featured && <Trophy className="h-5 w-5 text-yellow-500" />}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">

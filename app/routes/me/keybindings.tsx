@@ -4,7 +4,7 @@ import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
-import { users, keybindings, playerConfigs, keyRemaps, customKeys } from "@/lib/schema";
+import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
@@ -309,6 +309,23 @@ export async function action({ context, request }: Route.ActionArgs) {
           updatedAt: now,
         });
       }
+    }
+
+    // 変更履歴を記録
+    const changes: string[] = [];
+    if (keybindingsJson) changes.push("キー配置");
+    if (remapsJson) changes.push("リマップ");
+    if (fingerAssignmentsJson) changes.push("指割り当て");
+
+    if (changes.length > 0) {
+      await db.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "keybinding",
+        changeDescription: `${changes.join("・")}を更新`,
+        newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson }),
+        createdAt: now,
+      });
     }
 
     return { success: true, message: "設定を保存しました" };

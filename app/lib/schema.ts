@@ -20,7 +20,7 @@ export const users = sqliteTable("users", {
   profilePose: text("profile_pose", { enum: ["standing", "walking", "waving"] }).default("waving"),
   location: text("location"),
   pronouns: text("pronouns"),
-  defaultProfileTab: text("default_profile_tab", { enum: ["keybindings", "records", "devices", "settings"] }).default("keybindings"),
+  defaultProfileTab: text("default_profile_tab", { enum: ["keybindings", "stats", "devices", "settings"] }).default("keybindings"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報
@@ -33,6 +33,7 @@ export const users = sqliteTable("users", {
   speedruncomUsername: text("speedruncom_username"),
   speedruncomId: text("speedruncom_id"),
   speedruncomLastSync: integer("speedruncom_last_sync", { mode: "timestamp" }),
+  hiddenSpeedrunRecords: text("hidden_speedrun_records"), // JSON配列: 非表示にする記録のrun ID
 
   // 統計
   profileViews: integer("profile_views").default(0).notNull(),
@@ -240,7 +241,6 @@ export const categoryRecords = sqliteTable("category_records", {
 
   // 表示設定
   isVisible: integer("is_visible", { mode: "boolean" }).default(true).notNull(),
-  isFeatured: integer("is_featured", { mode: "boolean" }).default(false).notNull(),
   displayOrder: integer("display_order").default(0).notNull(),
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
@@ -250,7 +250,6 @@ export const categoryRecords = sqliteTable("category_records", {
   index("idx_category_records_user_id").on(table.userId),
   index("idx_category_records_category").on(table.category),
   index("idx_category_records_type").on(table.recordType),
-  index("idx_category_records_featured").on(table.isFeatured),
 ]);
 
 // ============================================
@@ -353,6 +352,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   categoryRecords: many(categoryRecords),
   customFields: many(customFields),
   externalStats: many(externalStats),
+  configPresets: many(configPresets),
+  configHistory: many(configHistory),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -450,3 +451,73 @@ export type SocialLink = typeof socialLinks.$inferSelect;
 export type CategoryRecord = typeof categoryRecords.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
 export type ExternalStat = typeof externalStats.$inferSelect;
+
+// ============================================
+// 13. config_presets（設定プリセット）
+// ============================================
+export const configPresets = sqliteTable("config_presets", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: integer("is_active", { mode: "boolean" }).default(false).notNull(),
+
+  // 設定データ（JSON）
+  keybindingsData: text("keybindings_data"), // JSON: キーバインドのスナップショット
+  playerConfigData: text("player_config_data"), // JSON: プレイヤー設定のスナップショット
+  remapsData: text("remaps_data"), // JSON: リマップのスナップショット
+  fingerAssignmentsData: text("finger_assignments_data"), // JSON: 指割り当て
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_config_presets_user_id").on(table.userId),
+  index("idx_config_presets_is_active").on(table.isActive),
+]);
+
+// ============================================
+// 14. config_history（設定変更履歴）
+// ============================================
+export const configHistory = sqliteTable("config_history", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  changeType: text("change_type", { enum: ["keybinding", "device", "game_setting", "remap", "preset_switch"] }).notNull(),
+  changeDescription: text("change_description").notNull(),
+
+  // 変更前後のデータ（JSON）
+  previousData: text("previous_data"), // JSON
+  newData: text("new_data"), // JSON
+
+  // 関連プリセット（あれば）
+  presetId: text("preset_id").references(() => configPresets.id, { onDelete: "set null" }),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_config_history_user_id").on(table.userId),
+  index("idx_config_history_created_at").on(table.createdAt),
+  index("idx_config_history_change_type").on(table.changeType),
+]);
+
+export const configPresetsRelations = relations(configPresets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [configPresets.userId],
+    references: [users.id],
+  }),
+  history: many(configHistory),
+}));
+
+export const configHistoryRelations = relations(configHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [configHistory.userId],
+    references: [users.id],
+  }),
+  preset: one(configPresets, {
+    fields: [configHistory.presetId],
+    references: [configPresets.id],
+  }),
+}));
+
+export type ConfigPreset = typeof configPresets.$inferSelect;
+export type NewConfigPreset = typeof configPresets.$inferInsert;
+export type ConfigHistoryEntry = typeof configHistory.$inferSelect;
+export type NewConfigHistoryEntry = typeof configHistory.$inferInsert;

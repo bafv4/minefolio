@@ -666,17 +666,6 @@ export default function SearchCraftPage() {
         </Button>
       </div>
 
-      {/* 説明カード */}
-      <Card className="bg-secondary/30 border-dashed">
-        <CardContent className="p-4">
-          <p className="text-sm text-muted-foreground">
-            サーチクラフトとは、クラフトメニューの検索バーで特定のキーを入力することで
-            素早くアイテムを見つけるテクニックです。例えば「<code className="bg-background px-1 rounded">scr</code>」と入力すると
-            <strong>S</strong>tick → <strong>C</strong>rafting table → Stone Pickaxe（<strong>R</strong>ock）の順にクラフトできます。
-          </p>
-        </CardContent>
-      </Card>
-
       {crafts.length > 0 ? (
         <DndContext
           id={dndContextId}

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, User, LogOut, Settings } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,8 +23,9 @@ interface HeaderProps {
 
 const navigation = [
   { name: "ホーム", href: "/" },
-  { name: "プレイヤー一覧", href: "/browse" },
   { name: "操作設定", href: "/keybindings" },
+  { name: "比較", href: "/compare" },
+  { name: "統計", href: "/stats" },
 ];
 
 export function Header({ user }: HeaderProps) {
@@ -104,6 +105,12 @@ export function Header({ user }: HeaderProps) {
                     <Link to="/me/edit">
                       <Settings className="mr-2 h-4 w-4" />
                       設定
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/favorites">
+                      <Heart className="mr-2 h-4 w-4" />
+                      お気に入り
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

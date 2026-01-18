@@ -8,6 +8,7 @@ import { users, categoryRecords } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
+import { fetchSpeedrunComStats } from "@/lib/external-stats";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,13 +30,15 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Star,
   ExternalLink,
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "記録 - Minefolio" }];
@@ -69,7 +72,28 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
-  return { user, records: user.categoryRecords };
+  // Speedrun.com記録を取得（ユーザー名が設定されている場合のみ）
+  let speedruncomRecords: Awaited<ReturnType<typeof fetchSpeedrunComStats>> | null = null;
+  if (user.speedruncomUsername) {
+    try {
+      speedruncomRecords = await fetchSpeedrunComStats(user.speedruncomUsername);
+    } catch (error) {
+      console.error("Failed to fetch Speedrun.com records:", error);
+    }
+  }
+
+  // 非表示記録IDをパース
+  const hiddenSpeedrunRecords: string[] = user.hiddenSpeedrunRecords
+    ? JSON.parse(user.hiddenSpeedrunRecords)
+    : [];
+
+  return {
+    user,
+    records: user.categoryRecords,
+    speedruncomRecords,
+    hiddenSpeedrunRecords,
+    speedruncomUsername: user.speedruncomUsername,
+  };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -131,7 +155,6 @@ export async function action({ context, request }: Route.ActionArgs) {
     const categoryDisplayName = (formData.get("categoryDisplayName") as string)?.trim();
     const personalBestStr = (formData.get("personalBest") as string)?.trim();
     const pbVideoUrl = (formData.get("pbVideoUrl") as string)?.trim() || null;
-    const isFeatured = formData.get("isFeatured") === "true";
     const isVisible = formData.get("isVisible") === "true";
 
     if (!category || !categoryDisplayName) {
@@ -152,7 +175,6 @@ export async function action({ context, request }: Route.ActionArgs) {
         recordType: "custom",
         personalBest,
         pbVideoUrl,
-        isFeatured,
         isVisible,
       });
     } else if (id) {
@@ -163,7 +185,6 @@ export async function action({ context, request }: Route.ActionArgs) {
           categoryDisplayName,
           personalBest,
           pbVideoUrl,
-          isFeatured,
           isVisible,
           updatedAt: new Date(),
         })
@@ -181,29 +202,69 @@ export async function action({ context, request }: Route.ActionArgs) {
     return { success: true };
   }
 
-  if (action === "toggleFeatured") {
-    const id = formData.get("id") as string;
-    const isFeatured = formData.get("isFeatured") === "true";
-    if (id) {
-      await db
-        .update(categoryRecords)
-        .set({ isFeatured, updatedAt: new Date() })
-        .where(eq(categoryRecords.id, id));
+  // Speedrun.com記録の表示/非表示トグル
+  if (action === "toggleSpeedrunRecord") {
+    const runId = formData.get("runId") as string;
+    if (!runId) {
+      return { error: "記録IDが必要です" };
     }
-    return { success: true };
+
+    // 現在の非表示リストを取得
+    const currentHidden: string[] = user.hiddenSpeedrunRecords
+      ? JSON.parse(user.hiddenSpeedrunRecords)
+      : [];
+
+    // トグル処理
+    let newHidden: string[];
+    if (currentHidden.includes(runId)) {
+      newHidden = currentHidden.filter((id) => id !== runId);
+    } else {
+      newHidden = [...currentHidden, runId];
+    }
+
+    // データベースを更新
+    await db
+      .update(users)
+      .set({
+        hiddenSpeedrunRecords: JSON.stringify(newHidden),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+
+    return { success: true, hiddenRecords: newHidden };
   }
 
   return { error: "無効な操作です" };
 }
 
 export default function RecordsPage() {
-  const { records } = useLoaderData<typeof loader>();
+  const { records, speedruncomRecords, hiddenSpeedrunRecords: initialHidden, speedruncomUsername } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<typeof records[0] | null>(null);
+  const [hiddenSpeedrunRecords, setHiddenSpeedrunRecords] = useState<string[]>(initialHidden);
 
   const isSubmitting = fetcher.state === "submitting";
   const data = fetcher.data;
+
+  // fetcherの結果を反映
+  useEffect(() => {
+    if (fetcher.data && "hiddenRecords" in fetcher.data && fetcher.data.hiddenRecords) {
+      setHiddenSpeedrunRecords(fetcher.data.hiddenRecords);
+    }
+  }, [fetcher.data]);
+
+  // Speedrun.com記録の表示/非表示をトグル
+  const toggleSpeedrunRecordVisibility = (runId: string) => {
+    fetcher.submit(
+      { _action: "toggleSpeedrunRecord", runId },
+      { method: "post" }
+    );
+    // 楽観的更新
+    setHiddenSpeedrunRecords((prev) =>
+      prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
+    );
+  };
 
   const handleOpenCreate = () => {
     setEditingRecord(null);
@@ -281,25 +342,14 @@ export default function RecordsPage() {
                     placeholder="https://youtube.com/..."
                   />
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="isFeatured"
-                      name="isFeatured"
-                      value="true"
-                      defaultChecked={editingRecord?.isFeatured ?? false}
-                    />
-                    <Label htmlFor="isFeatured">注目</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="isVisible"
-                      name="isVisible"
-                      value="true"
-                      defaultChecked={editingRecord?.isVisible ?? true}
-                    />
-                    <Label htmlFor="isVisible">公開</Label>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="isVisible"
+                    name="isVisible"
+                    value="true"
+                    defaultChecked={editingRecord?.isVisible ?? true}
+                  />
+                  <Label htmlFor="isVisible">公開</Label>
                 </div>
               </div>
               <DialogFooter>
@@ -322,69 +372,158 @@ export default function RecordsPage() {
         </Alert>
       )}
 
-      {records.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {records.map((record) => (
-            <Card key={record.id} className={record.isFeatured ? "border-yellow-500/50" : ""}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {record.categoryDisplayName}
-                      {record.isFeatured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />}
-                    </CardTitle>
-                    <CardDescription>{record.category}</CardDescription>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(record)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <fetcher.Form method="post">
-                      <input type="hidden" name="_action" value="delete" />
-                      <input type="hidden" name="id" value={record.id} />
-                      <Button variant="ghost" size="icon" type="submit">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </fetcher.Form>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {record.personalBest && (
-                  <p className="text-2xl font-mono font-bold">
-                    {formatTime(record.personalBest)}
-                  </p>
-                )}
-                <div className="flex gap-2 mt-2">
-                  {!record.isVisible && <Badge variant="secondary">非公開</Badge>}
-                  {record.pbVideoUrl && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="mr-1 h-3 w-3" />
-                        動画
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
+      {/* Speedrun.com記録セクション */}
+      {speedruncomUsername && (
         <Card>
-          <CardContent className="text-center py-12">
-            <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">記録がまだありません</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              最初のスピードラン記録を追加して、あなたの実績を公開しましょう。
-            </p>
-            <Button onClick={handleOpenCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              最初の記録を追加
-            </Button>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              Speedrun.com 記録
+            </CardTitle>
+            <CardDescription>
+              Speedrun.comから取得した記録の表示/非表示を設定できます。
+              非表示にした記録はプロフィールに表示されません。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {speedruncomRecords && !speedruncomRecords.error && speedruncomRecords.personalBests.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {speedruncomRecords.personalBests.map((pb) => {
+                  const isHidden = hiddenSpeedrunRecords.includes(pb.run.id);
+                  return (
+                    <div
+                      key={pb.run.id}
+                      className={cn(
+                        "p-3 bg-secondary/50 rounded-lg space-y-1 relative group",
+                        isHidden && "opacity-50"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
+                        className="absolute top-2 right-2 p-1.5 rounded hover:bg-secondary transition-colors"
+                        title={isHidden ? "表示する" : "非表示にする"}
+                      >
+                        {isHidden ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      <div className="flex items-center justify-between pr-8">
+                        <span className="font-medium text-sm truncate">
+                          {pb.category?.data?.name ?? "Unknown"}
+                        </span>
+                        <Badge variant="outline" className="shrink-0">
+                          #{pb.place}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {pb.game?.data?.names?.international ?? "Unknown Game"}
+                      </p>
+                      {(pb.platformName || pb.versionName) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                        </p>
+                      )}
+                      <p className="text-lg font-mono font-bold">
+                        {formatTime(pb.run.times.primary_t * 1000)}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isHidden && (
+                          <Badge variant="secondary" className="text-xs">非表示</Badge>
+                        )}
+                        {pb.run.weblink && (
+                          <a
+                            href={pb.run.weblink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            記録を見る
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : speedruncomRecords?.error ? (
+              <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Speedrun.comに記録がありません。</p>
+            )}
           </CardContent>
         </Card>
       )}
+
+      {/* カスタム記録セクション */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">カスタム記録</h2>
+        {records.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {records.map((record) => (
+              <Card key={record.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">
+                        {record.categoryDisplayName}
+                      </CardTitle>
+                      <CardDescription>{record.category}</CardDescription>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(record)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <fetcher.Form method="post">
+                        <input type="hidden" name="_action" value="delete" />
+                        <input type="hidden" name="id" value={record.id} />
+                        <Button variant="ghost" size="icon" type="submit">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </fetcher.Form>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {record.personalBest && (
+                    <p className="text-2xl font-mono font-bold">
+                      {formatTime(record.personalBest)}
+                    </p>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    {!record.isVisible && <Badge variant="secondary">非公開</Badge>}
+                    {record.pbVideoUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-1 h-3 w-3" />
+                          動画
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="text-center py-12">
+              <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <p className="text-lg font-medium">カスタム記録がまだありません</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Speedrun.com以外の記録を追加できます。
+              </p>
+              <Button onClick={handleOpenCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                最初の記録を追加
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

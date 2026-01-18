@@ -6,6 +6,7 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { CookieConsentBanner } from "@/components/cookie-consent";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { env } = context.cloudflare;
@@ -41,6 +42,7 @@ export default function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <CookieConsentBanner />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
 import { keybindings, playerConfigs } from "./schema";
+import { eq } from "drizzle-orm";
+import { createPresetFromOnboarding } from "./preset-utils";
 
 // デフォルトキーバインド定義
 export const DEFAULT_KEYBINDINGS = [
@@ -119,6 +121,23 @@ export async function createDefaultsForNewUser(db: Database, userId: string) {
     createDefaultKeybindings(db, userId),
     createDefaultPlayerConfig(db, userId),
   ]);
+
+  // 作成したデータを取得してプリセットを作成
+  const userKeybindings = await db.query.keybindings.findMany({
+    where: eq(keybindings.userId, userId),
+  });
+  const userPlayerConfig = await db.query.playerConfigs.findFirst({
+    where: eq(playerConfigs.userId, userId),
+  });
+
+  // 初期プリセットを作成
+  await createPresetFromOnboarding(
+    db,
+    userId,
+    userKeybindings,
+    userPlayerConfig ?? null,
+    [] // 新規ユーザーにはリマップなし
+  );
 }
 
 // cm/360 計算式

@@ -14,6 +14,8 @@ import {
   Package,
   Search,
   Loader2,
+  Save,
+  Upload,
 } from "lucide-react";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -39,6 +41,8 @@ const navItems = [
   { to: "/me/records", label: "記録", icon: Trophy },
   { to: "/me/keybindings", label: "キー配置", icon: Keyboard },
   { to: "/me/devices", label: "デバイス", icon: Mouse },
+  { to: "/me/presets", label: "プリセット", icon: Save },
+  { to: "/me/import", label: "インポート", icon: Upload },
   { to: "/me/items", label: "アイテム配置", icon: Package },
   { to: "/me/search-craft", label: "サーチクラフト", icon: Search },
 ];

@@ -3,6 +3,7 @@ import type { Database } from "./db";
 import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
+import { createPresetFromOnboarding } from "./preset-utils";
 
 // カスタムキーの型定義
 interface LegacyCustomKey {
@@ -538,6 +539,27 @@ export async function importFromLegacy(
         searchCraftsImported++;
       }
     }
+
+    // インポート完了後にプリセットを自動作成
+    // 更新されたデータを取得
+    const userKeybindings = await db.query.keybindings.findMany({
+      where: eq(keybindings.userId, userId),
+    });
+    const userPlayerConfig = await db.query.playerConfigs.findFirst({
+      where: eq(playerConfigs.userId, userId),
+    });
+    const userKeyRemaps = await db.query.keyRemaps.findMany({
+      where: eq(keyRemaps.userId, userId),
+    });
+
+    // 初期プリセットを作成（レガシーインポートもオンボーディングの一種として扱う）
+    await createPresetFromOnboarding(
+      db,
+      userId,
+      userKeybindings,
+      userPlayerConfig ?? null,
+      userKeyRemaps
+    );
 
     return {
       success: true,

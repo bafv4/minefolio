@@ -213,6 +213,14 @@ export async function action({ context, request }: Route.ActionArgs) {
           platform,
           identifier,
         });
+
+        // Speedrun.comの場合、speedruncomUsernameも自動設定
+        if (platform === "speedruncom") {
+          await db
+            .update(users)
+            .set({ speedruncomUsername: identifier, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
       } else if (id) {
         // 更新時に別のプラットフォームに変更する場合、重複チェック
         const existingPlatform = await db.query.socialLinks.findFirst({
@@ -227,10 +235,29 @@ export async function action({ context, request }: Route.ActionArgs) {
           return { error: `${platform}のリンクは既に登録されています。` };
         }
 
+        // 更新前のリンク情報を取得
+        const oldLink = await db.query.socialLinks.findFirst({
+          where: eq(socialLinks.id, id),
+        });
+
         await db
           .update(socialLinks)
           .set({ platform, identifier, updatedAt: new Date() })
           .where(eq(socialLinks.id, id));
+
+        // Speedrun.comの場合、speedruncomUsernameも自動更新
+        if (platform === "speedruncom") {
+          await db
+            .update(users)
+            .set({ speedruncomUsername: identifier, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        } else if (oldLink?.platform === "speedruncom") {
+          // Speedrun.comから別のプラットフォームに変更した場合、クリア
+          await db
+            .update(users)
+            .set({ speedruncomUsername: null, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
       }
 
       return { success: true, action: "link" };
@@ -246,7 +273,20 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (actionType === "delete_link") {
     const id = formData.get("id") as string;
     if (id) {
+      // 削除前にリンク情報を取得
+      const linkToDelete = await db.query.socialLinks.findFirst({
+        where: eq(socialLinks.id, id),
+      });
+
       await db.delete(socialLinks).where(eq(socialLinks.id, id));
+
+      // Speedrun.comリンクを削除した場合、speedruncomUsernameもクリア
+      if (linkToDelete?.platform === "speedruncom") {
+        await db
+          .update(users)
+          .set({ speedruncomUsername: null, updatedAt: new Date() })
+          .where(eq(users.id, user.id));
+      }
     }
     return { success: true, action: "link" };
   }
@@ -278,12 +318,13 @@ export async function action({ context, request }: Route.ActionArgs) {
   const pronouns = (formData.get("pronouns") as string)?.trim() || null;
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
-  const defaultProfileTab = formData.get("defaultProfileTab") as "keybindings" | "records" | "devices" | "settings";
+  const defaultProfileTab = formData.get("defaultProfileTab") as "keybindings" | "stats" | "devices" | "settings";
   const featuredVideoUrl = (formData.get("featuredVideoUrl") as string)?.trim() || null;
   const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
+  const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
 
   // Validate
   if (displayName && displayName.length > 50) {
@@ -310,7 +351,11 @@ export async function action({ context, request }: Route.ActionArgs) {
   }
 
   if (shortBio && shortBio.length > 50) {
-    return { error: "短い自己紹介は50文字以下にしてください" };
+    return { error: "ひとことは50文字以下にしてください" };
+  }
+
+  if (speedruncomUsername && speedruncomUsername.length > 50) {
+    return { error: "Speedrun.comユーザー名は50文字以下にしてください" };
   }
 
   await db
@@ -328,6 +373,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       mainPlatform,
       role,
       shortBio,
+      speedruncomUsername,
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
@@ -476,6 +522,7 @@ export default function EditProfilePage() {
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
+    speedruncomUsername: user.speedruncomUsername ?? "",
   });
 
   const initialFormValues = useRef({
@@ -491,6 +538,7 @@ export default function EditProfilePage() {
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
+    speedruncomUsername: user.speedruncomUsername ?? "",
   });
 
   // 変更チェック
@@ -522,6 +570,7 @@ export default function EditProfilePage() {
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
     formData.set("shortBio", formValues.shortBio);
+    formData.set("speedruncomUsername", formValues.speedruncomUsername);
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
@@ -778,7 +827,7 @@ export default function EditProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="shortBio">短い自己紹介</Label>
+              <Label htmlFor="shortBio">ひとこと</Label>
               <Input
                 id="shortBio"
                 value={formValues.shortBio}
@@ -843,6 +892,41 @@ export default function EditProfilePage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Speedrun.com連携 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ExternalLink className="h-5 w-5" />
+              Speedrun.com 連携
+            </CardTitle>
+            <CardDescription>
+              Speedrun.comのユーザー名を設定すると、Statsタブに記録が表示されます。
+              ソーシャルリンクでSpeedrun.comを追加すると自動的に設定されます。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="speedruncomUsername">Speedrun.com ユーザー名</Label>
+              <div className="flex items-center">
+                <span className="text-sm text-muted-foreground mr-2 shrink-0">
+                  speedrun.com/users/
+                </span>
+                <Input
+                  id="speedruncomUsername"
+                  value={formValues.speedruncomUsername}
+                  onChange={(e) => handleInputChange("speedruncomUsername", e.target.value)}
+                  placeholder="例: Feinberg"
+                  maxLength={50}
+                  className="flex-1"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                直接入力するか、下のソーシャルリンクでSpeedrun.comを追加してください
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -918,7 +1002,7 @@ export default function EditProfilePage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="keybindings">キー配置</SelectItem>
-                  <SelectItem value="records">記録</SelectItem>
+                  <SelectItem value="stats">Stats</SelectItem>
                   <SelectItem value="devices">デバイス・設定</SelectItem>
                   <SelectItem value="settings">ゲーム設定</SelectItem>
                 </SelectContent>
