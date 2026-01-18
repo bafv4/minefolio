@@ -20,7 +20,7 @@ export const users = sqliteTable("users", {
   profilePose: text("profile_pose", { enum: ["standing", "walking", "waving"] }).default("waving"),
   location: text("location"),
   pronouns: text("pronouns"),
-  defaultProfileTab: text("default_profile_tab", { enum: ["keybindings", "stats", "devices", "settings"] }).default("keybindings"),
+  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings"] }).default("keybindings"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報
@@ -207,7 +207,8 @@ export const socialLinks = sqliteTable("social_links", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  uniqueIndex("idx_social_links_user_platform").on(table.userId, table.platform),
+  index("idx_social_links_user_id").on(table.userId),
+  index("idx_social_links_platform").on(table.platform),
 ]);
 
 // ============================================
