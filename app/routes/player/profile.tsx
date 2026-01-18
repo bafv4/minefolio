@@ -216,38 +216,6 @@ function calculateCm360(
   return cm360Base / winMultiplier;
 }
 
-export const meta: Route.MetaFunction = ({ data }) => {
-  if (!data?.player) {
-    return [{ title: "プレイヤーが見つかりません - Minefolio" }];
-  }
-
-  const displayName = data.player.displayName ?? data.player.mcid;
-  const description = data.player.shortBio
-    ? `${displayName} - ${data.player.shortBio}`
-    : `${displayName}のMinecraftスピードランポートフォリオ、キー配置、自己ベストを表示。`;
-
-  // OGP画像URL（Crafatar APIを使用したスキン画像）
-  const ogImageUrl = `https://crafatar.com/renders/body/${data.player.uuid}?overlay=true&scale=4`;
-  const profileUrl = `https://minefolio.pages.dev/player/${data.player.mcid}`;
-
-  return [
-    { title: `${displayName} - Minefolio` },
-    { name: "description", content: description },
-    // Open Graph
-    { property: "og:title", content: `${displayName} - Minefolio` },
-    { property: "og:description", content: description },
-    { property: "og:image", content: ogImageUrl },
-    { property: "og:url", content: profileUrl },
-    { property: "og:type", content: "profile" },
-    { property: "og:site_name", content: "Minefolio" },
-    // Twitter Card
-    { name: "twitter:card", content: "summary" },
-    { name: "twitter:title", content: `${displayName} - Minefolio` },
-    { name: "twitter:description", content: description },
-    { name: "twitter:image", content: ogImageUrl },
-  ];
-};
-
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { env } = context.cloudflare;
   const db = createDb(env.DB);
