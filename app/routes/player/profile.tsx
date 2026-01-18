@@ -24,6 +24,44 @@ const MinecraftAvatar = lazy(() =>
   import("@/components/minecraft-avatar").then((mod) => ({ default: mod.MinecraftAvatar }))
 );
 
+// OGPメタタグ
+export function meta({ data, params }: Route.MetaArgs) {
+  if (!data?.player) {
+    return [
+      { title: "Player Not Found - Minefolio" },
+      { name: "description", content: "Player profile not found" },
+    ];
+  }
+
+  const { player } = data;
+  const displayName = player.displayName || player.mcid;
+  const description = player.shortBio || player.bio || `${displayName}'s Minecraft speedrunning profile`;
+  const ogImageUrl = `${data.appUrl}/og-image?mcid=${encodeURIComponent(player.mcid)}`;
+
+  return [
+    { title: `${displayName} (@${player.mcid}) - Minefolio` },
+    { name: "description", content: description },
+
+    // Open Graph
+    { property: "og:type", content: "profile" },
+    { property: "og:title", content: `${displayName} - Minefolio` },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImageUrl },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:url", content: `${data.appUrl}/player/${player.mcid}` },
+
+    // Twitter Card
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: `${displayName} - Minefolio` },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImageUrl },
+
+    // Profile-specific meta
+    { property: "profile:username", content: player.mcid },
+  ];
+}
+
 // クライアントローダーでサーバーからデータを取得
 export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
   return await serverLoader();
@@ -357,6 +395,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const isFavorited = isFavorite(favorites, mcid);
 
   return {
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
     player: {
       ...player,
       keybindings: displayKeybindings,

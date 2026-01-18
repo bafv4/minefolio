@@ -1,9 +1,14 @@
 // i18n configuration for Minefolio
-// Currently supports Japanese only, but designed for future multi-language support
+// Supports Japanese and English
 
-export type Locale = "ja";
+export type Locale = "ja" | "en";
 
 export const defaultLocale: Locale = "ja";
+
+export const supportedLocales: Record<Locale, { name: string; nativeName: string }> = {
+  ja: { name: "Japanese", nativeName: "日本語" },
+  en: { name: "English", nativeName: "English" },
+};
 
 // Translation keys organized by feature/page
 export const translations = {
@@ -205,16 +210,182 @@ export const translations = {
       pageNotFound: "お探しのページが見つかりませんでした。",
     },
   },
+  en: {
+    // Common
+    common: {
+      loading: "Loading...",
+      error: "An error occurred",
+      save: "Save",
+      cancel: "Cancel",
+      delete: "Delete",
+      edit: "Edit",
+      add: "Add",
+      search: "Search",
+      searchPlaceholder: "Search by MCID...",
+      sortBy: "Sort by",
+      recent: "Recent",
+      nameAsc: "Name (A-Z)",
+      mostViewed: "Most Viewed",
+      previous: "Previous",
+      next: "Next",
+      views: "views",
+      joined: "Joined",
+      comingSoon: "Coming Soon",
+      checkBackLater: "Check back later for updates",
+      noResults: "No results found",
+      clearSearch: "Clear search",
+      tryDifferentSearch: "Try a different search term",
+      or: "or",
+    },
+
+    // Navigation
+    nav: {
+      home: "Home",
+      browse: "Browse Players",
+      keybindings: "Keybindings",
+      rankings: "Rankings",
+      stats: "Stats",
+      login: "Log in",
+      logout: "Log out",
+      myProfile: "My Profile",
+      settings: "Settings",
+      toggleMenu: "Toggle menu",
+    },
+
+    // Footer
+    footer: {
+      privacy: "Privacy",
+      terms: "Terms",
+    },
+
+    // Home page
+    home: {
+      title: "Minecraft Speedrunner Portfolio",
+      subtitle: "Discover speedrunners and explore their keybindings, personal bests, and more.",
+      getStarted: "Get Started",
+      browsePlayers: "Browse Players",
+      players: "Players",
+      noPlayersFound: "No players found",
+    },
+
+    // Browse page
+    browse: {
+      title: "Browse Players",
+      description: "Discover Minecraft speedrunners and check out their portfolios.",
+      playersFound: "{count} players found",
+    },
+
+    // Rankings page
+    rankings: {
+      title: "Rankings",
+      description: "View speedrun rankings and leaderboards.",
+      comingSoonTitle: "Coming Soon",
+      comingSoonDescription:
+        "Integration with Speedrun.com and MCSR Ranked will be available in future updates.",
+    },
+
+    // Stats page
+    stats: {
+      title: "Platform Statistics",
+      description: "Explore Minefolio usage statistics and metrics.",
+      totalPlayers: "Total Players",
+      totalPlayersDesc: "Registered speedrunners",
+      totalViews: "Total Views",
+      totalViewsDesc: "Across all profiles",
+      moreStatsComing: "More Stats Coming Soon",
+      moreStatsDesc:
+        "Detailed analytics, trends, and community insights will be available in future updates.",
+    },
+
+    // Keybindings list page
+    keybindingsList: {
+      title: "Keybindings Directory",
+      description: "Browse keybindings from top Minecraft speedrunners.",
+      playersWithKeybindings: "{count} players",
+      noKeybindingsFound: "No keybindings found",
+    },
+
+    // Compare page
+    compare: {
+      title: "Compare Players",
+      description: "Side-by-side comparison of player stats and configurations.",
+      addPlayer: "Add Player",
+      selectPlayers: "Select players to compare",
+      player: "Player",
+      noPlayersSelected: "No players selected",
+      selectAtLeast: "Select at least two players",
+      clearAll: "Clear All",
+    },
+
+    // Favorites page
+    favorites: {
+      title: "Favorites",
+      description: "Your bookmarked players",
+      empty: "No favorites yet",
+      addFavorites: "Add players to favorites to see them here",
+      loginToSync: "Log in to sync favorites across devices",
+    },
+
+    // Profile tabs
+    profileTabs: {
+      keybindings: "Keybindings",
+      stats: "Stats",
+      devices: "Devices",
+      itemLayouts: "Item Layouts",
+      searchCraft: "Search Craft",
+    },
+
+    // Error pages
+    errors: {
+      oops: "Oops!",
+      unexpectedError: "An unexpected error occurred.",
+      notFound: "404",
+      pageNotFound: "The page you're looking for doesn't exist.",
+    },
+  },
 } as const;
 
 // Type-safe translation function
 export type TranslationKey = keyof typeof translations.ja;
 
+/**
+ * ロケールを取得（Cookieまたはブラウザ設定から）
+ */
+export function getLocaleFromRequest(request?: Request): Locale {
+  if (!request) return defaultLocale;
+
+  // Cookieから取得
+  const cookieHeader = request.headers.get("Cookie");
+  if (cookieHeader) {
+    const match = cookieHeader.match(/minefolio_locale=([^;]+)/);
+    if (match && (match[1] === "ja" || match[1] === "en")) {
+      return match[1] as Locale;
+    }
+  }
+
+  // Accept-Languageヘッダーから取得
+  const acceptLanguage = request.headers.get("Accept-Language");
+  if (acceptLanguage) {
+    if (acceptLanguage.includes("ja")) return "ja";
+    if (acceptLanguage.includes("en")) return "en";
+  }
+
+  return defaultLocale;
+}
+
+/**
+ * 翻訳関数（ロケール指定可能）
+ */
 export function t<
   K extends keyof typeof translations.ja,
   SK extends keyof (typeof translations.ja)[K],
->(category: K, key: SK, params?: Record<string, string | number>): string {
-  const translation = translations.ja[category][key] as string;
+>(
+  category: K,
+  key: SK,
+  params?: Record<string, string | number>,
+  locale: Locale = defaultLocale
+): string {
+  const translation = translations[locale][category][key] as string;
 
   if (!params) return translation;
 
@@ -225,7 +396,23 @@ export function t<
   );
 }
 
-// Hook-style getter for components
-export function useTranslation() {
-  return { t, locale: defaultLocale };
+/**
+ * Hook-style getter for components
+ */
+export function useTranslation(locale: Locale = defaultLocale) {
+  return {
+    t: <K extends keyof typeof translations.ja, SK extends keyof (typeof translations.ja)[K]>(
+      category: K,
+      key: SK,
+      params?: Record<string, string | number>
+    ) => t(category, key, params, locale),
+    locale,
+  };
+}
+
+/**
+ * ロケール切り替え用のCookie値を生成
+ */
+export function createLocaleCookieValue(locale: Locale): string {
+  return `minefolio_locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
