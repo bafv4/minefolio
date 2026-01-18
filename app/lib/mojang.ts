@@ -1,5 +1,13 @@
 // Mojang API連携
 
+import { getCached, setCached, getMojangCacheKey, CacheTTL } from "./cache";
+import {
+  mojangProfileSchema,
+  mojangSessionProfileSchema,
+  mojangTexturesSchema,
+  safeParse,
+} from "./schemas/external-api";
+
 const MOJANG_API_BASE = "https://api.mojang.com";
 const SESSION_SERVER_BASE = "https://sessionserver.mojang.com";
 
@@ -19,6 +27,13 @@ export interface MojangSessionProfile {
 
 // MCIDからUUIDを取得
 export async function fetchUuidFromMcid(mcid: string): Promise<string> {
+  // キャッシュチェック
+  const cacheKey = getMojangCacheKey(`mcid:${mcid.toLowerCase()}`);
+  const cached = await getCached<string>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const response = await fetch(
     `${MOJANG_API_BASE}/users/profiles/minecraft/${encodeURIComponent(mcid)}`
   );
@@ -30,10 +45,19 @@ export async function fetchUuidFromMcid(mcid: string): Promise<string> {
     throw new MojangError("API_ERROR", `Mojang API error: ${response.status}`);
   }
 
-  const data: MojangProfile = await response.json();
+  const json = await response.json();
+  const data = safeParse(json, mojangProfileSchema);
+
+  if (!data) {
+    throw new MojangError("API_ERROR", "Invalid response from Mojang API");
+  }
 
   // ハイフン付きUUIDに変換
   const uuid = formatUuid(data.id);
+
+  // キャッシュに保存（1日）
+  await setCached(cacheKey, uuid, CacheTTL.LONG);
+
   return uuid;
 }
 
@@ -53,7 +77,13 @@ export async function fetchMcidFromUuid(uuid: string): Promise<string> {
     throw new MojangError("API_ERROR", `Session server error: ${response.status}`);
   }
 
-  const data: MojangSessionProfile = await response.json();
+  const json = await response.json();
+  const data = safeParse(json, mojangSessionProfileSchema);
+
+  if (!data) {
+    throw new MojangError("API_ERROR", "Invalid response from Mojang session server");
+  }
+
   return data.name;
 }
 
@@ -103,6 +133,13 @@ export async function syncMcid(uuid: string, currentMcid: string): Promise<{
 
 // スキンテクスチャURLを取得
 export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
+  // キャッシュチェック
+  const cacheKey = getMojangCacheKey(`skin:${uuid}`);
+  const cached = await getCached<string | null>(cacheKey);
+  if (cached !== null) {
+    return cached;
+  }
+
   const uuidWithoutHyphens = uuid.replace(/-/g, "");
 
   const response = await fetch(
@@ -113,7 +150,13 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
     return null;
   }
 
-  const data: MojangSessionProfile = await response.json();
+  const json = await response.json();
+  const data = safeParse(json, mojangSessionProfileSchema);
+
+  if (!data) {
+    return null;
+  }
+
   const texturesProperty = data.properties.find((p) => p.name === "textures");
 
   if (!texturesProperty) {
@@ -122,7 +165,18 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
 
   try {
     const decoded = JSON.parse(atob(texturesProperty.value));
-    return decoded?.textures?.SKIN?.url ?? null;
+    const texturesData = safeParse(decoded, mojangTexturesSchema);
+
+    if (!texturesData) {
+      return null;
+    }
+
+    const skinUrl = texturesData.textures.SKIN?.url ?? null;
+
+    // キャッシュに保存（1日）
+    await setCached(cacheKey, skinUrl, CacheTTL.LONG);
+
+    return skinUrl;
   } catch {
     return null;
   }

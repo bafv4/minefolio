@@ -1,5 +1,7 @@
 // Twitch API - 配信状態取得
 
+import { getCached, setCached, getTwitchCacheKey, CacheTTL } from "./cache";
+
 const TWITCH_API = "https://api.twitch.tv/helix";
 const TWITCH_AUTH = "https://id.twitch.tv/oauth2/token";
 
@@ -34,6 +36,13 @@ export async function getTwitchAppToken(
   clientId: string,
   clientSecret: string
 ): Promise<string | null> {
+  // キャッシュチェック
+  const cacheKey = getTwitchCacheKey(["app_token"]);
+  const cached = await getCached<string>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const res = await fetch(
       `${TWITCH_AUTH}?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
@@ -46,6 +55,10 @@ export async function getTwitchAppToken(
     }
 
     const data = (await res.json()) as TwitchTokenResponse;
+
+    // キャッシュに保存（15分）
+    await setCached(cacheKey, data.access_token, CacheTTL.MEDIUM);
+
     return data.access_token;
   } catch (error) {
     console.error("Twitch auth error:", error);
@@ -65,6 +78,13 @@ export async function getLiveStreams(
   userLogins: string[]
 ): Promise<TwitchStream[]> {
   if (userLogins.length === 0) return [];
+
+  // キャッシュチェック
+  const cacheKey = getTwitchCacheKey(userLogins);
+  const cached = await getCached<TwitchStream[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
 
   try {
     // Twitch APIは最大100件のuser_loginをサポート
@@ -96,7 +116,12 @@ export async function getLiveStreams(
     }
 
     // ライブ中のストリームのみ返す
-    return allStreams.filter((s) => s.type === "live");
+    const liveStreams = allStreams.filter((s) => s.type === "live");
+
+    // キャッシュに保存（15分）
+    await setCached(cacheKey, liveStreams, CacheTTL.MEDIUM);
+
+    return liveStreams;
   } catch (error) {
     console.error("Twitch streams error:", error);
     return [];

@@ -1,5 +1,7 @@
 // YouTube Data API v3 - 最新動画取得
 
+import { getCached, setCached, getYouTubeCacheKey, CacheTTL } from "./cache";
+
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
 export interface YouTubeVideoSnippet {
@@ -107,6 +109,14 @@ export async function getRecentVideos(
 ): Promise<YouTubeVideo[]> {
   if (channels.length === 0) return [];
 
+  // キャッシュチェック
+  const channelIds = channels.map((c) => c.channelId);
+  const cacheKey = getYouTubeCacheKey(channelIds);
+  const cached = await getCached<YouTubeVideo[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const allVideos: YouTubeVideo[] = [];
   const cutoffTime = Date.now() - maxAgeHours * 60 * 60 * 1000;
 
@@ -134,7 +144,7 @@ export async function getRecentVideos(
   }
 
   // 指定時間以内の動画のみ、最新順でソート
-  return allVideos
+  const recentVideos = allVideos
     .filter((v) => new Date(v.snippet.publishedAt).getTime() > cutoffTime)
     .sort(
       (a, b) =>
@@ -142,6 +152,11 @@ export async function getRecentVideos(
         new Date(a.snippet.publishedAt).getTime()
     )
     .slice(0, 10);
+
+  // キャッシュに保存（15分）
+  await setCached(cacheKey, recentVideos, CacheTTL.MEDIUM);
+
+  return recentVideos;
 }
 
 /**

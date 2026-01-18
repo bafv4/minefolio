@@ -1,5 +1,7 @@
 // PaceMan API - ライブペース取得
 
+import { getCached, setCached, getPaceManCacheKey, CacheTTL } from "./cache";
+
 const PACEMAN_API = "https://paceman.gg/api/ars/liveruns";
 const PACEMAN_STATS_API = "https://paceman.gg/stats/api";
 
@@ -29,12 +31,24 @@ export interface PaceManLiveRun {
  * PaceMan APIからライブペース一覧を取得
  */
 export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
+  // キャッシュチェック
+  const cacheKey = getPaceManCacheKey("liveruns");
+  const cached = await getCached<PaceManLiveRun[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const res = await fetch(PACEMAN_API);
     if (!res.ok) return [];
     const data = (await res.json()) as PaceManLiveRun[];
     // 非表示・チート検出されたものを除外
-    return data.filter((run) => !run.isHidden && !run.isCheated);
+    const filteredData = data.filter((run) => !run.isHidden && !run.isCheated);
+
+    // キャッシュに保存（1分）- ライブデータなので短め
+    await setCached(cacheKey, filteredData, CacheTTL.SHORT);
+
+    return filteredData;
   } catch (error) {
     console.error("PaceMan API error:", error);
     return [];
@@ -184,6 +198,13 @@ export async function fetchRecentRunsForUsers(
 ): Promise<PaceManRecentRun[]> {
   if (nicknames.length === 0) return [];
 
+  // キャッシュチェック
+  const cacheKey = getPaceManCacheKey(`recent:${nicknames.sort().join(",")}`);
+  const cached = await getCached<PaceManRecentRun[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // 並列で取得（ただし同時リクエスト数を制限）
   const batchSize = 10;
   const allRuns: PaceManRecentRun[] = [];
@@ -197,9 +218,14 @@ export async function fetchRecentRunsForUsers(
   }
 
   // 時間でソート（新しい順）して上位を返す
-  return allRuns
+  const sortedRuns = allRuns
     .sort((a, b) => b.time - a.time)
     .slice(0, totalLimit);
+
+  // キャッシュに保存（15分）
+  await setCached(cacheKey, sortedRuns, CacheTTL.MEDIUM);
+
+  return sortedRuns;
 }
 
 /**
