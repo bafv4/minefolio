@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, Users, ArrowUpDown } from "lucide-react";
+import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -84,13 +85,28 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     offset: (page - 1) * ITEMS_PER_PAGE,
   });
 
+  // お気に入りを取得
+  const cookieHeader = request.headers.get("Cookie");
+  const favoriteMcids = getFavoritesFromCookie(cookieHeader);
+  const favoritesSet = new Set(favoriteMcids);
+
+  // お気に入りを先頭に並べ替え
+  const sortedPlayers = playerList.sort((a, b) => {
+    const aIsFavorite = favoritesSet.has(a.mcid);
+    const bIsFavorite = favoritesSet.has(b.mcid);
+    if (aIsFavorite && !bIsFavorite) return -1;
+    if (!aIsFavorite && bIsFavorite) return 1;
+    return 0;
+  });
+
   return {
-    players: playerList,
+    players: sortedPlayers,
     searchQuery,
     sortBy,
     currentPage: page,
     totalPages,
     totalCount,
+    favoriteMcids,
   };
 }
 

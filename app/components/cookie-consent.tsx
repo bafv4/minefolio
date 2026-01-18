@@ -7,40 +7,80 @@ const COOKIE_CONSENT_KEY = "minefolio_cookie_consent";
 
 export function useCookieConsent() {
   const [hasConsent, setHasConsent] = useState<boolean | null>(null);
+  const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
     // クライアントサイドでのみ実行
     const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
-    setHasConsent(consent === "true");
+    if (consent === "true") {
+      setHasConsent(true);
+    } else if (consent === "false") {
+      setHasConsent(false);
+    } else {
+      setHasConsent(null);
+    }
   }, []);
 
   const acceptCookies = () => {
     localStorage.setItem(COOKIE_CONSENT_KEY, "true");
     setHasConsent(true);
+    setShowBanner(false);
   };
 
   const declineCookies = () => {
     localStorage.setItem(COOKIE_CONSENT_KEY, "false");
     setHasConsent(false);
+    setShowBanner(false);
   };
 
-  return { hasConsent, acceptCookies, declineCookies };
+  const requestConsent = () => {
+    if (hasConsent === null) {
+      setShowBanner(true);
+    }
+  };
+
+  return { hasConsent, acceptCookies, declineCookies, requestConsent, showBanner, setShowBanner };
 }
 
-export function CookieConsentBanner() {
+interface CookieConsentBannerProps {
+  show?: boolean;
+  onAccept?: () => void;
+  onDecline?: () => void;
+}
+
+export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }: CookieConsentBannerProps = {}) {
   const { hasConsent, acceptCookies, declineCookies } = useCookieConsent();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // 承諾状態が未設定（null以外でundefinedでもない）の場合のみ表示
+    // 外部からshowが指定されている場合はそれを優先
+    if (externalShow !== undefined) {
+      setIsVisible(externalShow && hasConsent === null);
+      return;
+    }
+
+    // 初回アクセス時の自動表示
     if (hasConsent === null) {
-      // localStorageを確認
       const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
       if (consent === null) {
-        setIsVisible(true);
+        // 初回アクセス時は少し遅延させて表示
+        const timer = setTimeout(() => setIsVisible(true), 1000);
+        return () => clearTimeout(timer);
       }
     }
-  }, [hasConsent]);
+  }, [hasConsent, externalShow]);
+
+  const handleAccept = () => {
+    acceptCookies();
+    setIsVisible(false);
+    onAccept?.();
+  };
+
+  const handleDecline = () => {
+    declineCookies();
+    setIsVisible(false);
+    onDecline?.();
+  };
 
   if (!isVisible || hasConsent !== null) {
     return null;
@@ -61,10 +101,10 @@ export function CookieConsentBanner() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={acceptCookies}>
+                <Button size="sm" onClick={handleAccept}>
                   同意する
                 </Button>
-                <Button size="sm" variant="outline" onClick={declineCookies}>
+                <Button size="sm" variant="outline" onClick={handleDecline}>
                   拒否する
                 </Button>
               </div>
@@ -73,7 +113,7 @@ export function CookieConsentBanner() {
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0"
-              onClick={declineCookies}
+              onClick={handleDecline}
             >
               <X className="h-4 w-4" />
             </Button>

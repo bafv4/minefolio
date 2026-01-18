@@ -7,6 +7,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { fetchLiveRuns, fetchRecentRunsForUsers } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getRecentVideos } from "@/lib/youtube";
+import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { env } = context.cloudflare;
@@ -14,6 +15,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");
+
+  // お気に入りを取得
+  const cookieHeader = request.headers.get("Cookie");
+  const favoriteMcids = getFavoritesFromCookie(cookieHeader);
+  const favoritesSet = new Set(favoriteMcids.map(m => m.toLowerCase()));
 
   // 登録ユーザーのMCIDとUUIDを取得
   const allUserMcids = await db.query.users.findMany({
@@ -24,15 +30,28 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     allUserMcids.map((u) => [u.mcid.toLowerCase(), u.uuid])
   );
 
+  // お気に入りを優先してソートする関数
+  const sortByFavorite = <T extends { mcid?: string; nickname?: string }>(items: T[]): T[] => {
+    return items.sort((a, b) => {
+      const aMcid = (a.mcid || a.nickname || '').toLowerCase();
+      const bMcid = (b.mcid || b.nickname || '').toLowerCase();
+      const aIsFavorite = favoritesSet.has(aMcid);
+      const bIsFavorite = favoritesSet.has(bMcid);
+      if (aIsFavorite && !bIsFavorite) return -1;
+      if (!aIsFavorite && bIsFavorite) return 1;
+      return 0;
+    });
+  };
+
   // フィードタイプに応じてデータを取得
   switch (feedType) {
     case "live-runs": {
       const liveRuns = await fetchLiveRuns();
       const filteredLiveRuns = liveRuns
-        .filter((run) => registeredMcidSet.has(run.nickname.toLowerCase()))
-        .slice(0, 20);
+        .filter((run) => registeredMcidSet.has(run.nickname.toLowerCase()));
+      const sortedLiveRuns = sortByFavorite(filteredLiveRuns).slice(0, 20);
       return Response.json({
-        liveRuns: filteredLiveRuns,
+        liveRuns: sortedLiveRuns,
         mcidToUuid,
       });
     }
@@ -44,8 +63,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         5,
         20
       );
+      const sortedPaces = sortByFavorite(recentPaces);
       return Response.json({
-        recentPaces,
+        recentPaces: sortedPaces,
         mcidToUuid,
       });
     }
@@ -92,7 +112,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         return { stream, mcid: link?.mcid ?? "" };
       });
 
-      return Response.json({ liveStreams });
+      const sortedStreams = sortByFavorite(liveStreams);
+      return Response.json({ liveStreams: sortedStreams });
     }
 
     case "youtube-videos": {
@@ -127,7 +148,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       }));
 
       const recentVideos = await getRecentVideos(apiKey, channels, 3, 72);
-      return Response.json({ recentVideos });
+      const sortedVideos = sortByFavorite(recentVideos);
+      return Response.json({ recentVideos: sortedVideos });
     }
 
     default:

@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCookieConsent } from "@/components/cookie-consent";
+import { useCookieConsent, CookieConsentBanner } from "@/components/cookie-consent";
 import {
   Tooltip,
   TooltipContent,
@@ -26,6 +27,7 @@ export function FavoriteButton({
 }: FavoriteButtonProps) {
   const fetcher = useFetcher();
   const { hasConsent } = useCookieConsent();
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
 
   // Optimistic UI: fetcher送信中は逆の状態を表示
   const optimisticFavorite =
@@ -35,19 +37,26 @@ export function FavoriteButton({
 
   const isSubmitting = fetcher.state === "submitting";
 
-  // Cookie未承諾の場合は無効化
-  const isDisabled = isSubmitting || hasConsent === false;
+  // Cookie未承諾時のクリックハンドラー
+  const handleClick = (e: React.MouseEvent) => {
+    if (hasConsent === null || hasConsent === false) {
+      e.preventDefault();
+      setShowConsentBanner(true);
+    }
+  };
+
+  const isDisabled = isSubmitting;
 
   const button = (
     <Button
-      type="submit"
+      type={hasConsent === true ? "submit" : "button"}
       variant={variant}
       size={size}
       disabled={isDisabled}
+      onClick={hasConsent !== true ? handleClick : undefined}
       className={cn(
         "transition-colors",
-        optimisticFavorite && "text-red-500 hover:text-red-600",
-        hasConsent === false && "opacity-50 cursor-not-allowed"
+        optimisticFavorite && "text-red-500 hover:text-red-600"
       )}
     >
       <Heart
@@ -61,29 +70,23 @@ export function FavoriteButton({
     </Button>
   );
 
-  // Cookie未承諾の場合はツールチップで説明
-  if (hasConsent === false) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span tabIndex={0}>{button}</span>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>お気に入り機能を使用するにはCookieの承諾が必要です</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
   return (
-    <fetcher.Form method="post" action="/api/favorites">
-      <input type="hidden" name="mcid" value={mcid} />
-      <input
-        type="hidden"
-        name="action"
-        value={optimisticFavorite ? "remove" : "add"}
+    <>
+      <fetcher.Form method="post" action="/api/favorites">
+        <input type="hidden" name="mcid" value={mcid} />
+        <input
+          type="hidden"
+          name="action"
+          value={optimisticFavorite ? "remove" : "add"}
+        />
+        {button}
+      </fetcher.Form>
+
+      <CookieConsentBanner
+        show={showConsentBanner}
+        onAccept={() => setShowConsentBanner(false)}
+        onDecline={() => setShowConsentBanner(false)}
       />
-      {button}
-    </fetcher.Form>
+    </>
   );
 }
