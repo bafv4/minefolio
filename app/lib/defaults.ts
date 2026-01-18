@@ -98,7 +98,12 @@ export async function createDefaultKeybindings(db: Database, userId: string) {
     updatedAt: now,
   }));
 
-  await db.insert(keybindings).values(values);
+  // D1のSQL変数制限を回避するため、バッチで挿入
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < values.length; i += BATCH_SIZE) {
+    const batch = values.slice(i, i + BATCH_SIZE);
+    await db.insert(keybindings).values(batch);
+  }
 }
 
 // デフォルトプレイヤー設定を作成

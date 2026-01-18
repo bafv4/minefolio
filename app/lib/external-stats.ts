@@ -244,6 +244,9 @@ const RANKED_API_BASE = "https://mcsrranked.com/api";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RankedApiResponse = { status: string; data: any };
 
+// マッチタイプ定数
+const MATCH_TYPE_RANKED = 2;
+
 export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRankedStats> {
   try {
     // ユーザー情報を取得（存在確認を兼ねる）
@@ -275,45 +278,43 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     let seasonData: MCSRRankedSeasonData | null = null;
     if (userData.data.statistics) {
       const stats = userData.data.statistics;
-      const currentSeason = stats.season?.number ?? 0;
 
-      // 数値を抽出するヘルパー（オブジェクト {ranked, casual} or 数値に対応）
-      const extractNumber = (value: unknown, preferRanked = true): number | null => {
+      // Rankedモードの数値のみを抽出するヘルパー
+      const extractRankedNumber = (value: unknown): number | null => {
         if (value == null) return null;
         if (typeof value === "number") return value;
         if (typeof value === "object" && value !== null) {
           const obj = value as { ranked?: number | null; casual?: number | null };
-          if (preferRanked) {
-            return obj.ranked ?? obj.casual ?? null;
-          }
-          return obj.casual ?? obj.ranked ?? null;
+          return obj.ranked ?? null;
         }
         return null;
       };
 
-      // 全期間のベストタイムを取得
-      const bestTimeAllTime = extractNumber(stats.total?.bestTime);
+      // 全期間のRankedベストタイムを取得
+      const bestTimeAllTime = extractRankedNumber(stats.total?.bestTime);
 
-      // シーズンベストタイム
-      const seasonBestTime = extractNumber(stats.season?.bestTime);
+      // 今シーズンのRankedベストタイム
+      const seasonBestTime = extractRankedNumber(stats.season?.bestTime);
 
       seasonData = {
-        season: currentSeason,
+        season: 0, // シーズン番号はAPIから取得できないため0で初期化
         seasonResult: userData.data.seasonResult,
         bestTime: seasonBestTime ?? undefined,
         bestTimeAllTime: bestTimeAllTime ?? undefined,
         records: {
-          win: extractNumber(stats.season?.wins) ?? 0,
-          lose: extractNumber(stats.season?.loses) ?? 0,
-          draw: extractNumber(stats.season?.draws) ?? 0,
+          win: extractRankedNumber(stats.season?.wins) ?? 0,
+          lose: extractRankedNumber(stats.season?.loses) ?? 0,
+          draw: 0, // drawsはAPIに存在しない
         },
-        highestWinStreak: extractNumber(stats.season?.highestWinStreak) ?? 0,
-        currentWinStreak: extractNumber(stats.season?.currentWinStreak) ?? 0,
+        highestWinStreak: extractRankedNumber(stats.season?.highestWinStreak) ?? 0,
+        currentWinStreak: extractRankedNumber(stats.season?.currentWinStreak) ?? 0,
       };
     }
 
-    // 最近のマッチ履歴を取得（Eloグラフ用に30件）
-    const matchesRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30`);
+    // 最近のRankedマッチ履歴を取得（type=2でRankedモードのみ、30件）
+    const matchesRes = await fetch(
+      `${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30&type=${MATCH_TYPE_RANKED}`
+    );
     let recentMatches: MCSRRankedMatch[] = [];
 
     if (matchesRes.ok) {
@@ -321,19 +322,30 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
       if (matchesData && matchesData.status === "success" && Array.isArray(matchesData.data)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recentMatches = matchesData.data
-          .filter((m: any) => m && m.id && Array.isArray(m.players))
+          .filter((m: any) => m && m.id && Array.isArray(m.players) && m.type === MATCH_TYPE_RANKED)
           .map((m: any) => {
-            // 自分の結果を判定
-            const isPlayer1 = m.players?.[0]?.uuid === user.uuid;
-            const playerData = isPlayer1 ? m.players?.[0] : m.players?.[1];
-            const opponentData = isPlayer1 ? m.players?.[1] : m.players?.[0];
+            // 自分のUUIDを特定
+            const playerIndex = m.players?.findIndex((p: any) => p?.uuid === user.uuid) ?? -1;
+            const opponentIndex = playerIndex === 0 ? 1 : 0;
+            const opponentData = m.players?.[opponentIndex];
 
+            // 勝敗判定: result.uuid が勝者
             let result: "win" | "lose" | "draw" = "draw";
-            if (m.forfeited) {
-              result = playerData?.uuid === m.winner ? "win" : "lose";
-            } else if (m.winner) {
-              result = playerData?.uuid === m.winner ? "win" : "lose";
+            if (m.result?.uuid) {
+              result = m.result.uuid === user.uuid ? "win" : "lose";
+            } else if (m.forfeited && m.result?.uuid) {
+              result = m.result.uuid === user.uuid ? "win" : "lose";
             }
+
+            // 自分のタイム: 勝者のみtimeが記録される
+            const playerTime = m.result?.uuid === user.uuid ? m.result?.time : null;
+
+            // Elo変動: changes配列から自分のデータを取得
+            const playerChange = Array.isArray(m.changes)
+              ? m.changes.find((c: any) => c?.uuid === user.uuid)
+              : null;
+            const eloChange = playerChange?.change ?? 0;
+            const eloAfter = playerChange?.eloRate ? playerChange.eloRate + eloChange : 0;
 
             return {
               id: String(m.id),
@@ -341,11 +353,11 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
               season: m.season ?? 0,
               date: m.date ?? "",
               result,
-              time: playerData?.time ?? null,
+              time: playerTime ?? null,
               opponentUuid: opponentData?.uuid ?? "",
               opponentNickname: opponentData?.nickname ?? "Unknown",
-              eloChange: playerData?.eloChange ?? 0,
-              eloAfter: (playerData?.eloRate ?? 0) + (playerData?.eloChange ?? 0),
+              eloChange,
+              eloAfter,
             };
           });
       }

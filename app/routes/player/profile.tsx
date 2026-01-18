@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -18,6 +18,10 @@ import { formatTime } from "@/lib/time-utils";
 // クライアントサイドのみでレンダリング
 const MinecraftFullBody = lazy(() =>
   import("@/components/minecraft-fullbody").then((mod) => ({ default: mod.MinecraftFullBody }))
+);
+
+const MinecraftAvatar = lazy(() =>
+  import("@/components/minecraft-avatar").then((mod) => ({ default: mod.MinecraftAvatar }))
 );
 
 // クライアントローダーでサーバーからデータを取得
@@ -112,6 +116,9 @@ import {
   Timer,
   GitCompare,
   Save,
+  User,
+  Menu,
+  X,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -422,193 +429,176 @@ export default function PlayerProfilePage() {
   }));
 
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // タブ項目の定義
+  const tabItems = [
+    { value: "stats", icon: BarChart3, label: "活動・記録" },
+    { value: "keybindings", icon: Keyboard, label: "キー配置" },
+    { value: "items", icon: Package, label: "アイテム配置" },
+    { value: "searchcraft", icon: Search, label: "サーチクラフト" },
+    { value: "devices", icon: Mouse, label: "デバイス" },
+    { value: "settings", icon: Settings, label: "設定" },
+  ];
+
+  // 有効なタブ値のリスト
+  const validTabs = ["profile", ...tabItems.map((t) => t.value)];
+
+  // URLパラメータからタブを取得（無効な値はデフォルトにフォールバック）
+  const tabFromUrl = searchParams.get("tab");
+  const defaultTab = player.defaultProfileTab ?? "keybindings";
+  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
+
+  // タブ変更ハンドラー（URLパラメータを更新）
+  const handleTabChange = (tab: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (tab === defaultTab) {
+      newParams.delete("tab");
+    } else {
+      newParams.set("tab", tab);
+    }
+    navigate(`?${newParams.toString()}`, { preventScrollReset: true });
+  };
+
+  // プリセット選択を表示するタブ
+  const presetTabs = ["keybindings", "devices", "settings"];
+  const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
+
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Left Sidebar - Profile Info */}
-      <aside className="lg:w-72 shrink-0 space-y-6">
-        {/* Skin and Basic Info */}
-        <div className="flex flex-col items-center lg:items-start">
-          <Suspense fallback={<SkinSkeleton width={160} height={240} />}>
-            <MinecraftFullBody
-              uuid={player.uuid}
-              mcid={player.mcid}
-              width={160}
-              height={240}
-              pose={(player.profilePose as PoseName) ?? "waving"}
-              angle={-25}
-              elevation={8}
-              zoom={0.85}
-              asImage
-            />
-          </Suspense>
-
-          <div className="mt-4 text-center lg:text-left w-full">
-            <h1 className="text-2xl font-bold">
-              {player.displayName ?? player.mcid}
-            </h1>
-            <p className="text-muted-foreground">@{player.mcid}</p>
-
-            {player.shortBio && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {player.shortBio}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-2 mt-3 justify-center lg:justify-start">
-              {player.role && (
-                <Badge variant={player.role === "runner" ? "default" : "secondary"}>
-                  {player.role === "runner" ? "走者" : "視聴者"}
-                </Badge>
-              )}
-              {player.mainEdition && (
-                <Badge variant="outline">
-                  {player.mainEdition === "java" ? "Java" : "Bedrock"}
-                </Badge>
-              )}
-              {player.mainPlatform && (
-                <Badge variant="outline">
-                  {getPlatformLabel(player.mainPlatform)}
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-3 mt-3 text-sm text-muted-foreground justify-center lg:justify-start">
-              {player.location && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  {player.location}
-                </span>
-              )}
-              {player.pronouns && (
-                <span>{player.pronouns}</span>
-              )}
-            </div>
-
-            <div className="flex gap-3 mt-2 text-xs text-muted-foreground justify-center lg:justify-start">
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                最終更新: {new Date(player.updatedAt).toLocaleDateString("ja-JP", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col gap-2">
-          {isOwner && (
-            <Button asChild className="w-full">
-              <Link to="/me/edit">
-                <Pencil className="mr-2 h-4 w-4" />
-                プロフィールを編集
-              </Link>
-            </Button>
-          )}
-          <div className="flex gap-2">
-            <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />
-            <ShareButton
-              title={`${player.displayName ?? player.mcid} - Minefolio`}
-              description={player.shortBio ?? undefined}
-            />
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/compare?p1=${player.mcid}`}>
-                <GitCompare className="h-4 w-4 mr-2" />
-                比較
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Social Links */}
-        {player.socialLinks.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">リンク</h3>
-            <div className="flex flex-wrap gap-2">
-              {player.socialLinks.map((link) => (
-                <Button
-                  key={link.id}
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="gap-2"
-                >
-                  <a href={getSocialUrl(link.platform, link.identifier)} target="_blank" rel="noopener noreferrer">
-                    <SocialIcon platform={link.platform as "speedruncom" | "youtube" | "twitch" | "twitter"} />
-                    {link.identifier}
-                  </a>
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Bio */}
-        {player.bio && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">自己紹介</h3>
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
-              <Markdown>{player.bio}</Markdown>
-            </div>
-          </div>
-        )}
-
-        {/* Featured Video in Sidebar */}
-        {player.featuredVideoUrl && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Video className="h-4 w-4" />
-              おすすめ動画
-            </h3>
-            <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
-              <iframe
-                className="w-full h-full"
-                src={getYouTubeEmbedUrl(player.featuredVideoUrl)}
-                title="Featured Video"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
+      {/* Mobile Menu Toggle */}
+      <div className="lg:hidden">
+        <Button
+          variant="outline"
+          className="w-full justify-between"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          <div className="flex items-center gap-3">
+            <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
+              <MinecraftAvatar
+                uuid={player.uuid}
+                mcid={player.mcid}
+                size={32}
+                className="rounded"
               />
+            </Suspense>
+            <div className="text-left">
+              <p className="font-medium text-sm">{player.displayName ?? player.mcid}</p>
+              <p className="text-xs text-muted-foreground">@{player.mcid}</p>
             </div>
           </div>
+          {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+
+        {/* Mobile Menu Dropdown */}
+        {mobileMenuOpen && (
+          <div className="mt-2 p-2 border rounded-lg bg-background space-y-1">
+            <TabsList className="flex flex-col h-auto w-full bg-transparent gap-1">
+              {/* Profile Tab */}
+              <TabsTrigger
+                value="profile"
+                className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <User className="h-4 w-4 shrink-0" />
+                <span>プロフィール</span>
+              </TabsTrigger>
+              {tabItems.map((item) => (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
         )}
+      </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:block w-56 shrink-0">
+        <div className="sticky top-20 space-y-4">
+          <TabsList className="flex flex-col h-auto w-full bg-transparent gap-1">
+            {/* Profile Tab with Avatar */}
+            <TabsTrigger
+              value="profile"
+              className="w-full justify-start gap-3 px-3 py-3 h-auto data-[state=active]:bg-secondary"
+            >
+              <Suspense fallback={<div className="w-10 h-10 bg-muted rounded animate-pulse" />}>
+                <MinecraftAvatar
+                  uuid={player.uuid}
+                  mcid={player.mcid}
+                  size={40}
+                  className="rounded shrink-0"
+                />
+              </Suspense>
+              <div className="text-left min-w-0 flex-1">
+                <p className="font-medium text-sm truncate">{player.displayName ?? player.mcid}</p>
+                <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>
+                {player.shortBio && (
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
+                )}
+              </div>
+            </TabsTrigger>
+
+            <Separator className="my-2" />
+
+            {/* Other Tabs */}
+            {tabItems.map((item) => (
+              <TabsTrigger
+                key={item.value}
+                value={item.value}
+                className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {/* Preset Selector in Sidebar */}
+          {showPresetSelector && (
+            <div className="p-3 border rounded-lg space-y-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Save className="h-3 w-3" />
+                <span>プリセット</span>
+              </div>
+              <Select
+                value={activePresetId ?? "current"}
+                onValueChange={handlePresetChange}
+              >
+                <SelectTrigger className="w-full text-sm">
+                  <SelectValue placeholder="現在の設定" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">現在の設定</SelectItem>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.name}
+                      {preset.isActive && " (適用中)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activePresetId && (
+                <Badge variant="secondary" className="text-xs w-full justify-center">
+                  プリセット表示中
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
       </aside>
 
-      {/* Right Content - Tabs */}
-      <main className="flex-1 min-w-0 space-y-6">
-        {/* Tabs for different sections */}
-        <Tabs defaultValue={player.defaultProfileTab ?? "keybindings"} className="space-y-6">
-        <TabsList className="flex-wrap h-auto gap-2">
-          <TabsTrigger value="keybindings" className="gap-2">
-            <Keyboard className="h-4 w-4" />
-            キー配置
-          </TabsTrigger>
-          <TabsTrigger value="stats" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Stats
-          </TabsTrigger>
-          <TabsTrigger value="items" className="gap-2">
-            <Package className="h-4 w-4" />
-            アイテム配置
-          </TabsTrigger>
-          <TabsTrigger value="searchcraft" className="gap-2">
-            <Search className="h-4 w-4" />
-            サーチクラフト
-          </TabsTrigger>
-          <TabsTrigger value="devices" className="gap-2">
-            <Mouse className="h-4 w-4" />
-            デバイス
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="gap-2">
-            <Settings className="h-4 w-4" />
-            設定
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Preset Selector */}
-        {presets.length > 0 && (
-          <div className="flex items-center gap-3">
+      {/* Main Content */}
+      <div className="flex-1 min-w-0 space-y-6">
+        {/* Mobile Preset Selector */}
+        {showPresetSelector && (
+          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Save className="h-4 w-4" />
               <span>プリセット:</span>
@@ -617,13 +607,11 @@ export default function PlayerProfilePage() {
               value={activePresetId ?? "current"}
               onValueChange={handlePresetChange}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="flex-1">
                 <SelectValue placeholder="現在の設定" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">
-                  現在の設定
-                </SelectItem>
+                <SelectItem value="current">現在の設定</SelectItem>
                 {presets.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.name}
@@ -632,27 +620,176 @@ export default function PlayerProfilePage() {
                 ))}
               </SelectContent>
             </Select>
-            {activePresetId && (
-              <Badge variant="secondary" className="text-xs">
-                プリセット表示中
-              </Badge>
-            )}
           </div>
         )}
 
+        {/* Profile Tab */}
+        <TabsContent value="profile" className="space-y-4">
+          {/* Header: Skin + Basic Info */}
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex flex-col sm:flex-row gap-6">
+                {/* Skin */}
+                <div className="flex justify-center sm:justify-start shrink-0">
+                  <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
+                    <MinecraftFullBody
+                      uuid={player.uuid}
+                      mcid={player.mcid}
+                      width={120}
+                      height={180}
+                      pose={(player.profilePose as PoseName) ?? "waving"}
+                      angle={-25}
+                      elevation={8}
+                      zoom={0.85}
+                      asImage
+                    />
+                  </Suspense>
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 space-y-4">
+                  <div className="text-center sm:text-left">
+                    <h1 className="text-2xl font-bold">{player.displayName ?? player.mcid}</h1>
+                    <p className="text-muted-foreground">@{player.mcid}</p>
+                    {player.shortBio && (
+                      <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
+                    )}
+                  </div>
+
+                  {/* Badges */}
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                    {player.role && (
+                      <Badge variant={player.role === "runner" ? "default" : "secondary"}>
+                        {player.role === "runner" ? "走者" : "視聴者"}
+                      </Badge>
+                    )}
+                    {player.mainEdition && (
+                      <Badge variant="outline">{player.mainEdition === "java" ? "Java" : "Bedrock"}</Badge>
+                    )}
+                    {player.mainPlatform && (
+                      <Badge variant="outline">{getPlatformLabel(player.mainPlatform)}</Badge>
+                    )}
+                  </div>
+
+                  {/* Meta Info */}
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground justify-center sm:justify-start">
+                    {player.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {player.location}
+                      </span>
+                    )}
+                    {player.pronouns && <span>{player.pronouns}</span>}
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      {new Date(player.updatedAt).toLocaleDateString("ja-JP", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                    {isOwner && (
+                      <Button asChild size="sm">
+                        <Link to="/me/edit">
+                          <Pencil className="mr-2 h-4 w-4" />
+                          編集
+                        </Link>
+                      </Button>
+                    )}
+                    <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />
+                    <ShareButton
+                      title={`${player.displayName ?? player.mcid} - Minefolio`}
+                      description={player.shortBio ?? undefined}
+                    />
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/compare?p1=${player.mcid}`}>
+                        <GitCompare className="h-4 w-4 mr-2" />
+                        比較
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Social Links */}
+          {player.socialLinks.length > 0 && (
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-base">リンク</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-4">
+                <div className="flex flex-wrap gap-2">
+                  {player.socialLinks.map((link) => (
+                    <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
+                      <a href={getSocialUrl(link.platform, link.identifier)} target="_blank" rel="noopener noreferrer">
+                        <SocialIcon platform={link.platform as "speedruncom" | "youtube" | "twitch" | "twitter"} />
+                        <span className="font-medium">{getSocialPlatformName(link.platform)}</span>
+                        <span className="text-muted-foreground">{link.identifier}</span>
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Bio */}
+          {player.bio && (
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-base">自己紹介</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-4">
+                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
+                  <Markdown>{player.bio}</Markdown>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Featured Video */}
+          {player.featuredVideoUrl && (
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  おすすめ動画
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-4">
+                <div className="aspect-video rounded-lg overflow-hidden bg-secondary max-w-2xl">
+                  <iframe
+                    className="w-full h-full"
+                    src={getYouTubeEmbedUrl(player.featuredVideoUrl)}
+                    title="Featured Video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="space-y-6">
+        <TabsContent value="keybindings" className="space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="py-3">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">キーボードビュー</CardTitle>
                     <FingerLegend />
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0 pb-4">
                   <div className="flex flex-col items-start gap-4">
                     {/* メインキーボード */}
                     <div className="overflow-x-auto pb-2 w-full">
@@ -691,19 +828,19 @@ export default function PlayerProfilePage() {
               </Card>
 
               {/* List View */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {categoryOrder.map((category) => {
                   const bindings = keybindingsByCategory[category];
                   if (!bindings || bindings.length === 0) return null;
 
                   return (
                     <Card key={category}>
-                      <CardHeader className="pb-2">
+                      <CardHeader className="py-2">
                         <CardTitle className={`text-base font-semibold ${getCategoryColorClass(category)}`}>
                           {categoryLabels[category]}
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="pt-0">
+                      <CardContent className="pt-0 pb-3">
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -733,7 +870,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="space-y-6">
+        <TabsContent value="stats" className="space-y-4">
           {/* MCSR Ranked Section */}
           {externalStats.ranked?.isRegistered && (
             <Card>
@@ -965,9 +1102,9 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="space-y-6">
+        <TabsContent value="items" className="space-y-4">
           {player.itemLayouts.length > 0 ? (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {player.itemLayouts.map((layout) => (
                 <ItemLayoutCard key={layout.id} layout={layout} />
               ))}
@@ -982,7 +1119,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="space-y-6">
+        <TabsContent value="searchcraft" className="space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* ゲーム言語表示 */}
@@ -1015,9 +1152,9 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab */}
-        <TabsContent value="devices" className="space-y-6">
+        <TabsContent value="devices" className="space-y-4">
           {player.playerConfig ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Keyboard */}
               <Card>
                 <CardHeader>
@@ -1111,7 +1248,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-6">
+        <TabsContent value="settings" className="space-y-4">
           {player.playerConfig ? (
             <Card>
               <CardHeader>
@@ -1178,16 +1315,16 @@ export default function PlayerProfilePage() {
             />
           )}
         </TabsContent>
-      </Tabs>
-      </main>
-    </div>
+      </div>
+    </Tabs>
   );
 }
 
 // Eloレートグラフコンポーネント
 function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
-  // マッチを古い順に並べ替え（グラフ表示用）
-  const sortedMatches = [...matches].reverse();
+  // Eloレートが0のマッチを除外してから古い順に並べ替え（グラフ表示用）
+  const validMatches = matches.filter((m) => m.eloAfter > 0);
+  const sortedMatches = [...validMatches].reverse();
 
   if (sortedMatches.length < 2) return null;
 
@@ -1224,7 +1361,7 @@ function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-muted-foreground">Eloレート推移（直近{matches.length}試合）</h4>
+        <h4 className="text-sm font-medium text-muted-foreground">Eloレート推移（直近{sortedMatches.length}試合）</h4>
         <span className={cn(
           "text-sm font-medium",
           isPositive ? "text-green-500" : "text-red-500"
@@ -1736,14 +1873,15 @@ function SocialIcon({
 }) {
   switch (platform) {
     case "youtube":
-      return <Youtube className="h-4 w-4" />;
+      return <Youtube className="h-5 w-5" />;
     case "twitch":
-      return <Twitch className="h-4 w-4" />;
+      return <Twitch className="h-5 w-5" />;
     case "twitter":
-      return <Twitter className="h-4 w-4" />;
+      return <Twitter className="h-5 w-5" />;
     case "speedruncom":
+      return <Trophy className="h-5 w-5" />;
     default:
-      return <ExternalLink className="h-4 w-4" />;
+      return <ExternalLink className="h-5 w-5" />;
   }
 }
 
@@ -1759,6 +1897,21 @@ function getSocialUrl(platform: string, identifier: string): string {
       return `https://x.com/${identifier}`;
     default:
       return "#";
+  }
+}
+
+function getSocialPlatformName(platform: string): string {
+  switch (platform) {
+    case "speedruncom":
+      return "Speedrun.com";
+    case "youtube":
+      return "YouTube";
+    case "twitch":
+      return "Twitch";
+    case "twitter":
+      return "X";
+    default:
+      return platform;
   }
 }
 

@@ -1,21 +1,30 @@
-import { useLoaderData, useSearchParams, Link } from "react-router";
+import { useLoaderData, Link } from "react-router";
+import { useState, useEffect } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { users } from "@/lib/schema";
-import { desc, asc, like, sql, eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+import { PaceCard } from "@/components/pace-card";
+import { StreamCard } from "@/components/stream-card";
+import { VideoCard } from "@/components/video-card";
 import { PlayerCard } from "@/components/player-card";
-import { Input } from "@/components/ui/input";
+import { RecentPaceCard } from "@/components/recent-pace-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Search, Users, ArrowRight } from "lucide-react";
+  ArrowRight,
+  Radio,
+  Timer,
+  Play,
+  Compass,
+  UserCheck,
+  History,
+} from "lucide-react";
+import type { PaceManLiveRun, PaceManRecentRun } from "@/lib/paceman";
+import type { TwitchStream } from "@/lib/twitch";
+import type { YouTubeVideo } from "@/lib/youtube";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -28,13 +37,10 @@ export const meta: Route.MetaFunction = () => {
   ];
 };
 
-const PLAYERS_PER_PAGE = 12;
-
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { env } = context.cloudflare;
   const db = createDb(env.DB);
   const auth = createAuth(db, env);
-  const url = new URL(request.url);
 
   // セッションをチェックしてユーザーが登録済みか確認
   const session = await getOptionalSession(request, auth);
@@ -47,217 +53,263 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     isRegistered = !!existingUser;
   }
 
-  const search = url.searchParams.get("q") ?? "";
-  const sort = url.searchParams.get("sort") ?? "recent";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+  // 登録ユーザーのMCIDとUUIDを取得
+  const allUserMcids = await db.query.users.findMany({
+    columns: { mcid: true, uuid: true },
+  });
+  const registeredMcids = allUserMcids.map((u) => u.mcid.toLowerCase());
+  const mcidToUuid = Object.fromEntries(
+    allUserMcids.map((u) => [u.mcid.toLowerCase(), u.uuid])
+  );
 
-  // Build query
-  let orderBy;
-  switch (sort) {
-    case "name":
-      orderBy = asc(users.mcid);
-      break;
-    case "recent":
-    default:
-      orderBy = desc(users.createdAt);
-      break;
-  }
-
-  // Get players with optional search filter
-  const whereClause = search
-    ? like(users.mcid, `%${search}%`)
-    : undefined;
-
-  const [players, countResult] = await Promise.all([
-    db.query.users.findMany({
-      where: whereClause,
-      orderBy: [orderBy],
-      limit: PLAYERS_PER_PAGE,
-      offset: (page - 1) * PLAYERS_PER_PAGE,
-      columns: {
-        mcid: true,
-        uuid: true,
-        displayName: true,
-        bio: true,
-        location: true,
-        updatedAt: true,
-        shortBio: true,
-      },
-    }),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(whereClause),
-  ]);
-
-  const totalPlayers = countResult[0]?.count ?? 0;
-  const totalPages = Math.ceil(totalPlayers / PLAYERS_PER_PAGE);
+  // 最近更新されたプロフィール（公開設定のみ、最新4件）- DBのみなので即時取得
+  const recentlyUpdatedUsers = await db.query.users.findMany({
+    where: eq(users.profileVisibility, "public"),
+    columns: {
+      mcid: true,
+      uuid: true,
+      displayName: true,
+      location: true,
+      updatedAt: true,
+      shortBio: true,
+    },
+    orderBy: [desc(users.updatedAt)],
+    limit: 4,
+  });
 
   return {
-    players,
-    totalPlayers,
-    totalPages,
-    currentPage: page,
-    search,
-    sort,
     isRegistered,
+    registeredMcids,
+    mcidToUuid,
+    recentlyUpdatedUsers,
   };
 }
 
+// APIレスポンスの型定義
+interface LiveRunsResponse {
+  liveRuns: PaceManLiveRun[];
+  mcidToUuid: Record<string, string>;
+}
+
+interface TwitchStreamsResponse {
+  liveStreams: { stream: TwitchStream; mcid: string }[];
+}
+
+interface YouTubeVideosResponse {
+  recentVideos: YouTubeVideo[];
+}
+
+interface RecentPacesResponse {
+  recentPaces: PaceManRecentRun[];
+  mcidToUuid: Record<string, string>;
+}
+
+// セクション全体のローディングスケルトン
+function SectionSkeleton({ columns = 4 }: { columns?: number }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-6 w-32" />
+      </div>
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${columns} gap-4`}>
+        {Array.from({ length: columns }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-lg" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function HomePage() {
-  const { players, totalPlayers, totalPages, currentPage, search, sort, isRegistered } =
+  const { isRegistered, registeredMcids, mcidToUuid, recentlyUpdatedUsers } =
     useLoaderData<typeof loader>();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const handleSearch = (value: string) => {
-    const params = new URLSearchParams(searchParams);
-    if (value) {
-      params.set("q", value);
-    } else {
-      params.delete("q");
-    }
-    params.delete("page");
-    setSearchParams(params);
-  };
+  const registeredMcidSet = new Set(registeredMcids);
 
-  const handleSort = (value: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("sort", value);
-    params.delete("page");
-    setSearchParams(params);
-  };
+  // 遅延読み込み用の状態
+  const [liveRuns, setLiveRuns] = useState<PaceManLiveRun[]>([]);
+  const [liveStreams, setLiveStreams] = useState<{ stream: TwitchStream; mcid: string }[]>([]);
+  const [recentVideos, setRecentVideos] = useState<YouTubeVideo[]>([]);
+  const [recentPaces, setRecentPaces] = useState<PaceManRecentRun[]>([]);
+  const [pacesMcidToUuid, setPacesMcidToUuid] = useState<Record<string, string>>({});
 
-  const handlePageChange = (newPage: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("page", String(newPage));
-    setSearchParams(params);
-  };
+  // ローディング状態
+  const [loadingLiveRuns, setLoadingLiveRuns] = useState(true);
+  const [loadingStreams, setLoadingStreams] = useState(true);
+  const [loadingVideos, setLoadingVideos] = useState(true);
+  const [loadingPaces, setLoadingPaces] = useState(true);
+
+  // 遅延読み込み
+  useEffect(() => {
+    // ライブペース取得
+    fetch("/api/home-feed?type=live-runs")
+      .then((res) => res.json() as Promise<LiveRunsResponse>)
+      .then((data) => {
+        setLiveRuns(data.liveRuns || []);
+        if (data.mcidToUuid) {
+          setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingLiveRuns(false));
+
+    // Twitch配信取得
+    fetch("/api/home-feed?type=twitch-streams")
+      .then((res) => res.json() as Promise<TwitchStreamsResponse>)
+      .then((data) => setLiveStreams(data.liveStreams || []))
+      .catch(console.error)
+      .finally(() => setLoadingStreams(false));
+
+    // YouTube動画取得
+    fetch("/api/home-feed?type=youtube-videos")
+      .then((res) => res.json() as Promise<YouTubeVideosResponse>)
+      .then((data) => setRecentVideos(data.recentVideos || []))
+      .catch(console.error)
+      .finally(() => setLoadingVideos(false));
+
+    // 最近のペース取得
+    fetch("/api/home-feed?type=recent-paces")
+      .then((res) => res.json() as Promise<RecentPacesResponse>)
+      .then((data) => {
+        setRecentPaces(data.recentPaces || []);
+        if (data.mcidToUuid) {
+          setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingPaces(false));
+  }, []);
+
+  // mcidToUuidをマージ
+  const mergedMcidToUuid = { ...mcidToUuid, ...pacesMcidToUuid };
 
   return (
     <div className="flex-1 flex flex-col space-y-8">
       {/* Hero Section */}
       <section className="text-center py-12 space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">
-          Minefolio
-        </h1>
+        <h1 className="text-4xl font-bold tracking-tight">Minefolio</h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Minecraft Speedrunning + Portfolio
         </p>
-        {!isRegistered && (
-          <div className="flex justify-center gap-4 pt-4">
+        <div className="flex justify-center gap-4 pt-4">
+          {!isRegistered && (
             <Button asChild size="lg">
               <Link to="/login">
                 プロフィールを作る
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-          </div>
-        )}
+          )}
+          <Button asChild size="lg" variant="outline">
+            <Link to="/browse">
+              <Compass className="mr-2 h-4 w-4" />
+              ランナーを探す
+            </Link>
+          </Button>
+        </div>
       </section>
 
-      {/* Players Section */}
-      <section className="flex-1 flex flex-col space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-2xl font-bold">プレイヤー</h2>
-            <span className="text-muted-foreground">({totalPlayers})</span>
-          </div>
+      {/* 最近更新されたプロフィール（即時表示） */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <UserCheck className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">最近更新されたプロフィール</h2>
         </div>
-
-        {/* Search and Filter */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="MCIDで検索..."
-              defaultValue={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={sort} onValueChange={handleSort}>
-            <SelectTrigger className="w-full sm:w-45">
-              <SelectValue placeholder="並び替え" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="recent">新着順</SelectItem>
-              <SelectItem value="name">名前順 (A-Z)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Player Grid */}
-        {players.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {players.map((player) => (
-              <PlayerCard key={player.mcid} player={player} />
+        {recentlyUpdatedUsers.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {recentlyUpdatedUsers.map((user) => (
+              <PlayerCard key={user.mcid} player={user} />
             ))}
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg">プレイヤーが見つかりません</p>
-            {search && (
-              <p className="text-sm mt-2">
-                別の検索ワードをお試しください{" "}
-                <button
-                  onClick={() => handleSearch("")}
-                  className="text-primary hover:underline"
-                >
-                  検索をクリア
-                </button>
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => handlePageChange(currentPage - 1)}
-            >
-              前へ
-            </Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={pageNum === currentPage ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handlePageChange(pageNum)}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= totalPages}
-              onClick={() => handlePageChange(currentPage + 1)}
-            >
-              次へ
-            </Button>
+          <div className="text-center py-8 text-muted-foreground">
+            <UserCheck className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>登録ユーザーはまだいません</p>
           </div>
         )}
       </section>
+
+      {/* Twitch 配信中 */}
+      {loadingStreams ? (
+        <SectionSkeleton columns={3} />
+      ) : liveStreams.length > 0 ? (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Radio className="h-5 w-5 text-red-500" />
+            <h2 className="text-xl font-bold">配信中</h2>
+            <span className="text-muted-foreground">({liveStreams.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {liveStreams.map(({ stream, mcid }) => (
+              <StreamCard key={stream.id} stream={stream} mcid={mcid} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* PaceMan ライブペース */}
+      {loadingLiveRuns ? (
+        <SectionSkeleton columns={2} />
+      ) : liveRuns.length > 0 ? (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Timer className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-bold">ライブペース</h2>
+            <span className="text-muted-foreground">({liveRuns.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {liveRuns.map((run) => (
+              <PaceCard
+                key={run.worldId}
+                run={run}
+                isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* PaceMan Stats 最近のペース */}
+      {loadingPaces ? (
+        <SectionSkeleton columns={4} />
+      ) : recentPaces.length > 0 ? (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-bold">最近のペース</h2>
+            <span className="text-muted-foreground">({recentPaces.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {recentPaces.map((run) => (
+              <RecentPaceCard
+                key={`${run.id}-${run.time}`}
+                run={run}
+                isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
+                uuid={mergedMcidToUuid[run.nickname.toLowerCase()]}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* YouTube 最新動画 */}
+      {loadingVideos ? (
+        <SectionSkeleton columns={3} />
+      ) : recentVideos.length > 0 ? (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Play className="h-5 w-5 text-red-600" />
+            <h2 className="text-xl font-bold">最新動画</h2>
+            <span className="text-muted-foreground">({recentVideos.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentVideos.map((video) => (
+              <VideoCard key={video.id.videoId} video={video} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

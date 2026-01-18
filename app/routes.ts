@@ -26,6 +26,7 @@ export default [
 
     // Player profile (public)
     route("player/:mcid", "routes/player/profile.tsx"),
+    route("player/:mcid/stats", "routes/player/stats.tsx"),
 
     // Protected routes - user settings
     ...prefix("me", [
@@ -47,4 +48,5 @@ export default [
   route("api/auth/*", "routes/api/auth/splat.tsx"),
   route("api/skin", "routes/api/skin.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
+  route("api/home-feed", "routes/api/home-feed.ts"),
 ] satisfies RouteConfig;

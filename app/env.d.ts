@@ -10,6 +10,10 @@ export interface CloudflareEnv {
   APP_URL: string;
   BETTER_AUTH_SECRET: string;
   LEGACY_API_URL?: string;
+  // External APIs
+  TWITCH_CLIENT_ID?: string;
+  TWITCH_CLIENT_SECRET?: string;
+  YOUTUBE_API_KEY?: string;
 }
 
 /**

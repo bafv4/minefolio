@@ -3,8 +3,12 @@ compatibility_date = "2026-01-01"
 pages_build_output_dir = "./build/client"
 
 # 環境変数（ローカル開発用）
+# 本番環境では Cloudflare Dashboard で設定
 [vars]
 APP_URL = "http://localhost:5173"
+TWITCH_CLIENT_ID = "f4qfx7v3psgugwnm2eri97bqvvdllf"
+TWITCH_CLIENT_SECRET = "3mobtiz74xn8wtupqnm8bt8gxxxzgx"
+YOUTUBE_API_KEY = "AIzaSyALHW8rIlMGwFtcicyal9vApm0T_MHqp_w"
 
 # 本番環境変数
 [env.production.vars]

@@ -684,11 +684,14 @@ export function VirtualKeyboard({
     );
   };
 
+  // メインキーボードの最小幅を計算（15ユニット + ギャップ）
+  const mainKeyboardMinWidth = MAIN_KEYBOARD_UNITS * baseSize + (MAIN_KEYBOARD_UNITS - 1) * gap;
+
   return (
     <TooltipProvider delayDuration={200}>
-      <div className={cn("w-full", className)}>
+      <div className={cn("shrink-0", className)} style={{ minWidth: mainKeyboardMinWidth }}>
         {/* メインキーボード */}
-        <div className="w-full">
+        <div className="shrink-0">
           {renderKeyboardSection(mainLayout, baseSize, gap)}
         </div>
 

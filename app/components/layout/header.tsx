@@ -23,9 +23,9 @@ interface HeaderProps {
 
 const navigation = [
   { name: "ホーム", href: "/" },
+  { name: "探す", href: "/browse" },
   { name: "操作設定", href: "/keybindings" },
   { name: "比較", href: "/compare" },
-  { name: "統計", href: "/stats" },
 ];
 
 export function Header({ user }: HeaderProps) {
