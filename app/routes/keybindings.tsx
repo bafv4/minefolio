@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 export const meta: Route.MetaFunction = () => {
   return [
     { title: "操作設定一覧 - Minefolio" },
-    { name: "description", content: "スピードランナーの操作設定・キー配置を一覧で確認できます。" },
+    { name: "description", content: "RTA走者の操作設定・キー配置を一覧で確認できます。" },
   ];
 };
 
@@ -40,6 +40,10 @@ const PLAYERS_PER_PAGE = 30;
 
 // キーボード系の主要なキーバインド
 const KEYBOARD_COLUMNS = [
+  { action: "forward", label: "前進", shortLabel: "前" },
+  { action: "back", label: "後退", shortLabel: "後" },
+  { action: "left", label: "左", shortLabel: "左" },
+  { action: "right", label: "右", shortLabel: "右" },
   { action: "sprint", label: "ダッシュ", shortLabel: "ﾀﾞｯｼｭ" },
   { action: "sneak", label: "スニーク", shortLabel: "ｽﾆｰｸ" },
   { action: "inventory", label: "インベントリ", shortLabel: "ｲﾝﾍﾞﾝﾄﾘ" },
@@ -220,6 +224,9 @@ export default function KeybindingsListPage() {
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // URLパラメータからタブを取得
+  const tabFromUrl = searchParams.get("tab") || "keyboard";
+
   // マウスタブのソート状態
   const [mouseSortKey, setMouseSortKey] = useState<MouseSortKey>(null);
   const [mouseSortDirection, setMouseSortDirection] = useState<SortDirection>("asc");
@@ -323,6 +330,12 @@ export default function KeybindingsListPage() {
     setSearchParams(params);
   };
 
+  const handleTabChange = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", value);
+    setSearchParams(params);
+  };
+
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams);
     params.set("page", String(newPage));
@@ -337,7 +350,7 @@ export default function KeybindingsListPage() {
           操作設定一覧
         </h1>
         <p className="text-muted-foreground mt-1">
-          スピードランナーの操作設定・キー配置を一覧で確認できます。
+          RTA走者の操作設定・キー配置を一覧で確認できます。
         </p>
       </div>
 
@@ -369,7 +382,7 @@ export default function KeybindingsListPage() {
       </p>
 
       {/* Tabs for Keyboard / Mouse */}
-      <Tabs defaultValue="keyboard" className="w-full">
+      <Tabs value={tabFromUrl} onValueChange={handleTabChange} className="w-full">
         <TabsList>
           <TabsTrigger value="keyboard" className="gap-1.5">
             <Keyboard className="h-4 w-4" />

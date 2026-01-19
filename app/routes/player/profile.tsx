@@ -716,6 +716,7 @@ export default function PlayerProfilePage() {
                     <ShareButton
                       title={`${player.displayName ?? player.mcid} - Minefolio`}
                       description={player.shortBio ?? undefined}
+                      includeTab={true}
                     />
                     <Button asChild variant="outline" size="sm">
                       <Link to={`/compare?p1=${player.mcid}`}>

@@ -13,14 +13,27 @@ interface ShareButtonProps {
   title: string;
   url?: string;
   description?: string;
+  includeTab?: boolean; // 現在のタブをURLに含めるか
 }
 
-export function ShareButton({ title, url, description }: ShareButtonProps) {
+export function ShareButton({ title, url, description, includeTab = false }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const getShareUrl = () => {
     if (url) return url;
-    if (typeof window !== "undefined") return window.location.href;
+    if (typeof window !== "undefined") {
+      // includeTabがtrueの場合、現在のURLをそのまま使用（タブパラメータ含む）
+      // falseの場合、タブパラメータを除外
+      if (!includeTab) {
+        const urlObj = new URL(window.location.href);
+        // タブパラメータがあれば除外
+        if (urlObj.searchParams.has("tab")) {
+          urlObj.searchParams.delete("tab");
+          return urlObj.toString();
+        }
+      }
+      return window.location.href;
+    }
     return "";
   };
 
