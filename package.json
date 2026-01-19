@@ -1,6 +1,7 @@
 {
   "name": "minefolio",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
@@ -66,7 +67,6 @@
   "devDependencies": {
     "@react-router/dev": "7.12.0",
     "@tailwindcss/vite": "^4.1.18",
-    "@vercel/remix": "^2.16.7",
     "@types/node": "^22.19.7",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
