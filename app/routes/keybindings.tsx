@@ -142,8 +142,8 @@ function calculateCursorSpeed(
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
   const url = new URL(request.url);
 
   const search = url.searchParams.get("q") ?? "";

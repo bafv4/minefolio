@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
   const auth = createAuth(db, env);
 
   const session = await getSession(request, auth);

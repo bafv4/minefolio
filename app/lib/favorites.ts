@@ -1,9 +1,8 @@
 // お気に入りプレイヤーをCookieまたはDBで管理するユーティリティ
 
-import type { D1Database } from "@cloudflare/workers-types";
-import { drizzle } from "drizzle-orm/d1";
 import { eq, and } from "drizzle-orm";
 import { favorites } from "./schema";
+import type { Database } from "./db";
 
 const FAVORITES_COOKIE_NAME = "minefolio_favorites";
 const MAX_FAVORITES = 50;
@@ -86,17 +85,15 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 
 /**
  * DBからお気に入りリストを取得（認証済みユーザー）
- * @param db - D1データベース
+ * @param db - データベース
  * @param userId - ユーザーID
  * @returns お気に入りMCIDの配列
  */
 export async function getFavoritesFromDb(
-  db: D1Database,
+  db: Database,
   userId: string
 ): Promise<string[]> {
-  const drizzleDb = drizzle(db);
-
-  const results = await drizzleDb
+  const results = await db
     .select({ favoriteMcid: favorites.favoriteMcid })
     .from(favorites)
     .where(eq(favorites.userId, userId))
@@ -107,19 +104,17 @@ export async function getFavoritesFromDb(
 
 /**
  * DBにお気に入りを追加（認証済みユーザー）
- * @param db - D1データベース
+ * @param db - データベース
  * @param userId - ユーザーID
  * @param mcid - 追加するMCID
  */
 export async function addFavoriteToDb(
-  db: D1Database,
+  db: Database,
   userId: string,
   mcid: string
 ): Promise<void> {
-  const drizzleDb = drizzle(db);
-
   // 既に存在するかチェック
-  const existing = await drizzleDb
+  const existing = await db
     .select()
     .from(favorites)
     .where(and(eq(favorites.userId, userId), eq(favorites.favoriteMcid, mcid)))
@@ -130,7 +125,7 @@ export async function addFavoriteToDb(
   }
 
   // 追加
-  await drizzleDb.insert(favorites).values({
+  await db.insert(favorites).values({
     userId,
     favoriteMcid: mcid,
   });
@@ -138,38 +133,34 @@ export async function addFavoriteToDb(
 
 /**
  * DBからお気に入りを削除（認証済みユーザー）
- * @param db - D1データベース
+ * @param db - データベース
  * @param userId - ユーザーID
  * @param mcid - 削除するMCID
  */
 export async function removeFavoriteFromDb(
-  db: D1Database,
+  db: Database,
   userId: string,
   mcid: string
 ): Promise<void> {
-  const drizzleDb = drizzle(db);
-
-  await drizzleDb
+  await db
     .delete(favorites)
     .where(and(eq(favorites.userId, userId), eq(favorites.favoriteMcid, mcid)));
 }
 
 /**
  * Cookieのお気に入りをDBに同期（ログイン時）
- * @param db - D1データベース
+ * @param db - データベース
  * @param userId - ユーザーID
  * @param cookieFavorites - Cookieから取得したお気に入り
  */
 export async function syncCookieFavoritesToDb(
-  db: D1Database,
+  db: Database,
   userId: string,
   cookieFavorites: string[]
 ): Promise<void> {
   if (cookieFavorites.length === 0) {
     return;
   }
-
-  const drizzleDb = drizzle(db);
 
   // DBの既存のお気に入りを取得
   const dbFavorites = await getFavoritesFromDb(db, userId);
@@ -185,13 +176,13 @@ export async function syncCookieFavoritesToDb(
 
 /**
  * お気に入りを取得（認証状態に応じてCookieまたはDBから）
- * @param db - D1データベース（認証済みの場合）
+ * @param db - データベース（認証済みの場合）
  * @param userId - ユーザーID（認証済みの場合）
  * @param cookieHeader - Cookieヘッダー（未認証の場合）
  * @returns お気に入りMCIDの配列
  */
 export async function getFavorites(
-  db: D1Database | null,
+  db: Database | null,
   userId: string | null,
   cookieHeader: string | null
 ): Promise<string[]> {

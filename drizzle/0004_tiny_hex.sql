@@ -1,1 +1,0 @@
-ALTER TABLE `player_configs` ADD `windows_speed_multiplier` real;

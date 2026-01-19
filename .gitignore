@@ -6,3 +6,17 @@
 # React Router
 /.react-router/
 /build/
+
+# Cloudflare (deprecated)
+.wrangler/
+wrangler.toml
+drizzle.config.prod.ts
+/workers/
+
+# Local database
+local.db
+local.db-shm
+local.db-wal
+
+# Vercel
+.vercel

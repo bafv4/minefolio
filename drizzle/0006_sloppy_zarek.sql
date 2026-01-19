@@ -1,1 +1,0 @@
-ALTER TABLE `users` ADD `hidden_speedrun_records` text;

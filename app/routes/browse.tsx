@@ -32,8 +32,8 @@ const ITEMS_PER_PAGE = 12;
 type SortOption = "updatedAt" | "mcid" | "displayName";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
 
   const url = new URL(request.url);
   const searchQuery = url.searchParams.get("q") || "";

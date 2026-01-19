@@ -1,10 +1,9 @@
-/// <reference types="@cloudflare/workers-types" />
-
 /**
- * Cloudflare Workers環境変数の型定義
+ * アプリケーション環境変数の型定義
  */
-export interface CloudflareEnv {
-  DB: D1Database;
+export interface Env {
+  TURSO_DATABASE_URL: string;
+  TURSO_AUTH_TOKEN?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   APP_URL: string;
@@ -17,14 +16,10 @@ export interface CloudflareEnv {
 }
 
 /**
- * React Router Cloudflareコンテキストの型定義
+ * React Router コンテキストの型定義
  */
 declare module "react-router" {
   interface AppLoadContext {
-    cloudflare: {
-      env: CloudflareEnv;
-      ctx: ExecutionContext;
-      cf: CfProperties;
-    };
+    env: Env;
   }
 }

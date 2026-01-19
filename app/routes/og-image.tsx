@@ -1,9 +1,9 @@
 // OGP画像生成API
 // プレイヤープロフィール用の動的OGP画像を生成
-import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { getCraftarAvatarUrl } from "@/lib/mojang";
+import { createDb } from "@/lib/db";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
   const url = new URL(request.url);
@@ -13,7 +13,7 @@ export async function loader({ request, context }: { request: Request; context: 
     return new Response("Missing mcid parameter", { status: 400 });
   }
 
-  const db = drizzle(context.cloudflare.env.DB);
+  const db = createDb();
 
   // ユーザー情報を取得
   const user = await db

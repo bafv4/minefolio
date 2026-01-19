@@ -217,8 +217,8 @@ function calculateCm360(
 }
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
 

@@ -10,8 +10,8 @@ import { getRecentVideos } from "@/lib/youtube";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
 
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");

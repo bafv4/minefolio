@@ -128,8 +128,8 @@ function normalizeKeyCodeForStats(keyCode: string): string {
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
 
   // 総ユーザー数
   const [{ totalUsers }] = await db.select({ totalUsers: count() }).from(users);

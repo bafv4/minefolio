@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1768398749608,
-      "tag": "0000_harsh_moonstone",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1768482442152,
-      "tag": "0001_nice_vivisector",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1768576207311,
-      "tag": "0002_massive_baron_zemo",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1768611010528,
-      "tag": "0003_unknown_pepper_potts",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1768647782820,
-      "tag": "0004_tiny_hex",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1768650824772,
-      "tag": "0005_broad_lorna_dane",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1768653632730,
-      "tag": "0006_sloppy_zarek",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1768665490216,
-      "tag": "0007_remove_is_featured",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1768697580015,
-      "tag": "0008_burly_adam_destine",
+      "when": 1768738080333,
+      "tag": "0000_blue_squadron_sinister",
       "breakpoints": true
     }
   ]

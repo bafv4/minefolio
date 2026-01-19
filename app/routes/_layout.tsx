@@ -9,8 +9,8 @@ import { eq } from "drizzle-orm";
 import { CookieConsentBanner } from "@/components/cookie-consent";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
   const auth = createAuth(db, env);
 
   const session = await getOptionalSession(request, auth);

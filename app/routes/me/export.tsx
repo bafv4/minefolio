@@ -19,7 +19,7 @@ import {
 import { getOptionalSession } from "@/lib/session";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
-  const { env } = context.cloudflare;
+  const { env } = context;
   const db = drizzle(env.DB);
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -32,7 +32,7 @@ export async function loader({ request, context }: { request: Request; context: 
 }
 
 export async function action({ request, context }: { request: Request; context: any }) {
-  const { env } = context.cloudflare;
+  const { env } = context;
   const db = drizzle(env.DB);
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

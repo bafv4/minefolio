@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8737ad4e-25b6-4ebf-ab3d-7dcce33c3974",
+  "id": "a4faa68c-4ffa-45cf-bfc1-dcd98d02a67f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "auth_accounts": {
@@ -450,14 +450,6 @@
           "autoincrement": false,
           "default": true
         },
-        "is_featured": {
-          "name": "is_featured",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "display_order": {
           "name": "display_order",
           "type": "integer",
@@ -511,19 +503,244 @@
             "record_type"
           ],
           "isUnique": false
-        },
-        "idx_category_records_featured": {
-          "name": "idx_category_records_featured",
-          "columns": [
-            "is_featured"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {
         "category_records_user_id_users_id_fk": {
           "name": "category_records_user_id_users_id_fk",
           "tableFrom": "category_records",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "config_history": {
+      "name": "config_history",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "change_type": {
+          "name": "change_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "change_description": {
+          "name": "change_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "previous_data": {
+          "name": "previous_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "new_data": {
+          "name": "new_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "preset_id": {
+          "name": "preset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_config_history_user_id": {
+          "name": "idx_config_history_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "idx_config_history_created_at": {
+          "name": "idx_config_history_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "idx_config_history_change_type": {
+          "name": "idx_config_history_change_type",
+          "columns": [
+            "change_type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "config_history_user_id_users_id_fk": {
+          "name": "config_history_user_id_users_id_fk",
+          "tableFrom": "config_history",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "config_history_preset_id_config_presets_id_fk": {
+          "name": "config_history_preset_id_config_presets_id_fk",
+          "tableFrom": "config_history",
+          "tableTo": "config_presets",
+          "columnsFrom": [
+            "preset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "config_presets": {
+      "name": "config_presets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "keybindings_data": {
+          "name": "keybindings_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "player_config_data": {
+          "name": "player_config_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "remaps_data": {
+          "name": "remaps_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finger_assignments_data": {
+          "name": "finger_assignments_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_config_presets_user_id": {
+          "name": "idx_config_presets_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "idx_config_presets_is_active": {
+          "name": "idx_config_presets_is_active",
+          "columns": [
+            "is_active"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "config_presets_user_id_users_id_fk": {
+          "name": "config_presets_user_id_users_id_fk",
+          "tableFrom": "config_presets",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -910,6 +1127,74 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "favorites": {
+      "name": "favorites",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "favorite_mcid": {
+          "name": "favorite_mcid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_favorites_user_mcid": {
+          "name": "idx_favorites_user_mcid",
+          "columns": [
+            "user_id",
+            "favorite_mcid"
+          ],
+          "isUnique": true
+        },
+        "idx_favorites_user_id": {
+          "name": "idx_favorites_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "favorites_user_id_users_id_fk": {
+          "name": "favorites_user_id_users_id_fk",
+          "tableFrom": "favorites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "item_layouts": {
       "name": "item_layouts",
       "columns": {
@@ -1244,6 +1529,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "windows_speed_multiplier": {
+          "name": "windows_speed_multiplier",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "mouse_acceleration": {
           "name": "mouse_acceleration",
           "type": "integer",
@@ -1298,6 +1590,20 @@
         "game_language": {
           "name": "game_language",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fov": {
+          "name": "fov",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "gui_scale": {
+          "name": "gui_scale",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1479,18 +1785,11 @@
           "notNull": true,
           "autoincrement": false
         },
-        "url": {
-          "name": "url",
+        "identifier": {
+          "name": "identifier",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "username": {
-          "name": "username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "display_order": {
@@ -1517,13 +1816,19 @@
         }
       },
       "indexes": {
-        "idx_social_links_user_platform": {
-          "name": "idx_social_links_user_platform",
+        "idx_social_links_user_id": {
+          "name": "idx_social_links_user_id",
           "columns": [
-            "user_id",
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "idx_social_links_platform": {
+          "name": "idx_social_links_platform",
+          "columns": [
             "platform"
           ],
-          "isUnique": true
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -1613,6 +1918,14 @@
           "autoincrement": false,
           "default": "'public'"
         },
+        "profile_pose": {
+          "name": "profile_pose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'waving'"
+        },
         "location": {
           "name": "location",
           "type": "text",
@@ -1622,6 +1935,49 @@
         },
         "pronouns": {
           "name": "pronouns",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "default_profile_tab": {
+          "name": "default_profile_tab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'keybindings'"
+        },
+        "featured_video_url": {
+          "name": "featured_video_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "main_edition": {
+          "name": "main_edition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "main_platform": {
+          "name": "main_platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "short_bio": {
+          "name": "short_bio",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1644,6 +2000,13 @@
         "speedruncom_last_sync": {
           "name": "speedruncom_last_sync",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hidden_speedrun_records": {
+          "name": "hidden_speedrun_records",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

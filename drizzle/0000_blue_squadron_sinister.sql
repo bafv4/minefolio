@@ -66,7 +66,6 @@ CREATE TABLE `category_records` (
 	`achieved` integer DEFAULT false NOT NULL,
 	`achieved_at` integer,
 	`is_visible` integer DEFAULT true NOT NULL,
-	`is_featured` integer DEFAULT false NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
@@ -77,7 +76,39 @@ CREATE UNIQUE INDEX `idx_category_records_user_category_type` ON `category_recor
 CREATE INDEX `idx_category_records_user_id` ON `category_records` (`user_id`);--> statement-breakpoint
 CREATE INDEX `idx_category_records_category` ON `category_records` (`category`);--> statement-breakpoint
 CREATE INDEX `idx_category_records_type` ON `category_records` (`record_type`);--> statement-breakpoint
-CREATE INDEX `idx_category_records_featured` ON `category_records` (`is_featured`);--> statement-breakpoint
+CREATE TABLE `config_history` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`change_type` text NOT NULL,
+	`change_description` text NOT NULL,
+	`previous_data` text,
+	`new_data` text,
+	`preset_id` text,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`preset_id`) REFERENCES `config_presets`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `idx_config_history_user_id` ON `config_history` (`user_id`);--> statement-breakpoint
+CREATE INDEX `idx_config_history_created_at` ON `config_history` (`created_at`);--> statement-breakpoint
+CREATE INDEX `idx_config_history_change_type` ON `config_history` (`change_type`);--> statement-breakpoint
+CREATE TABLE `config_presets` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`is_active` integer DEFAULT false NOT NULL,
+	`keybindings_data` text,
+	`player_config_data` text,
+	`remaps_data` text,
+	`finger_assignments_data` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `idx_config_presets_user_id` ON `config_presets` (`user_id`);--> statement-breakpoint
+CREATE INDEX `idx_config_presets_is_active` ON `config_presets` (`is_active`);--> statement-breakpoint
 CREATE TABLE `custom_fields` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -132,6 +163,16 @@ CREATE TABLE `external_tools` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_external_tools_user_trigger_tool` ON `external_tools` (`user_id`,`trigger_key`,`tool_name`);--> statement-breakpoint
+CREATE TABLE `favorites` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`favorite_mcid` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_favorites_user_mcid` ON `favorites` (`user_id`,`favorite_mcid`);--> statement-breakpoint
+CREATE INDEX `idx_favorites_user_id` ON `favorites` (`user_id`);--> statement-breakpoint
 CREATE TABLE `item_layouts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -181,6 +222,7 @@ CREATE TABLE `player_configs` (
 	`mouse_dpi` integer,
 	`game_sensitivity` real,
 	`windows_speed` integer,
+	`windows_speed_multiplier` real,
 	`mouse_acceleration` integer DEFAULT false,
 	`raw_input` integer DEFAULT true,
 	`cm360` real,
@@ -189,6 +231,8 @@ CREATE TABLE `player_configs` (
 	`toggle_sneak` integer,
 	`auto_jump` integer,
 	`game_language` text,
+	`fov` integer,
+	`gui_scale` integer,
 	`finger_assignments` text,
 	`notes` text,
 	`created_at` integer NOT NULL,
@@ -215,15 +259,15 @@ CREATE TABLE `social_links` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`platform` text NOT NULL,
-	`url` text NOT NULL,
-	`username` text,
+	`identifier` text NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `idx_social_links_user_platform` ON `social_links` (`user_id`,`platform`);--> statement-breakpoint
+CREATE INDEX `idx_social_links_user_id` ON `social_links` (`user_id`);--> statement-breakpoint
+CREATE INDEX `idx_social_links_platform` ON `social_links` (`platform`);--> statement-breakpoint
 CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`discord_id` text NOT NULL,
@@ -234,11 +278,19 @@ CREATE TABLE `users` (
 	`bio` text,
 	`has_imported` integer DEFAULT false NOT NULL,
 	`profile_visibility` text DEFAULT 'public' NOT NULL,
+	`profile_pose` text DEFAULT 'waving',
 	`location` text,
 	`pronouns` text,
+	`default_profile_tab` text DEFAULT 'keybindings',
+	`featured_video_url` text,
+	`main_edition` text,
+	`main_platform` text,
+	`role` text,
+	`short_bio` text,
 	`speedruncom_username` text,
 	`speedruncom_id` text,
 	`speedruncom_last_sync` integer,
+	`hidden_speedrun_records` text,
 	`profile_views` integer DEFAULT 0 NOT NULL,
 	`last_active` integer,
 	`created_at` integer NOT NULL,

@@ -1,6 +1,7 @@
 name = "minefolio"
 compatibility_date = "2026-01-01"
-pages_build_output_dir = "./build/client"
+compatibility_flags = ["nodejs_compat"]
+main = "./workers/app.ts"
 
 # 環境変数（ローカル開発用）
 # 本番環境では Cloudflare Dashboard で設定
@@ -10,21 +11,20 @@ APP_URL = "http://localhost:5173"
 # TWITCH_CLIENT_ID と TWITCH_CLIENT_SECRET は .dev.vars または Cloudflare Dashboard で設定
 # YOUTUBE_API_KEY は .dev.vars または Cloudflare Dashboard で設定
 
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "minefolio-prd"
+database_id = "98d106db-116b-4b87-8f1d-8d63029f1c01"
+
 # 本番環境変数
 [env.production.vars]
 APP_URL = "https://minefolio.pages.dev"
 
-[[d1_databases]]
+[[env.production.d1_databases]]
 binding = "DB"
-database_name = "minefolio-db"
-database_id = "9250eb59-9aa9-4bff-8ed3-6e58d8baf139"
-
-# Cron Triggers
-[triggers]
-crons = [
-  "0 0 * * *",  # MCID同期 (毎日0:00 UTC)
-  "0 1 * * *",  # Speedrun.com同期 (毎日1:00 UTC)
-]
+database_name = "minefolio-prd"
+database_id = "98d106db-116b-4b87-8f1d-8d63029f1c01"
 
 # KV Namespaces（オプション）
 # [[kv_namespaces]]

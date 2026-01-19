@@ -21,8 +21,8 @@ export const meta: Route.MetaFunction = () => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context.cloudflare;
-  const db = createDb(env.DB);
+  const { env } = context;
+  const db = createDb();
 
   const cookieHeader = request.headers.get("Cookie");
   const favoriteMcids = getFavoritesFromCookie(cookieHeader);
