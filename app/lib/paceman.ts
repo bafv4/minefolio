@@ -73,6 +73,23 @@ export function getSplitLabel(eventId: string): string {
 }
 
 /**
+ * スプリットIDを英語ラベルに変換
+ */
+export function getSplitLabelEnglish(eventId: string): string {
+  const labels: Record<string, string> = {
+    "rsg.enter_nether": "Enter Nether",
+    "rsg.enter_bastion": "Bastion",
+    "rsg.enter_fortress": "Fortress",
+    "rsg.first_portal": "Blind",
+    "rsg.second_portal": "Second Portal",
+    "rsg.enter_stronghold": "Enter Stronghold",
+    "rsg.enter_end": "Enter End",
+    "rsg.credits": "Finish",
+  };
+  return labels[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
+}
+
+/**
  * スプリットIDの進行順序を取得（ソート用）
  */
 export function getSplitOrder(eventId: string): number {

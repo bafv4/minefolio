@@ -67,8 +67,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         mcidToUuid,
       };
 
-      // キャッシュに保存（1分 - ライブデータは頻繁に変わる）
-      await setCached(liveRunsCacheKey, result, CacheTTL.SHORT);
+      // キャッシュに保存（15秒 - ライブデータは頻繁に変わる）
+      await setCached(liveRunsCacheKey, result, 15 * 1000);
 
       return Response.json(result);
     }

@@ -7,7 +7,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq, desc } from "drizzle-orm";
-import { PaceCard } from "@/components/pace-card";
+import { LivePaceList } from "@/components/live-pace-list";
 import { StreamCard } from "@/components/stream-card";
 import { VideoCard } from "@/components/video-card";
 import { PlayerCard } from "@/components/player-card";
@@ -169,9 +169,8 @@ export default function HomePage() {
   const [errorVideos, setErrorVideos] = useState(false);
   const [errorPaces, setErrorPaces] = useState(false);
 
-  // 遅延読み込み
-  useEffect(() => {
-    // ライブペース取得
+  // ライブペースを取得する関数
+  const fetchLiveRuns = () => {
     fetch("/api/home-feed?type=live-runs")
       .then((res) => res.json() as Promise<LiveRunsResponse>)
       .then((data) => {
@@ -185,6 +184,12 @@ export default function HomePage() {
         setErrorLiveRuns(true);
       })
       .finally(() => setLoadingLiveRuns(false));
+  };
+
+  // 遅延読み込み
+  useEffect(() => {
+    // ライブペース取得（初回）
+    fetchLiveRuns();
 
     // Twitch配信取得
     fetch("/api/home-feed?type=twitch-streams")
@@ -223,6 +228,15 @@ export default function HomePage() {
         setErrorPaces(true);
       })
       .finally(() => setLoadingPaces(false));
+  }, []);
+
+  // ライブペースの自動更新（15秒間隔）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLiveRuns();
+    }, 15000); // 15秒
+
+    return () => clearInterval(interval);
   }, []);
 
   // mcidToUuidをマージ
@@ -313,15 +327,7 @@ export default function HomePage() {
             <h2 className="text-xl font-bold">ライブペース</h2>
             <span className="text-muted-foreground">({liveRuns.length})</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {liveRuns.map((run) => (
-              <PaceCard
-                key={run.worldId}
-                run={run}
-                isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
-              />
-            ))}
-          </div>
+          <LivePaceList runs={liveRuns} registeredMcidSet={registeredMcidSet} />
         </section>
       ) : null}
 
