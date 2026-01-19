@@ -3,6 +3,7 @@ import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,7 @@ import {
 } from "lucide-react";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

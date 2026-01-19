@@ -4,6 +4,7 @@ import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets } from "@/lib/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
@@ -217,7 +218,7 @@ function calculateCm360(
 }
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

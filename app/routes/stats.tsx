@@ -1,6 +1,7 @@
 import { useLoaderData } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { keybindings, playerConfigs, users } from "@/lib/schema";
 import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,7 +129,7 @@ function normalizeKeyCodeForStats(keyCode: string): string {
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
 
   // 総ユーザー数

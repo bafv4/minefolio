@@ -2,6 +2,7 @@
 
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { fetchLiveRuns, fetchRecentRunsForUsers } from "@/lib/paceman";
@@ -10,7 +11,7 @@ import { getRecentVideos } from "@/lib/youtube";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
 
   const url = new URL(request.url);

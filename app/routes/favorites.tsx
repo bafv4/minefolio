@@ -1,6 +1,7 @@
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/favorites";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { inArray } from "drizzle-orm";
 import { getFavoritesFromCookie } from "@/lib/favorites";
@@ -21,7 +22,7 @@ export const meta: Route.MetaFunction = () => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
 
   const cookieHeader = request.headers.get("Cookie");

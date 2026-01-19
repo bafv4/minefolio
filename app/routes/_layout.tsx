@@ -4,12 +4,13 @@ import { Header, Footer } from "@/components/layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { CookieConsentBanner } from "@/components/cookie-consent";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

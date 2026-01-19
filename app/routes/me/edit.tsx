@@ -5,6 +5,7 @@ import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, authUsers, authSessions, authAccounts } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { importFromLegacy } from "@/lib/legacy-import";
@@ -65,7 +66,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: Shou
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -138,7 +139,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

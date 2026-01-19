@@ -2,6 +2,7 @@ import { useLoaderData, useSearchParams, Form } from "react-router";
 import { useState } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq, desc, asc, like, sql, or } from "drizzle-orm";
 import { PlayerCard } from "@/components/player-card";
@@ -32,7 +33,7 @@ const ITEMS_PER_PAGE = 12;
 type SortOption = "updatedAt" | "mcid" | "displayName";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
 
   const url = new URL(request.url);

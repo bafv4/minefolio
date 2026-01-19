@@ -1,0 +1,26 @@
+# Development files
+.dev.vars
+local.db
+local.db-shm
+local.db-wal
+
+# Cloudflare (deprecated)
+.wrangler/
+wrangler.toml
+drizzle.config.prod.ts
+workers/
+
+# Testing
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/

@@ -17,9 +17,10 @@ import {
   socialLinks,
 } from "@/lib/schema";
 import { getOptionalSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = drizzle(env.DB);
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -32,7 +33,7 @@ export async function loader({ request, context }: { request: Request; context: 
 }
 
 export async function action({ request, context }: { request: Request; context: any }) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = drizzle(env.DB);
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

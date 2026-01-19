@@ -4,6 +4,7 @@ import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
@@ -52,7 +53,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: Shou
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -124,7 +125,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

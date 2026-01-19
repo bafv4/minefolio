@@ -12,9 +12,19 @@ export default defineConfig({
   resolve: {
     dedupe: ["react", "react-dom"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router"],
+        },
+      },
+    },
+    sourcemap: false,
+    minify: "esbuild",
+  },
   server: {
     watch: {
-      // publicフォルダ内のmcitemsを監視対象から除外
       ignored: ["**/public/mcitems/**"],
     },
   },

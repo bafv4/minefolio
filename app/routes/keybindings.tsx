@@ -2,6 +2,7 @@ import { useLoaderData, useSearchParams, Link } from "react-router";
 import { useState, useMemo } from "react";
 import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs } from "@/lib/schema";
 import { desc, asc, like, sql } from "drizzle-orm";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -142,7 +143,7 @@ function calculateCursorSpeed(
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const url = new URL(request.url);
 

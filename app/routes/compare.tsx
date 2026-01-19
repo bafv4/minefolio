@@ -1,6 +1,7 @@
 import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps } from "@/lib/schema";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
@@ -72,7 +73,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const url = new URL(request.url);
 

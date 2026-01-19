@@ -3,6 +3,7 @@ import type { Route } from "./+types/presets";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps } from "@/lib/schema";
 import { eq, desc, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
@@ -44,7 +45,7 @@ export const meta: Route.MetaFunction = () => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -82,7 +83,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { env } = context;
+  const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
