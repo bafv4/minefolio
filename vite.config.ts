@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     reactRouter(),
     tailwindcss(),
@@ -13,13 +13,15 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router"],
+    rollupOptions: isSsrBuild
+      ? {}
+      : {
+          output: {
+            manualChunks: {
+              vendor: ["react", "react-dom", "react-router"],
+            },
+          },
         },
-      },
-    },
     sourcemap: false,
     minify: "esbuild",
   },
@@ -28,4 +30,4 @@ export default defineConfig({
       ignored: ["**/public/mcitems/**"],
     },
   },
-});
+}));
