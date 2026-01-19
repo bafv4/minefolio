@@ -62,7 +62,7 @@ function getLatestSplit(run: PaceManRecentRun): { label: string; igt: number } |
 export function RecentPaceCard({ run, isRegistered, uuid, displayName }: RecentPaceCardProps) {
   const latestSplit = getLatestSplit(run);
   const isFinished = run.finish !== null && run.finish > 0;
-  const paceManUrl = `https://paceman.gg/stats/timeline/${run.nickname}/${run.id}`;
+  const paceManUrl = `https://paceman.gg/stats/run/${run.id}`;
 
   // ネザーイン以外のペースがない場合は何も表示しない
   if (!latestSplit) {
