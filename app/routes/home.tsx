@@ -117,6 +117,7 @@ interface YouTubeVideosResponse {
 interface RecentPacesResponse {
   recentPaces: PaceManRecentRun[];
   mcidToUuid: Record<string, string>;
+  mcidToDisplayName: Record<string, string>;
 }
 
 // セクション全体のローディングスケルトン
@@ -154,6 +155,7 @@ export default function HomePage() {
   const [recentVideos, setRecentVideos] = useState<YouTubeVideo[]>([]);
   const [recentPaces, setRecentPaces] = useState<PaceManRecentRun[]>([]);
   const [pacesMcidToUuid, setPacesMcidToUuid] = useState<Record<string, string>>({});
+  const [pacesMcidToDisplayName, setPacesMcidToDisplayName] = useState<Record<string, string>>({});
 
   // ローディング状態
   const [loadingLiveRuns, setLoadingLiveRuns] = useState(true);
@@ -211,6 +213,9 @@ export default function HomePage() {
         setRecentPaces(data.recentPaces || []);
         if (data.mcidToUuid) {
           setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
+        }
+        if (data.mcidToDisplayName) {
+          setPacesMcidToDisplayName((prev) => ({ ...prev, ...data.mcidToDisplayName }));
         }
       })
       .catch((err) => {
@@ -328,7 +333,6 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <History className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-bold">最近のペース</h2>
-            <span className="text-muted-foreground">({recentPaces.length})</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {recentPaces.map((run) => (
@@ -337,6 +341,7 @@ export default function HomePage() {
                 run={run}
                 isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
                 uuid={mergedMcidToUuid[run.nickname.toLowerCase()]}
+                displayName={pacesMcidToDisplayName[run.nickname.toLowerCase()]}
               />
             ))}
           </div>

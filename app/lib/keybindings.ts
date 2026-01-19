@@ -288,10 +288,31 @@ const MINECRAFT_KEY_LABELS: Record<string, string> = {
   "key.keyboard.grave.accent": "`",
 };
 
+// JIS配列とUS配列で異なるキーのマッピング
+const JIS_KEY_LABELS: Record<string, string> = {
+  Semicolon: ":",
+  Quote: "^",
+  BracketLeft: "@",
+  BracketRight: "[",
+  Backslash: "]",
+  Backquote: "半角",
+};
+
+const US_KEY_LABELS: Record<string, string> = {
+  Semicolon: ";",
+  Quote: "'",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Backquote: "`",
+};
+
 /**
  * キーコードを表示用ラベルに変換
+ * @param keyCode キーコード
+ * @param keyboardLayout キーボード配列 ("jis" | "us" | null)、nullの場合はUSとして扱う
  */
-export function getKeyLabel(keyCode: string): string {
+export function getKeyLabel(keyCode: string, keyboardLayout: string | null = null): string {
   // 小文字に統一して検索
   const lowerKeyCode = keyCode.toLowerCase();
 
@@ -304,6 +325,13 @@ export function getKeyLabel(keyCode: string): string {
   const keyboardMatch = lowerKeyCode.match(/^key\.keyboard\.([a-z0-9])$/);
   if (keyboardMatch) {
     return keyboardMatch[1].toUpperCase();
+  }
+
+  // キーボード配列による違いを適用（正規化されたキーコードで判定）
+  const normalizedKeyCode = normalizeKeyCode(keyCode);
+  const layoutLabels = keyboardLayout === "jis" ? JIS_KEY_LABELS : US_KEY_LABELS;
+  if (layoutLabels[normalizedKeyCode]) {
+    return layoutLabels[normalizedKeyCode];
   }
 
   // 既知のキーコードの場合（旧形式）

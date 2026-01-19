@@ -612,7 +612,7 @@ function PlayerRow({
         return (
           <TableCell key={col.action} className="text-center px-2">
             {keyCode ? (
-              <KeyBadge keyCode={keyCode} />
+              <KeyBadge keyCode={keyCode} keyboardLayout={player.playerConfig?.keyboardLayout} />
             ) : (
               <span className="text-muted-foreground/40">-</span>
             )}
@@ -757,8 +757,8 @@ function MouseSettingsRow({
 }
 
 // キー表示バッジ
-function KeyBadge({ keyCode }: { keyCode: string }) {
-  const label = getKeyLabel(keyCode);
+function KeyBadge({ keyCode, keyboardLayout }: { keyCode: string; keyboardLayout?: string | null }) {
+  const label = getKeyLabel(keyCode, keyboardLayout);
   const isMouse = keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
 
   return (

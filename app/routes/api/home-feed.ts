@@ -22,13 +22,16 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const favoriteMcids = getFavoritesFromCookie(cookieHeader);
   const favoritesSet = new Set(favoriteMcids.map(m => m.toLowerCase()));
 
-  // 登録ユーザーのMCIDとUUIDを取得
+  // 登録ユーザーのMCID、UUID、表示名を取得
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true },
+    columns: { mcid: true, uuid: true, displayName: true },
   });
   const registeredMcidSet = new Set(allUserMcids.map((u) => u.mcid.toLowerCase()));
   const mcidToUuid = Object.fromEntries(
     allUserMcids.map((u) => [u.mcid.toLowerCase(), u.uuid])
+  );
+  const mcidToDisplayName = Object.fromEntries(
+    allUserMcids.map((u) => [u.mcid.toLowerCase(), u.displayName || u.mcid])
   );
 
   // お気に入りを優先してソートする関数
@@ -68,6 +71,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       return Response.json({
         recentPaces: sortedPaces,
         mcidToUuid,
+        mcidToDisplayName,
       });
     }
 
