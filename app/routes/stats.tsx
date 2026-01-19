@@ -15,7 +15,7 @@ export const meta: Route.MetaFunction = () => {
     { title: "統計 - Minefolio" },
     {
       name: "description",
-      content: "Minecraftスピードランナーのキー配置・マウス設定の統計",
+      content: "RTA勢はキー配置・マウス設定をこう設定している！",
     },
   ];
 };
@@ -516,7 +516,7 @@ export default function StatsPage() {
       <div>
         <h1 className="text-3xl font-bold">統計</h1>
         <p className="text-muted-foreground mt-1">
-          Minecraftスピードランナーのキー配置・マウス設定の統計
+          キー配置・マウス設定の統計
         </p>
       </div>
 

@@ -21,7 +21,7 @@ import { useState } from "react";
 export const meta: Route.MetaFunction = () => {
   return [
     { title: "ログイン - Minefolio" },
-    { name: "description", content: "DiscordでMinefolioにサインイン" },
+    { name: "description", content: "Discordを使ってサインイン" },
   ];
 };
 
@@ -67,7 +67,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Minefolio</CardTitle>
           <CardDescription>
-            スピードランナーポートフォリオを管理するにはサインインしてください
+            プロフィールを管理するにはサインインしてください
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -84,18 +84,6 @@ export default function LoginPage() {
             )}
             Discordでログイン
           </Button>
-
-          <p className="text-center text-xs text-muted-foreground">
-            サインインすることで、
-            <Link to="/terms" className="underline hover:text-foreground">
-              利用規約
-            </Link>
-            と
-            <Link to="/privacy" className="underline hover:text-foreground">
-              プライバシーポリシー
-            </Link>
-            に同意したものとみなされます。
-          </p>
         </CardContent>
       </Card>
     </div>

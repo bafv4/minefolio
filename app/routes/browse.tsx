@@ -24,7 +24,7 @@ export const meta: Route.MetaFunction = () => {
     { title: "探す - Minefolio" },
     {
       name: "description",
-      content: "Minecraftスピードランナーを探す",
+      content: "RTA走者を探す",
     },
   ];
 };
