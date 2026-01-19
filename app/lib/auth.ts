@@ -26,7 +26,6 @@ export function createAuth(db: Database, env: {
       discord: {
         clientId: env.DISCORD_CLIENT_ID,
         clientSecret: env.DISCORD_CLIENT_SECRET,
-        redirectURI: `${env.APP_URL}/api/auth/callback/discord`,
         scope: ["identify", "email"],
       },
     },

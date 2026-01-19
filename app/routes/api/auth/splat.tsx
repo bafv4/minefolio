@@ -1,9 +1,9 @@
-import type { Route } from "./+types/splat";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ context, request }: LoaderFunctionArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -11,7 +11,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return auth.handler(request);
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
+export async function action({ context, request }: ActionFunctionArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
