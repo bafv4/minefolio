@@ -9,6 +9,7 @@ import { fetchLiveRuns, fetchRecentRunsForUsers } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getRecentVideos } from "@/lib/youtube";
 import { getFavoritesFromCookie } from "@/lib/favorites";
+import { getCached, setCached, CacheTTL } from "@/lib/cache";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -50,17 +51,36 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // フィードタイプに応じてデータを取得
   switch (feedType) {
     case "live-runs": {
+      // キャッシュをチェック（お気に入りを含むキャッシュキー）
+      const liveRunsCacheKey = `home-feed:live-runs:${favoriteMcids.sort().join(",")}`;
+      const cachedLiveRuns = await getCached<{ liveRuns: any[]; mcidToUuid: any }>(liveRunsCacheKey);
+      if (cachedLiveRuns) {
+        return Response.json(cachedLiveRuns);
+      }
+
       const liveRuns = await fetchLiveRuns();
       const filteredLiveRuns = liveRuns
         .filter((run) => registeredMcidSet.has(run.nickname.toLowerCase()));
       const sortedLiveRuns = sortByFavorite(filteredLiveRuns).slice(0, 20);
-      return Response.json({
+      const result = {
         liveRuns: sortedLiveRuns,
         mcidToUuid,
-      });
+      };
+
+      // キャッシュに保存（1分 - ライブデータは頻繁に変わる）
+      await setCached(liveRunsCacheKey, result, CacheTTL.SHORT);
+
+      return Response.json(result);
     }
 
     case "recent-paces": {
+      // キャッシュをチェック（お気に入りを含むキャッシュキー）
+      const pacesCacheKey = `home-feed:paces:${favoriteMcids.sort().join(",")}`;
+      const cachedPacesData = await getCached<{ recentPaces: any[]; mcidToUuid: any; mcidToDisplayName: any }>(pacesCacheKey);
+      if (cachedPacesData) {
+        return Response.json(cachedPacesData);
+      }
+
       const recentPaces = await fetchRecentRunsForUsers(
         Array.from(registeredMcidSet),
         168, // 1週間
@@ -68,11 +88,16 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         20
       );
       const sortedPaces = sortByFavorite(recentPaces);
-      return Response.json({
+      const result = {
         recentPaces: sortedPaces,
         mcidToUuid,
         mcidToDisplayName,
-      });
+      };
+
+      // キャッシュに保存（5分 - ペースデータは比較的頻繁に更新される）
+      await setCached(pacesCacheKey, result, CacheTTL.SHORT * 5);
+
+      return Response.json(result);
     }
 
     case "twitch-streams": {
@@ -81,6 +106,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       if (!clientId || !clientSecret) {
         return Response.json({ liveStreams: [] });
+      }
+
+      // キャッシュをチェック（お気に入りを含むキャッシュキー）
+      const twitchCacheKey = `home-feed:twitch:${favoriteMcids.sort().join(",")}`;
+      const cachedTwitchData = await getCached<{ liveStreams: any[] }>(twitchCacheKey);
+      if (cachedTwitchData) {
+        return Response.json(cachedTwitchData);
       }
 
       // 公開プロフィールのTwitchリンクを取得
@@ -118,7 +150,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       });
 
       const sortedStreams = sortByFavorite(liveStreams);
-      return Response.json({ liveStreams: sortedStreams });
+      const result = { liveStreams: sortedStreams };
+
+      // キャッシュに保存（1分 - ライブストリームは頻繁に変わる）
+      await setCached(twitchCacheKey, result, CacheTTL.SHORT);
+
+      return Response.json(result);
     }
 
     case "youtube-videos": {
@@ -126,6 +163,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       if (!apiKey) {
         return Response.json({ recentVideos: [] });
+      }
+
+      // キャッシュをチェック（お気に入りを含むキャッシュキー）
+      const youtubeCacheKey = `home-feed:youtube:${favoriteMcids.sort().join(",")}`;
+      const cachedYoutubeData = await getCached<{ recentVideos: any[] }>(youtubeCacheKey);
+      if (cachedYoutubeData) {
+        return Response.json(cachedYoutubeData);
       }
 
       // 公開プロフィールのYouTubeリンクを取得
@@ -154,7 +198,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       const recentVideos = await getRecentVideos(apiKey, channels, 3, 72);
       const sortedVideos = sortByFavorite(recentVideos);
-      return Response.json({ recentVideos: sortedVideos });
+      const result = { recentVideos: sortedVideos };
+
+      // キャッシュに保存（30分 - YouTube APIのレート制限対策）
+      await setCached(youtubeCacheKey, result, CacheTTL.MEDIUM * 2);
+
+      return Response.json(result);
     }
 
     default:
