@@ -1,16 +1,31 @@
 // OGP画像生成API
 // プレイヤープロフィール用の動的OGP画像を生成
+import type { Route } from "./+types/og-image";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { getCraftarAvatarUrl } from "@/lib/mojang";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 
-export async function loader({ request, context }: { request: Request; context: any }) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const mcid = url.searchParams.get("mcid");
+  const title = url.searchParams.get("title");
+  const description = url.searchParams.get("description");
 
+  // mcidがない場合はデフォルトのOGP画像を生成
   if (!mcid) {
-    return new Response("Missing mcid parameter", { status: 400 });
+    const svg = generateDefaultOgpSvg({
+      title: title || "Minefolio",
+      description: description || "Minecraft Speedrunning Portfolio Platform",
+    });
+
+    return new Response(svg, {
+      headers: {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
   }
 
   const db = createDb();
@@ -27,7 +42,7 @@ export async function loader({ request, context }: { request: Request; context: 
   }
 
   // SVG形式でOGP画像を生成
-  const svg = generateOgpSvg({
+  const svg = generatePlayerOgpSvg({
     displayName: user.displayName || user.mcid,
     mcid: user.mcid,
     uuid: user.uuid,
@@ -54,10 +69,72 @@ interface OgpData {
 }
 
 /**
- * SVG形式のOGP画像を生成
+ * デフォルトのOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generateOgpSvg(data: OgpData): string {
+function generateDefaultOgpSvg(data: { title: string; description: string }): string {
+  const title = escapeXml(data.title);
+  const description = escapeXml(data.description.slice(0, 120));
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1200" height="630" fill="url(#bg-gradient)"/>
+
+  <!-- グリッドパターン -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.02)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- ロゴエリア（中央） -->
+  <g transform="translate(600, 250)">
+    <!-- ロゴアイコン（簡略版） -->
+    <g transform="translate(-60, -60)">
+      <!-- マウスアイコンの簡略版 -->
+      <rect x="20" y="10" width="80" height="100" rx="20" fill="#3a3a3a"/>
+      <rect x="30" y="25" width="30" height="50" rx="8" fill="#b0b0b0"/>
+      <ellipse cx="60" cy="45" rx="8" ry="18" fill="#555"/>
+    </g>
+
+    <!-- タイトル -->
+    <text
+      x="0"
+      y="90"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="72"
+      font-weight="700"
+      fill="#f1f5f9"
+      text-anchor="middle"
+    >${title}</text>
+
+    <!-- 説明 -->
+    <text
+      x="0"
+      y="140"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="28"
+      fill="#94a3b8"
+      text-anchor="middle"
+    >${description}</text>
+  </g>
+</svg>`;
+}
+
+/**
+ * プレイヤー用のOGP画像を生成
+ * 1200x630px (Twitter/OGP標準サイズ)
+ */
+function generatePlayerOgpSvg(data: OgpData): string {
   const avatarUrl = getCraftarAvatarUrl(data.uuid, 128, true);
 
   // エスケープ処理

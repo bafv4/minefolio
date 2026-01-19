@@ -28,14 +28,30 @@ import type { PaceManLiveRun, PaceManRecentRun } from "@/lib/paceman";
 import type { TwitchStream } from "@/lib/twitch";
 import type { YouTubeVideo } from "@/lib/youtube";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const title = "Minefolio - Minecraft Speedrunner Portfolio";
+  const description = "Minecraftスピードランナーを見つけて、キー配置や自己ベストなどを確認しましょう。";
+  const ogImageUrl = `${appUrl}/og-image`;
+
   return [
-    { title: "Minefolio - Minecraft Speedrunner Portfolio" },
-    {
-      name: "description",
-      content:
-        "Minecraftスピードランナーを見つけて、キー配置や自己ベストなどを確認しましょう。",
-    },
+    { title },
+    { name: "description", content: description },
+
+    // Open Graph
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImageUrl },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:url", content: appUrl },
+
+    // Twitter Card
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImageUrl },
   ];
 };
 
@@ -80,6 +96,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   return {
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
     isRegistered,
     registeredMcids,
     mcidToUuid,

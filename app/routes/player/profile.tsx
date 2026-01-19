@@ -1004,7 +1004,7 @@ export default function PlayerProfilePage() {
                         {/* Win Sens または カスタム係数 */}
                         {player.playerConfig.windowsSpeedMultiplier != null ? (
                           <DeviceRow
-                            label="Win Sens"
+                            label="マウス速度係数"
                             value={`x${player.playerConfig.windowsSpeedMultiplier.toFixed(3)}`}
                           />
                         ) : player.playerConfig.windowsSpeed != null ? (

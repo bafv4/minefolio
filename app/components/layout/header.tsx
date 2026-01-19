@@ -39,6 +39,7 @@ export function Header({ user }: HeaderProps) {
           {/* Logo */}
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
+              <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
               <span className="text-xl font-bold">Minefolio</span>
             </Link>
           </div>
