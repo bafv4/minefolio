@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { MapPin, Clock } from "lucide-react";
+import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
@@ -34,10 +35,10 @@ function getRelativeTime(date: Date): string {
   return `${Math.floor(diffDays / 365)}年前`;
 }
 
-export function PlayerCard({ player }: PlayerCardProps) {
+function PlayerCardComponent({ player }: PlayerCardProps) {
   return (
-    <Link to={`/player/${player.mcid}`}>
-      <Card className="group transition-all duration-200 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 cursor-pointer h-full active:scale-[0.98]">
+    <Link to={`/player/${player.mcid}`} prefetch="intent">
+      <Card className="group transition-all duration-200 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 cursor-pointer h-full active:scale-[0.98] active:opacity-90">
         <CardContent className="p-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
@@ -83,3 +84,5 @@ export function PlayerCard({ player }: PlayerCardProps) {
     </Link>
   );
 }
+
+export const PlayerCard = memo(PlayerCardComponent);

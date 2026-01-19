@@ -78,6 +78,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       socialLinks: {
         orderBy: [asc(socialLinks.displayOrder)],
       },
+      keybindings: true,
+      playerConfig: true,
+      itemLayouts: true,
+      searchCrafts: true,
+      keyRemaps: true,
     },
   });
 
@@ -85,10 +90,18 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
+  // キー配置等のデータが存在するかチェック
+  const hasExistingData =
+    user.keybindings.length > 0 ||
+    user.playerConfig !== null ||
+    user.itemLayouts.length > 0 ||
+    user.searchCrafts.length > 0 ||
+    user.keyRemaps.length > 0;
+
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
 
-  return { user, links: user.socialLinks, legacyApiUrl };
+  return { user, links: user.socialLinks, legacyApiUrl, hasExistingData };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -514,7 +527,7 @@ function SocialLinkDialog({
 }
 
 export default function EditProfilePage() {
-  const { user, links, legacyApiUrl } = useLoaderData<typeof loader>();
+  const { user, links, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
@@ -706,7 +719,7 @@ export default function EditProfilePage() {
       </div>
 
       {/* Legacy Import Card */}
-      {legacyApiUrl && !importCompleted && (
+      {legacyApiUrl && !importCompleted && !hasExistingData && (
         <Card className="border-primary/50 bg-primary/5">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -742,9 +755,9 @@ export default function EditProfilePage() {
         {/* Avatar Section */}
         <Card>
           <CardHeader>
-            <CardTitle>アバター</CardTitle>
+            <CardTitle>MCID</CardTitle>
             <CardDescription>
-              アバターはMinecraftアカウントと同期されています。
+              同期されています。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -781,9 +794,9 @@ export default function EditProfilePage() {
                         width={64}
                         height={96}
                         pose={pose}
-                        angle={-25}
-                        elevation={8}
-                        zoom={0.85}
+                        angle={-35}
+                        elevation={5}
+                        zoom={0.9}
                         asImage
                       />
                     </div>
@@ -1225,6 +1238,27 @@ export default function EditProfilePage() {
                 </deleteFetcher.Form>
               </DialogContent>
             </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  return (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center space-y-4">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <p className="text-muted-foreground">
+              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              ページをリロード
+            </Button>
           </div>
         </CardContent>
       </Card>

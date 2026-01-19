@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -323,7 +324,7 @@ interface VirtualKeyboardProps {
 // メインキーボードの行の合計幅を計算（USレイアウト Row2基準: 15ユニット）
 const MAIN_KEYBOARD_UNITS = 15;
 
-export function VirtualKeyboard({
+function VirtualKeyboardComponent({
   layout = "US",
   keybindings = {},
   fingerAssignments = {},
@@ -1163,3 +1164,5 @@ export function FingerLegend({ className }: { className?: string }) {
     </div>
   );
 }
+
+export const VirtualKeyboard = memo(VirtualKeyboardComponent);

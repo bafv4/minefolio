@@ -40,21 +40,21 @@ const PLAYERS_PER_PAGE = 30;
 
 // キーボード系の主要なキーバインド
 const KEYBOARD_COLUMNS = [
-  { action: "sprint", label: "ダッシュ", shortLabel: "走" },
-  { action: "sneak", label: "スニーク", shortLabel: "忍" },
-  { action: "inventory", label: "インベントリ", shortLabel: "E" },
-  { action: "swapHands", label: "オフハンド", shortLabel: "F" },
-  { action: "drop", label: "捨てる", shortLabel: "Q" },
-  { action: "pickBlock", label: "ピック", shortLabel: "選" },
-  { action: "hotbar1", label: "1", shortLabel: "1" },
-  { action: "hotbar2", label: "2", shortLabel: "2" },
-  { action: "hotbar3", label: "3", shortLabel: "3" },
-  { action: "hotbar4", label: "4", shortLabel: "4" },
-  { action: "hotbar5", label: "5", shortLabel: "5" },
-  { action: "hotbar6", label: "6", shortLabel: "6" },
-  { action: "hotbar7", label: "7", shortLabel: "7" },
-  { action: "hotbar8", label: "8", shortLabel: "8" },
-  { action: "hotbar9", label: "9", shortLabel: "9" },
+  { action: "sprint", label: "ダッシュ", shortLabel: "ﾀﾞｯｼｭ" },
+  { action: "sneak", label: "スニーク", shortLabel: "ｽﾆｰｸ" },
+  { action: "inventory", label: "インベントリ", shortLabel: "ｲﾝﾍﾞﾝﾄﾘ" },
+  { action: "swapHands", label: "オフハンド", shortLabel: "OH" },
+  { action: "drop", label: "捨てる", shortLabel: "捨てる" },
+  { action: "pickBlock", label: "ピック", shortLabel: "ﾋﾟｯｸ" },
+  { action: "hotbar1", label: "HB1", shortLabel: "HB1" },
+  { action: "hotbar2", label: "HB2", shortLabel: "HB2" },
+  { action: "hotbar3", label: "HB3", shortLabel: "HB3" },
+  { action: "hotbar4", label: "HB4", shortLabel: "HB4" },
+  { action: "hotbar5", label: "HB5", shortLabel: "HB5" },
+  { action: "hotbar6", label: "HB6", shortLabel: "HB6" },
+  { action: "hotbar7", label: "HB7", shortLabel: "HB7" },
+  { action: "hotbar8", label: "HB8", shortLabel: "HB8" },
+  { action: "hotbar9", label: "HB9", shortLabel: "HB9" },
 ] as const;
 
 // マウス設定の列定義
@@ -63,25 +63,34 @@ const MOUSE_COLUMNS = [
   { key: "sensitivity", label: "ゲーム内感度", shortLabel: "感度" },
   { key: "cm360", label: "振り向き", shortLabel: "振向" },
   { key: "windowsSpeed", label: "Win Sens", shortLabel: "Win" },
-  { key: "cursorSpeed", label: "カーソル速度", shortLabel: "速度" },
-  { key: "rawInput", label: "Raw Input", shortLabel: "Raw" },
-  { key: "mouseAcceleration", label: "マウス加速", shortLabel: "加速" },
+  { key: "cursorSpeed", label: "カーソル速度", shortLabel: "カーソル速度" },
+  { key: "rawInput", label: "Raw Input", shortLabel: "Raw Input" },
+  { key: "mouseAcceleration", label: "マウス加速", shortLabel: "マウス加速" },
 ] as const;
 
-// Windowsポインター速度の乗数（6/11がデフォルト）
+// Windowsポインター速度の乗数（11/11がデフォルト）
 // https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
 const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
   1: 0.03125,
   2: 0.0625,
-  3: 0.25,
-  4: 0.5,
-  5: 0.75,
-  6: 1.0,
-  7: 1.5,
-  8: 2.0,
-  9: 2.5,
-  10: 3.0,
-  11: 3.5,
+  3: 0.125,
+  4: 0.25,
+  5: 0.375,
+  6: 0.5,
+  7: 0.625,
+  8: 0.75,
+  9: 0.875,
+  10: 1,
+  11: 1.25,
+  12: 1.5,
+  13: 1.75,
+  14: 2,
+  15: 2.25,
+  16: 2.5,
+  17: 2.75,
+  18: 3,
+  19: 3.25,
+  20: 3.5,
 };
 
 // Windowsポインター速度乗数を取得（カスタム係数優先）
@@ -121,23 +130,16 @@ function calculateCm360(
   return cm360Base / winMultiplier;
 }
 
-// カーソル速度（実効DPI / eDPI）を計算
-// Raw Input ON: DPIそのまま
-// Raw Input OFF: DPI × Windowsポインター速度乗数
+// カーソル速度（実効DPI）を計算
+// RawInputの状態に関わらず、DPIにWindows速度の係数をかける
 function calculateCursorSpeed(
   dpi: number | null,
-  rawInput: boolean | null,
   windowsSpeed: number | null,
   windowsSpeedMultiplier: number | null = null
 ): number | null {
   if (dpi == null) return null;
 
-  // Raw Input が ON の場合、Windowsポインター速度は無視
-  if (rawInput === true) {
-    return dpi;
-  }
-
-  // Raw Input が OFF の場合、Windowsポインター速度を適用
+  // RawInputの状態に関わらず、Windows速度係数を適用
   const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
   return Math.round(dpi * winMultiplier);
 }
@@ -282,13 +284,11 @@ export default function KeybindingsListPage() {
         case "cursorSpeed":
           valueA = configA ? calculateCursorSpeed(
             configA.mouseDpi,
-            configA.rawInput,
             configA.windowsSpeed,
             configA.windowsSpeedMultiplier
           ) : null;
           valueB = configB ? calculateCursorSpeed(
             configB.mouseDpi,
-            configB.rawInput,
             configB.windowsSpeed,
             configB.windowsSpeedMultiplier
           ) : null;
@@ -647,7 +647,6 @@ function MouseSettingsRow({
   const cursorSpeed = config
     ? calculateCursorSpeed(
         config.mouseDpi,
-        config.rawInput,
         config.windowsSpeed,
         config.windowsSpeedMultiplier
       )
@@ -686,14 +685,18 @@ function MouseSettingsRow({
       </TableCell>
       <TableCell className="text-center px-3">
         {sensitivityDisplay != null ? (
-          <span className="font-mono text-sm">{sensitivityDisplay}%</span>
+          <span className="font-mono text-sm">
+            {sensitivityDisplay}<span className="text-muted-foreground">%</span>
+          </span>
         ) : (
           <span className="text-muted-foreground/40">-</span>
         )}
       </TableCell>
       <TableCell className="text-center px-3">
         {cm360 != null ? (
-          <span className="font-mono text-sm">{cm360.toFixed(1)}cm</span>
+          <span className="font-mono text-sm">
+            {cm360.toFixed(1)}<span className="text-muted-foreground">cm</span>
+          </span>
         ) : (
           <span className="text-muted-foreground/40">-</span>
         )}
@@ -701,12 +704,14 @@ function MouseSettingsRow({
       <TableCell className="text-center px-3">
         {config?.windowsSpeedMultiplier != null ? (
           <span className="font-mono text-sm" title="カスタム係数">
-            ×{config.windowsSpeedMultiplier}
+            x{config.windowsSpeedMultiplier.toFixed(3)}
           </span>
         ) : config?.windowsSpeed != null ? (
-          <span className="font-mono text-sm">{config.windowsSpeed}/11</span>
+          <span className="font-mono text-sm">
+            {config.windowsSpeed}<span className="text-muted-foreground">(x{WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed]?.toFixed(3) ?? "1.000"})</span>
+          </span>
         ) : (
-          <span className="text-muted-foreground/40">-</span>
+          <span className="text-muted-foreground/40">値なし</span>
         )}
       </TableCell>
       <TableCell className="text-center px-3">

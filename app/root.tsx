@@ -70,14 +70,28 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center pt-16 p-4 container mx-auto text-center">
-      <h1 className="text-4xl font-bold mb-4">{message}</h1>
-      <p className="text-muted-foreground">{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto mt-8 text-left bg-secondary rounded-lg">
-          <code className="text-sm">{stack}</code>
-        </pre>
-      )}
-    </main>
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <main className="flex-1 flex flex-col items-center justify-center p-4 container mx-auto">
+        <div className="max-w-2xl w-full text-center space-y-6">
+          <div className="space-y-2">
+            <h1 className="text-6xl font-bold">{message}</h1>
+            <p className="text-xl text-muted-foreground">{details}</p>
+          </div>
+          {stack && (
+            <pre className="w-full p-4 overflow-x-auto text-left bg-secondary rounded-lg border">
+              <code className="text-sm">{stack}</code>
+            </pre>
+          )}
+          <div className="pt-4">
+            <a
+              href="/"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4"
+            >
+              ホームに戻る
+            </a>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

@@ -442,18 +442,9 @@ export async function importFromLegacy(
 
       const now = new Date();
 
-      // セグメント名のマッピング（MCSRer Hotkeys → Minefolio）
-      const segmentMap: Record<string, string> = {
-        "Common": "overworld",
-        "Overworld": "overworld",
-        "Nether": "nether",
-        "EnterEndZero": "end",
-        "End": "end",
-      };
-
       for (const layout of legacyData.itemLayouts) {
-        // セグメント名を変換
-        const segment = segmentMap[layout.segment] || layout.segment.toLowerCase();
+        // セグメント名はそのまま使用（変換しない）
+        const segment = layout.segment;
 
         // 同じセグメントが既にインポートされていないか確認
         const existingLayout = await db.query.itemLayouts.findFirst({

@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -63,13 +63,8 @@ export function meta({ data, params }: Route.MetaArgs) {
   ];
 }
 
-// クライアントローダーでサーバーからデータを取得
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
-  return await serverLoader();
-}
-
-// クライアントローダーを使用することを明示
-clientLoader.hydrate = true as const;
+// ClientLoaderを削除し、通常のloaderのみを使用
+// これにより、ナビゲーション時に即座にHydrateFallbackが表示される
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
@@ -164,20 +159,29 @@ import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
 
-// Windowsポインター速度の乗数（6/11がデフォルト）
+// Windowsポインター速度の乗数（11/11がデフォルト）
 // https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
 const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
   1: 0.03125,
   2: 0.0625,
-  3: 0.25,
-  4: 0.5,
-  5: 0.75,
-  6: 1.0,
-  7: 1.5,
-  8: 2.0,
-  9: 2.5,
-  10: 3.0,
-  11: 3.5,
+  3: 0.125,
+  4: 0.25,
+  5: 0.375,
+  6: 0.5,
+  7: 0.625,
+  8: 0.75,
+  9: 0.875,
+  10: 1,
+  11: 1.25,
+  12: 1.5,
+  13: 1.75,
+  14: 2,
+  15: 2.25,
+  16: 2.5,
+  17: 2.75,
+  18: 3,
+  19: 3.25,
+  20: 3.5,
 };
 
 // Windowsポインター速度乗数を取得（カスタム係数優先）
@@ -191,6 +195,20 @@ function getWindowsMultiplier(
   }
   // Windowsポインター速度から乗数を取得
   return windowsSpeed != null ? (WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? 1.0) : 1.0;
+}
+
+// カーソル速度（実効DPI）を計算
+// RawInputの状態に関わらず、DPIにWindows速度の係数をかける
+function calculateCursorSpeed(
+  dpi: number | null | undefined,
+  windowsSpeed: number | null | undefined,
+  windowsSpeedMultiplier: number | null | undefined = null
+): number | null {
+  if (dpi == null) return null;
+
+  // RawInputの状態に関わらず、Windows速度係数を適用
+  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
+  return Math.round(dpi * winMultiplier);
 }
 
 // 振り向き（cm/360）を計算
@@ -342,17 +360,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     isOwner = currentUser?.id === player.id;
   }
 
-  // 外部サービスから統計情報を取得（エラーが発生しても空オブジェクトを返す）
-  let externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>> = {};
-  try {
-    externalStats = await fetchAllExternalStats(
-      player.mcid,
-      player.speedruncomUsername
-    );
-  } catch (error) {
-    console.error("Failed to fetch external stats:", error);
-  }
-
   // 非表示記録IDをパース
   const hiddenSpeedrunRecords: string[] = player.hiddenSpeedrunRecords
     ? JSON.parse(player.hiddenSpeedrunRecords)
@@ -363,6 +370,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const favorites = getFavoritesFromCookie(cookieHeader);
   const isFavorited = isFavorite(favorites, mcid);
 
+  // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
     player: {
@@ -372,7 +380,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       keyRemaps: displayKeyRemaps,
     },
     isOwner,
-    externalStats,
     hiddenSpeedrunRecords,
     isFavorited,
     presets: presets.map((p) => ({
@@ -386,7 +393,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, externalStats, hiddenSpeedrunRecords, isFavorited, presets, activePresetId } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, presets, activePresetId } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -440,37 +447,33 @@ export default function PlayerProfilePage() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // タブ項目の定義
+  // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
     { value: "stats", icon: BarChart3, label: "活動・記録" },
     { value: "keybindings", icon: Keyboard, label: "キー配置" },
+    { value: "devices", icon: Mouse, label: "デバイス" },
     { value: "items", icon: Package, label: "アイテム配置" },
     { value: "searchcraft", icon: Search, label: "サーチクラフト" },
-    { value: "devices", icon: Mouse, label: "デバイス" },
-    { value: "settings", icon: Settings, label: "設定" },
   ];
 
   // 有効なタブ値のリスト
   const validTabs = ["profile", ...tabItems.map((t) => t.value)];
 
-  // URLパラメータからタブを取得（無効な値はデフォルトにフォールバック）
+  // URLパラメータからタブを取得（初回のみ）
   const tabFromUrl = searchParams.get("tab");
   const defaultTab = player.defaultProfileTab ?? "keybindings";
-  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
+  const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
 
-  // タブ変更ハンドラー（URLパラメータを更新）
+  // タブをローカル状態で管理（URLナビゲーションなし）
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // タブ変更ハンドラー（クライアント側のみ、URLは更新しない）
   const handleTabChange = (tab: string) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (tab === defaultTab) {
-      newParams.delete("tab");
-    } else {
-      newParams.set("tab", tab);
-    }
-    navigate(`?${newParams.toString()}`, { preventScrollReset: true });
+    setActiveTab(tab);
   };
 
   // プリセット選択を表示するタブ
-  const presetTabs = ["keybindings", "devices", "settings"];
+  const presetTabs = ["keybindings", "devices"];
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
 
   return (
@@ -647,9 +650,9 @@ export default function PlayerProfilePage() {
                       width={120}
                       height={180}
                       pose={(player.profilePose as PoseName) ?? "waving"}
-                      angle={-25}
-                      elevation={8}
-                      zoom={0.85}
+                      angle={-35}
+                      elevation={5}
+                      zoom={0.9}
                       asImage
                     />
                   </Suspense>
@@ -880,234 +883,10 @@ export default function PlayerProfilePage() {
 
         {/* Stats Tab */}
         <TabsContent value="stats" className="space-y-4">
-          {/* MCSR Ranked Section */}
-          {externalStats.ranked?.isRegistered && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Swords className="h-5 w-5" />
-                  MCSR Ranked
-                </CardTitle>
-                <CardDescription>
-                  Ranked対戦の統計情報
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {externalStats.ranked.user?.eloRate && (
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <p className="text-2xl font-bold">{externalStats.ranked.user.eloRate}</p>
-                      <p className="text-xs text-muted-foreground">Elo レート</p>
-                    </div>
-                  )}
-                  {externalStats.ranked.user?.eloRank && (
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <p className="text-2xl font-bold">#{externalStats.ranked.user.eloRank}</p>
-                      <p className="text-xs text-muted-foreground">ランキング</p>
-                    </div>
-                  )}
-                  {externalStats.ranked.seasonData && (
-                    <>
-                      <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                        <p className="text-2xl font-bold">
-                          {externalStats.ranked.seasonData.records.win}W - {externalStats.ranked.seasonData.records.lose}L
-                        </p>
-                        <p className="text-xs text-muted-foreground">今シーズン戦績</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* PB表示（全期間 / 今シーズン） */}
-                {externalStats.ranked.seasonData && (
-                  typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" ||
-                  typeof externalStats.ranked.seasonData.bestTime === "number"
-                ) ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" && (
-                      <div className="p-3 bg-secondary/30 rounded-lg">
-                        <p className="text-xs text-muted-foreground mb-1">全期間 PB</p>
-                        <p className="text-xl font-mono font-bold">
-                          {formatTime(externalStats.ranked.seasonData.bestTimeAllTime)}
-                        </p>
-                      </div>
-                    )}
-                    {typeof externalStats.ranked.seasonData.bestTime === "number" && (
-                      <div className="p-3 bg-secondary/30 rounded-lg">
-                        <p className="text-xs text-muted-foreground mb-1">今シーズン PB</p>
-                        <p className="text-xl font-mono font-bold">
-                          {formatTime(externalStats.ranked.seasonData.bestTime)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Eloレートグラフ */}
-                {externalStats.ranked.recentMatches.length > 1 && (
-                  <EloRateGraph matches={externalStats.ranked.recentMatches} />
-                )}
-
-                {/* 最近のマッチ */}
-                {externalStats.ranked.recentMatches.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">最近のマッチ</h4>
-                    <div className="space-y-1">
-                      {externalStats.ranked.recentMatches.slice(0, 5).map((match) => (
-                        <div
-                          key={match.id}
-                          className={cn(
-                            "flex items-center justify-between p-2 rounded text-sm",
-                            match.result === "win" && "bg-green-500/10",
-                            match.result === "lose" && "bg-red-500/10",
-                            match.result === "draw" && "bg-yellow-500/10"
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
-                              className="w-12 justify-center"
-                            >
-                              {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
-                            </Badge>
-                            <span>vs {match.opponentNickname}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {match.time && (
-                              <span className="font-mono text-muted-foreground">
-                                {formatTime(match.time)}
-                              </span>
-                            )}
-                            <span className={cn(
-                              "font-medium",
-                              match.eloChange > 0 && "text-green-500",
-                              match.eloChange < 0 && "text-red-500"
-                            )}>
-                              {match.eloChange > 0 ? "+" : ""}{match.eloChange}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* PaceMan Section - リンクのみ */}
-          {externalStats.paceman?.isRegistered && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Timer className="h-5 w-5" />
-                  PaceMan Stats
-                </CardTitle>
-                <CardDescription>
-                  ペース統計・リセット情報
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <a
-                    href={`https://paceman.gg/stats/player/${encodeURIComponent(player.mcid)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    PaceMan Statsで詳細を見る
-                  </a>
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Speedrun.com Section */}
-          {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5" />
-                  Speedrun.com
-                </CardTitle>
-                <CardDescription>
-                  公式記録（Minecraft関連）
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {externalStats.speedruncom.personalBests
-                    .filter((pb) => !hiddenSpeedrunRecords.includes(pb.run.id))
-                    .slice(0, 6)
-                    .map((pb) => (
-                      <div
-                        key={pb.run.id}
-                        className="p-3 bg-secondary/50 rounded-lg space-y-1"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm truncate">
-                            {pb.category?.data?.name ?? "Unknown"}
-                          </span>
-                          <Badge variant="outline" className="shrink-0">
-                            #{pb.place}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {pb.game?.data?.names?.international ?? "Unknown Game"}
-                        </p>
-                        {(pb.platformName || pb.versionName) && (
-                          <p className="text-xs text-muted-foreground">
-                            {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                          </p>
-                        )}
-                        <p className="text-xl font-mono font-bold">
-                          {formatTime(pb.run.times.primary_t * 1000)}
-                        </p>
-                        {pb.run.weblink && (
-                          <a
-                            href={pb.run.weblink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            記録を見る
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* カスタム記録 */}
-          {player.categoryRecords.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  カスタム記録
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {player.categoryRecords.map((record) => (
-                    <RecordCard key={record.id} record={record} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* データがない場合 */}
-          {(!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
-            <EmptyState
-              icon={<BarChart3 className="h-12 w-12" />}
-              title="統計データなし"
-              description="外部サービスからの統計データがありません。"
-            />
-          )}
+          <StatsTabContent
+            player={player}
+            hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+          />
         </TabsContent>
 
         {/* Item Layouts Tab */}
@@ -1160,93 +939,208 @@ export default function PlayerProfilePage() {
           )}
         </TabsContent>
 
-        {/* Devices Tab */}
+        {/* Devices Tab (merged with settings) */}
         <TabsContent value="devices" className="space-y-4">
           {player.playerConfig ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Keyboard */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Keyboard className="h-5 w-5" />
-                    キーボード
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {player.playerConfig.keyboardModel && (
-                    <DeviceRow
-                      label="モデル"
-                      value={player.playerConfig.keyboardModel}
-                    />
-                  )}
-                  {player.playerConfig.keyboardLayout && (
-                    <DeviceRow
-                      label="レイアウト"
-                      value={player.playerConfig.keyboardLayout}
-                    />
-                  )}
-                  {!player.playerConfig.keyboardModel &&
-                    !player.playerConfig.keyboardLayout && (
-                      <p className="text-sm text-muted-foreground">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Keyboard */}
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Keyboard className="h-5 w-5" />
+                      キーボード
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    {player.playerConfig.keyboardModel || player.playerConfig.keyboardLayout ? (
+                      <div className="divide-y">
+                        {player.playerConfig.keyboardModel && (
+                          <DeviceRow
+                            label="モデル"
+                            value={player.playerConfig.keyboardModel}
+                          />
+                        )}
+                        {player.playerConfig.keyboardLayout && (
+                          <DeviceRow
+                            label="レイアウト"
+                            value={player.playerConfig.keyboardLayout}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-2">
                         キーボード情報なし
                       </p>
                     )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Mouse */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Mouse className="h-5 w-5" />
-                    マウス
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {player.playerConfig.mouseModel && (
-                    <DeviceRow
-                      label="モデル"
-                      value={player.playerConfig.mouseModel}
-                    />
-                  )}
-                  {player.playerConfig.mouseDpi && (
-                    <DeviceRow
-                      label="DPI"
-                      value={player.playerConfig.mouseDpi.toString()}
-                    />
-                  )}
-                  {player.playerConfig.gameSensitivity && (
-                    <DeviceRow
-                      label="ゲーム内感度"
-                      value={Math.floor(player.playerConfig.gameSensitivity * 200).toString()}
-                      unit="%"
-                    />
-                  )}
-                  {(() => {
-                    const cm360 = calculateCm360(
-                      player.playerConfig.mouseDpi,
-                      player.playerConfig.gameSensitivity,
-                      player.playerConfig.rawInput,
-                      player.playerConfig.windowsSpeed,
-                      player.playerConfig.windowsSpeedMultiplier
-                    );
-                    return cm360 != null ? (
-                      <DeviceRow
-                        label="振り向き"
-                        value={cm360.toFixed(2)}
-                        unit="cm"
-                      />
-                    ) : null;
-                  })()}
-                  {!player.playerConfig.mouseModel &&
-                    !player.playerConfig.mouseDpi && (
-                      <p className="text-sm text-muted-foreground">
+                {/* Mouse */}
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Mouse className="h-5 w-5" />
+                      マウス
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    {player.playerConfig.mouseModel || player.playerConfig.mouseDpi ? (
+                      <div className="divide-y">
+                        {/* モデル */}
+                        {player.playerConfig.mouseModel && (
+                          <DeviceRow
+                            label="モデル"
+                            value={player.playerConfig.mouseModel}
+                          />
+                        )}
+                        {/* DPI */}
+                        {player.playerConfig.mouseDpi && (
+                          <DeviceRow
+                            label="DPI"
+                            value={player.playerConfig.mouseDpi.toString()}
+                          />
+                        )}
+                        {/* Win Sens または カスタム係数 */}
+                        {player.playerConfig.windowsSpeedMultiplier != null ? (
+                          <DeviceRow
+                            label="Win Sens"
+                            value={`x${player.playerConfig.windowsSpeedMultiplier.toFixed(3)}`}
+                          />
+                        ) : player.playerConfig.windowsSpeed != null ? (
+                          <DeviceRow
+                            label="Win Sens"
+                            value={player.playerConfig.windowsSpeed.toString()}
+                            unit={`(x${WINDOWS_POINTER_MULTIPLIERS[player.playerConfig.windowsSpeed]?.toFixed(3) ?? "1.000"})`}
+                          />
+                        ) : (
+                          <DeviceRow
+                            label="Win Sens"
+                            value="値なし"
+                          />
+                        )}
+                        {/* マウス加速 */}
+                        {player.playerConfig.mouseAcceleration != null && (
+                          <DeviceRow
+                            label="マウス加速"
+                            value={player.playerConfig.mouseAcceleration ? "ON" : "OFF"}
+                          />
+                        )}
+                        {/* ゲーム内感度 */}
+                        {player.playerConfig.gameSensitivity != null && (
+                          <DeviceRow
+                            label="ゲーム内感度"
+                            value={Math.floor(player.playerConfig.gameSensitivity * 200).toString()}
+                            unit="%"
+                          />
+                        )}
+                        {/* Raw Input */}
+                        {player.playerConfig.rawInput != null && (
+                          <DeviceRow
+                            label="Raw Input"
+                            value={player.playerConfig.rawInput ? "ON" : "OFF"}
+                          />
+                        )}
+                        {/* 振り向き */}
+                        {(() => {
+                          const cm360 = calculateCm360(
+                            player.playerConfig.mouseDpi,
+                            player.playerConfig.gameSensitivity,
+                            player.playerConfig.rawInput,
+                            player.playerConfig.windowsSpeed,
+                            player.playerConfig.windowsSpeedMultiplier
+                          );
+                          return cm360 != null ? (
+                            <DeviceRow
+                              label="振り向き"
+                              value={cm360.toFixed(2)}
+                              unit="cm"
+                            />
+                          ) : null;
+                        })()}
+                        {/* カーソル速度 */}
+                        {(() => {
+                          const cursorSpeed = calculateCursorSpeed(
+                            player.playerConfig.mouseDpi,
+                            player.playerConfig.windowsSpeed,
+                            player.playerConfig.windowsSpeedMultiplier
+                          );
+                          return cursorSpeed != null ? (
+                            <DeviceRow
+                              label="カーソル速度"
+                              value={cursorSpeed.toString()}
+                            />
+                          ) : null;
+                        })()}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-2">
                         マウス情報なし
                       </p>
                     )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Game Settings */}
+              <Card>
+                <CardHeader className="py-2">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    ゲーム内設定
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                    <div className="divide-y">
+                      {player.playerConfig.toggleSprint != null && (
+                        <DeviceRow
+                          label="ダッシュ切替"
+                          value={player.playerConfig.toggleSprint ? "ON" : "OFF"}
+                        />
+                      )}
+                      {player.playerConfig.toggleSneak != null && (
+                        <DeviceRow
+                          label="スニーク切替"
+                          value={player.playerConfig.toggleSneak ? "ON" : "OFF"}
+                        />
+                      )}
+                      {player.playerConfig.autoJump != null && (
+                        <DeviceRow
+                          label="自動ジャンプ"
+                          value={player.playerConfig.autoJump ? "ON" : "OFF"}
+                        />
+                      )}
+                      {player.playerConfig.gameLanguage && (
+                        <DeviceRow
+                          label="ゲーム言語"
+                          value={getGameLanguageName(player.playerConfig.gameLanguage)}
+                        />
+                      )}
+                    </div>
+                    <div className="divide-y">
+                      {player.playerConfig.fov != null && (
+                        <DeviceRow
+                          label="FOV"
+                          value={player.playerConfig.fov.toString()}
+                        />
+                      )}
+                      {player.playerConfig.guiScale !== null && player.playerConfig.guiScale !== undefined && (
+                        <DeviceRow
+                          label="GUIスケール"
+                          value={player.playerConfig.guiScale.toString()}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  {player.playerConfig.notes && (
+                    <div className="mt-4 p-3 bg-secondary/50 rounded-lg">
+                      <p className="text-sm">{player.playerConfig.notes}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            </div>
+            </>
           ) : (
             <EmptyState
               icon={<Mouse className="h-12 w-12" />}
@@ -1256,74 +1150,6 @@ export default function PlayerProfilePage() {
           )}
         </TabsContent>
 
-        {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-4">
-          {player.playerConfig ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  ゲーム内設定
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <SettingBadge
-                    label="ダッシュ切替"
-                    enabled={player.playerConfig.toggleSprint}
-                  />
-                  <SettingBadge
-                    label="スニーク切替"
-                    enabled={player.playerConfig.toggleSneak}
-                  />
-                  <SettingBadge
-                    label="自動ジャンプ"
-                    enabled={player.playerConfig.autoJump}
-                  />
-                  <SettingBadge
-                    label="Raw Input"
-                    enabled={player.playerConfig.rawInput}
-                  />
-                  <SettingBadge
-                    label="マウス加速"
-                    enabled={player.playerConfig.mouseAcceleration}
-                  />
-                </div>
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {player.playerConfig.gameLanguage && (
-                    <DeviceRow
-                      label="ゲーム言語"
-                      value={getGameLanguageName(player.playerConfig.gameLanguage)}
-                    />
-                  )}
-                  {player.playerConfig.fov && (
-                    <DeviceRow
-                      label="FOV"
-                      value={player.playerConfig.fov.toString()}
-                    />
-                  )}
-                  {player.playerConfig.guiScale !== null && player.playerConfig.guiScale !== undefined && (
-                    <DeviceRow
-                      label="GUIスケール"
-                      value={player.playerConfig.guiScale.toString()}
-                    />
-                  )}
-                </div>
-                {player.playerConfig.notes && (
-                  <div className="mt-4 p-3 bg-secondary/50 rounded-lg">
-                    <p className="text-sm">{player.playerConfig.notes}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <EmptyState
-              icon={<Settings className="h-12 w-12" />}
-              title="設定なし"
-              description="このプレイヤーはまだゲーム内設定をしていません。"
-            />
-          )}
-        </TabsContent>
       </div>
     </Tabs>
   );
@@ -1926,11 +1752,11 @@ function getSocialPlatformName(platform: string): string {
 
 function DeviceRow({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-medium">
+    <div className="flex justify-between items-center py-2.5">
+      <span className="text-sm">{label}</span>
+      <span className="font-medium font-mono text-sm">
         {value}
-        {unit && <span className="text-sm text-muted-foreground ml-1">{unit}</span>}
+        {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
     </div>
   );
@@ -2022,5 +1848,341 @@ function SkinSkeleton({ width, height }: { width: number; height: number }) {
         className="bg-muted rounded-lg animate-pulse"
       />
     </div>
+  );
+}
+
+// Stats タブのコンテナ（クライアント側でデータ取得）
+function StatsTabContent({
+  player,
+  hiddenSpeedrunRecords,
+}: {
+  player: any;
+  hiddenSpeedrunRecords: string[];
+}) {
+  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>> | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStats() {
+      try {
+        setIsLoading(true);
+        const stats = await fetchAllExternalStats(
+          player.mcid,
+          player.speedruncomUsername
+        );
+        if (!cancelled) {
+          setExternalStats(stats);
+        }
+      } catch (error) {
+        console.error("Failed to fetch external stats:", error);
+        if (!cancelled) {
+          setExternalStats({});
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [player.mcid, player.speedruncomUsername]);
+
+  if (isLoading) {
+    return <StatsLoadingSkeleton />;
+  }
+
+  if (!externalStats) {
+    return <StatsLoadingSkeleton />;
+  }
+
+  return (
+    <StatsContent
+      externalStats={externalStats}
+      player={player}
+      hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+    />
+  );
+}
+
+// Stats タブのローディングスケルトン
+function StatsLoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Stats タブのコンテンツ
+function StatsContent({
+  externalStats,
+  player,
+  hiddenSpeedrunRecords,
+}: {
+  externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
+  player: any;
+  hiddenSpeedrunRecords: string[];
+}) {
+  return (
+    <>
+      {/* MCSR Ranked Section */}
+      {externalStats.ranked?.isRegistered && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Swords className="h-5 w-5" />
+              MCSR Ranked
+            </CardTitle>
+            <CardDescription>
+              Ranked対戦の統計情報
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {externalStats.ranked.user?.eloRate && (
+                <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                  <p className="text-2xl font-bold">{externalStats.ranked.user.eloRate}</p>
+                  <p className="text-xs text-muted-foreground">Elo レート</p>
+                </div>
+              )}
+              {externalStats.ranked.user?.eloRank && (
+                <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                  <p className="text-2xl font-bold">#{externalStats.ranked.user.eloRank}</p>
+                  <p className="text-xs text-muted-foreground">ランキング</p>
+                </div>
+              )}
+              {externalStats.ranked.seasonData && (
+                <>
+                  <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                    <p className="text-2xl font-bold">
+                      {externalStats.ranked.seasonData.records.win}W - {externalStats.ranked.seasonData.records.lose}L
+                    </p>
+                    <p className="text-xs text-muted-foreground">今シーズン戦績</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* PB表示（全期間 / 今シーズン） */}
+            {externalStats.ranked.seasonData && (
+              typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" ||
+              typeof externalStats.ranked.seasonData.bestTime === "number"
+            ) ? (
+              <div className="grid grid-cols-2 gap-4">
+                {typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" && (
+                  <div className="p-3 bg-secondary/30 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">全期間 PB</p>
+                    <p className="text-xl font-mono font-bold">
+                      {formatTime(externalStats.ranked.seasonData.bestTimeAllTime)}
+                    </p>
+                  </div>
+                )}
+                {typeof externalStats.ranked.seasonData.bestTime === "number" && (
+                  <div className="p-3 bg-secondary/30 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">今シーズン PB</p>
+                    <p className="text-xl font-mono font-bold">
+                      {formatTime(externalStats.ranked.seasonData.bestTime)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Eloレートグラフ */}
+            {externalStats.ranked.recentMatches.length > 1 && (
+              <EloRateGraph matches={externalStats.ranked.recentMatches} />
+            )}
+
+            {/* 最近のマッチ */}
+            {externalStats.ranked.recentMatches.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">最近のマッチ</h4>
+                <div className="space-y-1">
+                  {externalStats.ranked.recentMatches.slice(0, 5).map((match) => (
+                    <div
+                      key={match.id}
+                      className={cn(
+                        "flex items-center justify-between p-2 rounded text-sm",
+                        match.result === "win" && "bg-green-500/10",
+                        match.result === "lose" && "bg-red-500/10",
+                        match.result === "draw" && "bg-yellow-500/10"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
+                          className="w-12 justify-center"
+                        >
+                          {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
+                        </Badge>
+                        <span>vs {match.opponentNickname}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {match.time && (
+                          <span className="font-mono text-muted-foreground">
+                            {formatTime(match.time)}
+                          </span>
+                        )}
+                        <span className={cn(
+                          "font-medium",
+                          match.eloChange > 0 && "text-green-500",
+                          match.eloChange < 0 && "text-red-500"
+                        )}>
+                          {match.eloChange > 0 ? "+" : ""}{match.eloChange}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PaceMan Section - リンクのみ */}
+      {externalStats.paceman?.isRegistered && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Timer className="h-5 w-5" />
+              PaceMan Stats
+            </CardTitle>
+            <CardDescription>
+              ペース統計・リセット情報
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline" className="w-full">
+              <a
+                href={`https://paceman.gg/stats/player/${encodeURIComponent(player.mcid)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                PaceMan Statsで詳細を見る
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Speedrun.com Section */}
+      {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              Speedrun.com
+            </CardTitle>
+            <CardDescription>
+              公式記録（Minecraft関連）
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {externalStats.speedruncom.personalBests
+                .filter((pb) => !hiddenSpeedrunRecords.includes(pb.run.id))
+                .slice(0, 6)
+                .map((pb) => (
+                  <div
+                    key={pb.run.id}
+                    className="p-3 bg-secondary/50 rounded-lg space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm truncate">
+                        {pb.category?.data?.name ?? "Unknown"}
+                      </span>
+                      <Badge variant="outline" className="shrink-0">
+                        #{pb.place}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {pb.game?.data?.names?.international ?? "Unknown Game"}
+                    </p>
+                    {(pb.platformName || pb.versionName) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                      </p>
+                    )}
+                    <p className="text-xl font-mono font-bold">
+                      {formatTime(pb.run.times.primary_t * 1000)}
+                    </p>
+                    {pb.run.weblink && (
+                      <a
+                        href={pb.run.weblink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        記録を見る
+                      </a>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* カスタム記録 */}
+      {player.categoryRecords.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              カスタム記録
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {player.categoryRecords.map((record: any) => (
+                <RecordCard key={record.id} record={record} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* データがない場合 */}
+      {(!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
+        <EmptyState
+          icon={<BarChart3 className="h-12 w-12" />}
+          title="統計データなし"
+          description="外部サービスからの統計データがありません。"
+        />
+      )}
+    </>
   );
 }

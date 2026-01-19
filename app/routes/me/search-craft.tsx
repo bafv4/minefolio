@@ -432,6 +432,21 @@ function EditableSearchCraftCard({
 
             {/* Main content */}
             <div className="flex-1 min-w-0 space-y-3">
+              {/* Header with expand/collapse button */}
+              <div className="flex items-center justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                >
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
               {/* アイテム表示 */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {craft.items.map((itemId, index) => (
@@ -475,18 +490,6 @@ function EditableSearchCraftCard({
                   placeholder="scr"
                   className="font-mono h-8 w-32"
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setIsExpanded(!isExpanded)}
-                >
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
               </div>
 
               {/* 展開時：コメント */}
@@ -499,7 +502,7 @@ function EditableSearchCraftCard({
                     id={`comment-${craft.id}`}
                     value={craft.comment || ""}
                     onChange={(e) => handleCommentChange(e.target.value)}
-                    placeholder="このシーケンスについてのメモ..."
+                    placeholder="このサーチクラフトについてのメモ..."
                     rows={2}
                   />
                 </div>
@@ -522,7 +525,7 @@ function EditableSearchCraftCard({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>シーケンスを削除しますか？</AlertDialogTitle>
+                  <AlertDialogTitle>サーチクラフトを削除しますか？</AlertDialogTitle>
                   <AlertDialogDescription>
                     この操作は保存するまで確定されません。
                   </AlertDialogDescription>
@@ -658,7 +661,7 @@ export default function SearchCraftPage() {
         <div>
           <h1 className="text-2xl font-bold">サーチクラフト</h1>
           <p className="text-muted-foreground">
-            スピードラン用のクラフト検索シーケンスを設定します。
+            スピードラン用のクラフト検索を設定します。
           </p>
         </div>
         <Button onClick={handleAddCraft}>
@@ -696,11 +699,11 @@ export default function SearchCraftPage() {
             <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
             <p className="text-lg font-medium">サーチクラフトが設定されていません</p>
             <p className="text-sm text-muted-foreground mb-4">
-              クラフト検索シーケンスを追加して、スピードランを効率化しましょう。
+              クラフト検索を追加して、スピードランを効率化しましょう。
             </p>
             <Button onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              シーケンスを追加
+              追加
             </Button>
           </CardContent>
         </Card>
@@ -712,6 +715,27 @@ export default function SearchCraftPage() {
         onSave={handleSave}
         onReset={handleReset}
       />
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  return (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center space-y-4">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <p className="text-muted-foreground">
+              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              ページをリロード
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

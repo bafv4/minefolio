@@ -43,11 +43,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { toast } from "sonner";
 import {
   Package,
@@ -55,7 +50,7 @@ import {
   Trash2,
   Edit,
   Layers,
-  ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import {
   MinecraftItemIcon,
@@ -66,6 +61,7 @@ import {
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { Combobox } from "@/components/ui/combobox";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "アイテム配置 - Minefolio" }];
@@ -165,10 +161,10 @@ export function HydrateFallback() {
               </div>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              <Skeleton className="w-10 h-10 shrink-0" />
+              <Skeleton className="w-12 h-12 shrink-0" />
               <div className="w-px h-8 bg-border shrink-0" />
               {Array.from({ length: 9 }).map((_, j) => (
-                <Skeleton key={j} className="w-10 h-10 shrink-0" />
+                <Skeleton key={j} className="w-12 h-12 shrink-0" />
               ))}
             </div>
           </div>
@@ -273,7 +269,7 @@ function HotbarSlot({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="relative w-10 h-10 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group"
+          className="relative w-12 h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group"
         >
           {items.length > 0 ? (
             <div className="relative w-full h-full flex items-center justify-center">
@@ -361,7 +357,7 @@ function HotbarSlot({
                 key={itemId}
                 type="button"
                 onClick={() => toggleItem(itemId)}
-                className={`w-10 h-10 flex items-center justify-center rounded border-2 transition-colors ${
+                className={`w-12 h-12 flex items-center justify-center rounded border-2 transition-colors ${
                   isItemSelected(itemId)
                     ? "border-primary bg-primary/20"
                     : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -461,51 +457,26 @@ function SegmentNameInput({
   onChange: (value: string) => void;
   existingSegments: string[];
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-
   // 未使用のプリセットのみ表示
   const availablePresets = SEGMENT_PRESETS.filter(
     (preset) => preset === value || !existingSegments.includes(preset)
   );
 
+  const options = availablePresets.map((preset) => ({
+    value: preset,
+    label: preset,
+  }));
+
   return (
-    <div className="flex gap-2">
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="セグメント名を入力..."
-        className="flex-1"
-      />
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="icon">
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-48 p-1">
-          <div className="space-y-0.5">
-            {availablePresets.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-secondary transition-colors"
-                onClick={() => {
-                  onChange(preset);
-                  setIsOpen(false);
-                }}
-              >
-                {preset}
-              </button>
-            ))}
-            {availablePresets.length === 0 && (
-              <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                プリセットがありません
-              </p>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+    <Combobox
+      options={options}
+      value={value}
+      onValueChange={onChange}
+      placeholder="セグメント名を選択または入力..."
+      searchPlaceholder="セグメント名を検索..."
+      emptyText="プリセットがありません"
+      allowCustomValue={true}
+    />
   );
 }
 
@@ -748,6 +719,27 @@ export default function ItemLayoutsPage() {
         onSave={handleSave}
         onReset={handleReset}
       />
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  return (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center space-y-4">
+            <Package className="h-12 w-12 mx-auto text-destructive" />
+            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <p className="text-muted-foreground">
+              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              ページをリロード
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

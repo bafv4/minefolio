@@ -64,7 +64,7 @@ export const translations = {
     home: {
       title: "Minecraft Speedrunner Portfolio",
       subtitle:
-        "スピードランナーを探して、キー配置や自己ベストなどを確認しましょう。",
+        "RTA走者を探して、キー配置や自己ベストなどを確認しましょう。",
       getStarted: "始める",
       browsePlayers: "プレイヤーを探す",
       players: "プレイヤー",
@@ -74,7 +74,7 @@ export const translations = {
     // Browse page
     browse: {
       title: "プレイヤー一覧",
-      description: "Minecraftスピードランナーを探して、ポートフォリオをチェック。",
+      description: "MinecraftRTA走者を探して、ポートフォリオをチェック。",
       playersFound: "{count}人のプレイヤー",
     },
 
@@ -92,7 +92,7 @@ export const translations = {
       title: "プラットフォーム統計",
       description: "Minefolioの利用統計とメトリクス。",
       totalPlayers: "総プレイヤー数",
-      totalPlayersDesc: "登録スピードランナー",
+      totalPlayersDesc: "登録走者",
       totalViews: "総閲覧数",
       totalViewsDesc: "全プロフィールの合計",
       moreStatsComing: "詳細な統計は近日公開",
@@ -103,7 +103,7 @@ export const translations = {
     // Keybindings list page
     keybindingsList: {
       title: "操作設定一覧",
-      description: "スピードランナーの操作設定・キー配置を一覧で確認できます。",
+      description: "RTA走者の操作設定・キー配置を一覧で確認できます。",
       playersFound: "{count}人のプレイヤー",
       layout: "{layout}配列",
     },
@@ -111,7 +111,7 @@ export const translations = {
     // Login page
     login: {
       title: "Minefolio",
-      description: "スピードランナーポートフォリオを管理するにはサインインしてください",
+      description: "ポートフォリオを管理するにはサインインしてください",
       continueWithDiscord: "Discordでログイン",
       agreementPrefix: "サインインすることで、",
       termsOfService: "利用規約",
@@ -124,25 +124,25 @@ export const translations = {
     onboarding: {
       title: "Minefolioへようこそ！",
       stepVerify: "プロフィールを設定しましょう",
-      stepConfirm: "もう少しです！プロフィールを確認してください。",
-      connectedViaDiscord: "Discord経由で接続済み",
-      mcidLabel: "Minecraft ID (MCID)",
+      stepConfirm: "プロフィールを確認してください。",
+      connectedViaDiscord: "Discordで認証済み",
+      mcidLabel: "MCID (MCID)",
       mcidPlaceholder: "例: Steve",
       mcidHint: "MCIDはMojang APIで検証されます",
       verifyAndContinue: "検証して続行",
       verifying: "検証中...",
-      verified: "Minecraft IDの検証に成功しました！",
+      verified: "MCIDの検証に成功しました！",
       foundLegacyData: "MCSRer Hotkeysのデータが見つかりました",
       legacyDataHint: "キー配置と設定をインポートできます",
       importData: "データをインポート",
       startFresh: "新規で始める",
       completeSetup: "セットアップを完了",
       creatingProfile: "プロフィールを作成中...",
-      errorMcidRequired: "Minecraft IDを入力してください",
-      errorMcidLength: "Minecraft IDは3〜16文字である必要があります",
-      errorMcidTaken: "このMinecraft IDは既に登録されています",
-      errorMcidNotFound: "Minecraft IDが見つかりません。確認してもう一度お試しください。",
-      errorVerifyFailed: "Minecraft IDの検証に失敗しました。もう一度お試しください。",
+      errorMcidRequired: "MCIDを入力してください",
+      errorMcidLength: "MCIDは3〜16文字である必要があります",
+      errorMcidTaken: "このMCIDは既に登録されています",
+      errorMcidNotFound: "MCIDが見つかりません。確認してもう一度お試しください。",
+      errorVerifyFailed: "MCIDの検証に失敗しました。もう一度お試しください。",
       errorInvalidRequest: "無効なリクエストです。最初からやり直してください。",
     },
 

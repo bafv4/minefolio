@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
   Select,
@@ -640,5 +641,109 @@ function SimilarPlayersSection({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function HydrateFallback() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-5 w-72" />
+      </div>
+
+      {/* プレイヤー選択スケルトン */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 統計サマリースケルトン */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-center justify-center gap-6">
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-10 h-10 rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+            <div className="text-center px-6">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="text-center">
+                  <Skeleton className="h-8 w-12 mx-auto mb-1" />
+                  <Skeleton className="h-3 w-8 mx-auto" />
+                </div>
+                <div className="text-center">
+                  <Skeleton className="h-8 w-12 mx-auto mb-1" />
+                  <Skeleton className="h-3 w-12 mx-auto" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-24 mx-auto" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-10 h-10 rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* キーバインド比較スケルトン */}
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-40" />
+        {Array.from({ length: 4 }).map((_, categoryIndex) => (
+          <Card key={categoryIndex}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-5 w-20" />
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 px-2 -mx-2">
+                    <Skeleton className="h-4 w-24" />
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-8 w-20" />
+                      <Skeleton className="h-4 w-4" />
+                      <Skeleton className="h-8 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* デバイス・設定の比較スケルトン */}
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-48" />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-3 gap-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              {Array.from({ length: 15 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

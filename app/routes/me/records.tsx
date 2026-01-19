@@ -528,3 +528,24 @@ export default function RecordsPage() {
     </div>
   );
 }
+
+export function ErrorBoundary() {
+  return (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center space-y-4">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <p className="text-muted-foreground">
+              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              ページをリロード
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

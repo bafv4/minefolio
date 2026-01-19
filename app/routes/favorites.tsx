@@ -7,6 +7,7 @@ import { inArray } from "drizzle-orm";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 import { PlayerCard } from "@/components/player-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, Users, ArrowLeft, Cookie } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -117,6 +118,34 @@ export default function FavoritesPage() {
       <p className="text-xs text-muted-foreground text-center">
         お気に入りはブラウザのCookieに保存されます。別のブラウザやデバイスでは表示されません。
       </p>
+    </div>
+  );
+}
+
+export function HydrateFallback() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-5 w-64" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="border rounded-lg p-3">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-12 h-12 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

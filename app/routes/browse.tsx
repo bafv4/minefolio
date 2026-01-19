@@ -1,4 +1,4 @@
-import { useLoaderData, useSearchParams, Form } from "react-router";
+import { useLoaderData, useSearchParams, Form, useNavigation } from "react-router";
 import { useState } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
@@ -8,6 +8,7 @@ import { eq, desc, asc, like, sql, or } from "drizzle-orm";
 import { PlayerCard } from "@/components/player-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, ArrowUpDown } from "lucide-react";
+import { Search, Users, ArrowUpDown, Loader2 } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export const meta: Route.MetaFunction = () => {
@@ -111,11 +112,28 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   };
 }
 
+function PlayerCardSkeleton() {
+  return (
+    <div className="border rounded-lg p-3">
+      <div className="flex items-center gap-3">
+        <Skeleton className="w-12 h-12 rounded-lg shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BrowsePage() {
   const { players, searchQuery, sortBy, currentPage, totalPages, totalCount } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
 
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -185,7 +203,13 @@ export default function BrowsePage() {
       </div>
 
       {/* プレイヤー一覧 */}
-      {players.length > 0 ? (
+      {isNavigating ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <PlayerCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
             <PlayerCard key={player.mcid} player={player} />
@@ -223,8 +247,9 @@ export default function BrowsePage() {
             variant="outline"
             size="sm"
             onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1}
+            disabled={currentPage <= 1 || isNavigating}
           >
+            {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             前へ
           </Button>
           <div className="flex items-center gap-1">
@@ -263,8 +288,9 @@ export default function BrowsePage() {
             variant="outline"
             size="sm"
             onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= totalPages}
+            disabled={currentPage >= totalPages || isNavigating}
           >
+            {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             次へ
           </Button>
         </div>

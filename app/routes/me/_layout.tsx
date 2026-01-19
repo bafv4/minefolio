@@ -37,15 +37,20 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return { user };
 }
 
-const navItems = [
+// 主要なナビゲーション項目
+const mainNavItems = [
   { to: "/me/edit", label: "プロフィール編集", icon: Pencil },
   { to: "/me/records", label: "記録", icon: Trophy },
   { to: "/me/keybindings", label: "キー配置", icon: Keyboard },
   { to: "/me/devices", label: "デバイス", icon: Mouse },
-  { to: "/me/presets", label: "プリセット", icon: Save },
-  { to: "/me/import", label: "インポート", icon: Upload },
   { to: "/me/items", label: "アイテム配置", icon: Package },
   { to: "/me/search-craft", label: "サーチクラフト", icon: Search },
+];
+
+// 補助的なナビゲーション項目（区切り線の下）
+const secondaryNavItems = [
+  { to: "/me/presets", label: "プリセット", icon: Save },
+  { to: "/me/import", label: "インポート", icon: Upload },
 ];
 
 export default function MeLayout() {
@@ -64,7 +69,42 @@ export default function MeLayout() {
             <p className="font-medium">{user.displayName ?? user.mcid}</p>
             <p className="text-sm text-muted-foreground">@{user.mcid}</p>
           </div>
-          {navItems.map((item) => (
+
+          {/* 主要なナビゲーション項目 */}
+          {mainNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end
+              className={({ isActive, isPending }) =>
+                cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : isPending
+                    ? "bg-secondary/50 text-muted-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )
+              }
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <item.icon className="h-4 w-4" />
+                  )}
+                  {item.label}
+                </>
+              )}
+            </NavLink>
+          ))}
+
+          {/* 区切り線 */}
+          <div className="my-3 border-t" />
+
+          {/* 補助的なナビゲーション項目 */}
+          {secondaryNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
