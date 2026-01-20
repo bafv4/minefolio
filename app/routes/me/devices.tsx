@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import {
   Keyboard,
   Mouse,
+  AlertCircle,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = () => {

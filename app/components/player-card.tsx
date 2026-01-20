@@ -12,8 +12,9 @@ import {
 
 interface PlayerCardProps {
   player: {
-    mcid: string;
-    uuid: string;
+    mcid: string | null;
+    uuid: string | null;
+    slug: string;
     displayName: string | null;
     location: string | null;
     updatedAt: Date;
@@ -36,8 +37,10 @@ function getRelativeTime(date: Date): string {
 }
 
 function PlayerCardComponent({ player }: PlayerCardProps) {
+  const displayName = player.displayName ?? player.mcid ?? player.slug;
+
   return (
-    <Link to={`/player/${player.mcid}`} prefetch="intent">
+    <Link to={`/player/${player.slug}`} prefetch="intent">
       <Card className="group transition-all duration-200 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 cursor-pointer h-full active:scale-[0.98] active:opacity-90">
         <CardContent className="p-3">
           <div className="flex items-center gap-3">
@@ -49,17 +52,17 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <h3 className="font-bold truncate">
-                      {player.displayName ?? player.mcid}
+                      {displayName}
                     </h3>
                   </TooltipTrigger>
-                  {(player.displayName ?? player.mcid).length > 20 && (
+                  {displayName.length > 20 && (
                     <TooltipContent>
-                      <p>{player.displayName ?? player.mcid}</p>
+                      <p>{displayName}</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
-              <p className="text-muted-foreground text-sm">@{player.mcid}</p>
+              {player.mcid && <p className="text-muted-foreground text-sm">@{player.mcid}</p>}
               {player.shortBio && (
                 <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
                   {player.shortBio}

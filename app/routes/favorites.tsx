@@ -39,6 +39,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     columns: {
       mcid: true,
       uuid: true,
+      slug: true,
       displayName: true,
       shortBio: true,
       location: true,
@@ -97,7 +98,7 @@ export default function FavoritesPage() {
       {players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
-            <PlayerCard key={player.mcid} player={player} />
+            <PlayerCard key={player.slug} player={player} />
           ))}
         </div>
       ) : (

@@ -86,16 +86,17 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     columns: {
       mcid: true,
       uuid: true,
+      slug: true,
       displayName: true,
     },
-    orderBy: [asc(users.mcid)],
+    orderBy: [asc(users.slug)],
     limit: 100,
   });
 
-  // p1のみ指定の場合、類似プレイヤーを検索
+  // p1のみ指定の場合、類似プレイヤーを検索（slugで検索）
   if (p1 && !p2) {
     const player1Data = await db.query.users.findFirst({
-      where: eq(users.mcid, p1),
+      where: eq(users.slug, p1),
       with: {
         keybindings: true,
         playerConfig: true,
@@ -115,11 +116,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
     // 全ユーザーのキーバインドを取得して類似度を計算
     const allUsersWithKeybindings = await db.query.users.findMany({
-      where: sql`${users.mcid} != ${p1}`,
+      where: sql`${users.slug} != ${p1}`,
       columns: {
         id: true,
         mcid: true,
         uuid: true,
+        slug: true,
         displayName: true,
       },
       with: {
@@ -153,6 +155,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         return {
           mcid: user.mcid,
           uuid: user.uuid,
+          slug: user.slug,
           displayName: user.displayName,
           matches,
           total,
@@ -176,10 +179,10 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     return { allPlayers, player1: null, player2: null, similarPlayers: [] };
   }
 
-  // 両プレイヤーのデータを取得
+  // 両プレイヤーのデータを取得（slugで検索）
   const [player1Data, player2Data] = await Promise.all([
     db.query.users.findFirst({
-      where: eq(users.mcid, p1),
+      where: eq(users.slug, p1),
       with: {
         keybindings: true,
         playerConfig: true,
@@ -187,7 +190,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       },
     }),
     db.query.users.findFirst({
-      where: eq(users.mcid, p2),
+      where: eq(users.slug, p2),
       with: {
         keybindings: true,
         playerConfig: true,
@@ -213,10 +216,10 @@ export default function ComparePage() {
   const selectedP1 = searchParams.get("p1") ?? "";
   const selectedP2 = searchParams.get("p2") ?? "";
 
-  const handleSelectPlayer = (slot: "p1" | "p2", mcid: string) => {
+  const handleSelectPlayer = (slot: "p1" | "p2", slug: string) => {
     const params = new URLSearchParams(searchParams);
-    if (mcid) {
-      params.set(slot, mcid);
+    if (slug) {
+      params.set(slot, slug);
     } else {
       params.delete(slot);
     }
@@ -229,7 +232,8 @@ export default function ComparePage() {
     const lower = search1.toLowerCase();
     return allPlayers.filter(
       (p) =>
-        p.mcid.toLowerCase().includes(lower) ||
+        p.slug.toLowerCase().includes(lower) ||
+        p.mcid?.toLowerCase().includes(lower) ||
         p.displayName?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search1]);
@@ -239,7 +243,8 @@ export default function ComparePage() {
     const lower = search2.toLowerCase();
     return allPlayers.filter(
       (p) =>
-        p.mcid.toLowerCase().includes(lower) ||
+        p.slug.toLowerCase().includes(lower) ||
+        p.mcid?.toLowerCase().includes(lower) ||
         p.displayName?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search2]);
@@ -333,11 +338,11 @@ export default function ComparePage() {
               </SelectTrigger>
               <SelectContent className="max-h-60">
                 {filteredPlayers1.map((p) => (
-                  <SelectItem key={p.mcid} value={p.mcid}>
+                  <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} />
-                      <span>{p.displayName ?? p.mcid}</span>
-                      <span className="text-muted-foreground text-xs">@{p.mcid}</span>
+                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
                 ))}
@@ -345,7 +350,7 @@ export default function ComparePage() {
             </Select>
             {player1 && (
               <Link
-                to={`/player/${player1.mcid}`}
+                to={`/player/${player1.slug}`}
                 className="flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <User className="h-4 w-4" />
@@ -375,11 +380,11 @@ export default function ComparePage() {
               </SelectTrigger>
               <SelectContent className="max-h-60">
                 {filteredPlayers2.map((p) => (
-                  <SelectItem key={p.mcid} value={p.mcid}>
+                  <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} />
-                      <span>{p.displayName ?? p.mcid}</span>
-                      <span className="text-muted-foreground text-xs">@{p.mcid}</span>
+                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
                 ))}
@@ -387,7 +392,7 @@ export default function ComparePage() {
             </Select>
             {player2 && (
               <Link
-                to={`/player/${player2.mcid}`}
+                to={`/player/${player2.slug}`}
                 className="flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <User className="h-4 w-4" />
@@ -408,8 +413,8 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player1.uuid} size={40} />
                   <div>
-                    <p className="font-bold">{player1.displayName ?? player1.mcid}</p>
-                    <p className="text-xs text-muted-foreground">@{player1.mcid}</p>
+                    <p className="font-bold">{player1.displayName ?? player1.mcid ?? player1.slug}</p>
+                    {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
                   </div>
                 </div>
                 <div className="text-center px-6">
@@ -432,8 +437,8 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player2.uuid} size={40} />
                   <div>
-                    <p className="font-bold">{player2.displayName ?? player2.mcid}</p>
-                    <p className="text-xs text-muted-foreground">@{player2.mcid}</p>
+                    <p className="font-bold">{player2.displayName ?? player2.mcid ?? player2.slug}</p>
+                    {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
                   </div>
                 </div>
               </div>
@@ -495,8 +500,8 @@ export default function ComparePage() {
               <CardContent className="pt-6">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="font-medium text-sm text-muted-foreground">項目</div>
-                  <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid}</div>
-                  <div className="font-medium text-sm text-center">{player2.displayName ?? player2.mcid}</div>
+                  <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid ?? player1.slug}</div>
+                  <div className="font-medium text-sm text-center">{player2.displayName ?? player2.mcid ?? player2.slug}</div>
 
                   <CompareRow
                     label="マウスDPI"
@@ -586,7 +591,7 @@ function SimilarPlayersSection({
 }: {
   targetPlayer: NonNullable<Awaited<ReturnType<typeof loader>>["player1"]>;
   similarPlayers: Awaited<ReturnType<typeof loader>>["similarPlayers"];
-  onSelectPlayer: (mcid: string) => void;
+  onSelectPlayer: (slug: string) => void;
 }) {
   return (
     <Card>
@@ -596,7 +601,7 @@ function SimilarPlayersSection({
           類似設定のプレイヤー
         </CardTitle>
         <CardDescription>
-          {targetPlayer.displayName ?? targetPlayer.mcid}と似たキー配置のプレイヤー
+          {targetPlayer.displayName ?? targetPlayer.mcid ?? targetPlayer.slug}と似たキー配置のプレイヤー
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -604,14 +609,14 @@ function SimilarPlayersSection({
           <div className="space-y-2">
             {similarPlayers.map((player) => (
               <div
-                key={player.mcid}
+                key={player.slug}
                 className="flex items-center justify-between p-3 rounded-lg border hover:bg-secondary/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <MinecraftAvatar uuid={player.uuid} size={32} />
                   <div>
-                    <p className="font-medium">{player.displayName ?? player.mcid}</p>
-                    <p className="text-xs text-muted-foreground">@{player.mcid}</p>
+                    <p className="font-medium">{player.displayName ?? player.mcid ?? player.slug}</p>
+                    {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -626,7 +631,7 @@ function SimilarPlayersSection({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => onSelectPlayer(player.mcid)}
+                    onClick={() => onSelectPlayer(player.slug)}
                   >
                     比較
                   </Button>

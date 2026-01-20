@@ -10,6 +10,8 @@ import { users, socialLinks, authUsers, authSessions, authAccounts } from "@/lib
 import { eq, asc } from "drizzle-orm";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
+import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
+import { generateSlug } from "@/lib/slug";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
 import { Button } from "@/components/ui/button";
@@ -176,6 +178,10 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: "レガシーAPIが設定されていません", action: "import" };
     }
 
+    if (!user.mcid) {
+      return { error: "MCIDが設定されていないためインポートできません", action: "import" };
+    }
+
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
       return {
@@ -190,6 +196,70 @@ export async function action({ context, request }: Route.ActionArgs) {
     } else {
       return { error: result.error ?? "インポートに失敗しました", action: "import" };
     }
+  }
+
+  // MCID設定/変更
+  if (actionType === "set_mcid") {
+    const mcid = (formData.get("mcid") as string)?.trim();
+
+    if (!mcid) {
+      return { error: "MCIDを入力してください", action: "mcid" };
+    }
+
+    if (mcid.length < 3 || mcid.length > 16) {
+      return { error: "MCIDは3〜16文字である必要があります", action: "mcid" };
+    }
+
+    // 既に同じMCIDが登録されていないかチェック
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.mcid, mcid),
+    });
+
+    if (existingUser && existingUser.id !== user.id) {
+      return { error: "このMCIDは既に登録されています", action: "mcid" };
+    }
+
+    // Mojang APIで検証
+    try {
+      const uuid = await fetchUuidFromMcid(mcid);
+      const newSlug = generateSlug(mcid, session.user.id);
+
+      await db
+        .update(users)
+        .set({
+          mcid,
+          uuid,
+          slug: newSlug,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      return { success: true, action: "mcid", newSlug };
+    } catch (error) {
+      if (error instanceof MojangError) {
+        if (error.code === "MCID_NOT_FOUND") {
+          return { error: "MCIDが見つかりません。正しいMCIDを入力してください。", action: "mcid" };
+        }
+      }
+      return { error: "MCIDの検証に失敗しました", action: "mcid" };
+    }
+  }
+
+  // MCID削除
+  if (actionType === "remove_mcid") {
+    const newSlug = generateSlug(null, session.user.id);
+
+    await db
+      .update(users)
+      .set({
+        mcid: null,
+        uuid: null,
+        slug: newSlug,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+
+    return { success: true, action: "mcid_removed", newSlug };
   }
 
   // ソーシャルリンクの操作
@@ -318,10 +388,11 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // アカウント削除
   if (actionType === "delete_account") {
-    const confirmMcid = (formData.get("confirmMcid") as string)?.trim();
+    const confirmText = (formData.get("confirmText") as string)?.trim();
+    const expectedText = user.mcid || user.slug;
 
-    if (confirmMcid !== user.mcid) {
-      return { error: "MCIDが一致しません", action: "delete" };
+    if (confirmText !== expectedText) {
+      return { error: "入力が一致しません", action: "delete" };
     }
 
     // Delete user data (cascades to related tables)
@@ -532,11 +603,14 @@ export default function EditProfilePage() {
   const linkFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
+  const mcidFetcher = useFetcher<typeof action>();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isMcidDialogOpen, setIsMcidDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<typeof links[0] | null>(null);
-  const [confirmMcid, setConfirmMcid] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+  const [newMcid, setNewMcid] = useState("");
   const [selectedPose, setSelectedPose] = useState<PoseName>(
     (user.profilePose as PoseName) ?? "waving"
   );
@@ -625,14 +699,17 @@ export default function EditProfilePage() {
   const isLinkSubmitting = linkFetcher.state === "submitting";
   const isDeleting = deleteFetcher.state === "submitting";
   const isImporting = importFetcher.state === "submitting";
+  const isMcidSubmitting = mcidFetcher.state === "submitting";
   const data = fetcher.data;
   const linkData = linkFetcher.data;
   const deleteData = deleteFetcher.data;
   const importData = importFetcher.data;
+  const mcidData = mcidFetcher.data;
 
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const prevLinkDataRef = useRef<typeof linkFetcher.data>(undefined);
   const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
+  const prevMcidDataRef = useRef<typeof mcidFetcher.data>(undefined);
 
   // 保存成功後に初期値を更新
   useEffect(() => {
@@ -699,6 +776,22 @@ export default function EditProfilePage() {
     }
   }, [importData]);
 
+  // MCID変更結果のトースト
+  useEffect(() => {
+    if (!mcidData || mcidData === prevMcidDataRef.current) return;
+    prevMcidDataRef.current = mcidData;
+
+    if ("success" in mcidData && mcidData.action === "mcid") {
+      toast.success("MCIDを変更しました");
+      setIsMcidDialogOpen(false);
+      // ページをリロードして新しいデータを反映
+      window.location.reload();
+    } else if ("success" in mcidData && mcidData.action === "mcid_removed") {
+      toast.success("MCIDを削除しました");
+      window.location.reload();
+    }
+  }, [mcidData]);
+
   const handleOpenCreate = () => {
     setEditingLink(null);
     setIsDialogOpen(true);
@@ -752,63 +845,193 @@ export default function EditProfilePage() {
       )}
 
       <div className="space-y-6">
-        {/* Avatar Section */}
+        {/* Avatar & MCID Section */}
         <Card>
           <CardHeader>
-            <CardTitle>MCID</CardTitle>
+            <CardTitle>Minecraft ID</CardTitle>
             <CardDescription>
-              同期されています。
+              {user.mcid
+                ? "MCIDはMojang APIで検証されています。"
+                : "MCIDを設定すると、PaceManやMCSR Rankedとの連携が可能になります。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-xl overflow-hidden">
-                <MinecraftAvatar uuid={user.uuid} size={80} />
+            {user.mcid ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden">
+                    <MinecraftAvatar uuid={user.uuid} size={80} />
+                  </div>
+                  <div>
+                    <p className="font-medium">@{user.mcid}</p>
+                    <p className="text-sm text-muted-foreground">
+                      UUID: {user.uuid}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
+                    setIsMcidDialogOpen(open);
+                    if (!open) setNewMcid("");
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Pencil className="mr-2 h-4 w-4" />
+                        変更
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>MCIDを変更</DialogTitle>
+                        <DialogDescription>
+                          新しいMCIDを入力してください。URLも変更されます。
+                        </DialogDescription>
+                      </DialogHeader>
+                      <mcidFetcher.Form method="post">
+                        <input type="hidden" name="_action" value="set_mcid" />
+                        <div className="space-y-4 py-4">
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              MCIDを変更すると、プロフィールURLが変更されます。旧URLは無効になります。
+                            </AlertDescription>
+                          </Alert>
+                          <div className="space-y-2">
+                            <Label htmlFor="new-mcid">新しいMCID</Label>
+                            <Input
+                              id="new-mcid"
+                              name="mcid"
+                              value={newMcid}
+                              onChange={(e) => setNewMcid(e.target.value)}
+                              placeholder="例: Steve"
+                              minLength={3}
+                              maxLength={16}
+                            />
+                          </div>
+                          {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
+                            <Alert variant="destructive">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>{mcidData.error}</AlertDescription>
+                            </Alert>
+                          )}
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
+                            {isMcidSubmitting ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            MCIDを変更
+                          </Button>
+                        </DialogFooter>
+                      </mcidFetcher.Form>
+                    </DialogContent>
+                  </Dialog>
+                  <mcidFetcher.Form method="post">
+                    <input type="hidden" name="_action" value="remove_mcid" />
+                    <Button variant="ghost" size="sm" type="submit" disabled={isMcidSubmitting}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      削除
+                    </Button>
+                  </mcidFetcher.Form>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">@{user.mcid}</p>
-                <p className="text-sm text-muted-foreground">
-                  UUID: {user.uuid}
-                </p>
+            ) : (
+              <div className="text-center py-4">
+                <div className="w-20 h-20 rounded-xl bg-muted mx-auto mb-4 flex items-center justify-center">
+                  <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground mb-4">MCIDが設定されていません</p>
+                <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
+                  setIsMcidDialogOpen(open);
+                  if (!open) setNewMcid("");
+                }}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      MCIDを設定
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>MCIDを設定</DialogTitle>
+                      <DialogDescription>
+                        Java版のMCIDを入力してください。Mojang APIで検証されます。
+                      </DialogDescription>
+                    </DialogHeader>
+                    <mcidFetcher.Form method="post">
+                      <input type="hidden" name="_action" value="set_mcid" />
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-mcid">MCID</Label>
+                          <Input
+                            id="new-mcid"
+                            name="mcid"
+                            value={newMcid}
+                            onChange={(e) => setNewMcid(e.target.value)}
+                            placeholder="例: Steve"
+                            minLength={3}
+                            maxLength={16}
+                          />
+                        </div>
+                        {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{mcidData.error}</AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
+                          {isMcidSubmitting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : null}
+                          MCIDを設定
+                        </Button>
+                      </DialogFooter>
+                    </mcidFetcher.Form>
+                  </DialogContent>
+                </Dialog>
               </div>
-            </div>
+            )}
 
-            {/* Pose Selection */}
-            <div className="space-y-3">
-              <Label>プロフィールのポーズ</Label>
-              <div className="grid grid-cols-3 gap-3">
-                {(["standing", "walking", "waving"] as const).map((pose) => (
-                  <button
-                    key={pose}
-                    type="button"
-                    onClick={() => setSelectedPose(pose)}
-                    className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${
-                      selectedPose === pose
-                        ? "border-primary bg-primary/5"
-                        : "border-muted hover:border-muted-foreground/30"
-                    }`}
-                  >
-                    <div className="w-16 h-24">
-                      <MinecraftFullBody
-                        uuid={user.uuid}
-                        width={64}
-                        height={96}
-                        pose={pose}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        asImage
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {pose === "standing" && "直立"}
-                      {pose === "walking" && "歩行"}
-                      {pose === "waving" && "手を振る"}
-                    </span>
-                  </button>
-                ))}
+            {/* Pose Selection - only show when user has uuid */}
+            {user.uuid && (
+              <div className="space-y-3">
+                <Label>プロフィールのポーズ</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(["standing", "walking", "waving"] as const).map((pose) => (
+                    <button
+                      key={pose}
+                      type="button"
+                      onClick={() => setSelectedPose(pose)}
+                      className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${
+                        selectedPose === pose
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <div className="w-16 h-24">
+                        <MinecraftFullBody
+                          uuid={user.uuid!}
+                          width={64}
+                          height={96}
+                          pose={pose}
+                          angle={-35}
+                          elevation={5}
+                          zoom={0.9}
+                          asImage
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {pose === "standing" && "直立"}
+                        {pose === "walking" && "歩行"}
+                        {pose === "waving" && "手を振る"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -824,11 +1047,11 @@ export default function EditProfilePage() {
                 id="displayName"
                 value={formValues.displayName}
                 onChange={(e) => handleInputChange("displayName", e.target.value)}
-                placeholder={user.mcid}
+                placeholder={user.mcid || user.slug}
                 maxLength={50}
               />
               <p className="text-xs text-muted-foreground">
-                空欄の場合はMCIDが使用されます
+                空欄の場合は{user.mcid ? "MCID" : "slug"}が使用されます
               </p>
             </div>
 
@@ -1166,7 +1389,7 @@ export default function EditProfilePage() {
             </div>
             <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
               setIsDeleteDialogOpen(open);
-              if (!open) setConfirmMcid("");
+              if (!open) setConfirmText("");
             }}>
               <DialogTrigger asChild>
                 <Button variant="destructive">
@@ -1193,15 +1416,15 @@ export default function EditProfilePage() {
                       </AlertDescription>
                     </Alert>
                     <div className="space-y-2">
-                      <Label htmlFor="confirmMcid">
-                        確認のため、あなたのMCID <span className="font-mono font-bold">{user.mcid}</span> を入力してください
+                      <Label htmlFor="confirmText">
+                        確認のため、<span className="font-mono font-bold">{user.mcid || user.slug}</span> を入力してください
                       </Label>
                       <Input
-                        id="confirmMcid"
-                        name="confirmMcid"
-                        value={confirmMcid}
-                        onChange={(e) => setConfirmMcid(e.target.value)}
-                        placeholder={user.mcid}
+                        id="confirmText"
+                        name="confirmText"
+                        value={confirmText}
+                        onChange={(e) => setConfirmText(e.target.value)}
+                        placeholder={user.mcid || user.slug}
                         autoComplete="off"
                       />
                     </div>
@@ -1223,7 +1446,7 @@ export default function EditProfilePage() {
                     <Button
                       type="submit"
                       variant="destructive"
-                      disabled={confirmMcid !== user.mcid || isDeleting}
+                      disabled={confirmText !== (user.mcid || user.slug) || isDeleting}
                     >
                       {isDeleting ? (
                         <>

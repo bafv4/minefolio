@@ -184,6 +184,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         id: true,
         mcid: true,
         uuid: true,
+        slug: true,
         displayName: true,
       },
       with: {
@@ -568,8 +569,9 @@ function PlayerRow({
 }: {
   player: {
     id: string;
-    mcid: string;
-    uuid: string;
+    mcid: string | null;
+    uuid: string | null;
+    slug: string;
     displayName: string | null;
     keybindings: Array<{
       id: string;
@@ -592,7 +594,7 @@ function PlayerRow({
     <TableRow className="hover:bg-muted/30">
       <TableCell className="sticky left-0 bg-background z-10">
         <Link
-          to={`/player/${player.mcid}`}
+          to={`/player/${player.slug}`}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
           <MinecraftAvatar
@@ -602,7 +604,7 @@ function PlayerRow({
           />
           <div className="min-w-0">
             <p className="font-medium text-sm truncate">
-              {player.displayName ?? player.mcid}
+              {player.displayName ?? player.mcid ?? player.slug}
             </p>
           </div>
         </Link>
@@ -629,8 +631,9 @@ function MouseSettingsRow({
 }: {
   player: {
     id: string;
-    mcid: string;
-    uuid: string;
+    mcid: string | null;
+    uuid: string | null;
+    slug: string;
     displayName: string | null;
     playerConfig: {
       keyboardLayout: string | null;
@@ -674,7 +677,7 @@ function MouseSettingsRow({
     <TableRow className="hover:bg-muted/30">
       <TableCell className="sticky left-0 bg-background z-10">
         <Link
-          to={`/player/${player.mcid}`}
+          to={`/player/${player.slug}`}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
           <MinecraftAvatar
@@ -684,7 +687,7 @@ function MouseSettingsRow({
           />
           <div className="min-w-0">
             <p className="font-medium text-sm truncate">
-              {player.displayName ?? player.mcid}
+              {player.displayName ?? player.mcid ?? player.slug}
             </p>
           </div>
         </Link>

@@ -1,11 +1,16 @@
-// シンプルなインメモリキャッシュ（開発用）とCloudflare Cache API（本番用）
-// ユーザーごとにキャッシュを管理
+// DBキャッシュとインメモリキャッシュのハイブリッド実装
+// Vercel環境ではDBキャッシュを使用し、インメモリはフォールバック
+
+import { eq, lt } from "drizzle-orm";
+import { createDb } from "./db";
+import { apiCache } from "./schema";
+import { createId } from "@paralleldrive/cuid2";
 
 const CACHE_TTL = 60 * 1000; // 1分
 const CACHE_TTL_15MIN = 15 * 60 * 1000; // 15分（外部API用）
 const CACHE_TTL_1DAY = 24 * 60 * 60 * 1000; // 1日（Mojang API用）
 
-// インメモリキャッシュ（開発環境用）
+// インメモリキャッシュ（開発環境用・フォールバック用）
 const memoryCache = new Map<string, { data: unknown; expires: number }>();
 
 /**
@@ -19,7 +24,7 @@ export function getCacheKey(userId: string, page: string): string {
 }
 
 /**
- * キャッシュからデータを取得
+ * キャッシュからデータを取得（インメモリ）
  * @param key - キャッシュキー
  * @returns キャッシュされたデータ、または有効期限切れ/存在しない場合はnull
  */
@@ -33,7 +38,7 @@ export async function getCached<T>(key: string): Promise<T | null> {
 }
 
 /**
- * データをキャッシュに保存
+ * データをキャッシュに保存（インメモリ）
  * @param key - キャッシュキー
  * @param data - 保存するデータ
  * @param ttl - Time To Live（ミリ秒）、デフォルト: 1分
@@ -112,4 +117,154 @@ export function getYouTubeCacheKey(channelIds: string[]): string {
  */
 export function getPaceManCacheKey(type: string): string {
   return `paceman:${type}`;
+}
+
+// ============================================
+// DBキャッシュ関連の関数
+// ============================================
+
+type CacheType = "youtube_videos" | "recent_paces" | "twitch_streams" | "live_runs";
+
+/**
+ * DBからキャッシュを取得
+ * @param cacheKey - キャッシュキー
+ * @returns キャッシュされたデータ、または有効期限切れ/存在しない場合はnull
+ */
+export async function getDbCached<T>(cacheKey: string): Promise<T | null> {
+  try {
+    const db = createDb();
+    const cached = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, cacheKey),
+    });
+
+    if (!cached) {
+      return null;
+    }
+
+    // 有効期限チェック
+    if (cached.expiresAt < new Date()) {
+      // 期限切れの場合は削除
+      await db.delete(apiCache).where(eq(apiCache.cacheKey, cacheKey));
+      return null;
+    }
+
+    return JSON.parse(cached.data) as T;
+  } catch (error) {
+    console.error("DB cache read error:", error);
+    return null;
+  }
+}
+
+/**
+ * データをDBキャッシュに保存
+ * @param cacheKey - キャッシュキー
+ * @param cacheType - キャッシュタイプ
+ * @param data - 保存するデータ
+ * @param ttlMs - Time To Live（ミリ秒）
+ */
+export async function setDbCached<T>(
+  cacheKey: string,
+  cacheType: CacheType,
+  data: T,
+  ttlMs: number
+): Promise<void> {
+  try {
+    const db = createDb();
+    const expiresAt = new Date(Date.now() + ttlMs);
+    const jsonData = JSON.stringify(data);
+
+    // upsert: 存在すれば更新、なければ挿入
+    const existing = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, cacheKey),
+    });
+
+    if (existing) {
+      await db
+        .update(apiCache)
+        .set({
+          data: jsonData,
+          expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(apiCache.cacheKey, cacheKey));
+    } else {
+      await db.insert(apiCache).values({
+        id: createId(),
+        cacheKey,
+        cacheType,
+        data: jsonData,
+        expiresAt,
+      });
+    }
+  } catch (error) {
+    console.error("DB cache write error:", error);
+  }
+}
+
+/**
+ * 特定のDBキャッシュを削除
+ * @param cacheKey - キャッシュキー
+ */
+export async function invalidateDbCache(cacheKey: string): Promise<void> {
+  try {
+    const db = createDb();
+    await db.delete(apiCache).where(eq(apiCache.cacheKey, cacheKey));
+  } catch (error) {
+    console.error("DB cache invalidation error:", error);
+  }
+}
+
+/**
+ * 特定タイプの全DBキャッシュを削除
+ * @param cacheType - キャッシュタイプ
+ */
+export async function invalidateDbCacheByType(cacheType: CacheType): Promise<void> {
+  try {
+    const db = createDb();
+    await db.delete(apiCache).where(eq(apiCache.cacheType, cacheType));
+  } catch (error) {
+    console.error("DB cache type invalidation error:", error);
+  }
+}
+
+/**
+ * 期限切れのDBキャッシュを削除
+ */
+export async function cleanupExpiredDbCache(): Promise<number> {
+  try {
+    const db = createDb();
+    const result = await db
+      .delete(apiCache)
+      .where(lt(apiCache.expiresAt, new Date()));
+    return result.rowsAffected;
+  } catch (error) {
+    console.error("DB cache cleanup error:", error);
+    return 0;
+  }
+}
+
+/**
+ * DBキャッシュを取得、なければフェッチして保存
+ * @param cacheKey - キャッシュキー
+ * @param cacheType - キャッシュタイプ
+ * @param fetcher - データ取得関数
+ * @param ttlMs - Time To Live（ミリ秒）
+ * @returns キャッシュまたは新規取得したデータ
+ */
+export async function getOrFetchDbCached<T>(
+  cacheKey: string,
+  cacheType: CacheType,
+  fetcher: () => Promise<T>,
+  ttlMs: number
+): Promise<T> {
+  // まずDBキャッシュを確認
+  const cached = await getDbCached<T>(cacheKey);
+  if (cached !== null) {
+    return cached;
+  }
+
+  // キャッシュがなければ取得して保存
+  const data = await fetcher();
+  await setDbCached(cacheKey, cacheType, data, ttlMs);
+  return data;
 }

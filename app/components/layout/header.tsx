@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   user?: {
-    mcid: string;
+    mcid: string | null;
+    slug: string;
     displayName: string | null;
     discordAvatar: string | null;
   } | null;
@@ -76,10 +77,10 @@ export function Header({ user }: HeaderProps) {
                     <Avatar className="h-9 w-9">
                       <AvatarImage
                         src={user.discordAvatar ?? undefined}
-                        alt={user.displayName ?? user.mcid}
+                        alt={user.displayName ?? user.mcid ?? user.slug}
                       />
                       <AvatarFallback>
-                        {(user.displayName ?? user.mcid)[0].toUpperCase()}
+                        {(user.displayName ?? user.mcid ?? user.slug)[0].toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
@@ -88,16 +89,18 @@ export function Header({ user }: HeaderProps) {
                   <div className="flex items-center justify-start gap-2 px-2 py-4 md:py-2">
                     <div className="flex flex-col space-y-0.5">
                       <p className="text-sm font-medium">
-                        {user.displayName ?? user.mcid}
+                        {user.displayName ?? user.mcid ?? user.slug}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        @{user.mcid}
-                      </p>
+                      {user.mcid && (
+                        <p className="text-xs text-muted-foreground">
+                          @{user.mcid}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to={`/player/${user.mcid}`}>
+                    <Link to={`/player/${user.slug}`}>
                       <User className="mr-2 h-4 w-4" />
                       マイプロフィール
                     </Link>

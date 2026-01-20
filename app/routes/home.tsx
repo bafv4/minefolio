@@ -12,6 +12,8 @@ import { StreamCard } from "@/components/stream-card";
 import { VideoCard } from "@/components/video-card";
 import { PlayerCard } from "@/components/player-card";
 import { RecentPaceCard } from "@/components/recent-pace-card";
+import { YouTubeLiveCard } from "@/components/youtube-live-card";
+import type { CachedYouTubeLive } from "@/lib/youtube-cache";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -67,13 +69,24 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     isRegistered = !!existingUser;
   }
 
-  // 登録ユーザーのMCIDとUUIDを取得
+  // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用）
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true },
+    columns: { mcid: true, uuid: true, slug: true },
   });
-  const registeredMcids = allUserMcids.map((u) => u.mcid.toLowerCase());
+  // MCIDがあるユーザーのみ（PaceMan連携対象）
+  const registeredMcids = allUserMcids
+    .filter((u) => u.mcid !== null)
+    .map((u) => u.mcid!.toLowerCase());
   const mcidToUuid = Object.fromEntries(
-    allUserMcids.map((u) => [u.mcid.toLowerCase(), u.uuid])
+    allUserMcids
+      .filter((u) => u.mcid !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.uuid])
+  );
+  // MCIDからslugへのマッピング（PaceMan連携のリンク生成用）
+  const mcidToSlug = Object.fromEntries(
+    allUserMcids
+      .filter((u) => u.mcid !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.slug])
   );
 
   // 最近更新されたプロフィール（公開設定のみ、最新4件）- DBのみなので即時取得
@@ -82,6 +95,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     columns: {
       mcid: true,
       uuid: true,
+      slug: true,
       displayName: true,
       location: true,
       updatedAt: true,
@@ -96,6 +110,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     isRegistered,
     registeredMcids,
     mcidToUuid,
+    mcidToSlug,
     recentlyUpdatedUsers,
   };
 }
@@ -118,6 +133,10 @@ interface RecentPacesResponse {
   recentPaces: PaceManRecentRun[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+}
+
+interface YouTubeLiveResponse {
+  liveStreams: CachedYouTubeLive[];
 }
 
 // セクション全体のローディングスケルトン
@@ -144,7 +163,7 @@ function SectionSkeleton({ columns = 4 }: { columns?: number }) {
 }
 
 export default function HomePage() {
-  const { isRegistered, registeredMcids, mcidToUuid, recentlyUpdatedUsers } =
+  const { isRegistered, registeredMcids, mcidToUuid, mcidToSlug, recentlyUpdatedUsers } =
     useLoaderData<typeof loader>();
 
   const registeredMcidSet = new Set(registeredMcids);
@@ -152,6 +171,7 @@ export default function HomePage() {
   // 遅延読み込み用の状態
   const [liveRuns, setLiveRuns] = useState<PaceManLiveRun[]>([]);
   const [liveStreams, setLiveStreams] = useState<{ stream: TwitchStream; mcid: string }[]>([]);
+  const [youtubeLiveStreams, setYoutubeLiveStreams] = useState<CachedYouTubeLive[]>([]);
   const [recentVideos, setRecentVideos] = useState<YouTubeVideo[]>([]);
   const [recentPaces, setRecentPaces] = useState<PaceManRecentRun[]>([]);
   const [pacesMcidToUuid, setPacesMcidToUuid] = useState<Record<string, string>>({});
@@ -160,12 +180,14 @@ export default function HomePage() {
   // ローディング状態
   const [loadingLiveRuns, setLoadingLiveRuns] = useState(true);
   const [loadingStreams, setLoadingStreams] = useState(true);
+  const [loadingYoutubeLive, setLoadingYoutubeLive] = useState(true);
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [loadingPaces, setLoadingPaces] = useState(true);
 
   // エラー状態
   const [errorLiveRuns, setErrorLiveRuns] = useState(false);
   const [errorStreams, setErrorStreams] = useState(false);
+  const [errorYoutubeLive, setErrorYoutubeLive] = useState(false);
   const [errorVideos, setErrorVideos] = useState(false);
   const [errorPaces, setErrorPaces] = useState(false);
 
@@ -200,6 +222,16 @@ export default function HomePage() {
         setErrorStreams(true);
       })
       .finally(() => setLoadingStreams(false));
+
+    // YouTubeライブ配信取得
+    fetch("/api/home-feed?type=youtube-live")
+      .then((res) => res.json() as Promise<YouTubeLiveResponse>)
+      .then((data) => setYoutubeLiveStreams(data.liveStreams || []))
+      .catch((err) => {
+        console.error("Failed to fetch YouTube live streams:", err);
+        setErrorYoutubeLive(true);
+      })
+      .finally(() => setLoadingYoutubeLive(false));
 
     // YouTube動画取得
     fetch("/api/home-feed?type=youtube-videos")
@@ -277,7 +309,7 @@ export default function HomePage() {
         {recentlyUpdatedUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {recentlyUpdatedUsers.map((user) => (
-              <PlayerCard key={user.mcid} player={user} />
+              <PlayerCard key={user.slug} player={user} />
             ))}
           </div>
         ) : (
@@ -288,10 +320,10 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Twitch 配信中 */}
-      {loadingStreams ? (
+      {/* 配信中（Twitch + YouTube Live） */}
+      {(loadingStreams || loadingYoutubeLive) ? (
         <SectionSkeleton columns={3} />
-      ) : errorStreams ? (
+      ) : (errorStreams && errorYoutubeLive) ? (
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-red-500" />
@@ -302,16 +334,19 @@ export default function HomePage() {
             <p>配信情報の取得に失敗しました</p>
           </div>
         </section>
-      ) : liveStreams.length > 0 ? (
+      ) : (liveStreams.length > 0 || youtubeLiveStreams.length > 0) ? (
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-red-500" />
             <h2 className="text-xl font-bold">配信中</h2>
-            <span className="text-muted-foreground">({liveStreams.length})</span>
+            <span className="text-muted-foreground">({liveStreams.length + youtubeLiveStreams.length})</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {liveStreams.map(({ stream, mcid }) => (
-              <StreamCard key={stream.id} stream={stream} mcid={mcid} />
+              <StreamCard key={`twitch-${stream.id}`} stream={stream} mcid={mcid} />
+            ))}
+            {youtubeLiveStreams.map((stream) => (
+              <YouTubeLiveCard key={`youtube-${stream.videoId}`} stream={stream} />
             ))}
           </div>
         </section>
@@ -327,7 +362,7 @@ export default function HomePage() {
             <h2 className="text-xl font-bold">ライブペース</h2>
             <span className="text-muted-foreground">({liveRuns.length})</span>
           </div>
-          <LivePaceList runs={liveRuns} registeredMcidSet={registeredMcidSet} />
+          <LivePaceList runs={liveRuns} registeredMcidSet={registeredMcidSet} mcidToSlug={mcidToSlug} />
         </section>
       ) : null}
 
@@ -346,7 +381,7 @@ export default function HomePage() {
                 key={`${run.id}-${run.time}`}
                 run={run}
                 isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
-                uuid={mergedMcidToUuid[run.nickname.toLowerCase()]}
+                uuid={mergedMcidToUuid[run.nickname.toLowerCase()] ?? undefined}
                 displayName={pacesMcidToDisplayName[run.nickname.toLowerCase()]}
               />
             ))}

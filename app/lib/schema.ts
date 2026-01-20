@@ -8,8 +8,14 @@ import { relations } from "drizzle-orm";
 export const users = sqliteTable("users", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   discordId: text("discord_id").unique().notNull(),
-  mcid: text("mcid").unique().notNull(),
-  uuid: text("uuid").unique().notNull(),
+
+  // MCID/UUID（任意）- MCIDがない場合でも登録可能
+  mcid: text("mcid").unique(),
+  uuid: text("uuid").unique(),
+
+  // URL用スラッグ（必須）- MCIDがある場合はMCID、ない場合は@{内部ID}形式
+  slug: text("slug").unique().notNull(),
+
   displayName: text("display_name"),
   discordAvatar: text("discord_avatar"),
   bio: text("bio"),
@@ -45,6 +51,7 @@ export const users = sqliteTable("users", {
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
   index("idx_users_uuid").on(table.uuid),
+  index("idx_users_slug").on(table.slug),
   index("idx_users_speedruncom_id").on(table.speedruncomId),
 ]);
 
@@ -546,3 +553,83 @@ export const favoritesRelations = relations(favorites, ({ one }) => ({
 
 export type Favorite = typeof favorites.$inferSelect;
 export type NewFavorite = typeof favorites.$inferInsert;
+
+// ============================================
+// 16. api_cache（APIキャッシュ）
+// ============================================
+export const apiCache = sqliteTable("api_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  cacheKey: text("cache_key").unique().notNull(),
+  cacheType: text("cache_type", { enum: ["youtube_videos", "recent_paces", "twitch_streams", "live_runs"] }).notNull(),
+  data: text("data").notNull(), // JSON
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_api_cache_key").on(table.cacheKey),
+  index("idx_api_cache_type").on(table.cacheType),
+  index("idx_api_cache_expires").on(table.expiresAt),
+]);
+
+export type ApiCache = typeof apiCache.$inferSelect;
+export type NewApiCache = typeof apiCache.$inferInsert;
+
+// ============================================
+// 17. youtube_video_cache（YouTube動画キャッシュ）
+// ============================================
+export const youtubeVideoCache = sqliteTable("youtube_video_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  videoId: text("video_id").unique().notNull(),
+  channelId: text("channel_id").notNull(),
+  minefolioMcid: text("minefolio_mcid"), // Minefolioユーザーとの紐付け
+  title: text("title").notNull(),
+  description: text("description"),
+  thumbnailUrl: text("thumbnail_url"),
+  channelTitle: text("channel_title"),
+  publishedAt: integer("published_at", { mode: "timestamp" }).notNull(),
+  // キャッシュ管理
+  lastVerifiedAt: integer("last_verified_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  isAvailable: integer("is_available", { mode: "boolean" }).default(true).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_youtube_cache_video_id").on(table.videoId),
+  index("idx_youtube_cache_channel_id").on(table.channelId),
+  index("idx_youtube_cache_mcid").on(table.minefolioMcid),
+  index("idx_youtube_cache_published").on(table.publishedAt),
+  index("idx_youtube_cache_available").on(table.isAvailable),
+]);
+
+export type YoutubeVideoCache = typeof youtubeVideoCache.$inferSelect;
+export type NewYoutubeVideoCache = typeof youtubeVideoCache.$inferInsert;
+
+// ============================================
+// 18. youtube_live_cache（YouTubeライブ配信キャッシュ）
+// ============================================
+export const youtubeLiveCache = sqliteTable("youtube_live_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  videoId: text("video_id").unique().notNull(),
+  channelId: text("channel_id").notNull(),
+  minefolioMcid: text("minefolio_mcid"), // Minefolioユーザーとの紐付け
+  title: text("title").notNull(),
+  description: text("description"),
+  thumbnailUrl: text("thumbnail_url"),
+  channelTitle: text("channel_title"),
+  // ライブ配信情報
+  liveBroadcastContent: text("live_broadcast_content", { enum: ["live", "upcoming", "none"] }).notNull(),
+  scheduledStartTime: integer("scheduled_start_time", { mode: "timestamp" }), // 配信予定開始時刻
+  actualStartTime: integer("actual_start_time", { mode: "timestamp" }), // 実際の開始時刻
+  concurrentViewers: integer("concurrent_viewers"), // 同時視聴者数
+  // キャッシュ管理
+  lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_youtube_live_video_id").on(table.videoId),
+  index("idx_youtube_live_channel_id").on(table.channelId),
+  index("idx_youtube_live_mcid").on(table.minefolioMcid),
+  index("idx_youtube_live_status").on(table.liveBroadcastContent),
+]);
+
+export type YoutubeLiveCache = typeof youtubeLiveCache.$inferSelect;
+export type NewYoutubeLiveCache = typeof youtubeLiveCache.$inferInsert;

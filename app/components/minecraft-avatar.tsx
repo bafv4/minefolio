@@ -5,8 +5,8 @@ const HEAD_BASE = { x: 8, y: 8, width: 8, height: 8 };
 const HEAD_OVERLAY = { x: 40, y: 8, width: 8, height: 8 };
 
 interface MinecraftAvatarProps {
-  uuid: string;
-  mcid?: string;
+  uuid: string | null | undefined;
+  mcid?: string | null;
   size?: number;
   overlay?: boolean;
   className?: string;
@@ -31,8 +31,9 @@ const MinecraftAvatarComponent = ({
       setIsLoading(true);
       setError(false);
 
-      // Use local skin proxy API
-      const skinUrl = `/api/skin?uuid=${uuid}`;
+      // Use local skin proxy API (use Steve if no uuid)
+      const targetUuid = uuid || STEVE_UUID;
+      const skinUrl = `/api/skin?uuid=${targetUuid}`;
       const fallbackSkinUrl = `/api/skin?uuid=${STEVE_UUID}`;
 
       const loadImage = (url: string): Promise<HTMLImageElement> => {

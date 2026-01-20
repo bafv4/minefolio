@@ -24,9 +24,9 @@ export default [
     route("compare", "routes/compare.tsx"),
     route("favorites", "routes/favorites.tsx"),
 
-    // Player profile (public)
-    route("player/:mcid", "routes/player/profile.tsx"),
-    route("player/:mcid/stats", "routes/player/stats.tsx"),
+    // Player profile (public) - slugはMCIDまたは@{内部ID}形式
+    route("player/:slug", "routes/player/profile.tsx"),
+    route("player/:slug/stats", "routes/player/stats.tsx"),
 
     // Protected routes - user settings
     ...prefix("me", [
@@ -49,4 +49,7 @@ export default [
   route("api/skin", "routes/api/skin.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+
+  // Cron routes (for Vercel Cron)
+  route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
 ] satisfies RouteConfig;

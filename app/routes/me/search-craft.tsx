@@ -51,6 +51,7 @@ import {
   GripVertical,
   ChevronDown,
   ChevronUp,
+  AlertCircle,
 } from "lucide-react";
 import {
   DndContext,

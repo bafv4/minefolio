@@ -12,6 +12,7 @@ import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { importFromLegacy } from "@/lib/legacy-import";
+import { generateSlug } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, CheckCircle2, AlertCircle, Info } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Info, SkipForward } from "lucide-react";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -47,7 +48,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   if (existingUser) {
     // Already onboarded, redirect to profile
-    return redirect(`/player/${existingUser.mcid}`);
+    return redirect(`/player/${existingUser.slug}`);
   }
 
   return {
@@ -123,7 +124,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   }
 
   if (action === "complete") {
-    // Step 2: Complete registration
+    // Step 2: Complete registration (with MCID)
     const mcid = formData.get("mcid") as string;
     const uuid = formData.get("uuid") as string;
     const importData = formData.get("importData") === "true";
@@ -141,13 +142,16 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: "このMinecraft IDは既に登録されています" };
     }
 
-    // Create user
+    // Create user with MCID
     const userId = createId();
+    const slug = generateSlug(mcid, session.user.id);
+
     await db.insert(users).values({
       id: userId,
       discordId: session.user.id,
       mcid,
       uuid,
+      slug,
       displayName: session.user.name,
       discordAvatar: session.user.image,
       hasImported: importData,
@@ -161,7 +165,29 @@ export async function action({ context, request }: Route.ActionArgs) {
       await createDefaultsForNewUser(db, userId);
     }
 
-    return redirect(`/player/${mcid}`);
+    return redirect(`/player/${slug}`);
+  }
+
+  if (action === "skip") {
+    // MCIDをスキップして登録
+    const userId = createId();
+    const slug = generateSlug(null, session.user.id);
+
+    await db.insert(users).values({
+      id: userId,
+      discordId: session.user.id,
+      mcid: null,
+      uuid: null,
+      slug,
+      displayName: session.user.name,
+      discordAvatar: session.user.image,
+      hasImported: false,
+    });
+
+    // Create defaults
+    await createDefaultsForNewUser(db, userId);
+
+    return redirect(`/player/${slug}`);
   }
 
   return { error: "無効な操作です" };
@@ -194,6 +220,7 @@ export default function OnboardingPage() {
         <CardContent>
           {!isVerified ? (
             // Step 1: Enter MCID
+            <>
             <fetcher.Form method="post" className="space-y-6">
               <input type="hidden" name="_action" value="verify" />
 
@@ -253,6 +280,26 @@ export default function OnboardingPage() {
                 )}
               </Button>
             </fetcher.Form>
+
+            {/* MCIDスキップオプション */}
+            <div className="mt-4 pt-4 border-t">
+              <fetcher.Form method="post">
+                <input type="hidden" name="_action" value="skip" />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  disabled={isSubmitting}
+                >
+                  <SkipForward className="mr-2 h-4 w-4" />
+                  MCIDなしで登録
+                </Button>
+              </fetcher.Form>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                後から設定ページでMCIDを追加できます
+              </p>
+            </div>
+            </>
           ) : (
             // Step 2: Confirm and complete
             <fetcher.Form method="post" className="space-y-6">

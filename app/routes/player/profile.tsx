@@ -35,12 +35,16 @@ export function meta({ data, params }: Route.MetaArgs) {
   }
 
   const { player } = data;
-  const displayName = player.displayName || player.mcid;
+  const displayName = player.displayName || player.mcid || player.slug;
   const description = player.shortBio || player.bio || `${displayName}'s Minecraft speedrunning profile`;
-  const ogImageUrl = `${data.appUrl}/og-image?mcid=${encodeURIComponent(player.mcid)}`;
+  // OGP画像: MCIDがある場合のみMCIDパラメータを付与
+  const ogImageUrl = player.mcid
+    ? `${data.appUrl}/og-image?mcid=${encodeURIComponent(player.mcid)}`
+    : `${data.appUrl}/og-image?slug=${encodeURIComponent(player.slug)}`;
+  const mentionDisplay = player.mcid ? `@${player.mcid}` : player.slug;
 
   return [
-    { title: `${displayName} (@${player.mcid}) - Minefolio` },
+    { title: `${displayName} (${mentionDisplay}) - Minefolio` },
     { name: "description", content: description },
 
     // Open Graph
@@ -50,7 +54,7 @@ export function meta({ data, params }: Route.MetaArgs) {
     { property: "og:image", content: ogImageUrl },
     { property: "og:image:width", content: "512" },
     { property: "og:image:height", content: "512" },
-    { property: "og:url", content: `${data.appUrl}/player/${player.mcid}` },
+    { property: "og:url", content: `${data.appUrl}/player/${player.slug}` },
 
     // Twitter Card
     { name: "twitter:card", content: "summary_large_image" },
@@ -58,8 +62,8 @@ export function meta({ data, params }: Route.MetaArgs) {
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: ogImageUrl },
 
-    // Profile-specific meta
-    { property: "profile:username", content: player.mcid },
+    // Profile-specific meta (MCIDがある場合のみ)
+    ...(player.mcid ? [{ property: "profile:username", content: player.mcid }] : []),
   ];
 }
 
@@ -69,7 +73,7 @@ export function meta({ data, params }: Route.MetaArgs) {
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
   const params = useParams();
-  const mcid = params.mcid || "loading";
+  const slug = params.slug || "loading";
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-200">
@@ -241,13 +245,13 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
 
-  const { mcid } = params;
+  const { slug } = params;
   const url = new URL(request.url);
   const presetId = url.searchParams.get("preset");
 
-  // Fetch player with all related data
+  // Fetch player with all related data (slugで検索)
   const player = await db.query.users.findFirst({
-    where: eq(users.mcid, mcid),
+    where: eq(users.slug, slug),
     with: {
       playerConfig: true,
       keybindings: {
@@ -365,10 +369,10 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     ? JSON.parse(player.hiddenSpeedrunRecords)
     : [];
 
-  // お気に入り状態を確認
+  // お気に入り状態を確認（slugベースに変更）
   const cookieHeader = request.headers.get("Cookie");
   const favorites = getFavoritesFromCookie(cookieHeader);
-  const isFavorited = isFavorite(favorites, mcid);
+  const isFavorited = isFavorite(favorites, player.slug);
 
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
@@ -443,6 +447,10 @@ export default function PlayerProfilePage() {
     sourceKey: r.sourceKey,
     targetKey: r.targetKey,
   }));
+
+  // キーボードレイアウト判定
+  const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  const isTKL = keyboardLayout === "US_TKL" || keyboardLayout === "JIS_TKL";
 
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -641,28 +649,30 @@ export default function PlayerProfilePage() {
           <Card>
             <CardContent className="pt-4 pb-4">
               <div className="flex flex-col sm:flex-row gap-6">
-                {/* Skin */}
-                <div className="flex justify-center sm:justify-start shrink-0">
-                  <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
-                    <MinecraftFullBody
-                      uuid={player.uuid}
-                      mcid={player.mcid}
-                      width={120}
-                      height={180}
-                      pose={(player.profilePose as PoseName) ?? "waving"}
-                      angle={-35}
-                      elevation={5}
-                      zoom={0.9}
-                      asImage
-                    />
-                  </Suspense>
-                </div>
+                {/* Skin - only show when uuid exists */}
+                {player.uuid && (
+                  <div className="flex justify-center sm:justify-start shrink-0">
+                    <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
+                      <MinecraftFullBody
+                        uuid={player.uuid}
+                        mcid={player.mcid ?? undefined}
+                        width={120}
+                        height={180}
+                        pose={(player.profilePose as PoseName) ?? "waving"}
+                        angle={-35}
+                        elevation={5}
+                        zoom={0.9}
+                        asImage
+                      />
+                    </Suspense>
+                  </div>
+                )}
 
                 {/* Info */}
                 <div className="flex-1 space-y-4">
                   <div className="text-center sm:text-left">
-                    <h1 className="text-2xl font-bold">{player.displayName ?? player.mcid}</h1>
-                    <p className="text-muted-foreground">@{player.mcid}</p>
+                    <h1 className="text-2xl font-bold">{player.displayName ?? player.mcid ?? player.slug}</h1>
+                    {player.mcid && <p className="text-muted-foreground">@{player.mcid}</p>}
                     {player.shortBio && (
                       <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
                     )}
@@ -712,14 +722,14 @@ export default function PlayerProfilePage() {
                         </Link>
                       </Button>
                     )}
-                    <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />
+                    {player.mcid && <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />}
                     <ShareButton
-                      title={`${player.displayName ?? player.mcid} - Minefolio`}
+                      title={`${player.displayName ?? player.mcid ?? player.slug} - Minefolio`}
                       description={player.shortBio ?? undefined}
                       includeTab={true}
                     />
                     <Button asChild variant="outline" size="sm">
-                      <Link to={`/compare?p1=${player.mcid}`}>
+                      <Link to={`/compare?p1=${player.slug}`}>
                         <GitCompare className="h-4 w-4 mr-2" />
                         比較
                       </Link>
@@ -807,7 +817,7 @@ export default function PlayerProfilePage() {
                     {/* メインキーボード */}
                     <div className="overflow-x-auto pb-2 w-full">
                       <VirtualKeyboard
-                        layout={player.playerConfig?.keyboardLayout as "US" | "JIS" | "US_TKL" | "JIS_TKL" || "US"}
+                        layout={keyboardLayout}
                         keybindings={keybindingsToMap(player.keybindings)}
                         fingerAssignments={userFingerAssignments}
                         remaps={remapsForKeyboard}
@@ -818,23 +828,27 @@ export default function PlayerProfilePage() {
                       />
                     </div>
                     {/* テンキーとマウスを横並び */}
-                    <div className="flex items-start gap-6">
-                      <VirtualNumpad
-                        keybindings={keybindingsToMap(player.keybindings)}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={remapsForKeyboard}
-                        showActionLabels
-                        showFingerAssignments
-                        showRemaps
-                      />
-                      <VirtualMouse
-                        keybindings={keybindingsToMap(player.keybindings)}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={remapsForKeyboard}
-                        showActionLabels
-                        showFingerAssignments
-                        showRemaps
-                      />
+                    <div className="overflow-x-auto pb-2 w-full">
+                      <div className="flex items-start gap-6">
+                        {!isTKL && (
+                          <VirtualNumpad
+                            keybindings={keybindingsToMap(player.keybindings)}
+                            fingerAssignments={userFingerAssignments}
+                            remaps={remapsForKeyboard}
+                            showActionLabels
+                            showFingerAssignments
+                            showRemaps
+                          />
+                        )}
+                        <VirtualMouse
+                          keybindings={keybindingsToMap(player.keybindings)}
+                          fingerAssignments={userFingerAssignments}
+                          remaps={remapsForKeyboard}
+                          showActionLabels
+                          showFingerAssignments
+                          showRemaps
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardContent>

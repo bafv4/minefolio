@@ -3,8 +3,8 @@ import { Download, FileJson, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createAuth } from "@/lib/auth";
+import { createDb } from "@/lib/db";
 import { redirect } from "react-router";
-import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import {
   users,
@@ -21,7 +21,7 @@ import { getEnv } from "@/lib/env.server";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
   const env = context.env ?? getEnv();
-  const db = drizzle(env.DB);
+  const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
 
@@ -34,7 +34,7 @@ export async function loader({ request, context }: { request: Request; context: 
 
 export async function action({ request, context }: { request: Request; context: any }) {
   const env = context.env ?? getEnv();
-  const db = drizzle(env.DB);
+  const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
 
@@ -49,9 +49,17 @@ export async function action({ request, context }: { request: Request; context: 
     return Response.json({ error: "Invalid format" }, { status: 400 });
   }
 
+  // ユーザーを取得（discordIdで検索）
+  const user = await db.query.users.findFirst({
+    where: eq(users.discordId, session.user.id),
+  });
+
+  if (!user) {
+    return Response.json({ error: "User not found" }, { status: 404 });
+  }
+
   // すべてのユーザーデータを取得
   const [
-    userData,
     configData,
     keybindingsData,
     customKeysData,
@@ -60,15 +68,15 @@ export async function action({ request, context }: { request: Request; context: 
     recordsData,
     socialLinksData,
   ] = await Promise.all([
-    db.select().from(users).where(eq(users.id, session.user.id)).get(),
-    db.select().from(playerConfigs).where(eq(playerConfigs.userId, session.user.id)).get(),
-    db.select().from(keybindings).where(eq(keybindings.userId, session.user.id)).all(),
-    db.select().from(customKeys).where(eq(customKeys.userId, session.user.id)).all(),
-    db.select().from(keyRemaps).where(eq(keyRemaps.userId, session.user.id)).all(),
-    db.select().from(configPresets).where(eq(configPresets.userId, session.user.id)).all(),
-    db.select().from(categoryRecords).where(eq(categoryRecords.userId, session.user.id)).all(),
-    db.select().from(socialLinks).where(eq(socialLinks.userId, session.user.id)).all(),
+    db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id) }),
+    db.query.keybindings.findMany({ where: eq(keybindings.userId, user.id) }),
+    db.query.customKeys.findMany({ where: eq(customKeys.userId, user.id) }),
+    db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, user.id) }),
+    db.query.configPresets.findMany({ where: eq(configPresets.userId, user.id) }),
+    db.query.categoryRecords.findMany({ where: eq(categoryRecords.userId, user.id) }),
+    db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) }),
   ]);
+  const userData = user;
 
   const exportData = {
     user: userData,

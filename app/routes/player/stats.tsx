@@ -1,5 +1,8 @@
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/stats";
+import { createDb } from "@/lib/db";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
 import { formatTime } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
@@ -15,27 +18,51 @@ import {
   UserCircle,
 } from "lucide-react";
 
-export const meta: Route.MetaFunction = ({ params }) => {
+export const meta: Route.MetaFunction = ({ params, data }) => {
+  // dataがある場合はmcidを使用、なければslugを表示
+  const displayName = data?.mcid || params.slug;
   return [
-    { title: `${params.mcid}の活動・記録 - Minefolio` },
-    { name: "description", content: `${params.mcid}の外部サービス統計情報` },
+    { title: `${displayName}の活動・記録 - Minefolio` },
+    { name: "description", content: `${displayName}の外部サービス統計情報` },
   ];
 };
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const { mcid } = params;
+  const { slug } = params;
+  const db = createDb();
 
-  // 外部サービスから統計情報を取得
-  const externalStats = await fetchAllExternalStats(mcid);
+  // slugでプレイヤーを検索
+  const player = await db.query.users.findFirst({
+    where: eq(users.slug, slug),
+    columns: {
+      mcid: true,
+      slug: true,
+      displayName: true,
+    },
+  });
+
+  if (!player) {
+    throw new Response("プレイヤーが見つかりません", { status: 404 });
+  }
+
+  // 外部サービスから統計情報を取得（MCIDがある場合のみ）
+  const externalStats = player.mcid
+    ? await fetchAllExternalStats(player.mcid)
+    : { paceman: null, ranked: null, speedruncom: null };
 
   return {
-    mcid,
+    mcid: player.mcid,
+    slug: player.slug,
+    displayName: player.displayName,
     externalStats,
   };
 }
 
 export default function PlayerStatsPage() {
-  const { mcid, externalStats } = useLoaderData<typeof loader>();
+  const { mcid, slug, displayName, externalStats } = useLoaderData<typeof loader>();
+
+  // 表示名の優先順位: displayName > mcid > slug
+  const playerDisplayName = displayName || mcid || slug;
 
   const hasAnyData =
     externalStats.ranked?.isRegistered ||
@@ -48,18 +75,18 @@ export default function PlayerStatsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" asChild>
-            <Link to={`/player/${mcid}`}>
+            <Link to={`/player/${slug}`}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               プロフィール
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">{mcid}</h1>
+            <h1 className="text-2xl font-bold">{playerDisplayName}</h1>
             <p className="text-muted-foreground text-sm">活動・記録</p>
           </div>
         </div>
         <Button variant="outline" size="sm" asChild>
-          <Link to={`/player/${mcid}`}>
+          <Link to={`/player/${slug}`}>
             <UserCircle className="h-4 w-4 mr-2" />
             プロフィールを見る
           </Link>
@@ -71,7 +98,9 @@ export default function PlayerStatsPage() {
           <CardContent className="py-12 text-center text-muted-foreground">
             <p className="text-lg font-medium">統計データが見つかりません</p>
             <p className="text-sm mt-2">
-              このMCIDは外部サービス（MCSR Ranked, PaceMan, Speedrun.com）に登録されていないようです。
+              {mcid
+                ? "このMCIDは外部サービス（MCSR Ranked, PaceMan, Speedrun.com）に登録されていないようです。"
+                : "MCIDが設定されていないため、外部サービスとの連携ができません。プロフィール編集からMCIDを設定してください。"}
             </p>
           </CardContent>
         </Card>
@@ -234,7 +263,7 @@ export default function PlayerStatsPage() {
               <CardContent>
                 <Button asChild variant="outline" className="w-full">
                   <a
-                    href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid)}`}
+                    href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid!)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

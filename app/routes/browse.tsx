@@ -77,6 +77,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     columns: {
       mcid: true,
       uuid: true,
+      slug: true,
       displayName: true,
       location: true,
       updatedAt: true,
@@ -87,15 +88,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     offset: (page - 1) * ITEMS_PER_PAGE,
   });
 
-  // お気に入りを取得
+  // お気に入りを取得（slugベース）
   const cookieHeader = request.headers.get("Cookie");
-  const favoriteMcids = getFavoritesFromCookie(cookieHeader);
-  const favoritesSet = new Set(favoriteMcids);
+  const favoriteSlugs = getFavoritesFromCookie(cookieHeader);
+  const favoritesSet = new Set(favoriteSlugs);
 
   // お気に入りを先頭に並べ替え
   const sortedPlayers = playerList.sort((a, b) => {
-    const aIsFavorite = favoritesSet.has(a.mcid);
-    const bIsFavorite = favoritesSet.has(b.mcid);
+    const aIsFavorite = favoritesSet.has(a.slug);
+    const bIsFavorite = favoritesSet.has(b.slug);
     if (aIsFavorite && !bIsFavorite) return -1;
     if (!aIsFavorite && bIsFavorite) return 1;
     return 0;
@@ -108,7 +109,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     currentPage: page,
     totalPages,
     totalCount,
-    favoriteMcids,
+    favoriteSlugs,
   };
 }
 
@@ -212,7 +213,7 @@ export default function BrowsePage() {
       ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
-            <PlayerCard key={player.mcid} player={player} />
+            <PlayerCard key={player.slug} player={player} />
           ))}
         </div>
       ) : (

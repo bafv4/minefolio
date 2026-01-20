@@ -1,4 +1,5 @@
 // お気に入りプレイヤーをCookieまたはDBで管理するユーティリティ
+// 注意: slugベースで管理（MCIDではなくslugをキーとして使用）
 
 import { eq, and } from "drizzle-orm";
 import { favorites } from "./schema";
@@ -41,25 +42,25 @@ export function createFavoritesCookieValue(favorites: string[]): string {
 }
 
 /**
- * お気に入りに追加
+ * お気に入りに追加（slugベース）
  */
-export function addToFavorites(current: string[], mcid: string): string[] {
-  if (current.includes(mcid)) return current;
-  return [mcid, ...current].slice(0, MAX_FAVORITES);
+export function addToFavorites(current: string[], slug: string): string[] {
+  if (current.includes(slug)) return current;
+  return [slug, ...current].slice(0, MAX_FAVORITES);
 }
 
 /**
- * お気に入りから削除
+ * お気に入りから削除（slugベース）
  */
-export function removeFromFavorites(current: string[], mcid: string): string[] {
-  return current.filter((id) => id !== mcid);
+export function removeFromFavorites(current: string[], slug: string): string[] {
+  return current.filter((id) => id !== slug);
 }
 
 /**
- * お気に入りかどうかをチェック
+ * お気に入りかどうかをチェック（slugベース）
  */
-export function isFavorite(favorites: string[], mcid: string): boolean {
-  return favorites.includes(mcid);
+export function isFavorite(favorites: string[], slug: string): boolean {
+  return favorites.includes(slug);
 }
 
 /**

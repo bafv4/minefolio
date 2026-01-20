@@ -33,7 +33,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2 } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
@@ -337,6 +337,10 @@ export async function action({ context, request }: Route.ActionArgs) {
     const legacyApiUrl = env.LEGACY_API_URL;
     if (!legacyApiUrl) {
       return { error: "レガシーAPIが設定されていません" };
+    }
+
+    if (!user.mcid) {
+      return { error: "MCIDが設定されていないためインポートできません" };
     }
 
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);

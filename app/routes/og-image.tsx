@@ -1,20 +1,19 @@
 // OGP画像生成API
 // プレイヤープロフィール用の動的OGP画像を生成
-import type { Route } from "./+types/og-image";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { getCraftarAvatarUrl } from "@/lib/mojang";
 import { createDb } from "@/lib/db";
-import { getEnv } from "@/lib/env.server";
 
-export async function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ request }: { request: Request }) {
   const url = new URL(request.url);
   const mcid = url.searchParams.get("mcid");
+  const slug = url.searchParams.get("slug");
   const title = url.searchParams.get("title");
   const description = url.searchParams.get("description");
 
-  // mcidがない場合はデフォルトのOGP画像を生成
-  if (!mcid) {
+  // mcidもslugもない場合はデフォルトのOGP画像を生成
+  if (!mcid && !slug) {
     const svg = generateDefaultOgpSvg({
       title: title || "Minefolio",
       description: description || "Minecraft Speedrunning Portfolio Platform",
@@ -30,12 +29,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const db = createDb();
 
-  // ユーザー情報を取得
-  const user = await db
-    .select()
-    .from(users)
-    .where(eq(users.mcid, mcid))
-    .get();
+  // ユーザー情報を取得（mcidまたはslugで検索）
+  const user = mcid
+    ? await db.query.users.findFirst({ where: eq(users.mcid, mcid) })
+    : await db.query.users.findFirst({ where: eq(users.slug, slug!) });
 
   if (!user) {
     return new Response("User not found", { status: 404 });
@@ -43,9 +40,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   // SVG形式でOGP画像を生成
   const svg = generatePlayerOgpSvg({
-    displayName: user.displayName || user.mcid,
-    mcid: user.mcid,
-    uuid: user.uuid,
+    displayName: user.displayName || user.mcid || user.slug,
+    mcid: user.mcid || user.slug,
+    uuid: user.uuid || "",
     bio: user.shortBio || user.bio || "Minecraft Speedrunner",
     mainEdition: user.mainEdition,
     role: user.role,

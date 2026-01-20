@@ -8,6 +8,13 @@
       "when": 1768738080333,
       "tag": "0000_blue_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1737417600000,
+      "tag": "0001_add_slug_make_mcid_optional",
+      "breakpoints": true
     }
   ]
 }

@@ -10,9 +10,10 @@ import { ExternalLink } from "lucide-react";
 interface LivePaceListProps {
   runs: PaceManLiveRun[];
   registeredMcidSet: Set<string>;
+  mcidToSlug: Record<string, string>;
 }
 
-export function LivePaceList({ runs, registeredMcidSet }: LivePaceListProps) {
+export function LivePaceList({ runs, registeredMcidSet, mcidToSlug }: LivePaceListProps) {
   if (runs.length === 0) {
     return null;
   }
@@ -34,13 +35,14 @@ export function LivePaceList({ runs, registeredMcidSet }: LivePaceListProps) {
           {runs.map((run) => {
             const latestSplit = getLatestSplit(run);
             const isRegistered = registeredMcidSet.has(run.nickname.toLowerCase());
+            const slug = mcidToSlug[run.nickname.toLowerCase()];
 
             return (
               <tr key={run.worldId} className="border-b hover:bg-accent/50 transition-colors">
                 <td className="py-2 px-3">
-                  {isRegistered ? (
+                  {isRegistered && slug ? (
                     <Link
-                      to={`/player/${run.nickname}`}
+                      to={`/player/${slug}`}
                       className="text-primary hover:underline font-medium"
                     >
                       {run.nickname}

@@ -25,6 +25,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     where: eq(users.discordId, session.user.id),
     columns: {
       mcid: true,
+      slug: true,
       displayName: true,
       discordAvatar: true,
     },
