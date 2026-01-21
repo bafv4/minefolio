@@ -1,17 +1,22 @@
 import { Link } from "react-router";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { type YouTubeVideo, getVideoUrl } from "@/lib/youtube";
-import { Play, ExternalLink } from "lucide-react";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { Youtube, Clock } from "lucide-react";
+import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 
 interface VideoCardProps {
-  video: YouTubeVideo;
+  video: CachedYouTubeVideo;
 }
 
 export function VideoCard({ video }: VideoCardProps) {
-  const publishedAt = new Date(video.snippet.publishedAt);
+  // サムネイルURL（mqdefault = 320x180）
+  const thumbnailUrl = video.thumbnailUrl || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+
+  // 投稿からの経過時間
+  const publishedAt = video.publishedAt;
   const now = Date.now();
-  const hoursAgo = Math.floor((now - publishedAt.getTime()) / 1000 / 60 / 60);
+  const hoursAgo = Math.floor((now - new Date(publishedAt).getTime()) / 1000 / 60 / 60);
 
   const timeAgo =
     hoursAgo < 1
@@ -20,74 +25,94 @@ export function VideoCard({ video }: VideoCardProps) {
         ? `${hoursAgo}時間前`
         : `${Math.floor(hoursAgo / 24)}日前`;
 
-  const videoUrl = video.id.videoId ? getVideoUrl(video.id.videoId) : "#";
+  // 表示名: displayName > channelTitle
+  const showName = video.displayName || video.channelTitle || "Unknown";
+
+  // アバター: MCIDがある場合はMinecraftアバター、ない場合はDiscordアバター
+  const hasMinecraftAvatar = !!video.uuid;
+
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
 
   return (
     <Card className="overflow-hidden hover:bg-accent/50 transition-colors">
-      <a
-        href={videoUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block"
-      >
-        {/* サムネイル */}
-        <div className="relative aspect-video bg-muted">
-          <img
-            src={video.snippet.thumbnails.medium.url}
-            alt={video.snippet.title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-          {/* 再生アイコン */}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity">
-            <Play className="h-12 w-12 text-white" fill="white" />
-          </div>
-          {/* ライブ配信中の場合 */}
-          {video.snippet.liveBroadcastContent === "live" && (
-            <Badge
-              variant="destructive"
-              className="absolute top-2 left-2"
-            >
-              LIVE
-            </Badge>
-          )}
-        </div>
-      </a>
-
-      <CardContent className="p-3">
-        {/* タイトル */}
+      <div className="flex gap-3 p-3">
+        {/* 左: サムネイル */}
         <a
           href={videoUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="block"
+          className="relative flex-shrink-0 w-32 aspect-video rounded overflow-hidden bg-muted"
         >
-          <h3 className="font-medium text-sm line-clamp-2 hover:text-primary transition-colors">
-            {video.snippet.title}
-          </h3>
+          <img
+            src={thumbnailUrl}
+            alt={video.title}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+          {/* YouTubeアイコン */}
+          <Badge
+            variant="secondary"
+            className="absolute top-1 right-1 p-0.5 bg-red-600 text-white"
+          >
+            <Youtube className="h-2.5 w-2.5" />
+          </Badge>
         </a>
 
-        {/* チャンネル名・投稿時間 */}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {video.minefolioMcid ? (
+        {/* 右: 情報 */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* タイトル */}
+          <a
+            href={videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
+          >
+            <h3 className="font-medium text-sm line-clamp-2 hover:text-primary transition-colors leading-tight">
+              {video.title}
+            </h3>
+          </a>
+
+          {/* ユーザー情報 */}
+          <div className="mt-auto pt-1 flex items-center gap-2">
+            {/* アバター */}
+            {hasMinecraftAvatar && video.slug ? (
+              <Link to={`/player/${video.slug}`} className="flex-shrink-0">
+                <MinecraftAvatar uuid={video.uuid!} size={24} className="rounded" />
+              </Link>
+            ) : video.discordAvatar && video.slug ? (
+              <Link to={`/player/${video.slug}`} className="flex-shrink-0">
+                <img
+                  src={video.discordAvatar}
+                  alt={showName}
+                  className="w-6 h-6 rounded"
+                />
+              </Link>
+            ) : null}
+
+            {/* 名前 */}
+            {video.slug ? (
               <Link
-                to={`/player/${video.minefolioMcid}`}
-                className="text-sm text-primary hover:underline truncate"
+                to={`/player/${video.slug}`}
+                className="text-xs text-primary hover:underline truncate"
               >
-                {video.snippet.channelTitle}
+                {showName}
               </Link>
             ) : (
-              <span className="text-sm text-muted-foreground truncate">
-                {video.snippet.channelTitle}
+              <span className="text-xs text-muted-foreground truncate">
+                {showName}
               </span>
             )}
           </div>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {timeAgo}
-          </span>
+
+          {/* 投稿時間 */}
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+              <Clock className="h-3 w-3" />
+              {timeAgo}
+            </span>
+          </div>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

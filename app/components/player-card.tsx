@@ -16,6 +16,7 @@ interface PlayerCardProps {
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    discordAvatar?: string | null;
     location: string | null;
     updatedAt: Date;
     shortBio: string | null;
@@ -42,10 +43,20 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
   return (
     <Link to={`/player/${player.slug}`} prefetch="intent">
       <Card className="group transition-all duration-200 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 cursor-pointer h-full active:scale-[0.98] active:opacity-90">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-3">
+        <CardContent className="p-3 h-[88px] flex items-center">
+          <div className="flex items-center gap-3 w-full">
             <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
-              <MinecraftAvatar uuid={player.uuid} size={48} />
+              {player.uuid ? (
+                <MinecraftAvatar uuid={player.uuid} size={48} />
+              ) : player.discordAvatar ? (
+                <img
+                  src={player.discordAvatar}
+                  alt={player.displayName ?? "Avatar"}
+                  className="w-12 h-12 object-cover"
+                />
+              ) : (
+                <div className="w-12 h-12 bg-muted" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <TooltipProvider>
@@ -64,7 +75,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
               </TooltipProvider>
               {player.mcid && <p className="text-muted-foreground text-sm">@{player.mcid}</p>}
               {player.shortBio && (
-                <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
+                <p className="text-muted-foreground text-xs mt-0.5 line-clamp-1">
                   {player.shortBio}
                 </p>
               )}

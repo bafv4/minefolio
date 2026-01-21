@@ -6,14 +6,17 @@ import {
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
 import { ExternalLink } from "lucide-react";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 
 interface LivePaceListProps {
   runs: PaceManLiveRun[];
   registeredMcidSet: Set<string>;
   mcidToSlug: Record<string, string>;
+  mcidToUuid: Record<string, string | null>;
+  mcidToDisplayName: Record<string, string>;
 }
 
-export function LivePaceList({ runs, registeredMcidSet, mcidToSlug }: LivePaceListProps) {
+export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName }: LivePaceListProps) {
   if (runs.length === 0) {
     return null;
   }
@@ -34,8 +37,11 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug }: LivePaceLi
         <tbody>
           {runs.map((run) => {
             const latestSplit = getLatestSplit(run);
-            const isRegistered = registeredMcidSet.has(run.nickname.toLowerCase());
-            const slug = mcidToSlug[run.nickname.toLowerCase()];
+            const mcidLower = run.nickname.toLowerCase();
+            const isRegistered = registeredMcidSet.has(mcidLower);
+            const slug = mcidToSlug[mcidLower];
+            const uuid = mcidToUuid[mcidLower];
+            const displayName = mcidToDisplayName[mcidLower];
 
             return (
               <tr key={run.worldId} className="border-b hover:bg-accent/50 transition-colors">
@@ -43,9 +49,19 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug }: LivePaceLi
                   {isRegistered && slug ? (
                     <Link
                       to={`/player/${slug}`}
-                      className="text-primary hover:underline font-medium"
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                     >
-                      {run.nickname}
+                      {uuid && (
+                        <MinecraftAvatar uuid={uuid} size={24} className="rounded shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <span className="font-medium block truncate">
+                          {displayName || run.nickname}
+                        </span>
+                        {displayName && displayName !== run.nickname && (
+                          <span className="text-xs text-muted-foreground">@{run.nickname}</span>
+                        )}
+                      </div>
                     </Link>
                   ) : (
                     <span className="font-medium">{run.nickname}</span>

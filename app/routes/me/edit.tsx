@@ -513,7 +513,8 @@ function getPlatformUrl(platform: string, identifier: string): string {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
     case "youtube":
-      return `https://www.youtube.com/${identifier}`;
+      // YouTubeハンドルには@が必要
+      return `https://www.youtube.com/@${identifier}`;
     case "twitch":
       return `https://www.twitch.tv/${identifier}`;
     case "twitter":

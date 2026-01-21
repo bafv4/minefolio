@@ -26,6 +26,7 @@ const navigation = [
   { name: "ホーム", href: "/" },
   { name: "探す", href: "/browse" },
   { name: "操作設定", href: "/keybindings" },
+  { name: "統計", href: "/keybindings/stats" },
   { name: "比較", href: "/compare" },
 ];
 
@@ -46,20 +47,24 @@ export function Header({ user }: HeaderProps) {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex md:items-center md:space-x-6">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  location.pathname === item.href
-                    ? "text-foreground"
-                    : "text-muted-foreground"
+          <div className="hidden md:flex md:items-center md:space-x-1">
+            {navigation.map((item, index) => (
+              <div key={item.name} className="flex items-center">
+                {index > 0 && (
+                  <div className="h-4 w-px bg-border mx-2" />
                 )}
-              >
-                {item.name}
-              </Link>
+                <Link
+                  to={item.href}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
+                    location.pathname === item.href
+                      ? "text-foreground bg-accent/50"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {item.name}
+                </Link>
+              </div>
             ))}
           </div>
 

@@ -4,7 +4,7 @@ import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
-import { eq, desc, asc, like, sql, or } from "drizzle-orm";
+import { eq, desc, asc, like, sql, or, and } from "drizzle-orm";
 import { PlayerCard } from "@/components/player-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,19 +45,25 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // ベースクエリ条件：公開プロフィールのみ
   const baseCondition = eq(users.profileVisibility, "public");
 
-  // 検索条件
+  // 検索条件（MCID、displayName、slugで検索）
   const searchCondition = searchQuery
     ? or(
         like(users.mcid, `%${searchQuery}%`),
-        like(users.displayName, `%${searchQuery}%`)
+        like(users.displayName, `%${searchQuery}%`),
+        like(users.slug, `%${searchQuery}%`)
       )
     : undefined;
+
+  // クエリ条件を組み合わせ
+  const whereCondition = searchCondition
+    ? and(baseCondition, searchCondition)
+    : baseCondition;
 
   // 全体の件数を取得
   const totalCountResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(users)
-    .where(searchCondition ? sql`${baseCondition} AND ${searchCondition}` : baseCondition);
+    .where(whereCondition);
   const totalCount = totalCountResult[0]?.count || 0;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
@@ -71,14 +77,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   // ユーザー一覧を取得
   const playerList = await db.query.users.findMany({
-    where: searchCondition
-      ? sql`${baseCondition} AND ${searchCondition}`
-      : baseCondition,
+    where: whereCondition,
     columns: {
       mcid: true,
       uuid: true,
       slug: true,
       displayName: true,
+      discordAvatar: true,
       location: true,
       updatedAt: true,
       shortBio: true,

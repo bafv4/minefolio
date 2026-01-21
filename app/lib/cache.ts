@@ -10,8 +10,51 @@ const CACHE_TTL = 60 * 1000; // 1分
 const CACHE_TTL_15MIN = 15 * 60 * 1000; // 15分（外部API用）
 const CACHE_TTL_1DAY = 24 * 60 * 60 * 1000; // 1日（Mojang API用）
 
+// メモリキャッシュの設定
+const MEMORY_CACHE_CONFIG = {
+  MAX_SIZE: 1000, // 最大エントリ数
+  CLEANUP_INTERVAL: 5 * 60 * 1000, // クリーンアップ間隔（5分）
+};
+
 // インメモリキャッシュ（開発環境用・フォールバック用）
-const memoryCache = new Map<string, { data: unknown; expires: number }>();
+const memoryCache = new Map<string, { data: unknown; expires: number; lastAccessed: number }>();
+let lastCleanupTime = Date.now();
+
+/**
+ * 期限切れのメモリキャッシュエントリを削除し、サイズ制限を適用
+ */
+function cleanupMemoryCache(): void {
+  const now = Date.now();
+
+  // 期限切れエントリの削除
+  for (const [key, value] of memoryCache.entries()) {
+    if (value.expires <= now) {
+      memoryCache.delete(key);
+    }
+  }
+
+  // サイズ制限を超えている場合、最もアクセスが古いエントリから削除（LRU）
+  if (memoryCache.size > MEMORY_CACHE_CONFIG.MAX_SIZE) {
+    const entries = [...memoryCache.entries()].sort(
+      (a, b) => a[1].lastAccessed - b[1].lastAccessed
+    );
+    const deleteCount = memoryCache.size - MEMORY_CACHE_CONFIG.MAX_SIZE;
+    for (let i = 0; i < deleteCount; i++) {
+      memoryCache.delete(entries[i][0]);
+    }
+  }
+
+  lastCleanupTime = now;
+}
+
+/**
+ * 必要に応じてクリーンアップを実行
+ */
+function maybeCleanup(): void {
+  if (Date.now() - lastCleanupTime > MEMORY_CACHE_CONFIG.CLEANUP_INTERVAL) {
+    cleanupMemoryCache();
+  }
+}
 
 /**
  * ユーザー固有のキャッシュキーを生成
@@ -29,8 +72,12 @@ export function getCacheKey(userId: string, page: string): string {
  * @returns キャッシュされたデータ、または有効期限切れ/存在しない場合はnull
  */
 export async function getCached<T>(key: string): Promise<T | null> {
+  maybeCleanup();
+
   const cached = memoryCache.get(key);
   if (cached && cached.expires > Date.now()) {
+    // LRU: 最終アクセス時間を更新
+    cached.lastAccessed = Date.now();
     return cached.data as T;
   }
   memoryCache.delete(key);
@@ -44,9 +91,13 @@ export async function getCached<T>(key: string): Promise<T | null> {
  * @param ttl - Time To Live（ミリ秒）、デフォルト: 1分
  */
 export async function setCached<T>(key: string, data: T, ttl = CACHE_TTL): Promise<void> {
+  maybeCleanup();
+
+  const now = Date.now();
   memoryCache.set(key, {
     data,
-    expires: Date.now() + ttl,
+    expires: now + ttl,
+    lastAccessed: now,
   });
 }
 

@@ -3,8 +3,8 @@ import { useState, useMemo } from "react";
 import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs } from "@/lib/schema";
-import { desc, asc, like, sql } from "drizzle-orm";
+import { users, keybindings, playerConfigs, customKeys } from "@/lib/schema";
+import { desc, asc, like, sql, eq, and } from "drizzle-orm";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from "lucide-react";
 import { getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 
@@ -171,7 +171,18 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       break;
   }
 
-  const whereClause = search ? like(users.mcid, `%${search}%`) : undefined;
+  // 公開プロフィールのみ表示
+  const baseCondition = eq(users.profileVisibility, "public");
+
+  // 検索条件（MCID、displayName、slugで検索）
+  const searchCondition = search
+    ? like(users.mcid, `%${search}%`)
+    : undefined;
+
+  // クエリ条件を組み合わせ
+  const whereClause = searchCondition
+    ? and(baseCondition, searchCondition)
+    : baseCondition;
 
   // キー配置を持つユーザーを取得
   const [playersWithKeybindings, countResult] = await Promise.all([
@@ -201,6 +212,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
             rawInput: true,
             mouseAcceleration: true,
           },
+        },
+        customKeys: {
+          orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
         },
       },
     }),
@@ -345,14 +359,22 @@ export default function KeybindingsListPage() {
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Keyboard className="h-8 w-8" />
-          操作設定一覧
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          RTA走者の操作設定・キー配置を一覧で確認できます。
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Keyboard className="h-8 w-8" />
+            操作設定一覧
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            RTA走者の操作設定・キー配置を一覧で確認できます。
+          </p>
+        </div>
+        <Button variant="outline" asChild>
+          <Link to="/keybindings/stats">
+            <BarChart3 className="mr-2 h-4 w-4" />
+            統計を見る
+          </Link>
+        </Button>
       </div>
 
       {/* Search and Filter */}

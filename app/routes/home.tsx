@@ -1,5 +1,5 @@
 import { useLoaderData, Link } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useReducer, useCallback, memo } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -13,7 +13,7 @@ import { VideoCard } from "@/components/video-card";
 import { PlayerCard } from "@/components/player-card";
 import { RecentPaceCard } from "@/components/recent-pace-card";
 import { YouTubeLiveCard } from "@/components/youtube-live-card";
-import type { CachedYouTubeLive } from "@/lib/youtube-cache";
+import type { CachedYouTubeLive, CachedYouTubeVideo } from "@/lib/youtube-cache";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import type { PaceManLiveRun, PaceManRecentRun } from "@/lib/paceman";
 import type { TwitchStream } from "@/lib/twitch";
-import type { YouTubeVideo } from "@/lib/youtube";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   const appUrl = data?.appUrl || "https://minefolio.pages.dev";
@@ -121,12 +120,21 @@ interface LiveRunsResponse {
   mcidToUuid: Record<string, string>;
 }
 
+interface TwitchStreamWithUser {
+  stream: TwitchStream;
+  mcid: string | null;
+  uuid: string | null;
+  slug: string;
+  displayName: string | null;
+  discordAvatar: string | null;
+}
+
 interface TwitchStreamsResponse {
-  liveStreams: { stream: TwitchStream; mcid: string }[];
+  liveStreams: TwitchStreamWithUser[];
 }
 
 interface YouTubeVideosResponse {
-  recentVideos: YouTubeVideo[];
+  recentVideos: CachedYouTubeVideo[];
 }
 
 interface RecentPacesResponse {
@@ -139,8 +147,123 @@ interface YouTubeLiveResponse {
   liveStreams: CachedYouTubeLive[];
 }
 
-// セクション全体のローディングスケルトン
-function SectionSkeleton({ columns = 4 }: { columns?: number }) {
+// Feed状態管理用のReducer
+interface FeedState {
+  liveRuns: PaceManLiveRun[];
+  liveStreams: TwitchStreamWithUser[];
+  youtubeLiveStreams: CachedYouTubeLive[];
+  recentVideos: CachedYouTubeVideo[];
+  recentPaces: PaceManRecentRun[];
+  mcidToUuid: Record<string, string>;
+  mcidToDisplayName: Record<string, string>;
+  loading: {
+    liveRuns: boolean;
+    streams: boolean;
+    youtubeLive: boolean;
+    videos: boolean;
+    paces: boolean;
+  };
+  errors: {
+    liveRuns: boolean;
+    streams: boolean;
+    youtubeLive: boolean;
+    videos: boolean;
+    paces: boolean;
+  };
+}
+
+type FeedAction =
+  | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string> } }
+  | { type: "SET_STREAMS"; payload: TwitchStreamWithUser[] }
+  | { type: "SET_YOUTUBE_LIVE"; payload: CachedYouTubeLive[] }
+  | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
+  | { type: "SET_PACES"; payload: { recentPaces: PaceManRecentRun[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
+  | { type: "SET_ERROR"; payload: keyof FeedState["errors"] }
+  | { type: "SET_LOADING"; payload: { key: keyof FeedState["loading"]; value: boolean } };
+
+const initialFeedState: FeedState = {
+  liveRuns: [],
+  liveStreams: [],
+  youtubeLiveStreams: [],
+  recentVideos: [],
+  recentPaces: [],
+  mcidToUuid: {},
+  mcidToDisplayName: {},
+  loading: {
+    liveRuns: true,
+    streams: true,
+    youtubeLive: true,
+    videos: true,
+    paces: true,
+  },
+  errors: {
+    liveRuns: false,
+    streams: false,
+    youtubeLive: false,
+    videos: false,
+    paces: false,
+  },
+};
+
+function feedReducer(state: FeedState, action: FeedAction): FeedState {
+  switch (action.type) {
+    case "SET_LIVE_RUNS":
+      return {
+        ...state,
+        liveRuns: action.payload.liveRuns,
+        mcidToUuid: action.payload.mcidToUuid
+          ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
+          : state.mcidToUuid,
+        loading: { ...state.loading, liveRuns: false },
+      };
+    case "SET_STREAMS":
+      return {
+        ...state,
+        liveStreams: action.payload,
+        loading: { ...state.loading, streams: false },
+      };
+    case "SET_YOUTUBE_LIVE":
+      return {
+        ...state,
+        youtubeLiveStreams: action.payload,
+        loading: { ...state.loading, youtubeLive: false },
+      };
+    case "SET_VIDEOS":
+      return {
+        ...state,
+        recentVideos: action.payload,
+        loading: { ...state.loading, videos: false },
+      };
+    case "SET_PACES":
+      return {
+        ...state,
+        recentPaces: action.payload.recentPaces,
+        mcidToUuid: action.payload.mcidToUuid
+          ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
+          : state.mcidToUuid,
+        mcidToDisplayName: action.payload.mcidToDisplayName
+          ? { ...state.mcidToDisplayName, ...action.payload.mcidToDisplayName }
+          : state.mcidToDisplayName,
+        loading: { ...state.loading, paces: false },
+      };
+    case "SET_ERROR":
+      return {
+        ...state,
+        errors: { ...state.errors, [action.payload]: true },
+        loading: { ...state.loading, [action.payload]: false },
+      };
+    case "SET_LOADING":
+      return {
+        ...state,
+        loading: { ...state.loading, [action.payload.key]: action.payload.value },
+      };
+    default:
+      return state;
+  }
+}
+
+// セクション全体のローディングスケルトン（memo化）
+const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
   // Tailwindのgrid-colsクラスをcolumns値に応じて動的に選択
   const gridColsClass =
     columns === 3 ? "lg:grid-cols-3" :
@@ -160,7 +283,7 @@ function SectionSkeleton({ columns = 4 }: { columns?: number }) {
       </div>
     </section>
   );
-}
+});
 
 export default function HomePage() {
   const { isRegistered, registeredMcids, mcidToUuid, mcidToSlug, recentlyUpdatedUsers } =
@@ -168,108 +291,118 @@ export default function HomePage() {
 
   const registeredMcidSet = new Set(registeredMcids);
 
-  // 遅延読み込み用の状態
-  const [liveRuns, setLiveRuns] = useState<PaceManLiveRun[]>([]);
-  const [liveStreams, setLiveStreams] = useState<{ stream: TwitchStream; mcid: string }[]>([]);
-  const [youtubeLiveStreams, setYoutubeLiveStreams] = useState<CachedYouTubeLive[]>([]);
-  const [recentVideos, setRecentVideos] = useState<YouTubeVideo[]>([]);
-  const [recentPaces, setRecentPaces] = useState<PaceManRecentRun[]>([]);
-  const [pacesMcidToUuid, setPacesMcidToUuid] = useState<Record<string, string>>({});
-  const [pacesMcidToDisplayName, setPacesMcidToDisplayName] = useState<Record<string, string>>({});
+  // Feed状態管理（useReducerで統合）
+  const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
-  // ローディング状態
-  const [loadingLiveRuns, setLoadingLiveRuns] = useState(true);
-  const [loadingStreams, setLoadingStreams] = useState(true);
-  const [loadingYoutubeLive, setLoadingYoutubeLive] = useState(true);
-  const [loadingVideos, setLoadingVideos] = useState(true);
-  const [loadingPaces, setLoadingPaces] = useState(true);
+  // 後方互換性のためのエイリアス
+  const { liveRuns, liveStreams, youtubeLiveStreams, recentVideos, recentPaces } = feed;
+  const pacesMcidToUuid = feed.mcidToUuid;
+  const pacesMcidToDisplayName = feed.mcidToDisplayName;
+  const loadingLiveRuns = feed.loading.liveRuns;
+  const loadingStreams = feed.loading.streams;
+  const loadingYoutubeLive = feed.loading.youtubeLive;
+  const loadingVideos = feed.loading.videos;
+  const loadingPaces = feed.loading.paces;
 
-  // エラー状態
-  const [errorLiveRuns, setErrorLiveRuns] = useState(false);
-  const [errorStreams, setErrorStreams] = useState(false);
-  const [errorYoutubeLive, setErrorYoutubeLive] = useState(false);
-  const [errorVideos, setErrorVideos] = useState(false);
-  const [errorPaces, setErrorPaces] = useState(false);
+  // エラー状態（reducerから取得）
+  const errorLiveRuns = feed.errors.liveRuns;
+  const errorStreams = feed.errors.streams;
+  const errorYoutubeLive = feed.errors.youtubeLive;
+  const errorVideos = feed.errors.videos;
+  const errorPaces = feed.errors.paces;
 
-  // ライブペースを取得する関数
-  const fetchLiveRuns = () => {
+  // ライブペースを取得する関数（useCallbackでメモ化）
+  const fetchLiveRuns = useCallback(() => {
     fetch("/api/home-feed?type=live-runs")
       .then((res) => res.json() as Promise<LiveRunsResponse>)
       .then((data) => {
-        setLiveRuns(data.liveRuns || []);
-        if (data.mcidToUuid) {
-          setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
-        }
+        dispatch({
+          type: "SET_LIVE_RUNS",
+          payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid },
+        });
       })
       .catch((err) => {
         console.error("Failed to fetch live runs:", err);
-        setErrorLiveRuns(true);
-      })
-      .finally(() => setLoadingLiveRuns(false));
-  };
+        dispatch({ type: "SET_ERROR", payload: "liveRuns" });
+      });
+  }, []);
 
-  // 遅延読み込み
+  // 遅延読み込み（Promise.allで並列化）
   useEffect(() => {
-    // ライブペース取得（初回）
-    fetchLiveRuns();
+    // 全てのAPIを並列で取得
+    Promise.all([
+      // ライブペース
+      fetch("/api/home-feed?type=live-runs")
+        .then((res) => res.json() as Promise<LiveRunsResponse>)
+        .then((data) => {
+          dispatch({
+            type: "SET_LIVE_RUNS",
+            payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid },
+          });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch live runs:", err);
+          dispatch({ type: "SET_ERROR", payload: "liveRuns" });
+        }),
 
-    // Twitch配信取得
-    fetch("/api/home-feed?type=twitch-streams")
-      .then((res) => res.json() as Promise<TwitchStreamsResponse>)
-      .then((data) => setLiveStreams(data.liveStreams || []))
-      .catch((err) => {
-        console.error("Failed to fetch Twitch streams:", err);
-        setErrorStreams(true);
-      })
-      .finally(() => setLoadingStreams(false));
+      // Twitch配信
+      fetch("/api/home-feed?type=twitch-streams")
+        .then((res) => res.json() as Promise<TwitchStreamsResponse>)
+        .then((data) => {
+          dispatch({ type: "SET_STREAMS", payload: data.liveStreams || [] });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch Twitch streams:", err);
+          dispatch({ type: "SET_ERROR", payload: "streams" });
+        }),
 
-    // YouTubeライブ配信取得
-    fetch("/api/home-feed?type=youtube-live")
-      .then((res) => res.json() as Promise<YouTubeLiveResponse>)
-      .then((data) => setYoutubeLiveStreams(data.liveStreams || []))
-      .catch((err) => {
-        console.error("Failed to fetch YouTube live streams:", err);
-        setErrorYoutubeLive(true);
-      })
-      .finally(() => setLoadingYoutubeLive(false));
+      // YouTubeライブ配信
+      fetch("/api/home-feed?type=youtube-live")
+        .then((res) => res.json() as Promise<YouTubeLiveResponse>)
+        .then((data) => {
+          dispatch({ type: "SET_YOUTUBE_LIVE", payload: data.liveStreams || [] });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch YouTube live streams:", err);
+          dispatch({ type: "SET_ERROR", payload: "youtubeLive" });
+        }),
 
-    // YouTube動画取得
-    fetch("/api/home-feed?type=youtube-videos")
-      .then((res) => res.json() as Promise<YouTubeVideosResponse>)
-      .then((data) => setRecentVideos(data.recentVideos || []))
-      .catch((err) => {
-        console.error("Failed to fetch YouTube videos:", err);
-        setErrorVideos(true);
-      })
-      .finally(() => setLoadingVideos(false));
+      // YouTube動画
+      fetch("/api/home-feed?type=youtube-videos")
+        .then((res) => res.json() as Promise<YouTubeVideosResponse>)
+        .then((data) => {
+          dispatch({ type: "SET_VIDEOS", payload: data.recentVideos || [] });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch YouTube videos:", err);
+          dispatch({ type: "SET_ERROR", payload: "videos" });
+        }),
 
-    // 最近のペース取得
-    fetch("/api/home-feed?type=recent-paces")
-      .then((res) => res.json() as Promise<RecentPacesResponse>)
-      .then((data) => {
-        setRecentPaces(data.recentPaces || []);
-        if (data.mcidToUuid) {
-          setPacesMcidToUuid((prev) => ({ ...prev, ...data.mcidToUuid }));
-        }
-        if (data.mcidToDisplayName) {
-          setPacesMcidToDisplayName((prev) => ({ ...prev, ...data.mcidToDisplayName }));
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to fetch recent paces:", err);
-        setErrorPaces(true);
-      })
-      .finally(() => setLoadingPaces(false));
+      // 最近のペース
+      fetch("/api/home-feed?type=recent-paces")
+        .then((res) => res.json() as Promise<RecentPacesResponse>)
+        .then((data) => {
+          dispatch({
+            type: "SET_PACES",
+            payload: {
+              recentPaces: data.recentPaces || [],
+              mcidToUuid: data.mcidToUuid,
+              mcidToDisplayName: data.mcidToDisplayName,
+            },
+          });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch recent paces:", err);
+          dispatch({ type: "SET_ERROR", payload: "paces" });
+        }),
+    ]);
   }, []);
 
   // ライブペースの自動更新（15秒間隔）
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLiveRuns();
-    }, 15000); // 15秒
-
+    const interval = setInterval(fetchLiveRuns, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchLiveRuns]);
 
   // mcidToUuidをマージ
   const mergedMcidToUuid = { ...mcidToUuid, ...pacesMcidToUuid };
@@ -321,36 +454,55 @@ export default function HomePage() {
       </section>
 
       {/* 配信中（Twitch + YouTube Live） */}
-      {(loadingStreams || loadingYoutubeLive) ? (
-        <SectionSkeleton columns={3} />
-      ) : (errorStreams && errorYoutubeLive) ? (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-red-500" />
-            <h2 className="text-xl font-bold">配信中</h2>
-          </div>
-          <div className="text-center py-8 text-muted-foreground">
-            <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>配信情報の取得に失敗しました</p>
-          </div>
-        </section>
-      ) : (liveStreams.length > 0 || youtubeLiveStreams.length > 0) ? (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-red-500" />
-            <h2 className="text-xl font-bold">配信中</h2>
-            <span className="text-muted-foreground">({liveStreams.length + youtubeLiveStreams.length})</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {liveStreams.map(({ stream, mcid }) => (
-              <StreamCard key={`twitch-${stream.id}`} stream={stream} mcid={mcid} />
-            ))}
-            {youtubeLiveStreams.map((stream) => (
-              <YouTubeLiveCard key={`youtube-${stream.videoId}`} stream={stream} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {(() => {
+        // 全体のローディング状態（両方ロード完了するまで待つ）
+        const isLoading = loadingStreams || loadingYoutubeLive;
+        // エラー状態（両方がエラーの場合のみエラー表示）
+        const hasError = errorStreams && errorYoutubeLive;
+        // 配信数
+        const totalStreams = liveStreams.length + youtubeLiveStreams.length;
+
+        if (isLoading) {
+          return <SectionSkeleton columns={3} />;
+        }
+
+        if (hasError) {
+          return (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Radio className="h-5 w-5 text-red-500" />
+                <h2 className="text-xl font-bold">配信中</h2>
+              </div>
+              <div className="text-center py-8 text-muted-foreground">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>配信情報の取得に失敗しました</p>
+              </div>
+            </section>
+          );
+        }
+
+        if (totalStreams === 0) {
+          return null;
+        }
+
+        return (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Radio className="h-5 w-5 text-red-500" />
+              <h2 className="text-xl font-bold">配信中（Twitch）</h2>
+              <span className="text-muted-foreground">({totalStreams})</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {liveStreams.map((data) => (
+                <StreamCard key={`twitch-${data.stream.id}`} {...data} />
+              ))}
+              {youtubeLiveStreams.map((stream) => (
+                <YouTubeLiveCard key={`youtube-${stream.videoId}`} stream={stream} />
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* PaceMan ライブペース */}
       {loadingLiveRuns ? (
@@ -362,7 +514,13 @@ export default function HomePage() {
             <h2 className="text-xl font-bold">ライブペース</h2>
             <span className="text-muted-foreground">({liveRuns.length})</span>
           </div>
-          <LivePaceList runs={liveRuns} registeredMcidSet={registeredMcidSet} mcidToSlug={mcidToSlug} />
+          <LivePaceList
+            runs={liveRuns}
+            registeredMcidSet={registeredMcidSet}
+            mcidToSlug={mcidToSlug}
+            mcidToUuid={mergedMcidToUuid}
+            mcidToDisplayName={pacesMcidToDisplayName}
+          />
         </section>
       ) : null}
 
@@ -401,7 +559,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {recentVideos.map((video) => (
-              <VideoCard key={video.id.videoId} video={video} />
+              <VideoCard key={video.videoId} video={video} />
             ))}
           </div>
         </section>

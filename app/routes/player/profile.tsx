@@ -5,7 +5,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys } from "@/lib/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
 import {
@@ -271,6 +271,9 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
         orderBy: [asc(searchCrafts.sequence)],
       },
       keyRemaps: true,
+      customKeys: {
+        orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
+      },
     },
   });
 
@@ -494,17 +497,27 @@ export default function PlayerProfilePage() {
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           <div className="flex items-center gap-3">
-            <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
-              <MinecraftAvatar
-                uuid={player.uuid}
-                mcid={player.mcid}
-                size={32}
-                className="rounded"
+            {player.uuid ? (
+              <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
+                <MinecraftAvatar
+                  uuid={player.uuid}
+                  mcid={player.mcid}
+                  size={32}
+                  className="rounded"
+                />
+              </Suspense>
+            ) : player.discordAvatar ? (
+              <img
+                src={player.discordAvatar}
+                alt={player.displayName ?? "Avatar"}
+                className="w-8 h-8 rounded"
               />
-            </Suspense>
+            ) : (
+              <div className="w-8 h-8 bg-muted rounded" />
+            )}
             <div className="text-left">
-              <p className="font-medium text-sm">{player.displayName ?? player.mcid}</p>
-              <p className="text-xs text-muted-foreground">@{player.mcid}</p>
+              <p className="font-medium text-sm">{player.displayName ?? player.mcid ?? player.slug}</p>
+              {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
             </div>
           </div>
           {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -548,17 +561,27 @@ export default function PlayerProfilePage() {
               value="profile"
               className="w-full justify-start gap-3 px-3 py-3 h-auto data-[state=active]:bg-secondary"
             >
-              <Suspense fallback={<div className="w-10 h-10 bg-muted rounded animate-pulse" />}>
-                <MinecraftAvatar
-                  uuid={player.uuid}
-                  mcid={player.mcid}
-                  size={40}
-                  className="rounded shrink-0"
+              {player.uuid ? (
+                <Suspense fallback={<div className="w-10 h-10 bg-muted rounded animate-pulse" />}>
+                  <MinecraftAvatar
+                    uuid={player.uuid}
+                    mcid={player.mcid}
+                    size={40}
+                    className="rounded shrink-0"
+                  />
+                </Suspense>
+              ) : player.discordAvatar ? (
+                <img
+                  src={player.discordAvatar}
+                  alt={player.displayName ?? "Avatar"}
+                  className="w-10 h-10 rounded shrink-0"
                 />
-              </Suspense>
+              ) : (
+                <div className="w-10 h-10 bg-muted rounded shrink-0" />
+              )}
               <div className="text-left min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{player.displayName ?? player.mcid}</p>
-                <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>
+                <p className="font-medium text-sm truncate">{player.displayName ?? player.mcid ?? player.slug}</p>
+                {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
                 {player.shortBio && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
                 )}
@@ -821,6 +844,9 @@ export default function PlayerProfilePage() {
                         keybindings={keybindingsToMap(player.keybindings)}
                         fingerAssignments={userFingerAssignments}
                         remaps={remapsForKeyboard}
+                        customKeys={player.customKeys
+                          .filter((ck) => ck.category === "keyboard")
+                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
                         showActionLabels
                         showFingerAssignments
                         showRemaps
@@ -844,6 +870,11 @@ export default function PlayerProfilePage() {
                           keybindings={keybindingsToMap(player.keybindings)}
                           fingerAssignments={userFingerAssignments}
                           remaps={remapsForKeyboard}
+                          customButtons={player.customKeys.map((ck) => ({
+                            code: ck.keyCode,
+                            label: ck.keyName,
+                            category: ck.category as "mouse" | "keyboard",
+                          }))}
                           showActionLabels
                           showFingerAssignments
                           showRemaps
@@ -1740,7 +1771,8 @@ function getSocialUrl(platform: string, identifier: string): string {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
     case "youtube":
-      return `https://www.youtube.com/${identifier}`;
+      // YouTubeハンドルには@が必要
+      return `https://www.youtube.com/@${identifier}`;
     case "twitch":
       return `https://www.twitch.tv/${identifier}`;
     case "twitter":

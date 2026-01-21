@@ -1,8 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
 import { keybindings, playerConfigs } from "./schema";
-import { eq } from "drizzle-orm";
-import { createPresetFromOnboarding } from "./preset-utils";
 
 // デフォルトキーバインド定義
 export const DEFAULT_KEYBINDINGS = [
@@ -121,28 +119,10 @@ export async function createDefaultPlayerConfig(db: Database, userId: string) {
 }
 
 // 新規ユーザーのデフォルト設定を一括作成
-export async function createDefaultsForNewUser(db: Database, userId: string) {
-  await Promise.all([
-    createDefaultKeybindings(db, userId),
-    createDefaultPlayerConfig(db, userId),
-  ]);
-
-  // 作成したデータを取得してプリセットを作成
-  const userKeybindings = await db.query.keybindings.findMany({
-    where: eq(keybindings.userId, userId),
-  });
-  const userPlayerConfig = await db.query.playerConfigs.findFirst({
-    where: eq(playerConfigs.userId, userId),
-  });
-
-  // 初期プリセットを作成
-  await createPresetFromOnboarding(
-    db,
-    userId,
-    userKeybindings,
-    userPlayerConfig ?? null,
-    [] // 新規ユーザーにはリマップなし
-  );
+// 注: 現在は何も作成しない（ユーザーが自分で設定する）
+export async function createDefaultsForNewUser(_db: Database, _userId: string) {
+  // デフォルトのキーバインドやプレイヤー設定は作成しない
+  // ユーザーがoptions.txtをインポートするか、手動で設定することを想定
 }
 
 // Windowsポインター速度の乗数（11/11がデフォルト）

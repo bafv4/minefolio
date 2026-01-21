@@ -3,7 +3,7 @@
 
 import { eq, desc, and, lt, ne } from "drizzle-orm";
 import { createDb } from "./db";
-import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
+import { youtubeVideoCache, youtubeLiveCache, users, socialLinks, apiCache } from "./schema";
 import { createId } from "@paralleldrive/cuid2";
 import type { YouTubeVideo, YouTubeSearchResult } from "./youtube";
 
@@ -19,6 +19,14 @@ const CACHE_CONFIG = {
   MAX_AGE_HOURS: 72,
   // 取得する最大件数
   MAX_VIDEOS: 10,
+  // APIリクエスト間隔（3時間）- Vercel Cron制限対応
+  API_REQUEST_INTERVAL: 3 * 60 * 60 * 1000,
+};
+
+// APIメタデータのキー
+const API_META_KEYS = {
+  YOUTUBE_VIDEOS_LAST_FETCH: "youtube_videos_last_fetch",
+  YOUTUBE_LIVE_LAST_FETCH: "youtube_live_last_fetch",
 };
 
 export interface CachedYouTubeVideo {
@@ -31,10 +39,15 @@ export interface CachedYouTubeVideo {
   channelTitle: string | null;
   publishedAt: Date;
   isAvailable: boolean;
+  // ユーザー情報
+  uuid: string | null;
+  slug: string | null;
+  displayName: string | null;
+  discordAvatar: string | null;
 }
 
 /**
- * キャッシュから最新動画を取得
+ * キャッシュから最新動画を取得（ユーザー情報付き）
  * キャッシュが存在しない場合や更新が必要な場合はnullを返す
  */
 export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
@@ -58,17 +71,41 @@ export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
       return null;
     }
 
-    return recentVideos.map(v => ({
-      videoId: v.videoId,
-      channelId: v.channelId,
-      minefolioMcid: v.minefolioMcid,
-      title: v.title,
-      description: v.description,
-      thumbnailUrl: v.thumbnailUrl,
-      channelTitle: v.channelTitle,
-      publishedAt: v.publishedAt,
-      isAvailable: v.isAvailable,
-    }));
+    // MCIDからユーザー情報を取得
+    const mcids = recentVideos
+      .map(v => v.minefolioMcid)
+      .filter((mcid): mcid is string => mcid !== null);
+
+    const usersData = mcids.length > 0
+      ? await db.query.users.findMany({
+          columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true },
+        })
+      : [];
+
+    const userMap = new Map(
+      usersData
+        .filter(u => u.mcid !== null)
+        .map(u => [u.mcid!.toLowerCase(), u])
+    );
+
+    return recentVideos.map(v => {
+      const user = v.minefolioMcid ? userMap.get(v.minefolioMcid.toLowerCase()) : null;
+      return {
+        videoId: v.videoId,
+        channelId: v.channelId,
+        minefolioMcid: v.minefolioMcid,
+        title: v.title,
+        description: v.description,
+        thumbnailUrl: v.thumbnailUrl,
+        channelTitle: v.channelTitle,
+        publishedAt: v.publishedAt,
+        isAvailable: v.isAvailable,
+        uuid: user?.uuid ?? null,
+        slug: user?.slug ?? null,
+        displayName: user?.displayName ?? null,
+        discordAvatar: user?.discordAvatar ?? null,
+      };
+    });
   } catch (error) {
     console.error("Failed to get cached videos:", error);
     return null;
@@ -110,6 +147,7 @@ export async function fetchAndCacheNewVideos(
   apiKey: string,
   channels: Array<{ channelId: string; mcid: string }>
 ): Promise<{ added: number; updated: number }> {
+  console.log(`[YouTube API] Starting fetchAndCacheNewVideos for ${channels.length} channels`);
   const db = createDb();
   let added = 0;
   let updated = 0;
@@ -170,6 +208,10 @@ export async function fetchAndCacheNewVideos(
     }
   }
 
+  // API実行日時を記録
+  await setLastApiFetchTime(API_META_KEYS.YOUTUBE_VIDEOS_LAST_FETCH);
+
+  console.log(`[YouTube API] fetchAndCacheNewVideos completed: added=${added}, updated=${updated}`);
   return { added, updated };
 }
 
@@ -250,14 +292,62 @@ export async function getLastUpdateTime(): Promise<Date | null> {
 }
 
 /**
- * 更新が必要かどうかを確認
+ * 更新が必要かどうかを確認（3時間以上経過している場合）
  */
 export async function needsUpdate(): Promise<boolean> {
-  const lastUpdate = await getLastUpdateTime();
-  if (!lastUpdate) return true;
+  const lastFetch = await getLastApiFetchTime(API_META_KEYS.YOUTUBE_VIDEOS_LAST_FETCH);
+  if (!lastFetch) return true;
 
-  const elapsed = Date.now() - lastUpdate.getTime();
-  return elapsed > CACHE_CONFIG.NEW_VIDEO_CHECK_INTERVAL;
+  const elapsed = Date.now() - lastFetch.getTime();
+  return elapsed > CACHE_CONFIG.API_REQUEST_INTERVAL;
+}
+
+/**
+ * APIの最終実行日時を取得
+ */
+export async function getLastApiFetchTime(metaKey: string): Promise<Date | null> {
+  try {
+    const db = createDb();
+    const meta = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, metaKey),
+      columns: { updatedAt: true },
+    });
+    return meta?.updatedAt || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * APIの最終実行日時を記録
+ */
+export async function setLastApiFetchTime(metaKey: string): Promise<void> {
+  try {
+    const db = createDb();
+    const now = new Date();
+    const existing = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, metaKey),
+    });
+
+    if (existing) {
+      await db
+        .update(apiCache)
+        .set({ updatedAt: now })
+        .where(eq(apiCache.cacheKey, metaKey));
+    } else {
+      await db.insert(apiCache).values({
+        id: createId(),
+        cacheKey: metaKey,
+        cacheType: "youtube_videos",
+        data: JSON.stringify({ lastFetch: now.toISOString() }),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1年後（実質無期限）
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  } catch (error) {
+    console.error("Failed to set last API fetch time:", error);
+  }
 }
 
 // ========================================
@@ -279,12 +369,29 @@ async function fetchChannelVideos(
       maxResults: String(maxResults),
     });
 
+    console.log(`[YouTube API] Fetching videos for channel: ${channelId}`);
     const res = await fetch(`${YOUTUBE_API}/search?${params}`);
-    if (!res.ok) return [];
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[YouTube API] Search failed (${res.status}): ${errorText}`);
+      return [];
+    }
 
     const data = await res.json();
+    console.log(`[YouTube API] Search response for ${channelId}:`, JSON.stringify({
+      totalResults: data.pageInfo?.totalResults,
+      resultsPerPage: data.pageInfo?.resultsPerPage,
+      itemCount: data.items?.length || 0,
+      items: data.items?.map((item: any) => ({
+        videoId: item.id?.videoId,
+        title: item.snippet?.title,
+        publishedAt: item.snippet?.publishedAt,
+      })),
+    }));
     return data.items || [];
-  } catch {
+  } catch (error) {
+    console.error(`[YouTube API] Search error for channel ${channelId}:`, error);
     return [];
   }
 }
@@ -307,12 +414,21 @@ async function resolveChannelIdInternal(
       part: "id",
     });
 
+    console.log(`[YouTube API] Resolving handle: @${username}`);
     const res = await fetch(`${YOUTUBE_API}/channels?${params}`);
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[YouTube API] Channel resolution failed (${res.status}): ${errorText}`);
+      return null;
+    }
 
     const data = await res.json();
-    return data.items?.[0]?.id || null;
-  } catch {
+    const channelId = data.items?.[0]?.id || null;
+    console.log(`[YouTube API] Resolved @${username} -> ${channelId}`);
+    return channelId;
+  } catch (error) {
+    console.error(`[YouTube API] Channel resolution error for ${identifier}:`, error);
     return null;
   }
 }
@@ -371,6 +487,9 @@ export async function getRegisteredYouTubeChannels(): Promise<Array<{ channelId:
 
 // ========================================
 // YouTubeライブ配信キャッシュ機能
+// ※ 利用停止中: Search APIのクォータコスト（1リクエスト100ユニット）が高く、
+//   日次クォータ（10,000ユニット）をすぐに消費してしまうため。
+//   将来的にRSS/Atomフィードや別の方法で再実装を検討。
 // ========================================
 
 // ライブ配信キャッシュ設定
@@ -393,34 +512,63 @@ export interface CachedYouTubeLive {
   scheduledStartTime: Date | null;
   actualStartTime: Date | null;
   concurrentViewers: number | null;
+  // ユーザー情報
+  uuid: string | null;
+  slug: string | null;
+  displayName: string | null;
+  discordAvatar: string | null;
 }
 
 /**
- * キャッシュからライブ配信を取得
+ * キャッシュからライブ配信を取得（ユーザー情報付き）
  */
 export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
   try {
     const db = createDb();
 
-    // ライブ中または配信予定の動画を取得
+    // ライブ中または配信予定の動画を取得（ユーザー情報をJOIN）
     const streams = await db.query.youtubeLiveCache.findMany({
       where: ne(youtubeLiveCache.liveBroadcastContent, "none"),
       orderBy: [desc(youtubeLiveCache.concurrentViewers)],
     });
 
-    return streams.map(s => ({
-      videoId: s.videoId,
-      channelId: s.channelId,
-      minefolioMcid: s.minefolioMcid,
-      title: s.title,
-      description: s.description,
-      thumbnailUrl: s.thumbnailUrl,
-      channelTitle: s.channelTitle,
-      liveBroadcastContent: s.liveBroadcastContent as "live" | "upcoming" | "none",
-      scheduledStartTime: s.scheduledStartTime,
-      actualStartTime: s.actualStartTime,
-      concurrentViewers: s.concurrentViewers,
-    }));
+    // MCIDからユーザー情報を取得
+    const mcids = streams
+      .map(s => s.minefolioMcid)
+      .filter((mcid): mcid is string => mcid !== null);
+
+    const usersData = mcids.length > 0
+      ? await db.query.users.findMany({
+          columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true },
+        })
+      : [];
+
+    const userMap = new Map(
+      usersData
+        .filter(u => u.mcid !== null)
+        .map(u => [u.mcid!.toLowerCase(), u])
+    );
+
+    return streams.map(s => {
+      const user = s.minefolioMcid ? userMap.get(s.minefolioMcid.toLowerCase()) : null;
+      return {
+        videoId: s.videoId,
+        channelId: s.channelId,
+        minefolioMcid: s.minefolioMcid,
+        title: s.title,
+        description: s.description,
+        thumbnailUrl: s.thumbnailUrl,
+        channelTitle: s.channelTitle,
+        liveBroadcastContent: s.liveBroadcastContent as "live" | "upcoming" | "none",
+        scheduledStartTime: s.scheduledStartTime,
+        actualStartTime: s.actualStartTime,
+        concurrentViewers: s.concurrentViewers,
+        uuid: user?.uuid ?? null,
+        slug: user?.slug ?? null,
+        displayName: user?.displayName ?? null,
+        discordAvatar: user?.discordAvatar ?? null,
+      };
+    });
   } catch (error) {
     console.error("Failed to get cached live streams:", error);
     return [];
@@ -462,6 +610,7 @@ export async function fetchAndCacheLiveStreams(
   apiKey: string,
   channels: Array<{ channelId: string; mcid: string }>
 ): Promise<{ live: number; upcoming: number; ended: number }> {
+  console.log(`[YouTube API] Starting fetchAndCacheLiveStreams for ${channels.length} channels`);
   const db = createDb();
   let live = 0;
   let upcoming = 0;
@@ -471,6 +620,7 @@ export async function fetchAndCacheLiveStreams(
   // クォータ節約のため、チャンネル数を制限（最大10チャンネル）
   const channelsToCheck = channels.slice(0, 10);
   const liveVideoIds: Array<{ videoId: string; channelId: string; mcid: string }> = [];
+  let successfulApiCalls = 0; // 成功したAPIコールをカウント
 
   for (const { channelId: identifier, mcid } of channelsToCheck) {
     try {
@@ -488,14 +638,24 @@ export async function fetchAndCacheLiveStreams(
         maxResults: "5",
       });
 
+      console.log(`[YouTube API] Searching live streams for channel: ${channelId}`);
       const searchRes = await fetch(`${YOUTUBE_API}/search?${searchParams}`);
       if (searchRes.ok) {
+        successfulApiCalls++;
         const searchData = await searchRes.json();
+        console.log(`[YouTube API] Live search response for ${channelId}:`, JSON.stringify({
+          totalResults: searchData.pageInfo?.totalResults,
+          itemCount: searchData.items?.length || 0,
+          videoIds: searchData.items?.map((item: any) => item.id?.videoId),
+        }));
         for (const item of searchData.items || []) {
           if (item.id?.videoId) {
             liveVideoIds.push({ videoId: item.id.videoId, channelId, mcid });
           }
         }
+      } else {
+        const errorText = await searchRes.text();
+        console.error(`[YouTube API] Live search failed (${searchRes.status}): ${errorText}`);
       }
 
       // 配信予定も検索
@@ -508,9 +668,16 @@ export async function fetchAndCacheLiveStreams(
         maxResults: "3",
       });
 
+      console.log(`[YouTube API] Searching upcoming streams for channel: ${channelId}`);
       const upcomingRes = await fetch(`${YOUTUBE_API}/search?${upcomingParams}`);
       if (upcomingRes.ok) {
+        successfulApiCalls++;
         const upcomingData = await upcomingRes.json();
+        console.log(`[YouTube API] Upcoming search response for ${channelId}:`, JSON.stringify({
+          totalResults: upcomingData.pageInfo?.totalResults,
+          itemCount: upcomingData.items?.length || 0,
+          videoIds: upcomingData.items?.map((item: any) => item.id?.videoId),
+        }));
         for (const item of upcomingData.items || []) {
           if (item.id?.videoId) {
             liveVideoIds.push({ videoId: item.id.videoId, channelId, mcid });
@@ -522,23 +689,29 @@ export async function fetchAndCacheLiveStreams(
     }
   }
 
-  // 動画IDがない場合は終了
+  // 動画IDがない場合
   if (liveVideoIds.length === 0) {
-    // 既存のキャッシュをクリア（配信終了）
-    const existingStreams = await db.query.youtubeLiveCache.findMany({
-      where: ne(youtubeLiveCache.liveBroadcastContent, "none"),
-    });
+    // APIが少なくとも1回成功した場合のみキャッシュをクリア
+    // 全てのAPIコールが失敗した場合はクォータ切れ等の可能性があるため、既存キャッシュを維持
+    if (successfulApiCalls > 0) {
+      // 既存のキャッシュをクリア（配信終了）
+      const existingStreams = await db.query.youtubeLiveCache.findMany({
+        where: ne(youtubeLiveCache.liveBroadcastContent, "none"),
+      });
 
-    for (const stream of existingStreams) {
-      await db
-        .update(youtubeLiveCache)
-        .set({
-          liveBroadcastContent: "none",
-          lastCheckedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(youtubeLiveCache.videoId, stream.videoId));
-      ended++;
+      for (const stream of existingStreams) {
+        await db
+          .update(youtubeLiveCache)
+          .set({
+            liveBroadcastContent: "none",
+            lastCheckedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(youtubeLiveCache.videoId, stream.videoId));
+        ended++;
+      }
+    } else if (channelsToCheck.length > 0) {
+      console.warn("All YouTube API calls failed, keeping existing cache");
     }
 
     return { live, upcoming, ended };
@@ -547,6 +720,8 @@ export async function fetchAndCacheLiveStreams(
   // Videos APIで詳細情報を取得（1クォータ/リクエスト、最大50件）
   const videoIds = [...new Set(liveVideoIds.map(v => v.videoId))];
   const videoIdToInfo = new Map(liveVideoIds.map(v => [v.videoId, v]));
+
+  console.log(`[YouTube API] Fetching video details for ${videoIds.length} videos: ${videoIds.join(", ")}`);
 
   try {
     const videosParams = new URLSearchParams({
@@ -557,11 +732,21 @@ export async function fetchAndCacheLiveStreams(
 
     const videosRes = await fetch(`${YOUTUBE_API}/videos?${videosParams}`);
     if (!videosRes.ok) {
-      console.error("Failed to fetch video details:", await videosRes.text());
+      const errorText = await videosRes.text();
+      console.error(`[YouTube API] Videos API failed (${videosRes.status}): ${errorText}`);
       return { live, upcoming, ended };
     }
 
     const videosData = await videosRes.json();
+    console.log(`[YouTube API] Videos API response:`, JSON.stringify({
+      itemCount: videosData.items?.length || 0,
+      items: videosData.items?.map((item: any) => ({
+        videoId: item.id,
+        title: item.snippet?.title,
+        liveBroadcastContent: item.snippet?.liveBroadcastContent,
+        concurrentViewers: item.liveStreamingDetails?.concurrentViewers,
+      })),
+    }));
     const currentLiveIds = new Set<string>();
 
     for (const video of videosData.items || []) {
@@ -639,6 +824,7 @@ export async function fetchAndCacheLiveStreams(
     console.error("Failed to fetch live stream details:", error);
   }
 
+  console.log(`[YouTube API] fetchAndCacheLiveStreams completed: live=${live}, upcoming=${upcoming}, ended=${ended}`);
   return { live, upcoming, ended };
 }
 

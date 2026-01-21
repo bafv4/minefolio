@@ -5,7 +5,7 @@ import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { fetchLiveRuns, fetchRecentRunsForUsers } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getFavoritesFromCookie } from "@/lib/favorites";
@@ -17,13 +17,13 @@ import {
 } from "@/lib/cache";
 import {
   getCachedVideos,
-  convertToYouTubeVideoFormat,
   fetchAndCacheNewVideos,
   needsUpdate,
   getRegisteredYouTubeChannels,
-  getCachedLiveStreams,
-  needsLiveUpdate,
-  fetchAndCacheLiveStreams,
+  // YouTubeライブ配信API関連は利用停止中
+  // getCachedLiveStreams,
+  // needsLiveUpdate,
+  // fetchAndCacheLiveStreams,
 } from "@/lib/youtube-cache";
 
 // キャッシュTTL設定（ミリ秒）
@@ -57,20 +57,23 @@ async function getCachedUserData(): Promise<UserDataCache | null> {
 
 async function fetchAndCacheUserData(): Promise<UserDataCache> {
   const db = createDb();
-  const allUsers = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true, displayName: true },
-  });
+  // DBクエリ段階でMCIDとUUIDがあるユーザーのみフィルタリング（最適化）
+  const usersWithMcid = await db
+    .select({
+      mcid: users.mcid,
+      uuid: users.uuid,
+      displayName: users.displayName,
+    })
+    .from(users)
+    .where(and(isNotNull(users.mcid), isNotNull(users.uuid)));
 
-  const usersWithMcid = allUsers.filter((u): u is typeof u & { mcid: string; uuid: string } =>
-    u.mcid !== null && u.uuid !== null
-  );
   const data: UserDataCache = {
-    registeredMcids: usersWithMcid.map((u) => u.mcid.toLowerCase()),
+    registeredMcids: usersWithMcid.map((u) => u.mcid!.toLowerCase()),
     mcidToUuid: Object.fromEntries(
-      usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.uuid])
+      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.uuid!])
     ),
     mcidToDisplayName: Object.fromEntries(
-      usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.displayName || u.mcid])
+      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
     ),
   };
 
@@ -85,8 +88,16 @@ async function getUserData(): Promise<UserDataCache> {
 }
 
 // Twitchリンク一覧のキャッシュ
+interface TwitchLinkData {
+  identifier: string;
+  mcid: string | null;
+  uuid: string | null;
+  slug: string;
+  displayName: string | null;
+  discordAvatar: string | null;
+}
 interface TwitchLinkCache {
-  links: Array<{ identifier: string; mcid: string | null }>;
+  links: TwitchLinkData[];
 }
 
 async function getCachedTwitchLinks(): Promise<TwitchLinkCache | null> {
@@ -99,6 +110,10 @@ async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
     .select({
       identifier: socialLinks.identifier,
       mcid: users.mcid,
+      uuid: users.uuid,
+      slug: users.slug,
+      displayName: users.displayName,
+      discordAvatar: users.discordAvatar,
     })
     .from(socialLinks)
     .innerJoin(users, eq(socialLinks.userId, users.id))
@@ -262,7 +277,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         const link = twitchLinks.find(
           (l) => l.identifier.toLowerCase() === stream.user_login.toLowerCase()
         );
-        return { stream, mcid: link?.mcid ?? "" };
+        return {
+          stream,
+          mcid: link?.mcid ?? null,
+          uuid: link?.uuid ?? null,
+          slug: link?.slug ?? "",
+          displayName: link?.displayName ?? null,
+          discordAvatar: link?.discordAvatar ?? null,
+        };
       });
 
       const result: TwitchCache = { liveStreams };
@@ -275,12 +297,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     case "youtube-videos": {
       const apiKey = env.YOUTUBE_API_KEY;
 
-      // 永続キャッシュから動画を取得
+      // 永続キャッシュから動画を取得（ユーザー情報付き）
       const cachedVideos = await getCachedVideos();
 
       if (cachedVideos && cachedVideos.length > 0) {
-        const videos = convertToYouTubeVideoFormat(cachedVideos);
-        const sortedVideos = sortByFavorite(videos, favoritesSet);
+        const sortedVideos = sortByFavorite(cachedVideos, favoritesSet);
 
         // バックグラウンドで更新が必要かチェック（APIキーがある場合のみ）
         if (apiKey && await needsUpdate()) {
@@ -305,8 +326,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       const newCachedVideos = await getCachedVideos();
       if (newCachedVideos) {
-        const videos = convertToYouTubeVideoFormat(newCachedVideos);
-        const sortedVideos = sortByFavorite(videos, favoritesSet);
+        const sortedVideos = sortByFavorite(newCachedVideos, favoritesSet);
         return jsonResponse({ recentVideos: sortedVideos }, CDN_CACHE.YOUTUBE);
       }
 
@@ -314,33 +334,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     }
 
     case "youtube-live": {
-      const apiKey = env.YOUTUBE_API_KEY;
-
-      // DBキャッシュからライブ配信を取得
-      const cachedStreams = await getCachedLiveStreams();
-
-      // ライブ中のみ抽出
-      const liveStreams = cachedStreams.filter(s => s.liveBroadcastContent === "live");
-
-      // キャッシュがある場合はそれを返す
-      if (liveStreams.length > 0 || !apiKey) {
-        const sortedStreams = sortByFavorite(liveStreams, favoritesSet);
-        return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.YOUTUBE_LIVE);
-      }
-
-      // 更新が必要な場合はバックグラウンドで更新
-      if (apiKey && await needsLiveUpdate()) {
-        const channels = await getRegisteredYouTubeChannels();
-        if (channels.length > 0) {
-          // 初回は同期的に取得
-          await fetchAndCacheLiveStreams(apiKey, channels);
-          const newStreams = await getCachedLiveStreams();
-          const newLiveStreams = newStreams.filter(s => s.liveBroadcastContent === "live");
-          const sortedStreams = sortByFavorite(newLiveStreams, favoritesSet);
-          return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.YOUTUBE_LIVE);
-        }
-      }
-
+      // YouTubeライブ配信APIは利用停止中（Search APIのクォータコストが高いため）
+      // 将来的にRSS/Atomフィードや別の方法で再実装を検討
       return jsonResponse({ liveStreams: [] }, CDN_CACHE.YOUTUBE_LIVE);
     }
 
