@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
 import { configPresets, configHistory, type ConfigPreset } from "./schema";
-import type { Keybinding, PlayerConfig, KeyRemap } from "./schema";
+import type { Keybinding, PlayerConfig, KeyRemap, ItemLayout, SearchCraft } from "./schema";
 
 /**
  * プリセットに保存するキーバインドデータの型
@@ -40,6 +40,28 @@ export interface PresetRemapData {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+}
+
+/**
+ * プリセットに保存するアイテム配置データの型
+ */
+export interface PresetItemLayoutData {
+  segment: string;
+  slots: string;
+  offhand: string | null;
+  notes: string | null;
+  displayOrder: number;
+}
+
+/**
+ * プリセットに保存するサーチクラフトデータの型
+ */
+export interface PresetSearchCraftData {
+  sequence: number;
+  items: string;
+  keys: string;
+  searchStr: string | null;
+  comment: string | null;
 }
 
 /**
@@ -100,6 +122,34 @@ export function serializeRemaps(remaps: KeyRemap[]): string {
     targetKey: r.targetKey,
     software: r.software,
     notes: r.notes,
+  }));
+  return JSON.stringify(data);
+}
+
+/**
+ * アイテム配置配列からプリセット用のJSONデータを作成
+ */
+export function serializeItemLayouts(layouts: ItemLayout[]): string {
+  const data: PresetItemLayoutData[] = layouts.map((l) => ({
+    segment: l.segment,
+    slots: l.slots,
+    offhand: l.offhand,
+    notes: l.notes,
+    displayOrder: l.displayOrder,
+  }));
+  return JSON.stringify(data);
+}
+
+/**
+ * サーチクラフト配列からプリセット用のJSONデータを作成
+ */
+export function serializeSearchCrafts(crafts: SearchCraft[]): string {
+  const data: PresetSearchCraftData[] = crafts.map((c) => ({
+    sequence: c.sequence,
+    items: c.items,
+    keys: c.keys,
+    searchStr: c.searchStr,
+    comment: c.comment,
   }));
   return JSON.stringify(data);
 }
@@ -172,6 +222,8 @@ export async function createPreset(
     playerConfigData,
     remapsData,
     fingerAssignmentsData,
+    itemLayoutsData: null,
+    searchCraftsData: null,
     createdAt: now,
     updatedAt: now,
   };

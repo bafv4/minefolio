@@ -6,8 +6,10 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, playerConfigs } from "@/lib/schema";
+import { users, playerConfigs, configPresets } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,6 +29,7 @@ import {
   Keyboard,
   Mouse,
   AlertCircle,
+  Settings,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = () => {
@@ -59,7 +62,19 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
-  return { config: user.playerConfig };
+  // アクティブなプリセットを取得
+  const activePreset = await db.query.configPresets.findFirst({
+    where: eq(configPresets.userId, user.id) && eq(configPresets.isActive, true),
+  });
+
+  // プリセット数を取得
+  const presetList = await db
+    .select({ id: configPresets.id })
+    .from(configPresets)
+    .where(eq(configPresets.userId, user.id));
+  const hasPresets = presetList.length > 0;
+
+  return { config: user.playerConfig, activePreset, hasPresets };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -181,7 +196,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 }
 
 export default function DevicesPage() {
-  const { config } = useLoaderData<typeof loader>();
+  const { config, activePreset, hasPresets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
@@ -420,7 +435,35 @@ export default function DevicesPage() {
         </p>
       </div>
 
-      <div className="space-y-6">
+      {/* プリセット警告・情報 */}
+      {!hasPresets && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              プリセットがないため、設定を編集できません。先にプリセットを作成してください。
+            </span>
+            <Link to="/me/presets">
+              <Button size="sm">プリセットを作成</Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+      {activePreset && (
+        <Alert>
+          <Settings className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              現在編集中のプリセット: <strong>{activePreset.name}</strong>
+            </span>
+            <Link to="/me/presets">
+              <Button variant="outline" size="sm">プリセット管理</Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-6" style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
         {/* Keyboard */}
         <Card>
           <CardHeader>

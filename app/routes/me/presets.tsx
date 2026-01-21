@@ -4,10 +4,11 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps } from "@/lib/schema";
+import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps } from "@/lib/preset-utils";
+import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData } from "@/lib/preset-utils";
+import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,7 +45,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -95,6 +104,8 @@ export async function action({ context, request }: Route.ActionArgs) {
       keybindings: true,
       playerConfig: true,
       keyRemaps: true,
+      itemLayouts: true,
+      searchCrafts: true,
     },
   });
 
@@ -106,28 +117,326 @@ export async function action({ context, request }: Route.ActionArgs) {
   const intent = formData.get("intent") as string;
   const now = new Date();
 
-  // プリセット作成（現在の設定を保存）
+  // プリセット作成（現在の設定を保存 or 既存プリセットからコピー）
   if (intent === "create-preset") {
     const name = formData.get("name") as string;
     const description = formData.get("description") as string | null;
+    const sourceType = formData.get("sourceType") as string; // "current" or "copy"
+    const sourcePresetId = formData.get("sourcePresetId") as string | null;
 
     if (!name?.trim()) {
       return { error: "プリセット名を入力してください" };
     }
 
-    // 共通関数を使用してプリセットを作成
-    await createPreset(db, {
-      userId: user.id,
-      name: name.trim(),
-      description: description?.trim() || null,
-      isActive: false,
-      keybindings: user.keybindings,
-      playerConfig: user.playerConfig,
-      keyRemaps: user.keyRemaps,
-      source: "manual",
-    });
+    // 全ての既存プリセットを非アクティブに
+    await db
+      .update(configPresets)
+      .set({ isActive: false, updatedAt: now })
+      .where(eq(configPresets.userId, user.id));
 
-    return { success: true, message: "プリセットを作成しました" };
+    // 既存のkeybindings/keyRemaps/playerConfigs/itemLayouts/searchCraftsを削除
+    await db.delete(keybindings).where(eq(keybindings.userId, user.id));
+    await db.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
+    await db.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
+    await db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+    await db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+
+    const presetId = createId();
+
+    if (sourceType === "copy" && sourcePresetId) {
+      // 既存プリセットからコピー
+      const sourcePreset = await db.query.configPresets.findFirst({
+        where: eq(configPresets.id, sourcePresetId),
+      });
+
+      if (!sourcePreset || sourcePreset.userId !== user.id) {
+        return { error: "コピー元のプリセットが見つかりません" };
+      }
+
+      // プリセットを作成（アクティブ状態で）
+      await db.insert(configPresets).values({
+        id: presetId,
+        userId: user.id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        isActive: true,
+        keybindingsData: sourcePreset.keybindingsData,
+        playerConfigData: sourcePreset.playerConfigData,
+        remapsData: sourcePreset.remapsData,
+        fingerAssignmentsData: sourcePreset.fingerAssignmentsData,
+        itemLayoutsData: sourcePreset.itemLayoutsData,
+        searchCraftsData: sourcePreset.searchCraftsData,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // プリセットのデータを実際のテーブルに展開
+      // キーバインドを作成
+      if (sourcePreset.keybindingsData) {
+        const kbData = JSON.parse(sourcePreset.keybindingsData) as PresetKeybindingData[];
+        for (const kb of kbData) {
+          await db.insert(keybindings).values({
+            id: createId(),
+            userId: user.id,
+            action: kb.action,
+            keyCode: kb.keyCode,
+            category: kb.category as "movement" | "combat" | "inventory" | "ui",
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // プレイヤー設定を作成
+      if (sourcePreset.playerConfigData) {
+        const configData = JSON.parse(sourcePreset.playerConfigData) as PresetPlayerConfigData;
+        await db.insert(playerConfigs).values({
+          id: createId(),
+          userId: user.id,
+          keyboardLayout: configData.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
+          keyboardModel: configData.keyboardModel,
+          mouseDpi: configData.mouseDpi,
+          gameSensitivity: configData.gameSensitivity,
+          rawInput: configData.rawInput,
+          mouseAcceleration: configData.mouseAcceleration,
+          toggleSprint: configData.toggleSprint,
+          toggleSneak: configData.toggleSneak,
+          autoJump: configData.autoJump,
+          fov: configData.fov,
+          guiScale: configData.guiScale,
+          gameLanguage: configData.gameLanguage,
+          fingerAssignments: sourcePreset.fingerAssignmentsData,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      // リマップを作成
+      if (sourcePreset.remapsData) {
+        const remapData = JSON.parse(sourcePreset.remapsData) as PresetRemapData[];
+        for (const remap of remapData) {
+          await db.insert(keyRemaps).values({
+            id: createId(),
+            userId: user.id,
+            sourceKey: remap.sourceKey,
+            targetKey: remap.targetKey,
+            software: remap.software,
+            notes: remap.notes,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // アイテム配置を作成
+      if (sourcePreset.itemLayoutsData) {
+        const layoutData = JSON.parse(sourcePreset.itemLayoutsData) as PresetItemLayoutData[];
+        for (const layout of layoutData) {
+          await db.insert(itemLayouts).values({
+            id: createId(),
+            userId: user.id,
+            segment: layout.segment,
+            slots: layout.slots,
+            offhand: layout.offhand,
+            notes: layout.notes,
+            displayOrder: layout.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // サーチクラフトを作成
+      if (sourcePreset.searchCraftsData) {
+        const craftData = JSON.parse(sourcePreset.searchCraftsData) as PresetSearchCraftData[];
+        for (const craft of craftData) {
+          await db.insert(searchCrafts).values({
+            id: createId(),
+            userId: user.id,
+            sequence: craft.sequence,
+            items: craft.items,
+            keys: craft.keys,
+            searchStr: craft.searchStr,
+            comment: craft.comment,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // 履歴に記録
+      await db.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "preset_switch",
+        changeDescription: `プリセット「${sourcePreset.name}」をコピーして「${name.trim()}」を作成・適用`,
+        presetId,
+        createdAt: now,
+      });
+
+      return { success: true, message: `プリセット「${name.trim()}」を作成して適用しました` };
+    } else {
+      // 現在の設定から作成、またはデフォルト設定から作成
+      let keybindingsData: string | null = null;
+      let playerConfigData: string | null = null;
+      let remapsData: string | null = null;
+      let fingerAssignmentsData: string | null = null;
+      let itemLayoutsData: string | null = null;
+      let searchCraftsData: string | null = null;
+
+      if (user.keybindings.length > 0) {
+        // 現在の設定がある場合はそれを使用
+        keybindingsData = serializeKeybindings(user.keybindings);
+        playerConfigData = user.playerConfig ? serializePlayerConfig(user.playerConfig) : null;
+        remapsData = user.keyRemaps.length > 0 ? serializeRemaps(user.keyRemaps) : null;
+        fingerAssignmentsData = user.playerConfig?.fingerAssignments ?? null;
+        itemLayoutsData = user.itemLayouts.length > 0 ? serializeItemLayouts(user.itemLayouts) : null;
+        searchCraftsData = user.searchCrafts.length > 0 ? serializeSearchCrafts(user.searchCrafts) : null;
+
+        // 既存設定をコピー（削除後に再作成）
+        for (const kb of user.keybindings) {
+          await db.insert(keybindings).values({
+            id: createId(),
+            userId: user.id,
+            action: kb.action,
+            keyCode: kb.keyCode,
+            category: kb.category,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        if (user.playerConfig) {
+          await db.insert(playerConfigs).values({
+            id: createId(),
+            userId: user.id,
+            keyboardLayout: user.playerConfig.keyboardLayout,
+            keyboardModel: user.playerConfig.keyboardModel,
+            mouseDpi: user.playerConfig.mouseDpi,
+            gameSensitivity: user.playerConfig.gameSensitivity,
+            rawInput: user.playerConfig.rawInput,
+            mouseAcceleration: user.playerConfig.mouseAcceleration,
+            toggleSprint: user.playerConfig.toggleSprint,
+            toggleSneak: user.playerConfig.toggleSneak,
+            autoJump: user.playerConfig.autoJump,
+            fov: user.playerConfig.fov,
+            guiScale: user.playerConfig.guiScale,
+            gameLanguage: user.playerConfig.gameLanguage,
+            fingerAssignments: user.playerConfig.fingerAssignments,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        for (const remap of user.keyRemaps) {
+          await db.insert(keyRemaps).values({
+            id: createId(),
+            userId: user.id,
+            sourceKey: remap.sourceKey,
+            targetKey: remap.targetKey,
+            software: remap.software,
+            notes: remap.notes,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        for (const layout of user.itemLayouts) {
+          await db.insert(itemLayouts).values({
+            id: createId(),
+            userId: user.id,
+            segment: layout.segment,
+            slots: layout.slots,
+            offhand: layout.offhand,
+            notes: layout.notes,
+            displayOrder: layout.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        for (const craft of user.searchCrafts) {
+          await db.insert(searchCrafts).values({
+            id: createId(),
+            userId: user.id,
+            sequence: craft.sequence,
+            items: craft.items,
+            keys: craft.keys,
+            searchStr: craft.searchStr,
+            comment: craft.comment,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } else {
+        // デフォルト設定を使用
+        const defaultKbs = DEFAULT_KEYBINDINGS.map((kb) => ({
+          action: kb.action,
+          keyCode: kb.keyCode,
+          category: kb.category,
+        }));
+        keybindingsData = JSON.stringify(defaultKbs);
+
+        // デフォルトキーバインドを作成
+        for (const kb of DEFAULT_KEYBINDINGS) {
+          await db.insert(keybindings).values({
+            id: createId(),
+            userId: user.id,
+            action: kb.action,
+            keyCode: kb.keyCode,
+            category: kb.category,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        // デフォルトプレイヤー設定を作成
+        await db.insert(playerConfigs).values({
+          id: createId(),
+          userId: user.id,
+          keyboardLayout: "US",
+          mouseAcceleration: false,
+          rawInput: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        playerConfigData = JSON.stringify({
+          keyboardLayout: "US",
+          mouseAcceleration: false,
+          rawInput: true,
+        });
+      }
+
+      // プリセットを作成（アクティブ状態で）
+      await db.insert(configPresets).values({
+        id: presetId,
+        userId: user.id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        isActive: true,
+        keybindingsData,
+        playerConfigData,
+        remapsData,
+        fingerAssignmentsData,
+        itemLayoutsData,
+        searchCraftsData,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // 履歴に記録
+      await db.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "preset_switch",
+        changeDescription: `プリセット「${name.trim()}」を作成・適用`,
+        presetId,
+        createdAt: now,
+      });
+
+      return { success: true, message: `プリセット「${name.trim()}」を作成して適用しました` };
+    }
   }
 
   // プリセット削除
@@ -230,6 +539,64 @@ export async function action({ context, request }: Route.ActionArgs) {
       }
     }
 
+    // アイテム配置を復元
+    if (preset.itemLayoutsData) {
+      // 既存のアイテム配置を削除
+      await db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+
+      // プリセットのアイテム配置を追加
+      const layoutsFromPreset = JSON.parse(preset.itemLayoutsData) as Array<{
+        segment: string;
+        slots: string;
+        offhand: string | null;
+        notes: string | null;
+        displayOrder: number;
+      }>;
+
+      for (const layoutData of layoutsFromPreset) {
+        await db.insert(itemLayouts).values({
+          id: createId(),
+          userId: user.id,
+          segment: layoutData.segment,
+          slots: layoutData.slots,
+          offhand: layoutData.offhand,
+          notes: layoutData.notes,
+          displayOrder: layoutData.displayOrder,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // サーチクラフトを復元
+    if (preset.searchCraftsData) {
+      // 既存のサーチクラフトを削除
+      await db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+
+      // プリセットのサーチクラフトを追加
+      const craftsFromPreset = JSON.parse(preset.searchCraftsData) as Array<{
+        sequence: number;
+        items: string;
+        keys: string;
+        searchStr: string | null;
+        comment: string | null;
+      }>;
+
+      for (const craftData of craftsFromPreset) {
+        await db.insert(searchCrafts).values({
+          id: createId(),
+          userId: user.id,
+          sequence: craftData.sequence,
+          items: craftData.items,
+          keys: craftData.keys,
+          searchStr: craftData.searchStr,
+          comment: craftData.comment,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
     // 全てのプリセットを非アクティブに
     await db
       .update(configPresets)
@@ -267,6 +634,8 @@ export default function PresetsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [newPresetDescription, setNewPresetDescription] = useState("");
+  const [sourceType, setSourceType] = useState<"current" | "copy">("current");
+  const [sourcePresetId, setSourcePresetId] = useState<string>("");
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -281,6 +650,8 @@ export default function PresetsPage() {
       setIsCreateDialogOpen(false);
       setNewPresetName("");
       setNewPresetDescription("");
+      setSourceType("current");
+      setSourcePresetId("");
     } else if ("error" in data) {
       toast.error(data.error);
     }
@@ -292,10 +663,19 @@ export default function PresetsPage() {
       return;
     }
 
+    if (sourceType === "copy" && !sourcePresetId) {
+      toast.error("コピー元のプリセットを選択してください");
+      return;
+    }
+
     const formData = new FormData();
     formData.set("intent", "create-preset");
     formData.set("name", newPresetName);
     formData.set("description", newPresetDescription);
+    formData.set("sourceType", sourceType);
+    if (sourceType === "copy" && sourcePresetId) {
+      formData.set("sourcePresetId", sourcePresetId);
+    }
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -323,21 +703,79 @@ export default function PresetsPage() {
             <CardTitle className="text-base">プリセット一覧</CardTitle>
             <CardDescription>保存した設定プリセット</CardDescription>
           </div>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              setNewPresetName("");
+              setNewPresetDescription("");
+              setSourceType("current");
+              setSourcePresetId("");
+            }
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                現在の設定を保存
+                新規プリセット
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>プリセットを作成</DialogTitle>
                 <DialogDescription>
-                  現在のキー配置・デバイス設定を新しいプリセットとして保存します
+                  新しいプリセットを作成します
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {/* ソース選択 */}
+                <div className="space-y-3">
+                  <Label>作成方法</Label>
+                  <RadioGroup
+                    value={sourceType}
+                    onValueChange={(value) => setSourceType(value as "current" | "copy")}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="current" id="source-current" />
+                      <Label htmlFor="source-current" className="cursor-pointer font-normal">
+                        現在の設定から作成
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="copy" id="source-copy" disabled={presets.length === 0} />
+                      <Label htmlFor="source-copy" className={`cursor-pointer font-normal ${presets.length === 0 ? "text-muted-foreground" : ""}`}>
+                        既存のプリセットをコピー
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {/* コピー元プリセット選択 */}
+                {sourceType === "copy" && presets.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="source-preset">コピー元プリセット</Label>
+                    <Select value={sourcePresetId} onValueChange={setSourcePresetId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="プリセットを選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {presets.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            <div className="flex items-center gap-2">
+                              <Copy className="h-3 w-3" />
+                              {preset.name}
+                              {preset.isActive && (
+                                <Badge variant="outline" className="text-xs ml-1">
+                                  適用中
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="preset-name">プリセット名</Label>
                   <Input
@@ -361,14 +799,16 @@ export default function PresetsPage() {
               <DialogFooter>
                 <Button
                   onClick={handleCreatePreset}
-                  disabled={isSubmitting || !newPresetName.trim()}
+                  disabled={isSubmitting || !newPresetName.trim() || (sourceType === "copy" && !sourcePresetId)}
                 >
                   {isSubmitting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : sourceType === "copy" ? (
+                    <Copy className="h-4 w-4 mr-2" />
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  保存
+                  {sourceType === "copy" ? "コピーして作成" : "保存"}
                 </Button>
               </DialogFooter>
             </DialogContent>

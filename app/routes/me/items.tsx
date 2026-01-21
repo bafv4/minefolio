@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/items";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, itemLayouts } from "@/lib/schema";
+import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -51,6 +52,7 @@ import {
   Edit,
   Layers,
   AlertCircle,
+  Settings,
 } from "lucide-react";
 import {
   MinecraftItemIcon,
@@ -133,7 +135,19 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     notes: layout.notes,
   }));
 
-  return { userId: user.id, layouts };
+  // アクティブなプリセットを取得
+  const activePreset = await db.query.configPresets.findFirst({
+    where: eq(configPresets.userId, user.id) && eq(configPresets.isActive, true),
+  });
+
+  // プリセット数を取得
+  const presetList = await db
+    .select({ id: configPresets.id })
+    .from(configPresets)
+    .where(eq(configPresets.userId, user.id));
+  const hasPresets = presetList.length > 0;
+
+  return { userId: user.id, layouts, activePreset, hasPresets };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -588,7 +602,7 @@ function EditableLayoutCard({
 }
 
 export default function ItemLayoutsPage() {
-  const { layouts: initialLayouts } = useLoaderData<typeof loader>();
+  const { layouts: initialLayouts, activePreset, hasPresets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -679,12 +693,41 @@ export default function ItemLayoutsPage() {
             ゲームの各場面に応じたホットバーやインベントリの配置を設定します。
           </p>
         </div>
-        <Button onClick={handleAddLayout}>
+        <Button onClick={handleAddLayout} disabled={!hasPresets}>
           <Plus className="mr-2 h-4 w-4" />
           追加
         </Button>
       </div>
 
+      {/* プリセット警告・情報 */}
+      {!hasPresets && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              プリセットがないため、設定を編集できません。先にプリセットを作成してください。
+            </span>
+            <Link to="/me/presets">
+              <Button size="sm">プリセットを作成</Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+      {activePreset && (
+        <Alert>
+          <Settings className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              現在編集中のプリセット: <strong>{activePreset.name}</strong>
+            </span>
+            <Link to="/me/presets">
+              <Button variant="outline" size="sm">プリセット管理</Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {layouts.length > 0 ? (
         <div className="space-y-4">
           {layouts.map((layout, index) => (
@@ -712,6 +755,7 @@ export default function ItemLayoutsPage() {
           </CardContent>
         </Card>
       )}
+      </div>
 
       <FloatingSaveBar
         hasChanges={hasChanges}

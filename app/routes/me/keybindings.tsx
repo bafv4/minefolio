@@ -5,7 +5,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory } from "@/lib/schema";
+import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
@@ -32,8 +32,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings } from "lucide-react";
+import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
@@ -77,6 +79,21 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
+  // アクティブなプリセットを取得
+  const activePreset = await db.query.configPresets.findFirst({
+    where: (presets, { and, eq: eqOp }) => and(
+      eqOp(presets.userId, user.id),
+      eqOp(presets.isActive, true)
+    ),
+  });
+
+  // プリセット数を取得
+  const presetCount = await db
+    .select({ id: configPresets.id })
+    .from(configPresets)
+    .where(eq(configPresets.userId, user.id))
+    .then((rows) => rows.length);
+
   return {
     userId: user.id,
     mcid: user.mcid,
@@ -85,6 +102,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     keyRemaps: user.keyRemaps,
     customKeys: user.customKeys,
     legacyApiUrl: env.LEGACY_API_URL,
+    activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
+    hasPresets: presetCount > 0,
   };
 }
 
@@ -478,7 +497,7 @@ type CustomKeyEntry = {
 };
 
 export default function KeybindingsPage() {
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
@@ -972,6 +991,40 @@ export default function KeybindingsPage() {
           </div>
         )}
       </div>
+
+      {/* 現在のプリセット表示 */}
+      {activePreset && (
+        <Alert>
+          <Settings className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              現在編集中のプリセット: <strong>{activePreset.name}</strong>
+            </span>
+            <Link to="/me/presets">
+              <Button variant="outline" size="sm">
+                プリセット管理
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* プリセットがない場合の警告 */}
+      {!hasPresets && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              プリセットがないため、キー配置を編集できません。まずプリセットを作成してください。
+            </span>
+            <Link to="/me/presets">
+              <Button size="sm">
+                プリセットを作成
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* 仮想キーボード */}
       <Card>

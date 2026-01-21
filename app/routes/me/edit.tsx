@@ -277,15 +277,25 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: "IDは100文字以下にしてください" };
     }
 
-    // IDの形式をバリデーション（より厳格なチェック）
-    // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
-    if (!/^[\w\-]+$/.test(identifier)) {
-      return { error: "IDには英数字、ハイフン、アンダースコアのみ使用できます" };
-    }
+    // IDの形式をバリデーション
+    // YouTubeは日本語ハンドルを許可（Unicode文字を含む）
+    // その他のプラットフォームは英数字、ハイフン、アンダースコアのみ
+    if (platform === "youtube") {
+      // YouTubeハンドルは日本語などUnicode文字を許可
+      // 空白、@、URL特殊文字は禁止
+      if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
+        return { error: "IDに使用できない文字が含まれています" };
+      }
+    } else {
+      // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
+      if (!/^[\w\-]+$/.test(identifier)) {
+        return { error: "IDには英数字、ハイフン、アンダースコアのみ使用できます" };
+      }
 
-    // 先頭と末尾のハイフン/アンダースコアを禁止
-    if (/^[-_]|[-_]$/.test(identifier)) {
-      return { error: "IDの先頭と末尾にハイフンやアンダースコアは使用できません" };
+      // 先頭と末尾のハイフン/アンダースコアを禁止
+      if (/^[-_]|[-_]$/.test(identifier)) {
+        return { error: "IDの先頭と末尾にハイフンやアンダースコアは使用できません" };
+      }
     }
 
     try {
