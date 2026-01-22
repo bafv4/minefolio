@@ -61,7 +61,7 @@ export default function FavoritesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Heart className="h-6 w-6 text-red-500 fill-current" />
@@ -71,7 +71,7 @@ export default function FavoritesPage() {
             お気に入りに登録したプレイヤー ({favoriteMcids.length}人)
           </p>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
           <Link to="/">
             <ArrowLeft className="h-4 w-4 mr-2" />
             ホームに戻る

@@ -171,12 +171,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-36 mb-2" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <Skeleton className="h-10 w-20" />
+        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
       {/* 説明カード */}
       <div className="rounded-lg border border-dashed bg-secondary/30 p-4">
@@ -711,14 +711,14 @@ export default function SearchCraftPage() {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">サーチクラフト</h1>
           <p className="text-muted-foreground">
             スピードラン用のクラフト検索を設定します。
           </p>
         </div>
-        <Button onClick={handleAddCraft} disabled={!hasPresets}>
+        <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
           <Plus className="mr-2 h-4 w-4" />
           追加
         </Button>

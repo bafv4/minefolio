@@ -53,4 +53,7 @@ export default [
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
+
+  // OGP image generation (outside of layout)
+  route("og-image", "routes/og-image.tsx"),
 ] satisfies RouteConfig;

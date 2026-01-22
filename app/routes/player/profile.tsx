@@ -52,8 +52,9 @@ export function meta({ data, params }: Route.MetaArgs) {
     { property: "og:title", content: `${displayName} - Minefolio` },
     { property: "og:description", content: description },
     { property: "og:image", content: ogImageUrl },
-    { property: "og:image:width", content: "512" },
-    { property: "og:image:height", content: "512" },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { property: "og:url", content: `${data.appUrl}/player/${player.slug}` },
 
     // Twitter Card

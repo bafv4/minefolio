@@ -1491,8 +1491,8 @@ export default function KeybindingsPage() {
                   カスタムキーが定義されていません
                 </p>
               )}
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={addCustomKey}>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button type="button" variant="outline" onClick={addCustomKey} className="w-full sm:w-auto">
                   <Plus className="mr-1 h-4 w-4" />
                   カスタムキーを追加
                 </Button>
@@ -1501,6 +1501,7 @@ export default function KeybindingsPage() {
                     type="button"
                     onClick={saveCustomKeys}
                     disabled={customKeyFetcher.state !== "idle"}
+                    className="w-full sm:w-auto"
                   >
                     {customKeyFetcher.state !== "idle" ? (
                       <Loader2 className="mr-1 h-4 w-4 animate-spin" />

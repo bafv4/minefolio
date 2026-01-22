@@ -41,6 +41,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
     { property: "og:type", content: "website" },
     { property: "og:title", content: title },
     { property: "og:image", content: ogImageUrl },
+    { property: "og:image:type", content: "image/png" },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { property: "og:url", content: appUrl },
@@ -415,16 +416,16 @@ export default function HomePage() {
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Minecraft Speedrunning + Portfolio
         </p>
-        <div className="flex justify-center gap-4 pt-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4 px-4 sm:px-0">
           {!isRegistered && (
-            <Button asChild size="lg">
+            <Button asChild size="lg" className="w-full sm:w-auto">
               <Link to="/login">
                 プロフィールを作る
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           )}
-          <Button asChild size="lg" variant="outline">
+          <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
             <Link to="/browse">
               <Compass className="mr-2 h-4 w-4" />
               ランナーを探す

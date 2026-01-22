@@ -713,7 +713,7 @@ export default function PresetsPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto h-11 sm:h-10">
                 <Plus className="h-4 w-4 mr-2" />
                 新規プリセット
               </Button>

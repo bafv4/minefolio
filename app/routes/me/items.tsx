@@ -169,12 +169,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-32 mb-2" />
           <Skeleton className="h-4 w-80" />
         </div>
-        <Skeleton className="h-10 w-20" />
+        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -731,14 +731,14 @@ export default function ItemLayoutsPage() {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">アイテム配置</h1>
           <p className="text-muted-foreground">
             ゲームの各場面に応じたホットバーやインベントリの配置を設定します。
           </p>
         </div>
-        <Button onClick={handleAddLayout} disabled={!hasPresets}>
+        <Button onClick={handleAddLayout} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
           <Plus className="mr-2 h-4 w-4" />
           追加
         </Button>
