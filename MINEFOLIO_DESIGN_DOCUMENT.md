@@ -1,7 +1,7 @@
 # Minefolio - 総合設計書（最終版）
 
-**バージョン**: 1.1
-**最終更新**: 2026年1月17日
+**バージョン**: 1.2
+**最終更新**: 2026年1月22日
 **プロジェクト名**: Minefolio
 **説明**: Minecraft Java Edition スピードランナーのための総合ポートフォリオサイト
 
@@ -39,9 +39,10 @@
 #### コア機能
 - Discord OAuth認証（パスワード不要）
 - 既存データインポート（MCSRer Hotkeysから）
-- キーバインド管理（27個の標準キー + カスタマイズ）
+- キーバインド管理（26個の標準キー + カスタマイズ）
 - VirtualKeyboard表示（JIS/US/JIS-TKL/US-TKL対応）
 - デバイス設定（マウス・キーボード）
+- 設定プリセット管理
 
 #### ポートフォリオ機能
 - プレイヤープロフィール（Bio、Location、Pronouns）
@@ -96,11 +97,10 @@
 ```json
 {
   "runtime": "Cloudflare Workers",
-  "database": "SQLite (Cloudflare D1)",
+  "database": "SQLite (Cloudflare D1 / Turso)",
   "orm": "Drizzle ORM",
   "auth": "Better Auth",
-  "validation": "Zod",
-  "http": "@neondatabase/serverless (HTTP)"
+  "validation": "Zod"
 }
 ```
 
@@ -122,7 +122,7 @@
 {
   "hosting": "Cloudflare Pages",
   "functions": "Cloudflare Workers",
-  "database": "Neon PostgreSQL (Serverless)",
+  "database": "SQLite (Cloudflare D1 / Turso)",
   "cdn": "Cloudflare CDN",
   "cron": "Cloudflare Cron Triggers",
   "storage": "Cloudflare R2 (画像等)"
@@ -151,7 +151,6 @@
 - pnpm 8.x 以上
 - Discord アカウント
 - Cloudflare アカウント
-- Neon PostgreSQL アカウント
 
 ### 3.2 Discord OAuth セットアップ
 
@@ -224,12 +223,13 @@ pnpm add date-fns
 
 #### Step 3: 環境変数設定
 
-`.env` ファイルを作成:
+`.env.example` をコピーして `.dev.vars` ファイルを作成:
+
+```bash
+cp .env.example .dev.vars
+```
 
 ```env
-# Database
-DATABASE_URL=postgresql://user:password@host/database?sslmode=require
-
 # Discord OAuth
 DISCORD_CLIENT_ID=your_discord_client_id
 DISCORD_CLIENT_SECRET=your_discord_client_secret
@@ -239,6 +239,13 @@ APP_URL=http://localhost:5173
 
 # Auth
 BETTER_AUTH_SECRET=your_random_secret_key_here
+
+# Twitch API（ストリーム連携用）
+TWITCH_CLIENT_ID=your_twitch_client_id
+TWITCH_CLIENT_SECRET=your_twitch_client_secret
+
+# YouTube API（動画連携用）
+YOUTUBE_API_KEY=your_youtube_api_key
 
 # Legacy App (for import)
 LEGACY_API_URL=https://mchotkeys.vercel.app
@@ -250,14 +257,21 @@ LEGACY_API_URL=https://mchotkeys.vercel.app
 openssl rand -base64 32
 ```
 
-#### Step 4: Neon PostgreSQL セットアップ
+**注意**: `.dev.vars` は `.gitignore` に含まれているため、Gitにコミットされません。
 
-1. [Neon Console](https://console.neon.tech/) にアクセス
-2. 「New Project」をクリック
-3. プロジェクト名とリージョン（Tokyo推奨）を選択
-4. 「Create Project」
-5. 接続文字列（Connection String）をコピー
-6. `.env` の `DATABASE_URL` に貼り付け
+#### Step 4: Cloudflare D1 データベースセットアップ
+
+ローカル開発用のD1データベースを作成:
+
+```bash
+pnpm wrangler d1 create minefolio_db --local
+```
+
+マイグレーション実行:
+
+```bash
+pnpm db:local
+```
 
 #### Step 5: Better Auth 設定
 
@@ -266,30 +280,30 @@ openssl rand -base64 32
 ```typescript
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "./db";
+import type { DbClient } from "./db";
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, {
-    provider: "pg",
-  }),
-  socialProviders: {
-    discord: {
-      clientId: process.env.DISCORD_CLIENT_ID!,
-      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
-      redirectURI: `${process.env.APP_URL}/api/auth/callback/discord`,
-      scope: "identify email",
+export function createAuth(db: DbClient, env: Env) {
+  return betterAuth({
+    database: drizzleAdapter(db, {
+      provider: "sqlite",
+    }),
+    socialProviders: {
+      discord: {
+        clientId: env.DISCORD_CLIENT_ID,
+        clientSecret: env.DISCORD_CLIENT_SECRET,
+        redirectURI: `${env.APP_URL}/api/auth/callback/discord`,
+        scope: "identify email",
+      },
     },
-  },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7日間
-    updateAge: 60 * 60 * 24, // 1日ごとに更新
-  },
-  advanced: {
-    cookiePrefix: "minefolio",
-  },
-});
-
-export type Session = typeof auth.$Infer.Session;
+    session: {
+      expiresIn: 60 * 60 * 24 * 7, // 7日間
+      updateAge: 60 * 60 * 24, // 1日ごとに更新
+    },
+    advanced: {
+      cookiePrefix: "minefolio",
+    },
+  });
+}
 ```
 
 #### Step 6: Drizzle ORM 設定
@@ -300,11 +314,12 @@ export type Session = typeof auth.$Infer.Session;
 import type { Config } from "drizzle-kit";
 
 export default {
-  schema: "./lib/schema.ts",
+  schema: "./app/lib/schema.ts",
   out: "./drizzle",
-  dialect: "postgresql",
+  dialect: "turso",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
   },
 } satisfies Config;
 ```
@@ -312,20 +327,29 @@ export default {
 `lib/db.ts` を作成:
 
 ```typescript
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 
-const sql = neon(process.env.DATABASE_URL!);
-export const db = drizzle(sql, { schema });
+export function createDb() {
+  const client = createClient({
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
+  return drizzle(client, { schema });
+}
+
+export type DbClient = ReturnType<typeof createDb>;
 ```
 
 #### Step 7: 開発サーバー起動
 
 ```bash
-# データベースマイグレーション
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+# データベースマイグレーション生成
+pnpm db:generate
+
+# ローカルDBにマイグレーション適用
+pnpm db:local
 
 # 開発サーバー起動
 pnpm dev
@@ -370,10 +394,13 @@ id = "your_kv_namespace_id"
    - **Build command**: `pnpm build`
    - **Build output directory**: `build/client`
 5. 環境変数を設定:
-   - `DATABASE_URL`
    - `DISCORD_CLIENT_ID`
    - `DISCORD_CLIENT_SECRET`
    - `BETTER_AUTH_SECRET`
+   - `TWITCH_CLIENT_ID`
+   - `TWITCH_CLIENT_SECRET`
+   - `YOUTUBE_API_KEY`
+   - `APP_URL`（本番URL）
 
 #### Step 3: デプロイ
 
@@ -447,8 +474,14 @@ git push origin main
 {
   id: string (cuid, PK)
   discordId: string (unique, indexed, NOT NULL)
-  mcid: string (unique, indexed, NOT NULL)
-  uuid: string (unique, NOT NULL) // Mojang UUID
+
+  // MCID/UUID（任意）- MCIDがない場合でも登録可能
+  mcid: string? (unique, indexed)
+  uuid: string? (unique) // Mojang UUID
+
+  // URL用スラッグ（必須）- MCIDがある場合はMCID、ない場合は@{内部ID}形式
+  slug: string (unique, indexed, NOT NULL)
+
   displayName: string? // 表示名（カスタマイズ可能）
   discordAvatar: string? // Discord avatar URL
   bio: text? // 自己紹介（Markdown対応）
@@ -456,15 +489,23 @@ git push origin main
 
   // プロフィール設定
   profileVisibility: string (default: "public") // "public" | "unlisted" | "private"
+  profilePose: string (default: "waving") // "standing" | "walking" | "waving"
   location: string? // "Japan", "USA", etc.
   pronouns: string? // "he/him", "she/her", "they/them", etc.
-  defaultProfileTab: string (default: "keybindings") // "keybindings" | "records" | "devices" | "settings"
+  defaultProfileTab: string (default: "keybindings") // "profile" | "stats" | "keybindings" | "items" | "searchcraft" | "devices" | "settings"
   featuredVideoUrl: string? // おすすめ動画（YouTube URL）
+
+  // プレイヤー情報
+  mainEdition: string? // "java" | "bedrock"
+  mainPlatform: string? // "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other"
+  role: string? // "viewer" | "runner"
+  shortBio: string? // 短い自己紹介
 
   // Speedrun.com連携
   speedruncomUsername: string? // Speedrun.comユーザー名
   speedruncomId: string? // Speedrun.com User ID（API用）
   speedruncomLastSync: timestamp? // 最終同期日時
+  hiddenSpeedrunRecords: text? // JSON配列: 非表示にする記録のrun ID
 
   // 統計
   profileViews: integer (default: 0)
@@ -478,6 +519,7 @@ git push origin main
 CREATE INDEX idx_users_discord_id ON users(discord_id);
 CREATE INDEX idx_users_mcid ON users(mcid);
 CREATE INDEX idx_users_uuid ON users(uuid);
+CREATE INDEX idx_users_slug ON users(slug);
 CREATE INDEX idx_users_speedruncom_id ON users(speedruncom_id);
 ```
 
@@ -496,6 +538,7 @@ CREATE INDEX idx_users_speedruncom_id ON users(speedruncom_id);
   mouseDpi: integer?
   gameSensitivity: real? // 0.0 - 1.0
   windowsSpeed: integer? // 1 - 20
+  windowsSpeedMultiplier: real? // 独自係数（小数）、設定時はwindowsSpeedより優先
   mouseAcceleration: boolean (default: false)
   rawInput: boolean (default: true)
   cm360: real? // 自動計算値
@@ -549,7 +592,7 @@ CREATE INDEX idx_keybindings_user_id ON keybindings(user_id);
 CREATE INDEX idx_keybindings_category ON keybindings(category);
 ```
 
-**27個の標準キーバインド**:
+**26個の標準キーバインド**:
 
 | カテゴリ       | アクション        | デフォルト   |
 | -------------- | ----------------- | ------------ |
@@ -567,11 +610,10 @@ CREATE INDEX idx_keybindings_category ON keybindings(category);
 | Inventory (11) | inventory         | E            |
 |                | swapHands         | F            |
 |                | hotbar1-9         | 1-9          |
-| UI (5)         | togglePerspective | F5           |
+| UI (4)         | togglePerspective | F5           |
 |                | fullscreen        | F11          |
 |                | chat              | T            |
 |                | command           | /            |
-|                | toggleHud         | F1           |
 
 #### 4.2.4 custom_keys（カスタムキー定義）
 
@@ -690,16 +732,17 @@ CREATE INDEX idx_keybindings_category ON keybindings(category);
 {
   id: string (cuid, PK)
   userId: string (FK: users.id, NOT NULL)
-  platform: string (NOT NULL) // "speedruncom" | "youtube" | "twitch" | "twitter" | "discord" | "custom"
-  url: string (NOT NULL)
-  username: string? // 表示名
+  platform: string (NOT NULL) // "speedruncom" | "youtube" | "twitch" | "twitter"
+  identifier: string (NOT NULL) // ユーザー名やチャンネルID
   displayOrder: integer (default: 0)
-  
+
   createdAt: timestamp
   updatedAt: timestamp
-  
-  UNIQUE(userId, platform)
 }
+
+// インデックス
+CREATE INDEX idx_social_links_user_id ON social_links(user_id);
+CREATE INDEX idx_social_links_platform ON social_links(platform);
 ```
 
 **対応プラットフォーム**:
@@ -707,8 +750,8 @@ CREATE INDEX idx_keybindings_category ON keybindings(category);
 - `youtube` - YouTube
 - `twitch` - Twitch
 - `twitter` - Twitter/X
-- `discord` - Discord
-- `custom` - その他（カスタムURL）
+
+※ Discord連携は `users.discordId` で管理されるためplatformから削除
 
 #### 4.2.10 category_records（記録・目標統合）
 
@@ -743,12 +786,11 @@ CREATE INDEX idx_keybindings_category ON keybindings(category);
   
   // 表示設定
   isVisible: boolean (default: true) // プロフィールに表示するか
-  isFeatured: boolean (default: false) // メインカテゴリーとして表示
   displayOrder: integer (default: 0) // 表示順
-  
+
   createdAt: timestamp
   updatedAt: timestamp
-  
+
   UNIQUE(userId, category, recordType)
 }
 
@@ -756,7 +798,6 @@ CREATE INDEX idx_keybindings_category ON keybindings(category);
 CREATE INDEX idx_category_records_user_id ON category_records(user_id);
 CREATE INDEX idx_category_records_category ON category_records(category);
 CREATE INDEX idx_category_records_type ON category_records(record_type);
-CREATE INDEX idx_category_records_featured ON category_records(is_featured);
 ```
 
 **recordType の説明**:
@@ -829,6 +870,151 @@ CREATE INDEX idx_external_stats_service ON external_stats(service);
   winRate: number,
   season: string
 }
+```
+
+#### 4.2.13 config_presets（設定プリセット）
+
+```typescript
+{
+  id: string (cuid, PK)
+  userId: string (FK: users.id, NOT NULL)
+  name: string (NOT NULL)
+  description: string?
+  isActive: boolean (default: false)
+
+  // 設定データ（JSON）
+  keybindingsData: text? // JSON: キーバインドのスナップショット
+  playerConfigData: text? // JSON: プレイヤー設定のスナップショット
+  remapsData: text? // JSON: リマップのスナップショット
+  fingerAssignmentsData: text? // JSON: 指割り当て
+  itemLayoutsData: text? // JSON: アイテム配置のスナップショット
+  searchCraftsData: text? // JSON: サーチクラフトのスナップショット
+
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+
+// インデックス
+CREATE INDEX idx_config_presets_user_id ON config_presets(user_id);
+CREATE INDEX idx_config_presets_is_active ON config_presets(is_active);
+```
+
+#### 4.2.14 config_history（設定変更履歴）
+
+```typescript
+{
+  id: string (cuid, PK)
+  userId: string (FK: users.id, NOT NULL)
+  changeType: string (NOT NULL) // "keybinding" | "device" | "game_setting" | "remap" | "preset_switch"
+  changeDescription: string (NOT NULL)
+
+  // 変更前後のデータ（JSON）
+  previousData: text? // JSON
+  newData: text? // JSON
+
+  // 関連プリセット（あれば）
+  presetId: string? (FK: config_presets.id)
+
+  createdAt: timestamp
+}
+
+// インデックス
+CREATE INDEX idx_config_history_user_id ON config_history(user_id);
+CREATE INDEX idx_config_history_created_at ON config_history(created_at);
+CREATE INDEX idx_config_history_change_type ON config_history(change_type);
+```
+
+#### 4.2.15 favorites（お気に入りプレイヤー）
+
+```typescript
+{
+  id: string (cuid, PK)
+  userId: string (FK: users.id, NOT NULL)
+  favoriteMcid: string (NOT NULL)
+  createdAt: timestamp
+
+  UNIQUE(userId, favoriteMcid)
+}
+
+// インデックス
+CREATE INDEX idx_favorites_user_id ON favorites(user_id);
+```
+
+#### 4.2.16 api_cache（APIキャッシュ）
+
+```typescript
+{
+  id: string (cuid, PK)
+  cacheKey: string (unique, NOT NULL)
+  cacheType: string (NOT NULL) // "youtube_videos" | "recent_paces" | "twitch_streams" | "live_runs"
+  data: text (NOT NULL) // JSON
+  expiresAt: timestamp (NOT NULL)
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+
+// インデックス
+CREATE INDEX idx_api_cache_key ON api_cache(cache_key);
+CREATE INDEX idx_api_cache_type ON api_cache(cache_type);
+CREATE INDEX idx_api_cache_expires ON api_cache(expires_at);
+```
+
+#### 4.2.17 youtube_video_cache（YouTube動画キャッシュ）
+
+```typescript
+{
+  id: string (cuid, PK)
+  videoId: string (unique, NOT NULL)
+  channelId: string (NOT NULL)
+  minefolioMcid: string? // Minefolioユーザーとの紐付け
+  title: string (NOT NULL)
+  description: text?
+  thumbnailUrl: string?
+  channelTitle: string?
+  publishedAt: timestamp (NOT NULL)
+  // キャッシュ管理
+  lastVerifiedAt: timestamp (NOT NULL)
+  isAvailable: boolean (default: true)
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+
+// インデックス
+CREATE INDEX idx_youtube_cache_video_id ON youtube_video_cache(video_id);
+CREATE INDEX idx_youtube_cache_channel_id ON youtube_video_cache(channel_id);
+CREATE INDEX idx_youtube_cache_mcid ON youtube_video_cache(minefolio_mcid);
+CREATE INDEX idx_youtube_cache_published ON youtube_video_cache(published_at);
+CREATE INDEX idx_youtube_cache_available ON youtube_video_cache(is_available);
+```
+
+#### 4.2.18 youtube_live_cache（YouTubeライブ配信キャッシュ）
+
+```typescript
+{
+  id: string (cuid, PK)
+  videoId: string (unique, NOT NULL)
+  channelId: string (NOT NULL)
+  minefolioMcid: string? // Minefolioユーザーとの紐付け
+  title: string (NOT NULL)
+  description: text?
+  thumbnailUrl: string?
+  channelTitle: string?
+  // ライブ配信情報
+  liveBroadcastContent: string (NOT NULL) // "live" | "upcoming" | "none"
+  scheduledStartTime: timestamp? // 配信予定開始時刻
+  actualStartTime: timestamp? // 実際の開始時刻
+  concurrentViewers: integer? // 同時視聴者数
+  // キャッシュ管理
+  lastCheckedAt: timestamp (NOT NULL)
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+
+// インデックス
+CREATE INDEX idx_youtube_live_video_id ON youtube_live_cache(video_id);
+CREATE INDEX idx_youtube_live_channel_id ON youtube_live_cache(channel_id);
+CREATE INDEX idx_youtube_live_mcid ON youtube_live_cache(minefolio_mcid);
+CREATE INDEX idx_youtube_live_status ON youtube_live_cache(live_broadcast_content);
 ```
 
 ---
@@ -984,7 +1170,6 @@ export async function createDefaultKeybindings(userId: string) {
     { action: "fullscreen", keyCode: "F11", category: "ui" },
     { action: "chat", keyCode: "KeyT", category: "ui" },
     { action: "command", keyCode: "Slash", category: "ui" },
-    { action: "toggleHud", keyCode: "F1", category: "ui" },
   ];
   
   await db.insert(keybindings).values(
@@ -1257,61 +1442,75 @@ export async function loader({ params }: LoaderFunctionArgs) {
 
 ```typescript
 // routes.ts
-export const routes = [
-  {
-    path: "/",
-    element: <RootLayout />,
-    children: [
-      // ホーム（プレイヤー一覧）
-      { index: true, element: <Home /> },
+export default [
+  // Public layout with header/footer
+  layout("routes/_layout.tsx", [
+    // ホーム
+    index("routes/home.tsx"),
 
-      // 認証
-      { path: "login", element: <Login /> },
-      { path: "onboarding", element: <Onboarding /> },
-      { path: "import", element: <Import /> },
+    // 認証
+    route("login", "routes/login.tsx"),
+    route("onboarding", "routes/onboarding.tsx"),
 
-      // プレイヤープロフィール
-      {
-        path: "player/:mcid",
-        element: <PlayerProfile />,
-      },
+    // 一覧・検索
+    route("browse", "routes/browse.tsx"),
+    route("keybindings", "routes/keybindings.tsx"),
+    route("keybindings/stats", "routes/keybindings-stats.tsx"),
+    route("rankings", "routes/rankings.tsx"),
+    route("stats", "routes/stats.tsx"),
+    route("compare", "routes/compare.tsx"),
+    route("favorites", "routes/favorites.tsx"),
 
-      // 自分のプロフィール編集
-      {
-        path: "me",
-        element: <ProtectedLayout />,
-        children: [
-          { index: true, element: <MyProfile /> },
-          { path: "edit", element: <EditProfile /> },      // ソーシャルリンク統合
-          { path: "records", element: <EditRecords /> },
-          { path: "keybindings", element: <EditKeybindings /> },
-          { path: "devices", element: <EditDevices /> },
-          // 以下はナビから非表示（ファイルは残す）
-          { path: "items", element: <EditItemLayouts /> },
-          { path: "search-craft", element: <EditSearchCraft /> },
-        ],
-      },
+    // プレイヤープロフィール（slugはMCIDまたは@{内部ID}形式）
+    route("player/:slug", "routes/player/profile.tsx"),
+    route("player/:slug/stats", "routes/player/stats.tsx"),
 
-      // 一覧
-      { path: "browse", element: <Browse /> },
-    ],
-  },
-];
+    // 自分のプロフィール編集（認証必要）
+    ...prefix("me", [
+      layout("routes/me/_layout.tsx", [
+        index("routes/me/index.tsx"),
+        route("edit", "routes/me/edit.tsx"),
+        route("records", "routes/me/records.tsx"),
+        route("keybindings", "routes/me/keybindings.tsx"),
+        route("devices", "routes/me/devices.tsx"),
+        route("presets", "routes/me/presets.tsx"),
+        route("import", "routes/me/import.tsx"),
+        route("items", "routes/me/items.tsx"),
+        route("search-craft", "routes/me/search-craft.tsx"),
+      ]),
+    ]),
+  ]),
+
+  // API routes (outside of layout)
+  route("api/auth/*", "routes/api/auth/splat.tsx"),
+  route("api/skin", "routes/api/skin.ts"),
+  route("api/favorites", "routes/api/favorites.ts"),
+  route("api/home-feed", "routes/api/home-feed.ts"),
+
+  // Cron routes
+  route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
+] satisfies RouteConfig;
 ```
 
 ### 7.2 ナビゲーション構成
 
 #### ヘッダーナビ
 ```
-ホーム | プレイヤー一覧
+ホーム | プレイヤー一覧 | キーバインド | お気に入り
 ```
-※ランキング、統計はナビから削除
 
 #### ダッシュボードナビ（/me）
+主要なナビゲーション項目:
 ```
-概要 | プロフィール編集 | 記録 | キー配置 | デバイス
+プロフィール編集 | 記録 | キー配置 | デバイス | アイテム配置 | サーチクラフト
 ```
-※ソーシャルリンクはプロフィール編集に統合、アイテム配置・サーチクラフトはナビから非表示
+
+補助的なナビゲーション項目（区切り線の下）:
+```
+プリセット | インポート
+```
+
+※ソーシャルリンクはプロフィール編集に統合
 
 ### 7.3 主要画面
 
@@ -1755,9 +1954,6 @@ code, pre {
 ### A. 環境変数一覧
 
 ```env
-# Database
-DATABASE_URL=postgresql://...
-
 # Discord OAuth
 DISCORD_CLIENT_ID=...
 DISCORD_CLIENT_SECRET=...
@@ -1768,27 +1964,58 @@ APP_URL=https://minefolio.example.com
 # Auth
 BETTER_AUTH_SECRET=...
 
-# Legacy App
+# Twitch API
+TWITCH_CLIENT_ID=...
+TWITCH_CLIENT_SECRET=...
+
+# YouTube API
+YOUTUBE_API_KEY=...
+
+# Legacy App (for import)
 LEGACY_API_URL=https://mchotkeys.vercel.app
 ```
+
+環境変数はローカル開発では `.dev.vars` ファイルに、本番環境では Cloudflare Dashboard で設定します。
 
 ### B. 参考リンク
 
 - **React Router v7**: https://reactrouter.com/
 - **Cloudflare Pages**: https://pages.cloudflare.com/
+- **Cloudflare D1**: https://developers.cloudflare.com/d1/
+- **Turso**: https://turso.tech/
 - **Drizzle ORM**: https://orm.drizzle.team/
 - **Better Auth**: https://www.better-auth.com/
 - **Shadcn/ui**: https://ui.shadcn.com/
 - **Discord Developer Portal**: https://discord.com/developers/applications
 - **Mojang API**: https://wiki.vg/Mojang_API
 - **Speedrun.com API**: https://github.com/speedruncomorg/api
-- **Neon PostgreSQL**: https://neon.tech/
 
 ---
 
 ---
 
 ## 11. 実装変更履歴
+
+### 2026年1月22日 - 設計書同期
+
+設計書を最新の実装に合わせて更新。以下の変更点を反映:
+
+#### データベース関連
+- データベースを Neon PostgreSQL から Cloudflare D1 (SQLite/Turso) に変更
+- 環境変数設定ファイルを `.env` から `.dev.vars` に変更
+- users テーブル: mcid/uuid を任意に変更、slug フィールド追加
+- social_links テーブル: url → identifier カラム変更、discord/custom platform削除
+- category_records テーブル: isFeatured フィールド削除
+- 新規テーブル追加: config_presets, config_history, favorites, api_cache, youtube_video_cache, youtube_live_cache
+
+#### キーバインド関連
+- toggleHud (F1) を廃止（27個 → 26個）
+
+#### ルート構成関連
+- プレイヤープロフィールURLを `/player/:mcid` から `/player/:slug` に変更
+- 新規ルート追加: /keybindings, /keybindings/stats, /compare, /favorites, /me/presets
+
+---
 
 ### 2026年1月 - Phase 1実装
 
@@ -1808,33 +2035,12 @@ LEGACY_API_URL=https://mchotkeys.vercel.app
 - ✅ インポートされたキーバインドの反映
 - ✅ VirtualKeyboardコンポーネント（JIS/US/TKL対応）
 
-#### 11.4 設計変更点
-
-##### データベース変更
-| 項目 | 設計書 | 実装 |
-|------|--------|------|
-| データベース | PostgreSQL (Neon) | SQLite (Cloudflare D1) |
-| social_links.url | `url` カラム | `identifier` カラムに変更（ユーザー名保存用） |
-| social_links.username | 存在 | 廃止（identifierに統合） |
-| users.profilePose | なし | 追加（3Dスキンのポーズ設定） |
-| discord連携 | social_linksに保存 | platformから削除（discordIdで代替） |
-| custom連携 | 対応 | platformから削除（現状未対応） |
-
-##### キーバインド変更
-| 項目 | 設計書 | 実装 |
-|------|--------|------|
-| toggleHud (F1) | 存在 | 廃止 |
-| swapHands | swapHands | offhand に名称変更 |
-| 標準キー数 | 27個 | 26個（toggleHud廃止） |
-
-##### UI変更
-| 画面 | 設計書 | 実装 |
-|------|--------|------|
-| プロフィールページレイアウト | タブのみ | 2カラム（左サイドバー + 右タブ） |
-| bio表示 | Markdown対応 | Markdown対応 + h1タグ対応 |
-| デバイス設定表示 | 感度・cm360表示 | 感度とcm360を別行に分離表示 |
-| ダッシュボードナビ | 概要タブあり | 概要タブ廃止（プロフィール編集がデフォルト） |
-| ソーシャルリンク | 別ページ | プロフィール編集に統合 |
+#### 11.4 追加機能（完了）
+- ✅ 設定プリセット管理
+- ✅ お気に入りプレイヤー機能
+- ✅ YouTube/Twitchストリーム連携
+- ✅ プレイヤー比較機能
+- ✅ キーバインド統計機能
 
 ##### プロフィールページ2カラムレイアウト
 ```
@@ -1934,16 +2140,23 @@ LEGACY_API_URL=https://mchotkeys.vercel.app
 | `/login` | ✅ 実装済み | Discord OAuth |
 | `/onboarding` | ✅ 実装済み | MCID登録 |
 | `/browse` | ✅ 実装済み | プレイヤー一覧 |
-| `/player/:mcid` | ✅ 実装済み | 2カラムレイアウト |
+| `/keybindings` | ✅ 実装済み | キーバインド一覧 |
+| `/keybindings/stats` | ✅ 実装済み | キーバインド統計 |
+| `/compare` | ✅ 実装済み | プレイヤー比較 |
+| `/favorites` | ✅ 実装済み | お気に入り一覧 |
+| `/player/:slug` | ✅ 実装済み | 2カラムレイアウト（slugはMCIDまたは@{内部ID}形式） |
+| `/player/:slug/stats` | ✅ 実装済み | プレイヤー統計 |
 | `/me` | ✅ 実装済み | ダッシュボード |
 | `/me/edit` | ✅ 実装済み | プロフィール+ソーシャルリンク |
 | `/me/keybindings` | ✅ 実装済み | キーバインド編集 |
 | `/me/devices` | ✅ 実装済み | デバイス設定 |
-| `/me/records` | 🔶 一部実装 | 基本UIのみ |
-| `/me/items` | 🔶 ファイル存在 | ナビ非表示 |
-| `/me/search-craft` | 🔶 ファイル存在 | ナビ非表示 |
-| `/stats` | 🔶 ファイル存在 | ナビ非表示 |
-| `/rankings` | 🔶 ファイル存在 | ナビ非表示 |
+| `/me/records` | ✅ 実装済み | 記録管理 |
+| `/me/items` | ✅ 実装済み | アイテム配置編集 |
+| `/me/search-craft` | ✅ 実装済み | サーチクラフト編集 |
+| `/me/presets` | ✅ 実装済み | プリセット管理 |
+| `/me/import` | ✅ 実装済み | データインポート |
+| `/stats` | 🔶 ファイル存在 | 統計ページ |
+| `/rankings` | 🔶 ファイル存在 | ランキングページ |
 
 ### 12.5 実装済みAPI
 
