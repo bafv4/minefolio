@@ -136,7 +136,7 @@ export default function ExportPage() {
           <CardContent>
             <form method="post">
               <input type="hidden" name="format" value="json" />
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full h-11">
                 <Download className="h-4 w-4 mr-2" />
                 JSONをダウンロード
               </Button>
@@ -168,7 +168,7 @@ export default function ExportPage() {
           <CardContent>
             <form method="post">
               <input type="hidden" name="format" value="csv" />
-              <Button type="submit" variant="outline" className="w-full">
+              <Button type="submit" variant="outline" className="w-full h-11">
                 <Download className="h-4 w-4 mr-2" />
                 CSVをダウンロード
               </Button>

@@ -53,6 +53,7 @@ import {
   Layers,
   AlertCircle,
   Settings,
+  Copy,
 } from "lucide-react";
 import {
   MinecraftItemIcon,
@@ -135,31 +136,45 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     notes: layout.notes,
   }));
 
-  // アクティブなプリセットを取得
-  const activePreset = await db.query.configPresets.findFirst({
-    where: eq(configPresets.userId, user.id) && eq(configPresets.isActive, true),
+  // 全プリセットを取得（コピー機能用）
+  const allPresets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, user.id),
+    columns: {
+      id: true,
+      name: true,
+      isActive: true,
+      itemLayoutsData: true,
+    },
   });
 
-  // プリセット数を取得
-  const presetList = await db
-    .select({ id: configPresets.id })
-    .from(configPresets)
-    .where(eq(configPresets.userId, user.id));
-  const hasPresets = presetList.length > 0;
+  // アクティブなプリセットを取得
+  const activePreset = allPresets.find((p) => p.isActive);
 
-  return { userId: user.id, layouts, activePreset, hasPresets };
+  return {
+    userId: user.id,
+    layouts,
+    activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
+    hasPresets: allPresets.length > 0,
+    presets: allPresets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isActive: p.isActive,
+      hasItemLayouts: !!p.itemLayoutsData,
+      itemLayoutsData: p.itemLayoutsData,
+    })),
+  };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-32 mb-2" />
           <Skeleton className="h-4 w-80" />
         </div>
-        <Skeleton className="h-10 w-20" />
+        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -283,15 +298,21 @@ function HotbarSlot({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="relative w-12 h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group"
+          className="relative w-10 h-10 sm:w-12 sm:h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group touch-manipulation"
         >
           {items.length > 0 ? (
             <div className="relative w-full h-full flex items-center justify-center">
               <MinecraftItemIcon
                 itemId={items[0]}
+                size={24}
+                textureBaseUrl={TEXTURE_BASE_URL}
+                className="pixelated sm:hidden"
+              />
+              <MinecraftItemIcon
+                itemId={items[0]}
                 size={28}
                 textureBaseUrl={TEXTURE_BASE_URL}
-                className="pixelated"
+                className="pixelated hidden sm:block"
               />
               {items.length > 1 && (
                 <span className="absolute bottom-0 right-0 text-[10px] bg-background/80 px-0.5 rounded">
@@ -365,13 +386,13 @@ function HotbarSlot({
           )}
 
           {/* アイテムリスト */}
-          <div className="grid grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
+          <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
             {filteredItems.slice(0, 200).map((itemId) => (
               <button
                 key={itemId}
                 type="button"
                 onClick={() => toggleItem(itemId)}
-                className={`w-12 h-12 flex items-center justify-center rounded border-2 transition-colors ${
+                className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
                   isItemSelected(itemId)
                     ? "border-primary bg-primary/20"
                     : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -380,7 +401,7 @@ function HotbarSlot({
               >
                 <MinecraftItemIcon
                   itemId={itemId}
-                  size={32}
+                  size={28}
                   textureBaseUrl={TEXTURE_BASE_URL}
                   className="pixelated"
                 />
@@ -602,10 +623,11 @@ function EditableLayoutCard({
 }
 
 export default function ItemLayoutsPage() {
-  const { layouts: initialLayouts, activePreset, hasPresets } = useLoaderData<typeof loader>();
+  const { layouts: initialLayouts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -682,18 +704,41 @@ export default function ItemLayoutsPage() {
     setLayouts(initialLayouts);
   }, [initialLayouts]);
 
+  // プリセットからコピー
+  const handleCopyFromPreset = useCallback((presetId: string) => {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset || !preset.itemLayoutsData) {
+      toast.error("コピーするデータがありません");
+      return;
+    }
+
+    try {
+      const itemLayoutsDataParsed = JSON.parse(preset.itemLayoutsData) as ItemLayout[];
+      setLayouts(itemLayoutsDataParsed.map((layout, idx) => ({
+        ...layout,
+        id: `new-${Date.now()}-${idx}`,
+      })));
+      toast.success(`${preset.name}からアイテム配置をコピーしました`);
+    } catch (e) {
+      console.error("Failed to parse item layouts data:", e);
+      toast.error("データの解析に失敗しました");
+    }
+
+    setCopyDialogOpen(false);
+  }, [presets]);
+
   const existingSegments = layouts.map((l) => l.segment);
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">アイテム配置</h1>
           <p className="text-muted-foreground">
             ゲームの各場面に応じたホットバーやインベントリの配置を設定します。
           </p>
         </div>
-        <Button onClick={handleAddLayout} disabled={!hasPresets}>
+        <Button onClick={handleAddLayout} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
           <Plus className="mr-2 h-4 w-4" />
           追加
         </Button>
@@ -703,12 +748,12 @@ export default function ItemLayoutsPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -716,13 +761,27 @@ export default function ItemLayoutsPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
-            </Link>
+            <div className="flex gap-2 shrink-0">
+              {presets.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => setCopyDialogOpen(true)}
+                >
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">他のプリセットからコピー</span>
+                  <span className="sm:hidden">コピー</span>
+                </Button>
+              )}
+              <Link to="/me/presets" className="shrink-0">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
+              </Link>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -763,6 +822,61 @@ export default function ItemLayoutsPage() {
         onSave={handleSave}
         onReset={handleReset}
       />
+
+      {/* プリセットからコピーダイアログ */}
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogDescription>
+              コピー元のプリセットを選択してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {presets
+                .filter((p) => p.id !== activePreset?.id)
+                .map((preset) => (
+                  <Button
+                    key={preset.id}
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    disabled={!preset.hasItemLayouts}
+                    onClick={() => handleCopyFromPreset(preset.id)}
+                  >
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="font-medium">{preset.name}</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {preset.hasItemLayouts ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <Package className="h-3 w-3 mr-1" />
+                            アイテム配置
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            データなし
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </Button>
+                ))}
+              {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  他のプリセットがありません
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

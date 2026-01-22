@@ -1,11 +1,13 @@
 // OGP画像生成API
-// プレイヤープロフィール用の動的OGP画像を生成
+// プレイヤープロフィール用の動的OGP画像を生成 (PNG形式)
+import { ImageResponse } from "@vercel/og";
+import type { LoaderFunctionArgs } from "react-router";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { getCraftarAvatarUrl } from "@/lib/mojang";
 import { createDb } from "@/lib/db";
 
-export async function loader({ request }: { request: Request }) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const mcid = url.searchParams.get("mcid");
   const slug = url.searchParams.get("slug");
@@ -14,16 +16,9 @@ export async function loader({ request }: { request: Request }) {
 
   // mcidもslugもない場合はデフォルトのOGP画像を生成
   if (!mcid && !slug) {
-    const svg = generateDefaultOgpSvg({
+    return generateDefaultOgp({
       title: title || "Minefolio",
       description: description || "Minecraft Speedrunning Portfolio Platform",
-    });
-
-    return new Response(svg, {
-      headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=3600",
-      },
     });
   }
 
@@ -38,21 +33,13 @@ export async function loader({ request }: { request: Request }) {
     return new Response("User not found", { status: 404 });
   }
 
-  // SVG形式でOGP画像を生成
-  const svg = generatePlayerOgpSvg({
+  return generatePlayerOgp({
     displayName: user.displayName || user.mcid || user.slug,
     mcid: user.mcid || user.slug,
     uuid: user.uuid || "",
     bio: user.shortBio || user.bio || "Minecraft Speedrunner",
     mainEdition: user.mainEdition,
     role: user.role,
-  });
-
-  return new Response(svg, {
-    headers: {
-      "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=3600", // 1時間キャッシュ
-    },
   });
 }
 
@@ -69,214 +56,325 @@ interface OgpData {
  * デフォルトのOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generateDefaultOgpSvg(data: { title: string; description: string }): string {
-  const title = escapeXml(data.title);
-  const description = escapeXml(data.description.slice(0, 120));
+function generateDefaultOgp(data: { title: string; description: string }) {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        {/* グリッドパターン背景 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
-    </linearGradient>
-  </defs>
+        {/* ロゴ部分 */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "24px",
+          }}
+        >
+          {/* マウスアイコン（簡略版） */}
+          <div
+            style={{
+              width: "80px",
+              height: "120px",
+              background: "#3a3a3a",
+              borderRadius: "40px",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "center",
+              paddingTop: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                width: "16px",
+                height: "36px",
+                background: "#555",
+                borderRadius: "8px",
+              }}
+            />
+          </div>
 
-  <!-- 背景 -->
-  <rect width="1200" height="630" fill="url(#bg-gradient)"/>
+          {/* タイトル */}
+          <div
+            style={{
+              display: "flex",
+              fontSize: "72px",
+              fontWeight: "700",
+              color: "#f1f5f9",
+            }}
+          >
+            {data.title}
+          </div>
 
-  <!-- グリッドパターン -->
-  <defs>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.02)" stroke-width="1"/>
-    </pattern>
-  </defs>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-
-  <!-- ロゴエリア（中央） -->
-  <g transform="translate(600, 250)">
-    <!-- ロゴアイコン（簡略版） -->
-    <g transform="translate(-60, -60)">
-      <!-- マウスアイコンの簡略版 -->
-      <rect x="20" y="10" width="80" height="100" rx="20" fill="#3a3a3a"/>
-      <rect x="30" y="25" width="30" height="50" rx="8" fill="#b0b0b0"/>
-      <ellipse cx="60" cy="45" rx="8" ry="18" fill="#555"/>
-    </g>
-
-    <!-- タイトル -->
-    <text
-      x="0"
-      y="90"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="72"
-      font-weight="700"
-      fill="#f1f5f9"
-      text-anchor="middle"
-    >${title}</text>
-
-    <!-- 説明 -->
-    <text
-      x="0"
-      y="140"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="28"
-      fill="#94a3b8"
-      text-anchor="middle"
-    >${description}</text>
-  </g>
-</svg>`;
+          {/* 説明 */}
+          <div
+            style={{
+              display: "flex",
+              fontSize: "28px",
+              color: "#94a3b8",
+            }}
+          >
+            {data.description.slice(0, 120)}
+          </div>
+        </div>
+      </div>
+    ),
+    {
+      width: 1200,
+      height: 630,
+      headers: {
+        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+      },
+    }
+  );
 }
 
 /**
  * プレイヤー用のOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generatePlayerOgpSvg(data: OgpData): string {
-  const avatarUrl = getCraftarAvatarUrl(data.uuid, 128, true);
-
-  // エスケープ処理
-  const displayName = escapeXml(data.displayName);
-  const bio = escapeXml(data.bio.slice(0, 100)); // 最大100文字
-  const mcid = escapeXml(data.mcid);
-
-  // ロールのラベル
+function generatePlayerOgp(data: OgpData) {
+  const avatarUrl = getCraftarAvatarUrl(data.uuid, 180, true);
   const roleLabel = data.role === "runner" ? "Speedrunner" : "Viewer";
-  const editionLabel = data.mainEdition === "java" ? "Java Edition" :
-                       data.mainEdition === "bedrock" ? "Bedrock Edition" : "";
+  const editionLabel =
+    data.mainEdition === "java"
+      ? "Java Edition"
+      : data.mainEdition === "bedrock"
+        ? "Bedrock Edition"
+        : "";
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <defs>
-    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/>
-    </filter>
-  </defs>
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          fontFamily: "system-ui, sans-serif",
+          padding: "60px",
+        }}
+      >
+        {/* グリッドパターン背景 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
 
-  <!-- 背景 -->
-  <rect width="1200" height="630" fill="url(#bg-gradient)"/>
+        {/* メインカード */}
+        <div
+          style={{
+            display: "flex",
+            width: "100%",
+            height: "100%",
+            background: "rgba(30, 41, 59, 0.8)",
+            borderRadius: "16px",
+            padding: "40px",
+            gap: "40px",
+          }}
+        >
+          {/* アバター */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "200px",
+                height: "200px",
+                borderRadius: "100px",
+                background: "#334155",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              {data.uuid ? (
+                <img
+                  src={avatarUrl}
+                  width={180}
+                  height={180}
+                  style={{ borderRadius: "90px" }}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    width: "80px",
+                    height: "80px",
+                    background: "#64748b",
+                    borderRadius: "8px",
+                  }}
+                />
+              )}
+            </div>
+          </div>
 
-  <!-- グリッドパターン（装飾） -->
-  <defs>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.02)" stroke-width="1"/>
-    </pattern>
-  </defs>
-  <rect width="1200" height="630" fill="url(#grid)"/>
+          {/* テキストエリア */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              flex: 1,
+              gap: "16px",
+            }}
+          >
+            {/* 表示名 */}
+            <div
+              style={{
+                display: "flex",
+                fontSize: "56px",
+                fontWeight: "700",
+                color: "#f1f5f9",
+                lineHeight: 1.2,
+              }}
+            >
+              {data.displayName.slice(0, 20)}
+            </div>
 
-  <!-- メインカード -->
-  <rect x="80" y="80" width="1040" height="470" rx="16" fill="#1e293b" opacity="0.8" filter="url(#shadow)"/>
+            {/* MCID */}
+            <div
+              style={{
+                display: "flex",
+                fontSize: "28px",
+                color: "#94a3b8",
+              }}
+            >
+              @{data.mcid}
+            </div>
 
-  <!-- アバター背景 -->
-  <circle cx="180" cy="315" r="100" fill="#334155"/>
+            {/* バッジ */}
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                marginTop: "8px",
+              }}
+            >
+              {data.role && (
+                <div
+                  style={{
+                    display: "flex",
+                    background: "#3b82f6",
+                    color: "white",
+                    padding: "8px 16px",
+                    borderRadius: "16px",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                  }}
+                >
+                  {roleLabel}
+                </div>
+              )}
+              {data.mainEdition && (
+                <div
+                  style={{
+                    display: "flex",
+                    background: "#64748b",
+                    color: "white",
+                    padding: "8px 16px",
+                    borderRadius: "16px",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                  }}
+                >
+                  {editionLabel}
+                </div>
+              )}
+            </div>
 
-  <!-- アバター画像 -->
-  <clipPath id="avatar-clip">
-    <circle cx="180" cy="315" r="90"/>
-  </clipPath>
-  <image
-    href="${avatarUrl}"
-    x="90"
-    y="225"
-    width="180"
-    height="180"
-    clip-path="url(#avatar-clip)"
-  />
+            {/* Bio */}
+            <div
+              style={{
+                display: "flex",
+                fontSize: "24px",
+                color: "#cbd5e1",
+                marginTop: "8px",
+                lineHeight: 1.4,
+              }}
+            >
+              {data.bio.slice(0, 100)}
+            </div>
+          </div>
+        </div>
 
-  <!-- テキストエリア -->
-  <g transform="translate(320, 200)">
-    <!-- 表示名 -->
-    <text
-      x="0"
-      y="0"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="56"
-      font-weight="700"
-      fill="#f1f5f9"
-    >${displayName}</text>
-
-    <!-- MCID -->
-    <text
-      x="0"
-      y="50"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="28"
-      fill="#94a3b8"
-    >@${mcid}</text>
-
-    <!-- バッジ -->
-    <g transform="translate(0, 90)">
-      ${data.role ? `
-      <rect x="0" y="0" width="${roleLabel.length * 12 + 24}" height="32" rx="16" fill="#3b82f6"/>
-      <text
-        x="${roleLabel.length * 6 + 12}"
-        y="22"
-        font-family="system-ui, -apple-system, sans-serif"
-        font-size="16"
-        font-weight="600"
-        fill="white"
-        text-anchor="middle"
-      >${roleLabel}</text>
-      ` : ''}
-
-      ${data.mainEdition ? `
-      <rect x="${data.role ? roleLabel.length * 12 + 36 : 0}" y="0" width="${editionLabel.length * 10 + 24}" height="32" rx="16" fill="#64748b"/>
-      <text
-        x="${(data.role ? roleLabel.length * 12 + 36 : 0) + editionLabel.length * 5 + 12}"
-        y="22"
-        font-family="system-ui, -apple-system, sans-serif"
-        font-size="16"
-        font-weight="600"
-        fill="white"
-        text-anchor="middle"
-      >${editionLabel}</text>
-      ` : ''}
-    </g>
-
-    <!-- Bio -->
-    <text
-      x="0"
-      y="160"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="24"
-      fill="#cbd5e1"
-    >${bio}</text>
-  </g>
-
-  <!-- フッター -->
-  <g transform="translate(80, 580)">
-    <text
-      x="0"
-      y="0"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="20"
-      font-weight="600"
-      fill="#64748b"
-    >MINEFOLIO</text>
-
-    <text
-      x="1040"
-      y="0"
-      font-family="system-ui, -apple-system, sans-serif"
-      font-size="18"
-      fill="#64748b"
-      text-anchor="end"
-    >Minecraft Speedrunning Portfolio</text>
-  </g>
-</svg>`;
-}
-
-/**
- * XML/SVG用のエスケープ処理
- */
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+        {/* フッター */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "24px",
+            left: "80px",
+            right: "80px",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              fontSize: "20px",
+              fontWeight: "600",
+              color: "#64748b",
+            }}
+          >
+            MINEFOLIO
+          </div>
+          <div
+            style={{
+              display: "flex",
+              fontSize: "18px",
+              color: "#64748b",
+            }}
+          >
+            Minecraft Speedrunning Portfolio
+          </div>
+        </div>
+      </div>
+    ),
+    {
+      width: 1200,
+      height: 630,
+      headers: {
+        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+      },
+    }
+  );
 }

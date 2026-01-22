@@ -341,12 +341,12 @@ export default function OnboardingPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Button
                         type="submit"
                         name="importData"
                         value="true"
-                        className="flex-1"
+                        className="flex-1 h-11 sm:h-10"
                         disabled={isSubmitting}
                       >
                         {isSubmitting ? (
@@ -359,7 +359,7 @@ export default function OnboardingPage() {
                         name="importData"
                         value="false"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 h-11 sm:h-10"
                         disabled={isSubmitting}
                       >
                         新規で始める

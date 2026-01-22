@@ -54,6 +54,7 @@ import {
   ChevronUp,
   AlertCircle,
   Settings,
+  Copy,
 } from "lucide-react";
 import {
   DndContext,
@@ -137,31 +138,45 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     comment: craft.comment,
   }));
 
-  // アクティブなプリセットを取得
-  const activePreset = await db.query.configPresets.findFirst({
-    where: eq(configPresets.userId, user.id) && eq(configPresets.isActive, true),
+  // 全プリセットを取得（コピー機能用）
+  const allPresets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, user.id),
+    columns: {
+      id: true,
+      name: true,
+      isActive: true,
+      searchCraftsData: true,
+    },
   });
 
-  // プリセット数を取得
-  const presetList = await db
-    .select({ id: configPresets.id })
-    .from(configPresets)
-    .where(eq(configPresets.userId, user.id));
-  const hasPresets = presetList.length > 0;
+  // アクティブなプリセットを取得
+  const activePreset = allPresets.find((p) => p.isActive);
 
-  return { userId: user.id, crafts, activePreset, hasPresets };
+  return {
+    userId: user.id,
+    crafts,
+    activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
+    hasPresets: allPresets.length > 0,
+    presets: allPresets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isActive: p.isActive,
+      hasSearchCrafts: !!p.searchCraftsData,
+      searchCraftsData: p.searchCraftsData,
+    })),
+  };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-36 mb-2" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <Skeleton className="h-10 w-20" />
+        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
       {/* 説明カード */}
       <div className="rounded-lg border border-dashed bg-secondary/30 p-4">
@@ -347,13 +362,13 @@ function ItemSelectDialog({
           )}
 
           {/* アイテムリスト */}
-          <div className="grid grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
+          <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
             {filteredItems.slice(0, 200).map((itemId) => (
               <button
                 key={itemId}
                 type="button"
                 onClick={() => toggleItem(itemId)}
-                className={`w-9 h-9 flex items-center justify-center rounded border-2 transition-colors ${
+                className={`w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center rounded border-2 transition-colors touch-manipulation ${
                   isItemSelected(itemId)
                     ? "border-primary bg-primary/20"
                     : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -566,11 +581,12 @@ function EditableSearchCraftCard({
 }
 
 export default function SearchCraftPage() {
-  const { crafts: initialCrafts, activePreset, hasPresets } = useLoaderData<typeof loader>();
+  const { crafts: initialCrafts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const dndContextId = useId();
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -670,16 +686,39 @@ export default function SearchCraftPage() {
     setCrafts(initialCrafts);
   }, [initialCrafts]);
 
+  // プリセットからコピー
+  const handleCopyFromPreset = useCallback((presetId: string) => {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset || !preset.searchCraftsData) {
+      toast.error("コピーするデータがありません");
+      return;
+    }
+
+    try {
+      const searchCraftsDataParsed = JSON.parse(preset.searchCraftsData) as SearchCraftItem[];
+      setCrafts(searchCraftsDataParsed.map((craft, idx) => ({
+        ...craft,
+        id: `new-${Date.now()}-${idx}`,
+      })));
+      toast.success(`${preset.name}からサーチクラフトをコピーしました`);
+    } catch (e) {
+      console.error("Failed to parse search crafts data:", e);
+      toast.error("データの解析に失敗しました");
+    }
+
+    setCopyDialogOpen(false);
+  }, [presets]);
+
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">サーチクラフト</h1>
           <p className="text-muted-foreground">
             スピードラン用のクラフト検索を設定します。
           </p>
         </div>
-        <Button onClick={handleAddCraft} disabled={!hasPresets}>
+        <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
           <Plus className="mr-2 h-4 w-4" />
           追加
         </Button>
@@ -689,12 +728,12 @@ export default function SearchCraftPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -702,13 +741,27 @@ export default function SearchCraftPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
-            </Link>
+            <div className="flex gap-2 shrink-0">
+              {presets.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => setCopyDialogOpen(true)}
+                >
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">他のプリセットからコピー</span>
+                  <span className="sm:hidden">コピー</span>
+                </Button>
+              )}
+              <Link to="/me/presets" className="shrink-0">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
+              </Link>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -760,6 +813,61 @@ export default function SearchCraftPage() {
         onSave={handleSave}
         onReset={handleReset}
       />
+
+      {/* プリセットからコピーダイアログ */}
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogDescription>
+              コピー元のプリセットを選択してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {presets
+                .filter((p) => p.id !== activePreset?.id)
+                .map((preset) => (
+                  <Button
+                    key={preset.id}
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    disabled={!preset.hasSearchCrafts}
+                    onClick={() => handleCopyFromPreset(preset.id)}
+                  >
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="font-medium">{preset.name}</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {preset.hasSearchCrafts ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <Search className="h-3 w-3 mr-1" />
+                            サーチクラフト
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            データなし
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </Button>
+                ))}
+              {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  他のプリセットがありません
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

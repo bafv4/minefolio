@@ -101,12 +101,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-24 mb-2" />
           <Skeleton className="h-4 w-64" />
         </div>
-        <Skeleton className="h-10 w-32" />
+        <Skeleton className="h-11 sm:h-10 w-full sm:w-32" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -279,7 +279,7 @@ export default function RecordsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">記録</h1>
           <p className="text-muted-foreground">
@@ -288,7 +288,7 @@ export default function RecordsPage() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenCreate}>
+            <Button onClick={handleOpenCreate} className="w-full sm:w-auto h-11 sm:h-10">
               <Plus className="mr-2 h-4 w-4" />
               記録を追加
             </Button>

@@ -45,7 +45,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy } from "lucide-react";
+import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -698,7 +698,7 @@ export default function PresetsPage() {
 
       {/* プリセット一覧 */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">プリセット一覧</CardTitle>
             <CardDescription>保存した設定プリセット</CardDescription>
@@ -713,7 +713,7 @@ export default function PresetsPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto h-11 sm:h-10">
                 <Plus className="h-4 w-4 mr-2" />
                 新規プリセット
               </Button>
@@ -817,69 +817,133 @@ export default function PresetsPage() {
         <CardContent>
           {presets.length > 0 ? (
             <div className="space-y-3">
-              {presets.map((preset) => (
-                <div
-                  key={preset.id}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{preset.name}</p>
-                      {preset.isActive && (
-                        <Badge variant="default" className="shrink-0">
-                          <Check className="h-3 w-3 mr-1" />
-                          適用中
-                        </Badge>
-                      )}
-                    </div>
-                    {preset.description && (
-                      <p className="text-sm text-muted-foreground truncate mt-1">
-                        {preset.description}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      更新: {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: ja })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    {!preset.isActive && (
-                      <fetcher.Form method="post">
-                        <input type="hidden" name="intent" value="apply-preset" />
-                        <input type="hidden" name="presetId" value={preset.id} />
-                        <Button type="submit" variant="outline" size="sm" disabled={isSubmitting}>
-                          <ArrowRight className="h-4 w-4 mr-1" />
-                          適用
-                        </Button>
-                      </fetcher.Form>
-                    )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>プリセットを削除</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            「{preset.name}」を削除しますか？この操作は取り消せません。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+              {presets.map((preset) => {
+                // プリセットに含まれる内容を計算
+                const hasKeybindings = !!preset.keybindingsData;
+                const hasPlayerConfig = !!preset.playerConfigData;
+                const hasRemaps = !!preset.remapsData;
+                const hasItemLayouts = !!preset.itemLayoutsData;
+                const hasSearchCrafts = !!preset.searchCraftsData;
+
+                // キーバインド数を計算
+                let keybindingsCount = 0;
+                if (preset.keybindingsData) {
+                  try {
+                    keybindingsCount = JSON.parse(preset.keybindingsData).length;
+                  } catch {}
+                }
+
+                // アイテム配置数を計算
+                let itemLayoutsCount = 0;
+                if (preset.itemLayoutsData) {
+                  try {
+                    itemLayoutsCount = JSON.parse(preset.itemLayoutsData).length;
+                  } catch {}
+                }
+
+                // サーチクラフト数を計算
+                let searchCraftsCount = 0;
+                if (preset.searchCraftsData) {
+                  try {
+                    searchCraftsCount = JSON.parse(preset.searchCraftsData).length;
+                  } catch {}
+                }
+
+                return (
+                  <div
+                    key={preset.id}
+                    className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium truncate">{preset.name}</p>
+                          {preset.isActive && (
+                            <Badge variant="default" className="shrink-0">
+                              <Check className="h-3 w-3 mr-1" />
+                              適用中
+                            </Badge>
+                          )}
+                        </div>
+                        {preset.description && (
+                          <p className="text-sm text-muted-foreground truncate mt-1">
+                            {preset.description}
+                          </p>
+                        )}
+
+                        {/* 含まれる内容をアイコンで表示 */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {hasKeybindings && (
+                            <Badge variant="secondary" className="text-xs py-0.5">
+                              <Keyboard className="h-3 w-3 mr-1" />
+                              キー配置 {keybindingsCount > 0 && `(${keybindingsCount})`}
+                            </Badge>
+                          )}
+                          {hasPlayerConfig && (
+                            <Badge variant="secondary" className="text-xs py-0.5">
+                              <Mouse className="h-3 w-3 mr-1" />
+                              デバイス
+                            </Badge>
+                          )}
+                          {hasItemLayouts && (
+                            <Badge variant="secondary" className="text-xs py-0.5">
+                              <Package className="h-3 w-3 mr-1" />
+                              アイテム {itemLayoutsCount > 0 && `(${itemLayoutsCount})`}
+                            </Badge>
+                          )}
+                          {hasSearchCrafts && (
+                            <Badge variant="secondary" className="text-xs py-0.5">
+                              <Search className="h-3 w-3 mr-1" />
+                              検索 {searchCraftsCount > 0 && `(${searchCraftsCount})`}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-muted-foreground mt-2">
+                          更新: {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: ja })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!preset.isActive && (
                           <fetcher.Form method="post">
-                            <input type="hidden" name="intent" value="delete-preset" />
+                            <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <AlertDialogAction type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                              削除
-                            </AlertDialogAction>
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                              <ArrowRight className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">適用</span>
+                            </Button>
                           </fetcher.Form>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive touch-manipulation">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>プリセットを削除</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                「{preset.name}」を削除しますか？この操作は取り消せません。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                              <fetcher.Form method="post">
+                                <input type="hidden" name="intent" value="delete-preset" />
+                                <input type="hidden" name="presetId" value={preset.id} />
+                                <AlertDialogAction type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  削除
+                                </AlertDialogAction>
+                              </fetcher.Form>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">

@@ -30,7 +30,17 @@ import {
   Mouse,
   AlertCircle,
   Settings,
+  Copy,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "デバイス - Minefolio" }];
@@ -62,19 +72,32 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
-  // アクティブなプリセットを取得
-  const activePreset = await db.query.configPresets.findFirst({
-    where: eq(configPresets.userId, user.id) && eq(configPresets.isActive, true),
+  // 全プリセットを取得（コピー機能用）
+  const allPresets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, user.id),
+    columns: {
+      id: true,
+      name: true,
+      isActive: true,
+      playerConfigData: true,
+    },
   });
 
-  // プリセット数を取得
-  const presetList = await db
-    .select({ id: configPresets.id })
-    .from(configPresets)
-    .where(eq(configPresets.userId, user.id));
-  const hasPresets = presetList.length > 0;
+  // アクティブなプリセットを取得
+  const activePreset = allPresets.find((p) => p.isActive);
 
-  return { config: user.playerConfig, activePreset, hasPresets };
+  return {
+    config: user.playerConfig,
+    activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
+    hasPresets: allPresets.length > 0,
+    presets: allPresets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isActive: p.isActive,
+      hasDeviceConfig: !!p.playerConfigData,
+      playerConfigData: p.playerConfigData,
+    })),
+  };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -196,7 +219,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 }
 
 export default function DevicesPage() {
-  const { config, activePreset, hasPresets } = useLoaderData<typeof loader>();
+  const { config, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
@@ -357,6 +380,9 @@ export default function DevicesPage() {
 
   const initialFormValues = useRef({ ...formValues });
 
+  // コピー元プリセット選択ダイアログ
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+
   // 変更チェック
   const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
 
@@ -413,6 +439,63 @@ export default function DevicesPage() {
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
+  // プリセットからコピー
+  const handleCopyFromPreset = useCallback((presetId: string) => {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset || !preset.playerConfigData) {
+      toast.error("コピーするデータがありません");
+      return;
+    }
+
+    try {
+      const configData = JSON.parse(preset.playerConfigData) as {
+        keyboardLayout?: string;
+        keyboardModel?: string;
+        mouseModel?: string;
+        mouseDpi?: number;
+        gameSensitivity?: number;
+        windowsSpeed?: number;
+        windowsSpeedMultiplier?: number;
+        toggleSprint?: boolean;
+        toggleSneak?: boolean;
+        autoJump?: boolean;
+        rawInput?: boolean;
+        mouseAcceleration?: boolean;
+        gameLanguage?: string;
+        fov?: number;
+        guiScale?: number;
+        notes?: string;
+      };
+
+      setFormValues({
+        keyboardLayout: configData.keyboardLayout ?? "",
+        keyboardModel: configData.keyboardModel ?? "",
+        mouseModel: configData.mouseModel ?? "",
+        mouseDpi: configData.mouseDpi?.toString() ?? "",
+        gameSensitivity: configData.gameSensitivity?.toString() ?? "",
+        gameSensitivityPercent: configData.gameSensitivity != null ? Math.round(configData.gameSensitivity * 200).toString() : "",
+        windowsSpeed: configData.windowsSpeed?.toString() ?? "",
+        windowsSpeedMultiplier: configData.windowsSpeedMultiplier?.toString() ?? "",
+        toggleSprint: configData.toggleSprint ?? false,
+        toggleSneak: configData.toggleSneak ?? false,
+        autoJump: configData.autoJump ?? false,
+        rawInput: configData.rawInput ?? true,
+        mouseAcceleration: configData.mouseAcceleration ?? false,
+        gameLanguage: configData.gameLanguage ?? "",
+        fov: configData.fov?.toString() ?? "",
+        guiScale: configData.guiScale?.toString() ?? "",
+        notes: configData.notes ?? "",
+      });
+
+      toast.success(`${preset.name}からデバイス設定をコピーしました`);
+    } catch (e) {
+      console.error("Failed to parse player config data:", e);
+      toast.error("データの解析に失敗しました");
+    }
+
+    setCopyDialogOpen(false);
+  }, [presets]);
+
   // トースト通知を表示
   useEffect(() => {
     if (!data || data === prevDataRef.current) return;
@@ -439,12 +522,12 @@ export default function DevicesPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -452,13 +535,27 @@ export default function DevicesPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
-            </Link>
+            <div className="flex gap-2 shrink-0">
+              {presets.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => setCopyDialogOpen(true)}
+                >
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">他のプリセットからコピー</span>
+                  <span className="sm:hidden">コピー</span>
+                </Button>
+              )}
+              <Link to="/me/presets" className="shrink-0">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
+              </Link>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -717,6 +814,67 @@ export default function DevicesPage() {
           onReset={handleReset}
         />
       </div>
+
+      {/* プリセットからコピーダイアログ */}
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogDescription>
+              コピー元のプリセットを選択してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {presets
+                .filter((p) => p.id !== activePreset?.id)
+                .map((preset) => (
+                  <Button
+                    key={preset.id}
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    disabled={!preset.hasDeviceConfig}
+                    onClick={() => handleCopyFromPreset(preset.id)}
+                  >
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="font-medium">{preset.name}</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {preset.hasDeviceConfig ? (
+                          <>
+                            <Badge variant="secondary" className="text-xs">
+                              <Keyboard className="h-3 w-3 mr-1" />
+                              キーボード
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              <Mouse className="h-3 w-3 mr-1" />
+                              マウス
+                            </Badge>
+                          </>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            データなし
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </Button>
+                ))}
+              {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  他のプリセットがありません
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

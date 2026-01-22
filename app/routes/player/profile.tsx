@@ -52,8 +52,9 @@ export function meta({ data, params }: Route.MetaArgs) {
     { property: "og:title", content: `${displayName} - Minefolio` },
     { property: "og:description", content: description },
     { property: "og:image", content: ogImageUrl },
-    { property: "og:image:width", content: "512" },
-    { property: "og:image:height", content: "512" },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { property: "og:url", content: `${data.appUrl}/player/${player.slug}` },
 
     // Twitter Card
@@ -294,6 +295,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       playerConfigData: true,
       remapsData: true,
       fingerAssignmentsData: true,
+      itemLayoutsData: true,
+      searchCraftsData: true,
     },
   });
 
@@ -302,6 +305,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
   let displayKeyRemaps = player.keyRemaps;
+  let displayItemLayouts = player.itemLayouts;
+  let displaySearchCrafts = player.searchCrafts;
 
   if (presetId && presets.length > 0) {
     const selectedPreset = presets.find((p) => p.id === presetId);
@@ -355,6 +360,50 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           updatedAt: new Date(),
         }));
       }
+
+      // プリセットのアイテム配置を適用
+      if (selectedPreset.itemLayoutsData) {
+        const presetItemLayouts = JSON.parse(selectedPreset.itemLayoutsData) as Array<{
+          segment: string;
+          slots: string;
+          offhand: string | null;
+          notes: string | null;
+          displayOrder: number;
+        }>;
+        displayItemLayouts = presetItemLayouts.map((layout, idx) => ({
+          id: `preset-layout-${idx}`,
+          userId: player.id,
+          segment: layout.segment,
+          slots: layout.slots,
+          offhand: layout.offhand,
+          notes: layout.notes,
+          displayOrder: layout.displayOrder,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
+
+      // プリセットのサーチクラフトを適用
+      if (selectedPreset.searchCraftsData) {
+        const presetSearchCrafts = JSON.parse(selectedPreset.searchCraftsData) as Array<{
+          sequence: number;
+          items: string;
+          keys: string;
+          searchStr: string | null;
+          comment: string | null;
+        }>;
+        displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
+          id: `preset-craft-${idx}`,
+          userId: player.id,
+          sequence: craft.sequence,
+          items: craft.items,
+          keys: craft.keys,
+          searchStr: craft.searchStr,
+          comment: craft.comment,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
     }
   }
 
@@ -385,6 +434,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       keybindings: displayKeybindings,
       playerConfig: displayPlayerConfig,
       keyRemaps: displayKeyRemaps,
+      itemLayouts: displayItemLayouts,
+      searchCrafts: displaySearchCrafts,
     },
     isOwner,
     hiddenSpeedrunRecords,
@@ -394,6 +445,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       name: p.name,
       description: p.description,
       isActive: p.isActive,
+      hasItemLayouts: !!p.itemLayoutsData,
+      hasSearchCrafts: !!p.searchCraftsData,
     })),
     activePresetId,
   };
@@ -484,7 +537,7 @@ export default function PlayerProfilePage() {
   };
 
   // プリセット選択を表示するタブ
-  const presetTabs = ["keybindings", "devices"];
+  const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
 
   return (
@@ -493,7 +546,7 @@ export default function PlayerProfilePage() {
       <div className="lg:hidden">
         <Button
           variant="outline"
-          className="w-full justify-between"
+          className="w-full justify-between h-14 py-3 touch-manipulation"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           <div className="flex items-center gap-3">
