@@ -545,7 +545,7 @@ export default function PlayerProfilePage() {
       <div className="lg:hidden">
         <Button
           variant="outline"
-          className="w-full justify-between"
+          className="w-full justify-between h-14 py-3 touch-manipulation"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           <div className="flex items-center gap-3">
