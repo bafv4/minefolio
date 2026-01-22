@@ -1,53 +1,46 @@
 import { useNavigation } from "react-router";
-import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useMemo } from "react";
+import { Loader2, Lightbulb } from "lucide-react";
+
+// ランダムに表示するTips
+const TIPS = [
+  "キー配置はプリセットとして保存できます",
+  "プレイヤーをお気に入りに追加すると素早くアクセスできます",
+  "比較機能で他のプレイヤーと設定を比べられます",
+  "サーチクラフトは順番をドラッグで変更できます",
+  "アイテム配置は各セグメントごとに設定できます",
+  "プロフィールはURLをシェアして共有できます",
+  "キーボードビューでキーをクリックすると詳細を編集できます",
+  "複数の操作を同じキーに割り当てることもできます",
+  "指割り当てを設定するとキーボードビューに色が表示されます",
+  "デバイス設定でマウス感度を記録しておくと便利です",
+  "記録ページで自己ベストを管理できます",
+  "Minecraftの言語設定も記録できます",
+  "プリセットを切り替えて複数の設定を管理できます",
+  "他のプリセットから設定をコピーすることもできます",
+];
 
 export function NavigationProgress() {
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
-  const [progress, setProgress] = useState(0);
-  const [visible, setVisible] = useState(false);
 
-  useEffect(() => {
-    if (isNavigating) {
-      setVisible(true);
-      setProgress(0);
+  // ランダムなTipを選択（ナビゲーション開始時に固定）
+  const tip = useMemo(() => {
+    return TIPS[Math.floor(Math.random() * TIPS.length)];
+  }, [isNavigating]); // eslint-disable-line react-hooks/exhaustive-deps
 
-      // 徐々に進行度を上げる（最大90%まで）
-      const timer1 = setTimeout(() => setProgress(30), 100);
-      const timer2 = setTimeout(() => setProgress(60), 300);
-      const timer3 = setTimeout(() => setProgress(80), 600);
-      const timer4 = setTimeout(() => setProgress(90), 1000);
-
-      return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
-        clearTimeout(timer4);
-      };
-    } else if (visible) {
-      // 完了時に100%にしてからフェードアウト
-      setProgress(100);
-      const hideTimer = setTimeout(() => {
-        setVisible(false);
-        setProgress(0);
-      }, 200);
-
-      return () => clearTimeout(hideTimer);
-    }
-  }, [isNavigating, visible]);
-
-  if (!visible) return null;
+  if (!isNavigating) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] h-1 bg-transparent">
-      <div
-        className={cn(
-          "h-full bg-primary transition-all duration-200 ease-out",
-          progress === 100 && "opacity-0"
-        )}
-        style={{ width: `${progress}%` }}
-      />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-6 max-w-sm text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-lg font-medium">読み込み中...</p>
+        <div className="flex items-start gap-2 text-sm text-muted-foreground bg-secondary/50 rounded-lg p-3">
+          <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-yellow-500" />
+          <p className="text-left">{tip}</p>
+        </div>
+      </div>
     </div>
   );
 }
