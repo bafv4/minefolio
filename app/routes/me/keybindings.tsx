@@ -6,8 +6,8 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
+import { eq, asc, and, or } from "drizzle-orm";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -204,30 +204,69 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     const now = new Date();
 
+    // 削除対象を先に処理
     for (const remap of remapsData) {
       if (remap._delete && remap.id) {
         await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
-      } else if (remap.id) {
+      }
+    }
+
+    // 更新・挿入を処理
+    for (const remap of remapsData) {
+      if (remap._delete) continue;
+      if (!remap.sourceKey) continue;
+
+      const sourceKeyNormalized = normalizeKeyCode(remap.sourceKey);
+      const targetKeyNormalized = remap.targetKey ? normalizeKeyCode(remap.targetKey) : null;
+
+      if (remap.id) {
+        // 既存レコードの更新
         await db.update(keyRemaps)
           .set({
-            sourceKey: remap.sourceKey.toUpperCase(),
-            targetKey: remap.targetKey?.toUpperCase() || null,
+            sourceKey: sourceKeyNormalized,
+            targetKey: targetKeyNormalized,
             software: remap.software || null,
             notes: remap.notes || null,
             updatedAt: now,
           })
           .where(eq(keyRemaps.id, remap.id));
-      } else if (remap.sourceKey) {
-        await db.insert(keyRemaps).values({
-          id: createId(),
-          userId: user.id,
-          sourceKey: remap.sourceKey.toUpperCase(),
-          targetKey: remap.targetKey?.toUpperCase() || null,
-          software: remap.software || null,
-          notes: remap.notes || null,
-          createdAt: now,
-          updatedAt: now,
+      } else {
+        // 新規挿入 - 同じsourceKeyが既に存在するか確認（正規化後と大文字の両方でチェック）
+        const sourceKeyUpper = remap.sourceKey.toUpperCase();
+        const existing = await db.query.keyRemaps.findFirst({
+          where: and(
+            eq(keyRemaps.userId, user.id),
+            or(
+              eq(keyRemaps.sourceKey, sourceKeyNormalized),
+              eq(keyRemaps.sourceKey, sourceKeyUpper)
+            )
+          ),
         });
+
+        if (existing) {
+          // 既存のものを更新（正規化形式に変換）
+          await db.update(keyRemaps)
+            .set({
+              sourceKey: sourceKeyNormalized,
+              targetKey: targetKeyNormalized,
+              software: remap.software || null,
+              notes: remap.notes || null,
+              updatedAt: now,
+            })
+            .where(eq(keyRemaps.id, existing.id));
+        } else {
+          // 新規挿入
+          await db.insert(keyRemaps).values({
+            id: createId(),
+            userId: user.id,
+            sourceKey: sourceKeyNormalized,
+            targetKey: targetKeyNormalized,
+            software: remap.software || null,
+            notes: remap.notes || null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       }
     }
 
@@ -293,30 +332,69 @@ export async function action({ context, request }: Route.ActionArgs) {
         _delete?: boolean;
       }>;
 
+      // 削除対象を先に処理
       for (const remap of remapsData) {
         if (remap._delete && remap.id) {
           await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
-        } else if (remap.id) {
+        }
+      }
+
+      // 更新・挿入を処理
+      for (const remap of remapsData) {
+        if (remap._delete) continue;
+        if (!remap.sourceKey) continue;
+
+        const sourceKeyNormalized = normalizeKeyCode(remap.sourceKey);
+        const targetKeyNormalized = remap.targetKey ? normalizeKeyCode(remap.targetKey) : null;
+
+        if (remap.id) {
+          // 既存レコードの更新
           await db.update(keyRemaps)
             .set({
-              sourceKey: remap.sourceKey.toUpperCase(),
-              targetKey: remap.targetKey?.toUpperCase() || null,
+              sourceKey: sourceKeyNormalized,
+              targetKey: targetKeyNormalized,
               software: remap.software || null,
               notes: remap.notes || null,
               updatedAt: now,
             })
             .where(eq(keyRemaps.id, remap.id));
-        } else if (remap.sourceKey) {
-          await db.insert(keyRemaps).values({
-            id: createId(),
-            userId: user.id,
-            sourceKey: remap.sourceKey.toUpperCase(),
-            targetKey: remap.targetKey?.toUpperCase() || null,
-            software: remap.software || null,
-            notes: remap.notes || null,
-            createdAt: now,
-            updatedAt: now,
+        } else {
+          // 新規挿入 - 同じsourceKeyが既に存在するか確認（正規化後と大文字の両方でチェック）
+          const sourceKeyUpper = remap.sourceKey.toUpperCase();
+          const existing = await db.query.keyRemaps.findFirst({
+            where: and(
+              eq(keyRemaps.userId, user.id),
+              or(
+                eq(keyRemaps.sourceKey, sourceKeyNormalized),
+                eq(keyRemaps.sourceKey, sourceKeyUpper)
+              )
+            ),
           });
+
+          if (existing) {
+            // 既存のものを更新（正規化形式に変換）
+            await db.update(keyRemaps)
+              .set({
+                sourceKey: sourceKeyNormalized,
+                targetKey: targetKeyNormalized,
+                software: remap.software || null,
+                notes: remap.notes || null,
+                updatedAt: now,
+              })
+              .where(eq(keyRemaps.id, existing.id));
+          } else {
+            // 新規挿入
+            await db.insert(keyRemaps).values({
+              id: createId(),
+              userId: user.id,
+              sourceKey: sourceKeyNormalized,
+              targetKey: targetKeyNormalized,
+              software: remap.software || null,
+              notes: remap.notes || null,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
         }
       }
     }
@@ -1292,36 +1370,50 @@ export default function KeybindingsPage() {
                       <div key={remap.id || `new-${index}`} className="p-3 rounded-lg border bg-secondary/20 space-y-3">
                         {/* キー変換行 */}
                         <div className="flex flex-wrap items-center gap-2">
-                          <Input
-                            value={remap.sourceKey}
-                            onChange={(e) => updateRemap(index, { sourceKey: e.target.value })}
-                            onKeyDown={(e) => {
-                              // 特殊キーをキャプチャ
-                              if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
-                                e.preventDefault();
-                                updateRemap(index, { sourceKey: e.code });
-                              }
-                            }}
-                            placeholder="変更元キー"
-                            className="w-24 sm:w-32 font-mono text-center text-sm"
-                          />
-                          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          {remapType === "disabled" ? (
-                            <Badge variant="destructive" className="w-24 sm:w-32 justify-center">無効化</Badge>
-                          ) : (
+                          <div className="flex items-center gap-1">
                             <Input
-                              value={remap.targetKey || ""}
-                              onChange={(e) => updateRemap(index, { targetKey: e.target.value || null })}
+                              value={remap.sourceKey}
+                              onChange={(e) => updateRemap(index, { sourceKey: e.target.value })}
                               onKeyDown={(e) => {
                                 // 特殊キーをキャプチャ
                                 if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
                                   e.preventDefault();
-                                  updateRemap(index, { targetKey: e.code });
+                                  updateRemap(index, { sourceKey: e.code });
                                 }
                               }}
-                              placeholder="変更先キー"
-                              className="w-24 sm:w-32 font-mono text-center text-sm"
+                              placeholder="変更元キー"
+                              className="w-24 sm:w-28 font-mono text-center text-xs"
                             />
+                            {remap.sourceKey && (
+                              <span className="text-xs text-muted-foreground min-w-8">
+                                ({getKeyLabel(remap.sourceKey, playerConfig?.keyboardLayout)})
+                              </span>
+                            )}
+                          </div>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          {remapType === "disabled" ? (
+                            <Badge variant="destructive" className="w-24 sm:w-32 justify-center">無効化</Badge>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={remap.targetKey || ""}
+                                onChange={(e) => updateRemap(index, { targetKey: e.target.value || null })}
+                                onKeyDown={(e) => {
+                                  // 特殊キーをキャプチャ
+                                  if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
+                                    e.preventDefault();
+                                    updateRemap(index, { targetKey: e.code });
+                                  }
+                                }}
+                                placeholder="変更先キー"
+                                className="w-24 sm:w-28 font-mono text-center text-xs"
+                              />
+                              {remap.targetKey && (
+                                <span className="text-xs text-muted-foreground min-w-8">
+                                  ({getKeyLabel(remap.targetKey, playerConfig?.keyboardLayout)})
+                                </span>
+                              )}
+                            </div>
                           )}
                           <Select
                             value={remapType}

@@ -1,3 +1,7 @@
+// =====================================
+// アクションラベル
+// =====================================
+
 // キーバインドアクションの日本語ラベル
 export const ACTION_LABELS: Record<string, string> = {
   // 移動
@@ -66,7 +70,12 @@ export const SHORT_ACTION_LABELS: Record<string, string> = {
   command: "コマンド",
 };
 
-// キーコードを表示名に変換
+// =====================================
+// キーコード正規化・表示ラベル
+// =====================================
+
+// JavaScript KeyboardEvent.code形式のキーコード → 表示名
+// 正規化後の形式（PascalCase）で定義
 export const KEY_CODE_LABELS: Record<string, string> = {
   // マウス
   Mouse0: "左クリック",
@@ -82,6 +91,8 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   ShiftRight: "右Shift",
   AltLeft: "左Alt",
   AltRight: "右Alt",
+  MetaLeft: "左Win",
+  MetaRight: "右Win",
   Tab: "Tab",
   CapsLock: "CapsLock",
   Escape: "Esc",
@@ -110,7 +121,7 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   F10: "F10",
   F11: "F11",
   F12: "F12",
-  // 記号
+  // 記号（US配列デフォルト）
   Slash: "/",
   Backslash: "\\",
   Minus: "-",
@@ -122,6 +133,14 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   Comma: ",",
   Period: ".",
   Backquote: "`",
+  // テンキー
+  NumpadEnter: "Num Enter",
+  NumpadAdd: "Num +",
+  NumpadSubtract: "Num -",
+  NumpadMultiply: "Num *",
+  NumpadDivide: "Num /",
+  NumpadDecimal: "Num .",
+  NumLock: "NumLock",
 };
 
 /**
@@ -138,8 +157,13 @@ export function getShortActionLabel(action: string): string {
   return SHORT_ACTION_LABELS[action] || action;
 }
 
+// =====================================
+// キーコード正規化
+// =====================================
+
 // Minecraft形式 → JavaScript KeyboardEvent.code形式 変換マッピング
-const MINECRAFT_TO_JS_KEYCODE: Record<string, string> = {
+// 特殊キー・記号など正規表現でカバーできないものを定義
+const MINECRAFT_SPECIAL_KEYS: Record<string, string> = {
   // マウス
   "key.mouse.left": "Mouse0",
   "key.mouse.right": "Mouse1",
@@ -154,6 +178,8 @@ const MINECRAFT_TO_JS_KEYCODE: Record<string, string> = {
   "key.keyboard.right.shift": "ShiftRight",
   "key.keyboard.left.alt": "AltLeft",
   "key.keyboard.right.alt": "AltRight",
+  "key.keyboard.left.win": "MetaLeft",
+  "key.keyboard.right.win": "MetaRight",
   "key.keyboard.tab": "Tab",
   "key.keyboard.caps.lock": "CapsLock",
   "key.keyboard.escape": "Escape",
@@ -169,19 +195,6 @@ const MINECRAFT_TO_JS_KEYCODE: Record<string, string> = {
   "key.keyboard.down": "ArrowDown",
   "key.keyboard.left": "ArrowLeft",
   "key.keyboard.right": "ArrowRight",
-  // ファンクションキー
-  "key.keyboard.f1": "F1",
-  "key.keyboard.f2": "F2",
-  "key.keyboard.f3": "F3",
-  "key.keyboard.f4": "F4",
-  "key.keyboard.f5": "F5",
-  "key.keyboard.f6": "F6",
-  "key.keyboard.f7": "F7",
-  "key.keyboard.f8": "F8",
-  "key.keyboard.f9": "F9",
-  "key.keyboard.f10": "F10",
-  "key.keyboard.f11": "F11",
-  "key.keyboard.f12": "F12",
   // 記号
   "key.keyboard.slash": "Slash",
   "key.keyboard.backslash": "Backslash",
@@ -194,99 +207,170 @@ const MINECRAFT_TO_JS_KEYCODE: Record<string, string> = {
   "key.keyboard.comma": "Comma",
   "key.keyboard.period": "Period",
   "key.keyboard.grave.accent": "Backquote",
+  // テンキー記号
+  "key.keyboard.keypad.enter": "NumpadEnter",
+  "key.keyboard.keypad.add": "NumpadAdd",
+  "key.keyboard.keypad.subtract": "NumpadSubtract",
+  "key.keyboard.keypad.multiply": "NumpadMultiply",
+  "key.keyboard.keypad.divide": "NumpadDivide",
+  "key.keyboard.keypad.decimal": "NumpadDecimal",
+  "key.keyboard.num.lock": "NumLock",
+};
+
+// 大文字/小文字混在のキーコードを正規化（PascalCase）するためのマッピング
+// 正規表現で対応できない特殊ケースのみ
+const NORMALIZE_SPECIAL_KEYS: Record<string, string> = {
+  // 単一ワード
+  space: "Space",
+  tab: "Tab",
+  enter: "Enter",
+  escape: "Escape",
+  backspace: "Backspace",
+  delete: "Delete",
+  insert: "Insert",
+  home: "Home",
+  end: "End",
+  pageup: "PageUp",
+  pagedown: "PageDown",
+  capslock: "CapsLock",
+  numlock: "NumLock",
+  // 矢印
+  arrowup: "ArrowUp",
+  arrowdown: "ArrowDown",
+  arrowleft: "ArrowLeft",
+  arrowright: "ArrowRight",
+  // 記号
+  slash: "Slash",
+  backslash: "Backslash",
+  minus: "Minus",
+  equal: "Equal",
+  bracketleft: "BracketLeft",
+  bracketright: "BracketRight",
+  semicolon: "Semicolon",
+  quote: "Quote",
+  comma: "Comma",
+  period: "Period",
+  backquote: "Backquote",
+  // テンキー記号
+  numpadenter: "NumpadEnter",
+  numpadadd: "NumpadAdd",
+  numpadsubtract: "NumpadSubtract",
+  numpadmultiply: "NumpadMultiply",
+  numpaddivide: "NumpadDivide",
+  numpaddecimal: "NumpadDecimal",
 };
 
 /**
- * Minecraft形式のキーコードをJavaScript KeyboardEvent.code形式に正規化
- * 例: "key.keyboard.w" → "KeyW", "key.mouse.left" → "Mouse0"
+ * 様々な形式のキーコードをJavaScript KeyboardEvent.code形式（PascalCase）に正規化
+ *
+ * 対応形式:
+ * - Minecraft形式: "key.keyboard.w", "key.mouse.left"
+ * - 大文字形式: "KEYW", "CONTROLLEFT", "SPACE"
+ * - PascalCase形式: "KeyW", "ControlLeft" (そのまま)
+ *
+ * @example
+ * normalizeKeyCode("key.keyboard.w") // => "KeyW"
+ * normalizeKeyCode("KEYW") // => "KeyW"
+ * normalizeKeyCode("KeyW") // => "KeyW"
+ * normalizeKeyCode("CONTROLLEFT") // => "ControlLeft"
  */
 export function normalizeKeyCode(keyCode: string): string {
   const lowerKeyCode = keyCode.toLowerCase();
 
-  // Minecraft形式のマッピングをチェック
-  if (MINECRAFT_TO_JS_KEYCODE[lowerKeyCode]) {
-    return MINECRAFT_TO_JS_KEYCODE[lowerKeyCode];
+  // 1. Minecraft形式の特殊キーマッピング
+  if (MINECRAFT_SPECIAL_KEYS[lowerKeyCode]) {
+    return MINECRAFT_SPECIAL_KEYS[lowerKeyCode];
   }
 
-  // key.keyboard.X 形式で単一文字キーの場合（例: key.keyboard.w → KeyW）
-  const keyboardMatch = lowerKeyCode.match(/^key\.keyboard\.([a-z])$/);
-  if (keyboardMatch) {
-    return `Key${keyboardMatch[1].toUpperCase()}`;
+  // 2. Minecraft形式のパターンマッチング
+  // key.keyboard.X（単一文字）→ KeyX
+  const mcKeyMatch = lowerKeyCode.match(/^key\.keyboard\.([a-z])$/);
+  if (mcKeyMatch) {
+    return `Key${mcKeyMatch[1].toUpperCase()}`;
   }
 
-  // key.keyboard.X 形式で数字キーの場合（例: key.keyboard.1 → Digit1）
-  const digitMatch = lowerKeyCode.match(/^key\.keyboard\.(\d)$/);
+  // key.keyboard.X（数字）→ DigitX
+  const mcDigitMatch = lowerKeyCode.match(/^key\.keyboard\.(\d)$/);
+  if (mcDigitMatch) {
+    return `Digit${mcDigitMatch[1]}`;
+  }
+
+  // key.keyboard.fX → FX
+  const mcFKeyMatch = lowerKeyCode.match(/^key\.keyboard\.f(\d+)$/);
+  if (mcFKeyMatch) {
+    return `F${mcFKeyMatch[1]}`;
+  }
+
+  // key.keyboard.keypad.X（数字）→ NumpadX
+  const mcNumpadMatch = lowerKeyCode.match(/^key\.keyboard\.keypad\.(\d)$/);
+  if (mcNumpadMatch) {
+    return `Numpad${mcNumpadMatch[1]}`;
+  }
+
+  // 3. 特殊キーの正規化（大文字/小文字混在対応）
+  if (NORMALIZE_SPECIAL_KEYS[lowerKeyCode]) {
+    return NORMALIZE_SPECIAL_KEYS[lowerKeyCode];
+  }
+
+  // 4. パターンによる正規化
+  // keyX → KeyX (例: keyw, KEYW → KeyW)
+  const keyMatch = lowerKeyCode.match(/^key([a-z])$/);
+  if (keyMatch) {
+    return `Key${keyMatch[1].toUpperCase()}`;
+  }
+
+  // digitX → DigitX (例: digit1, DIGIT1 → Digit1)
+  const digitMatch = lowerKeyCode.match(/^digit(\d)$/);
   if (digitMatch) {
     return `Digit${digitMatch[1]}`;
   }
 
-  // key.keyboard.keypad.X 形式（例: key.keyboard.keypad.1 → Numpad1）
-  const numpadMatch = lowerKeyCode.match(/^key\.keyboard\.keypad\.(\d)$/);
+  // numpadX → NumpadX (例: numpad1, NUMPAD1 → Numpad1)
+  const numpadMatch = lowerKeyCode.match(/^numpad(\d)$/);
   if (numpadMatch) {
     return `Numpad${numpadMatch[1]}`;
   }
 
-  // すでにJavaScript形式の場合はそのまま返す
+  // modifierLeft/Right (例: controlleft, SHIFTRIGHT → ControlLeft, ShiftRight)
+  const modifierMatch = lowerKeyCode.match(/^(control|shift|alt|meta)(left|right)$/);
+  if (modifierMatch) {
+    const [, modifier, side] = modifierMatch;
+    return modifier.charAt(0).toUpperCase() + modifier.slice(1) +
+           side.charAt(0).toUpperCase() + side.slice(1);
+  }
+
+  // mouseX → MouseX
+  const mouseMatch = lowerKeyCode.match(/^mouse(\d)$/);
+  if (mouseMatch) {
+    return `Mouse${mouseMatch[1]}`;
+  }
+
+  // fX → FX (例: f1, F12 → F1, F12)
+  const fKeyMatch = lowerKeyCode.match(/^f(\d+)$/);
+  if (fKeyMatch) {
+    return `F${fKeyMatch[1]}`;
+  }
+
+  // 5. すでにPascalCase形式の場合はそのまま返す
   return keyCode;
 }
 
-// KEY.KEYBOARD.X / KEY.MOUSE.X 形式のキーコードマッピング
-const MINECRAFT_KEY_LABELS: Record<string, string> = {
-  // マウス
-  "key.mouse.left": "左クリック",
-  "key.mouse.right": "右クリック",
-  "key.mouse.middle": "中クリック",
-  "key.mouse.4": "サイド1",
-  "key.mouse.5": "サイド2",
-  // 特殊キー
-  "key.keyboard.space": "スペース",
-  "key.keyboard.left.control": "左Ctrl",
-  "key.keyboard.right.control": "右Ctrl",
-  "key.keyboard.left.shift": "左Shift",
-  "key.keyboard.right.shift": "右Shift",
-  "key.keyboard.left.alt": "左Alt",
-  "key.keyboard.right.alt": "右Alt",
-  "key.keyboard.tab": "Tab",
-  "key.keyboard.caps.lock": "CapsLock",
-  "key.keyboard.escape": "Esc",
-  "key.keyboard.enter": "Enter",
-  "key.keyboard.backspace": "Backspace",
-  "key.keyboard.delete": "Delete",
-  "key.keyboard.insert": "Insert",
-  "key.keyboard.home": "Home",
-  "key.keyboard.end": "End",
-  "key.keyboard.page.up": "PageUp",
-  "key.keyboard.page.down": "PageDown",
-  "key.keyboard.up": "↑",
-  "key.keyboard.down": "↓",
-  "key.keyboard.left": "←",
-  "key.keyboard.right": "→",
-  // ファンクションキー
-  "key.keyboard.f1": "F1",
-  "key.keyboard.f2": "F2",
-  "key.keyboard.f3": "F3",
-  "key.keyboard.f4": "F4",
-  "key.keyboard.f5": "F5",
-  "key.keyboard.f6": "F6",
-  "key.keyboard.f7": "F7",
-  "key.keyboard.f8": "F8",
-  "key.keyboard.f9": "F9",
-  "key.keyboard.f10": "F10",
-  "key.keyboard.f11": "F11",
-  "key.keyboard.f12": "F12",
-  // 記号
-  "key.keyboard.slash": "/",
-  "key.keyboard.backslash": "\\",
-  "key.keyboard.minus": "-",
-  "key.keyboard.equal": "=",
-  "key.keyboard.left.bracket": "[",
-  "key.keyboard.right.bracket": "]",
-  "key.keyboard.semicolon": ";",
-  "key.keyboard.apostrophe": "'",
-  "key.keyboard.comma": ",",
-  "key.keyboard.period": ".",
-  "key.keyboard.grave.accent": "`",
-};
+/**
+ * 2つのキーコードが同じキーを指しているかを比較
+ * 大文字/小文字/Minecraft形式の違いを吸収して比較
+ *
+ * @example
+ * keysEqual("KeyW", "KEYW") // => true
+ * keysEqual("KeyW", "key.keyboard.w") // => true
+ * keysEqual("ControlLeft", "CONTROLLEFT") // => true
+ */
+export function keysEqual(keyCode1: string, keyCode2: string): boolean {
+  return normalizeKeyCode(keyCode1) === normalizeKeyCode(keyCode2);
+}
+
+// =====================================
+// キーボード配列別ラベル
+// =====================================
 
 // JIS配列とUS配列で異なるキーのマッピング
 const JIS_KEY_LABELS: Record<string, string> = {
@@ -309,63 +393,52 @@ const US_KEY_LABELS: Record<string, string> = {
 
 /**
  * キーコードを表示用ラベルに変換
- * @param keyCode キーコード
- * @param keyboardLayout キーボード配列 ("jis" | "us" | null)、nullの場合はUSとして扱う
+ *
+ * どの形式のキーコードでも適切な表示名に変換する
+ * - Minecraft形式: "key.keyboard.w" → "W"
+ * - 大文字形式: "KEYW" → "W"
+ * - PascalCase形式: "KeyW" → "W"
+ *
+ * @param keyCode キーコード（任意の形式）
+ * @param keyboardLayout キーボード配列 ("jis" | "us" | null)
  */
 export function getKeyLabel(keyCode: string, keyboardLayout: string | null = null): string {
-  // 小文字に統一して検索
-  const lowerKeyCode = keyCode.toLowerCase();
+  // まず正規化（Minecraft形式、大文字形式などをPascalCaseに統一）
+  const normalized = normalizeKeyCode(keyCode);
 
-  // KEY.KEYBOARD.X / KEY.MOUSE.X 形式（Minecraftの形式）
-  if (MINECRAFT_KEY_LABELS[lowerKeyCode]) {
-    return MINECRAFT_KEY_LABELS[lowerKeyCode];
-  }
-
-  // key.keyboard.X 形式で単一文字キーの場合（例: key.keyboard.w → W）
-  const keyboardMatch = lowerKeyCode.match(/^key\.keyboard\.([a-z0-9])$/);
-  if (keyboardMatch) {
-    return keyboardMatch[1].toUpperCase();
-  }
-
-  // キーボード配列による違いを適用（正規化されたキーコードで判定）
-  const normalizedKeyCode = normalizeKeyCode(keyCode);
+  // キーボード配列による違いを適用
   const layoutLabels = keyboardLayout === "jis" ? JIS_KEY_LABELS : US_KEY_LABELS;
-  if (layoutLabels[normalizedKeyCode]) {
-    return layoutLabels[normalizedKeyCode];
+  if (layoutLabels[normalized]) {
+    return layoutLabels[normalized];
   }
 
-  // 既知のキーコードの場合（旧形式）
-  if (KEY_CODE_LABELS[keyCode]) {
-    return KEY_CODE_LABELS[keyCode];
+  // 既知のキーコードの場合
+  if (KEY_CODE_LABELS[normalized]) {
+    return KEY_CODE_LABELS[normalized];
   }
 
   // KeyX形式の場合（例: KeyW → W）
-  if (keyCode.startsWith("Key")) {
-    return keyCode.slice(3);
+  if (normalized.startsWith("Key")) {
+    return normalized.slice(3);
   }
 
   // DigitX形式の場合（例: Digit1 → 1）
-  if (keyCode.startsWith("Digit")) {
-    return keyCode.slice(5);
+  if (normalized.startsWith("Digit")) {
+    return normalized.slice(5);
   }
 
   // NumpadX形式の場合（例: Numpad1 → Num1）
-  if (keyCode.startsWith("Numpad")) {
-    return "Num" + keyCode.slice(6);
+  if (normalized.startsWith("Numpad")) {
+    return "Num" + normalized.slice(6);
   }
 
-  // Mouse0/Mouse1形式
-  if (keyCode.startsWith("Mouse")) {
-    const num = keyCode.slice(5);
-    if (num === "0") return "左クリック";
-    if (num === "1") return "右クリック";
-    if (num === "2") return "中クリック";
-    return `マウス${num}`;
-  }
-
-  // その他はそのまま返す
-  return keyCode;
+  // その他は正規化後の値を返す
+  return normalized;
 }
+
+// =====================================
+// 指の割り当て
+// =====================================
 
 // 指の種類定義
 export type FingerType =

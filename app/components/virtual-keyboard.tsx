@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 // キーボードレイアウト定義
@@ -361,18 +361,18 @@ function VirtualKeyboardComponent({
     return keybindings[keyCode.toLowerCase()] || [];
   };
 
-  // キーコードから指割り当てを取得
+  // キーコードから指割り当てを取得（正規化して検索）
   const getFingerForKey = (keyCode: string): FingerType | undefined => {
-    const fingers = effectiveFingerAssignments[keyCode] || effectiveFingerAssignments[keyCode.toLowerCase()];
+    const normalized = normalizeKeyCode(keyCode);
+    const fingers = effectiveFingerAssignments[normalized] ||
+                   effectiveFingerAssignments[keyCode] ||
+                   effectiveFingerAssignments[keyCode.toLowerCase()];
     return fingers?.[0];
   };
 
-  // キーコードからリマップ情報を取得
+  // キーコードからリマップ情報を取得（keysEqualで比較）
   const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) =>
-      r.sourceKey === keyCode ||
-      r.sourceKey.toUpperCase() === keyCode.toUpperCase()
-    );
+    return remaps.find((r) => keysEqual(r.sourceKey, keyCode));
   };
 
   // 単一キーのレンダリング
@@ -955,18 +955,18 @@ export function VirtualNumpad({
     return keybindings[keyCode.toLowerCase()] || [];
   };
 
-  // キーコードから指割り当てを取得
+  // キーコードから指割り当てを取得（正規化して検索）
   const getFingerForKey = (keyCode: string): FingerType | undefined => {
-    const fingers = effectiveFingerAssignments[keyCode] || effectiveFingerAssignments[keyCode.toLowerCase()];
+    const normalized = normalizeKeyCode(keyCode);
+    const fingers = effectiveFingerAssignments[normalized] ||
+                   effectiveFingerAssignments[keyCode] ||
+                   effectiveFingerAssignments[keyCode.toLowerCase()];
     return fingers?.[0];
   };
 
-  // キーコードからリマップ情報を取得
+  // キーコードからリマップ情報を取得（keysEqualで比較）
   const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) =>
-      r.sourceKey === keyCode ||
-      r.sourceKey.toUpperCase() === keyCode.toUpperCase()
-    );
+    return remaps.find((r) => keysEqual(r.sourceKey, keyCode));
   };
 
   const gap = 2;
