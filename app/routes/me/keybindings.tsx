@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings, Copy } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
@@ -79,20 +79,21 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     throw new Response("ユーザーが見つかりません", { status: 404 });
   }
 
-  // アクティブなプリセットを取得
-  const activePreset = await db.query.configPresets.findFirst({
-    where: (presets, { and, eq: eqOp }) => and(
-      eqOp(presets.userId, user.id),
-      eqOp(presets.isActive, true)
-    ),
+  // 全プリセットを取得（コピー機能用）
+  const allPresets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, user.id),
+    columns: {
+      id: true,
+      name: true,
+      isActive: true,
+      keybindingsData: true,
+      remapsData: true,
+      fingerAssignmentsData: true,
+    },
   });
 
-  // プリセット数を取得
-  const presetCount = await db
-    .select({ id: configPresets.id })
-    .from(configPresets)
-    .where(eq(configPresets.userId, user.id))
-    .then((rows) => rows.length);
+  // アクティブなプリセットを取得
+  const activePreset = allPresets.find((p) => p.isActive);
 
   return {
     userId: user.id,
@@ -103,7 +104,18 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     customKeys: user.customKeys,
     legacyApiUrl: env.LEGACY_API_URL,
     activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
-    hasPresets: presetCount > 0,
+    hasPresets: allPresets.length > 0,
+    presets: allPresets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isActive: p.isActive,
+      hasKeybindings: !!p.keybindingsData,
+      hasRemaps: !!p.remapsData,
+      hasFingerAssignments: !!p.fingerAssignmentsData,
+      keybindingsData: p.keybindingsData,
+      remapsData: p.remapsData,
+      fingerAssignmentsData: p.fingerAssignmentsData,
+    })),
   };
 }
 
@@ -497,7 +509,7 @@ type CustomKeyEntry = {
 };
 
 export default function KeybindingsPage() {
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
@@ -542,6 +554,10 @@ export default function KeybindingsPage() {
 
   // タブの状態
   const [activeTab, setActiveTab] = useState("keybindings");
+
+  // コピー元プリセット選択ダイアログ
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<"keybindings" | "remaps" | "fingers" | "all">("all");
 
   const isSubmitting = fetcher.state === "submitting";
   const data = fetcher.data;
@@ -882,6 +898,79 @@ export default function KeybindingsPage() {
     );
   }, [importFetcher, legacyApiUrl]);
 
+  // プリセットからコピー
+  const handleCopyFromPreset = useCallback((presetId: string, target: "keybindings" | "remaps" | "fingers" | "all") => {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) {
+      toast.error("プリセットが見つかりません");
+      return;
+    }
+
+    let copiedItems: string[] = [];
+
+    // キーバインドをコピー
+    if ((target === "keybindings" || target === "all") && preset.keybindingsData) {
+      try {
+        const keybindingsDataParsed = JSON.parse(preset.keybindingsData) as Array<{ action: string; keyCode: string }>;
+        const newChanges: Record<string, string> = {};
+        for (const presetKb of keybindingsDataParsed) {
+          // 現在のkeybindingsから同じactionのものを探す
+          const kb = kbs.find((k) => k.action === presetKb.action);
+          if (kb && presetKb.keyCode !== kb.keyCode) {
+            newChanges[kb.id] = presetKb.keyCode;
+          }
+        }
+        if (Object.keys(newChanges).length > 0) {
+          setKeybindingChanges((prev) => ({ ...prev, ...newChanges }));
+          copiedItems.push("キー配置");
+        }
+      } catch (e) {
+        console.error("Failed to parse keybindings data:", e);
+      }
+    }
+
+    // リマップをコピー
+    if ((target === "remaps" || target === "all") && preset.remapsData) {
+      try {
+        const remapsDataParsed = JSON.parse(preset.remapsData) as Array<{
+          sourceKey: string;
+          targetKey: string | null;
+          software: string | null;
+          notes: string | null;
+        }>;
+        setLocalRemaps(remapsDataParsed.map((r) => ({
+          sourceKey: r.sourceKey,
+          targetKey: r.targetKey,
+          software: r.software,
+          notes: r.notes,
+          _isNew: true,
+        })));
+        copiedItems.push("リマップ");
+      } catch (e) {
+        console.error("Failed to parse remaps data:", e);
+      }
+    }
+
+    // 指割り当てをコピー
+    if ((target === "fingers" || target === "all") && preset.fingerAssignmentsData) {
+      try {
+        const fingerAssignmentsDataParsed = JSON.parse(preset.fingerAssignmentsData) as FingerAssignmentMap;
+        setLocalFingerAssignments(fingerAssignmentsDataParsed);
+        copiedItems.push("指割り当て");
+      } catch (e) {
+        console.error("Failed to parse finger assignments data:", e);
+      }
+    }
+
+    if (copiedItems.length > 0) {
+      toast.success(`${preset.name}から${copiedItems.join("・")}をコピーしました`);
+    } else {
+      toast.info("コピーするデータがありませんでした");
+    }
+
+    setCopyDialogOpen(false);
+  }, [presets, kbs]);
+
   // インポート結果を表示
   useEffect(() => {
     const data = importFetcher.data;
@@ -1000,11 +1089,28 @@ export default function KeybindingsPage() {
             <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets" className="shrink-0">
-              <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                プリセット管理
-              </Button>
-            </Link>
+            <div className="flex gap-2 shrink-0">
+              {presets.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    setCopyTarget("all");
+                    setCopyDialogOpen(true);
+                  }}
+                >
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">他のプリセットからコピー</span>
+                  <span className="sm:hidden">コピー</span>
+                </Button>
+              )}
+              <Link to="/me/presets" className="shrink-0">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                  プリセット管理
+                </Button>
+              </Link>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -1658,6 +1764,104 @@ export default function KeybindingsPage() {
             <Button variant="outline" onClick={() => setEditingKeyCode(null)}>
               <X className="mr-2 h-4 w-4" />
               閉じる
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* プリセットからコピーダイアログ */}
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogDescription>
+              コピー元のプリセットを選択してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* コピー対象の選択 */}
+            <div className="space-y-2">
+              <Label>コピーする項目:</Label>
+              <Select
+                value={copyTarget}
+                onValueChange={(value: "keybindings" | "remaps" | "fingers" | "all") => setCopyTarget(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">すべて</SelectItem>
+                  <SelectItem value="keybindings">キー配置のみ</SelectItem>
+                  <SelectItem value="remaps">リマップのみ</SelectItem>
+                  <SelectItem value="fingers">指割り当てのみ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* プリセット一覧 */}
+            <div className="space-y-2">
+              <Label>コピー元プリセット:</Label>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {presets
+                  .filter((p) => p.id !== activePreset?.id)
+                  .map((preset) => {
+                    const hasData =
+                      (copyTarget === "all" && (preset.hasKeybindings || preset.hasRemaps || preset.hasFingerAssignments)) ||
+                      (copyTarget === "keybindings" && preset.hasKeybindings) ||
+                      (copyTarget === "remaps" && preset.hasRemaps) ||
+                      (copyTarget === "fingers" && preset.hasFingerAssignments);
+
+                    return (
+                      <Button
+                        key={preset.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        disabled={!hasData}
+                        onClick={() => handleCopyFromPreset(preset.id, copyTarget)}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium">{preset.name}</span>
+                          <div className="flex gap-1 flex-wrap">
+                            {preset.hasKeybindings && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                キー配置
+                              </Badge>
+                            )}
+                            {preset.hasRemaps && (
+                              <Badge variant="secondary" className="text-xs">
+                                <ArrowRight className="h-3 w-3 mr-1" />
+                                リマップ
+                              </Badge>
+                            )}
+                            {preset.hasFingerAssignments && (
+                              <Badge variant="secondary" className="text-xs">
+                                指割り当て
+                              </Badge>
+                            )}
+                            {!preset.hasKeybindings && !preset.hasRemaps && !preset.hasFingerAssignments && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                データなし
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Button>
+                    );
+                  })}
+                {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    他のプリセットがありません
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
+              キャンセル
             </Button>
           </DialogFooter>
         </DialogContent>
