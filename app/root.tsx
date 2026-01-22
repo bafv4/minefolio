@@ -6,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { Analytics } from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
 import { Providers } from "@/components/providers";
@@ -49,6 +50,7 @@ export default function App() {
     <>
       <Outlet />
       <CookieConsentBanner />
+      <Analytics />
     </>
   );
 }
