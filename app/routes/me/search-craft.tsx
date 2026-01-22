@@ -347,13 +347,13 @@ function ItemSelectDialog({
           )}
 
           {/* アイテムリスト */}
-          <div className="grid grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
+          <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
             {filteredItems.slice(0, 200).map((itemId) => (
               <button
                 key={itemId}
                 type="button"
                 onClick={() => toggleItem(itemId)}
-                className={`w-9 h-9 flex items-center justify-center rounded border-2 transition-colors ${
+                className={`w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center rounded border-2 transition-colors touch-manipulation ${
                   isItemSelected(itemId)
                     ? "border-primary bg-primary/20"
                     : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -689,12 +689,12 @@ export default function SearchCraftPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -702,12 +702,12 @@ export default function SearchCraftPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
             </Link>
           </AlertDescription>
         </Alert>

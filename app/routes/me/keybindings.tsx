@@ -996,12 +996,12 @@ export default function KeybindingsPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">
+            <Link to="/me/presets" className="shrink-0">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">
                 プリセット管理
               </Button>
             </Link>
@@ -1013,12 +1013,12 @@ export default function KeybindingsPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、キー配置を編集できません。まずプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">
                 プリセットを作成
               </Button>
             </Link>
@@ -1093,17 +1093,17 @@ export default function KeybindingsPage() {
         }}
         className="w-full"
       >
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="keybindings" disabled={hasUnsavedChanges && activeTab !== "keybindings"}>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+          <TabsTrigger value="keybindings" disabled={hasUnsavedChanges && activeTab !== "keybindings"} className="text-xs sm:text-sm py-2">
             操作の種類
           </TabsTrigger>
-          <TabsTrigger value="remaps" disabled={hasUnsavedChanges && activeTab !== "remaps"}>
+          <TabsTrigger value="remaps" disabled={hasUnsavedChanges && activeTab !== "remaps"} className="text-xs sm:text-sm py-2">
             リマップ
           </TabsTrigger>
-          <TabsTrigger value="fingers" disabled={hasUnsavedChanges && activeTab !== "fingers"}>
+          <TabsTrigger value="fingers" disabled={hasUnsavedChanges && activeTab !== "fingers"} className="text-xs sm:text-sm py-2">
             指割り当て
           </TabsTrigger>
-          <TabsTrigger value="custom-keys" disabled={hasUnsavedChanges && activeTab !== "custom-keys"}>
+          <TabsTrigger value="custom-keys" disabled={hasUnsavedChanges && activeTab !== "custom-keys"} className="text-xs sm:text-sm py-2">
             カスタムキー
           </TabsTrigger>
         </TabsList>
@@ -1183,81 +1183,87 @@ export default function KeybindingsPage() {
                     if (remap._delete) return null;
                     const remapType = getRemapType(remap);
                     return (
-                      <div key={remap.id || `new-${index}`} className="flex flex-wrap items-center gap-3 p-3 rounded-lg border bg-secondary/20">
-                        <Input
-                          value={remap.sourceKey}
-                          onChange={(e) => updateRemap(index, { sourceKey: e.target.value })}
-                          onKeyDown={(e) => {
-                            // 特殊キーをキャプチャ
-                            if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
-                              e.preventDefault();
-                              updateRemap(index, { sourceKey: e.code });
-                            }
-                          }}
-                          placeholder="変更元キー"
-                          className="w-32 font-mono text-center text-sm"
-                        />
-                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        {remapType === "disabled" ? (
-                          <Badge variant="destructive" className="w-32 justify-center">無効化</Badge>
-                        ) : (
+                      <div key={remap.id || `new-${index}`} className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+                        {/* キー変換行 */}
+                        <div className="flex flex-wrap items-center gap-2">
                           <Input
-                            value={remap.targetKey || ""}
-                            onChange={(e) => updateRemap(index, { targetKey: e.target.value || null })}
+                            value={remap.sourceKey}
+                            onChange={(e) => updateRemap(index, { sourceKey: e.target.value })}
                             onKeyDown={(e) => {
                               // 特殊キーをキャプチャ
                               if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
                                 e.preventDefault();
-                                updateRemap(index, { targetKey: e.code });
+                                updateRemap(index, { sourceKey: e.code });
                               }
                             }}
-                            placeholder="変更先キー"
-                            className="w-32 font-mono text-center text-sm"
+                            placeholder="変更元キー"
+                            className="w-24 sm:w-32 font-mono text-center text-sm"
                           />
-                        )}
-                        <Select
-                          value={remapType}
-                          onValueChange={(value: RemapType) => {
-                            if (value === "disabled") {
-                              updateRemap(index, { targetKey: null });
-                            } else if (value === "none") {
-                              deleteRemap(index);
-                            } else if (remapType === "disabled") {
-                              updateRemap(index, { targetKey: "" });
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-24 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="keyboard">キー</SelectItem>
-                            <SelectItem value="special">特殊</SelectItem>
-                            <SelectItem value="disabled">無効</SelectItem>
-                            <SelectItem value="none">削除</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          value={remap.software || ""}
-                          onChange={(e) => updateRemap(index, { software: e.target.value || null })}
-                          placeholder="ソフトウェア"
-                          className="w-28 text-sm"
-                        />
-                        <Input
-                          value={remap.notes || ""}
-                          onChange={(e) => updateRemap(index, { notes: e.target.value || null })}
-                          placeholder="メモ"
-                          className="flex-1 min-w-24 text-sm"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          onClick={() => deleteRemap(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          {remapType === "disabled" ? (
+                            <Badge variant="destructive" className="w-24 sm:w-32 justify-center">無効化</Badge>
+                          ) : (
+                            <Input
+                              value={remap.targetKey || ""}
+                              onChange={(e) => updateRemap(index, { targetKey: e.target.value || null })}
+                              onKeyDown={(e) => {
+                                // 特殊キーをキャプチャ
+                                if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
+                                  e.preventDefault();
+                                  updateRemap(index, { targetKey: e.code });
+                                }
+                              }}
+                              placeholder="変更先キー"
+                              className="w-24 sm:w-32 font-mono text-center text-sm"
+                            />
+                          )}
+                          <Select
+                            value={remapType}
+                            onValueChange={(value: RemapType) => {
+                              if (value === "disabled") {
+                                updateRemap(index, { targetKey: null });
+                              } else if (value === "none") {
+                                deleteRemap(index);
+                              } else if (remapType === "disabled") {
+                                updateRemap(index, { targetKey: "" });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-20 sm:w-24 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="keyboard">キー</SelectItem>
+                              <SelectItem value="special">特殊</SelectItem>
+                              <SelectItem value="disabled">無効</SelectItem>
+                              <SelectItem value="none">削除</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive ml-auto sm:ml-0"
+                            onClick={() => deleteRemap(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {/* 詳細行 */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input
+                            value={remap.software || ""}
+                            onChange={(e) => updateRemap(index, { software: e.target.value || null })}
+                            placeholder="ソフトウェア"
+                            className="w-full sm:w-28 text-sm"
+                          />
+                          <Input
+                            value={remap.notes || ""}
+                            onChange={(e) => updateRemap(index, { notes: e.target.value || null })}
+                            placeholder="メモ"
+                            className="flex-1 min-w-0 text-sm"
+                          />
+                        </div>
                       </div>
                     );
                   })}

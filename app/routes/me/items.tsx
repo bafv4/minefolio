@@ -283,15 +283,21 @@ function HotbarSlot({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="relative w-12 h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group"
+          className="relative w-10 h-10 sm:w-12 sm:h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group touch-manipulation"
         >
           {items.length > 0 ? (
             <div className="relative w-full h-full flex items-center justify-center">
               <MinecraftItemIcon
                 itemId={items[0]}
+                size={24}
+                textureBaseUrl={TEXTURE_BASE_URL}
+                className="pixelated sm:hidden"
+              />
+              <MinecraftItemIcon
+                itemId={items[0]}
                 size={28}
                 textureBaseUrl={TEXTURE_BASE_URL}
-                className="pixelated"
+                className="pixelated hidden sm:block"
               />
               {items.length > 1 && (
                 <span className="absolute bottom-0 right-0 text-[10px] bg-background/80 px-0.5 rounded">
@@ -365,13 +371,13 @@ function HotbarSlot({
           )}
 
           {/* アイテムリスト */}
-          <div className="grid grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
+          <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
             {filteredItems.slice(0, 200).map((itemId) => (
               <button
                 key={itemId}
                 type="button"
                 onClick={() => toggleItem(itemId)}
-                className={`w-12 h-12 flex items-center justify-center rounded border-2 transition-colors ${
+                className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
                   isItemSelected(itemId)
                     ? "border-primary bg-primary/20"
                     : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -380,7 +386,7 @@ function HotbarSlot({
               >
                 <MinecraftItemIcon
                   itemId={itemId}
-                  size={32}
+                  size={28}
                   textureBaseUrl={TEXTURE_BASE_URL}
                   className="pixelated"
                 />
@@ -703,12 +709,12 @@ export default function ItemLayoutsPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -716,12 +722,12 @@ export default function ItemLayoutsPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
             </Link>
           </AlertDescription>
         </Alert>

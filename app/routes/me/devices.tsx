@@ -439,12 +439,12 @@ export default function DevicesPage() {
       {!hasPresets && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               プリセットがないため、設定を編集できません。先にプリセットを作成してください。
             </span>
-            <Link to="/me/presets">
-              <Button size="sm">プリセットを作成</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -452,12 +452,12 @@ export default function DevicesPage() {
       {activePreset && (
         <Alert>
           <Settings className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
               現在編集中のプリセット: <strong>{activePreset.name}</strong>
             </span>
-            <Link to="/me/presets">
-              <Button variant="outline" size="sm">プリセット管理</Button>
+            <Link to="/me/presets" className="shrink-0">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
             </Link>
           </AlertDescription>
         </Alert>
