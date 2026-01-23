@@ -4,8 +4,64 @@ import { ImageResponse } from "@vercel/og";
 import type { LoaderFunctionArgs } from "react-router";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
-import { getCraftarAvatarUrl } from "@/lib/mojang";
 import { createDb } from "@/lib/db";
+
+/**
+ * ArrayBufferをBase64文字列に変換（Edge Runtime対応）
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * 外部画像をフェッチしてBase64データURLに変換
+ */
+async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Minefolio/1.0",
+      },
+    });
+    if (!response.ok) return null;
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = arrayBufferToBase64(arrayBuffer);
+    const contentType = response.headers.get("content-type") || "image/png";
+    return `data:${contentType};base64,${base64}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 複数のアバターサービスを試してBase64データURLを取得
+ * Crafatar, mc-heads.net, minotarの順にフォールバック
+ */
+async function fetchAvatarDataUrl(
+  uuid: string,
+  size: number = 180
+): Promise<string | null> {
+  const uuidClean = uuid.replace(/-/g, "");
+
+  const services = [
+    `https://crafatar.com/avatars/${uuidClean}?size=${size}&overlay=true`,
+    `https://mc-heads.net/avatar/${uuidClean}/${size}`,
+    `https://minotar.net/avatar/${uuidClean}/${size}`,
+  ];
+
+  for (const url of services) {
+    const dataUrl = await fetchImageAsDataUrl(url);
+    if (dataUrl) return dataUrl;
+  }
+
+  return null;
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -33,10 +89,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return new Response("User not found", { status: 404 });
   }
 
+  // アバター画像を事前にフェッチ（複数サービスをフォールバック）
+  let avatarDataUrl: string | null = null;
+  if (user.uuid) {
+    avatarDataUrl = await fetchAvatarDataUrl(user.uuid, 180);
+  }
+
   return generatePlayerOgp({
     displayName: user.displayName || user.mcid || user.slug,
     mcid: user.mcid || user.slug,
     uuid: user.uuid || "",
+    avatarDataUrl,
     bio: user.shortBio || user.bio || "Minecraft Speedrunner",
     mainEdition: user.mainEdition,
     role: user.role,
@@ -47,6 +110,7 @@ interface OgpData {
   displayName: string;
   mcid: string;
   uuid: string;
+  avatarDataUrl: string | null;
   bio: string;
   mainEdition: string | null;
   role: string | null;
@@ -158,7 +222,6 @@ function generateDefaultOgp(data: { title: string; description: string }) {
  * 1200x630px (Twitter/OGP標準サイズ)
  */
 function generatePlayerOgp(data: OgpData) {
-  const avatarUrl = getCraftarAvatarUrl(data.uuid, 180, true);
   const roleLabel = data.role === "runner" ? "Speedrunner" : "Viewer";
   const editionLabel =
     data.mainEdition === "java"
@@ -226,9 +289,9 @@ function generatePlayerOgp(data: OgpData) {
                 overflow: "hidden",
               }}
             >
-              {data.uuid ? (
+              {data.avatarDataUrl ? (
                 <img
-                  src={avatarUrl}
+                  src={data.avatarDataUrl}
                   width={180}
                   height={180}
                   style={{ borderRadius: "90px" }}
