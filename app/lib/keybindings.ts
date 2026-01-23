@@ -1,4 +1,16 @@
 // =====================================
+// 定数
+// =====================================
+
+/** 不使用・割り当てなしを表す特殊キーコード */
+export const UNBOUND_KEY = "_UNBOUND";
+
+/** キーコードが不使用かどうかを判定 */
+export function isUnbound(keyCode: string | null | undefined): boolean {
+  return keyCode === UNBOUND_KEY;
+}
+
+// =====================================
 // アクションラベル
 // =====================================
 
@@ -29,6 +41,9 @@ export const ACTION_LABELS: Record<string, string> = {
   hotbar7: "ホットバー7",
   hotbar8: "ホットバー8",
   hotbar9: "ホットバー9",
+  // コントローラー用ホットバー操作
+  hotbarLeft: "ホットバー左",
+  hotbarRight: "ホットバー右",
   // UI
   togglePerspective: "視点切替",
   fullscreen: "全画面",
@@ -63,6 +78,9 @@ export const SHORT_ACTION_LABELS: Record<string, string> = {
   hotbar7: "HB7",
   hotbar8: "HB8",
   hotbar9: "HB9",
+  // コントローラー用ホットバー操作
+  hotbarLeft: "HB←",
+  hotbarRight: "HB→",
   // UI
   togglePerspective: "視点",
   fullscreen: "全画面",
@@ -83,6 +101,23 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   Mouse2: "中クリック",
   Mouse3: "サイド1",
   Mouse4: "サイド2",
+  // コントローラー
+  GamepadA: "A",
+  GamepadB: "B",
+  GamepadX: "X",
+  GamepadY: "Y",
+  GamepadLB: "LB",
+  GamepadRB: "RB",
+  GamepadLT: "LT",
+  GamepadRT: "RT",
+  GamepadL3: "L3",
+  GamepadR3: "R3",
+  GamepadDpadUp: "D-Pad↑",
+  GamepadDpadDown: "D-Pad↓",
+  GamepadDpadLeft: "D-Pad←",
+  GamepadDpadRight: "D-Pad→",
+  GamepadStart: "Start",
+  GamepadSelect: "Select",
   // 特殊キー
   Space: "スペース",
   ControlLeft: "左Ctrl",
@@ -345,6 +380,23 @@ export function normalizeKeyCode(keyCode: string): string {
     return `Mouse${mouseMatch[1]}`;
   }
 
+  // gamepadX → GamepadX (コントローラーボタン)
+  const gamepadMatch = lowerKeyCode.match(/^gamepad(.+)$/);
+  if (gamepadMatch) {
+    const button = gamepadMatch[1];
+    // 既知のボタン名を正規化
+    const buttonMap: Record<string, string> = {
+      a: "A", b: "B", x: "X", y: "Y",
+      lb: "LB", rb: "RB", lt: "LT", rt: "RT",
+      l3: "L3", r3: "R3",
+      dpadup: "DpadUp", dpaddown: "DpadDown",
+      dpadleft: "DpadLeft", dpadright: "DpadRight",
+      start: "Start", select: "Select",
+    };
+    const normalizedButton = buttonMap[button.toLowerCase()] || button;
+    return `Gamepad${normalizedButton}`;
+  }
+
   // fX → FX (例: f1, F12 → F1, F12)
   const fKeyMatch = lowerKeyCode.match(/^f(\d+)$/);
   if (fKeyMatch) {
@@ -403,6 +455,11 @@ const US_KEY_LABELS: Record<string, string> = {
  * @param keyboardLayout キーボード配列 ("jis" | "us" | null)
  */
 export function getKeyLabel(keyCode: string, keyboardLayout: string | null = null): string {
+  // 不使用の場合
+  if (keyCode === UNBOUND_KEY) {
+    return "-";
+  }
+
   // まず正規化（Minecraft形式、大文字形式などをPascalCaseに統一）
   const normalized = normalizeKeyCode(keyCode);
 
@@ -552,4 +609,100 @@ export const DEFAULT_FINGER_ASSIGNMENTS: Record<string, FingerType[]> = {
   Mouse2: ["right-middle"],
   Mouse3: ["right-thumb"],
   Mouse4: ["right-thumb"],
+};
+
+// =====================================
+// コントローラー設定
+// =====================================
+
+/** コントローラー設定の型定義 */
+export type ControllerSettings = {
+  controllerModel: string | null;
+  lookSensitivity: number | null;
+  invertYAxis: boolean;
+  vibration: boolean;
+};
+
+/** デフォルトコントローラー設定 */
+export const DEFAULT_CONTROLLER_SETTINGS: ControllerSettings = {
+  controllerModel: null,
+  lookSensitivity: 50,
+  invertYAxis: false,
+  vibration: true,
+};
+
+/** コントローラーアクションのカテゴリ */
+export type ControllerActionCategory = "movement" | "combat" | "inventory" | "ui";
+
+/** コントローラーキーバインド定義 */
+export type ControllerKeybinding = {
+  action: string;
+  keyCode: string;
+  category: ControllerActionCategory;
+};
+
+/** デフォルトコントローラーキー配置（Bedrock準拠） */
+export const DEFAULT_CONTROLLER_KEYBINDINGS: ControllerKeybinding[] = [
+  // 移動（forward/back/left/rightは左スティックで行うため省略）
+  { action: "jump", keyCode: "GamepadA", category: "movement" },
+  { action: "sneak", keyCode: "GamepadB", category: "movement" },
+  { action: "sprint", keyCode: "GamepadL3", category: "movement" },
+  // 戦闘
+  { action: "attack", keyCode: "GamepadRT", category: "combat" },
+  { action: "use", keyCode: "GamepadLT", category: "combat" },
+  { action: "pickBlock", keyCode: "GamepadR3", category: "combat" },
+  { action: "drop", keyCode: "GamepadDpadDown", category: "inventory" },
+  // インベントリ
+  { action: "inventory", keyCode: "GamepadY", category: "inventory" },
+  { action: "swapHands", keyCode: "GamepadX", category: "inventory" },
+  { action: "hotbarLeft", keyCode: "GamepadLB", category: "inventory" },
+  { action: "hotbarRight", keyCode: "GamepadRB", category: "inventory" },
+  // UI
+  { action: "togglePerspective", keyCode: "GamepadDpadUp", category: "ui" },
+  { action: "chat", keyCode: "GamepadDpadRight", category: "ui" },
+];
+
+/** コントローラー用アクション一覧（ホットバーはLB/RB方式のみ） */
+export const CONTROLLER_ACTIONS = [
+  // 移動
+  "jump", "sneak", "sprint",
+  // 戦闘
+  "attack", "use", "pickBlock", "drop",
+  // インベントリ
+  "inventory", "swapHands", "hotbarLeft", "hotbarRight",
+  // UI
+  "togglePerspective", "chat",
+] as const;
+
+/** キーボード/マウス用アクション一覧 */
+export const KEYBOARD_MOUSE_ACTIONS = [
+  // 移動
+  "forward", "back", "left", "right", "jump", "sneak", "sprint",
+  // 戦闘
+  "attack", "use", "pickBlock", "drop",
+  // インベントリ
+  "inventory", "swapHands",
+  "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
+  "hotbar6", "hotbar7", "hotbar8", "hotbar9",
+  // UI
+  "togglePerspective", "fullscreen", "chat", "command",
+] as const;
+
+/** キーコードがコントローラーボタンかどうかを判定 */
+export function isControllerKeyCode(keyCode: string): boolean {
+  return keyCode.startsWith("Gamepad");
+}
+
+/** 入力方法ラベル */
+export const INPUT_METHOD_LABELS: Record<string, string> = {
+  keyboard_mouse: "キーボード/マウス",
+  controller: "コントローラー",
+  touch: "タッチ",
+};
+
+/** 入力方法の短縮ラベル */
+export const INPUT_METHOD_SHORT_LABELS: Record<string, string> = {
+  keyboard_mouse: "KBM",
+  controller: "Controller",
+  touch: "Touch",
 };

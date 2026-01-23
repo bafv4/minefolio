@@ -7,7 +7,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets } from "@/lib/schema";
 import { eq, asc, and, or } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, FINGER_LABELS, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings, Copy } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
@@ -98,6 +98,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return {
     userId: user.id,
     mcid: user.mcid,
+    inputMethod: user.inputMethod,
     keybindings: user.keybindings,
     playerConfig: user.playerConfig,
     keyRemaps: user.keyRemaps,
@@ -179,12 +180,12 @@ export async function action({ context, request }: Route.ActionArgs) {
     const updates = JSON.parse(keybindingsJson) as Array<{ id: string; keyCode: string }>;
 
     for (const update of updates) {
-      if (update.keyCode) {
-        await db
-          .update(keybindings)
-          .set({ keyCode: update.keyCode, updatedAt: new Date() })
-          .where(eq(keybindings.id, update.id));
-      }
+      // 空文字列または_UNBOUNDの場合は不使用として保存
+      const keyCode = update.keyCode || "_UNBOUND";
+      await db
+        .update(keybindings)
+        .set({ keyCode, updatedAt: new Date() })
+        .where(eq(keybindings.id, update.id));
     }
 
     return { success: true, message: "キー配置を保存しました" };
@@ -587,7 +588,7 @@ type CustomKeyEntry = {
 };
 
 export default function KeybindingsPage() {
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
@@ -660,7 +661,16 @@ export default function KeybindingsPage() {
 
   // ========== Computed Values ==========
   const deprecatedActions = ["toggleHud"];
-  const validKeybindings = kbs.filter((kb) => !deprecatedActions.includes(kb.action));
+  const isControllerMode = inputMethod === "controller";
+
+  // 入力方法に応じたアクションをフィルタリング
+  const allowedActions = isControllerMode
+    ? (CONTROLLER_ACTIONS as readonly string[])
+    : (KEYBOARD_MOUSE_ACTIONS as readonly string[]);
+
+  const validKeybindings = kbs.filter((kb) =>
+    !deprecatedActions.includes(kb.action) && allowedActions.includes(kb.action)
+  );
 
   // ローカル変更を適用したキーバインドリスト
   const keybindingsWithLocalChanges = useMemo(() =>
@@ -830,10 +840,10 @@ export default function KeybindingsPage() {
       if (!original) return prev;
 
       if (isCurrentlyAssigned) {
-        // 割り当てを解除（空にする）
+        // 割り当てを解除（不使用にする）
         return {
           ...prev,
-          [keybindingId]: "",
+          [keybindingId]: UNBOUND_KEY,
         };
       } else {
         // このキーに割り当てる
@@ -1210,59 +1220,140 @@ export default function KeybindingsPage() {
         </Alert>
       )}
 
-      {/* 仮想キーボード */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <CardTitle className="text-base font-semibold">キーボードビュー</CardTitle>
-            <FingerLegend />
-          </div>
-          <CardDescription>
-            キーをクリックして設定を編集できます
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-start gap-4">
-            {/* メインキーボード */}
-            <div className="overflow-x-auto pb-2 w-full">
-              <VirtualKeyboard
-                layout={keyboardLayout}
-                keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
-                fingerAssignments={localFingerAssignments}
-                remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
-                customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
-                onKeyClick={handleKeyClick}
-                showActionLabels
-                showFingerAssignments
-                showRemaps
-                hideNumpad
-              />
+      {/* コントローラーモード: コントローラービュー */}
+      {isControllerMode ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Gamepad2 className="h-5 w-5" />
+                コントローラービュー
+              </CardTitle>
             </div>
-            {/* テンキーとマウスを横並び */}
-            <div className="flex items-start gap-6">
-              <VirtualNumpad
-                keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
-                fingerAssignments={localFingerAssignments}
-                remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
-                onKeyClick={handleKeyClick}
-                showActionLabels
-                showFingerAssignments
-                showRemaps
-              />
-              <VirtualMouse
-                keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
-                fingerAssignments={localFingerAssignments}
-                remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
-                customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
-                onButtonClick={handleKeyClick}
-                showActionLabels
-                showFingerAssignments
-                showRemaps
-              />
+            <CardDescription>
+              コントローラーボタンに操作を割り当てます。左スティック（移動）・右スティック（視点）は固定です。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 左側: フェイスボタン・バンパー・トリガー */}
+              <div className="space-y-4">
+                <div className="text-sm font-medium text-muted-foreground">ボタン</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3"].map((keyCode) => {
+                    const binding = keybindingsWithLocalChanges.find((kb) => kb.keyCode === keyCode);
+                    return (
+                      <button
+                        key={keyCode}
+                        type="button"
+                        onClick={() => setEditingKeyCode(keyCode)}
+                        className={cn(
+                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "bg-secondary/30 hover:bg-secondary/50",
+                          binding ? "border-primary/30" : "border-input"
+                        )}
+                      >
+                        <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
+                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                          {binding ? getActionLabel(binding.action) : "未設定"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* 右側: D-Pad・Start/Select */}
+              <div className="space-y-4">
+                <div className="text-sm font-medium text-muted-foreground">D-Pad / その他</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {["GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => {
+                    const binding = keybindingsWithLocalChanges.find((kb) => kb.keyCode === keyCode);
+                    return (
+                      <button
+                        key={keyCode}
+                        type="button"
+                        onClick={() => setEditingKeyCode(keyCode)}
+                        className={cn(
+                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "bg-secondary/30 hover:bg-secondary/50",
+                          binding ? "border-primary/30" : "border-input"
+                        )}
+                      >
+                        <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
+                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                          {binding ? getActionLabel(binding.action) : "未設定"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* スティックの説明 */}
+                <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                  <div className="font-medium mb-1">スティック操作（固定）</div>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li>左スティック: 移動（前後左右）</li>
+                    <li>右スティック: 視点操作</li>
+                  </ul>
+                </div>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        /* キーボード/マウスモード: 仮想キーボード */
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <CardTitle className="text-base font-semibold">キーボードビュー</CardTitle>
+              <FingerLegend />
+            </div>
+            <CardDescription>
+              キーをクリックして設定を編集できます
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-start gap-4">
+              {/* メインキーボード */}
+              <div className="overflow-x-auto pb-2 w-full">
+                <VirtualKeyboard
+                  layout={keyboardLayout}
+                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  fingerAssignments={localFingerAssignments}
+                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                  onKeyClick={handleKeyClick}
+                  showActionLabels
+                  showFingerAssignments
+                  showRemaps
+                  hideNumpad
+                />
+              </div>
+              {/* テンキーとマウスを横並び */}
+              <div className="flex items-start gap-6">
+                <VirtualNumpad
+                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  fingerAssignments={localFingerAssignments}
+                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  onKeyClick={handleKeyClick}
+                  showActionLabels
+                  showFingerAssignments
+                  showRemaps
+                />
+                <VirtualMouse
+                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  fingerAssignments={localFingerAssignments}
+                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
+                  onButtonClick={handleKeyClick}
+                  showActionLabels
+                  showFingerAssignments
+                  showRemaps
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* タブ分け設定セクション */}
       <Tabs
@@ -1277,19 +1368,23 @@ export default function KeybindingsPage() {
         }}
         className="w-full"
       >
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+        <TabsList className={cn("grid w-full h-auto", isControllerMode ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4")}>
           <TabsTrigger value="keybindings" disabled={hasUnsavedChanges && activeTab !== "keybindings"} className="text-xs sm:text-sm py-2">
             操作の種類
           </TabsTrigger>
-          <TabsTrigger value="remaps" disabled={hasUnsavedChanges && activeTab !== "remaps"} className="text-xs sm:text-sm py-2">
-            リマップ
-          </TabsTrigger>
-          <TabsTrigger value="fingers" disabled={hasUnsavedChanges && activeTab !== "fingers"} className="text-xs sm:text-sm py-2">
-            指割り当て
-          </TabsTrigger>
-          <TabsTrigger value="custom-keys" disabled={hasUnsavedChanges && activeTab !== "custom-keys"} className="text-xs sm:text-sm py-2">
-            カスタムキー
-          </TabsTrigger>
+          {!isControllerMode && (
+            <>
+              <TabsTrigger value="remaps" disabled={hasUnsavedChanges && activeTab !== "remaps"} className="text-xs sm:text-sm py-2">
+                リマップ
+              </TabsTrigger>
+              <TabsTrigger value="fingers" disabled={hasUnsavedChanges && activeTab !== "fingers"} className="text-xs sm:text-sm py-2">
+                指割り当て
+              </TabsTrigger>
+              <TabsTrigger value="custom-keys" disabled={hasUnsavedChanges && activeTab !== "custom-keys"} className="text-xs sm:text-sm py-2">
+                カスタムキー
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* 操作の種類タブ */}
@@ -1313,32 +1408,68 @@ export default function KeybindingsPage() {
                         return (
                           <div key={kb.id} className="flex items-center justify-between py-2.5">
                             <span className="text-sm">{getActionLabel(kb.action)}</span>
-                            <button
-                              type="button"
-                              onFocus={() => setIsFocused(true)}
-                              onBlur={() => setIsFocused(false)}
-                              onKeyDown={(e) => {
-                                if (!["Tab", "Enter", "Escape"].includes(e.key)) {
-                                  e.preventDefault();
-                                  updateKeybindingKey(kb.id, e.code);
-                                  (e.target as HTMLElement).blur();
-                                }
-                              }}
-                              className={cn(
-                                "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
-                                "bg-secondary/50 hover:bg-secondary/70",
-                                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-                                isFocused ? "border-primary" : "border-input"
-                              )}
-                            >
-                              {isFocused ? (
-                                <span className="text-muted-foreground text-xs">キーを押してください</span>
-                              ) : kb.keyCode ? (
-                                <span className="font-medium">{getKeyLabelWithCustom(kb.keyCode)}</span>
-                              ) : (
-                                <span className="text-muted-foreground">未設定</span>
-                              )}
-                            </button>
+                            {isControllerMode ? (
+                              /* コントローラーモード: ドロップダウンでボタン選択 */
+                              <Select
+                                value={kb.keyCode || ""}
+                                onValueChange={(value) => updateKeybindingKey(kb.id, value)}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <SelectValue placeholder="未設定">
+                                    {isUnbound(kb.keyCode) ? (
+                                      <span className="text-muted-foreground">不使用</span>
+                                    ) : kb.keyCode ? (
+                                      getKeyLabel(kb.keyCode)
+                                    ) : (
+                                      <span className="text-muted-foreground">未設定</span>
+                                    )}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={UNBOUND_KEY}>不使用</SelectItem>
+                                  {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3", "GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => (
+                                    <SelectItem key={keyCode} value={keyCode}>
+                                      {getKeyLabel(keyCode)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              /* キーボード/マウスモード: キーキャプチャ */
+                              <button
+                                type="button"
+                                onFocus={() => setIsFocused(true)}
+                                onBlur={() => setIsFocused(false)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    // ESCキーで不使用に設定
+                                    e.preventDefault();
+                                    updateKeybindingKey(kb.id, UNBOUND_KEY);
+                                    (e.target as HTMLElement).blur();
+                                  } else if (!["Tab", "Enter"].includes(e.key)) {
+                                    e.preventDefault();
+                                    updateKeybindingKey(kb.id, e.code);
+                                    (e.target as HTMLElement).blur();
+                                  }
+                                }}
+                                className={cn(
+                                  "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
+                                  "bg-secondary/50 hover:bg-secondary/70",
+                                  "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+                                  isFocused ? "border-primary" : "border-input"
+                                )}
+                              >
+                                {isFocused ? (
+                                  <span className="text-muted-foreground text-xs">キーを押す / ESCで不使用</span>
+                                ) : isUnbound(kb.keyCode) ? (
+                                  <span className="text-muted-foreground">不使用</span>
+                                ) : kb.keyCode ? (
+                                  <span className="font-medium">{getKeyLabelWithCustom(kb.keyCode)}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">未設定</span>
+                                )}
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -1350,7 +1481,8 @@ export default function KeybindingsPage() {
           </div>
         </TabsContent>
 
-        {/* リマップタブ */}
+        {/* リマップタブ（コントローラーモード以外） */}
+        {!isControllerMode && (
         <TabsContent value="remaps" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1484,8 +1616,10 @@ export default function KeybindingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
-        {/* 指割り当てタブ */}
+        {/* 指割り当てタブ（コントローラーモード以外） */}
+        {!isControllerMode && (
         <TabsContent value="fingers" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1521,8 +1655,10 @@ export default function KeybindingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
-        {/* カスタムキータブ */}
+        {/* カスタムキータブ（コントローラーモード以外） */}
+        {!isControllerMode && (
         <TabsContent value="custom-keys" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1607,6 +1743,7 @@ export default function KeybindingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* 保存バー */}
@@ -1698,7 +1835,8 @@ export default function KeybindingsPage() {
               </div>
             </div>
 
-            {/* リマップ */}
+            {/* リマップ（コントローラーボタン以外のみ表示） */}
+            {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
             <div className="space-y-2">
               <Label>リマップ:</Label>
               <p className="text-xs text-muted-foreground">
@@ -1820,8 +1958,10 @@ export default function KeybindingsPage() {
                 )}
               </div>
             </div>
+            )}
 
-            {/* 指割り当て */}
+            {/* 指割り当て（コントローラーボタン以外のみ表示） */}
+            {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
             <div className="space-y-2">
               <Label>指割り当て:</Label>
               <Select
@@ -1851,6 +1991,7 @@ export default function KeybindingsPage() {
                 </SelectContent>
               </Select>
             </div>
+            )}
           </div>
 
           <DialogFooter>

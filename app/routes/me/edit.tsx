@@ -431,6 +431,8 @@ export async function action({ context, request }: Route.ActionArgs) {
   const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
+  const inputMethod = (formData.get("inputMethod") as "keyboard_mouse" | "controller" | "touch") || null;
+  const inputMethodBadge = (formData.get("inputMethodBadge") as "keyboard_mouse" | "controller" | "touch") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
   const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
 
@@ -490,6 +492,8 @@ export async function action({ context, request }: Route.ActionArgs) {
       mainEdition,
       mainPlatform,
       role,
+      inputMethod,
+      inputMethodBadge,
       shortBio,
       speedruncomUsername,
       updatedAt: new Date(),
@@ -644,6 +648,8 @@ export default function EditProfilePage() {
     mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
+    inputMethod: user.inputMethod ?? "",
+    inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     speedruncomUsername: user.speedruncomUsername ?? "",
   });
@@ -661,6 +667,8 @@ export default function EditProfilePage() {
     mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
+    inputMethod: user.inputMethod ?? "",
+    inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     speedruncomUsername: user.speedruncomUsername ?? "",
   });
@@ -702,6 +710,8 @@ export default function EditProfilePage() {
     formData.set("mainEdition", formValues.mainEdition);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
+    formData.set("inputMethod", formValues.inputMethod);
+    formData.set("inputMethodBadge", formValues.inputMethodBadge);
     formData.set("shortBio", formValues.shortBio);
     formData.set("speedruncomUsername", formValues.speedruncomUsername);
     fetcher.submit(formData, { method: "post" });
@@ -1191,6 +1201,46 @@ export default function EditProfilePage() {
                     <SelectItem value="viewer">視聴者</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="inputMethod">入力方法</Label>
+                <Select
+                  value={formValues.inputMethod}
+                  onValueChange={(value) => handleInputChange("inputMethod", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="選択..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="keyboard_mouse">キーボード/マウス</SelectItem>
+                    <SelectItem value="controller">コントローラー</SelectItem>
+                    <SelectItem value="touch">タッチ</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  デバイス設定/キー配置の切り替えに使用
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="inputMethodBadge">入力方法バッジ</Label>
+                <Select
+                  value={formValues.inputMethodBadge}
+                  onValueChange={(value) => handleInputChange("inputMethodBadge", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="選択..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="keyboard_mouse">KBM</SelectItem>
+                    <SelectItem value="controller">Controller</SelectItem>
+                    <SelectItem value="touch">Touch</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  プロフィールに表示するバッジ
+                </p>
               </div>
             </div>
           </CardContent>

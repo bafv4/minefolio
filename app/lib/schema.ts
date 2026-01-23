@@ -34,6 +34,8 @@ export const users = sqliteTable("users", {
   mainEdition: text("main_edition", { enum: ["java", "bedrock"] }),
   mainPlatform: text("main_platform", { enum: ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] }),
   role: text("role", { enum: ["viewer", "runner"] }),
+  inputMethod: text("input_method", { enum: ["keyboard_mouse", "controller", "touch"] }),
+  inputMethodBadge: text("input_method_badge", { enum: ["keyboard_mouse", "controller", "touch"] }), // プロフィールバッジ用（inputMethodとは独立）
   shortBio: text("short_bio"),
 
   // Speedrun.com連携
@@ -88,6 +90,9 @@ export const playerConfigs = sqliteTable("player_configs", {
   // 指割り当て（JSON）
   fingerAssignments: text("finger_assignments"), // JSON.stringify/parse
 
+  // コントローラー設定（JSON）
+  controllerSettings: text("controller_settings"), // JSON: { controllerModel, lookSensitivity, invertYAxis, vibration }
+
   // その他
   notes: text("notes"),
 
@@ -121,7 +126,7 @@ export const customKeys = sqliteTable("custom_keys", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   keyCode: text("key_code").notNull(),
   keyName: text("key_name").notNull(),
-  category: text("category", { enum: ["mouse", "keyboard"] }).notNull(),
+  category: text("category", { enum: ["mouse", "keyboard", "controller"] }).notNull(),
   position: text("position"), // JSON { x: number, y: number }
   size: text("size"), // JSON { width: number, height: number }
   notes: text("notes"),

@@ -3,12 +3,13 @@ import { useState, useMemo } from "react";
 import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, customKeys } from "@/lib/schema";
+import { users, keybindings, customKeys } from "@/lib/schema";
 import { desc, asc, like, eq, and } from "drizzle-orm";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -25,8 +26,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from "lucide-react";
-import { getKeyLabel } from "@/lib/keybindings";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, X, SlidersHorizontal } from "lucide-react";
+import { getKeyLabel, isUnbound } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 
 export const meta: Route.MetaFunction = () => {
@@ -225,6 +233,25 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 type MouseSortKey = "dpi" | "sensitivity" | "cm360" | "windowsSpeed" | "cursorSpeed" | null;
 type SortDirection = "asc" | "desc";
 
+// マウスフィルタの型
+type MouseFilters = {
+  dpiMin: string;
+  dpiMax: string;
+  sensitivityMin: string; // %表記（0-200）
+  sensitivityMax: string;
+  cm360Min: string;
+  cm360Max: string;
+};
+
+const DEFAULT_MOUSE_FILTERS: MouseFilters = {
+  dpiMin: "",
+  dpiMax: "",
+  sensitivityMin: "",
+  sensitivityMax: "",
+  cm360Min: "",
+  cm360Max: "",
+};
+
 export default function KeybindingsListPage() {
   const { players, search, sort } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -235,6 +262,18 @@ export default function KeybindingsListPage() {
   // マウスタブのソート状態
   const [mouseSortKey, setMouseSortKey] = useState<MouseSortKey>(null);
   const [mouseSortDirection, setMouseSortDirection] = useState<SortDirection>("asc");
+
+  // マウスタブのフィルタ状態
+  const [mouseFilters, setMouseFilters] = useState<MouseFilters>(DEFAULT_MOUSE_FILTERS);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+
+  // アクティブなフィルタ数
+  const activeMouseFilterCount = Object.values(mouseFilters).filter(Boolean).length;
+
+  // フィルタをクリア
+  const clearMouseFilters = () => {
+    setMouseFilters(DEFAULT_MOUSE_FILTERS);
+  };
 
   // マウスソートのトグル
   const handleMouseSort = (key: MouseSortKey) => {
@@ -252,11 +291,62 @@ export default function KeybindingsListPage() {
     }
   };
 
-  // ソート済みプレイヤーリスト（マウスタブ用）
+  // フィルタ＆ソート済みプレイヤーリスト（マウスタブ用）
   const sortedPlayersForMouse = useMemo(() => {
-    if (!mouseSortKey) return players;
+    // フィルタを適用
+    let filtered = players;
 
-    return [...players].sort((a, b) => {
+    const dpiMin = mouseFilters.dpiMin ? parseInt(mouseFilters.dpiMin) : null;
+    const dpiMax = mouseFilters.dpiMax ? parseInt(mouseFilters.dpiMax) : null;
+    const sensMin = mouseFilters.sensitivityMin ? parseInt(mouseFilters.sensitivityMin) : null;
+    const sensMax = mouseFilters.sensitivityMax ? parseInt(mouseFilters.sensitivityMax) : null;
+    const cm360Min = mouseFilters.cm360Min ? parseFloat(mouseFilters.cm360Min) : null;
+    const cm360Max = mouseFilters.cm360Max ? parseFloat(mouseFilters.cm360Max) : null;
+
+    if (dpiMin !== null || dpiMax !== null || sensMin !== null || sensMax !== null || cm360Min !== null || cm360Max !== null) {
+      filtered = players.filter((player) => {
+        const config = player.playerConfig;
+        if (!config) return false;
+
+        // DPIフィルタ
+        if (dpiMin !== null || dpiMax !== null) {
+          const dpi = config.mouseDpi;
+          if (dpi === null) return false;
+          if (dpiMin !== null && dpi < dpiMin) return false;
+          if (dpiMax !== null && dpi > dpiMax) return false;
+        }
+
+        // 感度フィルタ（%表記）
+        if (sensMin !== null || sensMax !== null) {
+          const sensitivity = config.gameSensitivity;
+          if (sensitivity === null) return false;
+          const sensitivityPercent = Math.floor(sensitivity * 200);
+          if (sensMin !== null && sensitivityPercent < sensMin) return false;
+          if (sensMax !== null && sensitivityPercent > sensMax) return false;
+        }
+
+        // 振り向きフィルタ
+        if (cm360Min !== null || cm360Max !== null) {
+          const cm360 = calculateCm360(
+            config.mouseDpi,
+            config.gameSensitivity,
+            config.rawInput,
+            config.windowsSpeed,
+            config.windowsSpeedMultiplier
+          );
+          if (cm360 === null) return false;
+          if (cm360Min !== null && cm360 < cm360Min) return false;
+          if (cm360Max !== null && cm360 > cm360Max) return false;
+        }
+
+        return true;
+      });
+    }
+
+    // ソートなしの場合はフィルタ結果のみ返す
+    if (!mouseSortKey) return filtered;
+
+    return [...filtered].sort((a, b) => {
       const configA = a.playerConfig;
       const configB = b.playerConfig;
 
@@ -315,7 +405,7 @@ export default function KeybindingsListPage() {
       const diff = valueA - valueB;
       return mouseSortDirection === "asc" ? diff : -diff;
     });
-  }, [players, mouseSortKey, mouseSortDirection]);
+  }, [players, mouseSortKey, mouseSortDirection, mouseFilters]);
 
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams);
@@ -437,7 +527,160 @@ export default function KeybindingsListPage() {
 
         {/* Mouse Tab */}
         <TabsContent value="mouse">
-          {players.length > 0 ? (
+          {/* マウスフィルタ */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setIsFilterDialogOpen(true)}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              数値フィルタ
+              {activeMouseFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                  {activeMouseFilterCount}
+                </Badge>
+              )}
+            </Button>
+
+            <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>数値範囲で絞り込み</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {/* DPI */}
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">DPI</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="最小"
+                        value={mouseFilters.dpiMin}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, dpiMin: e.target.value }))}
+                        className="flex-1"
+                      />
+                      <span className="text-muted-foreground">〜</span>
+                      <Input
+                        type="number"
+                        placeholder="最大"
+                        value={mouseFilters.dpiMax}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, dpiMax: e.target.value }))}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 感度 */}
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">ゲーム内感度 (%)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="最小"
+                        value={mouseFilters.sensitivityMin}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, sensitivityMin: e.target.value }))}
+                        className="flex-1"
+                      />
+                      <span className="text-muted-foreground">〜</span>
+                      <Input
+                        type="number"
+                        placeholder="最大"
+                        value={mouseFilters.sensitivityMax}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, sensitivityMax: e.target.value }))}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 振り向き */}
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">振り向き (cm/180)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="最小"
+                        value={mouseFilters.cm360Min}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, cm360Min: e.target.value }))}
+                        className="flex-1"
+                      />
+                      <span className="text-muted-foreground">〜</span>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="最大"
+                        value={mouseFilters.cm360Max}
+                        onChange={(e) => setMouseFilters((prev) => ({ ...prev, cm360Max: e.target.value }))}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
+                  {activeMouseFilterCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearMouseFilters}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      クリア
+                    </Button>
+                  )}
+                  <Button onClick={() => setIsFilterDialogOpen(false)}>
+                    閉じる
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* アクティブフィルタの表示 */}
+            {activeMouseFilterCount > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {(mouseFilters.dpiMin || mouseFilters.dpiMax) && (
+                  <Badge variant="secondary" className="gap-1">
+                    DPI: {mouseFilters.dpiMin || "0"}〜{mouseFilters.dpiMax || "∞"}
+                    <button
+                      onClick={() => setMouseFilters((prev) => ({ ...prev, dpiMin: "", dpiMax: "" }))}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(mouseFilters.sensitivityMin || mouseFilters.sensitivityMax) && (
+                  <Badge variant="secondary" className="gap-1">
+                    感度: {mouseFilters.sensitivityMin || "0"}%〜{mouseFilters.sensitivityMax || "∞"}%
+                    <button
+                      onClick={() => setMouseFilters((prev) => ({ ...prev, sensitivityMin: "", sensitivityMax: "" }))}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(mouseFilters.cm360Min || mouseFilters.cm360Max) && (
+                  <Badge variant="secondary" className="gap-1">
+                    振向: {mouseFilters.cm360Min || "0"}cm〜{mouseFilters.cm360Max || "∞"}cm
+                    <button
+                      onClick={() => setMouseFilters((prev) => ({ ...prev, cm360Min: "", cm360Max: "" }))}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <span className="text-sm text-muted-foreground ml-auto">
+              {sortedPlayersForMouse.length}人
+            </span>
+          </div>
+
+          {sortedPlayersForMouse.length > 0 ? (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
@@ -493,7 +736,19 @@ export default function KeybindingsListPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState search={search} onClear={() => handleSearch("")} />
+            <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">
+                {activeMouseFilterCount > 0
+                  ? "フィルタ条件に一致するプレイヤーがいません"
+                  : "プレイヤーが見つかりません"}
+              </p>
+              {activeMouseFilterCount > 0 && (
+                <Button variant="ghost" size="sm" className="mt-2" onClick={clearMouseFilters}>
+                  フィルタをクリア
+                </Button>
+              )}
+            </div>
           )}
         </TabsContent>
       </Tabs>
@@ -720,12 +975,66 @@ function MouseSettingsRow({
   );
 }
 
+/**
+ * 文字列の視覚的な幅を計算（全角=2、半角=1）
+ */
+function getVisualWidth(str: string): number {
+  let width = 0;
+  for (const char of str) {
+    const code = char.charCodeAt(0);
+    if (
+      (code >= 0x3000 && code <= 0x9FFF) ||
+      (code >= 0xFF00 && code <= 0xFFEF) ||
+      (code >= 0xAC00 && code <= 0xD7AF)
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * 視覚的な幅で文字列を省略（全角5文字=半角10文字を超える場合）
+ */
+function truncateByVisualWidth(str: string, maxWidth: number = 10): string {
+  if (getVisualWidth(str) <= maxWidth) {
+    return str;
+  }
+
+  let width = 0;
+  let result = '';
+  for (const char of str) {
+    const code = char.charCodeAt(0);
+    const charWidth = (
+      (code >= 0x3000 && code <= 0x9FFF) ||
+      (code >= 0xFF00 && code <= 0xFFEF) ||
+      (code >= 0xAC00 && code <= 0xD7AF)
+    ) ? 2 : 1;
+
+    if (width + charWidth > maxWidth - 1) {
+      return result + '…';
+    }
+    result += char;
+    width += charWidth;
+  }
+  return str;
+}
+
 // キー表示バッジ
 function KeyBadge({ keyCode, keyboardLayout }: { keyCode: string; keyboardLayout?: string | null }) {
+  // 不使用の場合は "-" を表示
+  if (isUnbound(keyCode)) {
+    return <span className="text-muted-foreground/40">-</span>;
+  }
+
   const label = getKeyLabel(keyCode, keyboardLayout);
+  const truncatedLabel = truncateByVisualWidth(label);
+  const isTruncated = label !== truncatedLabel;
   const isMouse = keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
 
-  return (
+  const badge = (
     <Badge
       variant="secondary"
       className={cn(
@@ -733,7 +1042,14 @@ function KeyBadge({ keyCode, keyboardLayout }: { keyCode: string; keyboardLayout
         isMouse && "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
       )}
     >
-      {label}
+      {truncatedLabel}
     </Badge>
   );
+
+  // 省略された場合はtitle属性で完全なラベルを表示
+  if (isTruncated) {
+    return <span title={label}>{badge}</span>;
+  }
+
+  return badge;
 }

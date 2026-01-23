@@ -304,6 +304,56 @@ type CustomKeyboardButton = {
   label: string;
 };
 
+/**
+ * 文字列の視覚的な幅を計算（全角=2、半角=1）
+ */
+function getVisualWidth(str: string): number {
+  let width = 0;
+  for (const char of str) {
+    const code = char.charCodeAt(0);
+    // 全角文字（CJK、全角記号など）
+    if (
+      (code >= 0x3000 && code <= 0x9FFF) || // CJK記号、ひらがな、カタカナ、漢字
+      (code >= 0xFF00 && code <= 0xFFEF) || // 全角英数、半角カタカナ
+      (code >= 0xAC00 && code <= 0xD7AF)    // 韓国語
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * 視覚的な幅で文字列を省略（全角5文字=半角10文字を超える場合）
+ */
+function truncateByVisualWidth(str: string, maxWidth: number = 10): string {
+  const visualWidth = getVisualWidth(str);
+  if (visualWidth <= maxWidth) {
+    return str;
+  }
+
+  let width = 0;
+  let result = '';
+  for (const char of str) {
+    const code = char.charCodeAt(0);
+    const charWidth = (
+      (code >= 0x3000 && code <= 0x9FFF) ||
+      (code >= 0xFF00 && code <= 0xFFEF) ||
+      (code >= 0xAC00 && code <= 0xD7AF)
+    ) ? 2 : 1;
+
+    // 省略記号（…）の分を考慮して1文字分余裕を持たせる
+    if (width + charWidth > maxWidth - 1) {
+      return result + '…';
+    }
+    result += char;
+    width += charWidth;
+  }
+  return str;
+}
+
 interface VirtualKeyboardProps {
   layout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   keybindings?: Record<string, KeybindingInfoList>;

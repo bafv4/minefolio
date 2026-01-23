@@ -4,11 +4,12 @@ import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
-import { eq, desc, asc, like, sql, or, and } from "drizzle-orm";
+import { eq, desc, asc, like, sql, or, and, isNotNull } from "drizzle-orm";
 import { PlayerCard } from "@/components/player-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -16,7 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, ArrowUpDown, Loader2 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 
 export const meta: Route.MetaFunction = () => {
@@ -33,6 +39,11 @@ const ITEMS_PER_PAGE = 12;
 
 type SortOption = "updatedAt" | "mcid" | "displayName";
 
+// フィルタオプションの型
+type FilterRole = "runner" | "viewer" | "";
+type FilterEdition = "java" | "bedrock" | "";
+type FilterInputMethod = "keyboard_mouse" | "controller" | "touch" | "";
+
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
@@ -42,22 +53,38 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const sortBy = (url.searchParams.get("sort") as SortOption) || "updatedAt";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
 
+  // フィルタパラメータ
+  const filterRole = (url.searchParams.get("role") as FilterRole) || "";
+  const filterEdition = (url.searchParams.get("edition") as FilterEdition) || "";
+  const filterInputMethod = (url.searchParams.get("input") as FilterInputMethod) || "";
+
   // ベースクエリ条件：公開プロフィールのみ
-  const baseCondition = eq(users.profileVisibility, "public");
+  const conditions = [eq(users.profileVisibility, "public")];
 
   // 検索条件（MCID、displayName、slugで検索）
-  const searchCondition = searchQuery
-    ? or(
+  if (searchQuery) {
+    conditions.push(
+      or(
         like(users.mcid, `%${searchQuery}%`),
         like(users.displayName, `%${searchQuery}%`),
         like(users.slug, `%${searchQuery}%`)
-      )
-    : undefined;
+      )!
+    );
+  }
+
+  // フィルタ条件
+  if (filterRole) {
+    conditions.push(eq(users.role, filterRole));
+  }
+  if (filterEdition) {
+    conditions.push(eq(users.mainEdition, filterEdition));
+  }
+  if (filterInputMethod) {
+    conditions.push(eq(users.inputMethodBadge, filterInputMethod));
+  }
 
   // クエリ条件を組み合わせ
-  const whereCondition = searchCondition
-    ? and(baseCondition, searchCondition)
-    : baseCondition;
+  const whereCondition = and(...conditions);
 
   // 全体の件数を取得
   const totalCountResult = await db
@@ -115,6 +142,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     totalPages,
     totalCount,
     favoriteSlugs,
+    filters: {
+      role: filterRole,
+      edition: filterEdition,
+      inputMethod: filterInputMethod,
+    },
   };
 }
 
@@ -133,18 +165,36 @@ function PlayerCardSkeleton() {
   );
 }
 
+// フィルタラベル
+const ROLE_LABELS: Record<string, string> = {
+  runner: "ランナー",
+  viewer: "視聴者",
+};
+const EDITION_LABELS: Record<string, string> = {
+  java: "Java",
+  bedrock: "Bedrock",
+};
+const INPUT_METHOD_LABELS: Record<string, string> = {
+  keyboard_mouse: "KBM",
+  controller: "Controller",
+  touch: "Touch",
+};
+
 export default function BrowsePage() {
-  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount } =
+  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, filters } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
 
+  // アクティブなフィルタ数
+  const activeFilterCount = [filters.role, filters.edition, filters.inputMethod].filter(Boolean).length;
+
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set("sort", value);
-    newParams.delete("page"); // ソート変更時は1ページ目に戻る
+    newParams.delete("page");
     setSearchParams(newParams);
   };
 
@@ -156,7 +206,27 @@ export default function BrowsePage() {
     } else {
       newParams.delete("q");
     }
-    newParams.delete("page"); // 検索時は1ページ目に戻る
+    newParams.delete("page");
+    setSearchParams(newParams);
+  };
+
+  const handleFilterChange = (key: string, value: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (value) {
+      newParams.set(key, value);
+    } else {
+      newParams.delete(key);
+    }
+    newParams.delete("page");
+    setSearchParams(newParams);
+  };
+
+  const clearAllFilters = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("role");
+    newParams.delete("edition");
+    newParams.delete("input");
+    newParams.delete("page");
     setSearchParams(newParams);
   };
 
@@ -179,33 +249,162 @@ export default function BrowsePage() {
         </p>
       </div>
 
-      {/* 検索・ソート */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <Form onSubmit={handleSearch} className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="MCID・名前で検索..."
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              className="pl-10"
-            />
+      {/* 検索・フィルタ・ソート */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Form onSubmit={handleSearch} className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="MCID・名前で検索..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </Form>
+          <div className="flex items-center gap-2">
+            {/* フィルタ */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  フィルタ
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72" align="end">
+                <div className="space-y-4">
+                  <div className="font-medium">絞り込み</div>
+
+                  {/* ロール */}
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">ロール</label>
+                    <Select
+                      value={filters.role}
+                      onValueChange={(value) => handleFilterChange("role", value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="すべて" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">すべて</SelectItem>
+                        <SelectItem value="runner">ランナー</SelectItem>
+                        <SelectItem value="viewer">視聴者</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* エディション */}
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">エディション</label>
+                    <Select
+                      value={filters.edition}
+                      onValueChange={(value) => handleFilterChange("edition", value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="すべて" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">すべて</SelectItem>
+                        <SelectItem value="java">Java Edition</SelectItem>
+                        <SelectItem value="bedrock">Bedrock Edition</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 入力方法 */}
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">入力方法</label>
+                    <Select
+                      value={filters.inputMethod}
+                      onValueChange={(value) => handleFilterChange("input", value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="すべて" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">すべて</SelectItem>
+                        <SelectItem value="keyboard_mouse">キーボード/マウス</SelectItem>
+                        <SelectItem value="controller">コントローラー</SelectItem>
+                        <SelectItem value="touch">タッチ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {activeFilterCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      onClick={clearAllFilters}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      フィルタをクリア
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* ソート */}
+            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            <Select value={sortBy} onValueChange={handleSortChange}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updatedAt">更新日順</SelectItem>
+                <SelectItem value="mcid">MCID順</SelectItem>
+                <SelectItem value="displayName">名前順</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </Form>
-        <div className="flex items-center gap-2">
-          <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          <Select value={sortBy} onValueChange={handleSortChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="updatedAt">更新日順</SelectItem>
-              <SelectItem value="mcid">MCID順</SelectItem>
-              <SelectItem value="displayName">名前順</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
+
+        {/* アクティブフィルタの表示 */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {filters.role && (
+              <Badge variant="secondary" className="gap-1">
+                {ROLE_LABELS[filters.role]}
+                <button
+                  onClick={() => handleFilterChange("role", "")}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.edition && (
+              <Badge variant="secondary" className="gap-1">
+                {EDITION_LABELS[filters.edition]}
+                <button
+                  onClick={() => handleFilterChange("edition", "")}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.inputMethod && (
+              <Badge variant="secondary" className="gap-1">
+                {INPUT_METHOD_LABELS[filters.inputMethod]}
+                <button
+                  onClick={() => handleFilterChange("input", "")}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
       {/* プレイヤー一覧 */}
@@ -225,22 +424,23 @@ export default function BrowsePage() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
           <p className="text-lg mb-2">
-            {searchQuery
-              ? `「${searchQuery}」に一致するプレイヤーが見つかりません`
+            {searchQuery || activeFilterCount > 0
+              ? "条件に一致するプレイヤーが見つかりません"
               : "登録されているプレイヤーがいません"}
           </p>
-          {searchQuery && (
+          {(searchQuery || activeFilterCount > 0) && (
             <Button
               variant="outline"
               onClick={() => {
                 setInputValue("");
-                const newParams = new URLSearchParams(searchParams);
-                newParams.delete("q");
-                newParams.delete("page");
+                const newParams = new URLSearchParams();
+                if (sortBy !== "updatedAt") {
+                  newParams.set("sort", sortBy);
+                }
                 setSearchParams(newParams);
               }}
             >
-              検索をクリア
+              検索・フィルタをクリア
             </Button>
           )}
         </div>

@@ -768,6 +768,13 @@ export default function PlayerProfilePage() {
                     {player.mainPlatform && (
                       <Badge variant="outline">{getPlatformLabel(player.mainPlatform)}</Badge>
                     )}
+                    {player.inputMethodBadge && (
+                      <Badge variant="outline">
+                        {player.inputMethodBadge === "keyboard_mouse" && "KBM"}
+                        {player.inputMethodBadge === "controller" && "Controller"}
+                        {player.inputMethodBadge === "touch" && "Touch"}
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Meta Info */}

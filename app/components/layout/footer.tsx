@@ -1,4 +1,5 @@
 import { Github } from "lucide-react";
+import packageJson from "../../../package.json";
 
 export function Footer() {
   return (
@@ -6,6 +7,7 @@ export function Footer() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
           <span>© {new Date().getFullYear()} Minefolio</span>
+          <span className="text-xs">{packageJson.version}</span>
           <a
             href="https://github.com/bafv4/minefolio"
             target="_blank"

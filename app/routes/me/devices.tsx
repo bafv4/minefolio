@@ -28,10 +28,13 @@ import { toast } from "sonner";
 import {
   Keyboard,
   Mouse,
+  Gamepad2,
   AlertCircle,
   Settings,
   Copy,
+  Smartphone,
 } from "lucide-react";
+import { type ControllerSettings, DEFAULT_CONTROLLER_SETTINGS } from "@/lib/keybindings";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +91,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   return {
     config: user.playerConfig,
+    inputMethod: user.inputMethod,
     activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
     hasPresets: allPresets.length > 0,
     presets: allPresets.map((p) => ({
@@ -164,6 +168,19 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   const formData = await request.formData();
 
+  // 入力方法の更新
+  const inputMethodValue = formData.get("inputMethod") as string | null;
+  if (inputMethodValue !== null) {
+    const validInputMethods = ["keyboard_mouse", "controller", "touch", ""] as const;
+    if (validInputMethods.includes(inputMethodValue as typeof validInputMethods[number])) {
+      const typedInputMethod = inputMethodValue === "" ? null : inputMethodValue as "keyboard_mouse" | "controller" | "touch";
+      await db
+        .update(users)
+        .set({ inputMethod: typedInputMethod })
+        .where(eq(users.id, user.id));
+    }
+  }
+
   const keyboardLayout = (formData.get("keyboardLayout") as string) || null;
   const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
   const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
@@ -180,6 +197,10 @@ export async function action({ context, request }: Route.ActionArgs) {
   const fovStr = formData.get("fov") as string;
   const guiScaleStr = formData.get("guiScale") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
+
+  // コントローラー設定
+  const controllerSettingsJson = formData.get("controllerSettings") as string;
+  const controllerSettings = controllerSettingsJson ? controllerSettingsJson : null;
 
   const mouseDpi = mouseDpiStr ? parseInt(mouseDpiStr) : null;
   const gameSensitivity = gameSensitivityStr ? parseFloat(gameSensitivityStr) : null;
@@ -205,6 +226,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     fov,
     guiScale,
     notes,
+    controllerSettings,
     updatedAt: new Date(),
   };
 
@@ -218,8 +240,24 @@ export async function action({ context, request }: Route.ActionArgs) {
   return { success: true };
 }
 
+// コントローラー設定をパース
+function parseControllerSettings(json: string | null | undefined): ControllerSettings {
+  if (!json) return DEFAULT_CONTROLLER_SETTINGS;
+  try {
+    const parsed = JSON.parse(json);
+    return {
+      controllerModel: parsed.controllerModel ?? null,
+      lookSensitivity: parsed.lookSensitivity ?? 50,
+      invertYAxis: parsed.invertYAxis ?? false,
+      vibration: parsed.vibration ?? true,
+    };
+  } catch {
+    return DEFAULT_CONTROLLER_SETTINGS;
+  }
+}
+
 export default function DevicesPage() {
-  const { config, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
+  const { config, inputMethod, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
@@ -357,8 +395,12 @@ export default function DevicesPage() {
     { value: "zlm_arab", label: "بهاس ملايو (جاوي)" },
   ];
 
+  // コントローラー設定の初期値
+  const initialControllerSettings = parseControllerSettings(config?.controllerSettings);
+
   // フォームの値をトラッキング
   const [formValues, setFormValues] = useState({
+    inputMethod: inputMethod ?? "",
     keyboardLayout: config?.keyboardLayout ?? "",
     keyboardModel: config?.keyboardModel ?? "",
     mouseModel: config?.mouseModel ?? "",
@@ -376,6 +418,11 @@ export default function DevicesPage() {
     fov: config?.fov?.toString() ?? "",
     guiScale: config?.guiScale?.toString() ?? "",
     notes: config?.notes ?? "",
+    // コントローラー設定
+    controllerModel: initialControllerSettings.controllerModel ?? "",
+    lookSensitivity: initialControllerSettings.lookSensitivity?.toString() ?? "50",
+    invertYAxis: initialControllerSettings.invertYAxis ?? false,
+    vibration: initialControllerSettings.vibration ?? true,
   });
 
   const initialFormValues = useRef({ ...formValues });
@@ -420,6 +467,7 @@ export default function DevicesPage() {
   // 保存処理
   const handleSave = useCallback(() => {
     const formData = new FormData();
+    formData.set("inputMethod", formValues.inputMethod);
     formData.set("keyboardLayout", formValues.keyboardLayout);
     formData.set("keyboardModel", formValues.keyboardModel);
     formData.set("mouseModel", formValues.mouseModel);
@@ -436,6 +484,13 @@ export default function DevicesPage() {
     formData.set("fov", formValues.fov);
     formData.set("guiScale", formValues.guiScale);
     formData.set("notes", formValues.notes);
+    // コントローラー設定をJSON形式で保存
+    formData.set("controllerSettings", JSON.stringify({
+      controllerModel: formValues.controllerModel || null,
+      lookSensitivity: formValues.lookSensitivity ? parseInt(formValues.lookSensitivity) : 50,
+      invertYAxis: formValues.invertYAxis,
+      vibration: formValues.vibration,
+    }));
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
@@ -467,7 +522,8 @@ export default function DevicesPage() {
         notes?: string;
       };
 
-      setFormValues({
+      setFormValues((prev) => ({
+        ...prev,
         keyboardLayout: configData.keyboardLayout ?? "",
         keyboardModel: configData.keyboardModel ?? "",
         mouseModel: configData.mouseModel ?? "",
@@ -485,7 +541,7 @@ export default function DevicesPage() {
         fov: configData.fov?.toString() ?? "",
         guiScale: configData.guiScale?.toString() ?? "",
         notes: configData.notes ?? "",
-      });
+      }));
 
       toast.success(`${preset.name}からデバイス設定をコピーしました`);
     } catch (e) {
@@ -560,7 +616,107 @@ export default function DevicesPage() {
         </Alert>
       )}
 
+      {/* 入力方法セレクター */}
+      <Card>
+        <CardHeader>
+          <CardTitle>入力方法</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <p className="text-sm text-muted-foreground sm:flex-1">
+              使用する入力デバイスを選択してください。選択に応じてキー配置やデバイス設定の表示が切り替わります。
+            </p>
+            <Select
+              value={formValues.inputMethod}
+              onValueChange={(value) => handleChange("inputMethod", value)}
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="選択してください" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="keyboard_mouse">
+                  <span className="flex items-center gap-2">
+                    <Keyboard className="h-4 w-4" />
+                    キーボード/マウス
+                  </span>
+                </SelectItem>
+                <SelectItem value="controller">
+                  <span className="flex items-center gap-2">
+                    <Gamepad2 className="h-4 w-4" />
+                    コントローラー
+                  </span>
+                </SelectItem>
+                <SelectItem value="touch">
+                  <span className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4" />
+                    タッチ
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="space-y-6" style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
+        {/* コントローラー設定（inputMethod === "controller" の場合） */}
+        {formValues.inputMethod === "controller" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Gamepad2 className="h-5 w-5" />
+                コントローラー
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="controllerModel">モデル</Label>
+                  <Input
+                    id="controllerModel"
+                    value={formValues.controllerModel}
+                    onChange={(e) => handleChange("controllerModel", e.target.value)}
+                    placeholder="例: Xbox Controller"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lookSensitivity">視点感度 (0-100)</Label>
+                  <Input
+                    id="lookSensitivity"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={formValues.lookSensitivity}
+                    onChange={(e) => handleChange("lookSensitivity", e.target.value)}
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-6 pt-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="invertYAxis"
+                    checked={formValues.invertYAxis}
+                    onCheckedChange={(checked) => handleChange("invertYAxis", checked)}
+                  />
+                  <Label htmlFor="invertYAxis">Y軸反転</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="vibration"
+                    checked={formValues.vibration}
+                    onCheckedChange={(checked) => handleChange("vibration", checked)}
+                  />
+                  <Label htmlFor="vibration">振動</Label>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* キーボード/マウス設定（inputMethod !== "controller" の場合） */}
+        {formValues.inputMethod !== "controller" && (
+          <>
         {/* Keyboard */}
         <Card>
           <CardHeader>
@@ -720,6 +876,8 @@ export default function DevicesPage() {
             </div>
           </CardContent>
         </Card>
+          </>
+        )}
 
         {/* In-Game Settings */}
         <Card>
