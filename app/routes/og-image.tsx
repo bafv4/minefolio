@@ -96,9 +96,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // mcidもslugもない場合はデフォルトのOGP画像を生成
   if (!mcid && !slug) {
+    const origin = new URL(request.url).origin;
+    const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
       title: title || "Minefolio",
       description: description || "Minecraft Speedrunning Portfolio Platform",
+      iconDataUrl,
     });
   }
 
@@ -146,7 +149,11 @@ interface OgpData {
  * デフォルトのOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generateDefaultOgp(data: { title: string; description: string }) {
+function generateDefaultOgp(data: {
+  title: string;
+  description: string;
+  iconDataUrl: string | null;
+}) {
   return new ImageResponse(
     (
       <div
@@ -184,29 +191,25 @@ function generateDefaultOgp(data: { title: string; description: string }) {
             gap: "24px",
           }}
         >
-          {/* マウスアイコン（簡略版） */}
-          <div
-            style={{
-              width: "80px",
-              height: "120px",
-              background: "#3a3a3a",
-              borderRadius: "40px",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "center",
-              paddingTop: "20px",
-            }}
-          >
+          {/* ページアイコン */}
+          {data.iconDataUrl ? (
+            <img
+              src={data.iconDataUrl}
+              width={120}
+              height={120}
+              style={{ borderRadius: "24px" }}
+            />
+          ) : (
             <div
               style={{
                 display: "flex",
-                width: "16px",
-                height: "36px",
-                background: "#555",
-                borderRadius: "8px",
+                width: "120px",
+                height: "120px",
+                background: "#334155",
+                borderRadius: "24px",
               }}
             />
-          </div>
+          )}
 
           {/* タイトル */}
           <div

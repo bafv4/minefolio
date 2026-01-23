@@ -32,7 +32,7 @@ import type { TwitchStream } from "@/lib/twitch";
 export const meta: Route.MetaFunction = ({ data }) => {
   const appUrl = data?.appUrl || "https://minefolio.pages.dev";
   const title = "Minefolio - Minecraft Speedrunner Portfolio";
-  const ogImageUrl = `${appUrl}/og-image`;
+  const ogImageUrl = `${appUrl}/icon.png`;
 
   return [
     { title },
@@ -42,12 +42,10 @@ export const meta: Route.MetaFunction = ({ data }) => {
     { property: "og:title", content: title },
     { property: "og:image", content: ogImageUrl },
     { property: "og:image:type", content: "image/png" },
-    { property: "og:image:width", content: "1200" },
-    { property: "og:image:height", content: "630" },
     { property: "og:url", content: appUrl },
 
     // Twitter Card
-    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:card", content: "summary" },
     { name: "twitter:title", content: title },
     { name: "twitter:image", content: ogImageUrl },
   ];
