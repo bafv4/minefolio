@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -424,6 +425,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   const pronouns = (formData.get("pronouns") as string)?.trim() || null;
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
+  const slimSkin = formData.get("slimSkin") === "true";
   const defaultProfileTab = formData.get("defaultProfileTab") as "keybindings" | "stats" | "devices" | "settings";
   const featuredVideoUrl = (formData.get("featuredVideoUrl") as string)?.trim() || null;
   const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
@@ -482,6 +484,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       pronouns,
       profileVisibility,
       profilePose,
+      slimSkin,
       defaultProfileTab,
       featuredVideoUrl,
       mainEdition,
@@ -635,6 +638,7 @@ export default function EditProfilePage() {
     pronouns: user.pronouns ?? "",
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
+    slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
     featuredVideoUrl: user.featuredVideoUrl ?? "",
     mainEdition: user.mainEdition ?? "",
@@ -651,6 +655,7 @@ export default function EditProfilePage() {
     pronouns: user.pronouns ?? "",
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
+    slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
     featuredVideoUrl: user.featuredVideoUrl ?? "",
     mainEdition: user.mainEdition ?? "",
@@ -691,6 +696,7 @@ export default function EditProfilePage() {
     formData.set("pronouns", formValues.pronouns);
     formData.set("profileVisibility", formValues.profileVisibility);
     formData.set("profilePose", formValues.profilePose);
+    formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("defaultProfileTab", formValues.defaultProfileTab);
     formData.set("featuredVideoUrl", formValues.featuredVideoUrl);
     formData.set("mainEdition", formValues.mainEdition);
@@ -1030,6 +1036,7 @@ export default function EditProfilePage() {
                           angle={-35}
                           elevation={5}
                           zoom={0.9}
+                          slim={formValues.slimSkin}
                           asImage
                         />
                       </div>
@@ -1041,6 +1048,23 @@ export default function EditProfilePage() {
                     </button>
                   ))}
                 </div>
+
+                {/* Slim Skin Toggle */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="slimSkin"
+                    checked={formValues.slimSkin}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, slimSkin: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="slimSkin" className="text-sm font-normal cursor-pointer">
+                    Slimスキン（細い腕）を使用
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Alex型のスキンを使用している場合はオンにしてください
+                </p>
               </div>
             )}
           </CardContent>

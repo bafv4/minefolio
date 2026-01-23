@@ -735,6 +735,7 @@ export default function PlayerProfilePage() {
                         width={120}
                         height={180}
                         pose={(player.profilePose as PoseName) ?? "waving"}
+                        slim={player.slimSkin ?? false}
                         angle={-35}
                         elevation={5}
                         zoom={0.9}
