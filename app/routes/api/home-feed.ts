@@ -15,16 +15,7 @@ import {
   getDbCached,
   setDbCached,
 } from "@/lib/cache";
-import {
-  getCachedVideos,
-  fetchAndCacheNewVideos,
-  needsUpdate,
-  getRegisteredYouTubeChannels,
-  // YouTubeライブ配信API関連は利用停止中
-  // getCachedLiveStreams,
-  // needsLiveUpdate,
-  // fetchAndCacheLiveStreams,
-} from "@/lib/youtube-cache";
+import { getCachedVideos } from "@/lib/youtube-cache";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -295,38 +286,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     }
 
     case "youtube-videos": {
-      const apiKey = env.YOUTUBE_API_KEY;
-
-      // 永続キャッシュから動画を取得（ユーザー情報付き）
+      // キャッシュから動画を取得（Cronで更新）
       const cachedVideos = await getCachedVideos();
 
       if (cachedVideos && cachedVideos.length > 0) {
         const sortedVideos = sortByFavorite(cachedVideos, favoritesSet);
-
-        // バックグラウンドで更新が必要かチェック（APIキーがある場合のみ）
-        if (apiKey && await needsUpdate()) {
-          updateYouTubeCache(apiKey).catch(console.error);
-        }
-
-        return jsonResponse({ recentVideos: sortedVideos }, CDN_CACHE.YOUTUBE);
-      }
-
-      // キャッシュがない場合はAPIから取得して保存
-      if (!apiKey) {
-        return jsonResponse({ recentVideos: [] }, CDN_CACHE.YOUTUBE);
-      }
-
-      const channels = await getRegisteredYouTubeChannels();
-      if (channels.length === 0) {
-        return jsonResponse({ recentVideos: [] }, CDN_CACHE.YOUTUBE);
-      }
-
-      // 初回取得
-      await fetchAndCacheNewVideos(apiKey, channels);
-
-      const newCachedVideos = await getCachedVideos();
-      if (newCachedVideos) {
-        const sortedVideos = sortByFavorite(newCachedVideos, favoritesSet);
         return jsonResponse({ recentVideos: sortedVideos }, CDN_CACHE.YOUTUBE);
       }
 
@@ -341,19 +305,5 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
     default:
       return Response.json({ error: "Invalid feed type" }, { status: 400 });
-  }
-}
-
-/**
- * YouTubeキャッシュをバックグラウンドで更新
- */
-async function updateYouTubeCache(apiKey: string): Promise<void> {
-  try {
-    const channels = await getRegisteredYouTubeChannels();
-    if (channels.length > 0) {
-      await fetchAndCacheNewVideos(apiKey, channels);
-    }
-  } catch (error) {
-    console.error("Background YouTube cache update failed:", error);
   }
 }

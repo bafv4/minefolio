@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/youtube-update?action=update",
-      "schedule": "0 6 * * *"
+      "schedule": "0 3 12 18 21"
     },
     {
       "path": "/api/cron/youtube-update?action=verify",
-      "schedule": "0 18 * * *"
+      "schedule": "0 3 12 18 21"
     }
   ]
 }

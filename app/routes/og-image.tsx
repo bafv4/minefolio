@@ -40,24 +40,48 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
 }
 
 /**
- * 複数のアバターサービスを試してBase64データURLを取得
- * Crafatar, mc-heads.net, minotarの順にフォールバック
+ * DiscordアバターURLを生成
  */
-async function fetchAvatarDataUrl(
-  uuid: string,
-  size: number = 180
-): Promise<string | null> {
-  const uuidClean = uuid.replace(/-/g, "");
+function getDiscordAvatarUrl(
+  discordId: string,
+  discordAvatar: string,
+  size: number = 256
+): string {
+  return `https://cdn.discordapp.com/avatars/${discordId}/${discordAvatar}.png?size=${size}`;
+}
 
-  const services = [
-    `https://crafatar.com/avatars/${uuidClean}?size=${size}&overlay=true`,
-    `https://mc-heads.net/avatar/${uuidClean}/${size}`,
-    `https://minotar.net/avatar/${uuidClean}/${size}`,
-  ];
+/**
+ * アバター画像をBase64データURLとして取得
+ * 優先順位: Discord → Crafatar → mc-heads.net → minotar
+ */
+async function fetchAvatarDataUrl(options: {
+  discordId?: string | null;
+  discordAvatar?: string | null;
+  uuid?: string | null;
+  size?: number;
+}): Promise<string | null> {
+  const { discordId, discordAvatar, uuid, size = 180 } = options;
 
-  for (const url of services) {
-    const dataUrl = await fetchImageAsDataUrl(url);
+  // 1. Discordアバターを優先
+  if (discordId && discordAvatar) {
+    const discordUrl = getDiscordAvatarUrl(discordId, discordAvatar, size);
+    const dataUrl = await fetchImageAsDataUrl(discordUrl);
     if (dataUrl) return dataUrl;
+  }
+
+  // 2. Minecraftアバターサービスにフォールバック
+  if (uuid) {
+    const uuidClean = uuid.replace(/-/g, "");
+    const services = [
+      `https://crafatar.com/avatars/${uuidClean}?size=${size}&overlay=true`,
+      `https://mc-heads.net/avatar/${uuidClean}/${size}`,
+      `https://minotar.net/avatar/${uuidClean}/${size}`,
+    ];
+
+    for (const url of services) {
+      const dataUrl = await fetchImageAsDataUrl(url);
+      if (dataUrl) return dataUrl;
+    }
   }
 
   return null;
@@ -89,11 +113,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return new Response("User not found", { status: 404 });
   }
 
-  // アバター画像を事前にフェッチ（複数サービスをフォールバック）
-  let avatarDataUrl: string | null = null;
-  if (user.uuid) {
-    avatarDataUrl = await fetchAvatarDataUrl(user.uuid, 180);
-  }
+  // アバター画像を事前にフェッチ（Discord優先、Minecraftアバターにフォールバック）
+  const avatarDataUrl = await fetchAvatarDataUrl({
+    discordId: user.discordId,
+    discordAvatar: user.discordAvatar,
+    uuid: user.uuid,
+    size: 180,
+  });
 
   return generatePlayerOgp({
     displayName: user.displayName || user.mcid || user.slug,

@@ -1,9 +1,9 @@
 // YouTube動画キャッシュ管理
-// 2時間毎に新しい動画を確認し、半日に1回存在確認を行う
+// Cronで定期的に更新される
 
 import { eq, desc, and, lt, ne } from "drizzle-orm";
 import { createDb } from "./db";
-import { youtubeVideoCache, youtubeLiveCache, users, socialLinks, apiCache } from "./schema";
+import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
 import { createId } from "@paralleldrive/cuid2";
 import type { YouTubeVideo, YouTubeSearchResult } from "./youtube";
 
@@ -11,22 +11,12 @@ const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
 // キャッシュ管理設定
 const CACHE_CONFIG = {
-  // 新しい動画の確認間隔（2時間）
-  NEW_VIDEO_CHECK_INTERVAL: 2 * 60 * 60 * 1000,
   // 存在確認の間隔（12時間）
   VERIFICATION_INTERVAL: 12 * 60 * 60 * 1000,
   // 表示する動画の最大期間（72時間）
   MAX_AGE_HOURS: 72,
   // 取得する最大件数
   MAX_VIDEOS: 10,
-  // APIリクエスト間隔（3時間）- Vercel Cron制限対応
-  API_REQUEST_INTERVAL: 3 * 60 * 60 * 1000,
-};
-
-// APIメタデータのキー
-const API_META_KEYS = {
-  YOUTUBE_VIDEOS_LAST_FETCH: "youtube_videos_last_fetch",
-  YOUTUBE_LIVE_LAST_FETCH: "youtube_live_last_fetch",
 };
 
 export interface CachedYouTubeVideo {
@@ -208,9 +198,6 @@ export async function fetchAndCacheNewVideos(
     }
   }
 
-  // API実行日時を記録
-  await setLastApiFetchTime(API_META_KEYS.YOUTUBE_VIDEOS_LAST_FETCH);
-
   console.log(`[YouTube API] fetchAndCacheNewVideos completed: added=${added}, updated=${updated}`);
   return { added, updated };
 }
@@ -273,81 +260,6 @@ export async function verifyVideosExistence(apiKey: string): Promise<{ verified:
   }
 
   return { verified, removed };
-}
-
-/**
- * 最終更新時刻を取得
- */
-export async function getLastUpdateTime(): Promise<Date | null> {
-  try {
-    const db = createDb();
-    const latest = await db.query.youtubeVideoCache.findFirst({
-      orderBy: [desc(youtubeVideoCache.updatedAt)],
-      columns: { updatedAt: true },
-    });
-    return latest?.updatedAt || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 更新が必要かどうかを確認（3時間以上経過している場合）
- */
-export async function needsUpdate(): Promise<boolean> {
-  const lastFetch = await getLastApiFetchTime(API_META_KEYS.YOUTUBE_VIDEOS_LAST_FETCH);
-  if (!lastFetch) return true;
-
-  const elapsed = Date.now() - lastFetch.getTime();
-  return elapsed > CACHE_CONFIG.API_REQUEST_INTERVAL;
-}
-
-/**
- * APIの最終実行日時を取得
- */
-export async function getLastApiFetchTime(metaKey: string): Promise<Date | null> {
-  try {
-    const db = createDb();
-    const meta = await db.query.apiCache.findFirst({
-      where: eq(apiCache.cacheKey, metaKey),
-      columns: { updatedAt: true },
-    });
-    return meta?.updatedAt || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * APIの最終実行日時を記録
- */
-export async function setLastApiFetchTime(metaKey: string): Promise<void> {
-  try {
-    const db = createDb();
-    const now = new Date();
-    const existing = await db.query.apiCache.findFirst({
-      where: eq(apiCache.cacheKey, metaKey),
-    });
-
-    if (existing) {
-      await db
-        .update(apiCache)
-        .set({ updatedAt: now })
-        .where(eq(apiCache.cacheKey, metaKey));
-    } else {
-      await db.insert(apiCache).values({
-        id: createId(),
-        cacheKey: metaKey,
-        cacheType: "youtube_videos",
-        data: JSON.stringify({ lastFetch: now.toISOString() }),
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1年後（実質無期限）
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-  } catch (error) {
-    console.error("Failed to set last API fetch time:", error);
-  }
 }
 
 // ========================================
@@ -492,13 +404,6 @@ export async function getRegisteredYouTubeChannels(): Promise<Array<{ channelId:
 //   将来的にRSS/Atomフィードや別の方法で再実装を検討。
 // ========================================
 
-// ライブ配信キャッシュ設定
-const LIVE_CACHE_CONFIG = {
-  // ライブ配信確認間隔（30分）- クォータ効率重視
-  LIVE_CHECK_INTERVAL: 30 * 60 * 1000,
-  // 終了した配信のクリーンアップ間隔（1時間）
-  CLEANUP_INTERVAL: 60 * 60 * 1000,
-};
 
 export interface CachedYouTubeLive {
   videoId: string;
@@ -573,33 +478,6 @@ export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
     console.error("Failed to get cached live streams:", error);
     return [];
   }
-}
-
-/**
- * ライブ配信の最終確認時刻を取得
- */
-export async function getLiveLastCheckTime(): Promise<Date | null> {
-  try {
-    const db = createDb();
-    const latest = await db.query.youtubeLiveCache.findFirst({
-      orderBy: [desc(youtubeLiveCache.lastCheckedAt)],
-      columns: { lastCheckedAt: true },
-    });
-    return latest?.lastCheckedAt || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * ライブ配信の更新が必要かどうか確認
- */
-export async function needsLiveUpdate(): Promise<boolean> {
-  const lastCheck = await getLiveLastCheckTime();
-  if (!lastCheck) return true;
-
-  const elapsed = Date.now() - lastCheck.getTime();
-  return elapsed > LIVE_CACHE_CONFIG.LIVE_CHECK_INTERVAL;
 }
 
 /**
