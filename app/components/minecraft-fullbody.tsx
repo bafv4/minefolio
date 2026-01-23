@@ -12,9 +12,10 @@ function getCacheKey(
   height: number,
   angle: number,
   elevation: number,
-  zoom: number
+  zoom: number,
+  slim: boolean
 ): string {
-  return `${uuid}-${pose}-${width}-${height}-${angle}-${elevation}-${zoom}`;
+  return `${uuid}-${pose}-${width}-${height}-${angle}-${elevation}-${zoom}-${slim ? "slim" : "default"}`;
 }
 
 export type PoseName =
@@ -41,6 +42,8 @@ interface MinecraftFullBodyProps {
   rotate?: boolean;
   /** trueの場合、レンダリング後に静止画像として出力（操作不可） */
   asImage?: boolean;
+  /** Slimスキン（腕幅3px）を使用する場合はtrue */
+  slim?: boolean;
 }
 
 const POSE_ROTATIONS: Record<
@@ -116,6 +119,7 @@ const MinecraftFullBodyComponent = ({
   run = false,
   rotate = false,
   asImage = false,
+  slim = false,
 }: MinecraftFullBodyProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
@@ -128,7 +132,7 @@ const MinecraftFullBodyComponent = ({
 
     // asImageモードの場合、キャッシュをチェック
     if (asImage) {
-      const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom);
+      const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = imageCache.get(cacheKey);
       if (cachedImage) {
         setImageSrc(cachedImage);
@@ -162,12 +166,13 @@ const MinecraftFullBodyComponent = ({
 
         // Use local skin proxy API
         const skinUrl = `/api/skin?uuid=${uuid}`;
+        const skinModel = slim ? "slim" : "default";
 
         try {
-          await viewer.loadSkin(skinUrl);
+          await viewer.loadSkin(skinUrl, { model: skinModel });
         } catch {
           const steveUrl = `/api/skin?uuid=${STEVE_UUID}`;
-          await viewer.loadSkin(steveUrl);
+          await viewer.loadSkin(steveUrl, { model: skinModel });
         }
 
         // Set camera angle
@@ -229,7 +234,7 @@ const MinecraftFullBodyComponent = ({
           const dataUrl = canvas.toDataURL("image/png");
 
           // キャッシュに保存
-          const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom);
+          const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom, slim);
           imageCache.set(cacheKey, dataUrl);
 
           setImageSrc(dataUrl);
@@ -255,7 +260,7 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-  }, [uuid, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage]);
+  }, [uuid, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage, slim]);
 
   // スケルトン表示（ローディング中）
   const skeleton = (

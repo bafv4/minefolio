@@ -24,6 +24,7 @@ export const users = sqliteTable("users", {
   // プロフィール設定
   profileVisibility: text("profile_visibility", { enum: ["public", "unlisted", "private"] }).default("public").notNull(),
   profilePose: text("profile_pose", { enum: ["standing", "walking", "waving"] }).default("waving"),
+  slimSkin: integer("slim_skin", { mode: "boolean" }).default(false),
   location: text("location"),
   pronouns: text("pronouns"),
   defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings"] }).default("keybindings"),

@@ -4,7 +4,7 @@ import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, customKeys } from "@/lib/schema";
-import { desc, asc, like, sql, eq, and } from "drizzle-orm";
+import { desc, asc, like, eq, and } from "drizzle-orm";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ export const meta: Route.MetaFunction = () => {
   ];
 };
 
-const PLAYERS_PER_PAGE = 30;
+// 全プレイヤーを表示（ページネーションなし）
 
 // キーボード系の主要なキーバインド
 const KEYBOARD_COLUMNS = [
@@ -155,7 +155,6 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   const search = url.searchParams.get("q") ?? "";
   const sort = url.searchParams.get("sort") ?? "recent";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
 
   let orderBy;
   switch (sort) {
@@ -184,50 +183,42 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     ? and(baseCondition, searchCondition)
     : baseCondition;
 
-  // キー配置を持つユーザーを取得
-  const [playersWithKeybindings, countResult] = await Promise.all([
-    db.query.users.findMany({
-      where: whereClause,
-      orderBy: [orderBy],
-      limit: PLAYERS_PER_PAGE,
-      offset: (page - 1) * PLAYERS_PER_PAGE,
-      columns: {
-        id: true,
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
+  // キー配置を持つユーザーを全件取得
+  const playersWithKeybindings = await db.query.users.findMany({
+    where: whereClause,
+    orderBy: [orderBy],
+    columns: {
+      id: true,
+      mcid: true,
+      uuid: true,
+      slug: true,
+      displayName: true,
+    },
+    with: {
+      keybindings: {
+        orderBy: [asc(keybindings.category), asc(keybindings.action)],
       },
-      with: {
-        keybindings: {
-          orderBy: [asc(keybindings.category), asc(keybindings.action)],
-        },
-        playerConfig: {
-          columns: {
-            keyboardLayout: true,
-            mouseDpi: true,
-            gameSensitivity: true,
-            windowsSpeed: true,
-            windowsSpeedMultiplier: true,
-            rawInput: true,
-            mouseAcceleration: true,
-          },
-        },
-        customKeys: {
-          orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
+      playerConfig: {
+        columns: {
+          keyboardLayout: true,
+          mouseDpi: true,
+          gameSensitivity: true,
+          windowsSpeed: true,
+          windowsSpeedMultiplier: true,
+          rawInput: true,
+          mouseAcceleration: true,
         },
       },
-    }),
-    db.select({ count: sql<number>`count(*)` }).from(users).where(whereClause),
-  ]);
+      customKeys: {
+        orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
+      },
+    },
+  });
 
   // キー配置があるプレイヤーのみをフィルタ
   const players = playersWithKeybindings.filter(p => p.keybindings.length > 0);
 
-  const totalPlayers = countResult[0]?.count ?? 0;
-  const totalPages = Math.ceil(totalPlayers / PLAYERS_PER_PAGE);
-
-  return { players, totalPlayers, totalPages, currentPage: page, search, sort };
+  return { players, search, sort };
 }
 
 // マウスソートのキー型
@@ -235,8 +226,7 @@ type MouseSortKey = "dpi" | "sensitivity" | "cm360" | "windowsSpeed" | "cursorSp
 type SortDirection = "asc" | "desc";
 
 export default function KeybindingsListPage() {
-  const { players, totalPages, currentPage, search, sort } =
-    useLoaderData<typeof loader>();
+  const { players, search, sort } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // URLパラメータからタブを取得
@@ -348,12 +338,6 @@ export default function KeybindingsListPage() {
   const handleTabChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", value);
-    setSearchParams(params);
-  };
-
-  const handlePageChange = (newPage: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("page", String(newPage));
     setSearchParams(params);
   };
 
@@ -514,51 +498,6 @@ export default function KeybindingsListPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => handlePageChange(currentPage - 1)}
-          >
-            前へ
-          </Button>
-          <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-              return (
-                <Button
-                  key={pageNum}
-                  variant={pageNum === currentPage ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handlePageChange(pageNum)}
-                >
-                  {pageNum}
-                </Button>
-              );
-            })}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => handlePageChange(currentPage + 1)}
-          >
-            次へ
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
