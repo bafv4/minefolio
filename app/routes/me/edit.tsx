@@ -426,7 +426,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
-  const defaultProfileTab = formData.get("defaultProfileTab") as "keybindings" | "stats" | "devices" | "settings";
+  const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "keybindings" | "devices" | "items" | "searchcraft";
   const featuredVideoUrl = (formData.get("featuredVideoUrl") as string)?.trim() || null;
   const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
@@ -1351,10 +1351,12 @@ export default function EditProfilePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="profile">プロフィール</SelectItem>
+                  <SelectItem value="stats">活動・記録</SelectItem>
                   <SelectItem value="keybindings">キー配置</SelectItem>
-                  <SelectItem value="stats">Stats</SelectItem>
-                  <SelectItem value="devices">デバイス・設定</SelectItem>
-                  <SelectItem value="settings">ゲーム設定</SelectItem>
+                  <SelectItem value="devices">デバイス</SelectItem>
+                  <SelectItem value="items">アイテム配置</SelectItem>
+                  <SelectItem value="searchcraft">サーチクラフト</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

@@ -18,10 +18,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 
@@ -40,9 +46,10 @@ const ITEMS_PER_PAGE = 12;
 type SortOption = "updatedAt" | "mcid" | "displayName";
 
 // フィルタオプションの型
-type FilterRole = "runner" | "viewer" | "";
-type FilterEdition = "java" | "bedrock" | "";
-type FilterInputMethod = "keyboard_mouse" | "controller" | "touch" | "";
+type FilterRole = "runner" | "viewer";
+type FilterEdition = "java" | "bedrock";
+type FilterInputMethod = "keyboard_mouse" | "controller" | "touch";
+type FilterPlatform = "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -53,10 +60,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const sortBy = (url.searchParams.get("sort") as SortOption) || "updatedAt";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
 
-  // フィルタパラメータ
-  const filterRole = (url.searchParams.get("role") as FilterRole) || "";
-  const filterEdition = (url.searchParams.get("edition") as FilterEdition) || "";
-  const filterInputMethod = (url.searchParams.get("input") as FilterInputMethod) || "";
+  // フィルタパラメータ（複数選択対応）
+  const filterRoles = url.searchParams.getAll("role") as FilterRole[];
+  const filterEditions = url.searchParams.getAll("edition") as FilterEdition[];
+  const filterInputMethods = url.searchParams.getAll("input") as FilterInputMethod[];
+  const filterPlatforms = url.searchParams.getAll("platform") as FilterPlatform[];
 
   // ベースクエリ条件：公開プロフィールのみ
   const conditions = [eq(users.profileVisibility, "public")];
@@ -72,15 +80,26 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     );
   }
 
-  // フィルタ条件
-  if (filterRole) {
-    conditions.push(eq(users.role, filterRole));
+  // フィルタ条件（複数選択対応：OR条件で組み合わせ）
+  if (filterRoles.length > 0) {
+    conditions.push(
+      or(...filterRoles.map((role) => eq(users.role, role)))!
+    );
   }
-  if (filterEdition) {
-    conditions.push(eq(users.mainEdition, filterEdition));
+  if (filterEditions.length > 0) {
+    conditions.push(
+      or(...filterEditions.map((edition) => eq(users.mainEdition, edition)))!
+    );
   }
-  if (filterInputMethod) {
-    conditions.push(eq(users.inputMethodBadge, filterInputMethod));
+  if (filterInputMethods.length > 0) {
+    conditions.push(
+      or(...filterInputMethods.map((input) => eq(users.inputMethodBadge, input)))!
+    );
+  }
+  if (filterPlatforms.length > 0) {
+    conditions.push(
+      or(...filterPlatforms.map((platform) => eq(users.mainPlatform, platform)))!
+    );
   }
 
   // クエリ条件を組み合わせ
@@ -143,9 +162,10 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     totalCount,
     favoriteSlugs,
     filters: {
-      role: filterRole,
-      edition: filterEdition,
-      inputMethod: filterInputMethod,
+      roles: filterRoles,
+      editions: filterEditions,
+      inputMethods: filterInputMethods,
+      platforms: filterPlatforms,
     },
   };
 }
@@ -179,6 +199,14 @@ const INPUT_METHOD_LABELS: Record<string, string> = {
   controller: "Controller",
   touch: "Touch",
 };
+const PLATFORM_LABELS: Record<string, string> = {
+  pc_windows: "Windows",
+  pc_mac: "Mac",
+  pc_linux: "Linux",
+  switch: "Switch",
+  mobile: "Mobile",
+  other: "その他",
+};
 
 export default function BrowsePage() {
   const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, filters } =
@@ -187,9 +215,10 @@ export default function BrowsePage() {
   const [inputValue, setInputValue] = useState(searchQuery);
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
 
   // アクティブなフィルタ数
-  const activeFilterCount = [filters.role, filters.edition, filters.inputMethod].filter(Boolean).length;
+  const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
 
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -210,13 +239,23 @@ export default function BrowsePage() {
     setSearchParams(newParams);
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key: string, value: string, checked: boolean) => {
     const newParams = new URLSearchParams(searchParams);
-    if (value) {
-      newParams.set(key, value);
+
+    // 現在の値を取得
+    const currentValues = newParams.getAll(key);
+
+    // すべて削除
+    newParams.delete(key);
+
+    if (checked) {
+      // 追加（既存の値 + 新しい値）
+      [...currentValues, value].forEach(v => newParams.append(key, v));
     } else {
-      newParams.delete(key);
+      // 削除（新しい値以外を保持）
+      currentValues.filter(v => v !== value).forEach(v => newParams.append(key, v));
     }
+
     newParams.delete("page");
     setSearchParams(newParams);
   };
@@ -226,6 +265,7 @@ export default function BrowsePage() {
     newParams.delete("role");
     newParams.delete("edition");
     newParams.delete("input");
+    newParams.delete("platform");
     newParams.delete("page");
     setSearchParams(newParams);
   };
@@ -266,8 +306,8 @@ export default function BrowsePage() {
           </Form>
           <div className="flex items-center gap-2">
             {/* フィルタ */}
-            <Popover>
-              <PopoverTrigger asChild>
+            <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+              <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="h-4 w-4" />
                   フィルタ
@@ -277,80 +317,198 @@ export default function BrowsePage() {
                     </Badge>
                   )}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72" align="end">
-                <div className="space-y-4">
-                  <div className="font-medium">絞り込み</div>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>絞り込み</DialogTitle>
+                  <DialogDescription>
+                    プレイヤーを条件で絞り込みます
+                  </DialogDescription>
+                </DialogHeader>
 
+                <div className="space-y-6 py-4">
                   {/* ロール */}
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">ロール</label>
-                    <Select
-                      value={filters.role}
-                      onValueChange={(value) => handleFilterChange("role", value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="すべて" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">すべて</SelectItem>
-                        <SelectItem value="runner">ランナー</SelectItem>
-                        <SelectItem value="viewer">視聴者</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">ロール</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="role-runner"
+                          checked={filters.roles.includes("runner")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("role", "runner", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="role-runner" className="cursor-pointer">ランナー</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="role-viewer"
+                          checked={filters.roles.includes("viewer")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("role", "viewer", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="role-viewer" className="cursor-pointer">視聴者</RadixLabel>
+                      </div>
+                    </div>
                   </div>
 
                   {/* エディション */}
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">エディション</label>
-                    <Select
-                      value={filters.edition}
-                      onValueChange={(value) => handleFilterChange("edition", value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="すべて" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">すべて</SelectItem>
-                        <SelectItem value="java">Java Edition</SelectItem>
-                        <SelectItem value="bedrock">Bedrock Edition</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">エディション</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="edition-java"
+                          checked={filters.editions.includes("java")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("edition", "java", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="edition-java" className="cursor-pointer">Java Edition</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="edition-bedrock"
+                          checked={filters.editions.includes("bedrock")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("edition", "bedrock", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="edition-bedrock" className="cursor-pointer">Bedrock Edition</RadixLabel>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* プラットフォーム */}
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">プラットフォーム</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-windows"
+                          checked={filters.platforms.includes("pc_windows")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "pc_windows", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-windows" className="cursor-pointer">Windows</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-mac"
+                          checked={filters.platforms.includes("pc_mac")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "pc_mac", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-mac" className="cursor-pointer">Mac</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-linux"
+                          checked={filters.platforms.includes("pc_linux")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "pc_linux", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-linux" className="cursor-pointer">Linux</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-switch"
+                          checked={filters.platforms.includes("switch")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "switch", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-switch" className="cursor-pointer">Switch</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-mobile"
+                          checked={filters.platforms.includes("mobile")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "mobile", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-mobile" className="cursor-pointer">Mobile</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="platform-other"
+                          checked={filters.platforms.includes("other")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("platform", "other", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="platform-other" className="cursor-pointer">その他</RadixLabel>
+                      </div>
+                    </div>
                   </div>
 
                   {/* 入力方法 */}
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">入力方法</label>
-                    <Select
-                      value={filters.inputMethod}
-                      onValueChange={(value) => handleFilterChange("input", value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="すべて" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">すべて</SelectItem>
-                        <SelectItem value="keyboard_mouse">キーボード/マウス</SelectItem>
-                        <SelectItem value="controller">コントローラー</SelectItem>
-                        <SelectItem value="touch">タッチ</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">入力方法</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="input-kbm"
+                          checked={filters.inputMethods.includes("keyboard_mouse")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("input", "keyboard_mouse", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="input-kbm" className="cursor-pointer">キーボード/マウス</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="input-controller"
+                          checked={filters.inputMethods.includes("controller")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("input", "controller", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="input-controller" className="cursor-pointer">コントローラー</RadixLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="input-touch"
+                          checked={filters.inputMethods.includes("touch")}
+                          onCheckedChange={(checked) => {
+                            handleFilterChange("input", "touch", !!checked);
+                          }}
+                        />
+                        <RadixLabel htmlFor="input-touch" className="cursor-pointer">タッチ</RadixLabel>
+                      </div>
+                    </div>
                   </div>
+                </div>
 
+                <DialogFooter className="flex-col sm:flex-row gap-2">
                   {activeFilterCount > 0 && (
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full"
-                      onClick={clearAllFilters}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        clearAllFilters();
+                        setIsFilterDialogOpen(false);
+                      }}
                     >
                       <X className="h-4 w-4 mr-2" />
-                      フィルタをクリア
+                      すべてクリア
                     </Button>
                   )}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  <Button
+                    className="w-full sm:w-auto"
+                    onClick={() => setIsFilterDialogOpen(false)}
+                  >
+                    完了
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* ソート */}
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
@@ -370,39 +528,50 @@ export default function BrowsePage() {
         {/* アクティブフィルタの表示 */}
         {activeFilterCount > 0 && (
           <div className="flex flex-wrap gap-2">
-            {filters.role && (
-              <Badge variant="secondary" className="gap-1">
-                {ROLE_LABELS[filters.role]}
+            {filters.roles.map((role) => (
+              <Badge key={role} variant="secondary" className="gap-1">
+                {ROLE_LABELS[role]}
                 <button
-                  onClick={() => handleFilterChange("role", "")}
+                  onClick={() => handleFilterChange("role", role, false)}
                   className="ml-1 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
-            )}
-            {filters.edition && (
-              <Badge variant="secondary" className="gap-1">
-                {EDITION_LABELS[filters.edition]}
+            ))}
+            {filters.editions.map((edition) => (
+              <Badge key={edition} variant="secondary" className="gap-1">
+                {EDITION_LABELS[edition]}
                 <button
-                  onClick={() => handleFilterChange("edition", "")}
+                  onClick={() => handleFilterChange("edition", edition, false)}
                   className="ml-1 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
-            )}
-            {filters.inputMethod && (
-              <Badge variant="secondary" className="gap-1">
-                {INPUT_METHOD_LABELS[filters.inputMethod]}
+            ))}
+            {filters.platforms.map((platform) => (
+              <Badge key={platform} variant="secondary" className="gap-1">
+                {PLATFORM_LABELS[platform]}
                 <button
-                  onClick={() => handleFilterChange("input", "")}
+                  onClick={() => handleFilterChange("platform", platform, false)}
                   className="ml-1 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
-            )}
+            ))}
+            {filters.inputMethods.map((inputMethod) => (
+              <Badge key={inputMethod} variant="secondary" className="gap-1">
+                {INPUT_METHOD_LABELS[inputMethod]}
+                <button
+                  onClick={() => handleFilterChange("input", inputMethod, false)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
           </div>
         )}
       </div>

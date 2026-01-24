@@ -12,14 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -162,21 +154,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const url = new URL(request.url);
 
   const search = url.searchParams.get("q") ?? "";
-  const sort = url.searchParams.get("sort") ?? "recent";
 
-  let orderBy;
-  switch (sort) {
-    case "name":
-      orderBy = asc(users.mcid);
-      break;
-    case "updated":
-      orderBy = desc(users.updatedAt);
-      break;
-    case "recent":
-    default:
-      orderBy = desc(users.createdAt);
-      break;
-  }
+  // 新着順で固定
+  const orderBy = desc(users.createdAt);
 
   // 公開プロフィールのみ表示
   const baseCondition = eq(users.profileVisibility, "public");
@@ -226,7 +206,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // キー配置があるプレイヤーのみをフィルタ
   const players = playersWithKeybindings.filter(p => p.keybindings.length > 0);
 
-  return { players, search, sort };
+  return { players, search };
 }
 
 // マウスソートのキー型
@@ -253,7 +233,7 @@ const DEFAULT_MOUSE_FILTERS: MouseFilters = {
 };
 
 export default function KeybindingsListPage() {
-  const { players, search, sort } = useLoaderData<typeof loader>();
+  const { players, search } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // URLパラメータからタブを取得
@@ -293,8 +273,18 @@ export default function KeybindingsListPage() {
 
   // フィルタ＆ソート済みプレイヤーリスト（マウスタブ用）
   const sortedPlayersForMouse = useMemo(() => {
-    // フィルタを適用
-    let filtered = players;
+    // まず、DPI、ゲーム内感度、WinSensがすべて未設定のユーザーを除外
+    let filtered = players.filter((player) => {
+      const config = player.playerConfig;
+      if (!config) return false;
+
+      // DPI、ゲーム内感度、Windows速度のいずれかが設定されていればリストに表示
+      const hasDpi = config.mouseDpi != null;
+      const hasSensitivity = config.gameSensitivity != null;
+      const hasWindowsSpeed = config.windowsSpeed != null || config.windowsSpeedMultiplier != null;
+
+      return hasDpi || hasSensitivity || hasWindowsSpeed;
+    });
 
     const dpiMin = mouseFilters.dpiMin ? parseInt(mouseFilters.dpiMin) : null;
     const dpiMax = mouseFilters.dpiMax ? parseInt(mouseFilters.dpiMax) : null;
@@ -304,7 +294,7 @@ export default function KeybindingsListPage() {
     const cm360Max = mouseFilters.cm360Max ? parseFloat(mouseFilters.cm360Max) : null;
 
     if (dpiMin !== null || dpiMax !== null || sensMin !== null || sensMax !== null || cm360Min !== null || cm360Max !== null) {
-      filtered = players.filter((player) => {
+      filtered = filtered.filter((player) => {
         const config = player.playerConfig;
         if (!config) return false;
 
@@ -418,13 +408,6 @@ export default function KeybindingsListPage() {
     setSearchParams(params);
   };
 
-  const handleSort = (value: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("sort", value);
-    params.delete("page");
-    setSearchParams(params);
-  };
-
   const handleTabChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", value);
@@ -451,27 +434,15 @@ export default function KeybindingsListPage() {
         </Button>
       </div>
 
-      {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="MCIDで検索..."
-            defaultValue={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={sort} onValueChange={handleSort}>
-          <SelectTrigger className="w-full sm:w-45">
-            <SelectValue placeholder="並び替え" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="recent">新着順</SelectItem>
-            <SelectItem value="updated">更新順</SelectItem>
-            <SelectItem value="name">名前順 (A-Z)</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="MCIDで検索..."
+          defaultValue={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-10"
+        />
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -494,17 +465,17 @@ export default function KeybindingsListPage() {
         {/* Keyboard Tab */}
         <TabsContent value="keyboard">
           {players.length > 0 ? (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
+            <div className="relative border rounded-lg overflow-auto max-h-[600px]">
+              <table className="w-full caption-bottom text-sm">
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="sticky left-0 bg-muted/50 z-10 min-w-36">
+                  <TableRow>
+                    <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-36 border-r border-b-2">
                       プレイヤー
                     </TableHead>
                     {KEYBOARD_COLUMNS.map((col) => (
                       <TableHead
                         key={col.action}
-                        className="text-center px-2 min-w-12"
+                        className="sticky top-0 text-center px-2 min-w-12 bg-muted z-20 border-b-2"
                         title={col.label}
                       >
                         <span className="hidden sm:inline">{col.label}</span>
@@ -518,7 +489,7 @@ export default function KeybindingsListPage() {
                     <PlayerRow key={player.id} player={player} columns={KEYBOARD_COLUMNS} />
                   ))}
                 </TableBody>
-              </Table>
+              </table>
             </div>
           ) : (
             <EmptyState search={search} onClear={() => handleSearch("")} />
@@ -681,11 +652,11 @@ export default function KeybindingsListPage() {
           </div>
 
           {sortedPlayersForMouse.length > 0 ? (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
+            <div className="relative border rounded-lg overflow-auto max-h-[600px]">
+              <table className="w-full caption-bottom text-sm">
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="sticky left-0 bg-muted/50 z-10 min-w-36">
+                  <TableRow>
+                    <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-36 border-r border-b-2">
                       プレイヤー
                     </TableHead>
                     {MOUSE_COLUMNS.map((col) => {
@@ -696,7 +667,7 @@ export default function KeybindingsListPage() {
                       return (
                         <TableHead
                           key={col.key}
-                          className="text-center px-1 min-w-20"
+                          className="sticky top-0 text-center px-1 min-w-20 bg-muted z-20 border-b-2"
                           title={col.label}
                         >
                           {isSortable ? (
@@ -733,7 +704,7 @@ export default function KeybindingsListPage() {
                     <MouseSettingsRow key={player.id} player={player} />
                   ))}
                 </TableBody>
-              </Table>
+              </table>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
