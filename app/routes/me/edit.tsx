@@ -37,6 +37,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -435,6 +436,10 @@ export async function action({ context, request }: Route.ActionArgs) {
   const inputMethodBadge = (formData.get("inputMethodBadge") as "keyboard_mouse" | "controller" | "touch") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
   const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
+  const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
+  const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
+  const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
+  const showRankedStats = formData.get("showRankedStats") === "true";
 
   // Validate
   if (displayName && displayName.length > 50) {
@@ -496,6 +501,10 @@ export async function action({ context, request }: Route.ActionArgs) {
       inputMethodBadge,
       shortBio,
       speedruncomUsername,
+      showPacemanOnHome,
+      showTwitchOnHome,
+      showYoutubeOnHome,
+      showRankedStats,
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
@@ -652,6 +661,10 @@ export default function EditProfilePage() {
     inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     speedruncomUsername: user.speedruncomUsername ?? "",
+    showPacemanOnHome: user.showPacemanOnHome ?? true,
+    showTwitchOnHome: user.showTwitchOnHome ?? true,
+    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
+    showRankedStats: user.showRankedStats ?? true,
   });
 
   const initialFormValues = useRef({
@@ -671,6 +684,10 @@ export default function EditProfilePage() {
     inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     speedruncomUsername: user.speedruncomUsername ?? "",
+    showPacemanOnHome: user.showPacemanOnHome ?? true,
+    showTwitchOnHome: user.showTwitchOnHome ?? true,
+    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
+    showRankedStats: user.showRankedStats ?? true,
   });
 
   // selectedPoseをformValuesに同期
@@ -714,6 +731,10 @@ export default function EditProfilePage() {
     formData.set("inputMethodBadge", formValues.inputMethodBadge);
     formData.set("shortBio", formValues.shortBio);
     formData.set("speedruncomUsername", formValues.speedruncomUsername);
+    formData.set("showPacemanOnHome", String(formValues.showPacemanOnHome));
+    formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
+    formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
+    formData.set("showRankedStats", String(formValues.showRankedStats));
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
@@ -1362,6 +1383,69 @@ export default function EditProfilePage() {
               <p className="text-xs text-muted-foreground">
                 プロフィールを開いたときに最初に表示するタブ
               </p>
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className="space-y-3">
+              <Label>表示設定</Label>
+              <p className="text-xs text-muted-foreground">
+                ホーム画面やプロフィールに表示する項目を選択します
+              </p>
+
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showPacemanOnHome"
+                    checked={formValues.showPacemanOnHome}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showPacemanOnHome: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
+                    ホーム画面にPaceManのペースを表示
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showTwitchOnHome"
+                    checked={formValues.showTwitchOnHome}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showTwitchOnHome: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
+                    ホーム画面にTwitch配信を表示
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showYoutubeOnHome"
+                    checked={formValues.showYoutubeOnHome}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showYoutubeOnHome: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
+                    ホーム画面にYouTube動画を表示
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showRankedStats"
+                    checked={formValues.showRankedStats}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showRankedStats: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
+                    プロフィールの活動・記録タブにRanked戦績を表示
+                  </Label>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

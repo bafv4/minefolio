@@ -15,6 +15,13 @@
       "when": 1737417600000,
       "tag": "0001_add_slug_make_mcid_optional",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1769227075624,
+      "tag": "0002_true_genesis",
+      "breakpoints": true
     }
   ]
 }

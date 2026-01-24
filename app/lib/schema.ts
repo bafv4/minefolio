@@ -44,6 +44,12 @@ export const users = sqliteTable("users", {
   speedruncomLastSync: integer("speedruncom_last_sync", { mode: "timestamp" }),
   hiddenSpeedrunRecords: text("hidden_speedrun_records"), // JSON配列: 非表示にする記録のrun ID
 
+  // 表示設定
+  showPacemanOnHome: integer("show_paceman_on_home", { mode: "boolean" }).default(true),
+  showTwitchOnHome: integer("show_twitch_on_home", { mode: "boolean" }).default(true),
+  showYoutubeOnHome: integer("show_youtube_on_home", { mode: "boolean" }).default(true),
+  showRankedStats: integer("show_ranked_stats", { mode: "boolean" }).default(true),
+
   // 統計
   profileViews: integer("profile_views").default(0).notNull(),
   lastActive: integer("last_active", { mode: "timestamp" }),

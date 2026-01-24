@@ -2064,7 +2064,7 @@ function StatsContent({
   return (
     <>
       {/* MCSR Ranked Section */}
-      {externalStats.ranked?.isRegistered && (
+      {externalStats.ranked?.isRegistered && player.showRankedStats !== false && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

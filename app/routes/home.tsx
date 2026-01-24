@@ -59,12 +59,27 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // セッションをチェックしてユーザーが登録済みか確認
   const session = await getOptionalSession(request, auth);
   let isRegistered = false;
+  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showTwitchOnHome: boolean; showYoutubeOnHome: boolean } | null = null;
   if (session) {
     const existingUser = await db.query.users.findFirst({
       where: eq(users.discordId, session.user.id),
-      columns: { id: true },
+      columns: {
+        id: true,
+        mcid: true,
+        showPacemanOnHome: true,
+        showTwitchOnHome: true,
+        showYoutubeOnHome: true
+      },
     });
-    isRegistered = !!existingUser;
+    if (existingUser) {
+      isRegistered = true;
+      currentUser = {
+        mcid: existingUser.mcid,
+        showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
+        showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
+        showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+      };
+    }
   }
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用）
@@ -106,6 +121,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return {
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
     isRegistered,
+    currentUser,
     registeredMcids,
     mcidToUuid,
     mcidToSlug,
@@ -285,7 +301,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
 });
 
 export default function HomePage() {
-  const { isRegistered, registeredMcids, mcidToUuid, mcidToSlug, recentlyUpdatedUsers } =
+  const { isRegistered, currentUser, registeredMcids, mcidToUuid, mcidToSlug, recentlyUpdatedUsers } =
     useLoaderData<typeof loader>();
 
   const registeredMcidSet = new Set(registeredMcids);
@@ -294,7 +310,40 @@ export default function HomePage() {
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
   // 後方互換性のためのエイリアス
-  const { liveRuns, liveStreams, youtubeLiveStreams, recentVideos, recentPaces } = feed;
+  // フィルタリング: currentUserの設定に基づいて自分のデータを除外
+  const filteredLiveRuns = currentUser?.showPacemanOnHome === false && currentUser?.mcid
+    ? feed.liveRuns.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
+    : feed.liveRuns;
+
+  const filteredRecentPaces = currentUser?.showPacemanOnHome === false && currentUser?.mcid
+    ? feed.recentPaces.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
+    : feed.recentPaces;
+
+  const filteredLiveStreams = currentUser?.showTwitchOnHome === false && currentUser?.mcid
+    ? feed.liveStreams.filter(stream =>
+        !stream.mcid || stream.mcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+      )
+    : feed.liveStreams;
+
+  const filteredYoutubeLiveStreams = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
+    ? feed.youtubeLiveStreams.filter(stream =>
+        !stream.userMcid || stream.userMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+      )
+    : feed.youtubeLiveStreams;
+
+  const filteredRecentVideos = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
+    ? feed.recentVideos.filter(video =>
+        !video.userMcid || video.userMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+      )
+    : feed.recentVideos;
+
+  const { liveRuns, liveStreams, youtubeLiveStreams, recentVideos, recentPaces } = {
+    liveRuns: filteredLiveRuns,
+    liveStreams: filteredLiveStreams,
+    youtubeLiveStreams: filteredYoutubeLiveStreams,
+    recentVideos: filteredRecentVideos,
+    recentPaces: filteredRecentPaces,
+  };
   const pacesMcidToUuid = feed.mcidToUuid;
   const pacesMcidToDisplayName = feed.mcidToDisplayName;
   const loadingLiveRuns = feed.loading.liveRuns;
