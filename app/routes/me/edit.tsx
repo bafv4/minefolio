@@ -440,6 +440,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
   const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
   const showRankedStats = formData.get("showRankedStats") === "true";
+  const showPacemanStats = formData.get("showPacemanStats") === "true";
 
   // Validate
   if (displayName && displayName.length > 50) {
@@ -505,6 +506,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       showTwitchOnHome,
       showYoutubeOnHome,
       showRankedStats,
+      showPacemanStats,
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
@@ -665,6 +667,7 @@ export default function EditProfilePage() {
     showTwitchOnHome: user.showTwitchOnHome ?? true,
     showYoutubeOnHome: user.showYoutubeOnHome ?? true,
     showRankedStats: user.showRankedStats ?? true,
+    showPacemanStats: user.showPacemanStats ?? true,
   });
 
   const initialFormValues = useRef({
@@ -688,6 +691,7 @@ export default function EditProfilePage() {
     showTwitchOnHome: user.showTwitchOnHome ?? true,
     showYoutubeOnHome: user.showYoutubeOnHome ?? true,
     showRankedStats: user.showRankedStats ?? true,
+    showPacemanStats: user.showPacemanStats ?? true,
   });
 
   // selectedPoseをformValuesに同期
@@ -735,6 +739,7 @@ export default function EditProfilePage() {
     formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
     formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
     formData.set("showRankedStats", String(formValues.showRankedStats));
+    formData.set("showPacemanStats", String(formValues.showPacemanStats));
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
@@ -1443,6 +1448,19 @@ export default function EditProfilePage() {
                   />
                   <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
                     プロフィールの活動・記録タブにRanked戦績を表示
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showPacemanStats"
+                    checked={formValues.showPacemanStats}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showPacemanStats: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
+                    プロフィールの活動・記録タブにPaceMan統計を表示
                   </Label>
                 </div>
               </div>

@@ -163,6 +163,7 @@ import {
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
+import { getNetherEnterCount, getMainPaces } from "@/lib/paceman-cache";
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
 // https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
@@ -426,6 +427,23 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const favorites = getFavoritesFromCookie(cookieHeader);
   const isFavorited = isFavorite(favorites, player.slug);
 
+  // PaceManの統計情報を取得（MCIDがある場合のみ）
+  let pacemanStats = null;
+  if (player.mcid) {
+    try {
+      const [netherEnterCount, mainPaces] = await Promise.all([
+        getNetherEnterCount(player.mcid),
+        getMainPaces(player.mcid, 10),
+      ]);
+      pacemanStats = {
+        netherEnterCount,
+        mainPaces,
+      };
+    } catch (error) {
+      console.error("Failed to fetch PaceMan stats:", error);
+    }
+  }
+
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
@@ -440,6 +458,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     isOwner,
     hiddenSpeedrunRecords,
     isFavorited,
+    pacemanStats,
     presets: presets.map((p) => ({
       id: p.id,
       name: p.name,
@@ -453,7 +472,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, presets, activePresetId } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -993,6 +1012,7 @@ export default function PlayerProfilePage() {
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+            pacemanStats={pacemanStats}
           />
         </TabsContent>
 
@@ -1963,9 +1983,11 @@ function SkinSkeleton({ width, height }: { width: number; height: number }) {
 function StatsTabContent({
   player,
   hiddenSpeedrunRecords,
+  pacemanStats,
 }: {
   player: any;
   hiddenSpeedrunRecords: string[];
+  pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -2015,6 +2037,7 @@ function StatsTabContent({
       externalStats={externalStats}
       player={player}
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+      pacemanStats={pacemanStats}
     />
   );
 }
@@ -2056,10 +2079,12 @@ function StatsContent({
   externalStats,
   player,
   hiddenSpeedrunRecords,
+  pacemanStats,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   player: any;
   hiddenSpeedrunRecords: string[];
+  pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
 }) {
   return (
     <>
@@ -2201,6 +2226,50 @@ function StatsContent({
                 PaceMan Statsで詳細を見る
               </a>
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PaceMan 過去1週間の統計 */}
+      {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || pacemanStats.mainPaces.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Timer className="h-5 w-5" />
+              過去1週間の活動（PaceMan）
+            </CardTitle>
+            <CardDescription>
+              ネザーイン回数と主なペース
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* ネザーイン回数 */}
+            {pacemanStats.netherEnterCount > 0 && (
+              <div className="p-3 bg-secondary/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">ネザーイン回数</span>
+                  <span className="text-2xl font-bold">{pacemanStats.netherEnterCount}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 主なペース（2nd Structure以降） */}
+            {pacemanStats.mainPaces.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">主なペース（2nd Structure以降）</h4>
+                <div className="space-y-1">
+                  {pacemanStats.mainPaces.map((pace: any, idx: number) => (
+                    <div
+                      key={`${pace.timeline}-${idx}`}
+                      className="flex items-center justify-between p-2 rounded bg-secondary/30 text-sm"
+                    >
+                      <span className="font-medium">{pace.timeline}</span>
+                      <span className="font-mono">{formatTime(pace.time)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

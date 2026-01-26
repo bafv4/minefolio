@@ -16,6 +16,7 @@ import {
   setDbCached,
 } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
+import { cachePacemanPaces, getRecentPacesFromCache } from "@/lib/paceman-cache";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -200,16 +201,30 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     }
 
     case "recent-paces": {
-      const dbCacheKey = "home-feed:paces:all";
-      type PacesCache = { recentPaces: any[] };
-
-      const cachedPacesData = await getDbCached<PacesCache>(dbCacheKey);
       const userData = await getUserData();
 
+      // まずDBキャッシュから取得を試みる
       let recentPaces: any[];
-      if (cachedPacesData) {
-        recentPaces = cachedPacesData.recentPaces;
-      } else {
+      try {
+        recentPaces = await getRecentPacesFromCache(20);
+
+        // キャッシュが空の場合、PaceMan APIから取得してキャッシュに保存
+        if (recentPaces.length === 0) {
+          recentPaces = await fetchRecentRunsForUsers(
+            userData.registeredMcids,
+            168, // 1週間
+            5,
+            20
+          );
+
+          // 取得したデータをDBキャッシュに保存
+          if (recentPaces.length > 0) {
+            await cachePacemanPaces(recentPaces);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch paces from cache:", error);
+        // エラー時はPaceMan APIから取得
         recentPaces = await fetchRecentRunsForUsers(
           userData.registeredMcids,
           168, // 1週間
@@ -217,7 +232,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
           20
         );
 
-        await setDbCached(dbCacheKey, "recent_paces", { recentPaces }, CACHE_TTL.PACES);
+        // 取得したデータをDBキャッシュに保存
+        if (recentPaces.length > 0) {
+          try {
+            await cachePacemanPaces(recentPaces);
+          } catch (cacheError) {
+            console.error("Failed to cache paces:", cacheError);
+          }
+        }
       }
 
       const sortedPaces = sortByFavorite(recentPaces, favoritesSet);

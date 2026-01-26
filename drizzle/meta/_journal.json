@@ -22,6 +22,13 @@
       "when": 1769227075624,
       "tag": "0002_true_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1769466775733,
+      "tag": "0003_good_excalibur",
+      "breakpoints": true
     }
   ]
 }

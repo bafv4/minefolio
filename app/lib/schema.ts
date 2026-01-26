@@ -49,6 +49,7 @@ export const users = sqliteTable("users", {
   showTwitchOnHome: integer("show_twitch_on_home", { mode: "boolean" }).default(true),
   showYoutubeOnHome: integer("show_youtube_on_home", { mode: "boolean" }).default(true),
   showRankedStats: integer("show_ranked_stats", { mode: "boolean" }).default(true),
+  showPacemanStats: integer("show_paceman_stats", { mode: "boolean" }).default(true),
 
   // 統計
   profileViews: integer("profile_views").default(0).notNull(),
@@ -375,6 +376,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   configPresets: many(configPresets),
   configHistory: many(configHistory),
   favorites: many(favorites),
+  pacemanPaces: many(pacemanPaces),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -544,6 +546,44 @@ export type ConfigPreset = typeof configPresets.$inferSelect;
 export type NewConfigPreset = typeof configPresets.$inferInsert;
 export type ConfigHistoryEntry = typeof configHistory.$inferSelect;
 export type NewConfigHistoryEntry = typeof configHistory.$inferInsert;
+
+// ============================================
+// 15. paceman_paces（PaceManペースキャッシュ）
+// ============================================
+export const pacemanPaces = sqliteTable("paceman_paces", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  mcid: text("mcid").notNull(), // プレイヤーのMCID
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意）
+
+  // ペース情報
+  timeline: text("timeline").notNull(), // "Eye Spy", "Enter Nether", "Obtain Blaze Rods", etc.
+  rta: integer("rta").notNull(), // リアルタイム（ミリ秒）
+  igt: integer("igt"), // ゲーム内時間（ミリ秒）
+  date: integer("date", { mode: "timestamp" }).notNull(), // ペースの日時
+
+  // メタデータ
+  isNetherEnter: integer("is_nether_enter", { mode: "boolean" }).default(false).notNull(), // ネザーイン判定用
+  is2ndStructureOrLater: integer("is_2nd_structure_or_later", { mode: "boolean" }).default(false).notNull(), // 2nd Structure以降
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_paceman_paces_mcid").on(table.mcid),
+  index("idx_paceman_paces_user_id").on(table.userId),
+  index("idx_paceman_paces_date").on(table.date),
+  index("idx_paceman_paces_timeline").on(table.timeline),
+  index("idx_paceman_paces_is_nether_enter").on(table.isNetherEnter),
+  index("idx_paceman_paces_is_2nd_structure_or_later").on(table.is2ndStructureOrLater),
+]);
+
+export const pacemanPacesRelations = relations(pacemanPaces, ({ one }) => ({
+  user: one(users, {
+    fields: [pacemanPaces.userId],
+    references: [users.id],
+  }),
+}));
+
+export type PacemanPace = typeof pacemanPaces.$inferSelect;
+export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 
 // ============================================
 // 15. favorites（お気に入りプレイヤー）
