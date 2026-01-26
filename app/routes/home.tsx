@@ -327,13 +327,13 @@ export default function HomePage() {
 
   const filteredYoutubeLiveStreams = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
     ? feed.youtubeLiveStreams.filter(stream =>
-        !stream.userMcid || stream.userMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+        !stream.minefolioMcid || stream.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
       )
     : feed.youtubeLiveStreams;
 
   const filteredRecentVideos = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
     ? feed.recentVideos.filter(video =>
-        !video.userMcid || video.userMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+        !video.minefolioMcid || video.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
       )
     : feed.recentVideos;
 

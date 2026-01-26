@@ -3,23 +3,112 @@ import { pacemanPaces, users } from "./schema";
 import { eq, and, gte, desc, sql } from "drizzle-orm";
 import type { PaceManRecentRun } from "./paceman";
 
+// スプリットタイムをタイムラインに変換する型定義
+interface PaceEntry {
+  timeline: string;
+  rta: number;
+  isNetherEnter: boolean;
+  is2ndStructureOrLater: boolean;
+}
+
+// キャッシュから取得されるペースエントリの型
+export interface CachedPaceEntry {
+  id: number;
+  mcid: string;
+  timeline: string;
+  rta: number;
+  igt: number | null;
+  date: string; // ISO string
+}
+
 // 2nd Structure以降と判定するタイムライン
 const SECOND_STRUCTURE_OR_LATER = [
   "Obtain Blaze Rods",
   "Enter Stronghold",
   "Enter End",
-  "Complete",
+  "Finish",
 ];
 
-// ネザーイン判定
-const isNetherEnter = (timeline: string): boolean => {
-  return timeline === "Enter Nether";
-};
+// PaceManRecentRunから個別のペースエントリを抽出
+function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
+  const entries: PaceEntry[] = [];
+  const timestamp = run.time * 1000; // Unix秒からミリ秒に変換
 
-// 2nd Structure以降判定
-const is2ndStructureOrLater = (timeline: string): boolean => {
-  return SECOND_STRUCTURE_OR_LATER.includes(timeline);
-};
+  // 各スプリットをチェックして、値があればエントリを追加
+  if (run.nether !== null) {
+    entries.push({
+      timeline: "Enter Nether",
+      rta: run.nether,
+      isNetherEnter: true,
+      is2ndStructureOrLater: false,
+    });
+  }
+
+  if (run.bastion !== null) {
+    entries.push({
+      timeline: "Bastion",
+      rta: run.bastion,
+      isNetherEnter: false,
+      is2ndStructureOrLater: false,
+    });
+  }
+
+  if (run.fortress !== null) {
+    entries.push({
+      timeline: "Fortress",
+      rta: run.fortress,
+      isNetherEnter: false,
+      is2ndStructureOrLater: false,
+    });
+  }
+
+  if (run.first_portal !== null) {
+    entries.push({
+      timeline: "First Portal",
+      rta: run.first_portal,
+      isNetherEnter: false,
+      is2ndStructureOrLater: false,
+    });
+  }
+
+  if (run.second_structure !== null) {
+    entries.push({
+      timeline: "Obtain Blaze Rods",
+      rta: run.second_structure,
+      isNetherEnter: false,
+      is2ndStructureOrLater: true,
+    });
+  }
+
+  if (run.stronghold !== null) {
+    entries.push({
+      timeline: "Enter Stronghold",
+      rta: run.stronghold,
+      isNetherEnter: false,
+      is2ndStructureOrLater: true,
+    });
+  }
+
+  if (run.end !== null) {
+    entries.push({
+      timeline: "Enter End",
+      rta: run.end,
+      isNetherEnter: false,
+      is2ndStructureOrLater: true,
+    });
+  }
+
+  if (run.finish !== null) {
+    entries.push({
+      timeline: "Finish",
+      rta: run.finish,
+      isNetherEnter: false,
+      is2ndStructureOrLater: true,
+    });
+  }
+
+  return entries;
+}
 
 /**
  * PaceManの最近のペース情報をDBにキャッシュする
@@ -43,22 +132,39 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
   // 過去1週間の開始時刻
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  // 各ペース情報をDBに保存
-  const pacesToInsert = recentPaces.map((pace) => {
-    const mcidLower = pace.nickname.toLowerCase();
-    const userId = mcidToUserId.get(mcidLower) || null;
+  // 各ペース情報をDBに保存用に変換
+  const pacesToInsert: Array<{
+    mcid: string;
+    userId: string | null;
+    timeline: string;
+    rta: number;
+    igt: number | null;
+    date: Date;
+    isNetherEnter: boolean;
+    is2ndStructureOrLater: boolean;
+  }> = [];
 
-    return {
-      mcid: pace.nickname,
-      userId,
-      timeline: pace.timeline,
-      rta: pace.time,
-      igt: pace.igt ?? null,
-      date: new Date(pace.date),
-      isNetherEnter: isNetherEnter(pace.timeline),
-      is2ndStructureOrLater: is2ndStructureOrLater(pace.timeline),
-    };
-  });
+  for (const run of recentPaces) {
+    const mcidLower = run.nickname.toLowerCase();
+    const userId = mcidToUserId.get(mcidLower) || null;
+    const runDate = new Date(run.time * 1000); // Unix秒からミリ秒に変換
+
+    // 各スプリットからペースエントリを抽出
+    const entries = extractPaceEntries(run);
+
+    for (const entry of entries) {
+      pacesToInsert.push({
+        mcid: run.nickname,
+        userId,
+        timeline: entry.timeline,
+        rta: entry.rta,
+        igt: null, // PaceManRecentRunにはIGTがないためnull
+        date: runDate,
+        isNetherEnter: entry.isNetherEnter,
+        is2ndStructureOrLater: entry.is2ndStructureOrLater,
+      });
+    }
+  }
 
   // 一括挿入（重複は無視）
   if (pacesToInsert.length > 0) {
@@ -73,7 +179,7 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
  * キャッシュから最近のペース情報を取得
  * @param limit 取得件数
  */
-export async function getRecentPacesFromCache(limit: number = 20): Promise<PaceManRecentRun[]> {
+export async function getRecentPacesFromCache(limit: number = 20): Promise<CachedPaceEntry[]> {
   const db = createDb();
 
   const paces = await db.query.pacemanPaces.findMany({
@@ -90,12 +196,11 @@ export async function getRecentPacesFromCache(limit: number = 20): Promise<PaceM
 
   return paces.map((p) => ({
     id: 0, // キャッシュには不要だが型に合わせる
-    nickname: p.mcid,
+    mcid: p.mcid,
     timeline: p.timeline,
-    time: p.rta,
-    igt: p.igt ?? undefined,
+    rta: p.rta,
+    igt: p.igt,
     date: p.date.toISOString(),
-    sessionMarker: "",
   }));
 }
 
@@ -126,7 +231,7 @@ export async function getNetherEnterCount(mcid: string): Promise<number> {
  * @param mcid プレイヤーのMCID
  * @param limit 取得件数
  */
-export async function getMainPaces(mcid: string, limit: number = 10): Promise<PaceManRecentRun[]> {
+export async function getMainPaces(mcid: string, limit: number = 10): Promise<CachedPaceEntry[]> {
   const db = createDb();
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -149,11 +254,10 @@ export async function getMainPaces(mcid: string, limit: number = 10): Promise<Pa
 
   return paces.map((p) => ({
     id: 0,
-    nickname: p.mcid,
+    mcid: p.mcid,
     timeline: p.timeline,
-    time: p.rta,
-    igt: p.igt ?? undefined,
+    rta: p.rta,
+    igt: p.igt,
     date: p.date.toISOString(),
-    sessionMarker: "",
   }));
 }

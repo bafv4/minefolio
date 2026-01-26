@@ -2264,7 +2264,7 @@ function StatsContent({
                       className="flex items-center justify-between p-2 rounded bg-secondary/30 text-sm"
                     >
                       <span className="font-medium">{pace.timeline}</span>
-                      <span className="font-mono">{formatTime(pace.time)}</span>
+                      <span className="font-mono">{formatTime(pace.rta)}</span>
                     </div>
                   ))}
                 </div>
