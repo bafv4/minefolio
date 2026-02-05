@@ -16,7 +16,7 @@ import {
   setDbCached,
 } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
-import { cachePacemanPaces, getRecentPacesFromCache } from "@/lib/paceman-cache";
+import type { PaceManRecentRun } from "@/lib/paceman";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -203,43 +203,17 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     case "recent-paces": {
       const userData = await getUserData();
 
-      // まずDBキャッシュから取得を試みる
-      let recentPaces: any[];
+      let recentPaces: PaceManRecentRun[];
       try {
-        recentPaces = await getRecentPacesFromCache(20);
-
-        // キャッシュが空の場合、PaceMan APIから取得してキャッシュに保存
-        if (recentPaces.length === 0) {
-          recentPaces = await fetchRecentRunsForUsers(
-            userData.registeredMcids,
-            168, // 1週間
-            5,
-            20
-          );
-
-          // 取得したデータをDBキャッシュに保存
-          if (recentPaces.length > 0) {
-            await cachePacemanPaces(recentPaces);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch paces from cache:", error);
-        // エラー時はPaceMan APIから取得
         recentPaces = await fetchRecentRunsForUsers(
           userData.registeredMcids,
           168, // 1週間
           5,
           20
         );
-
-        // 取得したデータをDBキャッシュに保存
-        if (recentPaces.length > 0) {
-          try {
-            await cachePacemanPaces(recentPaces);
-          } catch (cacheError) {
-            console.error("Failed to cache paces:", cacheError);
-          }
-        }
+      } catch (error) {
+        console.error("Failed to fetch recent paces:", error);
+        recentPaces = [];
       }
 
       const sortedPaces = sortByFavorite(recentPaces, favoritesSet);
