@@ -2,11 +2,17 @@ import { Link } from "react-router";
 import {
   type PaceManLiveRun,
   getSplitLabelEnglish,
+  getSplitOrder,
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 interface LivePaceListProps {
   runs: PaceManLiveRun[];
@@ -30,7 +36,6 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
             <th className="text-left py-2 px-3 font-medium">バージョン</th>
             <th className="text-left py-2 px-3 font-medium">最新区間</th>
             <th className="text-right py-2 px-3 font-medium">タイム</th>
-            <th className="text-left py-2 px-3 font-medium">スプリット</th>
             <th className="text-center py-2 px-3 font-medium">配信</th>
           </tr>
         </thead>
@@ -80,16 +85,31 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                   )}
                 </td>
                 <td className="py-2 px-3 text-right font-mono font-semibold">
-                  {latestSplit ? formatTime(latestSplit.igt) : "-"}
-                </td>
-                <td className="py-2 px-3">
-                  <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
-                    {run.eventList.slice(0, -1).map((event) => (
-                      <span key={event.eventId}>
-                        {getSplitLabelEnglish(event.eventId)}: {formatTime(event.igt)}
-                      </span>
-                    ))}
-                  </div>
+                  {latestSplit ? (
+                    run.eventList.length > 1 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default underline decoration-dotted underline-offset-4 decoration-muted-foreground/50">
+                            {formatTime(latestSplit.igt)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="p-0">
+                          <div className="px-3 py-2 space-y-1">
+                            {[...run.eventList]
+                              .sort((a, b) => getSplitOrder(a.eventId) - getSplitOrder(b.eventId))
+                              .map((event) => (
+                                <div key={event.eventId} className="flex items-center justify-between gap-4 text-xs">
+                                  <span className="opacity-80">{getSplitLabelEnglish(event.eventId)}</span>
+                                  <span className="font-mono font-semibold">{formatTime(event.igt)}</span>
+                                </div>
+                              ))}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      formatTime(latestSplit.igt)
+                    )
+                  ) : "-"}
                 </td>
                 <td className="py-2 px-3 text-center">
                   {run.user.liveAccount ? (

@@ -11,7 +11,8 @@
       "Bash(pnpm build:*)",
       "Bash(chmod:*)",
       "Bash(bash:*)",
-      "Bash(/home/bafv4/.nvm/versions/node/v25.2.1/bin/pnpm install:*)"
+      "Bash(/home/bafv4/.nvm/versions/node/v25.2.1/bin/pnpm install:*)",
+      "WebFetch(domain:paceman.gg)"
     ]
   }
 }

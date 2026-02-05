@@ -1,6 +1,6 @@
 import { createDb } from "./db";
 import { pacemanPaces, users } from "./schema";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lt, desc, sql } from "drizzle-orm";
 import type { PaceManRecentRun } from "./paceman";
 
 // スプリットタイムをタイムラインに変換する型定義
@@ -21,18 +21,9 @@ export interface CachedPaceEntry {
   date: string; // ISO string
 }
 
-// 2nd Structure以降と判定するタイムライン
-const SECOND_STRUCTURE_OR_LATER = [
-  "Obtain Blaze Rods",
-  "Enter Stronghold",
-  "Enter End",
-  "Finish",
-];
-
 // PaceManRecentRunから個別のペースエントリを抽出
 function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
   const entries: PaceEntry[] = [];
-  const timestamp = run.time * 1000; // Unix秒からミリ秒に変換
 
   // 各スプリットをチェックして、値があればエントリを追加
   if (run.nether !== null) {
@@ -119,15 +110,24 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
 
   // MCIDからuserIdのマッピングを取得
   const mcids = [...new Set(recentPaces.map((p) => p.nickname.toLowerCase()))];
-  const userRecords = await db
-    .select({ id: users.id, mcid: users.mcid })
-    .from(users)
-    .where(sql`lower(${users.mcid}) IN (${sql.join(mcids.map((m) => sql`${m}`), sql`, `)})`);
 
+  const userRecords = mcids.length > 0
+    ? await db
+        .select({ id: users.id, mcid: users.mcid })
+        .from(users)
+        .where(sql`lower(${users.mcid}) IN (${sql.join(mcids.map((m) => sql`${m}`), sql`, `)})`)
+    : [];
 
   const mcidToUserId = new Map(
     userRecords.map((u) => [u.mcid!.toLowerCase(), u.id])
   );
+
+  // 対象MCIDの既存キャッシュを削除（重複防止）
+  for (const mcid of mcids) {
+    await db.delete(pacemanPaces).where(
+      sql`lower(${pacemanPaces.mcid}) = ${mcid}`
+    );
+  }
 
   // 過去1週間の開始時刻
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -149,6 +149,9 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     const userId = mcidToUserId.get(mcidLower) || null;
     const runDate = new Date(run.time * 1000); // Unix秒からミリ秒に変換
 
+    // 1週間より古いデータはスキップ
+    if (runDate < oneWeekAgo) continue;
+
     // 各スプリットからペースエントリを抽出
     const entries = extractPaceEntries(run);
 
@@ -166,13 +169,17 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     }
   }
 
-  // 一括挿入（重複は無視）
+  // バッチサイズを制限してインサート（SQLiteの変数上限対策）
   if (pacesToInsert.length > 0) {
-    await db.insert(pacemanPaces).values(pacesToInsert).onConflictDoNothing();
+    const batchSize = 50;
+    for (let i = 0; i < pacesToInsert.length; i += batchSize) {
+      const batch = pacesToInsert.slice(i, i + batchSize);
+      await db.insert(pacemanPaces).values(batch);
+    }
   }
 
-  // 1週間より古いデータを削除
-  await db.delete(pacemanPaces).where(sql`${pacemanPaces.date} < ${oneWeekAgo}`);
+  // 1週間より古いデータを削除（他ユーザーの古いデータも含む）
+  await db.delete(pacemanPaces).where(lt(pacemanPaces.date, oneWeekAgo));
 }
 
 /**

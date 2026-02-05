@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Home, Search, Keyboard, BarChart3, GitCompare, LogIn } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Home, Radio, Search, Keyboard, BarChart3, GitCompare, LogIn } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ interface HeaderProps {
 
 const navigation = [
   { name: "ホーム", href: "/", icon: Home },
+  { name: "ライブ", href: "/live", icon: Radio },
   { name: "探す", href: "/browse", icon: Search },
   { name: "操作設定", href: "/keybindings", icon: Keyboard },
   { name: "統計", href: "/keybindings/stats", icon: BarChart3 },

@@ -16,6 +16,9 @@ export default [
     route("login", "routes/login.tsx"),
     route("onboarding", "routes/onboarding.tsx"),
 
+    // Live
+    route("live", "routes/live.tsx"),
+
     // Browse & Rankings
     route("browse", "routes/browse.tsx"),
     route("keybindings", "routes/keybindings.tsx"),
@@ -53,6 +56,7 @@ export default [
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
+  route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
