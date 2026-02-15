@@ -4,19 +4,13 @@
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks } from "@/lib/schema";
-import { eq, and, isNotNull } from "drizzle-orm";
-import { fetchLiveRuns, fetchRecentRunsForUsers } from "@/lib/paceman";
+import { users, socialLinks, pacemanPaces } from "@/lib/schema";
+import { eq, and, isNotNull, desc } from "drizzle-orm";
+import { fetchLiveRuns } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getFavoritesFromCookie } from "@/lib/favorites";
-import {
-  getCached,
-  setCached,
-  getDbCached,
-  setDbCached,
-} from "@/lib/cache";
+import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
-import type { PaceManRecentRun } from "@/lib/paceman";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -127,8 +121,8 @@ async function getTwitchLinks(): Promise<TwitchLinkCache> {
   return fetchAndCacheTwitchLinks();
 }
 
-// お気に入りソート関数
-function sortByFavorite<T extends { mcid?: string | null; nickname?: string | null; minefolioMcid?: string | null }>(
+// お気に入りソート関数（時間順を維持）
+function sortByFavorite<T extends { mcid?: string | null; nickname?: string | null; minefolioMcid?: string | null; time?: number }>(
   items: T[],
   favoritesSet: Set<string>
 ): T[] {
@@ -137,8 +131,13 @@ function sortByFavorite<T extends { mcid?: string | null; nickname?: string | nu
     const bMcid = (b.mcid || b.nickname || b.minefolioMcid || "").toLowerCase();
     const aIsFavorite = favoritesSet.has(aMcid);
     const bIsFavorite = favoritesSet.has(bMcid);
+    // お気に入りを先頭に
     if (aIsFavorite && !bIsFavorite) return -1;
     if (!aIsFavorite && bIsFavorite) return 1;
+    // 同じお気に入り状態の場合は時間順（新しい順）
+    if (a.time !== undefined && b.time !== undefined) {
+      return b.time - a.time;
+    }
     return 0;
   });
 }
@@ -201,22 +200,30 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     }
 
     case "recent-paces": {
+      const db = createDb();
       const userData = await getUserData();
 
-      let recentPaces: PaceManRecentRun[];
-      try {
-        recentPaces = await fetchRecentRunsForUsers(
-          userData.registeredMcids,
-          168, // 1週間
-          5,
-          20
-        );
-      } catch (error) {
-        console.error("Failed to fetch recent paces:", error);
-        recentPaces = [];
-      }
+      // DBキャッシュから2nd Structure以降のペースを取得（新しい順、最大20件）
+      const paces = await db
+        .select({
+          mcid: pacemanPaces.mcid,
+          timeline: pacemanPaces.timeline,
+          rta: pacemanPaces.rta,
+          date: pacemanPaces.date,
+        })
+        .from(pacemanPaces)
+        .where(eq(pacemanPaces.is2ndStructureOrLater, true))
+        .orderBy(desc(pacemanPaces.date))
+        .limit(20);
 
-      const sortedPaces = sortByFavorite(recentPaces, favoritesSet);
+      // お気に入りソート用にtime（Unix秒）を追加
+      const pacesWithTime = paces.map((p) => ({
+        ...p,
+        nickname: p.mcid,
+        time: Math.floor(p.date.getTime() / 1000),
+      }));
+
+      const sortedPaces = sortByFavorite(pacesWithTime, favoritesSet);
       return jsonResponse(
         {
           recentPaces: sortedPaces,

@@ -552,6 +552,7 @@ export type NewConfigHistoryEntry = typeof configHistory.$inferInsert;
 // ============================================
 export const pacemanPaces = sqliteTable("paceman_paces", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
+  pacemanRunId: integer("paceman_run_id").notNull(), // PaceMan APIのランID（同じランのスプリットをグループ化するために使用）
   mcid: text("mcid").notNull(), // プレイヤーのMCID
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意）
 
@@ -573,6 +574,7 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   index("idx_paceman_paces_timeline").on(table.timeline),
   index("idx_paceman_paces_is_nether_enter").on(table.isNetherEnter),
   index("idx_paceman_paces_is_2nd_structure_or_later").on(table.is2ndStructureOrLater),
+  index("idx_paceman_paces_run_id").on(table.pacemanRunId),
 ]);
 
 export const pacemanPacesRelations = relations(pacemanPaces, ({ one }) => ({

@@ -4,6 +4,12 @@ import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
+import { getNetherEnterCount, getMainPaces, type GroupedPaceEntry } from "@/lib/paceman-cache";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { formatTime } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +22,24 @@ import {
   Timer,
   ArrowLeft,
   UserCircle,
+  Flame,
+  Clock,
 } from "lucide-react";
+
+// 相対時間を計算
+function getRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const date = new Date(dateStr);
+  const diffMs = now - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffMinutes < 1) return "たった今";
+  if (diffMinutes < 60) return `${diffMinutes}分前`;
+  if (diffHours < 24) return `${diffHours}時間前`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}日前`;
+}
 
 export const meta: Route.MetaFunction = ({ params, data }) => {
   // dataがある場合はmcidを使用、なければslugを表示
@@ -50,23 +73,36 @@ export async function loader({ params }: Route.LoaderArgs) {
     ? await fetchAllExternalStats(player.mcid)
     : { paceman: null, ranked: null, speedruncom: null };
 
+  // PaceManキャッシュからデータを取得（MCIDがある場合のみ）
+  let netherEnterCount = 0;
+  let recentPaces: GroupedPaceEntry[] = [];
+  if (player.mcid) {
+    [netherEnterCount, recentPaces] = await Promise.all([
+      getNetherEnterCount(player.mcid),
+      getMainPaces(player.mcid, 10),
+    ]);
+  }
+
   return {
     mcid: player.mcid,
     slug: player.slug,
     displayName: player.displayName,
     externalStats,
+    netherEnterCount,
+    recentPaces,
   };
 }
 
 export default function PlayerStatsPage() {
-  const { mcid, slug, displayName, externalStats } = useLoaderData<typeof loader>();
+  const { mcid, slug, displayName, externalStats, netherEnterCount, recentPaces } = useLoaderData<typeof loader>();
 
   // 表示名の優先順位: displayName > mcid > slug
   const playerDisplayName = displayName || mcid || slug;
 
+  const hasPacemanData = externalStats.paceman?.isRegistered || netherEnterCount > 0 || recentPaces.length > 0;
   const hasAnyData =
     externalStats.ranked?.isRegistered ||
-    externalStats.paceman?.isRegistered ||
+    hasPacemanData ||
     (externalStats.speedruncom?.personalBests?.length ?? 0) > 0;
 
   return (
@@ -250,27 +286,111 @@ export default function PlayerStatsPage() {
             </Card>
           )}
 
-          {/* PaceMan Section - リンクのみ */}
-          {externalStats.paceman?.isRegistered && (
+          {/* PaceMan Section */}
+          {hasPacemanData && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Timer className="h-5 w-5" />
                   PaceMan Stats
                 </CardTitle>
-                <CardDescription>ペース統計・リセット情報</CardDescription>
+                <CardDescription>過去1週間のペース統計</CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <a
-                    href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid!)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    PaceMan Statsで詳細を見る
-                  </a>
-                </Button>
+              <CardContent className="space-y-4">
+                {/* 統計サマリー */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                    <div className="flex items-center justify-center gap-2">
+                      <Flame className="h-5 w-5 text-orange-500" />
+                      <p className="text-2xl font-bold">{netherEnterCount}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">ネザーイン回数</p>
+                  </div>
+                  <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                    <div className="flex items-center justify-center gap-2">
+                      <Clock className="h-5 w-5 text-blue-500" />
+                      <p className="text-2xl font-bold">{recentPaces.length}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">主なペース</p>
+                  </div>
+                </div>
+
+                {/* 最近のペース一覧 */}
+                {recentPaces.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">
+                      最近のペース（2nd Structure以降）
+                    </h4>
+                    <div className="space-y-1">
+                      {recentPaces.map((pace) => (
+                        <a
+                          key={pace.pacemanRunId}
+                          href={`https://paceman.gg/stats/run/${pace.pacemanRunId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded text-sm hover:bg-accent/50 transition-colors",
+                            pace.latestSplit.timeline === "Finish" && "bg-yellow-500/10 hover:bg-yellow-500/20"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={pace.latestSplit.timeline === "Finish" ? "default" : "secondary"}
+                              className="min-w-25 justify-center"
+                            >
+                              {pace.latestSplit.timeline}
+                            </Badge>
+                            {pace.latestSplit.timeline === "Finish" && (
+                              <Trophy className="h-4 w-4 text-yellow-500" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {pace.splits.length > 1 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-mono font-medium cursor-default underline decoration-dotted underline-offset-4 decoration-muted-foreground/50">
+                                    {formatTime(pace.latestSplit.rta)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="p-0">
+                                  <div className="px-3 py-2 space-y-1">
+                                    {pace.splits.map((split) => (
+                                      <div key={split.timeline} className="flex items-center justify-between gap-4 text-xs">
+                                        <span className="opacity-80">{split.timeline}</span>
+                                        <span className="font-mono font-semibold">{formatTime(split.rta)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="font-mono font-medium">
+                                {formatTime(pace.latestSplit.rta)}
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {getRelativeTime(pace.date)}
+                            </span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 外部リンク */}
+                {externalStats.paceman?.isRegistered && (
+                  <Button asChild variant="outline" className="w-full">
+                    <a
+                      href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid!)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      PaceMan Statsで詳細を見る
+                    </a>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}

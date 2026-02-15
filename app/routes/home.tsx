@@ -9,7 +9,7 @@ import { users } from "@/lib/schema";
 import { eq, desc } from "drizzle-orm";
 import { VideoCard } from "@/components/video-card";
 import { PlayerCard } from "@/components/player-card";
-import { RecentPaceCard } from "@/components/recent-pace-card";
+import { RecentPaceCard, type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,6 @@ import {
   UserCheck,
   History,
 } from "lucide-react";
-import type { PaceManRecentRun } from "@/lib/paceman";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   const appUrl = data?.appUrl || "https://minefolio.pages.dev";
@@ -118,7 +117,7 @@ interface YouTubeVideosResponse {
 }
 
 interface RecentPacesResponse {
-  recentPaces: PaceManRecentRun[];
+  recentPaces: CachedPace[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
 }
@@ -126,7 +125,7 @@ interface RecentPacesResponse {
 // Feed状態管理用のReducer
 interface FeedState {
   recentVideos: CachedYouTubeVideo[];
-  recentPaces: PaceManRecentRun[];
+  recentPaces: CachedPace[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   loading: {
@@ -141,7 +140,7 @@ interface FeedState {
 
 type FeedAction =
   | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
-  | { type: "SET_PACES"; payload: { recentPaces: PaceManRecentRun[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
+  | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
 
 const initialFeedState: FeedState = {
@@ -222,7 +221,7 @@ export default function HomePage() {
 
   // フィルタリング
   const filteredRecentPaces = currentUser?.showPacemanOnHome === false && currentUser?.mcid
-    ? feed.recentPaces.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
+    ? feed.recentPaces.filter(run => run.mcid.toLowerCase() !== currentUser.mcid!.toLowerCase())
     : feed.recentPaces;
 
   const filteredRecentVideos = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
@@ -329,11 +328,11 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {filteredRecentPaces.map((run) => (
               <RecentPaceCard
-                key={`${run.id}-${run.time}`}
+                key={`${run.mcid}-${run.time}-${run.timeline}`}
                 run={run}
-                isRegistered={registeredMcidSet.has(run.nickname.toLowerCase())}
-                uuid={mergedMcidToUuid[run.nickname.toLowerCase()] ?? undefined}
-                displayName={pacesMcidToDisplayName[run.nickname.toLowerCase()]}
+                isRegistered={registeredMcidSet.has(run.mcid.toLowerCase())}
+                uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
+                displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
               />
             ))}
           </div>

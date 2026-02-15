@@ -21,6 +21,33 @@ export interface CachedPaceEntry {
   date: string; // ISO string
 }
 
+// グループ化されたペース（同じランの複数スプリットをまとめたもの）
+export interface GroupedPaceEntry {
+  mcid: string;
+  pacemanRunId: number; // PaceMan APIのランID
+  date: string; // ISO string
+  latestSplit: {
+    timeline: string;
+    rta: number;
+  };
+  splits: Array<{
+    timeline: string;
+    rta: number;
+  }>;
+}
+
+// スプリットの進行順序
+const SPLIT_ORDER: Record<string, number> = {
+  "Enter Nether": 1,
+  "Bastion": 2,
+  "Fortress": 3,
+  "First Portal": 4,
+  "Obtain Blaze Rods": 5,
+  "Enter Stronghold": 6,
+  "Enter End": 7,
+  "Finish": 8,
+};
+
 // PaceManRecentRunから個別のペースエントリを抽出
 function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
   const entries: PaceEntry[] = [];
@@ -134,6 +161,7 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
 
   // 各ペース情報をDBに保存用に変換
   const pacesToInsert: Array<{
+    pacemanRunId: number;
     mcid: string;
     userId: string | null;
     timeline: string;
@@ -157,6 +185,7 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
 
     for (const entry of entries) {
       pacesToInsert.push({
+        pacemanRunId: run.id, // PaceMan APIのランID
         mcid: run.nickname,
         userId,
         timeline: entry.timeline,
@@ -235,13 +264,15 @@ export async function getNetherEnterCount(mcid: string): Promise<number> {
 
 /**
  * 特定ユーザーの過去1週間の主なペース（2nd Structure以降）を取得
+ * 同じランの複数スプリットをグループ化して返す
  * @param mcid プレイヤーのMCID
- * @param limit 取得件数
+ * @param limit 取得するラン数
  */
-export async function getMainPaces(mcid: string, limit: number = 10): Promise<CachedPaceEntry[]> {
+export async function getMainPaces(mcid: string, limit: number = 10): Promise<GroupedPaceEntry[]> {
   const db = createDb();
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+  // 2nd Structure以降の全スプリットを取得
   const paces = await db.query.pacemanPaces.findMany({
     where: and(
       sql`lower(${pacemanPaces.mcid}) = ${mcid.toLowerCase()}`,
@@ -249,22 +280,49 @@ export async function getMainPaces(mcid: string, limit: number = 10): Promise<Ca
       gte(pacemanPaces.date, oneWeekAgo)
     ),
     orderBy: [desc(pacemanPaces.date)],
-    limit,
     columns: {
+      pacemanRunId: true,
       mcid: true,
       timeline: true,
       rta: true,
-      igt: true,
       date: true,
     },
   });
 
-  return paces.map((p) => ({
-    id: 0,
-    mcid: p.mcid,
-    timeline: p.timeline,
-    rta: p.rta,
-    igt: p.igt,
-    date: p.date.toISOString(),
-  }));
+  // pacemanRunIdでグループ化
+  const groupedMap = new Map<number, GroupedPaceEntry>();
+
+  for (const pace of paces) {
+    const runId = pace.pacemanRunId;
+
+    if (!groupedMap.has(runId)) {
+      groupedMap.set(runId, {
+        mcid: pace.mcid,
+        pacemanRunId: runId,
+        date: pace.date.toISOString(),
+        latestSplit: { timeline: pace.timeline, rta: pace.rta },
+        splits: [],
+      });
+    }
+
+    const group = groupedMap.get(runId)!;
+    group.splits.push({ timeline: pace.timeline, rta: pace.rta });
+
+    // 最も進んだスプリットを更新
+    const currentOrder = SPLIT_ORDER[group.latestSplit.timeline] ?? 0;
+    const newOrder = SPLIT_ORDER[pace.timeline] ?? 0;
+    if (newOrder > currentOrder) {
+      group.latestSplit = { timeline: pace.timeline, rta: pace.rta };
+    }
+  }
+
+  // グループを配列に変換し、各グループのスプリットを進行順にソート
+  const grouped = Array.from(groupedMap.values())
+    .map((g) => ({
+      ...g,
+      splits: g.splits.sort((a, b) => (SPLIT_ORDER[a.timeline] ?? 0) - (SPLIT_ORDER[b.timeline] ?? 0)),
+    }))
+    .slice(0, limit);
+
+  return grouped;
 }
