@@ -36,6 +36,13 @@
       "when": 1771165983508,
       "tag": "0004_fearless_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1771422293474,
+      "tag": "0005_slimy_the_stranger",
+      "breakpoints": true
     }
   ]
 }

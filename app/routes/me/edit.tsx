@@ -56,9 +56,10 @@ import {
   Download,
 } from "lucide-react";
 import type { PoseName } from "@/components/minecraft-fullbody";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "プロフィール編集 - Minefolio" }];
+  return [{ title: t("meEdit.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
@@ -91,7 +92,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
   // キー配置等のデータが存在するかチェック
@@ -167,7 +168,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("meEdit.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -177,11 +178,11 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (actionType === "import_legacy") {
     const legacyApiUrl = env.LEGACY_API_URL;
     if (!legacyApiUrl) {
-      return { error: "レガシーAPIが設定されていません", action: "import" };
+      return { error: t("meEdit.legacyApiNotConfigured"), action: "import" };
     }
 
     if (!user.mcid) {
-      return { error: "MCIDが設定されていないためインポートできません", action: "import" };
+      return { error: t("meEdit.mcidNotSetForImport"), action: "import" };
     }
 
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
@@ -196,7 +197,7 @@ export async function action({ context, request }: Route.ActionArgs) {
         settingsImported: result.settingsImported,
       };
     } else {
-      return { error: result.error ?? "インポートに失敗しました", action: "import" };
+      return { error: result.error ?? t("meEdit.importFailed"), action: "import" };
     }
   }
 
@@ -205,11 +206,11 @@ export async function action({ context, request }: Route.ActionArgs) {
     const mcid = (formData.get("mcid") as string)?.trim();
 
     if (!mcid) {
-      return { error: "MCIDを入力してください", action: "mcid" };
+      return { error: t("meEdit.mcidRequired"), action: "mcid" };
     }
 
     if (mcid.length < 3 || mcid.length > 16) {
-      return { error: "MCIDは3〜16文字である必要があります", action: "mcid" };
+      return { error: t("meEdit.mcidLength"), action: "mcid" };
     }
 
     // 既に同じMCIDが登録されていないかチェック
@@ -218,7 +219,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     });
 
     if (existingUser && existingUser.id !== user.id) {
-      return { error: "このMCIDは既に登録されています", action: "mcid" };
+      return { error: t("meEdit.mcidTaken"), action: "mcid" };
     }
 
     // Mojang APIで検証
@@ -240,10 +241,10 @@ export async function action({ context, request }: Route.ActionArgs) {
     } catch (error) {
       if (error instanceof MojangError) {
         if (error.code === "MCID_NOT_FOUND") {
-          return { error: "MCIDが見つかりません。正しいMCIDを入力してください。", action: "mcid" };
+          return { error: t("meEdit.mcidNotFound"), action: "mcid" };
         }
       }
-      return { error: "MCIDの検証に失敗しました", action: "mcid" };
+      return { error: t("meEdit.mcidVerifyFailed"), action: "mcid" };
     }
   }
 
@@ -271,12 +272,12 @@ export async function action({ context, request }: Route.ActionArgs) {
     const identifier = (formData.get("identifier") as string)?.trim();
 
     if (!platform || !identifier) {
-      return { error: "プラットフォームとIDは必須です" };
+      return { error: t("meEdit.platformAndIdRequired") };
     }
 
     // 長さチェック
     if (identifier.length > 100) {
-      return { error: "IDは100文字以下にしてください" };
+      return { error: t("meEdit.idMaxLength") };
     }
 
     // IDの形式をバリデーション
@@ -286,17 +287,17 @@ export async function action({ context, request }: Route.ActionArgs) {
       // YouTubeハンドルは日本語などUnicode文字を許可
       // 空白、@、URL特殊文字は禁止
       if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
-        return { error: "IDに使用できない文字が含まれています" };
+        return { error: t("meEdit.idInvalidChars") };
       }
     } else {
       // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
       if (!/^[\w\-]+$/.test(identifier)) {
-        return { error: "IDには英数字、ハイフン、アンダースコアのみ使用できます" };
+        return { error: t("meEdit.idAllowedChars") };
       }
 
       // 先頭と末尾のハイフン/アンダースコアを禁止
       if (/^[-_]|[-_]$/.test(identifier)) {
-        return { error: "IDの先頭と末尾にハイフンやアンダースコアは使用できません" };
+        return { error: t("meEdit.idNoEdgeHyphenUnderscore") };
       }
     }
 
@@ -311,7 +312,7 @@ export async function action({ context, request }: Route.ActionArgs) {
         });
 
         if (existingPlatform) {
-          return { error: `${platform}のリンクは既に登録されています。編集から更新してください。` };
+          return { error: t("meEdit.platformLinkExistsForEdit", { platform }) };
         }
 
         await db.insert(socialLinks).values({
@@ -339,7 +340,7 @@ export async function action({ context, request }: Route.ActionArgs) {
         });
 
         if (existingPlatform) {
-          return { error: `${platform}のリンクは既に登録されています。` };
+          return { error: t("meEdit.platformLinkExistsSimple", { platform }) };
         }
 
         // 更新前のリンク情報を取得
@@ -371,9 +372,9 @@ export async function action({ context, request }: Route.ActionArgs) {
     } catch (e) {
       console.error("Social link error:", e);
       if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
-        return { error: "このプラットフォームのリンクは既に登録されています" };
+        return { error: t("meEdit.platformLinkExists") };
       }
-      return { error: "リンクの保存に失敗しました" };
+      return { error: t("meEdit.linkSaveFailed") };
     }
   }
 
@@ -404,7 +405,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     const expectedText = user.mcid || user.slug;
 
     if (confirmText !== expectedText) {
-      return { error: "入力が一致しません", action: "delete" };
+      return { error: t("meEdit.deleteConfirmMismatch"), action: "delete" };
     }
 
     // Delete user data (cascades to related tables)
@@ -444,15 +445,15 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // Validate
   if (displayName && displayName.length > 50) {
-    return { error: "表示名は50文字以下にしてください" };
+    return { error: t("meEdit.displayNameMax") };
   }
 
   if (bio && bio.length > 500) {
-    return { error: "自己紹介は500文字以下にしてください" };
+    return { error: t("meEdit.bioMax") };
   }
 
   if (location && location.length > 100) {
-    return { error: "場所は100文字以下にしてください" };
+    return { error: t("meEdit.locationMax") };
   }
 
   if (featuredVideoUrl) {
@@ -461,26 +462,26 @@ export async function action({ context, request }: Route.ActionArgs) {
 
       // プロトコルチェック: http/https のみ許可
       if (!videoUrl.protocol.startsWith('http')) {
-        return { error: "動画URLの形式が正しくありません" };
+        return { error: t("meEdit.invalidVideoUrl") };
       }
 
       // 許可されたYouTubeホスト名のリスト
       const allowedYouTubeHosts = ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'];
 
       if (!allowedYouTubeHosts.includes(videoUrl.hostname)) {
-        return { error: "動画URLはYouTubeのURLを入力してください（youtube.com, youtu.be のみ）" };
+        return { error: t("meEdit.youtubeOnly") };
       }
     } catch {
-      return { error: "動画URLの形式が正しくありません" };
+      return { error: t("meEdit.invalidVideoUrl") };
     }
   }
 
   if (shortBio && shortBio.length > 50) {
-    return { error: "ひとことは50文字以下にしてください" };
+    return { error: t("meEdit.shortBioMax") };
   }
 
   if (speedruncomUsername && speedruncomUsername.length > 50) {
-    return { error: "Speedrun.comユーザー名は50文字以下にしてください" };
+    return { error: t("meEdit.speedrunUsernameMax") };
   }
 
   await db
@@ -515,10 +516,10 @@ export async function action({ context, request }: Route.ActionArgs) {
 }
 
 const platformOptions = [
-  { value: "speedruncom", label: "Speedrun.com", placeholder: "例: couriern3w", prefix: "speedrun.com/users/" },
-  { value: "youtube", label: "YouTube", placeholder: "例: @couriern3w", prefix: "youtube.com/" },
-  { value: "twitch", label: "Twitch", placeholder: "例: couriern3w", prefix: "twitch.tv/" },
-  { value: "twitter", label: "Twitter/X", placeholder: "例: couriern3w", prefix: "x.com/" },
+  { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
+  { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
+  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
+  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
 ] as const;
 
 function getPlatformIcon(platform: string) {
@@ -571,14 +572,14 @@ function SocialLinkDialog({
       <input type="hidden" name="_action" value={editingLink ? "update_link" : "create_link"} />
       {editingLink && <input type="hidden" name="id" value={editingLink.id} />}
       <DialogHeader>
-        <DialogTitle>{editingLink ? "リンクを編集" : "ソーシャルリンクを追加"}</DialogTitle>
+        <DialogTitle>{editingLink ? t("meEdit.socialDialogEditTitle") : t("meEdit.socialDialogAddTitle")}</DialogTitle>
         <DialogDescription>
-          {editingLink ? "リンクの詳細を更新します。" : "SNSアカウントのIDを入力してください。"}
+          {editingLink ? t("meEdit.socialDialogEditDesc") : t("meEdit.socialDialogAddDesc")}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4 py-4">
         <div className="space-y-2">
-          <Label htmlFor="platform">プラットフォーム</Label>
+          <Label htmlFor="platform">{t("meEdit.platform")}</Label>
           <Select
             name="platform"
             value={selectedPlatform}
@@ -597,7 +598,7 @@ function SocialLinkDialog({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="link-identifier">ユーザーID</Label>
+          <Label htmlFor="link-identifier">{t("meEdit.userId")}</Label>
           <div className="flex items-center">
             <span className="text-sm text-muted-foreground mr-2 shrink-0">
               {currentOption?.prefix}
@@ -612,14 +613,14 @@ function SocialLinkDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            URLではなく、ユーザー名やチャンネルIDを入力してください
+            {t("meEdit.socialIdHint")}
           </p>
         </div>
       </div>
       <DialogFooter>
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          リンクを{editingLink ? "更新" : "追加"}
+          {editingLink ? t("meEdit.updateLink") : t("meEdit.addLink")}
         </Button>
       </DialogFooter>
     </linkFetcher.Form>
@@ -777,7 +778,7 @@ export default function EditProfilePage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.action === "profile") {
-      toast.success("プロフィールを更新しました");
+      toast.success(t("meEdit.profileUpdated"));
     } else if ("error" in data && !("action" in data)) {
       toast.error(data.error);
     }
@@ -789,7 +790,7 @@ export default function EditProfilePage() {
     prevLinkDataRef.current = linkData;
 
     if ("success" in linkData && linkData.action === "link") {
-      toast.success("ソーシャルリンクを更新しました");
+      toast.success(t("meEdit.socialUpdated"));
       setIsDialogOpen(false);
     } else if ("error" in linkData) {
       toast.error(linkData.error);
@@ -804,24 +805,24 @@ export default function EditProfilePage() {
     if ("success" in importData && importData.action === "import") {
       const parts: string[] = [];
       if ("keybindingsImported" in importData && (importData.keybindingsImported ?? 0) > 0) {
-        parts.push(`キーバインド ${importData.keybindingsImported}件`);
+        parts.push(t("meEdit.importedKeybindingsCount", { count: importData.keybindingsImported ?? 0 }));
       }
       if ("customKeysImported" in importData && (importData.customKeysImported ?? 0) > 0) {
-        parts.push(`カスタムキー ${importData.customKeysImported}件`);
+        parts.push(t("meEdit.importedCustomKeysCount", { count: importData.customKeysImported ?? 0 }));
       }
       if ("remapsImported" in importData && (importData.remapsImported ?? 0) > 0) {
-        parts.push(`リマップ ${importData.remapsImported}件`);
+        parts.push(t("meEdit.importedRemapsCount", { count: importData.remapsImported ?? 0 }));
       }
       if ("fingerAssignmentsImported" in importData && importData.fingerAssignmentsImported) {
-        parts.push("指割り当て");
+        parts.push(t("meEdit.importedFingerAssignments"));
       }
       if ("settingsImported" in importData && importData.settingsImported) {
-        parts.push("設定");
+        parts.push(t("meEdit.importedSettings"));
       }
       if (parts.length > 0) {
-        toast.success(`インポート完了: ${parts.join("、")}`);
+        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join("、") }));
       } else {
-        toast.success("インポート完了（データなし）");
+        toast.success(t("meEdit.importCompletedNoData"));
       }
       setImportCompleted(true);
     } else if ("error" in importData && importData.action === "import") {
@@ -835,12 +836,12 @@ export default function EditProfilePage() {
     prevMcidDataRef.current = mcidData;
 
     if ("success" in mcidData && mcidData.action === "mcid") {
-      toast.success("MCIDを変更しました");
+      toast.success(t("meEdit.mcidChanged"));
       setIsMcidDialogOpen(false);
       // ページをリロードして新しいデータを反映
       window.location.reload();
     } else if ("success" in mcidData && mcidData.action === "mcid_removed") {
-      toast.success("MCIDを削除しました");
+      toast.success(t("meEdit.mcidRemoved"));
       window.location.reload();
     }
   }, [mcidData]);
@@ -858,9 +859,9 @@ export default function EditProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">プロフィール編集</h1>
+        <h1 className="text-2xl font-bold">{t("meEdit.pageTitle")}</h1>
         <p className="text-muted-foreground">
-          公開プロフィール情報を更新します。
+          {t("meEdit.pageDescription")}
         </p>
       </div>
 
@@ -870,10 +871,10 @@ export default function EditProfilePage() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Download className="h-5 w-5" />
-              MCSRer Hotkeysからデータをインポート
+              {t("meEdit.importFromLegacyTitle")}
             </CardTitle>
             <CardDescription>
-              以前のMCSRer Hotkeysに登録されたキー配置・設定をインポートできます。
+              {t("meEdit.importFromLegacyDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -883,12 +884,12 @@ export default function EditProfilePage() {
                 {isImporting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    インポート中...
+                    {t("meEdit.importing")}
                   </>
                 ) : (
                   <>
                     <Download className="mr-2 h-4 w-4" />
-                    データをインポート
+                    {t("meEdit.importData")}
                   </>
                 )}
               </Button>
@@ -901,11 +902,11 @@ export default function EditProfilePage() {
         {/* Avatar & MCID Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Minecraft ID</CardTitle>
+            <CardTitle>{t("meEdit.minecraftIdTitle")}</CardTitle>
             <CardDescription>
               {user.mcid
-                ? "MCIDはMojang APIで検証されています。"
-                : "MCIDを設定すると、PaceManやMCSR Rankedとの連携が可能になります。"}
+                ? t("meEdit.mcidVerifiedDesc")
+                : t("meEdit.mcidUnsetDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -930,14 +931,14 @@ export default function EditProfilePage() {
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
                         <Pencil className="mr-2 h-4 w-4" />
-                        変更
+                        {t("meEdit.change")}
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>MCIDを変更</DialogTitle>
+                        <DialogTitle>{t("meEdit.changeMcidTitle")}</DialogTitle>
                         <DialogDescription>
-                          新しいMCIDを入力してください。URLも変更されます。
+                          {t("meEdit.changeMcidDesc")}
                         </DialogDescription>
                       </DialogHeader>
                       <mcidFetcher.Form method="post">
@@ -946,17 +947,17 @@ export default function EditProfilePage() {
                           <Alert>
                             <AlertCircle className="h-4 w-4" />
                             <AlertDescription>
-                              MCIDを変更すると、プロフィールURLが変更されます。旧URLは無効になります。
+                              {t("meEdit.mcidUrlChangeWarning")}
                             </AlertDescription>
                           </Alert>
                           <div className="space-y-2">
-                            <Label htmlFor="new-mcid">新しいMCID</Label>
+                            <Label htmlFor="new-mcid">{t("meEdit.newMcid")}</Label>
                             <Input
                               id="new-mcid"
                               name="mcid"
                               value={newMcid}
                               onChange={(e) => setNewMcid(e.target.value)}
-                              placeholder="例: Steve"
+                              placeholder={t("meEdit.mcidExample")}
                               minLength={3}
                               maxLength={16}
                             />
@@ -973,7 +974,7 @@ export default function EditProfilePage() {
                             {isMcidSubmitting ? (
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : null}
-                            MCIDを変更
+                            {t("meEdit.applyMcidChange")}
                           </Button>
                         </DialogFooter>
                       </mcidFetcher.Form>
@@ -983,7 +984,7 @@ export default function EditProfilePage() {
                     <input type="hidden" name="_action" value="remove_mcid" />
                     <Button variant="ghost" size="sm" type="submit" disabled={isMcidSubmitting}>
                       <Trash2 className="mr-2 h-4 w-4" />
-                      削除
+                      {t("meEdit.delete")}
                     </Button>
                   </mcidFetcher.Form>
                 </div>
@@ -993,7 +994,7 @@ export default function EditProfilePage() {
                 <div className="w-20 h-20 rounded-xl bg-muted mx-auto mb-4 flex items-center justify-center">
                   <AlertCircle className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <p className="text-muted-foreground mb-4">MCIDが設定されていません</p>
+                <p className="text-muted-foreground mb-4">{t("meEdit.mcidNotConfigured")}</p>
                 <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
                   setIsMcidDialogOpen(open);
                   if (!open) setNewMcid("");
@@ -1001,27 +1002,27 @@ export default function EditProfilePage() {
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="mr-2 h-4 w-4" />
-                      MCIDを設定
+                      {t("meEdit.setMcid")}
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>MCIDを設定</DialogTitle>
+                      <DialogTitle>{t("meEdit.setMcidTitle")}</DialogTitle>
                       <DialogDescription>
-                        Java版のMCIDを入力してください。Mojang APIで検証されます。
+                        {t("meEdit.setMcidDesc")}
                       </DialogDescription>
                     </DialogHeader>
                     <mcidFetcher.Form method="post">
                       <input type="hidden" name="_action" value="set_mcid" />
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                          <Label htmlFor="new-mcid">MCID</Label>
+                          <Label htmlFor="new-mcid">{t("meEdit.minecraftIdTitle")}</Label>
                           <Input
                             id="new-mcid"
                             name="mcid"
                             value={newMcid}
                             onChange={(e) => setNewMcid(e.target.value)}
-                            placeholder="例: Steve"
+                            placeholder={t("meEdit.mcidExample")}
                             minLength={3}
                             maxLength={16}
                           />
@@ -1038,7 +1039,7 @@ export default function EditProfilePage() {
                           {isMcidSubmitting ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           ) : null}
-                          MCIDを設定
+                          {t("meEdit.setMcid")}
                         </Button>
                       </DialogFooter>
                     </mcidFetcher.Form>
@@ -1050,7 +1051,7 @@ export default function EditProfilePage() {
             {/* Pose Selection - only show when user has uuid */}
             {user.uuid && (
               <div className="space-y-3">
-                <Label>プロフィールのポーズ</Label>
+                <Label>{t("meEdit.poseLabel")}</Label>
                 <div className="grid grid-cols-3 gap-3">
                   {(["standing", "walking", "waving"] as const).map((pose) => (
                     <button
@@ -1077,9 +1078,9 @@ export default function EditProfilePage() {
                         />
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {pose === "standing" && "直立"}
-                        {pose === "walking" && "歩行"}
-                        {pose === "waving" && "手を振る"}
+                        {pose === "standing" && t("meEdit.poseStanding")}
+                        {pose === "walking" && t("meEdit.poseWalking")}
+                        {pose === "waving" && t("meEdit.poseWaving")}
                       </span>
                     </button>
                   ))}
@@ -1095,11 +1096,11 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="slimSkin" className="text-sm font-normal cursor-pointer">
-                    Slimスキン（細い腕）を使用
+                    {t("meEdit.slimSkinLabel")}
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Alex型のスキンを使用している場合はオンにしてください
+                  {t("meEdit.slimSkinHint")}
                 </p>
               </div>
             )}
@@ -1109,11 +1110,11 @@ export default function EditProfilePage() {
         {/* Basic Info */}
         <Card>
           <CardHeader>
-            <CardTitle>基本情報</CardTitle>
+            <CardTitle>{t("meEdit.basicInfo")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="displayName">表示名</Label>
+              <Label htmlFor="displayName">{t("meEdit.displayName")}</Label>
               <Input
                 id="displayName"
                 value={formValues.displayName}
@@ -1122,17 +1123,17 @@ export default function EditProfilePage() {
                 maxLength={50}
               />
               <p className="text-xs text-muted-foreground">
-                空欄の場合は{user.mcid ? "MCID" : "slug"}が使用されます
+                {t("meEdit.fallbackToMcidOrSlug", { value: user.mcid ? "MCID" : "slug" })}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="bio">自己紹介</Label>
+              <Label htmlFor="bio">{t("meEdit.bio")}</Label>
               <Textarea
                 id="bio"
                 value={formValues.bio}
                 onChange={(e) => handleInputChange("bio", e.target.value)}
-                placeholder="自己紹介を入力..."
+                placeholder={t("meEdit.bioPlaceholder")}
                 maxLength={500}
                 rows={3}
               />
@@ -1140,51 +1141,51 @@ export default function EditProfilePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="location">場所</Label>
+                <Label htmlFor="location">{t("meEdit.location")}</Label>
                 <Input
                   id="location"
                   value={formValues.location}
                   onChange={(e) => handleInputChange("location", e.target.value)}
-                  placeholder="例: 東京, 日本"
+                  placeholder={t("meEdit.locationExample")}
                   maxLength={100}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pronouns">代名詞</Label>
+                <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
                 <Input
                   id="pronouns"
                   value={formValues.pronouns}
                   onChange={(e) => handleInputChange("pronouns", e.target.value)}
-                  placeholder="例: he/him"
+                  placeholder={t("meEdit.pronounsExample")}
                   maxLength={20}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="shortBio">ひとこと</Label>
+              <Label htmlFor="shortBio">{t("meEdit.shortBio")}</Label>
               <Input
                 id="shortBio"
                 value={formValues.shortBio}
                 onChange={(e) => handleInputChange("shortBio", e.target.value)}
-                placeholder="例: RSG日本記録保持者"
+                placeholder={t("meEdit.shortBioExample")}
                 maxLength={50}
               />
               <p className="text-xs text-muted-foreground">
-                プレイヤーカードに表示される短い肩書き
+                {t("meEdit.shortBioHint")}
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="mainEdition">エディション（メイン）</Label>
+                <Label htmlFor="mainEdition">{t("meEdit.mainEdition")}</Label>
                 <Select
                   value={formValues.mainEdition}
                   onValueChange={(value) => handleInputChange("mainEdition", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択..." />
+                    <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="java">Java</SelectItem>
@@ -1194,69 +1195,69 @@ export default function EditProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="mainPlatform">プラットフォーム（メイン）</Label>
+                <Label htmlFor="mainPlatform">{t("meEdit.mainPlatform")}</Label>
                 <Select
                   value={formValues.mainPlatform}
                   onValueChange={(value) => handleInputChange("mainPlatform", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択..." />
+                    <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pc_windows">PC（Windows）</SelectItem>
                     <SelectItem value="pc_mac">PC（Mac）</SelectItem>
                     <SelectItem value="pc_linux">PC（Linux）</SelectItem>
                     <SelectItem value="switch">Switch</SelectItem>
-                    <SelectItem value="mobile">スマホ</SelectItem>
-                    <SelectItem value="other">その他</SelectItem>
+                    <SelectItem value="mobile">{t("meEdit.mobile")}</SelectItem>
+                    <SelectItem value="other">{t("meEdit.other")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="role">ロール</Label>
+                <Label htmlFor="role">{t("meEdit.role")}</Label>
                 <Select
                   value={formValues.role}
                   onValueChange={(value) => handleInputChange("role", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択..." />
+                    <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="runner">走者</SelectItem>
-                    <SelectItem value="viewer">視聴者</SelectItem>
+                    <SelectItem value="runner">{t("meEdit.roleRunner")}</SelectItem>
+                    <SelectItem value="viewer">{t("meEdit.roleViewer")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="inputMethod">入力方法</Label>
+                <Label htmlFor="inputMethod">{t("meEdit.inputMethod")}</Label>
                 <Select
                   value={formValues.inputMethod}
                   onValueChange={(value) => handleInputChange("inputMethod", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択..." />
+                    <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="keyboard_mouse">キーボード/マウス</SelectItem>
-                    <SelectItem value="controller">コントローラー</SelectItem>
-                    <SelectItem value="touch">タッチ</SelectItem>
+                    <SelectItem value="keyboard_mouse">{t("meEdit.inputMethodKeyboardMouse")}</SelectItem>
+                    <SelectItem value="controller">{t("meEdit.inputMethodController")}</SelectItem>
+                    <SelectItem value="touch">{t("meEdit.inputMethodTouch")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  デバイス設定/キー配置の切り替えに使用
+                  {t("meEdit.inputMethodHint")}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="inputMethodBadge">入力方法バッジ</Label>
+                <Label htmlFor="inputMethodBadge">{t("meEdit.inputMethodBadge")}</Label>
                 <Select
                   value={formValues.inputMethodBadge}
                   onValueChange={(value) => handleInputChange("inputMethodBadge", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択..." />
+                    <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="keyboard_mouse">KBM</SelectItem>
@@ -1265,7 +1266,7 @@ export default function EditProfilePage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  プロフィールに表示するバッジ
+                  {t("meEdit.inputMethodBadgeHint")}
                 </p>
               </div>
             </div>
@@ -1277,16 +1278,15 @@ export default function EditProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ExternalLink className="h-5 w-5" />
-              Speedrun.com 連携
+              {t("meEdit.speedrunIntegration")}
             </CardTitle>
             <CardDescription>
-              Speedrun.comのユーザー名を設定すると、Statsタブに記録が表示されます。
-              ソーシャルリンクでSpeedrun.comを追加すると自動的に設定されます。
+              {t("meEdit.speedrunIntegrationDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Label htmlFor="speedruncomUsername">Speedrun.com ユーザー名</Label>
+              <Label htmlFor="speedruncomUsername">{t("meEdit.speedrunUsername")}</Label>
               <div className="flex items-center">
                 <span className="text-sm text-muted-foreground mr-2 shrink-0">
                   speedrun.com/users/
@@ -1295,13 +1295,13 @@ export default function EditProfilePage() {
                   id="speedruncomUsername"
                   value={formValues.speedruncomUsername}
                   onChange={(e) => handleInputChange("speedruncomUsername", e.target.value)}
-                  placeholder="例: Feinberg"
+                  placeholder={t("meEdit.speedrunUsernameExample")}
                   maxLength={50}
                   className="flex-1"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                直接入力するか、下のソーシャルリンクでSpeedrun.comを追加してください
+                {t("meEdit.speedrunUsernameHint")}
               </p>
             </div>
           </CardContent>
@@ -1312,10 +1312,10 @@ export default function EditProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Video className="h-5 w-5" />
-              おすすめ動画
+              {t("meEdit.featuredVideo")}
             </CardTitle>
             <CardDescription>
-              プロフィールページに表示したいYouTube動画を設定します。
+              {t("meEdit.featuredVideoDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1329,7 +1329,7 @@ export default function EditProfilePage() {
                 placeholder="https://www.youtube.com/watch?v=..."
               />
               <p className="text-xs text-muted-foreground">
-                自己ベスト動画や配信のハイライトなど
+                {t("meEdit.featuredVideoHint")}
               </p>
             </div>
           </CardContent>
@@ -1340,12 +1340,12 @@ export default function EditProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              プロフィール設定
+              {t("meEdit.profileSettings")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="profileVisibility">公開設定</Label>
+              <Label htmlFor="profileVisibility">{t("meEdit.profileVisibility")}</Label>
               <Select
                 value={formValues.profileVisibility}
                 onValueChange={(value) => handleInputChange("profileVisibility", value)}
@@ -1355,20 +1355,20 @@ export default function EditProfilePage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="public">
-                    公開 - 誰でもプロフィールを検索・閲覧可能
+                    {t("meEdit.profilePublic")}
                   </SelectItem>
                   <SelectItem value="unlisted">
-                    限定公開 - 直接リンクでのみアクセス可能
+                    {t("meEdit.profileUnlisted")}
                   </SelectItem>
                   <SelectItem value="private">
-                    非公開 - 自分だけがプロフィールを閲覧可能
+                    {t("meEdit.profilePrivate")}
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="defaultProfileTab">デフォルト表示タブ</Label>
+              <Label htmlFor="defaultProfileTab">{t("meEdit.defaultTab")}</Label>
               <Select
                 value={formValues.defaultProfileTab}
                 onValueChange={(value) => handleInputChange("defaultProfileTab", value)}
@@ -1377,25 +1377,25 @@ export default function EditProfilePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="profile">プロフィール</SelectItem>
-                  <SelectItem value="stats">活動・記録</SelectItem>
-                  <SelectItem value="keybindings">キー配置</SelectItem>
-                  <SelectItem value="devices">デバイス</SelectItem>
-                  <SelectItem value="items">アイテム配置</SelectItem>
-                  <SelectItem value="searchcraft">サーチクラフト</SelectItem>
+                  <SelectItem value="profile">{t("meEdit.tabProfile")}</SelectItem>
+                  <SelectItem value="stats">{t("meEdit.tabStats")}</SelectItem>
+                  <SelectItem value="keybindings">{t("meEdit.tabKeybindings")}</SelectItem>
+                  <SelectItem value="devices">{t("meEdit.tabDevices")}</SelectItem>
+                  <SelectItem value="items">{t("meEdit.tabItems")}</SelectItem>
+                  <SelectItem value="searchcraft">{t("meEdit.tabSearchcraft")}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                プロフィールを開いたときに最初に表示するタブ
+                {t("meEdit.defaultTabHint")}
               </p>
             </div>
 
             <Separator className="my-4" />
 
             <div className="space-y-3">
-              <Label>表示設定</Label>
+              <Label>{t("meEdit.displaySettings")}</Label>
               <p className="text-xs text-muted-foreground">
-                ホーム画面やプロフィールに表示する項目を選択します
+                {t("meEdit.displaySettingsHint")}
               </p>
 
               <div className="space-y-3">
@@ -1408,7 +1408,7 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
-                    ホーム画面にPaceManのペースを表示
+                    {t("meEdit.showPacemanOnHome")}
                   </Label>
                 </div>
 
@@ -1421,7 +1421,7 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
-                    ホーム画面にTwitch配信を表示
+                    {t("meEdit.showTwitchOnHome")}
                   </Label>
                 </div>
 
@@ -1434,7 +1434,7 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
-                    ホーム画面にYouTube動画を表示
+                    {t("meEdit.showYoutubeOnHome")}
                   </Label>
                 </div>
 
@@ -1447,7 +1447,7 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
-                    プロフィールの活動・記録タブにRanked戦績を表示
+                    {t("meEdit.showRankedStats")}
                   </Label>
                 </div>
 
@@ -1460,7 +1460,7 @@ export default function EditProfilePage() {
                     }
                   />
                   <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
-                    プロフィールの活動・記録タブにPaceMan統計を表示
+                    {t("meEdit.showPacemanStats")}
                   </Label>
                 </div>
               </div>
@@ -1484,17 +1484,17 @@ export default function EditProfilePage() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Share2 className="h-5 w-5" />
-                ソーシャルリンク
+                {t("meEdit.socialLinks")}
               </CardTitle>
               <CardDescription>
-                SNSや配信プラットフォームを連携します。
+                {t("meEdit.socialLinksDesc")}
               </CardDescription>
             </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" onClick={handleOpenCreate}>
                   <Plus className="mr-2 h-4 w-4" />
-                  追加
+                  {t("meEdit.add")}
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -1550,8 +1550,8 @@ export default function EditProfilePage() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Share2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">ソーシャルリンクがまだありません</p>
-              <p className="text-xs mt-1">配信チャンネルやSNSへのリンクを追加しましょう</p>
+              <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
+              <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
             </div>
           )}
         </CardContent>
@@ -1562,18 +1562,18 @@ export default function EditProfilePage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            危険な操作
+            {t("meEdit.dangerZone")}
           </CardTitle>
           <CardDescription>
-            この操作は取り消すことができません。
+            {t("meEdit.dangerZoneDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between p-4 border border-destructive/30 rounded-lg bg-destructive/5">
             <div>
-              <p className="font-medium">アカウントを削除</p>
+              <p className="font-medium">{t("meEdit.deleteAccount")}</p>
               <p className="text-sm text-muted-foreground">
-                プロフィール、記録、設定などすべてのデータが削除されます
+                {t("meEdit.deleteAccountDesc")}
               </p>
             </div>
             <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
@@ -1582,17 +1582,17 @@ export default function EditProfilePage() {
             }}>
               <DialogTrigger asChild>
                 <Button variant="destructive">
-                  アカウントを削除
+                  {t("meEdit.deleteAccount")}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-destructive">
                     <AlertTriangle className="h-5 w-5" />
-                    アカウントを削除しますか？
+                    {t("meEdit.confirmDeleteTitle")}
                   </DialogTitle>
                   <DialogDescription>
-                    この操作は取り消すことができません。すべてのプロフィール情報、キー配置、記録、設定が完全に削除されます。
+                    {t("meEdit.confirmDeleteDesc")}
                   </DialogDescription>
                 </DialogHeader>
                 <deleteFetcher.Form method="post">
@@ -1601,12 +1601,12 @@ export default function EditProfilePage() {
                     <Alert variant="destructive">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
-                        この操作は元に戻せません。削除されたデータは復元できません。
+                        {t("meEdit.cannotUndo")}
                       </AlertDescription>
                     </Alert>
                     <div className="space-y-2">
                       <Label htmlFor="confirmText">
-                        確認のため、<span className="font-mono font-bold">{user.mcid || user.slug}</span> を入力してください
+                        {t("meEdit.confirmInput", { value: user.mcid || user.slug })}
                       </Label>
                       <Input
                         id="confirmText"
@@ -1630,7 +1630,7 @@ export default function EditProfilePage() {
                       variant="outline"
                       onClick={() => setIsDeleteDialogOpen(false)}
                     >
-                      キャンセル
+                      {t("meEdit.cancel")}
                     </Button>
                     <Button
                       type="submit"
@@ -1640,10 +1640,10 @@ export default function EditProfilePage() {
                       {isDeleting ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          削除中...
+                          {t("meEdit.deleting")}
                         </>
                       ) : (
-                        "完全に削除する"
+                        t("meEdit.deletePermanently")
                       )}
                     </Button>
                   </DialogFooter>
@@ -1664,12 +1664,12 @@ export function ErrorBoundary() {
         <CardContent className="p-6">
           <div className="text-center space-y-4">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <h2 className="text-2xl font-bold">{t("meEdit.errorTitle")}</h2>
             <p className="text-muted-foreground">
-              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+              {t("meEdit.errorDescription")}
             </p>
             <Button onClick={() => window.location.reload()}>
-              ページをリロード
+              {t("meEdit.reloadPage")}
             </Button>
           </div>
         </CardContent>

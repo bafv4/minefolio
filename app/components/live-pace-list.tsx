@@ -32,7 +32,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-3 font-medium">プレイヤー</th>
+            <th className="text-left py-2 px-3 font-medium">走者</th>
             <th className="text-left py-2 px-3 font-medium">バージョン</th>
             <th className="text-left py-2 px-3 font-medium">最新区間</th>
             <th className="text-right py-2 px-3 font-medium">タイム</th>

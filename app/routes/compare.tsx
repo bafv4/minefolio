@@ -21,13 +21,14 @@ import {
 } from "@/components/ui/select";
 import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
 import { useState, useMemo } from "react";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "プレイヤー比較 - Minefolio" },
+    { title: `${t("compare.title")} - Minefolio` },
     {
       name: "description",
-      content: "2人のプレイヤーのキー配置・設定を比較します",
+      content: t("compare.description"),
     },
   ];
 };
@@ -67,9 +68,9 @@ const COMPARE_ACTIONS = [
 ];
 
 const categoryLabels: Record<string, string> = {
-  movement: "移動",
-  combat: "戦闘",
-  inventory: "インベントリ",
+  movement: t("compare.movement"),
+  combat: t("compare.combat"),
+  inventory: t("compare.inventory"),
   ui: "UI",
 };
 
@@ -81,7 +82,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
 
-  // プレイヤー一覧（選択用）
+  // 走者一覧（選択用）
   const allPlayers = await db.query.users.findMany({
     columns: {
       mcid: true,
@@ -93,7 +94,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     limit: 100,
   });
 
-  // p1のみ指定の場合、類似プレイヤーを検索（slugで検索）
+  // p1のみ指定の場合、類似走者を検索（slugで検索）
   if (p1 && !p2) {
     const player1Data = await db.query.users.findFirst({
       where: eq(users.slug, p1),
@@ -179,7 +180,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     return { allPlayers, player1: null, player2: null, similarPlayers: [] };
   }
 
-  // 両プレイヤーのデータを取得（slugで検索）
+  // 両走者のデータを取得（slugで検索）
   const [player1Data, player2Data] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.slug, p1),
@@ -226,7 +227,7 @@ export default function ComparePage() {
     setSearchParams(params);
   };
 
-  // フィルタリングされたプレイヤー一覧
+  // フィルタリングされた走者一覧
   const filteredPlayers1 = useMemo(() => {
     if (!search1) return allPlayers;
     const lower = search1.toLowerCase();
@@ -309,24 +310,24 @@ export default function ComparePage() {
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <GitCompare className="h-6 w-6" />
-          プレイヤー比較
+          {t("compare.title")}
         </h1>
         <p className="text-muted-foreground">
-          2人のプレイヤーのキー配置・設定を比較します
+          {t("compare.description")}
         </p>
       </div>
 
-      {/* プレイヤー選択 */}
+      {/* 走者選択 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">プレイヤー 1</CardTitle>
+            <CardTitle className="text-base">{t("compare.runner1")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="検索..."
+                placeholder={t("compare.searchPlaceholder")}
                 value={search1}
                 onChange={(e) => setSearch1(e.target.value)}
                 className="pl-10"
@@ -334,7 +335,7 @@ export default function ComparePage() {
             </div>
             <Select value={selectedP1} onValueChange={(v) => handleSelectPlayer("p1", v)}>
               <SelectTrigger>
-                <SelectValue placeholder="プレイヤーを選択" />
+                <SelectValue placeholder={t("compare.selectRunner")} />
               </SelectTrigger>
               <SelectContent className="max-h-60">
                 {filteredPlayers1.map((p) => (
@@ -354,7 +355,7 @@ export default function ComparePage() {
                 className="flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <User className="h-4 w-4" />
-                プロフィールを見る
+                {t("compare.viewProfile")}
               </Link>
             )}
           </CardContent>
@@ -362,13 +363,13 @@ export default function ComparePage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">プレイヤー 2</CardTitle>
+            <CardTitle className="text-base">{t("compare.runner2")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="検索..."
+                placeholder={t("compare.searchPlaceholder")}
                 value={search2}
                 onChange={(e) => setSearch2(e.target.value)}
                 className="pl-10"
@@ -376,7 +377,7 @@ export default function ComparePage() {
             </div>
             <Select value={selectedP2} onValueChange={(v) => handleSelectPlayer("p2", v)}>
               <SelectTrigger>
-                <SelectValue placeholder="プレイヤーを選択" />
+                <SelectValue placeholder={t("compare.selectRunner")} />
               </SelectTrigger>
               <SelectContent className="max-h-60">
                 {filteredPlayers2.map((p) => (
@@ -396,7 +397,7 @@ export default function ComparePage() {
                 className="flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <User className="h-4 w-4" />
-                プロフィールを見る
+                {t("compare.viewProfile")}
               </Link>
             )}
           </CardContent>
@@ -421,16 +422,16 @@ export default function ComparePage() {
                   <div className="flex items-center gap-4">
                     <div className="text-center">
                       <p className="text-2xl font-bold text-green-500">{stats.same}</p>
-                      <p className="text-xs text-muted-foreground">一致</p>
+                      <p className="text-xs text-muted-foreground">{t("compare.same")}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-red-500">{stats.different}</p>
-                      <p className="text-xs text-muted-foreground">異なる</p>
+                      <p className="text-xs text-muted-foreground">{t("compare.different")}</p>
                     </div>
                   </div>
                   {stats.total > 0 && (
                     <p className="text-sm text-muted-foreground mt-2">
-                      一致率: {Math.round((stats.same / stats.total) * 100)}%
+                      {t("compare.matchRate", { rate: Math.round((stats.same / stats.total) * 100) })}
                     </p>
                   )}
                 </div>
@@ -447,7 +448,7 @@ export default function ComparePage() {
 
           {/* キーバインド比較 */}
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">キー配置の比較</h2>
+            <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
             {Object.entries(groupedActions).map(([category, actions]) => (
               <Card key={category}>
                 <CardHeader className="pb-2">
@@ -495,38 +496,38 @@ export default function ComparePage() {
 
           {/* デバイス・設定の比較 */}
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">デバイス・設定の比較</h2>
+            <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
             <Card>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="font-medium text-sm text-muted-foreground">項目</div>
+                  <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
                   <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid ?? player1.slug}</div>
                   <div className="font-medium text-sm text-center">{player2.displayName ?? player2.mcid ?? player2.slug}</div>
 
                   <CompareRow
-                    label="マウスDPI"
+                    label={t("compare.mouseDpi")}
                     value1={player1.playerConfig?.mouseDpi?.toString()}
                     value2={player2.playerConfig?.mouseDpi?.toString()}
                   />
                   <CompareRow
-                    label="ゲーム内感度"
+                    label={t("compare.inGameSensitivity")}
                     value1={player1.playerConfig?.gameSensitivity ? `${Math.round(player1.playerConfig.gameSensitivity * 200)}%` : undefined}
                     value2={player2.playerConfig?.gameSensitivity ? `${Math.round(player2.playerConfig.gameSensitivity * 200)}%` : undefined}
                   />
                   <CompareRow
-                    label="キーボードレイアウト"
+                    label={t("compare.keyboardLayout")}
                     value1={player1.playerConfig?.keyboardLayout ?? undefined}
                     value2={player2.playerConfig?.keyboardLayout ?? undefined}
                   />
                   <CompareRow
-                    label="ダッシュ切替"
-                    value1={player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? "オン" : "オフ") : undefined}
-                    value2={player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? "オン" : "オフ") : undefined}
+                    label={t("compare.toggleSprint")}
+                    value1={player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
+                    value2={player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
                   />
                   <CompareRow
                     label="Raw Input"
-                    value1={player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? "オン" : "オフ") : undefined}
-                    value2={player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? "オン" : "オフ") : undefined}
+                    value1={player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
+                    value2={player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
                   />
                 </div>
               </CardContent>
@@ -535,7 +536,7 @@ export default function ComparePage() {
         </>
       )}
 
-      {/* 類似設定のプレイヤーを探す */}
+      {/* 類似設定の走者を探す */}
       {player1 && !player2 && (
         <SimilarPlayersSection
           targetPlayer={player1}
@@ -598,10 +599,10 @@ function SimilarPlayersSection({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          類似設定のプレイヤー
+          {t("compare.similarTitle")}
         </CardTitle>
         <CardDescription>
-          {targetPlayer.displayName ?? targetPlayer.mcid ?? targetPlayer.slug}と似たキー配置のプレイヤー
+          {(targetPlayer.displayName ?? targetPlayer.mcid ?? targetPlayer.slug) + t("compare.similarSuffix")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -625,7 +626,7 @@ function SimilarPlayersSection({
                       {Math.round(player.similarity * 100)}%
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {player.matches}/{player.total} 一致
+                      {t("compare.matched", { matches: player.matches, total: player.total })}
                     </p>
                   </div>
                   <Button
@@ -633,7 +634,7 @@ function SimilarPlayersSection({
                     variant="outline"
                     onClick={() => onSelectPlayer(player.slug)}
                   >
-                    比較
+                    {t("compare.compareButton")}
                   </Button>
                 </div>
               </div>
@@ -641,7 +642,7 @@ function SimilarPlayersSection({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-4">
-            類似するプレイヤーが見つかりませんでした
+            {t("compare.noSimilar")}
           </p>
         )}
       </CardContent>
@@ -657,7 +658,7 @@ export function HydrateFallback() {
         <Skeleton className="h-5 w-72" />
       </div>
 
-      {/* プレイヤー選択スケルトン */}
+      {/* 走者選択スケルトン */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i}>

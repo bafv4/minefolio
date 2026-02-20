@@ -40,9 +40,10 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "記録 - Minefolio" }];
+  return [{ title: t("meRecords.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
@@ -70,7 +71,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("meRecords.userNotFound"), { status: 404 });
   }
 
   // Speedrun.com記録を取得（ユーザー名が設定されている場合のみ）
@@ -144,7 +145,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("meRecords.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -159,12 +160,12 @@ export async function action({ context, request }: Route.ActionArgs) {
     const isVisible = formData.get("isVisible") === "true";
 
     if (!category || !categoryDisplayName) {
-      return { error: "カテゴリ名は必須です" };
+      return { error: t("meRecords.categoryRequired") };
     }
 
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
     if (personalBestStr && personalBest === null) {
-      return { error: "時間形式が不正です。M:SS.mmm形式で入力してください（例: 14:32.500）" };
+      return { error: t("meRecords.invalidTime") };
     }
 
     if (action === "create") {
@@ -207,7 +208,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (action === "toggleSpeedrunRecord") {
     const runId = formData.get("runId") as string;
     if (!runId) {
-      return { error: "記録IDが必要です" };
+      return { error: t("meRecords.recordIdRequired") };
     }
 
     // 現在の非表示リストを取得
@@ -235,7 +236,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     return { success: true, hiddenRecords: newHidden };
   }
 
-  return { error: "無効な操作です" };
+  return { error: t("meRecords.invalidAction") };
 }
 
 export default function RecordsPage() {
@@ -281,16 +282,16 @@ export default function RecordsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">記録</h1>
+          <h1 className="text-2xl font-bold">{t("meRecords.pageTitle")}</h1>
           <p className="text-muted-foreground">
-            スピードラン自己ベストと目標を管理します。
+            {t("meRecords.pageDescription")}
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleOpenCreate} className="w-full sm:w-auto h-11 sm:h-10">
               <Plus className="mr-2 h-4 w-4" />
-              記録を追加
+              {t("meRecords.addRecord")}
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -298,43 +299,43 @@ export default function RecordsPage() {
               <input type="hidden" name="_action" value={editingRecord ? "update" : "create"} />
               {editingRecord && <input type="hidden" name="id" value={editingRecord.id} />}
               <DialogHeader>
-                <DialogTitle>{editingRecord ? "記録を編集" : "記録を追加"}</DialogTitle>
+                <DialogTitle>{editingRecord ? t("meRecords.editRecord") : t("meRecords.addRecordTitle")}</DialogTitle>
                 <DialogDescription>
-                  {editingRecord ? "記録の詳細を更新します。" : "新しいスピードラン記録を追加します。"}
+                  {editingRecord ? t("meRecords.editRecordDescription") : t("meRecords.addRecordDescription")}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category">カテゴリID</Label>
+                  <Label htmlFor="category">{t("meRecords.categoryId")}</Label>
                   <Input
                     id="category"
                     name="category"
                     defaultValue={editingRecord?.category ?? ""}
-                    placeholder="例: rsg_any"
+                    placeholder={t("meRecords.categoryIdPlaceholder")}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="categoryDisplayName">表示名</Label>
+                  <Label htmlFor="categoryDisplayName">{t("meRecords.displayName")}</Label>
                   <Input
                     id="categoryDisplayName"
                     name="categoryDisplayName"
                     defaultValue={editingRecord?.categoryDisplayName ?? ""}
-                    placeholder="例: RSG Any%"
+                    placeholder={t("meRecords.displayNamePlaceholder")}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="personalBest">自己ベスト (M:SS.mmm)</Label>
+                  <Label htmlFor="personalBest">{t("meRecords.personalBest")}</Label>
                   <Input
                     id="personalBest"
                     name="personalBest"
                     defaultValue={editingRecord?.personalBest ? formatTime(editingRecord.personalBest) : ""}
-                    placeholder="例: 14:32.500"
+                    placeholder={t("meRecords.personalBestPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pbVideoUrl">動画URL</Label>
+                  <Label htmlFor="pbVideoUrl">{t("meRecords.videoUrl")}</Label>
                   <Input
                     id="pbVideoUrl"
                     name="pbVideoUrl"
@@ -350,7 +351,7 @@ export default function RecordsPage() {
                     value="true"
                     defaultChecked={editingRecord?.isVisible ?? true}
                   />
-                  <Label htmlFor="isVisible">公開</Label>
+                  <Label htmlFor="isVisible">{t("meRecords.visible")}</Label>
                 </div>
               </div>
               <DialogFooter>
@@ -358,7 +359,7 @@ export default function RecordsPage() {
                   {isSubmitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  記録を{editingRecord ? "更新" : "追加"}
+                  {editingRecord ? t("meRecords.submitUpdate") : t("meRecords.submitAdd")}
                 </Button>
               </DialogFooter>
             </fetcher.Form>
@@ -379,11 +380,10 @@ export default function RecordsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-5 w-5" />
-              Speedrun.com 記録
+              {t("meRecords.speedrunSectionTitle")}
             </CardTitle>
             <CardDescription>
-              Speedrun.comから取得した記録の表示/非表示を設定できます。
-              非表示にした記録はプロフィールに表示されません。
+              {t("meRecords.speedrunSectionDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -403,7 +403,7 @@ export default function RecordsPage() {
                         type="button"
                         onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
                         className="absolute top-2 right-2 p-1.5 rounded hover:bg-secondary transition-colors"
-                        title={isHidden ? "表示する" : "非表示にする"}
+                        title={isHidden ? t("meRecords.show") : t("meRecords.hide")}
                       >
                         {isHidden ? (
                           <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -432,7 +432,7 @@ export default function RecordsPage() {
                       </p>
                       <div className="flex items-center gap-2 flex-wrap">
                         {isHidden && (
-                          <Badge variant="secondary" className="text-xs">非表示</Badge>
+                          <Badge variant="secondary" className="text-xs">{t("meRecords.hidden")}</Badge>
                         )}
                         {pb.run.weblink && (
                           <a
@@ -442,7 +442,7 @@ export default function RecordsPage() {
                             className="text-xs text-primary hover:underline flex items-center gap-1"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            記録を見る
+                            {t("meRecords.viewRecord")}
                           </a>
                         )}
                       </div>
@@ -453,7 +453,7 @@ export default function RecordsPage() {
             ) : speedruncomRecords?.error ? (
               <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">Speedrun.comに記録がありません。</p>
+              <p className="text-sm text-muted-foreground">{t("meRecords.noSpeedrunRecords")}</p>
             )}
           </CardContent>
         </Card>
@@ -461,7 +461,7 @@ export default function RecordsPage() {
 
       {/* カスタム記録セクション */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">カスタム記録</h2>
+        <h2 className="text-lg font-semibold mb-4">{t("meRecords.customRecords")}</h2>
         {records.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {records.map((record) => (
@@ -495,12 +495,12 @@ export default function RecordsPage() {
                     </p>
                   )}
                   <div className="flex gap-2 mt-2">
-                    {!record.isVisible && <Badge variant="secondary">非公開</Badge>}
+                    {!record.isVisible && <Badge variant="secondary">{t("meRecords.private")}</Badge>}
                     {record.pbVideoUrl && (
                       <Button variant="outline" size="sm" asChild>
                         <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="mr-1 h-3 w-3" />
-                          動画
+                          {t("meRecords.video")}
                         </a>
                       </Button>
                     )}
@@ -513,13 +513,13 @@ export default function RecordsPage() {
           <Card>
             <CardContent className="text-center py-12">
               <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-lg font-medium">カスタム記録がまだありません</p>
+              <p className="text-lg font-medium">{t("meRecords.noCustomRecords")}</p>
               <p className="text-sm text-muted-foreground mb-4">
-                Speedrun.com以外の記録を追加できます。
+                {t("meRecords.noCustomRecordsDescription")}
               </p>
               <Button onClick={handleOpenCreate}>
                 <Plus className="mr-2 h-4 w-4" />
-                最初の記録を追加
+                {t("meRecords.addFirstRecord")}
               </Button>
             </CardContent>
           </Card>
@@ -536,12 +536,12 @@ export function ErrorBoundary() {
         <CardContent className="p-6">
           <div className="text-center space-y-4">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <h2 className="text-2xl font-bold">{t("meRecords.errorTitle")}</h2>
             <p className="text-muted-foreground">
-              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+              {t("meRecords.errorDescription")}
             </p>
             <Button onClick={() => window.location.reload()}>
-              ページをリロード
+              {t("meRecords.reloadPage")}
             </Button>
           </div>
         </CardContent>

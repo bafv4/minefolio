@@ -23,41 +23,42 @@ import {
   Users,
   TrendingUp,
 } from "lucide-react";
-import { getKeyLabel } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "操作設定統計 - Minefolio" },
-    { name: "description", content: "RTA走者の操作設定・キー配置の統計情報を確認できます。" },
+    { title: t("keybindingsStats.metaTitle") },
+    { name: "description", content: t("keybindingsStats.description") },
   ];
 };
 
 // 主要なアクション（集計対象）
 const TRACKED_ACTIONS = [
-  { action: "forward", label: "前進" },
-  { action: "back", label: "後退" },
-  { action: "left", label: "左" },
-  { action: "right", label: "右" },
-  { action: "sprint", label: "ダッシュ" },
-  { action: "sneak", label: "スニーク" },
-  { action: "jump", label: "ジャンプ" },
-  { action: "inventory", label: "インベントリ" },
-  { action: "swapHands", label: "オフハンド" },
-  { action: "drop", label: "捨てる" },
-  { action: "pickBlock", label: "ピック" },
-  { action: "attack", label: "攻撃" },
-  { action: "use", label: "使用" },
-  { action: "hotbar1", label: "ホットバー1" },
-  { action: "hotbar2", label: "ホットバー2" },
-  { action: "hotbar3", label: "ホットバー3" },
-  { action: "hotbar4", label: "ホットバー4" },
-  { action: "hotbar5", label: "ホットバー5" },
-  { action: "hotbar6", label: "ホットバー6" },
-  { action: "hotbar7", label: "ホットバー7" },
-  { action: "hotbar8", label: "ホットバー8" },
-  { action: "hotbar9", label: "ホットバー9" },
+  { action: "forward", label: getActionLabel("forward") },
+  { action: "back", label: getActionLabel("back") },
+  { action: "left", label: getActionLabel("left") },
+  { action: "right", label: getActionLabel("right") },
+  { action: "sprint", label: getActionLabel("sprint") },
+  { action: "sneak", label: getActionLabel("sneak") },
+  { action: "jump", label: getActionLabel("jump") },
+  { action: "inventory", label: getActionLabel("inventory") },
+  { action: "swapHands", label: getActionLabel("swapHands") },
+  { action: "drop", label: getActionLabel("drop") },
+  { action: "pickBlock", label: getActionLabel("pickBlock") },
+  { action: "attack", label: getActionLabel("attack") },
+  { action: "use", label: getActionLabel("use") },
+  { action: "hotbar1", label: getActionLabel("hotbar1") },
+  { action: "hotbar2", label: getActionLabel("hotbar2") },
+  { action: "hotbar3", label: getActionLabel("hotbar3") },
+  { action: "hotbar4", label: getActionLabel("hotbar4") },
+  { action: "hotbar5", label: getActionLabel("hotbar5") },
+  { action: "hotbar6", label: getActionLabel("hotbar6") },
+  { action: "hotbar7", label: getActionLabel("hotbar7") },
+  { action: "hotbar8", label: getActionLabel("hotbar8") },
+  { action: "hotbar9", label: getActionLabel("hotbar9") },
 ] as const;
 
 // DPIの範囲区分（旧サイトと同じ11段階）
@@ -136,7 +137,7 @@ function calculateCm360(
   return cm360Base / winMultiplier;
 }
 
-// プレイヤー情報
+// 走者情報
 interface PlayerInfo {
   slug: string;
   mcid: string | null;
@@ -209,7 +210,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
   // 公開ユーザーのみ対象
   const publicCondition = eq(users.profileVisibility, "public");
 
-  // 総プレイヤー数
+  // 総走者数
   const [totalResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(users)
@@ -232,7 +233,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
     .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi)));
   const playersWithMouseSettings = mouseCountResult?.count ?? 0;
 
-  // キーバインド統計を取得（プレイヤー情報付き）
+  // キーバインド統計を取得（走者情報付き）
   const keybindingStats: KeybindingStats[] = [];
 
   for (const tracked of TRACKED_ACTIONS) {
@@ -329,7 +330,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
 
   // リマップしているユーザーを追加（sourceKeyでグループ化）
   for (const r of f3InputRemaps) {
-    const inputKey = r.sourceKey ?? "未設定";
+    const inputKey = r.sourceKey ?? t("meKeybindings.unassigned");
     const players = f3Groups.get(inputKey) ?? [];
     players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName });
     f3Groups.set(inputKey, players);
@@ -349,7 +350,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
     totalCount: f3TotalCount,
   };
 
-  // マウス設定を取得（プレイヤー情報付き）
+  // マウス設定を取得（走者情報付き）
   const mouseConfigs = await db
     .select({
       mouseDpi: playerConfigs.mouseDpi,
@@ -548,16 +549,16 @@ export default function KeybindingsStatsPage() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <BarChart3 className="h-8 w-8" />
-            操作設定統計
+            {t("keybindingsStats.title")}
           </h1>
           <p className="text-muted-foreground mt-1">
-            RTA走者の操作設定・キー配置の統計情報
+            {t("keybindingsStats.description")}
           </p>
         </div>
         <Button variant="outline" asChild>
           <Link to="/keybindings">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            一覧に戻る
+            {t("keybindingsStats.backToList")}
           </Link>
         </Button>
       </div>
@@ -567,7 +568,7 @@ export default function KeybindingsStatsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              登録プレイヤー数
+              {t("keybindingsStats.registeredCount")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -580,7 +581,7 @@ export default function KeybindingsStatsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              キーバインド登録者
+              {t("keybindingsStats.keybindingsRegistered")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -598,7 +599,7 @@ export default function KeybindingsStatsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              マウス設定登録者
+              {t("keybindingsStats.mouseRegistered")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -620,11 +621,11 @@ export default function KeybindingsStatsPage() {
         <TabsList>
           <TabsTrigger value="keyboard" className="gap-1.5">
             <Keyboard className="h-4 w-4" />
-            キーボード
+            {t("keybindingsStats.keyboardTab")}
           </TabsTrigger>
           <TabsTrigger value="mouse" className="gap-1.5">
             <Mouse className="h-4 w-4" />
-            マウス
+            {t("keybindingsStats.mouseTab")}
           </TabsTrigger>
         </TabsList>
 
@@ -654,12 +655,12 @@ export default function KeybindingsStatsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  DPI分布
+                  {t("keybindingsStats.dpiDistribution")}
                 </CardTitle>
                 <CardDescription>
-                  {dpiStats.totalCount}人のデータ
-                  {dpiStats.average != null && ` / 平均: ${dpiStats.average}`}
-                  {dpiStats.median != null && ` / 中央値: ${dpiStats.median}`}
+                  {t("keybindingsStats.dataCount", { count: dpiStats.totalCount })}
+                  {dpiStats.average != null && ` / ${t("keybindingsStats.average", { value: dpiStats.average })}`}
+                  {dpiStats.median != null && ` / ${t("keybindingsStats.median", { value: dpiStats.median })}`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -670,12 +671,12 @@ export default function KeybindingsStatsPage() {
                       type="button"
                       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
                       disabled={range.count === 0}
-                      onClick={() => openPlayersDialog(`DPI ${range.label}`, range.players)}
+                      onClick={() => openPlayersDialog(t("keybindingsStats.dialogDpi", { label: range.label }), range.players)}
                     >
                       <div className="flex justify-between text-sm">
                         <span>{range.label}</span>
                         <span className="text-muted-foreground">
-                          {range.count}人 ({range.percentage.toFixed(1)}%)
+                          {t("keybindingsStats.peoplePercent", { count: range.count, percent: range.percentage.toFixed(1) })}
                         </span>
                       </div>
                       <Progress value={range.percentage} className="h-2" />
@@ -690,14 +691,14 @@ export default function KeybindingsStatsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  振り向き (cm/180°) 分布
+                  {t("keybindingsStats.turnDistanceDistribution")}
                 </CardTitle>
                 <CardDescription>
-                  {cm180Stats.totalCount}人のデータ
+                  {t("keybindingsStats.dataCount", { count: cm180Stats.totalCount })}
                   {cm180Stats.average != null &&
-                    ` / 平均: ${cm180Stats.average.toFixed(1)}cm`}
+                    ` / ${t("keybindingsStats.average", { value: `${cm180Stats.average.toFixed(1)}cm` })}`}
                   {cm180Stats.median != null &&
-                    ` / 中央値: ${cm180Stats.median.toFixed(1)}cm`}
+                    ` / ${t("keybindingsStats.median", { value: `${cm180Stats.median.toFixed(1)}cm` })}`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -708,12 +709,12 @@ export default function KeybindingsStatsPage() {
                       type="button"
                       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
                       disabled={range.count === 0}
-                      onClick={() => openPlayersDialog(`振り向き ${range.label}`, range.players)}
+                      onClick={() => openPlayersDialog(t("keybindingsStats.dialogTurnDistance", { label: range.label }), range.players)}
                     >
                       <div className="flex justify-between text-sm">
                         <span>{range.label}</span>
                         <span className="text-muted-foreground">
-                          {range.count}人 ({range.percentage.toFixed(1)}%)
+                          {t("keybindingsStats.peoplePercent", { count: range.count, percent: range.percentage.toFixed(1) })}
                         </span>
                       </div>
                       <Progress value={range.percentage} className="h-2" />
@@ -728,12 +729,12 @@ export default function KeybindingsStatsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  ゲーム内感度分布
+                  {t("keybindingsStats.inGameSensitivityDistribution")}
                 </CardTitle>
                 <CardDescription>
-                  {sensitivityStats.totalCount}人のデータ
+                  {t("keybindingsStats.dataCount", { count: sensitivityStats.totalCount })}
                   {sensitivityStats.average != null &&
-                    ` / 平均: ${sensitivityStats.average}%`}
+                    ` / ${t("keybindingsStats.average", { value: `${sensitivityStats.average}%` })}`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -744,12 +745,12 @@ export default function KeybindingsStatsPage() {
                       type="button"
                       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
                       disabled={range.count === 0}
-                      onClick={() => openPlayersDialog(`感度 ${range.label}`, range.players)}
+                      onClick={() => openPlayersDialog(t("keybindingsStats.dialogSensitivity", { label: range.label }), range.players)}
                     >
                       <div className="flex justify-between text-sm">
                         <span>{range.label}</span>
                         <span className="text-muted-foreground">
-                          {range.count}人 ({range.percentage.toFixed(1)}%)
+                          {t("keybindingsStats.peoplePercent", { count: range.count, percent: range.percentage.toFixed(1) })}
                         </span>
                       </div>
                       <Progress value={range.percentage} className="h-2" />
@@ -764,10 +765,10 @@ export default function KeybindingsStatsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  Raw Input設定
+                  {t("keybindingsStats.rawInputSetting")}
                 </CardTitle>
                 <CardDescription>
-                  {rawInputStats.totalCount}人のデータ
+                  {t("keybindingsStats.dataCount", { count: rawInputStats.totalCount })}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -783,7 +784,7 @@ export default function KeybindingsStatsPage() {
                         <Badge>ON</Badge>
                       </span>
                       <span className="text-muted-foreground">
-                        {rawInputStats.onCount}人 (
+                        {rawInputStats.onCount}{t("common.peopleUnit")} (
                         {rawInputStats.totalCount > 0
                           ? (
                               (rawInputStats.onCount / rawInputStats.totalCount) *
@@ -813,7 +814,7 @@ export default function KeybindingsStatsPage() {
                         <Badge variant="secondary">OFF</Badge>
                       </span>
                       <span className="text-muted-foreground">
-                        {rawInputStats.offCount}人 (
+                        {rawInputStats.offCount}{t("common.peopleUnit")} (
                         {rawInputStats.totalCount > 0
                           ? (
                               (rawInputStats.offCount / rawInputStats.totalCount) *
@@ -839,7 +840,7 @@ export default function KeybindingsStatsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* プレイヤー一覧ダイアログ */}
+      {/* 走者一覧ダイアログ */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -867,7 +868,7 @@ export default function KeybindingsStatsPage() {
               ))}
               {dialogPlayers.length === 0 && (
                 <p className="text-muted-foreground text-sm text-center py-4">
-                  該当するプレイヤーはいません
+                  {t("keybindingsStats.emptyDialog")}
                 </p>
               )}
             </div>
@@ -891,7 +892,7 @@ function KeybindingStatCard({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{stat.label}</CardTitle>
-          <CardDescription>データなし</CardDescription>
+          <CardDescription>{t("keybindingsStats.noData")}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -901,7 +902,7 @@ function KeybindingStatCard({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{stat.label}</CardTitle>
-        <CardDescription>{stat.totalCount}人のデータ</CardDescription>
+        <CardDescription>{t("keybindingsStats.dataCount", { count: stat.totalCount })}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
@@ -935,7 +936,7 @@ function KeybindingStatCard({
                   <Progress value={key.percentage} className="h-1.5" />
                 </div>
                 <span className="text-xs text-muted-foreground w-20 text-right shrink-0">
-                  {key.count}人 ({key.percentage.toFixed(0)}%)
+                  {t("keybindingsStats.peoplePercent", { count: key.count, percent: key.percentage.toFixed(0) })}
                 </span>
               </button>
             );
@@ -958,8 +959,8 @@ function F3RemapStatCard({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">F3の入力キー</CardTitle>
-          <CardDescription>データなし</CardDescription>
+          <CardTitle className="text-base">{t("keybindingsStats.f3InputKey")}</CardTitle>
+          <CardDescription>{t("keybindingsStats.noData")}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -968,8 +969,8 @@ function F3RemapStatCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">F3の入力キー</CardTitle>
-        <CardDescription>{stat.totalCount}人のデータ</CardDescription>
+        <CardTitle className="text-base">{t("keybindingsStats.f3InputKey")}</CardTitle>
+        <CardDescription>{t("keybindingsStats.dataCount", { count: stat.totalCount })}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
@@ -982,8 +983,8 @@ function F3RemapStatCard({
               inputKey.startsWith("Mouse") ||
               inputKey.toLowerCase().includes("mouse");
             const dialogTitle = isDefault
-              ? "F3キーでF3入力"
-              : `${label}でF3入力`;
+              ? t("keybindingsStats.f3DefaultInput")
+              : t("keybindingsStats.f3WithKey", { key: label });
 
             return (
               <button
@@ -1009,7 +1010,7 @@ function F3RemapStatCard({
                   <Progress value={target.percentage} className="h-1.5" />
                 </div>
                 <span className="text-xs text-muted-foreground w-20 text-right shrink-0">
-                  {target.count}人 ({target.percentage.toFixed(0)}%)
+                  {t("keybindingsStats.peoplePercent", { count: target.count, percent: target.percentage.toFixed(0) })}
                 </span>
               </button>
             );

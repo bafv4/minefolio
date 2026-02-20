@@ -6,24 +6,34 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
-import { eq, desc } from "drizzle-orm";
-import { VideoCard } from "@/components/video-card";
-import { PlayerCard } from "@/components/player-card";
-import { RecentPaceCard, type CachedPace } from "@/components/recent-pace-card";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
+import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { cn } from "@/lib/utils";
+import { t } from "@/lib/messages";
 import {
   ArrowRight,
   Play,
   Compass,
   UserCheck,
   History,
+  Sparkles,
+  Users,
+  Activity,
+  Clock3,
+  ExternalLink,
+  Trophy,
+  Youtube,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   const appUrl = data?.appUrl || "https://minefolio.pages.dev";
-  const title = "Minefolio - Minecraft Speedrunner Portfolio";
+  const title = t("home.title");
   const ogImageUrl = `${appUrl}/icon.png`;
 
   return [
@@ -74,11 +84,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用）
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true, slug: true },
+    columns: { mcid: true, uuid: true },
   });
-  const registeredMcids = allUserMcids
-    .filter((u) => u.mcid !== null)
-    .map((u) => u.mcid!.toLowerCase());
   const mcidToUuid = Object.fromEntries(
     allUserMcids
       .filter((u) => u.mcid !== null)
@@ -93,7 +100,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
-      location: true,
+      pronouns: true,
+      role: true,
+      mainEdition: true,
+      mainPlatform: true,
+      inputMethodBadge: true,
       updatedAt: true,
       shortBio: true,
     },
@@ -101,13 +112,34 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     limit: 4,
   });
 
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  const totalPublicProfilesResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(eq(users.profileVisibility, "public"));
+  const totalPublicProfiles = totalPublicProfilesResult[0]?.count ?? 0;
+
+  const activePublicProfilesResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(
+      and(
+        eq(users.profileVisibility, "public"),
+        gte(users.updatedAt, oneWeekAgo)
+      )
+    );
+  const activePublicProfiles = activePublicProfilesResult[0]?.count ?? 0;
+
   return {
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
     isRegistered,
     currentUser,
-    registeredMcids,
     mcidToUuid,
     recentlyUpdatedUsers,
+    totalPublicProfiles,
+    activePublicProfiles,
   };
 }
 
@@ -189,22 +221,162 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
   }
 }
 
+function formatRunTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatRelativeUnixTime(unixSeconds: number): string {
+  const now = Date.now();
+  const diffMs = now - unixSeconds * 1000;
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffMinutes < 1) return t("playerStats.justNow");
+  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
+  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
+  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
+}
+
+function formatVideoTime(date: Date): string {
+  const now = Date.now();
+  const hoursAgo = Math.floor((now - new Date(date).getTime()) / (1000 * 60 * 60));
+
+  if (hoursAgo < 1) return t("home.justWithinHour");
+  if (hoursAgo < 24) return t("playerStats.hoursAgo", { count: hoursAgo });
+  return t("playerStats.daysAgo", { count: Math.floor(hoursAgo / 24) });
+}
+
+function HomePaceFeedCard({
+  run,
+  uuid,
+  displayName,
+}: {
+  run: CachedPace;
+  uuid?: string;
+  displayName?: string;
+}) {
+  const isFinished = run.timeline === "Finish";
+  const paceManUrl = `https://paceman.gg/stats/player/${encodeURIComponent(run.mcid)}`;
+
+  return (
+    <a
+      href={paceManUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "group block rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:shadow-sm",
+        isFinished && "border-yellow-500/40 bg-yellow-500/5"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        {uuid ? (
+          <div className="h-11 w-11 rounded-xl">
+            <MinecraftAvatar uuid={uuid} size={44} />
+          </div>
+        ) : (
+          <div className="h-11 w-11 rounded-xl bg-muted" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{displayName || run.nickname || run.mcid}</p>
+          <p className="truncate text-xs text-muted-foreground">@{run.mcid}</p>
+        </div>
+        {isFinished && <Trophy className="h-4 w-4 text-yellow-600" />}
+      </div>
+
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
+          <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
+        </div>
+        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+          {run.timeline}
+        </Badge>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <Clock3 className="h-3.5 w-3.5" />
+          {formatRelativeUnixTime(run.time)}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          PaceMan
+          <ExternalLink className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
+        </span>
+      </div>
+    </a>
+  );
+}
+
+function HomeVideoFeedCard({ video }: { video: CachedYouTubeVideo }) {
+  const thumbnailUrl = video.thumbnailUrl || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const showName = video.displayName || video.channelTitle || "Unknown";
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:shadow-sm">
+      <a
+        href={videoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="relative block aspect-video overflow-hidden bg-muted"
+      >
+        <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" />
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white">
+          <Youtube className="h-3 w-3" />
+          YouTube
+        </span>
+      </a>
+
+      <div className="space-y-3 p-4">
+        <a href={videoUrl} target="_blank" rel="noopener noreferrer">
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug transition-colors hover:text-primary">
+            {video.title}
+          </h3>
+        </a>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          {video.slug ? (
+            <Link to={`/player/${video.slug}`} className="inline-flex min-w-0 items-center gap-2 hover:text-primary">
+              {video.uuid ? (
+                <MinecraftAvatar uuid={video.uuid} size={20} className="rounded-md" />
+              ) : video.discordAvatar ? (
+                <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
+              ) : (
+                <div className="h-5 w-5 rounded-md bg-muted" />
+              )}
+              <span className="truncate">{showName}</span>
+            </Link>
+          ) : (
+            <span className="truncate">{showName}</span>
+          )}
+          <span className="shrink-0">{formatVideoTime(video.publishedAt)}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 // セクション全体のローディングスケルトン（memo化）
 const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
   const gridColsClass =
     columns === 3 ? "lg:grid-cols-3" :
-    columns === 4 ? "lg:grid-cols-4" :
-    "lg:grid-cols-4";
+      columns === 4 ? "lg:grid-cols-4" :
+        "lg:grid-cols-4";
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-5 w-5 rounded" />
-        <Skeleton className="h-6 w-32" />
+    <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-9 w-9 rounded-xl" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24 rounded" />
+          <Skeleton className="h-6 w-40 rounded" />
+        </div>
       </div>
       <div className={`grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-4`}>
         {Array.from({ length: columns }).map((_, i) => (
-          <Skeleton key={i} className="h-24 rounded-lg" />
+          <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
     </section>
@@ -212,10 +384,15 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
 });
 
 export default function HomePage() {
-  const { isRegistered, currentUser, registeredMcids, mcidToUuid, recentlyUpdatedUsers } =
+  const {
+    isRegistered,
+    currentUser,
+    mcidToUuid,
+    recentlyUpdatedUsers,
+    totalPublicProfiles,
+    activePublicProfiles,
+  } =
     useLoaderData<typeof loader>();
-
-  const registeredMcidSet = new Set(registeredMcids);
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
@@ -226,8 +403,8 @@ export default function HomePage() {
 
   const filteredRecentVideos = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
     ? feed.recentVideos.filter(video =>
-        !video.minefolioMcid || video.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
-      )
+      !video.minefolioMcid || video.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+    )
     : feed.recentVideos;
 
   const pacesMcidToUuid = feed.mcidToUuid;
@@ -271,66 +448,108 @@ export default function HomePage() {
   const mergedMcidToUuid = { ...mcidToUuid, ...pacesMcidToUuid };
 
   return (
-    <div className="flex-1 flex flex-col space-y-8">
-      {/* Hero Section */}
-      <section className="text-center py-12 space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">Minefolio</h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Minecraft Speedrunning + Portfolio
-        </p>
-        <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4 px-4 sm:px-0">
-          {!isRegistered && (
-            <Button asChild size="lg" className="w-full sm:w-auto">
-              <Link to="/login">
-                プロフィールを作る
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          )}
-          <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-            <Link to="/browse">
-              <Compass className="mr-2 h-4 w-4" />
-              ランナーを探す
-            </Link>
-          </Button>
+    <div className="relative flex-1 space-y-7 sm:space-y-8">
+      <div
+        className="pointer-events-none absolute inset-x-0 -top-12 -z-10 h-80 rounded-[2.5rem] opacity-70 blur-2xl"
+        style={{
+          background:
+            "radial-gradient(60% 60% at 20% 20%, color-mix(in oklch, var(--info) 28%, transparent), transparent), radial-gradient(50% 50% at 80% 30%, color-mix(in oklch, var(--success) 30%, transparent), transparent)",
+        }}
+      />
+
+      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_40%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--border)_35%,transparent)_1px,transparent_1px)] bg-[size:26px_26px] opacity-25" />
+        <div className="relative grid gap-7 lg:grid-cols-[1.3fr_1fr] lg:items-end">
+          <div className="space-y-5">
+            <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-3 py-1 text-xs font-medium text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              {t("home.heroBadge")}
+            </span>
+            <div className="space-y-3">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                {t("home.heroTitle")}
+              </h1>
+              <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
+                {t("home.heroDescription")}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {!isRegistered && (
+                <Button asChild size="lg" className="w-full sm:w-auto">
+                  <Link to="/login">
+                    {t("home.ctaStart")}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              )}
+              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+                <Link to="/browse">
+                  <Compass className="mr-2 h-4 w-4" />
+                  {t("home.ctaBrowse")}
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+              <p className="text-xs text-muted-foreground">{t("home.profileTotal")}</p>
+              <p className="mt-2 text-2xl font-bold">{totalPublicProfiles}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+              <p className="text-xs text-muted-foreground">{t("home.profileActive")}</p>
+              <p className="mt-2 text-2xl font-bold">{activePublicProfiles}</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* 最近更新されたプロフィール（即時表示） */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <UserCheck className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-bold">最近更新されたプロフィール</h2>
+      <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <UserCheck className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.profilesLabel")}</p>
+            <h2 className="text-xl font-bold">{t("home.sectionProfiles")}</h2>
+          </div>
         </div>
         {recentlyUpdatedUsers.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {recentlyUpdatedUsers.map((user) => (
-              <PlayerCard key={user.slug} player={user} />
-            ))}
-          </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {recentlyUpdatedUsers.map((user) => (
+                <ProfileFeedCard key={user.slug} player={user} />
+              ))}
+            </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <UserCheck className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>登録ユーザーはまだいません</p>
+          <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-10 text-center text-muted-foreground">
+            <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />
+            <p>{t("home.noProfiles")}</p>
           </div>
         )}
       </section>
 
-      {/* PaceMan Stats 最近のペース */}
       {feed.loading.paces ? (
         <SectionSkeleton columns={4} />
       ) : filteredRecentPaces.length > 0 ? (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-bold">最近のペース</h2>
+        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-primary/10 p-2">
+              <History className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.paceFeedLabel")}</p>
+              <h2 className="text-xl font-bold">{t("home.sectionPaces")}</h2>
+            </div>
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+              <Activity className="h-3.5 w-3.5" />
+              {filteredRecentPaces.length}
+            </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             {filteredRecentPaces.map((run) => (
-              <RecentPaceCard
+              <HomePaceFeedCard
                 key={`${run.mcid}-${run.time}-${run.timeline}`}
                 run={run}
-                isRegistered={registeredMcidSet.has(run.mcid.toLowerCase())}
                 uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
                 displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
               />
@@ -339,19 +558,25 @@ export default function HomePage() {
         </section>
       ) : null}
 
-      {/* YouTube 最新動画 */}
       {feed.loading.videos ? (
         <SectionSkeleton columns={3} />
       ) : filteredRecentVideos.length > 0 ? (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Play className="h-5 w-5 text-red-600" />
-            <h2 className="text-xl font-bold">最新動画</h2>
-            <span className="text-muted-foreground">({filteredRecentVideos.length})</span>
+        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-red-500/10 p-2">
+              <Play className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.videoFeedLabel")}</p>
+              <h2 className="text-xl font-bold">{t("home.sectionVideos")}</h2>
+            </div>
+            <span className="ml-auto rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+              {t("home.videosCount", { count: filteredRecentVideos.length })}
+            </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredRecentVideos.map((video) => (
-              <VideoCard key={video.videoId} video={video} />
+              <HomeVideoFeedCard key={video.videoId} video={video} />
             ))}
           </div>
         </section>

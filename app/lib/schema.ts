@@ -150,10 +150,15 @@ export const customKeys = sqliteTable("custom_keys", {
 export const keyRemaps = sqliteTable("key_remaps", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  sourceKey: text("source_key").notNull(),
-  targetKey: text("target_key"),
+  sourceKey: text("source_key").notNull(), // 修飾キー組み合わせ可（例: "Ctrl+KeyA", "Shift+KeyW"）
+  targetKey: text("target_key"), // 単一キーのみ（修飾キー組み合わせ不可）
   software: text("software"),
   notes: text("notes"),
+
+  // 出力モード: "key"（キー出力）または "character"（文字出力）
+  outputMode: text("output_mode", { enum: ["key", "character"] }).default("key"),
+  // 文字出力モード時の出力文字（例: "a", "A", "@"）
+  outputCharacter: text("output_character"),
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
@@ -377,6 +382,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   configHistory: many(configHistory),
   favorites: many(favorites),
   pacemanPaces: many(pacemanPaces),
+  customActions: many(customActions),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -689,3 +695,39 @@ export const youtubeLiveCache = sqliteTable("youtube_live_cache", {
 
 export type YoutubeLiveCache = typeof youtubeLiveCache.$inferSelect;
 export type NewYoutubeLiveCache = typeof youtubeLiveCache.$inferInsert;
+
+// ============================================
+// 19. custom_actions（カスタムアクション）
+// ============================================
+export const customActions = sqliteTable("custom_actions", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // アクション定義
+  actionName: text("action_name").notNull(), // ユーザー定義のアクション名（例: "DPIスイッチ", "感度切替"）
+  description: text("description"), // アクションの説明
+  category: text("category", { enum: ["other", "macro", "tool"] }).default("other").notNull(),
+
+  // トリガーキー（修飾キー組み合わせ可: "Ctrl+KeyX", "Shift+Alt+KeyZ"）
+  triggerKey: text("trigger_key").notNull(),
+
+  // 表示順序
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_custom_actions_user_trigger").on(table.userId, table.triggerKey),
+  index("idx_custom_actions_user_id").on(table.userId),
+  index("idx_custom_actions_category").on(table.category),
+]);
+
+export const customActionsRelations = relations(customActions, ({ one }) => ({
+  user: one(users, {
+    fields: [customActions.userId],
+    references: [users.id],
+  }),
+}));
+
+export type CustomAction = typeof customActions.$inferSelect;
+export type NewCustomAction = typeof customActions.$inferInsert;

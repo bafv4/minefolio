@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Home, Radio, Search, Keyboard, BarChart3, GitCompare, LogIn } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Home, Radio, Search, Keyboard, BarChart3, GitCompare, LogIn, MessageSquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -141,6 +141,12 @@ export function Header({ user }: HeaderProps) {
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
                         お気に入り
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/feedback">
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        フィードバック
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -287,6 +293,15 @@ export function Header({ user }: HeaderProps) {
                   >
                     <Heart className="h-6 w-6" />
                     お気に入り
+                  </Link>
+
+                  <Link
+                    to="/feedback"
+                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <MessageSquare className="h-6 w-6" />
+                    フィードバック
                   </Link>
 
                   <Link

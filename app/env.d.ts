@@ -13,6 +13,9 @@ export interface Env {
   TWITCH_CLIENT_ID?: string;
   TWITCH_CLIENT_SECRET?: string;
   YOUTUBE_API_KEY?: string;
+  // Feedback
+  FEEDBACK_EMAIL?: string;
+  RESEND_API_KEY?: string;
 }
 
 /**

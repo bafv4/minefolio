@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { t } from "@/lib/messages";
 
 export function meta() {
   return [
-    { title: "OGP画像テスト - Minefolio" },
+    { title: t("ogTest.title") },
     { name: "robots", content: "noindex, nofollow" },
   ];
 }
@@ -25,15 +26,15 @@ export default function OgpTestPage() {
 
   return (
     <div className="container max-w-4xl py-8">
-      <h1 className="text-3xl font-bold mb-6">OGP画像生成テスト</h1>
+      <h1 className="text-3xl font-bold mb-6">{t("ogTest.heading")}</h1>
 
       <div className="grid gap-6">
         {/* コントロールパネル */}
         <Card>
           <CardHeader>
-            <CardTitle>パラメータ設定</CardTitle>
+            <CardTitle>{t("ogTest.paramTitle")}</CardTitle>
             <CardDescription>
-              プレイヤーのMCIDを入力して、OGP画像を生成します
+              {t("ogTest.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -43,12 +44,12 @@ export default function OgpTestPage() {
                 id="mcid"
                 value={mcid}
                 onChange={(e) => setMcid(e.target.value)}
-                placeholder="例: Dream, Illumina"
+                placeholder={t("ogTest.mcidExample")}
               />
             </div>
 
             <Button onClick={generatePreview} className="w-full">
-              プレビュー生成
+              {t("ogTest.generatePreview")}
             </Button>
           </CardContent>
         </Card>
@@ -57,9 +58,9 @@ export default function OgpTestPage() {
         {imageUrl && (
           <Card>
             <CardHeader>
-              <CardTitle>プレビュー</CardTitle>
+              <CardTitle>{t("ogTest.preview")}</CardTitle>
               <CardDescription>
-                1200x630px (Twitter/OGP標準サイズ)
+                {t("ogTest.previewSize")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -73,7 +74,7 @@ export default function OgpTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>画像URL</Label>
+                <Label>{t("ogTest.imageUrl")}</Label>
                 <div className="flex gap-2">
                   <Input
                     value={imageUrl}
@@ -86,19 +87,19 @@ export default function OgpTestPage() {
                       navigator.clipboard.writeText(imageUrl);
                     }}
                   >
-                    コピー
+                    {t("ogTest.copy")}
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>新しいタブで開く</Label>
+                <Label>{t("ogTest.openInNewTab")}</Label>
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={() => window.open(imageUrl, "_blank")}
                 >
-                  SVG画像を開く
+                  {t("ogTest.openSvg")}
                 </Button>
               </div>
             </CardContent>
@@ -108,20 +109,20 @@ export default function OgpTestPage() {
         {/* 使い方 */}
         <Card>
           <CardHeader>
-            <CardTitle>使い方</CardTitle>
+            <CardTitle>{t("ogTest.usage")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • このページはOGP画像が正しく生成されるかテストするためのものです
+              {t("ogTest.usageLine1")}
             </p>
             <p>
-              • MCIDを入力して「プレビュー生成」をクリックすると、そのプレイヤーのOGP画像が表示されます
+              {t("ogTest.howToRunnerImage")}
             </p>
             <p>
-              • 画像は1200x630pxのSVG形式で生成されます
+              {t("ogTest.usageLine3")}
             </p>
             <p>
-              • プレイヤーが存在しない場合は404エラーが返されます
+              {t("ogTest.howToNotFound")}
             </p>
           </CardContent>
         </Card>
@@ -129,9 +130,9 @@ export default function OgpTestPage() {
         {/* サンプルMCID */}
         <Card>
           <CardHeader>
-            <CardTitle>サンプルMCID</CardTitle>
+            <CardTitle>{t("ogTest.sampleMcid")}</CardTitle>
             <CardDescription>
-              クリックして自動入力
+              {t("ogTest.clickToAutoFill")}
             </CardDescription>
           </CardHeader>
           <CardContent>

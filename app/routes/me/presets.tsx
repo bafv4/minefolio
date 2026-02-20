@@ -48,10 +48,17 @@ import { toast } from "sonner";
 import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "設定プリセット - Minefolio" }];
+  return [{ title: t("mePresets.title") }];
 };
+
+function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
+  if (targetKey == null) return null;
+  if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
+  return targetKey;
+}
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -65,7 +72,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("mePresets.userNotFound"), { status: 404 });
   }
 
   // プリセット一覧を取得
@@ -110,7 +117,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("mePresets.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -125,7 +132,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     const sourcePresetId = formData.get("sourcePresetId") as string | null;
 
     if (!name?.trim()) {
-      return { error: "プリセット名を入力してください" };
+      return { error: t("mePresets.presetNameRequired") };
     }
 
     // 全ての既存プリセットを非アクティブに
@@ -150,7 +157,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       });
 
       if (!sourcePreset || sourcePreset.userId !== user.id) {
-        return { error: "コピー元のプリセットが見つかりません" };
+        return { error: t("mePresets.sourcePresetNotFound") };
       }
 
       // プリセットを作成（アクティブ状態で）
@@ -187,7 +194,7 @@ export async function action({ context, request }: Route.ActionArgs) {
         }
       }
 
-      // プレイヤー設定を作成
+      // 走者設定を作成
       if (sourcePreset.playerConfigData) {
         const configData = JSON.parse(sourcePreset.playerConfigData) as PresetPlayerConfigData;
         await db.insert(playerConfigs).values({
@@ -219,7 +226,7 @@ export async function action({ context, request }: Route.ActionArgs) {
             id: createId(),
             userId: user.id,
             sourceKey: remap.sourceKey,
-            targetKey: remap.targetKey,
+            targetKey: sanitizeRemapTargetKey(remap.targetKey),
             software: remap.software,
             notes: remap.notes,
             createdAt: now,
@@ -269,12 +276,12 @@ export async function action({ context, request }: Route.ActionArgs) {
         id: createId(),
         userId: user.id,
         changeType: "preset_switch",
-        changeDescription: `プリセット「${sourcePreset.name}」をコピーして「${name.trim()}」を作成・適用`,
+        changeDescription: t("mePresets.copiedAndApplied", { source: sourcePreset.name, name: name.trim() }),
         presetId,
         createdAt: now,
       });
 
-      return { success: true, message: `プリセット「${name.trim()}」を作成して適用しました` };
+      return { success: true, message: t("mePresets.createdAndApplied", { name: name.trim() }) };
     } else {
       // 現在の設定から作成、またはデフォルト設定から作成
       let keybindingsData: string | null = null;
@@ -333,7 +340,7 @@ export async function action({ context, request }: Route.ActionArgs) {
             id: createId(),
             userId: user.id,
             sourceKey: remap.sourceKey,
-            targetKey: remap.targetKey,
+            targetKey: sanitizeRemapTargetKey(remap.targetKey),
             software: remap.software,
             notes: remap.notes,
             createdAt: now,
@@ -390,7 +397,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           });
         }
 
-        // デフォルトプレイヤー設定を作成
+        // デフォルト走者設定を作成
         await db.insert(playerConfigs).values({
           id: createId(),
           userId: user.id,
@@ -430,12 +437,12 @@ export async function action({ context, request }: Route.ActionArgs) {
         id: createId(),
         userId: user.id,
         changeType: "preset_switch",
-        changeDescription: `プリセット「${name.trim()}」を作成・適用`,
+        changeDescription: t("mePresets.createdFromCurrentAndApplied", { name: name.trim() }),
         presetId,
         createdAt: now,
       });
 
-      return { success: true, message: `プリセット「${name.trim()}」を作成して適用しました` };
+      return { success: true, message: t("mePresets.createdAndApplied", { name: name.trim() }) };
     }
   }
 
@@ -448,7 +455,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     });
 
     if (!preset || preset.userId !== user.id) {
-      return { error: "プリセットが見つかりません" };
+      return { error: t("mePresets.presetNotFound") };
     }
 
     await db.delete(configPresets).where(eq(configPresets.id, presetId));
@@ -458,11 +465,11 @@ export async function action({ context, request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: `プリセット「${preset.name}」を削除`,
+      changeDescription: t("mePresets.deleteHistoryDescription", { name: preset.name }),
       createdAt: now,
     });
 
-    return { success: true, message: "プリセットを削除しました" };
+    return { success: true, message: t("mePresets.presetDeleted") };
   }
 
   // プリセット適用
@@ -474,7 +481,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     });
 
     if (!preset || preset.userId !== user.id) {
-      return { error: "プリセットが見つかりません" };
+      return { error: t("mePresets.presetNotFound") };
     }
 
     // 現在の設定をバックアップ（履歴用）
@@ -499,7 +506,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       }
     }
 
-    // プレイヤー設定を復元
+    // 走者設定を復元
     if (preset.playerConfigData && user.playerConfig) {
       const configFromPreset = JSON.parse(preset.playerConfigData);
       await db
@@ -530,7 +537,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           id: createId(),
           userId: user.id,
           sourceKey: remapData.sourceKey,
-          targetKey: remapData.targetKey,
+          targetKey: sanitizeRemapTargetKey(remapData.targetKey),
           software: remapData.software,
           notes: remapData.notes,
           createdAt: now,
@@ -614,17 +621,17 @@ export async function action({ context, request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: `プリセット「${preset.name}」を適用`,
+      changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
       previousData: previousKeybindings,
       newData: preset.keybindingsData,
       presetId,
       createdAt: now,
     });
 
-    return { success: true, message: `プリセット「${preset.name}」を適用しました` };
+    return { success: true, message: t("mePresets.appliedPreset", { name: preset.name }) };
   }
 
-  return { error: "不明な操作です" };
+  return { error: t("mePresets.unknownAction") };
 }
 
 export default function PresetsPage() {
@@ -659,12 +666,12 @@ export default function PresetsPage() {
 
   const handleCreatePreset = () => {
     if (!newPresetName.trim()) {
-      toast.error("プリセット名を入力してください");
+      toast.error(t("mePresets.presetNameRequired"));
       return;
     }
 
     if (sourceType === "copy" && !sourcePresetId) {
-      toast.error("コピー元のプリセットを選択してください");
+      toast.error(t("mePresets.sourcePresetRequired"));
       return;
     }
 
@@ -680,19 +687,19 @@ export default function PresetsPage() {
   };
 
   const changeTypeLabels: Record<string, string> = {
-    keybinding: "キー配置",
-    device: "デバイス",
-    game_setting: "ゲーム設定",
-    remap: "リマップ",
-    preset_switch: "プリセット",
+    keybinding: t("mePresets.keybindings"),
+    device: t("mePresets.devices"),
+    game_setting: t("mePresets.gameSettings"),
+    remap: t("mePresets.remap"),
+    preset_switch: t("mePresets.preset"),
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">設定プリセット</h1>
+        <h1 className="text-2xl font-bold">{t("mePresets.pageTitle")}</h1>
         <p className="text-muted-foreground">
-          キー配置やデバイス設定を名前をつけて保存・復元できます
+          {t("mePresets.pageDescription")}
         </p>
       </div>
 
@@ -700,8 +707,8 @@ export default function PresetsPage() {
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-base">プリセット一覧</CardTitle>
-            <CardDescription>保存した設定プリセット</CardDescription>
+            <CardTitle className="text-base">{t("mePresets.listTitle")}</CardTitle>
+            <CardDescription>{t("mePresets.listDescription")}</CardDescription>
           </div>
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
@@ -715,20 +722,20 @@ export default function PresetsPage() {
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto h-11 sm:h-10">
                 <Plus className="h-4 w-4 mr-2" />
-                新規プリセット
+                {t("mePresets.newPreset")}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>プリセットを作成</DialogTitle>
+                <DialogTitle>{t("mePresets.createTitle")}</DialogTitle>
                 <DialogDescription>
-                  新しいプリセットを作成します
+                  {t("mePresets.createDescription")}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 {/* ソース選択 */}
                 <div className="space-y-3">
-                  <Label>作成方法</Label>
+                  <Label>{t("mePresets.createMethod")}</Label>
                   <RadioGroup
                     value={sourceType}
                     onValueChange={(value) => setSourceType(value as "current" | "copy")}
@@ -737,13 +744,13 @@ export default function PresetsPage() {
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="current" id="source-current" />
                       <Label htmlFor="source-current" className="cursor-pointer font-normal">
-                        現在の設定から作成
+                        {t("mePresets.createFromCurrent")}
                       </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="copy" id="source-copy" disabled={presets.length === 0} />
                       <Label htmlFor="source-copy" className={`cursor-pointer font-normal ${presets.length === 0 ? "text-muted-foreground" : ""}`}>
-                        既存のプリセットをコピー
+                        {t("mePresets.copyExistingPreset")}
                       </Label>
                     </div>
                   </RadioGroup>
@@ -752,10 +759,10 @@ export default function PresetsPage() {
                 {/* コピー元プリセット選択 */}
                 {sourceType === "copy" && presets.length > 0 && (
                   <div className="space-y-2">
-                    <Label htmlFor="source-preset">コピー元プリセット</Label>
+                    <Label htmlFor="source-preset">{t("mePresets.sourcePreset")}</Label>
                     <Select value={sourcePresetId} onValueChange={setSourcePresetId}>
                       <SelectTrigger>
-                        <SelectValue placeholder="プリセットを選択" />
+                        <SelectValue placeholder={t("mePresets.selectPreset")} />
                       </SelectTrigger>
                       <SelectContent>
                         {presets.map((preset) => (
@@ -765,7 +772,7 @@ export default function PresetsPage() {
                               {preset.name}
                               {preset.isActive && (
                                 <Badge variant="outline" className="text-xs ml-1">
-                                  適用中
+                                  {t("mePresets.active")}
                                 </Badge>
                               )}
                             </div>
@@ -777,19 +784,19 @@ export default function PresetsPage() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="preset-name">プリセット名</Label>
+                  <Label htmlFor="preset-name">{t("mePresets.presetName")}</Label>
                   <Input
                     id="preset-name"
-                    placeholder="例: メイン設定、練習用"
+                    placeholder={t("mePresets.presetNamePlaceholder")}
                     value={newPresetName}
                     onChange={(e) => setNewPresetName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="preset-description">説明（任意）</Label>
+                  <Label htmlFor="preset-description">{t("mePresets.descriptionOptional")}</Label>
                   <Textarea
                     id="preset-description"
-                    placeholder="このプリセットの説明..."
+                    placeholder={t("mePresets.descriptionPlaceholder")}
                     value={newPresetDescription}
                     onChange={(e) => setNewPresetDescription(e.target.value)}
                     rows={3}
@@ -808,7 +815,7 @@ export default function PresetsPage() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {sourceType === "copy" ? "コピーして作成" : "保存"}
+                  {sourceType === "copy" ? t("mePresets.createByCopy") : t("mePresets.save")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -861,7 +868,7 @@ export default function PresetsPage() {
                           {preset.isActive && (
                             <Badge variant="default" className="shrink-0">
                               <Check className="h-3 w-3 mr-1" />
-                              適用中
+                              {t("mePresets.active")}
                             </Badge>
                           )}
                         </div>
@@ -876,31 +883,31 @@ export default function PresetsPage() {
                           {hasKeybindings && (
                             <Badge variant="secondary" className="text-xs py-0.5">
                               <Keyboard className="h-3 w-3 mr-1" />
-                              キー配置 {keybindingsCount > 0 && `(${keybindingsCount})`}
+                              {t("mePresets.keybindings")} {keybindingsCount > 0 && `(${keybindingsCount})`}
                             </Badge>
                           )}
                           {hasPlayerConfig && (
                             <Badge variant="secondary" className="text-xs py-0.5">
                               <Mouse className="h-3 w-3 mr-1" />
-                              デバイス
+                              {t("mePresets.devices")}
                             </Badge>
                           )}
                           {hasItemLayouts && (
                             <Badge variant="secondary" className="text-xs py-0.5">
                               <Package className="h-3 w-3 mr-1" />
-                              アイテム {itemLayoutsCount > 0 && `(${itemLayoutsCount})`}
+                              {t("meItems.itemLayouts")} {itemLayoutsCount > 0 && `(${itemLayoutsCount})`}
                             </Badge>
                           )}
                           {hasSearchCrafts && (
                             <Badge variant="secondary" className="text-xs py-0.5">
                               <Search className="h-3 w-3 mr-1" />
-                              検索 {searchCraftsCount > 0 && `(${searchCraftsCount})`}
+                              {t("meSearchCraft.pageTitle")} {searchCraftsCount > 0 && `(${searchCraftsCount})`}
                             </Badge>
                           )}
                         </div>
 
                         <p className="text-xs text-muted-foreground mt-2">
-                          更新: {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: ja })}
+                          {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: ja })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -910,7 +917,7 @@ export default function PresetsPage() {
                             <input type="hidden" name="presetId" value={preset.id} />
                             <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
                               <ArrowRight className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">適用</span>
+                              <span className="hidden sm:inline">{t("mePresets.apply")}</span>
                             </Button>
                           </fetcher.Form>
                         )}
@@ -922,18 +929,18 @@ export default function PresetsPage() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>プリセットを削除</AlertDialogTitle>
+                              <AlertDialogTitle>{t("mePresets.deletePresetTitle")}</AlertDialogTitle>
                               <AlertDialogDescription>
-                                「{preset.name}」を削除しますか？この操作は取り消せません。
+                                {t("mePresets.deletePresetDescription", { name: preset.name })}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
                               <fetcher.Form method="post">
                                 <input type="hidden" name="intent" value="delete-preset" />
                                 <input type="hidden" name="presetId" value={preset.id} />
                                 <AlertDialogAction type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                  削除
+                                  {t("mePresets.delete")}
                                 </AlertDialogAction>
                               </fetcher.Form>
                             </AlertDialogFooter>
@@ -948,9 +955,9 @@ export default function PresetsPage() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Save className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>プリセットがありません</p>
+              <p>{t("mePresets.emptyTitle")}</p>
               <p className="text-sm mt-1">
-                「現在の設定を保存」をクリックして、最初のプリセットを作成しましょう
+                {t("mePresets.emptyDescription")}
               </p>
             </div>
           )}
@@ -962,9 +969,9 @@ export default function PresetsPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <History className="h-5 w-5" />
-            変更履歴
+            {t("mePresets.historyTitle")}
           </CardTitle>
-          <CardDescription>設定の変更履歴（最新20件）</CardDescription>
+          <CardDescription>{t("mePresets.historyDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           {history.length > 0 ? (
@@ -991,7 +998,7 @@ export default function PresetsPage() {
             </div>
           ) : (
             <p className="text-center py-4 text-muted-foreground text-sm">
-              変更履歴はありません
+              {t("mePresets.noHistory")}
             </p>
           )}
         </CardContent>

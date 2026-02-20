@@ -26,30 +26,31 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, X, SlidersHorizontal } from "lucide-react";
-import { getKeyLabel, isUnbound } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "操作設定一覧 - Minefolio" },
-    { name: "description", content: "RTA走者の操作設定・キー配置を一覧で確認できます。" },
+    { title: t("keybindings.metaTitle") },
+    { name: "description", content: t("keybindings.description") },
   ];
 };
 
-// 全プレイヤーを表示（ページネーションなし）
+// 全走者を表示（ページネーションなし）
 
 // キーボード系の主要なキーバインド
 const KEYBOARD_COLUMNS = [
-  { action: "forward", label: "前進", shortLabel: "前" },
-  { action: "back", label: "後退", shortLabel: "後" },
-  { action: "left", label: "左", shortLabel: "左" },
-  { action: "right", label: "右", shortLabel: "右" },
-  { action: "sprint", label: "ダッシュ", shortLabel: "ﾀﾞｯｼｭ" },
-  { action: "sneak", label: "スニーク", shortLabel: "ｽﾆｰｸ" },
-  { action: "inventory", label: "インベントリ", shortLabel: "ｲﾝﾍﾞﾝﾄﾘ" },
-  { action: "swapHands", label: "オフハンド", shortLabel: "OH" },
-  { action: "drop", label: "捨てる", shortLabel: "捨てる" },
-  { action: "pickBlock", label: "ピック", shortLabel: "ﾋﾟｯｸ" },
+  { action: "forward", label: getActionLabel("forward"), shortLabel: "Fwd" },
+  { action: "back", label: getActionLabel("back"), shortLabel: "Back" },
+  { action: "left", label: getActionLabel("left"), shortLabel: "Left" },
+  { action: "right", label: getActionLabel("right"), shortLabel: "Right" },
+  { action: "sprint", label: getActionLabel("sprint"), shortLabel: "Spr" },
+  { action: "sneak", label: getActionLabel("sneak"), shortLabel: "Snk" },
+  { action: "inventory", label: getActionLabel("inventory"), shortLabel: "Inv" },
+  { action: "swapHands", label: getActionLabel("swapHands"), shortLabel: "OH" },
+  { action: "drop", label: getActionLabel("drop"), shortLabel: "Drop" },
+  { action: "pickBlock", label: getActionLabel("pickBlock"), shortLabel: "Pick" },
   { action: "hotbar1", label: "HB1", shortLabel: "HB1" },
   { action: "hotbar2", label: "HB2", shortLabel: "HB2" },
   { action: "hotbar3", label: "HB3", shortLabel: "HB3" },
@@ -64,12 +65,12 @@ const KEYBOARD_COLUMNS = [
 // マウス設定の列定義
 const MOUSE_COLUMNS = [
   { key: "dpi", label: "DPI", shortLabel: "DPI" },
-  { key: "sensitivity", label: "ゲーム内感度", shortLabel: "感度" },
-  { key: "cm360", label: "振り向き", shortLabel: "振向" },
+  { key: "sensitivity", label: t("keybindings.inGameSensitivityRange"), shortLabel: "Sens" },
+  { key: "cm360", label: t("keybindings.turnDistanceRange"), shortLabel: "Turn" },
   { key: "windowsSpeed", label: "Win Sens", shortLabel: "Win" },
-  { key: "cursorSpeed", label: "カーソル速度", shortLabel: "カーソル速度" },
+  { key: "cursorSpeed", label: "Cursor Speed", shortLabel: "Cursor" },
   { key: "rawInput", label: "Raw Input", shortLabel: "Raw Input" },
-  { key: "mouseAcceleration", label: "マウス加速", shortLabel: "マウス加速" },
+  { key: "mouseAcceleration", label: "Mouse Accel", shortLabel: "Accel" },
 ] as const;
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
@@ -203,7 +204,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     },
   });
 
-  // キー配置があるプレイヤーのみをフィルタ
+  // キー配置がある走者のみをフィルタ
   const players = playersWithKeybindings.filter(p => p.keybindings.length > 0);
 
   return { players, search };
@@ -271,7 +272,7 @@ export default function KeybindingsListPage() {
     }
   };
 
-  // フィルタ＆ソート済みプレイヤーリスト（マウスタブ用）
+  // フィルタ＆ソート済み走者リスト（マウスタブ用）
   const sortedPlayersForMouse = useMemo(() => {
     // まず、DPI、ゲーム内感度、WinSensがすべて未設定のユーザーを除外
     let filtered = players.filter((player) => {
@@ -420,16 +421,16 @@ export default function KeybindingsListPage() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Keyboard className="h-8 w-8" />
-            操作設定一覧
+            {t("keybindings.title")}
           </h1>
           <p className="text-muted-foreground mt-1">
-            RTA走者の操作設定・キー配置を一覧で確認できます。
+            {t("keybindings.description")}
           </p>
         </div>
         <Button variant="outline" asChild>
           <Link to="/keybindings/stats">
             <BarChart3 className="mr-2 h-4 w-4" />
-            統計を見る
+            {t("keybindings.statsLink")}
           </Link>
         </Button>
       </div>
@@ -438,7 +439,7 @@ export default function KeybindingsListPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="MCIDで検索..."
+          placeholder={t("keybindings.searchPlaceholder")}
           defaultValue={search}
           onChange={(e) => handleSearch(e.target.value)}
           className="pl-10"
@@ -446,7 +447,7 @@ export default function KeybindingsListPage() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        {players.length}人のプレイヤー
+        {t("keybindings.countText", { count: players.length, suffix: t("keybindings.countSuffix") })}
       </p>
 
       {/* Tabs for Keyboard / Mouse */}
@@ -454,11 +455,11 @@ export default function KeybindingsListPage() {
         <TabsList>
           <TabsTrigger value="keyboard" className="gap-1.5">
             <Keyboard className="h-4 w-4" />
-            キーボード
+            {t("keybindings.keyboardTab")}
           </TabsTrigger>
           <TabsTrigger value="mouse" className="gap-1.5">
             <Mouse className="h-4 w-4" />
-            マウス
+            {t("keybindings.mouseTab")}
           </TabsTrigger>
         </TabsList>
 
@@ -470,7 +471,7 @@ export default function KeybindingsListPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-36 border-r border-b-2">
-                      プレイヤー
+                      {t("keybindings.columnRunner")}
                     </TableHead>
                     {KEYBOARD_COLUMNS.map((col) => (
                       <TableHead
@@ -507,7 +508,7 @@ export default function KeybindingsListPage() {
               onClick={() => setIsFilterDialogOpen(true)}
             >
               <SlidersHorizontal className="h-4 w-4" />
-              数値フィルタ
+              {t("keybindings.numericFilter")}
               {activeMouseFilterCount > 0 && (
                 <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
                   {activeMouseFilterCount}
@@ -518,7 +519,7 @@ export default function KeybindingsListPage() {
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>数値範囲で絞り込み</DialogTitle>
+                  <DialogTitle>{t("keybindings.filterByRange")}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   {/* DPI */}
@@ -527,7 +528,7 @@ export default function KeybindingsListPage() {
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
-                        placeholder="最小"
+                        placeholder={t("keybindings.min")}
                         value={mouseFilters.dpiMin}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, dpiMin: e.target.value }))}
                         className="flex-1"
@@ -535,7 +536,7 @@ export default function KeybindingsListPage() {
                       <span className="text-muted-foreground">〜</span>
                       <Input
                         type="number"
-                        placeholder="最大"
+                        placeholder={t("keybindings.max")}
                         value={mouseFilters.dpiMax}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, dpiMax: e.target.value }))}
                         className="flex-1"
@@ -545,11 +546,11 @@ export default function KeybindingsListPage() {
 
                   {/* 感度 */}
                   <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">ゲーム内感度 (%)</Label>
+                    <Label className="text-sm text-muted-foreground">{t("keybindings.inGameSensitivityRange")}</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
-                        placeholder="最小"
+                        placeholder={t("keybindings.min")}
                         value={mouseFilters.sensitivityMin}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, sensitivityMin: e.target.value }))}
                         className="flex-1"
@@ -557,7 +558,7 @@ export default function KeybindingsListPage() {
                       <span className="text-muted-foreground">〜</span>
                       <Input
                         type="number"
-                        placeholder="最大"
+                        placeholder={t("keybindings.max")}
                         value={mouseFilters.sensitivityMax}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, sensitivityMax: e.target.value }))}
                         className="flex-1"
@@ -567,12 +568,12 @@ export default function KeybindingsListPage() {
 
                   {/* 振り向き */}
                   <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">振り向き (cm/180)</Label>
+                    <Label className="text-sm text-muted-foreground">{t("keybindings.turnDistanceRange")}</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
                         step="0.1"
-                        placeholder="最小"
+                        placeholder={t("keybindings.min")}
                         value={mouseFilters.cm360Min}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, cm360Min: e.target.value }))}
                         className="flex-1"
@@ -581,7 +582,7 @@ export default function KeybindingsListPage() {
                       <Input
                         type="number"
                         step="0.1"
-                        placeholder="最大"
+                        placeholder={t("keybindings.max")}
                         value={mouseFilters.cm360Max}
                         onChange={(e) => setMouseFilters((prev) => ({ ...prev, cm360Max: e.target.value }))}
                         className="flex-1"
@@ -597,11 +598,11 @@ export default function KeybindingsListPage() {
                       onClick={clearMouseFilters}
                     >
                       <X className="h-4 w-4 mr-2" />
-                      クリア
+                      {t("common.clear")}
                     </Button>
                   )}
                   <Button onClick={() => setIsFilterDialogOpen(false)}>
-                    閉じる
+                    {t("common.close")}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -623,7 +624,7 @@ export default function KeybindingsListPage() {
                 )}
                 {(mouseFilters.sensitivityMin || mouseFilters.sensitivityMax) && (
                   <Badge variant="secondary" className="gap-1">
-                    感度: {mouseFilters.sensitivityMin || "0"}%〜{mouseFilters.sensitivityMax || "∞"}%
+                    {`Sens: ${mouseFilters.sensitivityMin || "0"}%〜${mouseFilters.sensitivityMax || "∞"}%`}
                     <button
                       onClick={() => setMouseFilters((prev) => ({ ...prev, sensitivityMin: "", sensitivityMax: "" }))}
                       className="ml-1 hover:text-destructive"
@@ -634,7 +635,7 @@ export default function KeybindingsListPage() {
                 )}
                 {(mouseFilters.cm360Min || mouseFilters.cm360Max) && (
                   <Badge variant="secondary" className="gap-1">
-                    振向: {mouseFilters.cm360Min || "0"}cm〜{mouseFilters.cm360Max || "∞"}cm
+                    {`Turn: ${mouseFilters.cm360Min || "0"}cm〜${mouseFilters.cm360Max || "∞"}cm`}
                     <button
                       onClick={() => setMouseFilters((prev) => ({ ...prev, cm360Min: "", cm360Max: "" }))}
                       className="ml-1 hover:text-destructive"
@@ -647,7 +648,7 @@ export default function KeybindingsListPage() {
             )}
 
             <span className="text-sm text-muted-foreground ml-auto">
-              {sortedPlayersForMouse.length}人
+              {`${sortedPlayersForMouse.length}${t("common.peopleUnit")}`}
             </span>
           </div>
 
@@ -657,7 +658,7 @@ export default function KeybindingsListPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-36 border-r border-b-2">
-                      プレイヤー
+                      {t("keybindings.columnRunner")}
                     </TableHead>
                     {MOUSE_COLUMNS.map((col) => {
                       const sortKey = col.key as MouseSortKey;
@@ -711,12 +712,12 @@ export default function KeybindingsListPage() {
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg">
                 {activeMouseFilterCount > 0
-                  ? "フィルタ条件に一致するプレイヤーがいません"
-                  : "プレイヤーが見つかりません"}
+                  ? t("keybindings.emptyFiltered")
+                  : t("keybindings.emptyAll")}
               </p>
               {activeMouseFilterCount > 0 && (
                 <Button variant="ghost" size="sm" className="mt-2" onClick={clearMouseFilters}>
-                  フィルタをクリア
+                  {t("keybindings.clearFilter")}
                 </Button>
               )}
             </div>
@@ -733,12 +734,12 @@ function EmptyState({ search, onClear }: { search: string; onClear: () => void }
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
       <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-      <p className="text-lg">プレイヤーが見つかりません</p>
+      <p className="text-lg">{t("keybindings.emptyAll")}</p>
       {search && (
         <p className="text-sm mt-2">
-          別の検索ワードをお試しください{" "}
+          {t("keybindings.tryDifferentSearch")}{" "}
           <button onClick={onClear} className="text-primary hover:underline">
-            検索をクリア
+            {t("keybindings.clearSearch")}
           </button>
         </p>
       )}
@@ -749,7 +750,7 @@ function EmptyState({ search, onClear }: { search: string; onClear: () => void }
 // カラム定義の型
 type ColumnDef = { action: string; label: string; shortLabel: string };
 
-// プレイヤー行コンポーネント
+// 走者行コンポーネント
 function PlayerRow({
   player,
   columns,
@@ -906,7 +907,7 @@ function MouseSettingsRow({
       </TableCell>
       <TableCell className="text-center px-3">
         {config?.windowsSpeedMultiplier != null ? (
-          <span className="font-mono text-sm" title="カスタム係数">
+          <span className="font-mono text-sm" title={t("keybindings.customMultiplier")}>
             x{config.windowsSpeedMultiplier.toFixed(3)}
           </span>
         ) : config?.windowsSpeed != null ? (
@@ -914,7 +915,7 @@ function MouseSettingsRow({
             {config.windowsSpeed}<span className="text-muted-foreground">(x{WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed]?.toFixed(3) ?? "1.000"})</span>
           </span>
         ) : (
-          <span className="text-muted-foreground/40">値なし</span>
+          <span className="text-muted-foreground/40">{t("keybindings.noValue")}</span>
         )}
       </TableCell>
       <TableCell className="text-center px-3">
@@ -993,14 +994,17 @@ function truncateByVisualWidth(str: string, maxWidth: number = 10): string {
   return str;
 }
 
-// キー表示バッジ
+// キー表示バッジ（修飾キー組み合わせ対応）
 function KeyBadge({ keyCode, keyboardLayout }: { keyCode: string; keyboardLayout?: string | null }) {
   // 不使用の場合は "-" を表示
   if (isUnbound(keyCode)) {
     return <span className="text-muted-foreground/40">-</span>;
   }
 
-  const label = getKeyLabel(keyCode, keyboardLayout);
+  // 修飾キー組み合わせの場合はgetKeyCombinationLabelを使用
+  const label = keyCode.includes("+")
+    ? getKeyCombinationLabel(keyCode, keyboardLayout)
+    : getKeyLabel(keyCode, keyboardLayout);
   const truncatedLabel = truncateByVisualWidth(label);
   const isTruncated = label !== truncatedLabel;
   const isMouse = keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");

@@ -5,9 +5,9 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets } from "@/lib/schema";
+import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, or } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, FINGER_LABELS, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, FINGER_LABELS, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,9 +39,11 @@ import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
+import { t } from "@/lib/messages";
+import { isKeyRemapTarget } from "@/lib/remap-utils";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "キー配置 - Minefolio" }];
+  return [{ title: t("meKeybindings.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
@@ -72,11 +74,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       customKeys: {
         orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
       },
+      customActions: {
+        orderBy: [asc(customActions.displayOrder)],
+      },
     },
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("meKeybindings.userNotFound"), { status: 404 });
   }
 
   // 全プリセットを取得（コピー機能用）
@@ -103,6 +108,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     playerConfig: user.playerConfig,
     keyRemaps: user.keyRemaps,
     customKeys: user.customKeys,
+    customActions: user.customActions,
     legacyApiUrl: env.LEGACY_API_URL,
     activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
     hasPresets: allPresets.length > 0,
@@ -156,6 +162,217 @@ export function HydrateFallback() {
   );
 }
 
+type RemapMutationInput = {
+  id?: string;
+  sourceKey: string;
+  targetKey: string | null;
+  software: string | null;
+  notes: string | null;
+  _delete?: boolean;
+};
+
+type KeybindingUpdateInput = { id: string; keyCode: string };
+type RemapType = "none" | "keyboard" | "special" | "disabled";
+type PersistedRemapPayload = {
+  sourceKey: string;
+  targetKey: string | null;
+  software: string | null;
+  notes: string | null;
+};
+
+function getRemapTypeFromTargetKey(targetKey: string | null | undefined): RemapType {
+  if (targetKey == null || targetKey === "") return "disabled";
+  return isKeyRemapTarget(targetKey) ? "keyboard" : "special";
+}
+
+function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
+  if (targetKey == null) return null;
+  if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
+  return targetKey;
+}
+
+type CustomActionMutationInput = {
+  id?: string;
+  actionName: string;
+  description?: string | null;
+  category: "other" | "macro" | "tool";
+  triggerKey: string;
+  displayOrder?: number;
+  _delete?: boolean;
+};
+
+type CustomKeyMutationInput = {
+  id?: string;
+  keyCode: string;
+  keyName: string;
+  category: "mouse" | "keyboard";
+  _delete?: boolean;
+};
+
+async function persistRemaps(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  remapsData: RemapMutationInput[],
+  now: Date
+) {
+  for (const remap of remapsData) {
+    if (remap._delete && remap.id) {
+      await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
+    }
+  }
+
+  for (const remap of remapsData) {
+    if (remap._delete) continue;
+    if (!remap.sourceKey) continue;
+
+    const sourceKeyNormalized = normalizeKeyCombination(remap.sourceKey);
+    const sourceKeyUpper = remap.sourceKey.toUpperCase();
+    const targetKey = sanitizeRemapTargetKey(remap.targetKey);
+    const targetKeyNormalized = targetKey
+      ? (isKeyRemapTarget(targetKey) ? normalizeKeyCode(targetKey) : targetKey)
+      : null;
+    const payload: PersistedRemapPayload = {
+      sourceKey: sourceKeyNormalized,
+      targetKey: targetKeyNormalized,
+      software: remap.software || null,
+      notes: remap.notes || null,
+    };
+
+    if (remap.id) {
+      await db
+        .update(keyRemaps)
+        .set({ ...payload, updatedAt: now })
+        .where(eq(keyRemaps.id, remap.id));
+      continue;
+    }
+
+    const existing = await db.query.keyRemaps.findFirst({
+      where: and(
+        eq(keyRemaps.userId, userId),
+        or(
+          eq(keyRemaps.sourceKey, sourceKeyNormalized),
+          eq(keyRemaps.sourceKey, sourceKeyUpper)
+        )
+      ),
+    });
+
+    if (existing) {
+      await db
+        .update(keyRemaps)
+        .set({ ...payload, updatedAt: now })
+        .where(eq(keyRemaps.id, existing.id));
+      continue;
+    }
+
+    await db.insert(keyRemaps).values({
+      id: createId(),
+      userId,
+      ...payload,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+async function persistKeybindingUpdates(
+  db: ReturnType<typeof createDb>,
+  updates: KeybindingUpdateInput[],
+  now: Date,
+  options: { normalizeEmptyToUnbound: boolean }
+) {
+  for (const update of updates) {
+    if (options.normalizeEmptyToUnbound) {
+      const keyCode = update.keyCode || "_UNBOUND";
+      await db
+        .update(keybindings)
+        .set({ keyCode, updatedAt: now })
+        .where(eq(keybindings.id, update.id));
+      continue;
+    }
+
+    if (!update.keyCode) continue;
+    await db
+      .update(keybindings)
+      .set({ keyCode: update.keyCode, updatedAt: now })
+      .where(eq(keybindings.id, update.id));
+  }
+}
+
+async function upsertFingerAssignments(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  fingerAssignmentsJson: string,
+  now: Date
+) {
+  const existingConfig = await db.query.playerConfigs.findFirst({
+    where: eq(playerConfigs.userId, userId),
+  });
+
+  if (existingConfig) {
+    await db
+      .update(playerConfigs)
+      .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
+      .where(eq(playerConfigs.userId, userId));
+    return;
+  }
+
+  await db.insert(playerConfigs).values({
+    id: createId(),
+    userId,
+    fingerAssignments: fingerAssignmentsJson,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function persistCustomActions(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  actionsData: CustomActionMutationInput[],
+  now: Date
+) {
+  for (const action of actionsData) {
+    if (action._delete && action.id) {
+      await db.delete(customActions).where(eq(customActions.id, action.id));
+    }
+  }
+
+  let order = 0;
+  for (const action of actionsData) {
+    if (action._delete) continue;
+    if (!action.actionName || !action.triggerKey) continue;
+
+    const triggerKeyNormalized = normalizeKeyCombination(action.triggerKey);
+
+    if (action.id) {
+      await db
+        .update(customActions)
+        .set({
+          actionName: action.actionName,
+          description: action.description || null,
+          category: action.category,
+          triggerKey: triggerKeyNormalized,
+          displayOrder: order++,
+          updatedAt: now,
+        })
+        .where(eq(customActions.id, action.id));
+      continue;
+    }
+
+    await db.insert(customActions).values({
+      id: createId(),
+      userId,
+      actionName: action.actionName,
+      description: action.description || null,
+      category: action.category,
+      triggerKey: triggerKeyNormalized,
+      displayOrder: order++,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 export async function action({ context, request }: Route.ActionArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
@@ -168,7 +385,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("meKeybindings.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -177,128 +394,32 @@ export async function action({ context, request }: Route.ActionArgs) {
   // キーバインド保存
   if (intent === "save-keybindings") {
     const keybindingsJson = formData.get("keybindings") as string;
-    const updates = JSON.parse(keybindingsJson) as Array<{ id: string; keyCode: string }>;
+    const updates = JSON.parse(keybindingsJson) as KeybindingUpdateInput[];
+    await persistKeybindingUpdates(db, updates, new Date(), {
+      normalizeEmptyToUnbound: true,
+    });
 
-    for (const update of updates) {
-      // 空文字列または_UNBOUNDの場合は不使用として保存
-      const keyCode = update.keyCode || "_UNBOUND";
-      await db
-        .update(keybindings)
-        .set({ keyCode, updatedAt: new Date() })
-        .where(eq(keybindings.id, update.id));
-    }
-
-    return { success: true, message: "キー配置を保存しました" };
+    return { success: true, message: t("meKeybindings.saveKeybindings") };
   }
 
   // リマップ保存
   if (intent === "save-remaps") {
     const remapsJson = formData.get("remaps") as string;
-    const remapsData = JSON.parse(remapsJson) as Array<{
-      id?: string;
-      sourceKey: string;
-      targetKey: string | null;
-      software: string | null;
-      notes: string | null;
-      _delete?: boolean;
-    }>;
+    const remapsData = JSON.parse(remapsJson) as RemapMutationInput[];
 
     const now = new Date();
+    await persistRemaps(db, user.id, remapsData, now);
 
-    // 削除対象を先に処理
-    for (const remap of remapsData) {
-      if (remap._delete && remap.id) {
-        await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
-      }
-    }
-
-    // 更新・挿入を処理
-    for (const remap of remapsData) {
-      if (remap._delete) continue;
-      if (!remap.sourceKey) continue;
-
-      const sourceKeyNormalized = normalizeKeyCode(remap.sourceKey);
-      const targetKeyNormalized = remap.targetKey ? normalizeKeyCode(remap.targetKey) : null;
-
-      if (remap.id) {
-        // 既存レコードの更新
-        await db.update(keyRemaps)
-          .set({
-            sourceKey: sourceKeyNormalized,
-            targetKey: targetKeyNormalized,
-            software: remap.software || null,
-            notes: remap.notes || null,
-            updatedAt: now,
-          })
-          .where(eq(keyRemaps.id, remap.id));
-      } else {
-        // 新規挿入 - 同じsourceKeyが既に存在するか確認（正規化後と大文字の両方でチェック）
-        const sourceKeyUpper = remap.sourceKey.toUpperCase();
-        const existing = await db.query.keyRemaps.findFirst({
-          where: and(
-            eq(keyRemaps.userId, user.id),
-            or(
-              eq(keyRemaps.sourceKey, sourceKeyNormalized),
-              eq(keyRemaps.sourceKey, sourceKeyUpper)
-            )
-          ),
-        });
-
-        if (existing) {
-          // 既存のものを更新（正規化形式に変換）
-          await db.update(keyRemaps)
-            .set({
-              sourceKey: sourceKeyNormalized,
-              targetKey: targetKeyNormalized,
-              software: remap.software || null,
-              notes: remap.notes || null,
-              updatedAt: now,
-            })
-            .where(eq(keyRemaps.id, existing.id));
-        } else {
-          // 新規挿入
-          await db.insert(keyRemaps).values({
-            id: createId(),
-            userId: user.id,
-            sourceKey: sourceKeyNormalized,
-            targetKey: targetKeyNormalized,
-            software: remap.software || null,
-            notes: remap.notes || null,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-    }
-
-    return { success: true, message: "リマップを保存しました" };
+    return { success: true, message: t("meKeybindings.saveRemaps") };
   }
 
   // 指割り当て保存
   if (intent === "save-fingers") {
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
-
-    const existingConfig = await db.query.playerConfigs.findFirst({
-      where: eq(playerConfigs.userId, user.id),
-    });
-
     const now = new Date();
-    if (existingConfig) {
-      await db
-        .update(playerConfigs)
-        .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
-        .where(eq(playerConfigs.userId, user.id));
-    } else {
-      await db.insert(playerConfigs).values({
-        id: createId(),
-        userId: user.id,
-        fingerAssignments: fingerAssignmentsJson,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+    await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
 
-    return { success: true, message: "指割り当てを保存しました" };
+    return { success: true, message: t("meKeybindings.saveFingers") };
   }
 
   // 全て保存
@@ -311,170 +432,84 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     // キーバインド
     if (keybindingsJson) {
-      const updates = JSON.parse(keybindingsJson) as Array<{ id: string; keyCode: string }>;
-      for (const update of updates) {
-        if (update.keyCode) {
-          await db
-            .update(keybindings)
-            .set({ keyCode: update.keyCode, updatedAt: now })
-            .where(eq(keybindings.id, update.id));
-        }
-      }
+      const updates = JSON.parse(keybindingsJson) as KeybindingUpdateInput[];
+      await persistKeybindingUpdates(db, updates, now, {
+        normalizeEmptyToUnbound: false,
+      });
     }
 
     // リマップ
     if (remapsJson) {
-      const remapsData = JSON.parse(remapsJson) as Array<{
-        id?: string;
-        sourceKey: string;
-        targetKey: string | null;
-        software: string | null;
-        notes: string | null;
-        _delete?: boolean;
-      }>;
-
-      // 削除対象を先に処理
-      for (const remap of remapsData) {
-        if (remap._delete && remap.id) {
-          await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
-        }
-      }
-
-      // 更新・挿入を処理
-      for (const remap of remapsData) {
-        if (remap._delete) continue;
-        if (!remap.sourceKey) continue;
-
-        const sourceKeyNormalized = normalizeKeyCode(remap.sourceKey);
-        const targetKeyNormalized = remap.targetKey ? normalizeKeyCode(remap.targetKey) : null;
-
-        if (remap.id) {
-          // 既存レコードの更新
-          await db.update(keyRemaps)
-            .set({
-              sourceKey: sourceKeyNormalized,
-              targetKey: targetKeyNormalized,
-              software: remap.software || null,
-              notes: remap.notes || null,
-              updatedAt: now,
-            })
-            .where(eq(keyRemaps.id, remap.id));
-        } else {
-          // 新規挿入 - 同じsourceKeyが既に存在するか確認（正規化後と大文字の両方でチェック）
-          const sourceKeyUpper = remap.sourceKey.toUpperCase();
-          const existing = await db.query.keyRemaps.findFirst({
-            where: and(
-              eq(keyRemaps.userId, user.id),
-              or(
-                eq(keyRemaps.sourceKey, sourceKeyNormalized),
-                eq(keyRemaps.sourceKey, sourceKeyUpper)
-              )
-            ),
-          });
-
-          if (existing) {
-            // 既存のものを更新（正規化形式に変換）
-            await db.update(keyRemaps)
-              .set({
-                sourceKey: sourceKeyNormalized,
-                targetKey: targetKeyNormalized,
-                software: remap.software || null,
-                notes: remap.notes || null,
-                updatedAt: now,
-              })
-              .where(eq(keyRemaps.id, existing.id));
-          } else {
-            // 新規挿入
-            await db.insert(keyRemaps).values({
-              id: createId(),
-              userId: user.id,
-              sourceKey: sourceKeyNormalized,
-              targetKey: targetKeyNormalized,
-              software: remap.software || null,
-              notes: remap.notes || null,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
-        }
-      }
+      const remapsData = JSON.parse(remapsJson) as RemapMutationInput[];
+      await persistRemaps(db, user.id, remapsData, now);
     }
 
     // 指割り当て
     if (fingerAssignmentsJson) {
-      const existingConfig = await db.query.playerConfigs.findFirst({
-        where: eq(playerConfigs.userId, user.id),
-      });
+      await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
+    }
 
-      if (existingConfig) {
-        await db
-          .update(playerConfigs)
-          .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
-          .where(eq(playerConfigs.userId, user.id));
-      } else {
-        await db.insert(playerConfigs).values({
-          id: createId(),
-          userId: user.id,
-          fingerAssignments: fingerAssignmentsJson,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+    // カスタムアクション
+    const customActionsJson = formData.get("customActions") as string;
+    if (customActionsJson) {
+      const customActionsData = JSON.parse(customActionsJson) as CustomActionMutationInput[];
+      await persistCustomActions(db, user.id, customActionsData, now);
     }
 
     // 変更履歴を記録
     const changes: string[] = [];
-    if (keybindingsJson) changes.push("キー配置");
-    if (remapsJson) changes.push("リマップ");
-    if (fingerAssignmentsJson) changes.push("指割り当て");
+    if (keybindingsJson) changes.push(t("meKeybindings.tabActions"));
+    if (remapsJson) changes.push(t("meKeybindings.tabRemaps"));
+    if (fingerAssignmentsJson) changes.push(t("meKeybindings.tabFingers"));
+    if (customActionsJson) changes.push(t("meKeybindings.tabCustomActions"));
 
     if (changes.length > 0) {
       await db.insert(configHistory).values({
         id: createId(),
         userId: user.id,
         changeType: "keybinding",
-        changeDescription: `${changes.join("・")}を更新`,
-        newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson }),
+        changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join("・") }),
+        newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
         createdAt: now,
       });
     }
 
-    return { success: true, message: "設定を保存しました" };
+    return { success: true, message: t("meKeybindings.saveSettings") };
   }
 
   // レガシーインポート
   if (intent === "import-legacy") {
     const legacyApiUrl = env.LEGACY_API_URL;
     if (!legacyApiUrl) {
-      return { error: "レガシーAPIが設定されていません" };
+      return { error: t("meKeybindings.legacyApiNotConfigured") };
     }
 
     if (!user.mcid) {
-      return { error: "MCIDが設定されていないためインポートできません" };
+      return { error: t("meKeybindings.mcidNotSetForImport") };
     }
 
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
       return {
         success: true,
-        message: `インポート完了: キーバインド${result.keybindingsImported}件, カスタムキー${result.customKeysImported}件, リマップ${result.remapsImported}件, 指割当${result.fingerAssignmentsImported ? "あり" : "なし"}, 設定${result.settingsImported ? "あり" : "なし"}`,
+        message: t("meKeybindings.importSummary", {
+          kb: result.keybindingsImported,
+          ck: result.customKeysImported,
+          rm: result.remapsImported,
+          fa: result.fingerAssignmentsImported ? t("meKeybindings.yes") : t("meKeybindings.no"),
+          st: result.settingsImported ? t("meKeybindings.yes") : t("meKeybindings.no"),
+        }),
         importResult: result,
       };
     } else {
-      return { error: result.error ?? "インポートに失敗しました" };
+      return { error: result.error ?? t("meKeybindings.importFailed") };
     }
   }
 
   // カスタムキー保存
   if (intent === "save-custom-keys") {
     const customKeysJson = formData.get("customKeys") as string;
-    const customKeysData = JSON.parse(customKeysJson) as Array<{
-      id?: string;
-      keyCode: string;
-      keyName: string;
-      category: "mouse" | "keyboard";
-      _delete?: boolean;
-    }>;
+    const customKeysData = JSON.parse(customKeysJson) as CustomKeyMutationInput[];
 
     const now = new Date();
 
@@ -503,17 +538,28 @@ export async function action({ context, request }: Route.ActionArgs) {
       }
     }
 
-    return { success: true, message: "カスタムキーを保存しました" };
+    return { success: true, message: t("meKeybindings.saveCustomKeys") };
   }
 
-  return { error: "不明な操作です" };
+  // カスタムアクション保存
+  if (intent === "save-custom-actions") {
+    const customActionsJson = formData.get("customActions") as string;
+    const customActionsData = JSON.parse(customActionsJson) as CustomActionMutationInput[];
+
+    const now = new Date();
+    await persistCustomActions(db, user.id, customActionsData, now);
+
+    return { success: true, message: t("meKeybindings.saveCustomActions") };
+  }
+
+  return { error: t("meKeybindings.unknownAction") };
 }
 
 const categoryLabels: Record<string, string> = {
-  movement: "移動",
-  combat: "戦闘",
-  inventory: "インベントリ",
-  ui: "UI",
+  movement: t("meKeybindings.categoryMovement"),
+  combat: t("meKeybindings.categoryCombat"),
+  inventory: t("meKeybindings.categoryInventory"),
+  ui: t("meKeybindings.categoryUi"),
 };
 
 const categoryColors: Record<string, string> = {
@@ -549,6 +595,11 @@ const FINGER_COLOR_CLASSES: Record<FingerType, string> = {
   "right-pinky": "bg-finger-pinky",
 };
 
+// =====================================
+// リマップ関連の型定義
+// =====================================
+
+/** UI用リマップエントリ（フロントエンドで使用） */
 type RemapEntry = {
   id?: string;
   sourceKey: string;
@@ -559,21 +610,53 @@ type RemapEntry = {
   _isNew?: boolean;
 };
 
-// リマップの種類
-type RemapType = "none" | "keyboard" | "special" | "disabled";
+/** DB用リマップデータ（サーバーから/へ送受信） */
+type DbRemapData = {
+  id?: string;
+  sourceKey: string;
+  targetKey: string | null;
+  software: string | null;
+  notes: string | null;
+};
 
-// リマップの種類を判定
-function getRemapType(remap: RemapEntry | null | undefined): RemapType {
-  if (!remap) return "none";
-  if (remap.targetKey === null) return "disabled";
-  // 空文字の場合はキーボード入力待ち状態
-  if (remap.targetKey === "") return "keyboard";
-  // 特殊文字かどうかを判定（通常のキーコードではない場合）
-  if (!remap.targetKey.match(/^(Key[A-Z]|Digit[0-9]|F[0-9]+|Numpad[0-9]|Arrow|Space|Tab|Enter|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Shift|Control|Alt|Meta|Caps)/)) {
-    return "special";
-  }
-  return "keyboard";
+// =====================================
+// リマップ変換関数
+// =====================================
+
+/** DBデータからUI用エントリに変換 */
+function dbRemapToUiRemap(db: DbRemapData): RemapEntry {
+  const targetKey = sanitizeRemapTargetKey(db.targetKey);
+  return {
+    id: db.id,
+    sourceKey: db.sourceKey,
+    targetKey,
+    software: db.software ?? null,
+    notes: db.notes ?? null,
+  };
 }
+
+function dbRemapsToUiRemaps(remaps: DbRemapData[], markAsNew = false): RemapEntry[] {
+  return remaps.map((remap) => {
+    const uiRemap = dbRemapToUiRemap(remap);
+    return markAsNew ? { ...uiRemap, _isNew: true } : uiRemap;
+  });
+}
+
+// =====================================
+// その他の型定義
+// =====================================
+
+// カスタムアクションのエントリ
+type CustomActionEntry = {
+  id?: string;
+  actionName: string;
+  description: string | null;
+  category: "other" | "macro" | "tool";
+  triggerKey: string;
+  displayOrder: number;
+  _delete?: boolean;
+  _isNew?: boolean;
+};
 
 type FingerAssignmentMap = Record<string, FingerType[]>;
 
@@ -587,8 +670,477 @@ type CustomKeyEntry = {
   _isNew?: boolean;
 };
 
+// =====================================
+// リマップ行コンポーネント
+// =====================================
+
+/** キーキャプチャボタン（リマップ元/先で共通化） */
+function KeyCaptureButton({
+  value,
+  placeholder,
+  keyboardLayout,
+  isCapturing,
+  setIsCapturing,
+  onCapture,
+  allowModifiers = false,
+  className,
+}: {
+  value: string;
+  placeholder: string;
+  keyboardLayout: string | null;
+  isCapturing: boolean;
+  setIsCapturing: (v: boolean) => void;
+  onCapture: (keyCode: string) => void;
+  allowModifiers?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onFocus={() => setIsCapturing(true)}
+      onBlur={() => setIsCapturing(false)}
+      onKeyDown={(e) => {
+        if (!isCapturing) return;
+        e.preventDefault();
+
+        if (allowModifiers) {
+          // 修飾キー単独の場合
+          const modifierKeyCodes = [
+            "ShiftLeft", "ShiftRight",
+            "ControlLeft", "ControlRight",
+            "AltLeft", "AltRight",
+            "MetaLeft", "MetaRight",
+          ];
+          if (modifierKeyCodes.includes(e.code)) {
+            onCapture(e.code);
+            (e.target as HTMLElement).blur();
+            return;
+          }
+
+          // 修飾キー組み合わせを構築
+          const modifiers: string[] = [];
+          if (e.ctrlKey) modifiers.push("Ctrl");
+          if (e.shiftKey) modifiers.push("Shift");
+          if (e.altKey) modifiers.push("Alt");
+          if (e.metaKey) modifiers.push("Meta");
+          const combo = modifiers.length > 0
+            ? [...modifiers, e.code].join("+")
+            : e.code;
+          onCapture(combo);
+        } else {
+          // 修飾キーは無視（リマップ先用）
+          if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+          onCapture(e.code);
+        }
+        (e.target as HTMLElement).blur();
+      }}
+      className={cn(
+        "min-w-28 h-9 px-3 rounded-md border text-sm font-mono transition-colors",
+        "bg-secondary/50 hover:bg-secondary/70",
+        "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+        isCapturing ? "border-primary" : "border-input",
+        className
+      )}
+    >
+      {isCapturing ? (
+        <span className="text-muted-foreground">{t("meKeybindings.pressKey")}</span>
+      ) : value ? (
+        <span>
+          {allowModifiers
+            ? getKeyCombinationLabel(value, keyboardLayout)
+            : getKeyLabel(value, keyboardLayout)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">{placeholder}</span>
+      )}
+    </button>
+  );
+}
+
+// リマップ行コンポーネント
+function RemapRow({
+  remap,
+  index,
+  keyboardLayout,
+  onUpdate,
+  onDelete,
+}: {
+  remap: RemapEntry;
+  index: number;
+  keyboardLayout: string | null;
+  onUpdate: (index: number, updates: Partial<RemapEntry>) => void;
+  onDelete: (index: number) => void;
+}) {
+  const [isCapturingSource, setIsCapturingSource] = useState(false);
+  const [isCapturingTarget, setIsCapturingTarget] = useState(false);
+  const remapType = getRemapTypeFromTargetKey(remap.targetKey);
+  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
+
+  useEffect(() => {
+    if (selectedRemapType === "special" && (remap.targetKey === "" || remap.targetKey === null)) {
+      return;
+    }
+    setSelectedRemapType(remapType);
+  }, [remapType, selectedRemapType, remap.targetKey]);
+
+  const handleRemapTypeChange = (newType: RemapType) => {
+    setSelectedRemapType(newType);
+    switch (newType) {
+      case "disabled":
+        onUpdate(index, { targetKey: null });
+        break;
+      case "special":
+        onUpdate(index, { targetKey: remapType === "special" ? remap.targetKey : "" });
+        break;
+      case "keyboard":
+        onUpdate(index, { targetKey: remapType === "keyboard" && remap.targetKey ? remap.targetKey : "" });
+        break;
+    }
+  };
+
+  return (
+    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+      {/* キー変換行 */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* リマップ元（修飾キー対応） */}
+        <KeyCaptureButton
+          value={remap.sourceKey}
+          placeholder={t("meKeybindings.source")}
+          keyboardLayout={keyboardLayout}
+          isCapturing={isCapturingSource}
+          setIsCapturing={setIsCapturingSource}
+          onCapture={(key) => onUpdate(index, { sourceKey: key })}
+          allowModifiers={true}
+        />
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+
+        <Select
+          value={selectedRemapType}
+          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
+        >
+          <SelectTrigger className="w-24 h-9 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
+            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
+            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {selectedRemapType === "special" ? (
+          <Input
+            value={remapType === "special" ? (remap.targetKey ?? "") : ""}
+            onChange={(e) => onUpdate(index, { targetKey: e.target.value })}
+            placeholder={t("meKeybindings.enterCharacter")}
+            className="w-40 h-9 font-mono text-center text-sm"
+          />
+        ) : selectedRemapType === "keyboard" ? (
+          <KeyCaptureButton
+            value={remap.targetKey || ""}
+            placeholder={t("meKeybindings.target")}
+            keyboardLayout={keyboardLayout}
+            isCapturing={isCapturingTarget}
+            setIsCapturing={setIsCapturingTarget}
+            onCapture={(key) => onUpdate(index, { targetKey: key })}
+            allowModifiers={false}
+            className="w-40"
+          />
+        ) : null}
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 w-9 p-0 text-destructive hover:text-destructive ml-auto"
+          onClick={() => onDelete(index)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+    </div>
+  );
+}
+
+// ダイアログ内リマップ行コンポーネント（修飾キー組み合わせ対応）
+function DialogRemapRow({
+  remap,
+  index,
+  baseKeyCode,
+  keyboardLayout,
+  onUpdate,
+  onDelete,
+}: {
+  remap: RemapEntry & { _index: number };
+  index: number;
+  baseKeyCode: string;
+  keyboardLayout: string | null;
+  onUpdate: (index: number, updates: Partial<RemapEntry>) => void;
+  onDelete: (index: number) => void;
+}) {
+  const [isCapturingTarget, setIsCapturingTarget] = useState(false);
+
+  // 現在のsourceKeyから修飾キーを抽出
+  const parsed = parseKeyCombination(remap.sourceKey);
+  const currentModifiers = parsed.modifiers;
+
+  // 修飾キーのトグル
+  const toggleModifier = (mod: "Ctrl" | "Shift" | "Alt" | "Meta") => {
+    const newModifiers = currentModifiers.includes(mod)
+      ? currentModifiers.filter((m) => m !== mod)
+      : [...currentModifiers, mod];
+
+    // 新しいsourceKeyを構築
+    const newSourceKey = newModifiers.length > 0
+      ? [...newModifiers.sort((a, b) => ["Ctrl", "Shift", "Alt", "Meta"].indexOf(a) - ["Ctrl", "Shift", "Alt", "Meta"].indexOf(b)), baseKeyCode].join("+")
+      : baseKeyCode;
+
+    onUpdate(index, { sourceKey: newSourceKey });
+  };
+
+  const remapType = getRemapTypeFromTargetKey(remap.targetKey);
+  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
+
+  useEffect(() => {
+    if (selectedRemapType === "special" && (remap.targetKey === "" || remap.targetKey === null)) {
+      return;
+    }
+    setSelectedRemapType(remapType);
+  }, [remapType, selectedRemapType, remap.targetKey]);
+
+  const handleRemapTypeChange = (newType: RemapType) => {
+    setSelectedRemapType(newType);
+    switch (newType) {
+      case "disabled":
+        onUpdate(index, { targetKey: null });
+        break;
+      case "special":
+        onUpdate(index, { targetKey: remapType === "special" ? remap.targetKey : "" });
+        break;
+      case "keyboard":
+        onUpdate(index, { targetKey: remapType === "keyboard" && remap.targetKey ? remap.targetKey : "" });
+        break;
+    }
+  };
+
+  return (
+    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+      {/* 修飾キー選択行 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.from")}</span>
+        <div className="flex gap-1">
+          {(["Ctrl", "Shift", "Alt", "Meta"] as const).map((mod) => (
+            <Button
+              key={mod}
+              type="button"
+              variant={currentModifiers.includes(mod) ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => toggleModifier(mod)}
+            >
+              {mod === "Meta" ? "Win" : mod}
+            </Button>
+          ))}
+        </div>
+        <span className="text-muted-foreground">+</span>
+        <Badge variant="secondary" className="font-mono text-sm px-2 py-1">
+          {getKeyLabel(baseKeyCode, keyboardLayout)}
+        </Badge>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+          onClick={() => onDelete(index)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* 出力設定行 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.to")}</span>
+
+        {/* 出力タイプ選択 */}
+        <Select
+          value={selectedRemapType}
+          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
+        >
+          <SelectTrigger className="w-24 h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
+            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
+            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {selectedRemapType === "special" ? (
+          <Input
+            value={remapType === "special" ? (remap.targetKey ?? "") : ""}
+            onChange={(e) => {
+              onUpdate(index, { targetKey: e.target.value });
+            }}
+            placeholder={t("meKeybindings.enterCharacter")}
+            className="w-40 h-8 font-mono text-center text-sm"
+          />
+        ) : selectedRemapType === "keyboard" ? (
+          <button
+            type="button"
+            onFocus={() => setIsCapturingTarget(true)}
+            onBlur={() => setIsCapturingTarget(false)}
+            onKeyDown={(e) => {
+              if (!isCapturingTarget) return;
+              e.preventDefault();
+              if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+              onUpdate(index, { targetKey: e.code });
+              (e.target as HTMLElement).blur();
+            }}
+            className={cn(
+              "w-40 h-8 px-3 rounded-md border text-sm font-mono transition-colors",
+              "bg-secondary/50 hover:bg-secondary/70",
+              "focus:outline-none focus:ring-2 focus:ring-primary",
+              isCapturingTarget ? "border-primary" : "border-input"
+            )}
+          >
+            {isCapturingTarget ? (
+              <span className="text-muted-foreground">{t("meKeybindings.pressKey")}</span>
+            ) : remap.targetKey ? (
+              getKeyLabel(remap.targetKey, keyboardLayout)
+            ) : (
+              <span className="text-muted-foreground">{t("meKeybindings.target")}</span>
+            )}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// カスタムアクション行コンポーネント（useStateを安全に使用するため分離）
+function CustomActionRow({
+  action,
+  index,
+  keyboardLayout,
+  onUpdate,
+  onDelete,
+}: {
+  action: CustomActionEntry;
+  index: number;
+  keyboardLayout: string;
+  onUpdate: (index: number, updates: Partial<CustomActionEntry>) => void;
+  onDelete: (index: number) => void;
+}) {
+  const [isCapturingTrigger, setIsCapturingTrigger] = useState(false);
+
+  return (
+    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <Input
+            value={action.actionName}
+            onChange={(e) => onUpdate(index, { actionName: e.target.value })}
+            placeholder={t("meKeybindings.actionNamePlaceholder")}
+            className="text-sm"
+          />
+        </div>
+        <Select
+          value={action.category}
+          onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
+        >
+          <SelectTrigger className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
+            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
+            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(index)}
+          className="text-destructive hover:text-destructive shrink-0"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Label className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.triggerKey")}</Label>
+        <button
+          type="button"
+          onFocus={() => setIsCapturingTrigger(true)}
+          onBlur={() => setIsCapturingTrigger(false)}
+          onKeyDown={(e) => {
+            if (!isCapturingTrigger) return;
+            e.preventDefault();
+
+            // 修飾キー単独の場合（ShiftLeft, ControlRight など）
+            const modifierKeyMap: Record<string, string> = {
+              ShiftLeft: "ShiftLeft",
+              ShiftRight: "ShiftRight",
+              ControlLeft: "ControlLeft",
+              ControlRight: "ControlRight",
+              AltLeft: "AltLeft",
+              AltRight: "AltRight",
+              MetaLeft: "MetaLeft",
+              MetaRight: "MetaRight",
+            };
+
+            if (modifierKeyMap[e.code]) {
+              // 修飾キー単独で登録
+              onUpdate(index, { triggerKey: e.code });
+              (e.target as HTMLElement).blur();
+              return;
+            }
+
+            // 修飾キー組み合わせを構築
+            const modifiers: string[] = [];
+            if (e.ctrlKey) modifiers.push("Ctrl");
+            if (e.shiftKey) modifiers.push("Shift");
+            if (e.altKey) modifiers.push("Alt");
+            if (e.metaKey) modifiers.push("Meta");
+            const combo = modifiers.length > 0
+              ? [...modifiers, e.code].join("+")
+              : e.code;
+            onUpdate(index, { triggerKey: combo });
+            (e.target as HTMLElement).blur();
+          }}
+          className={cn(
+            "min-w-40 h-8 px-3 rounded-md border text-sm transition-colors",
+            "bg-secondary/50 hover:bg-secondary/70",
+            "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+            isCapturingTrigger ? "border-primary" : "border-input"
+          )}
+        >
+          {isCapturingTrigger ? (
+            <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyWithModifiers")}</span>
+          ) : action.triggerKey ? (
+            <span className="font-medium font-mono">{getKeyCombinationLabel(action.triggerKey, keyboardLayout)}</span>
+          ) : (
+            <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
+          )}
+        </button>
+      </div>
+      <div>
+        <Input
+          value={action.description || ""}
+          onChange={(e) => onUpdate(index, { description: e.target.value || null })}
+          placeholder={t("meKeybindings.descriptionOptional")}
+          className="text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function KeybindingsPage() {
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
@@ -602,15 +1154,7 @@ export default function KeybindingsPage() {
   // キーバインドのローカル変更
   const [keybindingChanges, setKeybindingChanges] = useState<Record<string, string>>({});
   // リマップのローカル状態
-  const [localRemaps, setLocalRemaps] = useState<RemapEntry[]>(() =>
-    initialRemaps.map((r) => ({
-      id: r.id,
-      sourceKey: r.sourceKey,
-      targetKey: r.targetKey,
-      software: r.software,
-      notes: r.notes,
-    }))
-  );
+  const [localRemaps, setLocalRemaps] = useState<RemapEntry[]>(() => dbRemapsToUiRemaps(initialRemaps));
   // 指割り当てのローカル状態
   const [localFingerAssignments, setLocalFingerAssignments] = useState<FingerAssignmentMap>(() =>
     playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {}
@@ -624,12 +1168,25 @@ export default function KeybindingsPage() {
       category: ck.category as "mouse" | "keyboard",
     }))
   );
+  // カスタムアクションのローカル状態
+  const [localCustomActions, setLocalCustomActions] = useState<CustomActionEntry[]>(() =>
+    initialCustomActions.map((ca) => ({
+      id: ca.id,
+      actionName: ca.actionName,
+      description: ca.description,
+      category: ca.category as "other" | "macro" | "tool",
+      triggerKey: ca.triggerKey,
+      displayOrder: ca.displayOrder,
+    }))
+  );
 
   // ダイアログ関連
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  // ダイアログ内のリマップタイプ選択状態（空文字でkeyboardとspecialを区別するため）
-  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>("none");
+  const [modalDraftKeybindingChanges, setModalDraftKeybindingChanges] = useState<Record<string, string> | null>(null);
+  const [modalDraftRemaps, setModalDraftRemaps] = useState<RemapEntry[] | null>(null);
+  const [modalDraftFingerAssignments, setModalDraftFingerAssignments] = useState<FingerAssignmentMap | null>(null);
+  const [modalDraftCustomActions, setModalDraftCustomActions] = useState<CustomActionEntry[] | null>(null);
 
   // タブの状態
   const [activeTab, setActiveTab] = useState("keybindings");
@@ -708,7 +1265,8 @@ export default function KeybindingsPage() {
     for (const remap of localRemaps) {
       if (remap._isNew) return true;
       if (remap._delete) return true;
-      const original = originalRemapMap.get(remap.id!);
+      if (!remap.id) return true;
+      const original = originalRemapMap.get(remap.id);
       if (!original) return true;
       if (
         original.sourceKey !== remap.sourceKey ||
@@ -728,31 +1286,60 @@ export default function KeybindingsPage() {
     return originalJson !== currentJson;
   }, [localFingerAssignments, playerConfig?.fingerAssignments]);
 
-  const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges;
+  const hasCustomActionChanges = useMemo(() => {
+    const originalActionMap = new Map(initialCustomActions.map((a) => [a.id, a]));
+    for (const action of localCustomActions) {
+      if (action._isNew) return true;
+      if (action._delete) return true;
+      if (!action.id) return true;
+      const original = originalActionMap.get(action.id);
+      if (!original) return true;
+      if (
+        original.actionName !== action.actionName ||
+        original.description !== action.description ||
+        original.category !== action.category ||
+        original.triggerKey !== action.triggerKey
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [localCustomActions, initialCustomActions]);
+
+  const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges;
 
   // 現在選択中のキーに関するデータ
   // 複数の操作が同じキーに割り当てられている場合はすべて取得
   const selectedKeyBindings = editingKeyCode
     ? keybindingsWithLocalChanges.filter((kb) => kb.keyCode === editingKeyCode)
     : [];
-  const selectedRemap = editingKeyCode
-    ? localRemaps.find((r) => r.sourceKey === editingKeyCode && !r._delete)
-    : null;
+  // 選択したキーに関連するすべてのリマップ（修飾キー組み合わせを含む）
+  const selectedKeyRemaps = useMemo(() => {
+    if (!editingKeyCode) return [];
+    // editingKeyCode をベースキーとして持つすべてのリマップを検索
+    // 例: editingKeyCode が "KeyA" の場合、"KeyA", "Shift+KeyA", "Ctrl+KeyA" などすべて
+    return localRemaps
+      .map((r, index) => ({ ...r, _index: index }))
+      .filter((r) => {
+        if (r._delete) return false;
+        const parsed = parseKeyCombination(r.sourceKey);
+        return parsed.keyCode === editingKeyCode;
+      });
+  }, [editingKeyCode, localRemaps]);
+
   const selectedFinger = editingKeyCode
     ? localFingerAssignments[editingKeyCode]?.[0]
     : undefined;
-
-  // editingKeyCode が変わったときに selectedRemapType を初期化
-  // localRemaps を依存配列に入れると、入力のたびに再計算されてUIが壊れるため除外
-  useEffect(() => {
-    if (editingKeyCode) {
-      const remap = localRemaps.find((r) => r.sourceKey === editingKeyCode && !r._delete);
-      setSelectedRemapType(getRemapType(remap));
-    } else {
-      setSelectedRemapType("none");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingKeyCode]);
+  const selectedKeyCustomActions = useMemo(() => {
+    if (!editingKeyCode) return [];
+    return localCustomActions
+      .map((a, index) => ({ ...a, _index: index }))
+      .filter((a) => {
+        if (a._delete || !a.triggerKey) return false;
+        const parsed = parseKeyCombination(a.triggerKey);
+        return parsed.keyCode === editingKeyCode;
+      });
+  }, [editingKeyCode, localCustomActions]);
 
   // 各操作がどのキーに割り当てられているかをマップ化
   const actionToKeyMap = useMemo(() => {
@@ -796,6 +1383,84 @@ export default function KeybindingsPage() {
     return new Set(selectedKeyBindings.map((kb) => kb.id));
   }, [selectedKeyBindings]);
 
+  const modalKeybindingChanges = modalDraftKeybindingChanges ?? keybindingChanges;
+  const modalRemaps = modalDraftRemaps ?? localRemaps;
+  const modalFingerAssignments = modalDraftFingerAssignments ?? localFingerAssignments;
+  const modalCustomActions = modalDraftCustomActions ?? localCustomActions;
+
+  const modalKeybindingsWithLocalChanges = useMemo(() =>
+    validKeybindings.map((kb) => ({
+      ...kb,
+      keyCode: modalKeybindingChanges[kb.id] ?? kb.keyCode,
+    })),
+    [validKeybindings, modalKeybindingChanges]
+  );
+
+  const modalByCategory = useMemo(() =>
+    modalKeybindingsWithLocalChanges.reduce(
+      (acc, kb) => {
+        if (!acc[kb.category]) acc[kb.category] = [];
+        acc[kb.category].push(kb);
+        return acc;
+      },
+      {} as Record<string, typeof modalKeybindingsWithLocalChanges>
+    ),
+    [modalKeybindingsWithLocalChanges]
+  );
+
+  const modalActionToKeyMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const kb of modalKeybindingsWithLocalChanges) {
+      if (kb.keyCode) map[kb.action] = kb.keyCode;
+    }
+    return map;
+  }, [modalKeybindingsWithLocalChanges]);
+
+  const modalSelectedKeyRemaps = useMemo(() => {
+    if (!editingKeyCode) return [];
+    return modalRemaps
+      .map((r, index) => ({ ...r, _index: index }))
+      .filter((r) => {
+        if (r._delete) return false;
+        const parsed = parseKeyCombination(r.sourceKey);
+        return parsed.keyCode === editingKeyCode;
+      });
+  }, [editingKeyCode, modalRemaps]);
+
+  const modalSelectedKeyCustomActions = useMemo(() => {
+    if (!editingKeyCode) return [];
+    return modalCustomActions
+      .map((a, index) => ({ ...a, _index: index }))
+      .filter((a) => {
+        if (a._delete || !a.triggerKey) return false;
+        const parsed = parseKeyCombination(a.triggerKey);
+        return parsed.keyCode === editingKeyCode;
+      });
+  }, [editingKeyCode, modalCustomActions]);
+
+  const closeKeyModal = useCallback(() => {
+    setEditingKeyCode(null);
+    setIsCapturing(false);
+    setModalDraftKeybindingChanges(null);
+    setModalDraftRemaps(null);
+    setModalDraftFingerAssignments(null);
+    setModalDraftCustomActions(null);
+  }, []);
+
+  const saveKeyModalChanges = useCallback(() => {
+    if (modalDraftKeybindingChanges) setKeybindingChanges(modalDraftKeybindingChanges);
+    if (modalDraftRemaps) setLocalRemaps(modalDraftRemaps);
+    if (modalDraftFingerAssignments) setLocalFingerAssignments(modalDraftFingerAssignments);
+    if (modalDraftCustomActions) setLocalCustomActions(modalDraftCustomActions);
+    closeKeyModal();
+  }, [
+    closeKeyModal,
+    modalDraftCustomActions,
+    modalDraftFingerAssignments,
+    modalDraftKeybindingChanges,
+    modalDraftRemaps,
+  ]);
+
   // ========== Event Handlers ==========
 
   // 仮想キーボードでキーをクリック
@@ -824,6 +1489,19 @@ export default function KeybindingsPage() {
     setEditingKeyCode(buttonMap[e.button] || `Mouse${e.button}`);
     setIsCapturing(false);
   }, [isCapturing]);
+
+  useEffect(() => {
+    if (!editingKeyCode) return;
+
+    setModalDraftKeybindingChanges({ ...keybindingChanges });
+    setModalDraftRemaps(localRemaps.map((r) => ({ ...r })));
+    const clonedFingerAssignments = Object.keys(localFingerAssignments).reduce<FingerAssignmentMap>((acc, key) => {
+      acc[key] = [...(localFingerAssignments[key] ?? [])];
+      return acc;
+    }, {});
+    setModalDraftFingerAssignments(clonedFingerAssignments);
+    setModalDraftCustomActions(localCustomActions.map((a) => ({ ...a })));
+  }, [editingKeyCode]);
 
   // キーバインドを変更
   const updateKeybindingKey = useCallback((keybindingId: string, newKeyCode: string) => {
@@ -906,22 +1584,175 @@ export default function KeybindingsPage() {
     });
   }, []);
 
+  // カスタムアクションを追加
+  const addCustomAction = useCallback(() => {
+    setLocalCustomActions((prev) => [
+      ...prev,
+      {
+        actionName: "",
+        description: null,
+        category: "other" as const,
+        triggerKey: "",
+        displayOrder: prev.length,
+        _isNew: true,
+      },
+    ]);
+  }, []);
+
+  const addCustomActionForKey = useCallback((keyCode: string) => {
+    setLocalCustomActions((prev) => [
+      ...prev,
+      {
+        actionName: "",
+        description: null,
+        category: "other" as const,
+        triggerKey: keyCode,
+        displayOrder: prev.length,
+        _isNew: true,
+      },
+    ]);
+  }, []);
+
+  const modalToggleActionForKey = useCallback((keybindingId: string, targetKeyCode: string, isCurrentlyAssigned: boolean) => {
+    setModalDraftKeybindingChanges((prev) => {
+      const base = prev ?? keybindingChanges;
+      if (isCurrentlyAssigned) {
+        return { ...base, [keybindingId]: UNBOUND_KEY };
+      }
+      return { ...base, [keybindingId]: targetKeyCode };
+    });
+  }, [keybindingChanges]);
+
+  const modalAddRemapForKey = useCallback((keyCode: string) => {
+    setModalDraftRemaps((prev) => {
+      const base = prev ?? localRemaps;
+      return [
+        ...base,
+        {
+          sourceKey: keyCode,
+          targetKey: "",
+          software: null,
+          notes: null,
+          _isNew: true,
+        },
+      ];
+    });
+  }, [localRemaps]);
+
+  const modalUpdateRemap = useCallback((index: number, updates: Partial<RemapEntry>) => {
+    setModalDraftRemaps((prev) => {
+      const base = prev ?? localRemaps;
+      const updated = [...base];
+      updated[index] = { ...updated[index], ...updates };
+      return updated;
+    });
+  }, [localRemaps]);
+
+  const modalDeleteRemap = useCallback((index: number) => {
+    setModalDraftRemaps((prev) => {
+      const base = prev ?? localRemaps;
+      const updated = [...base];
+      if (updated[index].id) {
+        updated[index] = { ...updated[index], _delete: true };
+      } else {
+        updated.splice(index, 1);
+      }
+      return updated;
+    });
+  }, [localRemaps]);
+
+  const modalUpdateFingerAssignment = useCallback((keyCode: string, finger: FingerType | null) => {
+    setModalDraftFingerAssignments((prev) => {
+      const base = prev ?? localFingerAssignments;
+      const updated = { ...base };
+      if (finger === null) {
+        delete updated[keyCode];
+      } else {
+        updated[keyCode] = [finger];
+      }
+      return updated;
+    });
+  }, [localFingerAssignments]);
+
+  const modalAddCustomActionForKey = useCallback((keyCode: string) => {
+    setModalDraftCustomActions((prev) => {
+      const base = prev ?? localCustomActions;
+      return [
+        ...base,
+        {
+          actionName: "",
+          description: null,
+          category: "other" as const,
+          triggerKey: keyCode,
+          displayOrder: base.length,
+          _isNew: true,
+        },
+      ];
+    });
+  }, [localCustomActions]);
+
+  const modalUpdateCustomAction = useCallback((index: number, updates: Partial<CustomActionEntry>) => {
+    setModalDraftCustomActions((prev) => {
+      const base = prev ?? localCustomActions;
+      const updated = [...base];
+      updated[index] = { ...updated[index], ...updates };
+      return updated;
+    });
+  }, [localCustomActions]);
+
+  const modalDeleteCustomAction = useCallback((index: number) => {
+    setModalDraftCustomActions((prev) => {
+      const base = prev ?? localCustomActions;
+      const updated = [...base];
+      if (updated[index].id) {
+        updated[index] = { ...updated[index], _delete: true };
+      } else {
+        updated.splice(index, 1);
+      }
+      return updated;
+    });
+  }, [localCustomActions]);
+
+  // カスタムアクションを更新
+  const updateCustomAction = useCallback((index: number, updates: Partial<CustomActionEntry>) => {
+    setLocalCustomActions((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], ...updates };
+      return updated;
+    });
+  }, []);
+
+  // カスタムアクションを削除
+  const deleteCustomAction = useCallback((index: number) => {
+    setLocalCustomActions((prev) => {
+      const updated = [...prev];
+      if (updated[index].id) {
+        updated[index] = { ...updated[index], _delete: true };
+      } else {
+        updated.splice(index, 1);
+      }
+      return updated;
+    });
+  }, []);
+
   // 変更を取り消す
   const resetChanges = useCallback(() => {
     setKeybindingChanges({});
-    setLocalRemaps(
-      initialRemaps.map((r) => ({
-        id: r.id,
-        sourceKey: r.sourceKey,
-        targetKey: r.targetKey,
-        software: r.software,
-        notes: r.notes,
-      }))
-    );
+    setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
     setLocalFingerAssignments(
       playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {}
     );
-  }, [initialRemaps, playerConfig?.fingerAssignments]);
+    setLocalCustomActions(
+      initialCustomActions.map((ca) => ({
+        id: ca.id,
+        actionName: ca.actionName,
+        description: ca.description,
+        category: ca.category as "other" | "macro" | "tool",
+        triggerKey: ca.triggerKey,
+        displayOrder: ca.displayOrder,
+      }))
+    );
+  }, [initialRemaps, playerConfig?.fingerAssignments, initialCustomActions]);
 
   // 保存
   const handleSave = useCallback(() => {
@@ -943,13 +1774,11 @@ export default function KeybindingsPage() {
     // 指割り当てをJSON化
     formData.set("fingerAssignments", JSON.stringify(localFingerAssignments));
 
-    fetcher.submit(formData, { method: "post" });
-  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments]);
+    // カスタムアクションをJSON化
+    formData.set("customActions", JSON.stringify(localCustomActions));
 
-  // 現在のキーに対するリマップのインデックス
-  const currentRemapIndex = editingKeyCode
-    ? localRemaps.findIndex((r) => r.sourceKey === editingKeyCode && !r._delete)
-    : -1;
+    fetcher.submit(formData, { method: "post" });
+  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions]);
 
   // デバッグ: 現在のデータを表示
   const handleDebugLog = useCallback(() => {
@@ -977,7 +1806,7 @@ export default function KeybindingsPage() {
   // レガシーインポート
   const handleImportLegacy = useCallback(() => {
     if (!legacyApiUrl) {
-      toast.error("レガシーAPIが設定されていません");
+      toast.error(t("meKeybindings.legacyApiNotConfigured"));
       return;
     }
     importFetcher.submit(
@@ -990,7 +1819,7 @@ export default function KeybindingsPage() {
   const handleCopyFromPreset = useCallback((presetId: string, target: "keybindings" | "remaps" | "fingers" | "all") => {
     const preset = presets.find((p) => p.id === presetId);
     if (!preset) {
-      toast.error("プリセットが見つかりません");
+      toast.error(t("mePresets.presetNotFound"));
       return;
     }
 
@@ -1010,7 +1839,7 @@ export default function KeybindingsPage() {
         }
         if (Object.keys(newChanges).length > 0) {
           setKeybindingChanges((prev) => ({ ...prev, ...newChanges }));
-          copiedItems.push("キー配置");
+          copiedItems.push(t("meKeybindings.tabActions"));
         }
       } catch (e) {
         console.error("Failed to parse keybindings data:", e);
@@ -1020,20 +1849,9 @@ export default function KeybindingsPage() {
     // リマップをコピー
     if ((target === "remaps" || target === "all") && preset.remapsData) {
       try {
-        const remapsDataParsed = JSON.parse(preset.remapsData) as Array<{
-          sourceKey: string;
-          targetKey: string | null;
-          software: string | null;
-          notes: string | null;
-        }>;
-        setLocalRemaps(remapsDataParsed.map((r) => ({
-          sourceKey: r.sourceKey,
-          targetKey: r.targetKey,
-          software: r.software,
-          notes: r.notes,
-          _isNew: true,
-        })));
-        copiedItems.push("リマップ");
+        const remapsDataParsed = JSON.parse(preset.remapsData) as DbRemapData[];
+        setLocalRemaps(dbRemapsToUiRemaps(remapsDataParsed, true));
+        copiedItems.push(t("meKeybindings.tabRemaps"));
       } catch (e) {
         console.error("Failed to parse remaps data:", e);
       }
@@ -1044,16 +1862,21 @@ export default function KeybindingsPage() {
       try {
         const fingerAssignmentsDataParsed = JSON.parse(preset.fingerAssignmentsData) as FingerAssignmentMap;
         setLocalFingerAssignments(fingerAssignmentsDataParsed);
-        copiedItems.push("指割り当て");
+        copiedItems.push(t("meKeybindings.tabFingers"));
       } catch (e) {
         console.error("Failed to parse finger assignments data:", e);
       }
     }
 
     if (copiedItems.length > 0) {
-      toast.success(`${preset.name}から${copiedItems.join("・")}をコピーしました`);
+      toast.success(
+        t("meKeybindings.copiedFromPreset", {
+          name: preset.name,
+          items: copiedItems.join("・"),
+        })
+      );
     } else {
-      toast.info("コピーするデータがありませんでした");
+      toast.info(t("meKeybindings.copyNoData"));
     }
 
     setCopyDialogOpen(false);
@@ -1128,9 +1951,9 @@ export default function KeybindingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">キー配置</h1>
+          <h1 className="text-2xl font-bold">{t("meKeybindings.pageTitle")}</h1>
           <p className="text-muted-foreground">
-            キー配置・リマップ・指割り当てを設定します
+            {t("meKeybindings.pageDescription")}
           </p>
         </div>
         {/* 開発用デバッグボタン */}
@@ -1175,7 +1998,7 @@ export default function KeybindingsPage() {
           <Settings className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
-              現在編集中のプリセット: <strong>{activePreset.name}</strong>
+              {t("meKeybindings.editingPreset")} <strong>{activePreset.name}</strong>
             </span>
             <div className="flex gap-2 shrink-0">
               {presets.length > 1 && (
@@ -1189,13 +2012,13 @@ export default function KeybindingsPage() {
                   }}
                 >
                   <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">他のプリセットからコピー</span>
-                  <span className="sm:hidden">コピー</span>
+                  <span className="hidden sm:inline">{t("meKeybindings.copyFromOtherPreset")}</span>
+                  <span className="sm:hidden">{t("meKeybindings.copyShort")}</span>
                 </Button>
               )}
               <Link to="/me/presets" className="shrink-0">
                 <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                  プリセット管理
+                  {t("meKeybindings.managePresets")}
                 </Button>
               </Link>
             </div>
@@ -1209,11 +2032,11 @@ export default function KeybindingsPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
-              プリセットがないため、キー配置を編集できません。まずプリセットを作成してください。
+              {t("meKeybindings.noPresetWarning")}
             </span>
             <Link to="/me/presets" className="shrink-0">
               <Button size="sm" className="w-full sm:w-auto">
-                プリセットを作成
+                {t("meKeybindings.createPreset")}
               </Button>
             </Link>
           </AlertDescription>
@@ -1227,18 +2050,18 @@ export default function KeybindingsPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <Gamepad2 className="h-5 w-5" />
-                コントローラービュー
+                {t("meKeybindings.controllerView")}
               </CardTitle>
             </div>
             <CardDescription>
-              コントローラーボタンに操作を割り当てます。左スティック（移動）・右スティック（視点）は固定です。
+              {t("meKeybindings.controllerViewDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 左側: フェイスボタン・バンパー・トリガー */}
               <div className="space-y-4">
-                <div className="text-sm font-medium text-muted-foreground">ボタン</div>
+                <div className="text-sm font-medium text-muted-foreground">{t("meKeybindings.buttons")}</div>
                 <div className="grid grid-cols-2 gap-2">
                   {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3"].map((keyCode) => {
                     const binding = keybindingsWithLocalChanges.find((kb) => kb.keyCode === keyCode);
@@ -1255,7 +2078,7 @@ export default function KeybindingsPage() {
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
                         <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
-                          {binding ? getActionLabel(binding.action) : "未設定"}
+                          {binding ? getActionLabel(binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
                     );
@@ -1264,7 +2087,7 @@ export default function KeybindingsPage() {
               </div>
               {/* 右側: D-Pad・Start/Select */}
               <div className="space-y-4">
-                <div className="text-sm font-medium text-muted-foreground">D-Pad / その他</div>
+                <div className="text-sm font-medium text-muted-foreground">{t("meKeybindings.dpadEtc")}</div>
                 <div className="grid grid-cols-2 gap-2">
                   {["GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => {
                     const binding = keybindingsWithLocalChanges.find((kb) => kb.keyCode === keyCode);
@@ -1281,7 +2104,7 @@ export default function KeybindingsPage() {
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
                         <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
-                          {binding ? getActionLabel(binding.action) : "未設定"}
+                          {binding ? getActionLabel(binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
                     );
@@ -1289,10 +2112,10 @@ export default function KeybindingsPage() {
                 </div>
                 {/* スティックの説明 */}
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                  <div className="font-medium mb-1">スティック操作（固定）</div>
+                  <div className="font-medium mb-1">{t("meKeybindings.stickFixed")}</div>
                   <ul className="list-disc list-inside space-y-1 text-xs">
-                    <li>左スティック: 移動（前後左右）</li>
-                    <li>右スティック: 視点操作</li>
+                    <li>{t("meKeybindings.leftStickDesc")}</li>
+                    <li>{t("meKeybindings.rightStickDesc")}</li>
                   </ul>
                 </div>
               </div>
@@ -1304,11 +2127,11 @@ export default function KeybindingsPage() {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="text-base font-semibold">キーボードビュー</CardTitle>
+              <CardTitle className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
               <FingerLegend />
             </div>
             <CardDescription>
-              キーをクリックして設定を編集できます
+              {t("meKeybindings.keyboardViewDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1319,7 +2142,12 @@ export default function KeybindingsPage() {
                   layout={keyboardLayout}
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  remaps={localRemaps
+                    .filter((r) => !r._delete)
+                    .map((r) => ({
+                      sourceKey: r.sourceKey,
+                      targetKey: r.targetKey,
+                    }))}
                   customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
                   onKeyClick={handleKeyClick}
                   showActionLabels
@@ -1333,7 +2161,12 @@ export default function KeybindingsPage() {
                 <VirtualNumpad
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  remaps={localRemaps
+                    .filter((r) => !r._delete)
+                    .map((r) => ({
+                      sourceKey: r.sourceKey,
+                      targetKey: r.targetKey,
+                    }))}
                   onKeyClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments
@@ -1342,7 +2175,12 @@ export default function KeybindingsPage() {
                 <VirtualMouse
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps.filter((r) => !r._delete).map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey }))}
+                  remaps={localRemaps
+                    .filter((r) => !r._delete)
+                    .map((r) => ({
+                      sourceKey: r.sourceKey,
+                      targetKey: r.targetKey,
+                    }))}
                   customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
                   onButtonClick={handleKeyClick}
                   showActionLabels
@@ -1358,30 +2196,23 @@ export default function KeybindingsPage() {
       {/* タブ分け設定セクション */}
       <Tabs
         value={activeTab}
-        onValueChange={(value) => {
-          // 未保存の変更がある場合はタブ変更を防ぐ
-          if (hasUnsavedChanges) {
-            toast.error("変更を保存してからタブを切り替えてください");
-            return;
-          }
-          setActiveTab(value);
-        }}
+        onValueChange={setActiveTab}
         className="w-full"
       >
         <TabsList className={cn("grid w-full h-auto", isControllerMode ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4")}>
-          <TabsTrigger value="keybindings" disabled={hasUnsavedChanges && activeTab !== "keybindings"} className="text-xs sm:text-sm py-2">
-            操作の種類
+          <TabsTrigger value="keybindings" className="text-xs sm:text-sm py-2">
+            {t("meKeybindings.tabActions")}
           </TabsTrigger>
           {!isControllerMode && (
             <>
-              <TabsTrigger value="remaps" disabled={hasUnsavedChanges && activeTab !== "remaps"} className="text-xs sm:text-sm py-2">
-                リマップ
+              <TabsTrigger value="remaps" className="text-xs sm:text-sm py-2">
+                {t("meKeybindings.tabRemaps")}
               </TabsTrigger>
-              <TabsTrigger value="fingers" disabled={hasUnsavedChanges && activeTab !== "fingers"} className="text-xs sm:text-sm py-2">
-                指割り当て
+              <TabsTrigger value="custom-keys" className="text-xs sm:text-sm py-2">
+                {t("meKeybindings.tabCustomKeys")}
               </TabsTrigger>
-              <TabsTrigger value="custom-keys" disabled={hasUnsavedChanges && activeTab !== "custom-keys"} className="text-xs sm:text-sm py-2">
-                カスタムキー
+              <TabsTrigger value="custom-actions" className="text-xs sm:text-sm py-2">
+                {t("meKeybindings.tabCustomActions")}
               </TabsTrigger>
             </>
           )}
@@ -1415,18 +2246,18 @@ export default function KeybindingsPage() {
                                 onValueChange={(value) => updateKeybindingKey(kb.id, value)}
                               >
                                 <SelectTrigger className="w-32 h-8">
-                                  <SelectValue placeholder="未設定">
+                                  <SelectValue placeholder={t("meKeybindings.unassigned")}>
                                     {isUnbound(kb.keyCode) ? (
-                                      <span className="text-muted-foreground">不使用</span>
+                                      <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
                                     ) : kb.keyCode ? (
                                       getKeyLabel(kb.keyCode)
                                     ) : (
-                                      <span className="text-muted-foreground">未設定</span>
+                                      <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
                                     )}
                                   </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value={UNBOUND_KEY}>不使用</SelectItem>
+                                  <SelectItem value={UNBOUND_KEY}>{t("meKeybindings.notUsed")}</SelectItem>
                                   {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3", "GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => (
                                     <SelectItem key={keyCode} value={keyCode}>
                                       {getKeyLabel(keyCode)}
@@ -1460,13 +2291,13 @@ export default function KeybindingsPage() {
                                 )}
                               >
                                 {isFocused ? (
-                                  <span className="text-muted-foreground text-xs">キーを押す / ESCで不使用</span>
+                                  <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyToAssign")}</span>
                                 ) : isUnbound(kb.keyCode) ? (
-                                  <span className="text-muted-foreground">不使用</span>
+                                  <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
                                 ) : kb.keyCode ? (
                                   <span className="font-medium">{getKeyLabelWithCustom(kb.keyCode)}</span>
                                 ) : (
-                                  <span className="text-muted-foreground">未設定</span>
+                                  <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
                                 )}
                               </button>
                             )}
@@ -1486,10 +2317,11 @@ export default function KeybindingsPage() {
         <TabsContent value="remaps" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">キーリマップ</CardTitle>
+              <CardTitle className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</CardTitle>
               <CardDescription>
                 AutoHotkeyやKarabinerなどで設定しているキーの変換を記録します。
-                キーコードは直接入力するか、入力欄をクリック後にキーを押して入力できます。
+                変更元は修飾キー（Ctrl, Shift, Alt）との組み合わせに対応しています。
+                変更先は「キー」（単一キー）または「文字」（大文字/小文字区別）を選択できます。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1497,110 +2329,21 @@ export default function KeybindingsPage() {
                 <div className="space-y-3">
                   {localRemaps.map((remap, index) => {
                     if (remap._delete) return null;
-                    const remapType = getRemapType(remap);
                     return (
-                      <div key={remap.id || `new-${index}`} className="p-3 rounded-lg border bg-secondary/20 space-y-3">
-                        {/* キー変換行 */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex items-center gap-1">
-                            <Input
-                              value={remap.sourceKey}
-                              onChange={(e) => updateRemap(index, { sourceKey: e.target.value })}
-                              onKeyDown={(e) => {
-                                // 特殊キーをキャプチャ
-                                if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
-                                  e.preventDefault();
-                                  updateRemap(index, { sourceKey: e.code });
-                                }
-                              }}
-                              placeholder="変更元キー"
-                              className="w-24 sm:w-28 font-mono text-center text-xs"
-                            />
-                            {remap.sourceKey && (
-                              <span className="text-xs text-muted-foreground min-w-8">
-                                ({getKeyLabel(remap.sourceKey, playerConfig?.keyboardLayout)})
-                              </span>
-                            )}
-                          </div>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          {remapType === "disabled" ? (
-                            <Badge variant="destructive" className="w-24 sm:w-32 justify-center">無効化</Badge>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                value={remap.targetKey || ""}
-                                onChange={(e) => updateRemap(index, { targetKey: e.target.value || null })}
-                                onKeyDown={(e) => {
-                                  // 特殊キーをキャプチャ
-                                  if (!["Backspace", "Delete", "Tab", "Enter"].includes(e.key)) {
-                                    e.preventDefault();
-                                    updateRemap(index, { targetKey: e.code });
-                                  }
-                                }}
-                                placeholder="変更先キー"
-                                className="w-24 sm:w-28 font-mono text-center text-xs"
-                              />
-                              {remap.targetKey && (
-                                <span className="text-xs text-muted-foreground min-w-8">
-                                  ({getKeyLabel(remap.targetKey, playerConfig?.keyboardLayout)})
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          <Select
-                            value={remapType}
-                            onValueChange={(value: RemapType) => {
-                              if (value === "disabled") {
-                                updateRemap(index, { targetKey: null });
-                              } else if (value === "none") {
-                                deleteRemap(index);
-                              } else if (remapType === "disabled") {
-                                updateRemap(index, { targetKey: "" });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-20 sm:w-24 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="keyboard">キー</SelectItem>
-                              <SelectItem value="special">特殊</SelectItem>
-                              <SelectItem value="disabled">無効</SelectItem>
-                              <SelectItem value="none">削除</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive ml-auto sm:ml-0"
-                            onClick={() => deleteRemap(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        {/* 詳細行 */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Input
-                            value={remap.software || ""}
-                            onChange={(e) => updateRemap(index, { software: e.target.value || null })}
-                            placeholder="ソフトウェア"
-                            className="w-full sm:w-28 text-sm"
-                          />
-                          <Input
-                            value={remap.notes || ""}
-                            onChange={(e) => updateRemap(index, { notes: e.target.value || null })}
-                            placeholder="メモ"
-                            className="flex-1 min-w-0 text-sm"
-                          />
-                        </div>
-                      </div>
+                      <RemapRow
+                        key={remap.id || `new-${index}`}
+                        remap={remap}
+                        index={index}
+                        keyboardLayout={playerConfig?.keyboardLayout ?? null}
+                        onUpdate={updateRemap}
+                        onDelete={deleteRemap}
+                      />
                     );
                   })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  リマップが設定されていません
+                  {t("meKeybindings.remapsTitle")}が設定されていません
                 </p>
               )}
               <Button
@@ -1611,47 +2354,8 @@ export default function KeybindingsPage() {
                 onClick={() => addRemap("")}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                リマップを追加
+                {t("meKeybindings.tabRemaps")}を追加
               </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        )}
-
-        {/* 指割り当てタブ（コントローラーモード以外） */}
-        {!isControllerMode && (
-        <TabsContent value="fingers" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">指割り当て</CardTitle>
-              <CardDescription>
-                各キーを押す指を設定します。キーボードビューでキーをクリックして編集することもできます。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {Object.keys(localFingerAssignments).length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(localFingerAssignments).map(([keyCode, fingers]) => {
-                    const finger = fingers[0];
-                    return (
-                      <Badge
-                        key={keyCode}
-                        variant="outline"
-                        className="cursor-pointer hover:bg-muted py-1.5 px-3"
-                        onClick={() => setEditingKeyCode(keyCode)}
-                      >
-                        <span className="font-mono mr-2">{getKeyLabel(keyCode)}</span>
-                        <span className={`w-3 h-3 rounded-full ${FINGER_COLOR_CLASSES[finger]}`} />
-                        <span className="ml-1 text-xs text-muted-foreground">{FINGER_LABELS[finger]}</span>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  指割り当てが設定されていません。キーボードビューでキーをクリックして設定できます。
-                </p>
-              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1662,7 +2366,7 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-keys" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">カスタムキー</CardTitle>
+              <CardTitle className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</CardTitle>
               <CardDescription>
                 標準のキーボード以外のキー（マウスの追加ボタンなど）を定義します。
                 定義したカスタムキーは操作の割り当てやリマップで使用できます。
@@ -1679,13 +2383,13 @@ export default function KeybindingsPage() {
                           <Input
                             value={ck.keyCode}
                             onChange={(e) => updateCustomKey(index, { keyCode: e.target.value })}
-                            placeholder="キーコード"
+                            placeholder={t("meKeybindings.keyCode")}
                             className="font-mono text-sm"
                           />
                           <Input
                             value={ck.keyName}
                             onChange={(e) => updateCustomKey(index, { keyName: e.target.value })}
-                            placeholder="表示名"
+                            placeholder={t("meKeybindings.displayName")}
                             className="text-sm"
                           />
                           <Select
@@ -1696,8 +2400,8 @@ export default function KeybindingsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="keyboard">キーボード</SelectItem>
-                              <SelectItem value="mouse">マウス</SelectItem>
+                              <SelectItem value="keyboard">{t("meKeybindings.keyboard")}</SelectItem>
+                              <SelectItem value="mouse">{t("meKeybindings.mouse")}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1716,13 +2420,13 @@ export default function KeybindingsPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  カスタムキーが定義されていません
+                  {t("meKeybindings.noCustomKeys")}
                 </p>
               )}
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button type="button" variant="outline" onClick={addCustomKey} className="w-full sm:w-auto">
                   <Plus className="mr-1 h-4 w-4" />
-                  カスタムキーを追加
+                  {t("meKeybindings.addCustomKey")}
                 </Button>
                 {localCustomKeys.some((ck) => ck._isNew || ck._delete || !initialCustomKeys.some((ic) => ic.id === ck.id && ic.keyCode === ck.keyCode && ic.keyName === ck.keyName && ic.category === ck.category)) && (
                   <Button
@@ -1736,10 +2440,52 @@ export default function KeybindingsPage() {
                     ) : (
                       <Save className="mr-1 h-4 w-4" />
                     )}
-                    カスタムキーを保存
+                    {t("meKeybindings.saveCustomKeys")}
                   </Button>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        )}
+
+        {/* カスタムアクションタブ（コントローラーモード以外） */}
+        {!isControllerMode && (
+        <TabsContent value="custom-actions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</CardTitle>
+              <CardDescription>
+                DPIスイッチやマクロなど、ユーザー定義のアクションを登録します。
+                修飾キー（Ctrl, Shift, Alt）との組み合わせでトリガーを設定できます。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {localCustomActions.filter((a) => !a._delete).length > 0 ? (
+                <div className="space-y-3">
+                  {localCustomActions.map((action, index) => {
+                    if (action._delete) return null;
+                    return (
+                      <CustomActionRow
+                        key={action.id || `new-${index}`}
+                        action={action}
+                        index={index}
+                        keyboardLayout={keyboardLayout}
+                        onUpdate={updateCustomAction}
+                        onDelete={deleteCustomAction}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {t("meKeybindings.noCustomActions")}
+                </p>
+              )}
+              <Button type="button" variant="outline" onClick={addCustomAction} className="w-full sm:w-auto">
+                <Plus className="mr-1 h-4 w-4" />
+                {t("meKeybindings.addCustomAction")}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1759,37 +2505,37 @@ export default function KeybindingsPage() {
         open={!!editingKeyCode}
         onOpenChange={(open) => {
           if (!open) {
-            setEditingKeyCode(null);
-            setIsCapturing(false);
+            closeKeyModal();
           }
         }}
       >
         <DialogContent
-          className="sm:max-w-lg"
+          className="sm:max-w-lg max-h-[80vh] p-0 overflow-hidden flex flex-col"
           onKeyDown={isCapturing ? handleKeyCapture : undefined}
           onMouseDown={isCapturing ? handleMouseCapture : undefined}
           onContextMenu={isCapturing ? (e) => e.preventDefault() : undefined}
         >
-          <DialogHeader>
+          <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
             <DialogTitle className="flex items-center gap-2">
               <span className="font-mono text-xl">{editingKeyCode && getKeyLabel(editingKeyCode)}</span>
-              <span className="text-muted-foreground text-sm font-normal">の設定</span>
+              <span className="text-muted-foreground text-sm font-normal">{t("meKeybindings.settingsSuffix")}</span>
             </DialogTitle>
             <DialogDescription>
               このキーに関する設定を編集します
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-6">
             {/* 割り当て操作（複数選択可能） */}
             <div className="space-y-2">
-              <Label>割り当て操作:</Label>
+              <Label>{t("meKeybindings.actionAssignment")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 複数の操作を割り当てられます。他のキーに割当済の操作を選択すると、元のキーから削除されます。
               </p>
               <div className="max-h-64 overflow-y-auto border rounded-md p-2">
                 {categoryOrder.map((category) => {
-                  const bindings = byCategory[category];
+                  const bindings = modalByCategory[category];
                   if (!bindings || bindings.length === 0) return null;
 
                   return (
@@ -1801,7 +2547,7 @@ export default function KeybindingsPage() {
                         {bindings.map((kb) => {
                           const isAssignedToThisKey = kb.keyCode === editingKeyCode;
                           const isAssignedToOtherKey = !!(kb.keyCode && kb.keyCode !== editingKeyCode);
-                          const assignedTo = actionToKeyMap[kb.action];
+                          const assignedTo = modalActionToKeyMap[kb.action];
 
                           return (
                             <div key={kb.id} className="flex items-center gap-2">
@@ -1810,7 +2556,7 @@ export default function KeybindingsPage() {
                                 checked={isAssignedToThisKey}
                                 onCheckedChange={() => {
                                   if (editingKeyCode) {
-                                    toggleActionForKey(kb.id, editingKeyCode, isAssignedToThisKey, kb.keyCode || undefined);
+                                    modalToggleActionForKey(kb.id, editingKeyCode, isAssignedToThisKey);
                                   }
                                 }}
                               />
@@ -1837,138 +2583,57 @@ export default function KeybindingsPage() {
 
             {/* リマップ（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className="space-y-2">
-              <Label>リマップ:</Label>
-              <p className="text-xs text-muted-foreground">
-                このキーを別のキーに変換している場合に設定します
-              </p>
-              <div className="space-y-3">
-                <Select
-                  value={selectedRemapType}
-                  onValueChange={(value: RemapType) => {
-                    if (!editingKeyCode) return;
-                    setSelectedRemapType(value);
-
-                    const hasRemap = selectedRemap && currentRemapIndex >= 0;
-
-                    if (value === "none") {
-                      // リマップを削除
-                      if (hasRemap) {
-                        deleteRemap(currentRemapIndex);
-                      }
-                    } else if (value === "disabled") {
-                      // 無効化
-                      if (hasRemap) {
-                        updateRemap(currentRemapIndex, { targetKey: null });
-                      } else {
-                        // 新規追加（targetKey: null で無効化状態）
-                        setLocalRemaps((prev) => [
-                          ...prev,
-                          {
-                            sourceKey: editingKeyCode,
-                            targetKey: null,
-                            software: null,
-                            notes: null,
-                            _isNew: true,
-                          },
-                        ]);
-                      }
-                    } else if (value === "keyboard" || value === "special") {
-                      // キーボードまたは特殊文字へのリマップ
-                      if (hasRemap) {
-                        // 既存のリマップを更新（targetKeyを空にして入力待ち状態に）
-                        updateRemap(currentRemapIndex, { targetKey: "" });
-                      } else {
-                        // 新規追加（targetKey: "" で入力待ち状態）
-                        setLocalRemaps((prev) => [
-                          ...prev,
-                          {
-                            sourceKey: editingKeyCode,
-                            targetKey: "",
-                            software: null,
-                            notes: null,
-                            _isNew: true,
-                          },
-                        ]);
-                      }
-                    }
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>{t("meKeybindings.keyRemapSetting")}</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
+                    modalAddRemapForKey(editingKeyCode);
                   }}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="リマップ種類を選択" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">リマップしない</SelectItem>
-                    <SelectItem value="keyboard">キーボードにある文字にリマップ</SelectItem>
-                    <SelectItem value="special">特殊文字にリマップ</SelectItem>
-                    <SelectItem value="disabled">無効化</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {selectedRemapType === "keyboard" && (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="font-mono shrink-0">
-                      {getKeyLabel(editingKeyCode || "")}
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <Input
-                      value={selectedRemap?.targetKey || ""}
-                      readOnly
-                      onKeyDown={(e) => {
-                        if (!["Tab", "Enter"].includes(e.key)) {
-                          e.preventDefault();
-                          if (currentRemapIndex >= 0) {
-                            updateRemap(currentRemapIndex, { targetKey: e.code });
-                          }
-                        }
-                      }}
-                      placeholder="キーを押してください"
-                      className="w-40 font-mono text-center text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedRemapType === "special" && (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="font-mono shrink-0">
-                      {getKeyLabel(editingKeyCode || "")}
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <Input
-                      value={selectedRemap?.targetKey || ""}
-                      onChange={(e) => {
-                        if (currentRemapIndex >= 0) {
-                          updateRemap(currentRemapIndex, { targetKey: e.target.value || null });
-                        }
-                      }}
-                      placeholder="特殊文字を入力"
-                      className="w-40 font-mono text-center text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedRemapType === "disabled" && (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="font-mono">
-                      {getKeyLabel(editingKeyCode || "")}
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="destructive">無効化</Badge>
-                  </div>
-                )}
+                  <Plus className="mr-1 h-3 w-3" />
+                  追加
+                </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                このキー（および修飾キーとの組み合わせ）のリマップを設定できます
+              </p>
+
+              {modalSelectedKeyRemaps.length > 0 ? (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {modalSelectedKeyRemaps.map((remap) => (
+                    <DialogRemapRow
+                      key={remap.id || `new-${remap._index}`}
+                      remap={remap}
+                      index={remap._index}
+                      baseKeyCode={editingKeyCode}
+                      keyboardLayout={playerConfig?.keyboardLayout ?? null}
+                      onUpdate={modalUpdateRemap}
+                      onDelete={modalDeleteRemap}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">
+                  {t("meKeybindings.remapsTitle")}が設定されていません
+                </p>
+              )}
             </div>
             )}
 
             {/* 指割り当て（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
             <div className="space-y-2">
-              <Label>指割り当て:</Label>
+              <Label>{t("meKeybindings.fingerAssignment")}</Label>
               <Select
-                value={selectedFinger || "none"}
+                value={(editingKeyCode ? modalFingerAssignments[editingKeyCode]?.[0] : undefined) || "none"}
                 onValueChange={(value) => {
                   if (editingKeyCode) {
-                    updateFingerAssignment(
+                    modalUpdateFingerAssignment(
                       editingKeyCode,
                       value === "none" ? null : (value as FingerType)
                     );
@@ -1976,10 +2641,10 @@ export default function KeybindingsPage() {
                 }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="指を選択" />
+                  <SelectValue placeholder={t("meKeybindings.selectFinger")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">未設定</SelectItem>
+                  <SelectItem value="none">{t("meKeybindings.unassigned")}</SelectItem>
                   {FINGER_OPTIONS.map((finger) => (
                     <SelectItem key={finger} value={finger}>
                       <div className="flex items-center gap-2">
@@ -1992,12 +2657,57 @@ export default function KeybindingsPage() {
               </Select>
             </div>
             )}
+
+            {/* カスタムアクション（コントローラーモード以外） */}
+            {editingKeyCode && !isControllerMode && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>{t("meKeybindings.customActionsTitle")}</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => modalAddCustomActionForKey(editingKeyCode)}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  追加
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                このキーをトリガーにするカスタムアクションを追加・編集できます
+              </p>
+
+              {modalSelectedKeyCustomActions.length > 0 ? (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {modalSelectedKeyCustomActions.map((action) => (
+                    <CustomActionRow
+                      key={action.id || `new-${action._index}`}
+                      action={action}
+                      index={action._index}
+                      keyboardLayout={keyboardLayout}
+                      onUpdate={modalUpdateCustomAction}
+                      onDelete={modalDeleteCustomAction}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">
+                  {t("meKeybindings.noCustomActions")}
+                </p>
+              )}
+            </div>
+            )}
+          </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingKeyCode(null)}>
+          <DialogFooter className="px-6 py-4 border-t bg-background sticky bottom-0 z-10">
+            <Button variant="outline" onClick={closeKeyModal}>
               <X className="mr-2 h-4 w-4" />
-              閉じる
+              {t("meKeybindings.cancel")}
+            </Button>
+            <Button onClick={saveKeyModalChanges}>
+              <Save className="mr-2 h-4 w-4" />
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2007,16 +2717,16 @@ export default function KeybindingsPage() {
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogTitle>{t("meKeybindings.copyDialogTitle")}</DialogTitle>
             <DialogDescription>
-              コピー元のプリセットを選択してください
+              {t("meKeybindings.copyDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             {/* コピー対象の選択 */}
             <div className="space-y-2">
-              <Label>コピーする項目:</Label>
+              <Label>{t("meKeybindings.copyTarget")}</Label>
               <Select
                 value={copyTarget}
                 onValueChange={(value: "keybindings" | "remaps" | "fingers" | "all") => setCopyTarget(value)}
@@ -2025,17 +2735,17 @@ export default function KeybindingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">すべて</SelectItem>
-                  <SelectItem value="keybindings">キー配置のみ</SelectItem>
-                  <SelectItem value="remaps">リマップのみ</SelectItem>
-                  <SelectItem value="fingers">指割り当てのみ</SelectItem>
+                  <SelectItem value="all">{t("meKeybindings.all")}</SelectItem>
+                  <SelectItem value="keybindings">{t("meKeybindings.keybindingsOnly")}</SelectItem>
+                  <SelectItem value="remaps">{t("meKeybindings.remapsOnly")}</SelectItem>
+                  <SelectItem value="fingers">{t("meKeybindings.fingersOnly")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* プリセット一覧 */}
             <div className="space-y-2">
-              <Label>コピー元プリセット:</Label>
+              <Label>{t("meKeybindings.copySourcePreset")}</Label>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {presets
                   .filter((p) => p.id !== activePreset?.id)
@@ -2060,23 +2770,23 @@ export default function KeybindingsPage() {
                             {preset.hasKeybindings && (
                               <Badge variant="secondary" className="text-xs">
                                 <Keyboard className="h-3 w-3 mr-1" />
-                                キー配置
+                                {t("meKeybindings.tabActions")}
                               </Badge>
                             )}
                             {preset.hasRemaps && (
                               <Badge variant="secondary" className="text-xs">
                                 <ArrowRight className="h-3 w-3 mr-1" />
-                                リマップ
+                                {t("meKeybindings.tabRemaps")}
                               </Badge>
                             )}
                             {preset.hasFingerAssignments && (
                               <Badge variant="secondary" className="text-xs">
-                                指割り当て
+                                {t("meKeybindings.tabFingers")}
                               </Badge>
                             )}
                             {!preset.hasKeybindings && !preset.hasRemaps && !preset.hasFingerAssignments && (
                               <Badge variant="outline" className="text-xs text-muted-foreground">
-                                データなし
+                                {t("meKeybindings.noData")}
                               </Badge>
                             )}
                           </div>
@@ -2086,7 +2796,7 @@ export default function KeybindingsPage() {
                   })}
                 {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    他のプリセットがありません
+                    {t("meKeybindings.noOtherPresets")}
                   </p>
                 )}
               </div>
@@ -2095,7 +2805,7 @@ export default function KeybindingsPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
-              キャンセル
+              {t("meKeybindings.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2111,12 +2821,12 @@ export function ErrorBoundary() {
         <CardContent className="p-6">
           <div className="text-center space-y-4">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <h2 className="text-2xl font-bold">{t("meKeybindings.errorTitle")}</h2>
             <p className="text-muted-foreground">
-              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+              {t("meKeybindings.errorDescription")}
             </p>
             <Button onClick={() => window.location.reload()}>
-              ページをリロード
+              {t("meKeybindings.reloadPage")}
             </Button>
           </div>
         </CardContent>

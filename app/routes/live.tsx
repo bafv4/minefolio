@@ -19,9 +19,10 @@ import {
 } from "lucide-react";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import type { TwitchStream } from "@/lib/twitch";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "ライブ - Minefolio" }];
+  return [{ title: t("live.metaTitle") }];
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -333,7 +334,7 @@ export default function LivePage() {
             {totalStreams === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Radio className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>現在配信中のランナーはいません</p>
+                <p>{t("live.noStreaming")}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -370,7 +371,7 @@ export default function LivePage() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Timer className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>現在ペース中のランナーはいません</p>
+              <p>{t("live.noPacing")}</p>
             </div>
           )}
         </section>

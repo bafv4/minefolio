@@ -25,11 +25,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle2, AlertCircle, Info, SkipForward } from "lucide-react";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "ようこそ - Minefolio" },
-    { name: "description", content: "Minefolioプロフィールを設定" },
+    { title: t("onboarding.title") },
+    { name: "description", content: t("onboarding.description") },
   ];
 };
 
@@ -76,11 +77,11 @@ export async function action({ context, request }: Route.ActionArgs) {
     const mcid = (formData.get("mcid") as string)?.trim();
 
     if (!mcid) {
-      return { error: "Minecraft IDを入力してください" };
+      return { error: t("onboarding.errorMcidRequired") };
     }
 
     if (mcid.length < 3 || mcid.length > 16) {
-      return { error: "Minecraft IDは3〜16文字である必要があります" };
+      return { error: t("onboarding.errorMcidLength") };
     }
 
     // Check if MCID is already registered
@@ -89,7 +90,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     });
 
     if (existingUser) {
-      return { error: "このMinecraft IDは既に登録されています" };
+      return { error: t("onboarding.errorMcidTaken") };
     }
 
     // Verify with Mojang API
@@ -116,10 +117,10 @@ export async function action({ context, request }: Route.ActionArgs) {
     } catch (error) {
       if (error instanceof MojangError) {
         if (error.code === "MCID_NOT_FOUND") {
-          return { error: "Minecraft IDが見つかりません。確認してもう一度お試しください。" };
+          return { error: t("onboarding.errorMcidNotFound") };
         }
       }
-      return { error: "Minecraft IDの検証に失敗しました。もう一度お試しください。" };
+      return { error: t("onboarding.errorVerifyFailed") };
     }
   }
 
@@ -130,7 +131,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     const importData = formData.get("importData") === "true";
 
     if (!mcid || !uuid) {
-      return { error: "無効なリクエストです。最初からやり直してください。" };
+      return { error: t("onboarding.errorInvalidRequest") };
     }
 
     // Double-check MCID isn't taken
@@ -139,7 +140,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     });
 
     if (existingUser) {
-      return { error: "このMinecraft IDは既に登録されています" };
+      return { error: t("onboarding.errorMcidTaken") };
     }
 
     // Create user with MCID
@@ -190,7 +191,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     return redirect(`/player/${slug}`);
   }
 
-  return { error: "無効な操作です" };
+  return { error: t("onboarding.errorInvalidAction") };
 }
 
 export default function OnboardingPage() {
@@ -209,12 +210,12 @@ export default function OnboardingPage() {
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">
-            Minefolioへようこそ！
+            {t("onboarding.welcome")}
           </CardTitle>
           <CardDescription>
             {isVerified
-              ? "もう少しです！プロフィールを確認してください。"
-              : "プロフィールを設定しましょう"}
+              ? t("onboarding.stepConfirm")
+              : t("onboarding.stepSetup")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -234,17 +235,17 @@ export default function OnboardingPage() {
                   <div>
                     <p className="font-medium">{discordUser.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      Discord経由で接続済み
+                      {t("onboarding.connectedViaDiscord")}
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="mcid">Minecraft ID (MCID)</Label>
+                  <Label htmlFor="mcid">{t("onboarding.mcidLabel")}</Label>
                   <Input
                     id="mcid"
                     name="mcid"
-                    placeholder="例: Steve"
+                    placeholder={t("onboarding.mcidPlaceholder")}
                     required
                     minLength={3}
                     maxLength={16}
@@ -252,7 +253,7 @@ export default function OnboardingPage() {
                   />
                   <p className="text-xs text-muted-foreground">
                     <Info className="inline w-3 h-3 mr-1" />
-                    MCIDはMojang APIで検証されます
+                    {t("onboarding.mcidHint")}
                   </p>
                 </div>
 
@@ -273,10 +274,10 @@ export default function OnboardingPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    検証中...
+                    {t("onboarding.verifyLoading")}
                   </>
                 ) : (
-                  "検証して続行"
+                  t("onboarding.verifyAndContinue")
                 )}
               </Button>
             </fetcher.Form>
@@ -292,11 +293,11 @@ export default function OnboardingPage() {
                   disabled={isSubmitting}
                 >
                   <SkipForward className="mr-2 h-4 w-4" />
-                  MCIDなしで登録
+                  {t("onboarding.skipMcid")}
                 </Button>
               </fetcher.Form>
               <p className="text-xs text-muted-foreground text-center mt-2">
-                後から設定ページでMCIDを追加できます
+                {t("onboarding.skipHint")}
               </p>
             </div>
             </>
@@ -311,7 +312,7 @@ export default function OnboardingPage() {
                 <Alert className="border-green-500/50 bg-green-500/10">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
                   <AlertDescription className="text-green-600">
-                    Minecraft IDの検証に成功しました！
+                    {t("onboarding.verifySuccess")}
                   </AlertDescription>
                 </Alert>
 
@@ -333,10 +334,10 @@ export default function OnboardingPage() {
                       <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                       <div>
                         <p className="font-medium">
-                          MCSRer Hotkeysのデータが見つかりました
+                          {t("onboarding.legacyFoundTitle")}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          キー配置と設定をインポートできます
+                          {t("onboarding.legacyFoundHint")}
                         </p>
                       </div>
                     </div>
@@ -352,7 +353,7 @@ export default function OnboardingPage() {
                         {isSubmitting ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : null}
-                        データをインポート
+                        {t("onboarding.importData")}
                       </Button>
                       <Button
                         type="submit"
@@ -362,7 +363,7 @@ export default function OnboardingPage() {
                         className="flex-1 h-11 sm:h-10"
                         disabled={isSubmitting}
                       >
-                        新規で始める
+                        {t("onboarding.startFresh")}
                       </Button>
                     </div>
                   </div>
@@ -380,10 +381,10 @@ export default function OnboardingPage() {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        プロフィールを作成中...
+                        {t("onboarding.creatingProfile")}
                       </>
                     ) : (
-                      "セットアップを完了"
+                      t("onboarding.completeSetup")
                     )}
                   </Button>
                 )}

@@ -5,7 +5,7 @@ import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq, desc, asc, like, sql, or, and, isNotNull } from "drizzle-orm";
-import { PlayerCard } from "@/components/player-card";
+import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,13 +30,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "探す - Minefolio" },
+    { title: t("browse.metaTitle") },
     {
       name: "description",
-      content: "RTA走者を探す",
+      content: t("browse.description"),
     },
   ];
 };
@@ -129,8 +130,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
-      discordAvatar: true,
-      location: true,
+      pronouns: true,
+      role: true,
+      mainEdition: true,
+      mainPlatform: true,
+      inputMethodBadge: true,
       updatedAt: true,
       shortBio: true,
     },
@@ -187,8 +191,8 @@ function PlayerCardSkeleton() {
 
 // フィルタラベル
 const ROLE_LABELS: Record<string, string> = {
-  runner: "ランナー",
-  viewer: "視聴者",
+  runner: t("browse.roleRunner"),
+  viewer: t("browse.roleViewer"),
 };
 const EDITION_LABELS: Record<string, string> = {
   java: "Java",
@@ -205,7 +209,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   pc_linux: "Linux",
   switch: "Switch",
   mobile: "Mobile",
-  other: "その他",
+  other: t("browse.platformOther"),
 };
 
 export default function BrowsePage() {
@@ -282,10 +286,10 @@ export default function BrowsePage() {
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Users className="h-6 w-6" />
-          ランナーを探す
+          {t("browse.title")}
         </h1>
         <p className="text-muted-foreground">
-          登録されているプレイヤー ({totalCount}人)
+          {`${t("browse.totalCount")} (${totalCount}${t("common.peopleUnit")})`}
         </p>
       </div>
 
@@ -297,7 +301,7 @@ export default function BrowsePage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="MCID・名前で検索..."
+                placeholder={t("browse.searchPlaceholder")}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 className="pl-10"
@@ -322,7 +326,7 @@ export default function BrowsePage() {
                 <DialogHeader>
                   <DialogTitle>絞り込み</DialogTitle>
                   <DialogDescription>
-                    プレイヤーを条件で絞り込みます
+                    {t("browse.filterDescription")}
                   </DialogDescription>
                 </DialogHeader>
 
@@ -339,7 +343,7 @@ export default function BrowsePage() {
                             handleFilterChange("role", "runner", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="role-runner" className="cursor-pointer">ランナー</RadixLabel>
+                        <RadixLabel htmlFor="role-runner" className="cursor-pointer">{t("browse.roleRunner")}</RadixLabel>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -349,7 +353,7 @@ export default function BrowsePage() {
                             handleFilterChange("role", "viewer", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="role-viewer" className="cursor-pointer">視聴者</RadixLabel>
+                        <RadixLabel htmlFor="role-viewer" className="cursor-pointer">{t("browse.roleViewer")}</RadixLabel>
                       </div>
                     </div>
                   </div>
@@ -576,7 +580,7 @@ export default function BrowsePage() {
         )}
       </div>
 
-      {/* プレイヤー一覧 */}
+      {/* 走者一覧 */}
       {isNavigating ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -586,7 +590,7 @@ export default function BrowsePage() {
       ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
-            <PlayerCard key={player.slug} player={player} />
+            <ProfileFeedCard key={player.slug} player={player} />
           ))}
         </div>
       ) : (
@@ -594,8 +598,8 @@ export default function BrowsePage() {
           <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
           <p className="text-lg mb-2">
             {searchQuery || activeFilterCount > 0
-              ? "条件に一致するプレイヤーが見つかりません"
-              : "登録されているプレイヤーがいません"}
+              ? t("browse.emptyFiltered")
+              : t("browse.emptyAll")}
           </p>
           {(searchQuery || activeFilterCount > 0) && (
             <Button

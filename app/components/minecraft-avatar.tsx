@@ -146,6 +146,9 @@ const MinecraftAvatarComponent = ({
             imageRendering: "pixelated",
             width: size,
             height: size,
+            backgroundColor: "transparent",
+            filter:
+              "drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28))",
           }}
         />
       )}

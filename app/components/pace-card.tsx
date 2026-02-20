@@ -25,7 +25,7 @@ export function PaceCard({ run, isRegistered }: PaceCardProps) {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            {/* プレイヤー名 */}
+            {/* 走者名 */}
             <div className="flex items-center gap-2">
               {isRegistered ? (
                 <Link

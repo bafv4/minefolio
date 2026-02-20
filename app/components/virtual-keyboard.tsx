@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, type FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, parseKeyCombination, type FingerType } from "@/lib/keybindings";
+import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 // キーボードレイアウト定義
@@ -292,12 +293,6 @@ type KeybindingInfoList = KeybindingInfo[];
 
 type FingerAssignment = Record<string, FingerType[]>;
 
-// リマップ情報の型
-type RemapInfo = {
-  sourceKey: string;
-  targetKey: string | null; // nullは無効化
-};
-
 // カスタムキーボタン定義型
 type CustomKeyboardButton = {
   code: string;
@@ -420,9 +415,27 @@ function VirtualKeyboardComponent({
     return fingers?.[0];
   };
 
-  // キーコードからリマップ情報を取得（keysEqualで比較）
+  // キーコードからリマップ情報を取得
+  // 修飾キー組み合わせの場合はベースキーが一致するものを返す
   const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) => keysEqual(r.sourceKey, keyCode));
+    return remaps.find((r) => {
+      if (r.sourceKey.includes("+")) {
+        const parsed = parseKeyCombination(r.sourceKey);
+        return keysEqual(parsed.keyCode, keyCode);
+      }
+      return keysEqual(r.sourceKey, keyCode);
+    });
+  };
+
+  // 特定キーに関連する全リマップを取得（修飾キー組み合わせを含む）
+  const getRemapsForKey = (keyCode: string): RemapInfo[] => {
+    return remaps.filter((r) => {
+      if (r.sourceKey.includes("+")) {
+        const parsed = parseKeyCombination(r.sourceKey);
+        return keysEqual(parsed.keyCode, keyCode);
+      }
+      return keysEqual(r.sourceKey, keyCode);
+    });
   };
 
   // 単一キーのレンダリング
@@ -441,7 +454,8 @@ function VirtualKeyboardComponent({
     const height = (key.height || 1) * baseSize + ((key.height || 1) - 1) * gap;
     const bindings = getBindingsForKey(key.code);
     const finger = getFingerForKey(key.code);
-    const remap = showRemaps ? getRemapForKey(key.code) : undefined;
+    // 複数リマップ対応: このキーに関連する全リマップを取得
+    const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
     const isHighlighted = highlightedKeys.includes(key.code);
     const displayLabel = key.label || getKeyLabel(key.code);
 
@@ -456,12 +470,36 @@ function VirtualKeyboardComponent({
     // 操作名を表示するかどうか
     const showAction = showActionLabels && bindings.length > 0;
 
-    // リマップ先の表示ラベル
-    const remapTargetLabel = remap
-      ? remap.targetKey === null
-        ? "×"
-        : getKeyLabel(remap.targetKey)
-      : null;
+    // リマップのツールチップ説明を生成
+    const getRemapTooltipText = (r: RemapInfo): string => {
+      if (r.targetKey === null) {
+        return "無効化";
+      }
+      if (isSpecialRemapTarget(r.targetKey)) {
+        return `文字「${r.targetKey}」を出力`;
+      }
+      if (r.targetKey) {
+        return getKeyLabel(r.targetKey, layout);
+      }
+      return "無効化";
+    };
+
+    // リマップのソースキーの修飾キーマーク（シンボルで表示）
+    const getModifierMarks = (r: RemapInfo): string[] => {
+      if (!r.sourceKey.includes("+")) return [];
+      const parsed = parseKeyCombination(r.sourceKey);
+      if (parsed.modifiers.length === 0) return [];
+      // 修飾キーをマーク形式で表示
+      return parsed.modifiers.map(m => {
+        switch(m) {
+          case "Ctrl": return "◆";  // Ctrl
+          case "Shift": return "⇧"; // Shift
+          case "Alt": return "⌥";   // Alt
+          case "Meta": return "◇";  // Win/Meta
+          default: return "●";
+        }
+      });
+    };
 
     const keyElement = (
       <button
@@ -482,18 +520,37 @@ function VirtualKeyboardComponent({
         }}
       >
         {/* リマップがある場合 */}
-        {remap ? (
-          <div className="flex flex-wrap items-center justify-center gap-0.5 max-w-full">
+        {keyRemaps.length > 0 ? (
+          <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-hidden">
+            {/* キーラベル */}
             <span className="font-medium leading-none text-[9px] text-muted-foreground/50">
               {displayLabel}
             </span>
-            <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
-            <span className={cn(
-              "font-bold leading-none text-[11px]",
-              remap.targetKey === null ? "text-muted-foreground" : "text-foreground"
-            )}>
-              {remapTargetLabel}
-            </span>
+            {/* リマップ一覧（最大2件表示） */}
+            <div className="flex flex-col items-center gap-0">
+              {keyRemaps.slice(0, 2).map((r, i) => {
+                const isDisabled = r.targetKey === null;
+                const targetLabel = getRemapOutputLabel(r, layout);
+                const modifierMarks = getModifierMarks(r);
+                return (
+                  <div key={i} className="flex items-center gap-0.5 leading-none">
+                    {modifierMarks.length > 0 && (
+                      <span className="text-[7px] text-primary/70">{modifierMarks.join("")}</span>
+                    )}
+                    <span className="text-[8px] text-muted-foreground/40">→</span>
+                    <span className={cn(
+                      "font-bold text-[9px]",
+                      isDisabled ? "text-muted-foreground" : "text-foreground"
+                    )}>
+                      {targetLabel}
+                    </span>
+                  </div>
+                );
+              })}
+              {keyRemaps.length > 2 && (
+                <span className="text-[7px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
+              )}
+            </div>
           </div>
         ) : (
           /* 通常のキーラベル */
@@ -521,16 +578,24 @@ function VirtualKeyboardComponent({
     );
 
     // ツールチップでバインディング情報を表示
-    if (bindings.length > 0 || (showFingerAssignments && finger) || remap) {
+    if (bindings.length > 0 || (showFingerAssignments && finger) || keyRemaps.length > 0) {
       return (
         <Tooltip key={`${rowIndex}-${keyIndex}`}>
           <TooltipTrigger asChild>{keyElement}</TooltipTrigger>
           <TooltipContent>
             <p className="font-medium">{getKeyLabel(key.code)}</p>
-            {remap && (
-              <p className="text-xs text-muted-foreground">
-                リマップ: {remap.targetKey === null ? "無効化" : getKeyLabel(remap.targetKey)}
-              </p>
+            {keyRemaps.length > 0 && (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {keyRemaps.map((r, i) => {
+                  // ソースキーの表示（修飾キー組み合わせの場合）
+                  const sourceLabel = getRemapSourceLabel(r.sourceKey, layout);
+                  return (
+                    <p key={i}>
+                      {sourceLabel} → {getRemapTooltipText(r)}
+                    </p>
+                  );
+                })}
+              </div>
             )}
             {bindings.length > 0 && (
               <div className="text-xs text-muted-foreground">
@@ -640,11 +705,9 @@ function VirtualKeyboardComponent({
             : "bg-foreground/80 text-background";
 
           const showAction = showActionLabels && bindings.length > 0;
-          const remapTargetLabel = remap
-            ? remap.targetKey === null
-              ? "×"
-              : getKeyLabel(remap.targetKey)
-            : null;
+          // リマップ先の表示ラベル
+          const remapTargetLabel = remap ? getRemapOutputLabel(remap, layout) : null;
+          const isRemapDisabled = remap?.targetKey === null;
 
           const keyElement = (
             <button
@@ -672,7 +735,7 @@ function VirtualKeyboardComponent({
                   <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
                   <span className={cn(
                     "font-bold leading-none text-[11px]",
-                    remap.targetKey === null ? "text-muted-foreground" : "text-foreground"
+                    isRemapDisabled ? "text-muted-foreground" : "text-foreground"
                   )}>
                     {remapTargetLabel}
                   </span>
@@ -709,7 +772,13 @@ function VirtualKeyboardComponent({
                   <p className="text-xs text-muted-foreground font-mono">{ck.code}</p>
                   {remap && (
                     <p className="text-xs text-muted-foreground">
-                      リマップ: {remap.targetKey === null ? "無効化" : getKeyLabel(remap.targetKey)}
+                      リマップ: {remap.targetKey === null
+                        ? "無効化"
+                        : isSpecialRemapTarget(remap.targetKey)
+                          ? `文字「${remap.targetKey}」を出力`
+                          : remap.targetKey
+                            ? getKeyLabel(remap.targetKey, layout)
+                            : "無効化"}
                     </p>
                   )}
                   {bindings.length > 0 && (
@@ -836,11 +905,9 @@ export function VirtualMouse({
     const width = (button.width || 1) * baseSize + ((button.width || 1) - 1) * gap;
     const height = (button.height || 1) * baseSize + ((button.height || 1) - 1) * gap;
 
-    const remapTargetLabel = remap
-      ? remap.targetKey === null
-        ? "×"
-        : getKeyLabel(remap.targetKey)
-      : null;
+    // リマップ先の表示ラベル
+    const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
+    const isRemapDisabled = remap?.targetKey === null;
 
     const buttonElement = (
       <button
@@ -862,7 +929,7 @@ export function VirtualMouse({
             <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
             <span className={cn(
               "font-bold leading-none text-[11px]",
-              remap.targetKey === null ? "text-muted-foreground" : "text-foreground"
+              isRemapDisabled ? "text-muted-foreground" : "text-foreground"
             )}>
               {remapTargetLabel}
             </span>
@@ -901,7 +968,13 @@ export function VirtualMouse({
             <p className="font-medium">{getKeyLabel(button.code)}</p>
             {remap && (
               <p className="text-xs text-muted-foreground">
-                リマップ: {remap.targetKey === null ? "無効化" : getKeyLabel(remap.targetKey)}
+                リマップ: {remap.targetKey === null
+                  ? "無効化"
+                  : isSpecialRemapTarget(remap.targetKey)
+                    ? `文字「${remap.targetKey}」を出力`
+                    : remap.targetKey
+                      ? getKeyLabel(remap.targetKey)
+                      : "無効化"}
               </p>
             )}
             {bindings.map((binding, i) => (
@@ -1014,9 +1087,16 @@ export function VirtualNumpad({
     return fingers?.[0];
   };
 
-  // キーコードからリマップ情報を取得（keysEqualで比較）
+  // キーコードからリマップ情報を取得
+  // 修飾キー組み合わせの場合はベースキーが一致するものを返す
   const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) => keysEqual(r.sourceKey, keyCode));
+    return remaps.find((r) => {
+      if (r.sourceKey.includes("+")) {
+        const parsed = parseKeyCombination(r.sourceKey);
+        return keysEqual(parsed.keyCode, keyCode);
+      }
+      return keysEqual(r.sourceKey, keyCode);
+    });
   };
 
   const gap = 2;
@@ -1049,11 +1129,9 @@ export function VirtualNumpad({
       : "bg-foreground/80 text-background";
 
     const showAction = showActionLabels && bindings.length > 0;
-    const remapTargetLabel = remap
-      ? remap.targetKey === null
-        ? "×"
-        : getKeyLabel(remap.targetKey)
-      : null;
+    // リマップ先の表示ラベル
+    const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
+    const isRemapDisabled = remap?.targetKey === null;
 
     const keyElement = (
       <button
@@ -1081,7 +1159,7 @@ export function VirtualNumpad({
             <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
             <span className={cn(
               "font-bold leading-none text-[11px]",
-              remap.targetKey === null ? "text-muted-foreground" : "text-foreground"
+              isRemapDisabled ? "text-muted-foreground" : "text-foreground"
             )}>
               {remapTargetLabel}
             </span>
@@ -1117,7 +1195,13 @@ export function VirtualNumpad({
             <p className="font-medium">{getKeyLabel(key.code)}</p>
             {remap && (
               <p className="text-xs text-muted-foreground">
-                リマップ: {remap.targetKey === null ? "無効化" : getKeyLabel(remap.targetKey)}
+                リマップ: {remap.targetKey === null
+                  ? "無効化"
+                  : isSpecialRemapTarget(remap.targetKey)
+                    ? `文字「${remap.targetKey}」を出力`
+                    : remap.targetKey
+                      ? getKeyLabel(remap.targetKey)
+                      : "無効化"}
               </p>
             )}
             {bindings.length > 0 && (
