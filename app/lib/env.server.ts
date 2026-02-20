@@ -16,5 +16,7 @@ export function getEnv(): Env {
     TWITCH_CLIENT_ID: process.env.TWITCH_CLIENT_ID,
     TWITCH_CLIENT_SECRET: process.env.TWITCH_CLIENT_SECRET,
     YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY,
+    FEEDBACK_EMAIL: process.env.FEEDBACK_EMAIL,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
   };
 }

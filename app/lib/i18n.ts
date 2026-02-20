@@ -43,7 +43,7 @@ export const translations = {
     // Navigation
     nav: {
       home: "ホーム",
-      browse: "プレイヤー一覧",
+      browse: "走者一覧",
       keybindings: "操作設定",
       rankings: "ランキング",
       stats: "統計",
@@ -66,16 +66,16 @@ export const translations = {
       subtitle:
         "RTA走者を探して、キー配置や自己ベストなどを確認しましょう。",
       getStarted: "始める",
-      browsePlayers: "プレイヤーを探す",
-      players: "プレイヤー",
-      noPlayersFound: "プレイヤーが見つかりません",
+      browsePlayers: "走者を探す",
+      players: "走者",
+      noPlayersFound: "走者が見つかりません",
     },
 
     // Browse page
     browse: {
-      title: "プレイヤー一覧",
+      title: "走者一覧",
       description: "MinecraftRTA走者を探して、ポートフォリオをチェック。",
-      playersFound: "{count}人のプレイヤー",
+      playersFound: "{count}人の走者",
     },
 
     // Rankings page
@@ -91,7 +91,7 @@ export const translations = {
     stats: {
       title: "プラットフォーム統計",
       description: "Minefolioの利用統計とメトリクス。",
-      totalPlayers: "総プレイヤー数",
+      totalPlayers: "総走者数",
       totalPlayersDesc: "登録走者",
       totalViews: "総閲覧数",
       totalViewsDesc: "全プロフィールの合計",
@@ -104,7 +104,7 @@ export const translations = {
     keybindingsList: {
       title: "操作設定一覧",
       description: "RTA走者の操作設定・キー配置を一覧で確認できます。",
-      playersFound: "{count}人のプレイヤー",
+      playersFound: "{count}人の走者",
       layout: "{layout}配列",
     },
 
@@ -148,7 +148,7 @@ export const translations = {
 
     // Player profile page
     profile: {
-      notFoundTitle: "プレイヤーが見つかりません",
+      notFoundTitle: "走者が見つかりません",
       editProfile: "プロフィールを編集",
       featuredRecords: "注目の記録",
       keybindings: "キー配置",
@@ -156,13 +156,13 @@ export const translations = {
       devices: "デバイス",
       settings: "設定",
       noKeybindings: "キー配置が未設定",
-      noKeybindingsDesc: "このプレイヤーはまだキー配置を設定していません。",
+      noKeybindingsDesc: "この走者はまだキー配置を設定していません。",
       noRecords: "記録なし",
-      noRecordsDesc: "このプレイヤーはまだ記録を追加していません。",
+      noRecordsDesc: "この走者はまだ記録を追加していません。",
       noDeviceInfo: "デバイス情報なし",
-      noDeviceInfoDesc: "このプレイヤーはまだデバイス設定をしていません。",
+      noDeviceInfoDesc: "この走者はまだデバイス設定をしていません。",
       noSettings: "設定なし",
-      noSettingsDesc: "このプレイヤーはまだゲーム内設定をしていません。",
+      noSettingsDesc: "この走者はまだゲーム内設定をしていません。",
       watchVideo: "動画を見る",
       goal: "目標",
       pb: "PB",

@@ -27,6 +27,7 @@ export default [
     route("stats", "routes/stats.tsx"),
     route("compare", "routes/compare.tsx"),
     route("favorites", "routes/favorites.tsx"),
+    route("feedback", "routes/feedback.tsx"),
 
     // Player profile (public) - slugはMCIDまたは@{内部ID}形式
     route("player/:slug", "routes/player/profile.tsx"),

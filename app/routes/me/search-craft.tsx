@@ -83,9 +83,10 @@ import {
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "サーチクラフト - Minefolio" }];
+  return [{ title: t("meSearchCraft.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
@@ -125,7 +126,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("meSearchCraft.userNotFound"), { status: 404 });
   }
 
   // Parse JSON fields
@@ -227,7 +228,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("meSearchCraft.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -262,11 +263,11 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { success: true };
     } catch (error) {
       console.error("Save error:", error);
-      return { error: "データの保存に失敗しました" };
+      return { error: t("meSearchCraft.saveFailed") };
     }
   }
 
-  return { error: "不明なアクション" };
+  return { error: t("meSearchCraft.unknownAction") };
 }
 
 // アイテム選択ダイアログ
@@ -307,16 +308,16 @@ function ItemSelectDialog({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>アイテムを選択</DialogTitle>
+          <DialogTitle>{t("meSearchCraft.selectItems")}</DialogTitle>
           <DialogDescription>
-            クラフト文字列で検索するアイテムを選択してください（複数選択可）
+            {t("meSearchCraft.selectItemsDescription")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="アイテムを検索..."
+              placeholder={t("meSearchCraft.searchItems")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
@@ -387,11 +388,11 @@ function ItemSelectDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onItemsChange([])}>
-            クリア
+            <Button variant="outline" onClick={() => onItemsChange([])}>
+            {t("meSearchCraft.clear")}
           </Button>
           <DialogClose asChild>
-            <Button>完了</Button>
+            <Button>{t("meSearchCraft.complete")}</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
@@ -427,7 +428,7 @@ function EditableSearchCraftCard({
   };
 
   const handleSearchStrChange = (value: string) => {
-    onUpdate({ ...craft, searchStr: value.toLowerCase() || null });
+    onUpdate({ ...craft, searchStr: value || null });
   };
 
   const handleCommentChange = (value: string) => {
@@ -507,13 +508,13 @@ function EditableSearchCraftCard({
                   onClick={() => setIsItemDialogOpen(true)}
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  追加
+                  {t("meSearchCraft.add")}
                 </Button>
               </div>
 
               {/* クラフト文字列 */}
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground shrink-0">検索:</Label>
+                <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.searchLabel")}</Label>
                 <Input
                   value={craft.searchStr || ""}
                   onChange={(e) => handleSearchStrChange(e.target.value)}
@@ -526,13 +527,13 @@ function EditableSearchCraftCard({
               {isExpanded && (
                 <div className="space-y-2">
                   <Label htmlFor={`comment-${craft.id}`} className="text-xs text-muted-foreground">
-                    コメント（任意）
+                    {t("meSearchCraft.commentOptional")}
                   </Label>
                   <Textarea
                     id={`comment-${craft.id}`}
                     value={craft.comment || ""}
                     onChange={(e) => handleCommentChange(e.target.value)}
-                    placeholder="このサーチクラフトについてのメモ..."
+                    placeholder={t("meSearchCraft.commentPlaceholder")}
                     rows={2}
                   />
                 </div>
@@ -555,14 +556,14 @@ function EditableSearchCraftCard({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>サーチクラフトを削除しますか？</AlertDialogTitle>
+                  <AlertDialogTitle>{t("meSearchCraft.deleteCraftTitle")}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    この操作は保存するまで確定されません。
+                    {t("meSearchCraft.deleteCraftDescription")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete}>削除</AlertDialogAction>
+                  <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
+                  <AlertDialogAction onClick={onDelete}>{t("meSearchCraft.delete")}</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -602,7 +603,7 @@ export default function SearchCraftPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      toast.success("サーチクラフトを保存しました");
+      toast.success(t("meSearchCraft.saveSuccess"));
     } else if ("error" in data) {
       toast.error(data.error);
     }
@@ -666,13 +667,13 @@ export default function SearchCraftPage() {
     // バリデーション
     const emptyCrafts = crafts.filter((c) => c.items.length === 0);
     if (emptyCrafts.length > 0) {
-      toast.error("アイテムを1つ以上選択してください");
+      toast.error(t("meSearchCraft.selectAtLeastOneItem"));
       return;
     }
 
     const emptySearchStr = crafts.filter((c) => !c.searchStr);
     if (emptySearchStr.length > 0) {
-      toast.error("クラフト文字列を入力してください");
+      toast.error(t("meSearchCraft.craftStringRequired"));
       return;
     }
 
@@ -690,7 +691,7 @@ export default function SearchCraftPage() {
   const handleCopyFromPreset = useCallback((presetId: string) => {
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || !preset.searchCraftsData) {
-      toast.error("コピーするデータがありません");
+      toast.error(t("meSearchCraft.copyNoData"));
       return;
     }
 
@@ -700,10 +701,10 @@ export default function SearchCraftPage() {
         ...craft,
         id: `new-${Date.now()}-${idx}`,
       })));
-      toast.success(`${preset.name}からサーチクラフトをコピーしました`);
+      toast.success(t("meSearchCraft.copiedFromPreset", { name: preset.name }));
     } catch (e) {
       console.error("Failed to parse search crafts data:", e);
-      toast.error("データの解析に失敗しました");
+      toast.error(t("meSearchCraft.parseFailed"));
     }
 
     setCopyDialogOpen(false);
@@ -713,14 +714,14 @@ export default function SearchCraftPage() {
     <div className="space-y-6 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">サーチクラフト</h1>
+          <h1 className="text-2xl font-bold">{t("meSearchCraft.pageTitle")}</h1>
           <p className="text-muted-foreground">
-            スピードラン用のクラフト検索を設定します。
+            {t("meSearchCraft.pageDescription")}
           </p>
         </div>
         <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
           <Plus className="mr-2 h-4 w-4" />
-          追加
+          {t("meSearchCraft.add")}
         </Button>
       </div>
 
@@ -730,10 +731,10 @@ export default function SearchCraftPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
-              プリセットがないため、設定を編集できません。先にプリセットを作成してください。
+              {t("meSearchCraft.noPresetWarning")}
             </span>
             <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
+              <Button size="sm" className="w-full sm:w-auto">{t("meSearchCraft.createPreset")}</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -743,7 +744,7 @@ export default function SearchCraftPage() {
           <Settings className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
-              現在編集中のプリセット: <strong>{activePreset.name}</strong>
+              {t("meSearchCraft.editingPreset")} <strong>{activePreset.name}</strong>
             </span>
             <div className="flex gap-2 shrink-0">
               {presets.length > 1 && (
@@ -754,12 +755,12 @@ export default function SearchCraftPage() {
                   onClick={() => setCopyDialogOpen(true)}
                 >
                   <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">他のプリセットからコピー</span>
-                  <span className="sm:hidden">コピー</span>
+                  <span className="hidden sm:inline">{t("meSearchCraft.copyFromOtherPreset")}</span>
+                  <span className="sm:hidden">{t("meSearchCraft.copyShort")}</span>
                 </Button>
               )}
               <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("meSearchCraft.managePresets")}</Button>
               </Link>
             </div>
           </AlertDescription>
@@ -794,13 +795,13 @@ export default function SearchCraftPage() {
         <Card>
           <CardContent className="text-center py-12">
             <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">サーチクラフトが設定されていません</p>
+            <p className="text-lg font-medium">{t("meSearchCraft.emptyTitle")}</p>
             <p className="text-sm text-muted-foreground mb-4">
-              クラフト検索を追加して、スピードランを効率化しましょう。
+              {t("meSearchCraft.emptyDescription")}
             </p>
             <Button onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              追加
+              {t("meSearchCraft.add")}
             </Button>
           </CardContent>
         </Card>
@@ -818,9 +819,9 @@ export default function SearchCraftPage() {
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogTitle>{t("meSearchCraft.copyDialogTitle")}</DialogTitle>
             <DialogDescription>
-              コピー元のプリセットを選択してください
+              {t("meSearchCraft.copyDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -842,11 +843,11 @@ export default function SearchCraftPage() {
                         {preset.hasSearchCrafts ? (
                           <Badge variant="secondary" className="text-xs">
                             <Search className="h-3 w-3 mr-1" />
-                            サーチクラフト
+                            {t("meSearchCraft.pageTitle")}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs text-muted-foreground">
-                            データなし
+                            {t("meSearchCraft.noData")}
                           </Badge>
                         )}
                       </div>
@@ -855,7 +856,7 @@ export default function SearchCraftPage() {
                 ))}
               {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  他のプリセットがありません
+                  {t("meSearchCraft.noOtherPresets")}
                 </p>
               )}
             </div>
@@ -863,7 +864,7 @@ export default function SearchCraftPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
-              キャンセル
+              {t("meSearchCraft.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -879,12 +880,12 @@ export function ErrorBoundary() {
         <CardContent className="p-6">
           <div className="text-center space-y-4">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <h2 className="text-2xl font-bold">{t("meSearchCraft.errorTitle")}</h2>
             <p className="text-muted-foreground">
-              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+              {t("meSearchCraft.errorDescription")}
             </p>
             <Button onClick={() => window.location.reload()}>
-              ページをリロード
+              {t("meSearchCraft.reloadPage")}
             </Button>
           </div>
         </CardContent>

@@ -9,13 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "統計 - Minefolio" },
+    { title: t("stats.metaTitle") },
     {
       name: "description",
-      content: "RTA勢はキー配置・マウス設定をこう設定している！",
+      content: t("stats.metaDescription"),
     },
   ];
 };
@@ -346,7 +347,7 @@ function StatBar({
         <Progress value={barWidth} className="h-6" />
       </div>
       <div className="w-20 text-right text-sm text-muted-foreground">
-        {count}人 ({percentage}%)
+        {count}{t("common.peopleUnit")} ({percentage}%)
       </div>
     </div>
   );
@@ -479,9 +480,9 @@ function BooleanStatCard({
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        <StatBar label="ON" count={enabled} total={total} maxCount={maxCount} />
+        <StatBar label={t("common.on")} count={enabled} total={total} maxCount={maxCount} />
         <StatBar
-          label="OFF"
+          label={t("common.off")}
           count={disabled}
           total={total}
           maxCount={maxCount}
@@ -514,9 +515,9 @@ export default function StatsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">統計</h1>
+        <h1 className="text-3xl font-bold">{t("stats.title")}</h1>
         <p className="text-muted-foreground mt-1">
-          キー配置・マウス設定の統計
+          {t("stats.headingDescription")}
         </p>
       </div>
 
@@ -524,42 +525,45 @@ export default function StatsPage() {
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Users className="h-4 w-4" />
         <span>
-          {totalUsers}人のプレイヤー（うち{usersWithKeybindings}
-          人がキー配置を登録）
+          {t("stats.summary", {
+            total: totalUsers,
+            suffix: t("stats.summaryPrefix"),
+            withKeybindings: usersWithKeybindings,
+          })}
         </span>
       </div>
 
       <Tabs defaultValue="action-to-key" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="action-to-key" className="gap-2">
-            <span className="hidden sm:inline">操作</span>
+            <span className="hidden sm:inline">{t("stats.action")}</span>
             <ArrowRight className="h-4 w-4" />
-            <span className="hidden sm:inline">キー</span>
-            <span className="sm:hidden">操作→キー</span>
+            <span className="hidden sm:inline">{t("stats.key")}</span>
+            <span className="sm:hidden">{t("stats.actionToKey")}</span>
           </TabsTrigger>
           <TabsTrigger value="key-to-action" className="gap-2">
-            <span className="hidden sm:inline">キー</span>
+            <span className="hidden sm:inline">{t("stats.key")}</span>
             <ArrowRight className="h-4 w-4" />
-            <span className="hidden sm:inline">操作</span>
-            <span className="sm:hidden">キー→操作</span>
+            <span className="hidden sm:inline">{t("stats.action")}</span>
+            <span className="sm:hidden">{t("stats.keyToAction")}</span>
           </TabsTrigger>
           <TabsTrigger value="mouse" className="gap-2">
             <Mouse className="h-4 w-4" />
-            <span>マウス設定</span>
+            <span>{t("stats.mouseSettings")}</span>
           </TabsTrigger>
         </TabsList>
 
         {/* 操作 → キー */}
         <TabsContent value="action-to-key" className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            各操作にどのキーが割り当てられているかの統計
+            {t("stats.actionToKeyDescription")}
           </p>
 
           {/* 移動系 */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              移動
+              {t("stats.movement")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {["sprint", "sneak"]
@@ -579,7 +583,7 @@ export default function StatsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              アクション
+              {t("stats.actionGroup")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {["inventory", "swapHands", "drop", "pickBlock"]
@@ -599,7 +603,7 @@ export default function StatsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              ホットバー
+              {t("stats.hotbar")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
@@ -629,14 +633,14 @@ export default function StatsPage() {
         {/* キー → 操作 */}
         <TabsContent value="key-to-action" className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            各キーにどの操作が割り当てられているかの統計
+            {t("stats.keyToActionDescription")}
           </p>
 
           {/* アルファベットキー */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              アルファベットキー
+              {t("stats.alphabetKey")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
@@ -666,7 +670,7 @@ export default function StatsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              修飾キー
+              {t("stats.modifierKey")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {["ShiftLeft", "ControlLeft", "Tab", "CapsLock", "Space"]
@@ -686,7 +690,7 @@ export default function StatsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Mouse className="h-5 w-5" />
-              マウスボタン
+              {t("stats.mouseButton")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {["Mouse0", "Mouse1", "Mouse2", "Mouse3", "Mouse4"]
@@ -706,7 +710,7 @@ export default function StatsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              数字キー
+              {t("stats.numberKey")}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
@@ -736,8 +740,7 @@ export default function StatsPage() {
         {/* マウス設定 */}
         <TabsContent value="mouse" className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            マウス設定とゲーム内オプションの統計（{mouseStats.totalConfigs}
-            人のデータ）
+            {t("stats.mouseSettingsDescription", { count: mouseStats.totalConfigs })}
           </p>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -746,7 +749,7 @@ export default function StatsPage() {
               distribution={mouseStats.dpiDistribution}
             />
             <DistributionCard
-              title="ゲーム内感度"
+              title={t("stats.inGameSensitivity")}
               distribution={mouseStats.sensitivityDistribution}
             />
             <DistributionCard
@@ -759,12 +762,12 @@ export default function StatsPage() {
               disabled={mouseStats.rawInput.disabled}
             />
             <BooleanStatCard
-              title="マウス加速"
+              title={t("stats.mouseAcceleration")}
               enabled={mouseStats.mouseAcceleration.enabled}
               disabled={mouseStats.mouseAcceleration.disabled}
             />
             <BooleanStatCard
-              title="ダッシュ切替"
+              title={t("stats.dashToggle")}
               enabled={mouseStats.toggleSprint.enabled}
               disabled={mouseStats.toggleSprint.disabled}
             />

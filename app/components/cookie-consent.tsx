@@ -101,7 +101,7 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
                 <p className="font-medium text-sm">Cookieの使用について</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   お気に入り機能を利用するためにCookieを使用します。
-                  Cookieにはお気に入りに登録したプレイヤーのIDのみが保存されます。
+                  Cookieにはお気に入りに登録した走者のIDのみが保存されます。
                 </p>
               </div>
               <div className="flex gap-2">

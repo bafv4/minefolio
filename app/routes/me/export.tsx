@@ -18,6 +18,7 @@ import {
 } from "@/lib/schema";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { t } from "@/lib/messages";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
   const env = context.env ?? getEnv();
@@ -120,17 +121,17 @@ export async function action({ request, context }: { request: Request; context: 
 export default function ExportPage() {
   return (
     <div className="container max-w-4xl py-8">
-      <h1 className="text-3xl font-bold mb-6">データエクスポート</h1>
+      <h1 className="text-3xl font-bold mb-6">{t("meExport.title")}</h1>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileJson className="h-5 w-5" />
-              JSON形式
+              {t("meExport.jsonFormat")}
             </CardTitle>
             <CardDescription>
-              すべてのデータを包括的にエクスポート
+              {t("meExport.jsonDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -138,19 +139,19 @@ export default function ExportPage() {
               <input type="hidden" name="format" value="json" />
               <Button type="submit" className="w-full h-11">
                 <Download className="h-4 w-4 mr-2" />
-                JSONをダウンロード
+                {t("meExport.downloadJson")}
               </Button>
             </form>
             <p className="text-sm text-muted-foreground mt-4">
-              含まれるデータ:
+              {t("meExport.includedData")}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-              <li>• プロフィール情報</li>
-              <li>• キーバインド設定</li>
-              <li>• デバイス設定</li>
-              <li>• プリセット</li>
-              <li>• 記録</li>
-              <li>• ソーシャルリンク</li>
+              <li>• {t("meExport.includeProfile")}</li>
+              <li>• {t("meExport.includeKeybindings")}</li>
+              <li>• {t("meExport.includeDevices")}</li>
+              <li>• {t("meExport.includePresets")}</li>
+              <li>• {t("meExport.includeRecords")}</li>
+              <li>• {t("meExport.includeSocialLinks")}</li>
             </ul>
           </CardContent>
         </Card>
@@ -159,10 +160,10 @@ export default function ExportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              CSV形式
+              {t("meExport.csvFormat")}
             </CardTitle>
             <CardDescription>
-              キーバインド設定のみをスプレッドシート形式で
+              {t("meExport.csvDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -170,16 +171,16 @@ export default function ExportPage() {
               <input type="hidden" name="format" value="csv" />
               <Button type="submit" variant="outline" className="w-full h-11">
                 <Download className="h-4 w-4 mr-2" />
-                CSVをダウンロード
+                {t("meExport.downloadCsv")}
               </Button>
             </form>
             <p className="text-sm text-muted-foreground mt-4">
-              含まれるデータ:
+              {t("meExport.includedData")}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-              <li>• キーバインド一覧</li>
-              <li>• カテゴリー分類</li>
-              <li>• キーコード</li>
+              <li>• {t("meExport.includeKeybindingList")}</li>
+              <li>• {t("meExport.includeCategory")}</li>
+              <li>• {t("meExport.includeKeyCode")}</li>
             </ul>
           </CardContent>
         </Card>
@@ -187,21 +188,13 @@ export default function ExportPage() {
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>プライバシーとセキュリティ</CardTitle>
+          <CardTitle>{t("meExport.privacyTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            • エクスポートされたデータには個人情報（Discord ID、メールアドレスなど）が含まれます
-          </p>
-          <p>
-            • ダウンロードしたファイルは安全に保管してください
-          </p>
-          <p>
-            • データは暗号化されていません。共有する際は注意してください
-          </p>
-          <p>
-            • JSONファイルはインポート機能で再度読み込むことができます
-          </p>
+          <p>• {t("meExport.privacy1")}</p>
+          <p>• {t("meExport.privacy2")}</p>
+          <p>• {t("meExport.privacy3")}</p>
+          <p>• {t("meExport.privacy4")}</p>
         </CardContent>
       </Card>
     </div>

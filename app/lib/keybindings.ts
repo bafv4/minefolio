@@ -706,3 +706,161 @@ export const INPUT_METHOD_SHORT_LABELS: Record<string, string> = {
   controller: "Controller",
   touch: "Touch",
 };
+
+// =====================================
+// 修飾キー組み合わせ
+// =====================================
+
+/** 修飾キーの型 */
+export type Modifier = "Ctrl" | "Shift" | "Alt" | "Meta";
+
+/** 修飾キーの正規化順序 */
+export const MODIFIER_ORDER: Modifier[] = ["Ctrl", "Shift", "Alt", "Meta"];
+
+/** 修飾キーの表示ラベル */
+export const MODIFIER_LABELS: Record<Modifier, string> = {
+  Ctrl: "Ctrl",
+  Shift: "Shift",
+  Alt: "Alt",
+  Meta: "Win",
+};
+
+/** キー組み合わせを分解した構造 */
+export interface KeyCombination {
+  modifiers: Modifier[];
+  keyCode: string;
+}
+
+/**
+ * キー組み合わせ文字列をパースして構造化
+ *
+ * @example
+ * parseKeyCombination("Ctrl+Shift+KeyA")
+ * // => { modifiers: ["Ctrl", "Shift"], keyCode: "KeyA" }
+ *
+ * parseKeyCombination("KeyW")
+ * // => { modifiers: [], keyCode: "KeyW" }
+ */
+export function parseKeyCombination(combo: string): KeyCombination {
+  if (!combo || combo === UNBOUND_KEY) {
+    return { modifiers: [], keyCode: combo };
+  }
+
+  const parts = combo.split("+");
+  const modifiers: Modifier[] = [];
+  let keyCode = "";
+
+  for (const part of parts) {
+    const normalizedPart = part.trim();
+    // 修飾キーかどうか判定
+    if (MODIFIER_ORDER.includes(normalizedPart as Modifier)) {
+      modifiers.push(normalizedPart as Modifier);
+    } else {
+      // 最後の非修飾キー部分がキーコード
+      keyCode = normalizeKeyCode(normalizedPart);
+    }
+  }
+
+  return { modifiers, keyCode };
+}
+
+/**
+ * KeyCombination構造をフォーマットして文字列に変換
+ * 修飾キーは正規化順序でソート
+ *
+ * @example
+ * formatKeyCombination({ modifiers: ["Shift", "Ctrl"], keyCode: "KeyA" })
+ * // => "Ctrl+Shift+KeyA"
+ */
+export function formatKeyCombination(combo: KeyCombination): string {
+  if (!combo.keyCode || combo.keyCode === UNBOUND_KEY) {
+    return combo.keyCode;
+  }
+
+  const sortedMods = [...combo.modifiers].sort(
+    (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b)
+  );
+
+  if (sortedMods.length === 0) {
+    return combo.keyCode;
+  }
+
+  return [...sortedMods, combo.keyCode].join("+");
+}
+
+/**
+ * キー組み合わせ文字列を正規化
+ * 修飾キーを正しい順序に並べ、キーコードを正規化
+ *
+ * @example
+ * normalizeKeyCombination("shift+ctrl+keya")
+ * // => "Ctrl+Shift+KeyA"
+ */
+export function normalizeKeyCombination(input: string): string {
+  const combo = parseKeyCombination(input);
+  return formatKeyCombination(combo);
+}
+
+/**
+ * キー組み合わせを表示用ラベルに変換
+ *
+ * @example
+ * getKeyCombinationLabel("Ctrl+Shift+KeyA", "us")
+ * // => "Ctrl+Shift+A"
+ */
+export function getKeyCombinationLabel(
+  combo: string,
+  keyboardLayout: string | null = null
+): string {
+  if (!combo || combo === UNBOUND_KEY) {
+    return getKeyLabel(combo, keyboardLayout);
+  }
+
+  const parsed = parseKeyCombination(combo);
+
+  if (parsed.modifiers.length === 0) {
+    return getKeyLabel(parsed.keyCode, keyboardLayout);
+  }
+
+  const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+  const keyLabel = getKeyLabel(parsed.keyCode, keyboardLayout);
+
+  return [...modifierLabels, keyLabel].join("+");
+}
+
+/**
+ * 単一キー（修飾キー組み合わせではない）かどうかを判定
+ * リマップ先のバリデーションに使用
+ *
+ * @example
+ * isSingleKey("KeyA") // => true
+ * isSingleKey("Ctrl+KeyA") // => false
+ */
+export function isSingleKey(keyCode: string): boolean {
+  if (!keyCode || keyCode === UNBOUND_KEY) {
+    return true;
+  }
+  return !keyCode.includes("+");
+}
+
+/**
+ * 修飾キー組み合わせかどうかを判定
+ *
+ * @example
+ * hasModifiers("Ctrl+KeyA") // => true
+ * hasModifiers("KeyA") // => false
+ */
+export function hasModifiers(keyCode: string): boolean {
+  return !isSingleKey(keyCode);
+}
+
+/**
+ * 2つのキー組み合わせが同一かを比較
+ * 修飾キーの順序や大文字/小文字の違いを吸収
+ *
+ * @example
+ * keyCombinationsEqual("Ctrl+Shift+KeyA", "shift+ctrl+KEYA") // => true
+ */
+export function keyCombinationsEqual(combo1: string, combo2: string): boolean {
+  return normalizeKeyCombination(combo1) === normalizeKeyCombination(combo2);
+}

@@ -44,9 +44,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: "デバイス - Minefolio" }];
+  return [{ title: t("meDevices.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
@@ -72,7 +73,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response("ユーザーが見つかりません", { status: 404 });
+    throw new Response(t("meDevices.userNotFound"), { status: 404 });
   }
 
   // 全プリセットを取得（コピー機能用）
@@ -163,7 +164,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   });
 
   if (!user) {
-    return { error: "ユーザーが見つかりません" };
+    return { error: t("meDevices.userNotFound") };
   }
 
   const formData = await request.formData();
@@ -329,7 +330,7 @@ export default function DevicesPage() {
     { value: "is_is", label: "Íslenska" },
     { value: "isv", label: "Interslavic" },
     { value: "it_it", label: "Italiano" },
-    { value: "ja_jp", label: "日本語" },
+    { value: "ja_jp", label: t("common.langJaJp") },
     { value: "jbo_en", label: "la .lojban." },
     { value: "ka_ge", label: "ქართული" },
     { value: "kk_kz", label: "Қазақша" },
@@ -345,7 +346,7 @@ export default function DevicesPage() {
     { value: "lol_us", label: "LOLCAT" },
     { value: "lt_lt", label: "Lietuvių" },
     { value: "lv_lv", label: "Latviešu" },
-    { value: "lzh", label: "文言" },
+    { value: "lzh", label: t("common.langLzh") },
     { value: "mk_mk", label: "Македонски" },
     { value: "mn_mn", label: "Монгол" },
     { value: "ms_my", label: "Bahasa Melayu" },
@@ -389,9 +390,9 @@ export default function DevicesPage() {
     { value: "vi_vn", label: "Tiếng Việt" },
     { value: "yi_de", label: "ייִדיש" },
     { value: "yo_ng", label: "Yorùbá" },
-    { value: "zh_cn", label: "简体中文" },
-    { value: "zh_hk", label: "繁體中文 (香港)" },
-    { value: "zh_tw", label: "繁體中文 (台灣)" },
+    { value: "zh_cn", label: t("common.langZhCn") },
+    { value: "zh_hk", label: t("common.langZhHk") },
+    { value: "zh_tw", label: t("common.langZhTwTaiwan") },
     { value: "zlm_arab", label: "بهاس ملايو (جاوي)" },
   ];
 
@@ -498,7 +499,7 @@ export default function DevicesPage() {
   const handleCopyFromPreset = useCallback((presetId: string) => {
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || !preset.playerConfigData) {
-      toast.error("コピーするデータがありません");
+      toast.error(t("meDevices.copyNoData"));
       return;
     }
 
@@ -543,10 +544,10 @@ export default function DevicesPage() {
         notes: configData.notes ?? "",
       }));
 
-      toast.success(`${preset.name}からデバイス設定をコピーしました`);
+      toast.success(t("meDevices.copiedFromPreset", { name: preset.name }));
     } catch (e) {
       console.error("Failed to parse player config data:", e);
-      toast.error("データの解析に失敗しました");
+      toast.error(t("meDevices.parseFailed"));
     }
 
     setCopyDialogOpen(false);
@@ -558,7 +559,7 @@ export default function DevicesPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      toast.success("設定を保存しました");
+      toast.success(t("meDevices.saveSuccess"));
       initialFormValues.current = { ...formValues };
     } else if ("error" in data) {
       toast.error(data.error);
@@ -568,10 +569,8 @@ export default function DevicesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">デバイス・設定</h1>
-        <p className="text-muted-foreground">
-          使用機器とゲーム内設定を管理します。
-        </p>
+        <h1 className="text-2xl font-bold">{t("meDevices.pageTitle")}</h1>
+        <p className="text-muted-foreground">{t("meDevices.pageDescription")}</p>
       </div>
 
       {/* プリセット警告・情報 */}
@@ -579,11 +578,9 @@ export default function DevicesPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              プリセットがないため、設定を編集できません。先にプリセットを作成してください。
-            </span>
+            <span className="text-sm">{t("meDevices.noPresetWarning")}</span>
             <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">プリセットを作成</Button>
+              <Button size="sm" className="w-full sm:w-auto">{t("meDevices.createPreset")}</Button>
             </Link>
           </AlertDescription>
         </Alert>
@@ -592,9 +589,7 @@ export default function DevicesPage() {
         <Alert>
           <Settings className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              現在編集中のプリセット: <strong>{activePreset.name}</strong>
-            </span>
+            <span className="text-sm">{t("meDevices.editingPreset")} <strong>{activePreset.name}</strong></span>
             <div className="flex gap-2 shrink-0">
               {presets.length > 1 && (
                 <Button
@@ -604,12 +599,12 @@ export default function DevicesPage() {
                   onClick={() => setCopyDialogOpen(true)}
                 >
                   <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">他のプリセットからコピー</span>
-                  <span className="sm:hidden">コピー</span>
+                  <span className="hidden sm:inline">{t("meDevices.copyFromOtherPreset")}</span>
+                  <span className="sm:hidden">{t("meDevices.copyShort")}</span>
                 </Button>
               )}
               <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">プリセット管理</Button>
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("meDevices.managePresets")}</Button>
               </Link>
             </div>
           </AlertDescription>
@@ -619,37 +614,35 @@ export default function DevicesPage() {
       {/* 入力方法セレクター */}
       <Card>
         <CardHeader>
-          <CardTitle>入力方法</CardTitle>
+          <CardTitle>{t("meDevices.inputMethod")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
-            <p className="text-sm text-muted-foreground sm:flex-1">
-              使用する入力デバイスを選択してください。選択に応じてキー配置やデバイス設定の表示が切り替わります。
-            </p>
+            <p className="text-sm text-muted-foreground sm:flex-1">{t("meDevices.inputMethodDescription")}</p>
             <Select
               value={formValues.inputMethod}
               onValueChange={(value) => handleChange("inputMethod", value)}
             >
               <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="選択してください" />
+                <SelectValue placeholder={t("meDevices.selectPlease")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="keyboard_mouse">
                   <span className="flex items-center gap-2">
                     <Keyboard className="h-4 w-4" />
-                    キーボード/マウス
+                    {t("meDevices.keyboardMouse")}
                   </span>
                 </SelectItem>
                 <SelectItem value="controller">
                   <span className="flex items-center gap-2">
                     <Gamepad2 className="h-4 w-4" />
-                    コントローラー
+                    {t("meDevices.controller")}
                   </span>
                 </SelectItem>
                 <SelectItem value="touch">
                   <span className="flex items-center gap-2">
                     <Smartphone className="h-4 w-4" />
-                    タッチ
+                    {t("meDevices.touch")}
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -665,22 +658,22 @@ export default function DevicesPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Gamepad2 className="h-5 w-5" />
-                コントローラー
+                {t("meDevices.controller")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="controllerModel">モデル</Label>
+                  <Label htmlFor="controllerModel">{t("meDevices.model")}</Label>
                   <Input
                     id="controllerModel"
                     value={formValues.controllerModel}
                     onChange={(e) => handleChange("controllerModel", e.target.value)}
-                    placeholder="例: Xbox Controller"
+                    placeholder={t("meDevices.modelExampleController")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lookSensitivity">視点感度 (0-100)</Label>
+                  <Label htmlFor="lookSensitivity">{t("meDevices.lookSensitivity")}</Label>
                   <Input
                     id="lookSensitivity"
                     type="number"
@@ -699,7 +692,7 @@ export default function DevicesPage() {
                     checked={formValues.invertYAxis}
                     onCheckedChange={(checked) => handleChange("invertYAxis", checked)}
                   />
-                  <Label htmlFor="invertYAxis">Y軸反転</Label>
+                  <Label htmlFor="invertYAxis">{t("meDevices.invertYAxis")}</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
@@ -707,7 +700,7 @@ export default function DevicesPage() {
                     checked={formValues.vibration}
                     onCheckedChange={(checked) => handleChange("vibration", checked)}
                   />
-                  <Label htmlFor="vibration">振動</Label>
+                  <Label htmlFor="vibration">{t("meDevices.vibration")}</Label>
                 </div>
               </div>
             </CardContent>
@@ -722,28 +715,28 @@ export default function DevicesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              キーボード
+              {t("meDevices.keyboard")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="keyboardModel">モデル</Label>
+                <Label htmlFor="keyboardModel">{t("meDevices.model")}</Label>
                 <Input
                   id="keyboardModel"
                   value={formValues.keyboardModel}
                   onChange={(e) => handleChange("keyboardModel", e.target.value)}
-                  placeholder="例: HHKB Professional"
+                  placeholder={t("meDevices.modelExampleKeyboard")}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="keyboardLayout">レイアウト</Label>
+                <Label htmlFor="keyboardLayout">{t("meDevices.layout")}</Label>
                 <Select
                   value={formValues.keyboardLayout}
                   onValueChange={(value) => handleChange("keyboardLayout", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="レイアウトを選択" />
+                    <SelectValue placeholder={t("meDevices.chooseLayout")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="US">US</SelectItem>
@@ -762,18 +755,18 @@ export default function DevicesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mouse className="h-5 w-5" />
-              マウス
+              {t("meDevices.mouse")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="mouseModel">モデル</Label>
+                <Label htmlFor="mouseModel">{t("meDevices.model")}</Label>
                 <Input
                   id="mouseModel"
                   value={formValues.mouseModel}
                   onChange={(e) => handleChange("mouseModel", e.target.value)}
-                  placeholder="例: Logitech G Pro"
+                  placeholder={t("meDevices.modelExampleMouse")}
                 />
               </div>
               <div className="space-y-2">
@@ -783,11 +776,11 @@ export default function DevicesPage() {
                   type="number"
                   value={formValues.mouseDpi}
                   onChange={(e) => handleChange("mouseDpi", e.target.value)}
-                  placeholder="例: 800"
+                  placeholder={t("meDevices.dpiExample")}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gameSensitivity">ゲーム内感度</Label>
+                <Label htmlFor="gameSensitivity">{t("meDevices.inGameSensitivity")}</Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Input
@@ -822,25 +815,25 @@ export default function DevicesPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="windowsSpeed">Windowsポインター速度 (1-20)</Label>
+                <Label htmlFor="windowsSpeed">{t("meDevices.windowsPointerSpeed")}</Label>
                 <Select
                   value={formValues.windowsSpeed}
                   onValueChange={(value) => handleChange("windowsSpeed", value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="選択" />
+                    <SelectValue placeholder={t("meDevices.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => (
                       <SelectItem key={n} value={n.toString()}>
-                        {n}/20 {n === 11 && "(デフォルト)"}
+                        {n}/20 {n === 11 && t("meDevices.defaultSuffix")}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="windowsSpeedMultiplier">カスタム係数 (小数)</Label>
+                <Label htmlFor="windowsSpeedMultiplier">{t("meDevices.customMultiplier")}</Label>
                 <Input
                   id="windowsSpeedMultiplier"
                   type="number"
@@ -848,10 +841,10 @@ export default function DevicesPage() {
                   min="0"
                   value={formValues.windowsSpeedMultiplier}
                   onChange={(e) => handleChange("windowsSpeedMultiplier", e.target.value)}
-                  placeholder="例: 1.0（設定時はポインター速度より優先）"
+                  placeholder={t("meDevices.customMultiplierPlaceholder")}
                 />
                 <p className="text-xs text-muted-foreground">
-                  設定するとWindowsポインター速度の代わりに使用されます
+                  {t("meDevices.customMultiplierHint")}
                 </p>
               </div>
             </div>
@@ -871,7 +864,7 @@ export default function DevicesPage() {
                   checked={formValues.mouseAcceleration}
                   onCheckedChange={(checked) => handleChange("mouseAcceleration", checked)}
                 />
-                <Label htmlFor="mouseAcceleration">マウス加速</Label>
+                <Label htmlFor="mouseAcceleration">{t("meDevices.mouseAcceleration")}</Label>
               </div>
             </div>
           </CardContent>
@@ -882,7 +875,7 @@ export default function DevicesPage() {
         {/* In-Game Settings */}
         <Card>
           <CardHeader>
-            <CardTitle>ゲーム内設定</CardTitle>
+            <CardTitle>{t("meDevices.gameSettings")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-6">
@@ -892,7 +885,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSprint}
                   onCheckedChange={(checked) => handleChange("toggleSprint", checked)}
                 />
-                <Label htmlFor="toggleSprint">ダッシュ切替</Label>
+                <Label htmlFor="toggleSprint">{t("meDevices.toggleSprint")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -900,7 +893,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSneak}
                   onCheckedChange={(checked) => handleChange("toggleSneak", checked)}
                 />
-                <Label htmlFor="toggleSneak">スニーク切替</Label>
+                <Label htmlFor="toggleSneak">{t("meDevices.toggleSneak")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -908,20 +901,20 @@ export default function DevicesPage() {
                   checked={formValues.autoJump}
                   onCheckedChange={(checked) => handleChange("autoJump", checked)}
                 />
-                <Label htmlFor="autoJump">自動ジャンプ</Label>
+                <Label htmlFor="autoJump">{t("meDevices.autoJump")}</Label>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="gameLanguage">ゲーム言語</Label>
+                <Label htmlFor="gameLanguage">{t("meDevices.gameLanguage")}</Label>
                 <Combobox
                   options={GAME_LANGUAGE_OPTIONS}
                   value={formValues.gameLanguage}
                   onValueChange={(value) => handleChange("gameLanguage", value)}
-                  placeholder="言語を選択"
-                  searchPlaceholder="検索..."
-                  emptyText="見つかりません"
+                  placeholder={t("meDevices.chooseLanguage")}
+                  searchPlaceholder={t("meDevices.search")}
+                  emptyText={t("meDevices.notFound")}
                   allowCustomValue={true}
                 />
               </div>
@@ -934,11 +927,11 @@ export default function DevicesPage() {
                   max="110"
                   value={formValues.fov}
                   onChange={(e) => handleChange("fov", e.target.value)}
-                  placeholder="例: 90"
+                  placeholder={t("meDevices.fovExample")}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="guiScale">GUIスケール</Label>
+                <Label htmlFor="guiScale">{t("meDevices.guiScale")}</Label>
                 <Input
                   id="guiScale"
                   type="number"
@@ -946,18 +939,18 @@ export default function DevicesPage() {
                   max="4"
                   value={formValues.guiScale}
                   onChange={(e) => handleChange("guiScale", e.target.value)}
-                  placeholder="例: 2"
+                  placeholder={t("meDevices.guiScaleExample")}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">メモ</Label>
+              <Label htmlFor="notes">{t("meDevices.notes")}</Label>
               <Textarea
                 id="notes"
                 value={formValues.notes}
                 onChange={(e) => handleChange("notes", e.target.value)}
-                placeholder="設定についての補足..."
+                placeholder={t("meDevices.notesPlaceholder")}
                 rows={3}
               />
             </div>
@@ -977,9 +970,9 @@ export default function DevicesPage() {
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>他のプリセットからコピー</DialogTitle>
+            <DialogTitle>{t("meDevices.copyDialogTitle")}</DialogTitle>
             <DialogDescription>
-              コピー元のプリセットを選択してください
+              {t("meDevices.copyDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -1002,16 +995,16 @@ export default function DevicesPage() {
                           <>
                             <Badge variant="secondary" className="text-xs">
                               <Keyboard className="h-3 w-3 mr-1" />
-                              キーボード
+                              {t("meDevices.keyboard")}
                             </Badge>
                             <Badge variant="secondary" className="text-xs">
                               <Mouse className="h-3 w-3 mr-1" />
-                              マウス
+                              {t("meDevices.mouse")}
                             </Badge>
                           </>
                         ) : (
                           <Badge variant="outline" className="text-xs text-muted-foreground">
-                            データなし
+                            {t("meDevices.noData")}
                           </Badge>
                         )}
                       </div>
@@ -1020,7 +1013,7 @@ export default function DevicesPage() {
                 ))}
               {presets.filter((p) => p.id !== activePreset?.id).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  他のプリセットがありません
+                  {t("meDevices.noOtherPresets")}
                 </p>
               )}
             </div>
@@ -1028,7 +1021,7 @@ export default function DevicesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
-              キャンセル
+              {t("meDevices.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1044,12 +1037,12 @@ export function ErrorBoundary() {
         <CardContent className="p-6">
           <div className="text-center space-y-4">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">エラーが発生しました</h2>
+            <h2 className="text-2xl font-bold">{t("meDevices.errorTitle")}</h2>
             <p className="text-muted-foreground">
-              ページの読み込み中にエラーが発生しました。ページをリロードしてください。
+              {t("meDevices.errorDescription")}
             </p>
             <Button onClick={() => window.location.reload()}>
-              ページをリロード
+              {t("meDevices.reloadPage")}
             </Button>
           </div>
         </CardContent>

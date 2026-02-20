@@ -17,11 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "ログイン - Minefolio" },
-    { name: "description", content: "Discordを使ってサインイン" },
+    { title: t("login.title") },
+    { name: "description", content: t("login.description") },
   ];
 };
 
@@ -67,7 +68,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Minefolio</CardTitle>
           <CardDescription>
-            プロフィールを管理するにはサインインしてください
+            {t("login.cardDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -82,7 +83,7 @@ export default function LoginPage() {
             ) : (
               <DiscordIcon className="mr-2 h-5 w-5" />
             )}
-            Discordでログイン
+            {t("login.signInWithDiscord")}
           </Button>
         </CardContent>
       </Card>

@@ -11,13 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, Users, ArrowLeft, Cookie } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "お気に入り - Minefolio" },
+    { title: t("favorites.metaTitle") },
     {
       name: "description",
-      content: "お気に入りに登録したプレイヤー一覧",
+      content: t("favorites.description"),
     },
   ];
 };
@@ -33,7 +34,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     return { players: [], favoriteMcids };
   }
 
-  // お気に入りのプレイヤー情報を取得
+  // お気に入りの走者情報を取得
   const players = await db.query.users.findMany({
     where: inArray(users.mcid, favoriteMcids),
     columns: {
@@ -65,16 +66,16 @@ export default function FavoritesPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Heart className="h-6 w-6 text-red-500 fill-current" />
-            お気に入り
+            {t("favorites.title")}
           </h1>
           <p className="text-muted-foreground">
-            お気に入りに登録したプレイヤー ({favoriteMcids.length}人)
+            {`${t("favorites.totalCount")} (${favoriteMcids.length}${t("common.peopleUnit")})`}
           </p>
         </div>
         <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
           <Link to="/">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            ホームに戻る
+            {t("common.backToHome")}
           </Link>
         </Button>
       </div>
@@ -83,13 +84,11 @@ export default function FavoritesPage() {
       {hasConsent === false && (
         <Alert>
           <Cookie className="h-4 w-4" />
-          <AlertTitle>Cookieが無効です</AlertTitle>
+          <AlertTitle>{t("favorites.cookieDisabled")}</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
-            <span>
-              お気に入り機能を使用するにはCookieの承諾が必要です。
-            </span>
+            <span>{t("favorites.cookieRequired")}</span>
             <Button size="sm" onClick={acceptCookies} className="ml-4">
-              Cookieを有効にする
+              {t("favorites.enableCookie")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -104,20 +103,20 @@ export default function FavoritesPage() {
       ) : (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
-          <p className="text-lg mb-2">お気に入りがありません</p>
+          <p className="text-lg mb-2">{t("favorites.emptyTitle")}</p>
           <p className="text-sm text-center max-w-md mb-6">
             {hasConsent === false
-              ? "お気に入り機能を使用するにはCookieの承諾が必要です。"
-              : "プレイヤーのプロフィールページでハートボタンを押すと、お気に入りに追加できます。"}
+              ? t("favorites.cookieRequired")
+              : t("favorites.emptyHelp")}
           </p>
           <Button asChild>
-            <Link to="/">プレイヤーを探す</Link>
+            <Link to="/">{t("favorites.browseRunner")}</Link>
           </Button>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground text-center">
-        お気に入りはブラウザのCookieに保存されます。別のブラウザやデバイスでは表示されません。
+        {t("favorites.cookieNotice")}
       </p>
     </div>
   );

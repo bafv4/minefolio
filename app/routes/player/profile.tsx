@@ -15,6 +15,8 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { formatTime } from "@/lib/time-utils";
+import { t } from "@/lib/messages";
+import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 
 // クライアントサイドのみでレンダリング
 const MinecraftFullBody = lazy(() =>
@@ -116,7 +118,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
 import Markdown from "react-markdown";
@@ -280,7 +282,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   });
 
   if (!player) {
-    throw new Response("プレイヤーが見つかりません", { status: 404 });
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
   // プリセット一覧を取得
@@ -332,7 +334,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
         }));
       }
 
-      // プリセットのプレイヤー設定を適用
+      // プリセットの走者設定を適用
       if (selectedPreset.playerConfigData) {
         const presetConfig = JSON.parse(selectedPreset.playerConfigData);
         displayPlayerConfig = {
@@ -357,6 +359,8 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           targetKey: r.targetKey,
           software: r.software,
           notes: r.notes,
+          outputMode: null,
+          outputCharacter: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         }));
@@ -506,10 +510,10 @@ export default function PlayerProfilePage() {
 
   const categoryOrder = ["movement", "combat", "inventory", "ui"];
   const categoryLabels: Record<string, string> = {
-    movement: "移動",
-    combat: "戦闘",
-    inventory: "インベントリ",
-    ui: "UI",
+    movement: t("playerProfile.movement"),
+    combat: t("playerProfile.combat"),
+    inventory: t("playerProfile.inventory"),
+    ui: t("playerProfile.ui"),
   };
 
   // ユーザーの指割り当てをパース
@@ -517,11 +521,8 @@ export default function PlayerProfilePage() {
     ? JSON.parse(player.playerConfig.fingerAssignments)
     : {};
 
-  // リマップをVirtualKeyboard用の形式に変換
-  const remapsForKeyboard = player.keyRemaps.map((r) => ({
-    sourceKey: r.sourceKey,
-    targetKey: r.targetKey,
-  }));
+  // リマップを表示用形式に変換（disabled/characterの扱いを統一）
+  const remapsForKeyboard = toUiRemaps(player.keyRemaps);
 
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -532,11 +533,11 @@ export default function PlayerProfilePage() {
 
   // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
-    { value: "stats", icon: BarChart3, label: "活動・記録" },
-    { value: "keybindings", icon: Keyboard, label: "キー配置" },
-    { value: "devices", icon: Mouse, label: "デバイス" },
-    { value: "items", icon: Package, label: "アイテム配置" },
-    { value: "searchcraft", icon: Search, label: "サーチクラフト" },
+    { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
+    { value: "keybindings", icon: Keyboard, label: t("playerProfile.keybindingsTab") },
+    { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
+    { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
+    { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
   ];
 
   // 有効なタブ値のリスト
@@ -606,7 +607,7 @@ export default function PlayerProfilePage() {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <User className="h-4 w-4 shrink-0" />
-                <span>プロフィール</span>
+                <span>{t("playerProfile.profile")}</span>
               </TabsTrigger>
               {tabItems.map((item) => (
                 <TabsTrigger
@@ -680,28 +681,28 @@ export default function PlayerProfilePage() {
             <div className="p-3 border rounded-lg space-y-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Save className="h-3 w-3" />
-                <span>プリセット</span>
+                <span>{t("playerProfile.preset")}</span>
               </div>
               <Select
                 value={activePresetId ?? "current"}
                 onValueChange={handlePresetChange}
               >
                 <SelectTrigger className="w-full text-sm">
-                  <SelectValue placeholder="現在の設定" />
+                  <SelectValue placeholder={t("playerProfile.currentSetting")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current">現在の設定</SelectItem>
+                  <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                   {presets.map((preset) => (
                     <SelectItem key={preset.id} value={preset.id}>
                       {preset.name}
-                      {preset.isActive && " (適用中)"}
+                      {preset.isActive && t("playerProfile.presetAppliedSuffix")}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {activePresetId && (
                 <Badge variant="secondary" className="text-xs w-full justify-center">
-                  プリセット表示中
+                  {t("playerProfile.presetViewing")}
                 </Badge>
               )}
             </div>
@@ -716,21 +717,21 @@ export default function PlayerProfilePage() {
           <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Save className="h-4 w-4" />
-              <span>プリセット:</span>
+              <span>{t("playerProfile.presetWithColon")}</span>
             </div>
             <Select
               value={activePresetId ?? "current"}
               onValueChange={handlePresetChange}
             >
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="現在の設定" />
+                <SelectValue placeholder={t("playerProfile.currentSetting")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">現在の設定</SelectItem>
+                <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                 {presets.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.name}
-                    {preset.isActive && " (適用中)"}
+                    {preset.isActive && t("playerProfile.presetAppliedSuffix")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -778,7 +779,7 @@ export default function PlayerProfilePage() {
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {player.role && (
                       <Badge variant={player.role === "runner" ? "default" : "secondary"}>
-                        {player.role === "runner" ? "走者" : "視聴者"}
+                        {player.role === "runner" ? t("common.runner") : t("common.viewer")}
                       </Badge>
                     )}
                     {player.mainEdition && (
@@ -821,7 +822,7 @@ export default function PlayerProfilePage() {
                       <Button asChild size="sm">
                         <Link to="/me/edit">
                           <Pencil className="mr-2 h-4 w-4" />
-                          編集
+                          {t("playerProfile.edit")}
                         </Link>
                       </Button>
                     )}
@@ -834,7 +835,7 @@ export default function PlayerProfilePage() {
                     <Button asChild variant="outline" size="sm">
                       <Link to={`/compare?p1=${player.slug}`}>
                         <GitCompare className="h-4 w-4 mr-2" />
-                        比較
+                        {t("playerProfile.compare")}
                       </Link>
                     </Button>
                   </div>
@@ -847,7 +848,7 @@ export default function PlayerProfilePage() {
           {player.socialLinks.length > 0 && (
             <Card>
               <CardHeader className="py-3">
-                <CardTitle className="text-base">リンク</CardTitle>
+                <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-4">
                 <div className="flex flex-wrap gap-2">
@@ -869,7 +870,7 @@ export default function PlayerProfilePage() {
           {player.bio && (
             <Card>
               <CardHeader className="py-3">
-                <CardTitle className="text-base">自己紹介</CardTitle>
+                <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-4">
                 <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
@@ -885,7 +886,7 @@ export default function PlayerProfilePage() {
               <CardHeader className="py-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Video className="h-4 w-4" />
-                  おすすめ動画
+                  {t("playerProfile.featuredVideo")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-4">
@@ -911,7 +912,7 @@ export default function PlayerProfilePage() {
               <Card>
                 <CardHeader className="py-3">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <CardTitle className="text-base">キーボードビュー</CardTitle>
+                    <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
                     <FingerLegend />
                   </div>
                 </CardHeader>
@@ -1001,8 +1002,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<Keyboard className="h-12 w-12" />}
-              title="キー配置が未設定"
-              description="このプレイヤーはまだキー配置を設定していません。"
+              title={t("playerProfile.noKeybindingsTitle")}
+              description={t("playerProfile.noKeybindings")}
             />
           )}
         </TabsContent>
@@ -1027,8 +1028,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<Package className="h-12 w-12" />}
-              title="アイテム配置なし"
-              description="このプレイヤーはまだアイテム配置を設定していません。"
+              title={t("playerProfile.noItemLayoutsTitle")}
+              description={t("playerProfile.noItemLayouts")}
             />
           )}
         </TabsContent>
@@ -1040,7 +1041,7 @@ export default function PlayerProfilePage() {
               {/* ゲーム言語表示 */}
               {player.playerConfig?.gameLanguage && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>ゲーム言語:</span>
+                  <span>{t("playerProfile.gameLanguage")}:</span>
                   <Badge variant="secondary">
                     {getGameLanguageName(player.playerConfig.gameLanguage)}
                   </Badge>
@@ -1060,8 +1061,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<Search className="h-12 w-12" />}
-              title="サーチクラフトなし"
-              description="このプレイヤーはまだサーチクラフトを設定していません。"
+              title={t("playerProfile.searchCraftNoneTitle")}
+              description={t("playerProfile.noSearchCraft")}
             />
           )}
         </TabsContent>
@@ -1076,7 +1077,7 @@ export default function PlayerProfilePage() {
                   <CardHeader className="py-2">
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
                       <Keyboard className="h-5 w-5" />
-                      キーボード
+                      {t("playerProfile.keyboard")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-3">
@@ -1084,20 +1085,20 @@ export default function PlayerProfilePage() {
                       <div className="divide-y">
                         {player.playerConfig.keyboardModel && (
                           <DeviceRow
-                            label="モデル"
+                            label={t("playerProfile.model")}
                             value={player.playerConfig.keyboardModel}
                           />
                         )}
                         {player.playerConfig.keyboardLayout && (
                           <DeviceRow
-                            label="レイアウト"
+                            label={t("playerProfile.layout")}
                             value={player.playerConfig.keyboardLayout}
                           />
                         )}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground py-2">
-                        キーボード情報なし
+                        {t("playerProfile.keyboardNoInfo")}
                       </p>
                     )}
                   </CardContent>
@@ -1108,7 +1109,7 @@ export default function PlayerProfilePage() {
                   <CardHeader className="py-2">
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
                       <Mouse className="h-5 w-5" />
-                      マウス
+                      {t("playerProfile.mouse")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-3">
@@ -1117,46 +1118,46 @@ export default function PlayerProfilePage() {
                         {/* モデル */}
                         {player.playerConfig.mouseModel && (
                           <DeviceRow
-                            label="モデル"
+                            label={t("playerProfile.model")}
                             value={player.playerConfig.mouseModel}
                           />
                         )}
                         {/* DPI */}
                         {player.playerConfig.mouseDpi && (
                           <DeviceRow
-                            label="DPI"
+                            label={t("playerProfile.dpi")}
                             value={player.playerConfig.mouseDpi.toString()}
                           />
                         )}
                         {/* Win Sens または カスタム係数 */}
                         {player.playerConfig.windowsSpeedMultiplier != null ? (
                           <DeviceRow
-                            label="マウス速度係数"
+                            label={t("playerProfile.mouseSpeedMultiplier")}
                             value={`x${player.playerConfig.windowsSpeedMultiplier.toFixed(3)}`}
                           />
                         ) : player.playerConfig.windowsSpeed != null ? (
                           <DeviceRow
-                            label="Win Sens"
+                            label={t("playerProfile.winSens")}
                             value={player.playerConfig.windowsSpeed.toString()}
                             unit={`(x${WINDOWS_POINTER_MULTIPLIERS[player.playerConfig.windowsSpeed]?.toFixed(3) ?? "1.000"})`}
                           />
                         ) : (
                           <DeviceRow
-                            label="Win Sens"
-                            value="値なし"
+                            label={t("playerProfile.winSens")}
+                            value={t("playerProfile.noValue")}
                           />
                         )}
                         {/* マウス加速 */}
                         {player.playerConfig.mouseAcceleration != null && (
                           <DeviceRow
-                            label="マウス加速"
-                            value={player.playerConfig.mouseAcceleration ? "ON" : "OFF"}
+                            label={t("playerProfile.mouseAcceleration")}
+                            value={player.playerConfig.mouseAcceleration ? t("common.on") : t("common.off")}
                           />
                         )}
                         {/* ゲーム内感度 */}
                         {player.playerConfig.gameSensitivity != null && (
                           <DeviceRow
-                            label="ゲーム内感度"
+                            label={t("playerProfile.inGameSensitivity")}
                             value={Math.floor(player.playerConfig.gameSensitivity * 200).toString()}
                             unit="%"
                           />
@@ -1164,8 +1165,8 @@ export default function PlayerProfilePage() {
                         {/* Raw Input */}
                         {player.playerConfig.rawInput != null && (
                           <DeviceRow
-                            label="Raw Input"
-                            value={player.playerConfig.rawInput ? "ON" : "OFF"}
+                            label={t("playerProfile.rawInput")}
+                            value={player.playerConfig.rawInput ? t("common.on") : t("common.off")}
                           />
                         )}
                         {/* 振り向き */}
@@ -1179,7 +1180,7 @@ export default function PlayerProfilePage() {
                           );
                           return cm360 != null ? (
                             <DeviceRow
-                              label="振り向き"
+                            label={t("playerProfile.turnDistance")}
                               value={cm360.toFixed(2)}
                               unit="cm"
                             />
@@ -1194,7 +1195,7 @@ export default function PlayerProfilePage() {
                           );
                           return cursorSpeed != null ? (
                             <DeviceRow
-                              label="カーソル速度"
+                              label={t("playerProfile.cursorSpeed")}
                               value={cursorSpeed.toString()}
                             />
                           ) : null;
@@ -1202,7 +1203,7 @@ export default function PlayerProfilePage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground py-2">
-                        マウス情報なし
+                        {t("playerProfile.mouseNoInfo")}
                       </p>
                     )}
                   </CardContent>
@@ -1214,7 +1215,7 @@ export default function PlayerProfilePage() {
                 <CardHeader className="py-2">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <Settings className="h-5 w-5" />
-                    ゲーム内設定
+                    {t("playerProfile.inGameSettings")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 pb-3">
@@ -1222,25 +1223,25 @@ export default function PlayerProfilePage() {
                     <div className="divide-y">
                       {player.playerConfig.toggleSprint != null && (
                         <DeviceRow
-                          label="ダッシュ切替"
-                          value={player.playerConfig.toggleSprint ? "ON" : "OFF"}
+                          label={t("playerProfile.toggleSprint")}
+                          value={player.playerConfig.toggleSprint ? t("common.on") : t("common.off")}
                         />
                       )}
                       {player.playerConfig.toggleSneak != null && (
                         <DeviceRow
-                          label="スニーク切替"
-                          value={player.playerConfig.toggleSneak ? "ON" : "OFF"}
+                          label={t("playerProfile.toggleSneak")}
+                          value={player.playerConfig.toggleSneak ? t("common.on") : t("common.off")}
                         />
                       )}
                       {player.playerConfig.autoJump != null && (
                         <DeviceRow
-                          label="自動ジャンプ"
-                          value={player.playerConfig.autoJump ? "ON" : "OFF"}
+                          label={t("playerProfile.autoJump")}
+                          value={player.playerConfig.autoJump ? t("common.on") : t("common.off")}
                         />
                       )}
                       {player.playerConfig.gameLanguage && (
                         <DeviceRow
-                          label="ゲーム言語"
+                          label={t("playerProfile.gameLanguage")}
                           value={getGameLanguageName(player.playerConfig.gameLanguage)}
                         />
                       )}
@@ -1248,13 +1249,13 @@ export default function PlayerProfilePage() {
                     <div className="divide-y">
                       {player.playerConfig.fov != null && (
                         <DeviceRow
-                          label="FOV"
+                          label={t("playerProfile.fov")}
                           value={player.playerConfig.fov.toString()}
                         />
                       )}
                       {player.playerConfig.guiScale !== null && player.playerConfig.guiScale !== undefined && (
                         <DeviceRow
-                          label="GUIスケール"
+                          label={t("playerProfile.guiScale")}
                           value={player.playerConfig.guiScale.toString()}
                         />
                       )}
@@ -1271,8 +1272,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<Mouse className="h-12 w-12" />}
-              title="デバイス情報なし"
-              description="このプレイヤーはまだデバイス設定をしていません。"
+              title={t("playerProfile.noDevicesTitle")}
+              description={t("playerProfile.noDevices")}
             />
           )}
         </TabsContent>
@@ -1323,7 +1324,7 @@ function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-muted-foreground">Eloレート推移（直近{sortedMatches.length}試合）</h4>
+        <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.eloTrend", { count: sortedMatches.length })}</h4>
         <span className={cn(
           "text-sm font-medium",
           isPositive ? "text-green-500" : "text-red-500"
@@ -1410,9 +1411,9 @@ function getItemDisplayName(itemId: string): string {
 const GAME_LANGUAGE_NAMES: Record<string, string> = {
   "en_us": "English (US)",
   "en_gb": "English (UK)",
-  "ja_jp": "日本語",
-  "zh_cn": "简体中文",
-  "zh_tw": "繁體中文",
+  "ja_jp": t("common.langJaJp"),
+  "zh_cn": t("common.langZhCn"),
+  "zh_tw": t("common.langZhTw"),
   "ko_kr": "한국어",
   "de_de": "Deutsch",
   "fr_fr": "Français",
@@ -1441,8 +1442,8 @@ function getPlatformLabel(platform: string): string {
     pc_mac: "PC（Mac）",
     pc_linux: "PC（Linux）",
     switch: "Switch",
-    mobile: "スマホ",
-    other: "その他",
+    mobile: "Mobile",
+    other: "Other",
   };
   return labels[platform] || platform;
 }
@@ -1485,7 +1486,7 @@ function ItemLayoutCard({
                   <div
                     key={slotNum}
                     className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-                    title={items.map(getItemDisplayName).join(", ") || `スロット ${slotNum}`}
+                    title={items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
                   >
                     {items.length > 0 ? (
                       <>
@@ -1512,7 +1513,7 @@ function ItemLayoutCard({
             <div className="w-px h-10 bg-border mx-1" />
             <div
               className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-              title={offhand.map(getItemDisplayName).join(", ") || "オフハンド"}
+              title={offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
             >
               {offhand.length > 0 ? (
                 <>
@@ -1589,85 +1590,33 @@ function ItemLayoutCard({
   );
 }
 
-// キーコードから文字を抽出するヘルパー
-function keyCodeToChar(keyCode: string): string {
-  // "KeyA" → "a", "Digit1" → "1", etc.
-  if (keyCode.startsWith("Key")) {
-    return keyCode.slice(3).toLowerCase();
-  }
-  if (keyCode.startsWith("Digit")) {
-    return keyCode.slice(5);
-  }
-  // 1文字の場合はそのまま返す
-  if (keyCode.length === 1) {
-    return keyCode.toLowerCase();
-  }
-  return keyCode.toLowerCase();
-}
-
-// 文字からキーコードを生成するヘルパー
-function charToKeyCode(char: string): string {
-  const upper = char.toUpperCase();
-  if (/^[A-Z]$/.test(upper)) {
-    return `Key${upper}`;
-  }
-  if (/^[0-9]$/.test(char)) {
-    return `Digit${char}`;
-  }
-  return char;
-}
-
-// 検索文字列からリマップを逆算して実際に押すキーのリストを取得
-function getActualKeyInfos(
-  searchStr: string,
-  keyRemaps: { sourceKey: string; targetKey: string | null }[]
-): { char: string; keyCode: string; isRemapped: boolean }[] {
-  // targetKey の文字 → sourceKey のマップを作成（逆引き）
-  const reverseRemapMap = new Map<string, string>();
-
-  for (const remap of keyRemaps) {
-    if (remap.targetKey) {
-      const targetChar = keyCodeToChar(remap.targetKey);
-      reverseRemapMap.set(targetChar, remap.sourceKey);
-    }
-  }
-
-  // 検索文字列の各文字について、実際に押すキーの情報を取得
-  const result: { char: string; keyCode: string; isRemapped: boolean }[] = [];
-  for (const char of searchStr) {
-    const sourceKey = reverseRemapMap.get(char.toLowerCase());
-    if (sourceKey) {
-      // リマップされている場合
-      result.push({
-        char: keyCodeToChar(sourceKey),
-        keyCode: sourceKey,
-        isRemapped: true,
-      });
-    } else {
-      // リマップされていない場合
-      result.push({
-        char: char.toLowerCase(),
-        keyCode: charToKeyCode(char),
-        isRemapped: false,
-      });
-    }
-  }
-  return result;
-}
-
-// キーバッジコンポーネント
+// キーバッジコンポーネント（修飾キー対応）
 function KeyBadge({
   keyCode,
   label,
   finger,
   isRemapped,
+  needsShift,
 }: {
   keyCode: string;
   label: string;
   finger?: FingerType;
   isRemapped?: boolean;
+  needsShift?: boolean;
 }) {
   const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
+
+  // ツールチップのテキスト
+  const getTooltipText = () => {
+    if (keyCode.includes("+")) {
+      // 修飾キー組み合わせの場合
+      return getKeyCombinationLabel(keyCode);
+    }
+    if (isRemapped) {
+      return t("playerProfile.remapped", { key: getKeyLabel(keyCode) });
+    }
+    return getKeyLabel(keyCode);
+  };
 
   return (
     <span
@@ -1676,11 +1625,12 @@ function KeyBadge({
         finger
           ? fingerClass
           : "bg-secondary/50 border-border/50 text-muted-foreground",
-        isRemapped && "ring-1 ring-primary ring-offset-1"
+        isRemapped && "ring-1 ring-primary ring-offset-1",
+        needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
       )}
-      title={isRemapped ? `リマップ: ${getKeyLabel(keyCode)}` : getKeyLabel(keyCode)}
+      title={getTooltipText()}
     >
-      {label.toUpperCase()}
+      {label}
     </span>
   );
 }
@@ -1697,7 +1647,7 @@ function SearchCraftCard({
     searchStr: string | null;
     comment: string | null;
   };
-  keyRemaps: { sourceKey: string; targetKey: string | null }[];
+  keyRemaps: RemapInfo[];
   fingerAssignments: Record<string, FingerType[]>;
 }) {
   const items = JSON.parse(craft.items) as string[];
@@ -1732,23 +1682,30 @@ function SearchCraftCard({
           {craft.searchStr && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground shrink-0">サーチ:</span>
+                <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
                 <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono">
                   {craft.searchStr}
                 </code>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground shrink-0">入力キー:</span>
+                <span className="text-muted-foreground shrink-0">{t("playerProfile.inputKeysLabel")}</span>
                 <div className="flex items-center gap-1">
-                  {keyInfos.map((info, idx) => (
-                    <KeyBadge
-                      key={idx}
-                      keyCode={info.keyCode}
-                      label={info.char}
-                      finger={getFingerForKey(info.keyCode)}
-                      isRemapped={info.isRemapped}
-                    />
-                  ))}
+                  {keyInfos.map((info, idx) => {
+                    // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
+                    const baseKeyCode = info.keyCode.includes("+")
+                      ? info.keyCode.split("+").pop() || info.keyCode
+                      : info.keyCode;
+                    return (
+                      <KeyBadge
+                        key={idx}
+                        keyCode={info.keyCode}
+                        label={info.displayLabel}
+                        finger={getFingerForKey(baseKeyCode)}
+                        isRemapped={info.isRemapped}
+                        needsShift={info.needsShift}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1799,13 +1756,13 @@ function RecordCard({
             <span className="text-2xl font-mono font-bold">
               {formatTime(record.personalBest)}
             </span>
-            <span className="text-sm text-muted-foreground">PB</span>
+            <span className="text-sm text-muted-foreground">{t("playerProfile.pb")}</span>
           </div>
         )}
         {record.targetTime && (
           <div className="flex items-center gap-2 text-sm">
             <Target className="h-4 w-4 text-muted-foreground" />
-            <span>目標: {formatTime(record.targetTime)}</span>
+            <span>{t("playerProfile.target")}: {formatTime(record.targetTime)}</span>
             {record.achieved && (
               <CheckCircle2 className="h-4 w-4 text-green-500" />
             )}
@@ -1819,7 +1776,7 @@ function RecordCard({
               rel="noopener noreferrer"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
-              動画を見る
+              {t("playerProfile.watchVideo")}
             </a>
           </Button>
         )}
@@ -1902,7 +1859,7 @@ function SettingBadge({
   return (
     <div className="flex items-center gap-2">
       <Badge variant={enabled ? "default" : "secondary"}>
-        {enabled ? "オン" : "オフ"}
+        {enabled ? t("common.on") : t("common.off")}
       </Badge>
       <span className="text-sm">{label}</span>
     </div>
@@ -2097,7 +2054,7 @@ function StatsContent({
               MCSR Ranked
             </CardTitle>
             <CardDescription>
-              Ranked対戦の統計情報
+              {t("playerProfile.rankedDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -2105,13 +2062,13 @@ function StatsContent({
               {externalStats.ranked.user?.eloRate && (
                 <div className="text-center p-3 bg-secondary/50 rounded-lg">
                   <p className="text-2xl font-bold">{externalStats.ranked.user.eloRate}</p>
-                  <p className="text-xs text-muted-foreground">Elo レート</p>
+                  <p className="text-xs text-muted-foreground">{t("playerProfile.eloRate")}</p>
                 </div>
               )}
               {externalStats.ranked.user?.eloRank && (
                 <div className="text-center p-3 bg-secondary/50 rounded-lg">
                   <p className="text-2xl font-bold">#{externalStats.ranked.user.eloRank}</p>
-                  <p className="text-xs text-muted-foreground">ランキング</p>
+                  <p className="text-xs text-muted-foreground">{t("playerProfile.ranking")}</p>
                 </div>
               )}
               {externalStats.ranked.seasonData && (
@@ -2120,7 +2077,7 @@ function StatsContent({
                     <p className="text-2xl font-bold">
                       {externalStats.ranked.seasonData.records.win}W - {externalStats.ranked.seasonData.records.lose}L
                     </p>
-                    <p className="text-xs text-muted-foreground">今シーズン戦績</p>
+                    <p className="text-xs text-muted-foreground">{t("playerProfile.seasonRecord")}</p>
                   </div>
                 </>
               )}
@@ -2134,7 +2091,7 @@ function StatsContent({
               <div className="grid grid-cols-2 gap-4">
                 {typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" && (
                   <div className="p-3 bg-secondary/30 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">全期間 PB</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t("playerProfile.allTimePb")}</p>
                     <p className="text-xl font-mono font-bold">
                       {formatTime(externalStats.ranked.seasonData.bestTimeAllTime)}
                     </p>
@@ -2142,7 +2099,7 @@ function StatsContent({
                 )}
                 {typeof externalStats.ranked.seasonData.bestTime === "number" && (
                   <div className="p-3 bg-secondary/30 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">今シーズン PB</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t("playerProfile.seasonPb")}</p>
                     <p className="text-xl font-mono font-bold">
                       {formatTime(externalStats.ranked.seasonData.bestTime)}
                     </p>
@@ -2159,7 +2116,7 @@ function StatsContent({
             {/* 最近のマッチ */}
             {externalStats.ranked.recentMatches.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">最近のマッチ</h4>
+                <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.recentMatches")}</h4>
                 <div className="space-y-1">
                   {externalStats.ranked.recentMatches.slice(0, 5).map((match) => (
                     <div
@@ -2212,7 +2169,7 @@ function StatsContent({
               PaceMan Stats
             </CardTitle>
             <CardDescription>
-              ペース統計・リセット情報
+              {t("playerProfile.pacemanSummary")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -2223,7 +2180,7 @@ function StatsContent({
                 rel="noopener noreferrer"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
-                PaceMan Statsで詳細を見る
+                {t("playerProfile.pacemanOpenDetails")}
               </a>
             </Button>
           </CardContent>
@@ -2236,10 +2193,10 @@ function StatsContent({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Timer className="h-5 w-5" />
-              過去1週間の活動（PaceMan）
+              {t("playerProfile.weeklyActivityPaceman")}
             </CardTitle>
             <CardDescription>
-              ネザーイン回数と主なペース
+              {t("playerProfile.weeklyActivityDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -2247,7 +2204,7 @@ function StatsContent({
             {pacemanStats.netherEnterCount > 0 && (
               <div className="p-3 bg-secondary/50 rounded-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">ネザーイン回数</span>
+                  <span className="text-sm text-muted-foreground">{t("playerProfile.netherEntryCount")}</span>
                   <span className="text-2xl font-bold">{pacemanStats.netherEnterCount}</span>
                 </div>
               </div>
@@ -2256,7 +2213,7 @@ function StatsContent({
             {/* 主なペース（2nd Structure以降） */}
             {pacemanStats.mainPaces.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">主なペース（2nd Structure以降）</h4>
+                <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.mainPacesSince2nd")}</h4>
                 <div className="space-y-1">
                   {pacemanStats.mainPaces.map((pace: any, idx: number) => (
                     <div
@@ -2283,7 +2240,7 @@ function StatsContent({
               Speedrun.com
             </CardTitle>
             <CardDescription>
-              公式記録（Minecraft関連）
+              {t("playerProfile.officialRecords")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -2298,14 +2255,14 @@ function StatsContent({
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm truncate">
-                        {pb.category?.data?.name ?? "Unknown"}
+                        {pb.category?.data?.name ?? t("common.unknown")}
                       </span>
                       <Badge variant="outline" className="shrink-0">
                         #{pb.place}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {pb.game?.data?.names?.international ?? "Unknown Game"}
+                      {pb.game?.data?.names?.international ?? t("common.unknownGame")}
                     </p>
                     {(pb.platformName || pb.versionName) && (
                       <p className="text-xs text-muted-foreground">
@@ -2323,7 +2280,7 @@ function StatsContent({
                         className="text-xs text-primary hover:underline flex items-center gap-1"
                       >
                         <ExternalLink className="h-3 w-3" />
-                        記録を見る
+                        {t("playerProfile.viewRecord")}
                       </a>
                     )}
                   </div>
@@ -2339,7 +2296,7 @@ function StatsContent({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              カスタム記録
+              {t("playerProfile.customRecords")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -2356,8 +2313,8 @@ function StatsContent({
       {(!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
-          title="統計データなし"
-          description="外部サービスからの統計データがありません。"
+          title={t("playerProfile.noStatsTitle")}
+          description={t("playerProfile.noStatsDescription")}
         />
       )}
     </>

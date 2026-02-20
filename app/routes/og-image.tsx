@@ -1,5 +1,5 @@
 // OGP画像生成API
-// プレイヤープロフィール用の動的OGP画像を生成 (PNG形式)
+// 走者プロフィール用の動的OGP画像を生成 (PNG形式)
 import { ImageResponse } from "@vercel/og";
 import type { LoaderFunctionArgs } from "react-router";
 import { eq } from "drizzle-orm";
@@ -247,7 +247,7 @@ function generateDefaultOgp(data: {
 }
 
 /**
- * プレイヤー用のOGP画像を生成
+ * 走者用のOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
 function generatePlayerOgp(data: OgpData) {

@@ -14,11 +14,12 @@ import { Upload, Keyboard, Settings, Info } from "lucide-react";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { createPresetFromImport } from "@/lib/preset-utils";
+import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "インポート - Minefolio" },
-    { name: "description", content: "外部ファイルから設定をインポート" },
+    { title: t("meImport.title") },
+    { name: "description", content: t("meImport.description") },
   ];
 };
 
@@ -280,10 +281,10 @@ export default function ImportPage() {
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Upload className="h-6 w-6" />
-          インポート
+          {t("meImport.pageTitle")}
         </h1>
         <p className="text-muted-foreground">
-          外部ファイルから設定を読み込みます
+          {t("meImport.pageDescription")}
         </p>
       </div>
 
@@ -293,15 +294,15 @@ export default function ImportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              リマップ
+              {t("meImport.remapTitle")}
             </CardTitle>
             <CardDescription>
-              AutoHotkeyスクリプトからキーリマップ設定を読み込みます
+              {t("meImport.remapDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-sm">
-              <p className="text-muted-foreground mb-2">対応形式:</p>
+              <p className="text-muted-foreground mb-2">{t("meImport.supportedFormat")}</p>
               <div className="bg-muted p-2 rounded font-mono text-xs">
                 CapsLock::Ctrl<br />
                 a::b<br />
@@ -310,7 +311,7 @@ export default function ImportPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
-                現在の登録数: <Badge variant="secondary">{remapCount}件</Badge>
+                {t("meImport.currentCountLabel")} <Badge variant="secondary">{remapCount}{t("meImport.countUnit")}</Badge>
               </span>
             </div>
           </CardContent>
@@ -321,23 +322,23 @@ export default function ImportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              Minecraft設定
+              {t("meImport.minecraftTitle")}
             </CardTitle>
             <CardDescription>
-              キーバインドとゲーム設定をMinecraft設定ファイルから読み込みます
+              {t("meImport.minecraftDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-sm">
-              <p className="text-muted-foreground mb-2">対応ファイル:</p>
+              <p className="text-muted-foreground mb-2">{t("meImport.supportedFiles")}</p>
               <ul className="list-disc list-inside text-xs space-y-1">
-                <li><code className="bg-muted px-1 rounded">options.txt</code> - .minecraft フォルダ内</li>
+                <li><code className="bg-muted px-1 rounded">options.txt</code> - {t("meImport.minecraftFolder")}</li>
                 <li><code className="bg-muted px-1 rounded">standardsettings.json</code> - StandardSettings Mod</li>
               </ul>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
-                現在の登録数: <Badge variant="secondary">{keybindingCount}件</Badge>
+                {t("meImport.currentCountLabel")} <Badge variant="secondary">{keybindingCount}{t("meImport.countUnit")}</Badge>
               </span>
             </div>
           </CardContent>
@@ -346,10 +347,9 @@ export default function ImportPage() {
 
       <Alert>
         <Info className="h-4 w-4" />
-        <AlertTitle>インポートについて</AlertTitle>
+        <AlertTitle>{t("meImport.importInfoTitle")}</AlertTitle>
         <AlertDescription>
-          インポートすると、同じキー/アクションの既存設定は上書きされます。
-          インポート前にプリセットとして保存しておくことをお勧めします。
+          {t("meImport.importInfoDescription")}
         </AlertDescription>
       </Alert>
 
