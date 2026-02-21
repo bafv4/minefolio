@@ -190,13 +190,13 @@ body {
     @apply bg-background text-foreground;
     background-image:
       radial-gradient(circle at 1px 1px,
-        color-mix(in oklch, var(--border) 56%, transparent) 1.2px,
+        color-mix(in oklch, var(--border) 48%, transparent) 1.2px,
         transparent 0),
       linear-gradient(to right,
-        color-mix(in oklch, var(--border) 44%, transparent) 1px,
+        color-mix(in oklch, var(--border) 32%, transparent) 1px,
         transparent 1px),
       linear-gradient(to bottom,
-        color-mix(in oklch, var(--border) 44%, transparent) 1px,
+        color-mix(in oklch, var(--border) 38%, transparent) 1px,
         transparent 1px);
     background-size: 16px 16px, 34px 34px, 34px 34px;
   }

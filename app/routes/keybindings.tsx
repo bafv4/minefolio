@@ -1,5 +1,5 @@
-import { useLoaderData, useSearchParams, Link } from "react-router";
-import { useState, useMemo } from "react";
+import { useLoaderData, useSearchParams, Link, useNavigation } from "react-router";
+import { useState, useMemo, useEffect } from "react";
 import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -236,9 +236,16 @@ const DEFAULT_MOUSE_FILTERS: MouseFilters = {
 export default function KeybindingsListPage() {
   const { players, search } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
+  const [searchInput, setSearchInput] = useState(search);
 
   // URLパラメータからタブを取得
   const tabFromUrl = searchParams.get("tab") || "keyboard";
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   // マウスタブのソート状態
   const [mouseSortKey, setMouseSortKey] = useState<MouseSortKey>(null);
@@ -409,6 +416,11 @@ export default function KeybindingsListPage() {
     setSearchParams(params);
   };
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch(searchInput.trim());
+  };
+
   const handleTabChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", value);
@@ -436,14 +448,22 @@ export default function KeybindingsListPage() {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder={t("keybindings.searchPlaceholder")}
-          defaultValue={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="pl-10"
-        />
+      <div>
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={t("keybindings.searchPlaceholder")}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Button type="submit">
+            <Search className="mr-2 h-4 w-4" />
+            検索
+          </Button>
+        </form>
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -465,7 +485,13 @@ export default function KeybindingsListPage() {
 
         {/* Keyboard Tab */}
         <TabsContent value="keyboard">
-          {players.length > 0 ? (
+          {isNavigating ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 rounded border bg-muted/40 animate-pulse" />
+              ))}
+            </div>
+          ) : players.length > 0 ? (
             <div className="relative border rounded-lg overflow-auto max-h-[600px]">
               <table className="w-full caption-bottom text-sm">
                 <TableHeader>
@@ -493,7 +519,10 @@ export default function KeybindingsListPage() {
               </table>
             </div>
           ) : (
-            <EmptyState search={search} onClear={() => handleSearch("")} />
+            <EmptyState search={search} onClear={() => {
+              setSearchInput("");
+              handleSearch("");
+            }} />
           )}
         </TabsContent>
 
@@ -652,7 +681,13 @@ export default function KeybindingsListPage() {
             </span>
           </div>
 
-          {sortedPlayersForMouse.length > 0 ? (
+          {isNavigating ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 rounded border bg-muted/40 animate-pulse" />
+              ))}
+            </div>
+          ) : sortedPlayersForMouse.length > 0 ? (
             <div className="relative border rounded-lg overflow-auto max-h-[600px]">
               <table className="w-full caption-bottom text-sm">
                 <TableHeader>
