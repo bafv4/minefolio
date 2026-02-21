@@ -203,21 +203,39 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       const db = createDb();
       const userData = await getUserData();
 
-      // DBキャッシュから2nd Structure以降のペースを取得（新しい順、最大20件）
+      // DBキャッシュからペースを取得（新しい順）
+      // Enter Nether以外の全Split（Bastion, Fortress, First Portal, 2nd Structure以降）を含む
+      // 同じワールド（pacemanRunId）のペースは最新Splitのみ表示するため多めに取得
       const paces = await db
         .select({
           mcid: pacemanPaces.mcid,
           timeline: pacemanPaces.timeline,
           rta: pacemanPaces.rta,
           date: pacemanPaces.date,
+          pacemanRunId: pacemanPaces.pacemanRunId,
         })
         .from(pacemanPaces)
-        .where(eq(pacemanPaces.is2ndStructureOrLater, true))
+        .where(eq(pacemanPaces.isNetherEnter, false))
         .orderBy(desc(pacemanPaces.date))
-        .limit(20);
+        .limit(100);
+
+      // 同じワールド（pacemanRunId）のペースは最新（最も進んだ）Splitのみを残す
+      const runIdToLatestPace = new Map<number, typeof paces[0]>();
+      for (const pace of paces) {
+        const existing = runIdToLatestPace.get(pace.pacemanRunId);
+        // rtaが長い方が進んでいるので、より長いrtaを持つものを選択
+        if (!existing || pace.rta > existing.rta) {
+          runIdToLatestPace.set(pace.pacemanRunId, pace);
+        }
+      }
+
+      // Mapから配列に戻し、日時で降順ソートして20件に制限
+      const uniquePaces = Array.from(runIdToLatestPace.values())
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 20);
 
       // お気に入りソート用にtime（Unix秒）を追加
-      const pacesWithTime = paces.map((p) => ({
+      const pacesWithTime = uniquePaces.map((p) => ({
         ...p,
         nickname: p.mcid,
         time: Math.floor(p.date.getTime() / 1000),

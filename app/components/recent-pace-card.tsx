@@ -11,6 +11,7 @@ export interface CachedPace {
   rta: number;
   time: number; // Unix秒
   date: Date;
+  pacemanRunId: number; // PaceMan APIのランID
 }
 
 interface RecentPaceCardProps {

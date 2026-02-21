@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { Route } from "./+types/keybindings";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, customKeys } from "@/lib/schema";
+import { users, keybindings, customKeys, keyRemaps, customActions } from "@/lib/schema";
 import { desc, asc, like, eq, and } from "drizzle-orm";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, X, SlidersHorizontal } from "lucide-react";
+import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, X, SlidersHorizontal, ArrowRight, WandSparkles } from "lucide-react";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
+import { getRemapOutputLabel, getRemapSourceLabel } from "@/lib/remap-utils";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
@@ -187,6 +188,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       keybindings: {
         orderBy: [asc(keybindings.category), asc(keybindings.action)],
       },
+      keyRemaps: {
+        orderBy: [asc(keyRemaps.sourceKey)],
+      },
       playerConfig: {
         columns: {
           keyboardLayout: true,
@@ -201,11 +205,16 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       customKeys: {
         orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
       },
+      customActions: {
+        orderBy: [asc(customActions.displayOrder), asc(customActions.actionName)],
+      },
     },
   });
 
-  // キー配置がある走者のみをフィルタ
-  const players = playersWithKeybindings.filter(p => p.keybindings.length > 0);
+  // 操作設定関連データがある走者のみをフィルタ
+  const players = playersWithKeybindings.filter(
+    (p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0
+  );
 
   return { players, search };
 }
@@ -240,8 +249,9 @@ export default function KeybindingsListPage() {
   const isNavigating = navigation.state === "loading";
   const [searchInput, setSearchInput] = useState(search);
 
-  // URLパラメータからタブを取得
-  const tabFromUrl = searchParams.get("tab") || "keyboard";
+  // URLパラメータからタブを取得（旧パラメータと互換）
+  const rawTabFromUrl = searchParams.get("tab") || "actions";
+  const tabFromUrl = rawTabFromUrl === "keyboard" ? "actions" : rawTabFromUrl;
 
   useEffect(() => {
     setSearchInput(search);
@@ -405,6 +415,16 @@ export default function KeybindingsListPage() {
     });
   }, [players, mouseSortKey, mouseSortDirection, mouseFilters]);
 
+  const playersWithRemaps = useMemo(
+    () => players.filter((player) => player.keyRemaps.length > 0),
+    [players]
+  );
+
+  const playersWithCustomActions = useMemo(
+    () => players.filter((player) => player.customActions.length > 0),
+    [players]
+  );
+
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams);
     if (value) {
@@ -470,12 +490,20 @@ export default function KeybindingsListPage() {
         {t("keybindings.countText", { count: players.length, suffix: t("keybindings.countSuffix") })}
       </p>
 
-      {/* Tabs for Keyboard / Mouse */}
+      {/* Tabs for Actions / Remaps / Custom Actions / Mouse */}
       <Tabs value={tabFromUrl} onValueChange={handleTabChange} className="w-full">
         <TabsList>
-          <TabsTrigger value="keyboard" className="gap-1.5">
+          <TabsTrigger value="actions" className="gap-1.5">
             <Keyboard className="h-4 w-4" />
-            {t("keybindings.keyboardTab")}
+            {t("keybindings.actionsTab")}
+          </TabsTrigger>
+          <TabsTrigger value="remaps" className="gap-1.5">
+            <ArrowRight className="h-4 w-4" />
+            {t("keybindings.remapsTab")}
+          </TabsTrigger>
+          <TabsTrigger value="custom-actions" className="gap-1.5">
+            <WandSparkles className="h-4 w-4" />
+            {t("keybindings.customActionsTab")}
           </TabsTrigger>
           <TabsTrigger value="mouse" className="gap-1.5">
             <Mouse className="h-4 w-4" />
@@ -483,8 +511,8 @@ export default function KeybindingsListPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Keyboard Tab */}
-        <TabsContent value="keyboard">
+        {/* Actions Tab */}
+        <TabsContent value="actions">
           {isNavigating ? (
             <div className="space-y-2">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -514,6 +542,78 @@ export default function KeybindingsListPage() {
                 <TableBody>
                   {players.map((player) => (
                     <PlayerRow key={player.id} player={player} columns={KEYBOARD_COLUMNS} />
+                  ))}
+                </TableBody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState search={search} onClear={() => {
+              setSearchInput("");
+              handleSearch("");
+            }} />
+          )}
+        </TabsContent>
+
+        {/* Remaps Tab */}
+        <TabsContent value="remaps">
+          {isNavigating ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-16 rounded border bg-muted/40 animate-pulse" />
+              ))}
+            </div>
+          ) : playersWithRemaps.length > 0 ? (
+            <div className="relative border rounded-lg overflow-auto max-h-[600px]">
+              <table className="w-full caption-bottom text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-44 border-r border-b-2">
+                      {t("keybindings.columnRunner")}
+                    </TableHead>
+                    <TableHead className="sticky top-0 bg-muted z-20 border-b-2">
+                      {t("keybindings.remapsTab")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {playersWithRemaps.map((player) => (
+                    <RemapRow key={player.id} player={player} />
+                  ))}
+                </TableBody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState search={search} onClear={() => {
+              setSearchInput("");
+              handleSearch("");
+            }} />
+          )}
+        </TabsContent>
+
+        {/* Custom Actions Tab */}
+        <TabsContent value="custom-actions">
+          {isNavigating ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-16 rounded border bg-muted/40 animate-pulse" />
+              ))}
+            </div>
+          ) : playersWithCustomActions.length > 0 ? (
+            <div className="relative border rounded-lg overflow-auto max-h-[600px]">
+              <table className="w-full caption-bottom text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky top-0 left-0 bg-muted z-30 min-w-44 border-r border-b-2">
+                      {t("keybindings.columnRunner")}
+                    </TableHead>
+                    <TableHead className="sticky top-0 bg-muted z-20 border-b-2">
+                      {t("keybindings.customActionsTab")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {playersWithCustomActions.map((player) => (
+                    <CustomActionListRow key={player.id} player={player} />
                   ))}
                 </TableBody>
               </table>
@@ -844,6 +944,117 @@ function PlayerRow({
           </TableCell>
         );
       })}
+    </TableRow>
+  );
+}
+
+function RemapRow({
+  player,
+}: {
+  player: {
+    id: string;
+    mcid: string | null;
+    uuid: string | null;
+    slug: string;
+    displayName: string | null;
+    keyRemaps: Array<{
+      id: string;
+      sourceKey: string;
+      targetKey: string | null;
+    }>;
+    playerConfig: {
+      keyboardLayout: string | null;
+    } | null;
+  };
+}) {
+  const layout = player.playerConfig?.keyboardLayout;
+
+  return (
+    <TableRow className="hover:bg-muted/30">
+      <TableCell className="sticky left-0 bg-background z-10 align-top">
+        <Link
+          to={`/player/${player.slug}`}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+        >
+          <MinecraftAvatar
+            uuid={player.uuid}
+            size={28}
+            className="rounded-sm shrink-0"
+          />
+          <div className="min-w-0">
+            <p className="font-medium text-sm truncate">
+              {player.displayName ?? player.mcid ?? player.slug}
+            </p>
+          </div>
+        </Link>
+      </TableCell>
+      <TableCell className="py-3">
+        <div className="flex flex-wrap gap-1.5">
+          {player.keyRemaps.map((remap) => (
+            <Badge key={remap.id} variant="secondary" className="font-mono text-xs">
+              {getRemapSourceLabel(remap.sourceKey, layout)} → {getRemapOutputLabel(remap, layout)}
+            </Badge>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function CustomActionListRow({
+  player,
+}: {
+  player: {
+    id: string;
+    mcid: string | null;
+    uuid: string | null;
+    slug: string;
+    displayName: string | null;
+    customActions: Array<{
+      id: string;
+      actionName: string;
+      category: "other" | "macro" | "tool";
+      triggerKey: string;
+      description: string | null;
+    }>;
+    playerConfig: {
+      keyboardLayout: string | null;
+    } | null;
+  };
+}) {
+  const layout = player.playerConfig?.keyboardLayout;
+
+  return (
+    <TableRow className="hover:bg-muted/30">
+      <TableCell className="sticky left-0 bg-background z-10 align-top">
+        <Link
+          to={`/player/${player.slug}`}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+        >
+          <MinecraftAvatar
+            uuid={player.uuid}
+            size={28}
+            className="rounded-sm shrink-0"
+          />
+          <div className="min-w-0">
+            <p className="font-medium text-sm truncate">
+              {player.displayName ?? player.mcid ?? player.slug}
+            </p>
+          </div>
+        </Link>
+      </TableCell>
+      <TableCell className="py-3">
+        <div className="space-y-1.5">
+          {player.customActions.map((action) => (
+            <div key={action.id} className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="font-mono text-xs">
+                {getKeyCombinationLabel(action.triggerKey, layout)}
+              </Badge>
+              <span className="text-sm font-medium">{action.actionName}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
     </TableRow>
   );
 }

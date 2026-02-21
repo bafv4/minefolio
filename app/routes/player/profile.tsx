@@ -6,8 +6,14 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys } from "@/lib/schema";
-import { eq, asc, desc } from "drizzle-orm";
-import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
+import { eq, asc, desc, sql } from "drizzle-orm";
+import {
+  fetchAllExternalStats,
+  fetchMCSRRankedStats,
+  checkPaceManPlayer,
+  fetchSpeedrunComStats,
+  type MCSRRankedMatch,
+} from "@/lib/external-stats";
 import {
   MinecraftItemIcon,
   formatItemName,
@@ -120,6 +126,7 @@ export function HydrateFallback() {
 }
 import { getActionLabel, getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
 import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -161,11 +168,12 @@ import {
   User,
   Menu,
   X,
+  Loader2,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
-import { getNetherEnterCount, getMainPaces } from "@/lib/paceman-cache";
+import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
 // https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
@@ -252,10 +260,13 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { slug } = params;
   const url = new URL(request.url);
   const presetId = url.searchParams.get("preset");
+  const normalizedSlug = slug?.toLowerCase();
 
   // Fetch player with all related data (slugで検索)
   const player = await db.query.users.findFirst({
-    where: eq(users.slug, slug),
+    where: normalizedSlug
+      ? sql`lower(${users.slug}) = ${normalizedSlug}`
+      : sql`0 = 1`,
     with: {
       playerConfig: true,
       keybindings: {
@@ -437,7 +448,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     try {
       const [netherEnterCount, mainPaces] = await Promise.all([
         getNetherEnterCount(player.mcid),
-        getMainPaces(player.mcid, 10),
+        getRecentPacesForPlayer(player.mcid, 10),
       ]);
       pacemanStats = {
         netherEnterCount,
@@ -1946,32 +1957,65 @@ function StatsTabContent({
   hiddenSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
 }) {
-  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
+  const [loadState, setLoadState] = useState({
+    ranked: "loading" as "loading" | "done" | "error",
+    paceman: "loading" as "loading" | "done" | "error",
+    speedruncom: (player.speedruncomUsername ? "loading" : "done") as "loading" | "done" | "error",
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchStats() {
-      try {
-        setIsLoading(true);
-        const stats = await fetchAllExternalStats(
-          player.mcid,
-          player.speedruncomUsername
+      setLoadState({
+        ranked: "loading",
+        paceman: "loading",
+        speedruncom: player.speedruncomUsername ? "loading" : "done",
+      });
+
+      const tasks: Promise<void>[] = [
+        fetchMCSRRankedStats(player.mcid)
+          .then((ranked) => {
+            if (cancelled) return;
+            setExternalStats((prev) => ({ ...prev, ranked }));
+            setLoadState((prev) => ({ ...prev, ranked: "done" }));
+          })
+          .catch((error) => {
+            console.error("Failed to fetch MCSR Ranked stats:", error);
+            if (cancelled) return;
+            setLoadState((prev) => ({ ...prev, ranked: "error" }));
+          }),
+        checkPaceManPlayer(player.mcid)
+          .then((paceman) => {
+            if (cancelled) return;
+            setExternalStats((prev) => ({ ...prev, paceman }));
+            setLoadState((prev) => ({ ...prev, paceman: "done" }));
+          })
+          .catch((error) => {
+            console.error("Failed to fetch PaceMan status:", error);
+            if (cancelled) return;
+            setLoadState((prev) => ({ ...prev, paceman: "error" }));
+          }),
+      ];
+
+      if (player.speedruncomUsername) {
+        tasks.push(
+          fetchSpeedrunComStats(player.speedruncomUsername)
+            .then((speedruncom) => {
+              if (cancelled) return;
+              setExternalStats((prev) => ({ ...prev, speedruncom }));
+              setLoadState((prev) => ({ ...prev, speedruncom: "done" }));
+            })
+            .catch((error) => {
+              console.error("Failed to fetch speedrun.com stats:", error);
+              if (cancelled) return;
+              setLoadState((prev) => ({ ...prev, speedruncom: "error" }));
+            })
         );
-        if (!cancelled) {
-          setExternalStats(stats);
-        }
-      } catch (error) {
-        console.error("Failed to fetch external stats:", error);
-        if (!cancelled) {
-          setExternalStats({});
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
       }
+
+      await Promise.all(tasks);
     }
 
     fetchStats();
@@ -1981,54 +2025,85 @@ function StatsTabContent({
     };
   }, [player.mcid, player.speedruncomUsername]);
 
-  if (isLoading) {
-    return <StatsLoadingSkeleton />;
-  }
-
-  if (!externalStats) {
-    return <StatsLoadingSkeleton />;
-  }
-
   return (
     <StatsContent
       externalStats={externalStats}
       player={player}
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
       pacemanStats={pacemanStats}
+      loadState={loadState}
     />
   );
 }
 
-// Stats タブのローディングスケルトン
-function StatsLoadingSkeleton() {
+function LoadingProgressRing() {
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="relative h-10 w-10 shrink-0">
+      <div className="absolute inset-0 rounded-full border-4 border-muted" />
+      <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
     </div>
   );
+}
+
+function StatsServiceLoadingCard({
+  title,
+  description,
+  state,
+}: {
+  title: string;
+  description: string;
+  state: "loading" | "done" | "error";
+}) {
+  const isLoading = state === "loading";
+  const isError = state === "error";
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-4">
+          {isLoading ? (
+            <LoadingProgressRing />
+          ) : isError ? (
+            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center">
+              <span className="text-destructive text-sm font-bold">!</span>
+            </div>
+          ) : (
+            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-primary/40 flex items-center justify-center">
+              <Loader2 className="h-4 w-4 text-primary" />
+            </div>
+          )}
+          <div>
+            <p className="font-medium">{title}</p>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? description : isError ? "読み込みに失敗しました" : "読み込み完了"}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function filterWeeklyMainPaces(mainPaces: any[]): any[] {
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return mainPaces.filter((pace) => {
+    const date = pace?.date ? new Date(pace.date).getTime() : NaN;
+    return Number.isFinite(date) && date >= oneWeekAgo;
+  });
+}
+
+function formatRelativeDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffMinutes < 1) return t("playerStats.justNow");
+  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
+  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
+  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
 }
 
 // Stats タブのコンテンツ
@@ -2037,16 +2112,34 @@ function StatsContent({
   player,
   hiddenSpeedrunRecords,
   pacemanStats,
+  loadState,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   player: any;
   hiddenSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
+  loadState: {
+    ranked: "loading" | "done" | "error";
+    paceman: "loading" | "done" | "error";
+    speedruncom: "loading" | "done" | "error";
+  };
 }) {
+  const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
+  const allExternalResolved = loadState.ranked !== "loading"
+    && loadState.paceman !== "loading"
+    && loadState.speedruncom !== "loading";
+
   return (
     <>
       {/* MCSR Ranked Section */}
-      {externalStats.ranked?.isRegistered && player.showRankedStats !== false && (
+      {player.showRankedStats !== false && loadState.ranked === "loading" && (
+        <StatsServiceLoadingCard
+          title="MCSR Ranked"
+          description="レート・対戦統計を読み込み中"
+          state={loadState.ranked}
+        />
+      )}
+      {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2161,7 +2254,14 @@ function StatsContent({
       )}
 
       {/* PaceMan Section - リンクのみ */}
-      {externalStats.paceman?.isRegistered && (
+      {loadState.paceman === "loading" && (
+        <StatsServiceLoadingCard
+          title="PaceMan"
+          description="登録状態とペース情報を読み込み中"
+          state={loadState.paceman}
+        />
+      )}
+      {externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2188,7 +2288,7 @@ function StatsContent({
       )}
 
       {/* PaceMan 過去1週間の統計 */}
-      {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || pacemanStats.mainPaces.length > 0) && (
+      {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2211,18 +2311,66 @@ function StatsContent({
             )}
 
             {/* 主なペース（2nd Structure以降） */}
-            {pacemanStats.mainPaces.length > 0 && (
+            {weeklyMainPaces.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.mainPacesSince2nd")}</h4>
                 <div className="space-y-1">
-                  {pacemanStats.mainPaces.map((pace: any, idx: number) => (
-                    <div
-                      key={`${pace.timeline}-${idx}`}
-                      className="flex items-center justify-between p-2 rounded bg-secondary/30 text-sm"
-                    >
-                      <span className="font-medium">{pace.timeline}</span>
-                      <span className="font-mono">{formatTime(pace.rta)}</span>
-                    </div>
+                  {weeklyMainPaces.map((pace: any, idx: number) => (
+                    (() => {
+                      const timeline = pace?.latestSplit?.timeline ?? pace?.timeline;
+                      const rta = pace?.latestSplit?.rta ?? pace?.rta;
+                      if (!timeline || typeof rta !== "number") return null;
+
+                      const runUrl = pace?.pacemanRunId
+                        ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
+                        : null;
+                      const relativeDate = pace?.date ? formatRelativeDateTime(pace.date) : "";
+
+                      return runUrl ? (
+                        <a
+                          key={`run-${pace.pacemanRunId}`}
+                          href={runUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded text-sm transition-colors",
+                            timeline === "Finish"
+                              ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
+                              : "bg-secondary/30 hover:bg-secondary/50"
+                          )}
+                          title={pace?.date ? new Date(pace.date).toLocaleString() : undefined}
+                        >
+                          <div className="min-w-0">
+                            <PaceManSplitMark timeline={timeline} className="font-medium" />
+                            {relativeDate && (
+                              <p className="text-xs text-muted-foreground">{relativeDate}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono">{formatTime(rta)}</span>
+                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                          </div>
+                        </a>
+                      ) : (
+                        <div
+                          key={`${timeline}-${idx}`}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded text-sm",
+                            timeline === "Finish"
+                              ? "border border-cyan-400/60 bg-cyan-500/10"
+                              : "bg-secondary/30"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <PaceManSplitMark timeline={timeline} className="font-medium" />
+                            {relativeDate && (
+                              <p className="text-xs text-muted-foreground">{relativeDate}</p>
+                            )}
+                          </div>
+                          <span className="font-mono">{formatTime(rta)}</span>
+                        </div>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -2232,7 +2380,14 @@ function StatsContent({
       )}
 
       {/* Speedrun.com Section */}
-      {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && (
+      {player.speedruncomUsername && loadState.speedruncom === "loading" && (
+        <StatsServiceLoadingCard
+          title="Speedrun.com"
+          description="自己ベスト記録を読み込み中"
+          state={loadState.speedruncom}
+        />
+      )}
+      {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2310,7 +2465,7 @@ function StatsContent({
       )}
 
       {/* データがない場合 */}
-      {(!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
+      {allExternalResolved && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}

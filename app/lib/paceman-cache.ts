@@ -326,3 +326,51 @@ export async function getMainPaces(mcid: string, limit: number = 10): Promise<Gr
 
   return grouped;
 }
+
+/**
+ * 特定ユーザーの過去1週間の最近ペースを取得（ホームの recent-paces と同じ基準）
+ * - Enter Nether を除外
+ * - 同一 pacemanRunId は最も進んだ split（rta最大）を採用
+ * @param mcid プレイヤーのMCID
+ * @param limit 取得するラン数
+ */
+export async function getRecentPacesForPlayer(mcid: string, limit: number = 10): Promise<GroupedPaceEntry[]> {
+  const db = createDb();
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const paces = await db.query.pacemanPaces.findMany({
+    where: and(
+      sql`lower(${pacemanPaces.mcid}) = ${mcid.toLowerCase()}`,
+      eq(pacemanPaces.isNetherEnter, false),
+      gte(pacemanPaces.date, oneWeekAgo)
+    ),
+    orderBy: [desc(pacemanPaces.date)],
+    columns: {
+      pacemanRunId: true,
+      mcid: true,
+      timeline: true,
+      rta: true,
+      date: true,
+    },
+    limit: 100,
+  });
+
+  const runIdToLatestPace = new Map<number, typeof paces[number]>();
+  for (const pace of paces) {
+    const existing = runIdToLatestPace.get(pace.pacemanRunId);
+    if (!existing || pace.rta > existing.rta) {
+      runIdToLatestPace.set(pace.pacemanRunId, pace);
+    }
+  }
+
+  return Array.from(runIdToLatestPace.values())
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, limit)
+    .map((pace) => ({
+      mcid: pace.mcid,
+      pacemanRunId: pace.pacemanRunId,
+      date: pace.date.toISOString(),
+      latestSplit: { timeline: pace.timeline, rta: pace.rta },
+      splits: [{ timeline: pace.timeline, rta: pace.rta }],
+    }));
+}

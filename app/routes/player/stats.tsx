@@ -2,7 +2,7 @@ import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
 import { getNetherEnterCount, getMainPaces, type GroupedPaceEntry } from "@/lib/paceman-cache";
 import {
@@ -54,10 +54,13 @@ export const meta: Route.MetaFunction = ({ params, data }) => {
 export async function loader({ params }: Route.LoaderArgs) {
   const { slug } = params;
   const db = createDb();
+  const normalizedSlug = slug?.toLowerCase();
 
   // slugで走者を検索
   const player = await db.query.users.findFirst({
-    where: eq(users.slug, slug),
+    where: normalizedSlug
+      ? sql`lower(${users.slug}) = ${normalizedSlug}`
+      : sql`0 = 1`,
     columns: {
       mcid: true,
       slug: true,
@@ -331,19 +334,16 @@ export default function PlayerStatsPage() {
                           rel="noopener noreferrer"
                           className={cn(
                             "flex items-center justify-between p-2 rounded text-sm hover:bg-accent/50 transition-colors",
-                            pace.latestSplit.timeline === "Finish" && "bg-yellow-500/10 hover:bg-yellow-500/20"
+                            pace.latestSplit.timeline === "Finish" && "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
                           )}
                         >
                           <div className="flex items-center gap-2">
                             <Badge
-                              variant={pace.latestSplit.timeline === "Finish" ? "default" : "secondary"}
+                              variant={pace.latestSplit.timeline === "Finish" ? "outline" : "secondary"}
                               className="min-w-25 justify-center"
                             >
                               {pace.latestSplit.timeline}
                             </Badge>
-                            {pace.latestSplit.timeline === "Finish" && (
-                              <Trophy className="h-4 w-4 text-yellow-500" />
-                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             {pace.splits.length > 1 ? (

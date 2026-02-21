@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 import {
@@ -27,7 +28,6 @@ import {
   Activity,
   Clock3,
   ExternalLink,
-  Trophy,
   Youtube,
 } from "lucide-react";
 
@@ -259,54 +259,63 @@ function HomePaceFeedCard({
   displayName?: string;
 }) {
   const isFinished = run.timeline === "Finish";
-  const paceManUrl = `https://paceman.gg/stats/player/${encodeURIComponent(run.mcid)}`;
+  const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
 
   return (
-    <a
-      href={paceManUrl}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
       className={cn(
-        "group block rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:shadow-sm",
-        isFinished && "border-yellow-500/40 bg-yellow-500/5"
+        "group rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:shadow-sm",
+        isFinished && "border-cyan-400/60 bg-cyan-500/5"
       )}
     >
       <div className="flex items-center gap-3">
-        {uuid ? (
-          <div className="h-11 w-11 rounded-xl">
-            <MinecraftAvatar uuid={uuid} size={44} />
-          </div>
-        ) : (
-          <div className="h-11 w-11 rounded-xl bg-muted" />
-        )}
+        <Link to={`/player/${run.mcid}`} className="shrink-0">
+          {uuid ? (
+            <div className="h-11 w-11 rounded-xl transition-opacity hover:opacity-80">
+              <MinecraftAvatar uuid={uuid} size={44} />
+            </div>
+          ) : (
+            <div className="h-11 w-11 rounded-xl bg-muted transition-opacity hover:opacity-80" />
+          )}
+        </Link>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{displayName || run.nickname || run.mcid}</p>
-          <p className="truncate text-xs text-muted-foreground">@{run.mcid}</p>
+          <Link to={`/player/${run.mcid}`} className="block truncate text-sm font-semibold hover:text-primary">
+            {displayName || run.nickname || run.mcid}
+          </Link>
+          <Link to={`/player/${run.mcid}`} className="block truncate text-xs text-muted-foreground hover:text-primary">
+            @{run.mcid}
+          </Link>
         </div>
-        {isFinished && <Trophy className="h-4 w-4 text-yellow-600" />}
       </div>
 
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
-          <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
+      <a
+        href={paceManUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 block"
+      >
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
+            <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
+          </div>
+          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+            <PaceManSplitMark timeline={run.timeline} size={13} />
+          </Badge>
         </div>
-        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
-          {run.timeline}
-        </Badge>
-      </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <Clock3 className="h-3.5 w-3.5" />
-          {formatRelativeUnixTime(run.time)}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          PaceMan
-          <ExternalLink className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
-        </span>
-      </div>
-    </a>
+        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Clock3 className="h-3.5 w-3.5" />
+            {formatRelativeUnixTime(run.time)}
+          </span>
+          <span className="inline-flex items-center gap-1 transition-colors hover:text-primary">
+            PaceMan
+            <ExternalLink className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      </a>
+    </div>
   );
 }
 
