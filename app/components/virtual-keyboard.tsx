@@ -521,36 +521,32 @@ function VirtualKeyboardComponent({
       >
         {/* リマップがある場合 */}
         {keyRemaps.length > 0 ? (
-          <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-hidden">
-            {/* キーラベル */}
-            <span className="font-medium leading-none text-[9px] text-muted-foreground/50">
+          <div className="flex flex-wrap items-center justify-center gap-0.5 max-w-full overflow-hidden leading-none">
+            <span className="font-medium text-[9px] text-muted-foreground/50">
               {displayLabel}
             </span>
-            {/* リマップ一覧（最大2件表示） */}
-            <div className="flex flex-col items-center gap-0">
-              {keyRemaps.slice(0, 2).map((r, i) => {
-                const isDisabled = r.targetKey === null;
-                const targetLabel = getRemapOutputLabel(r, layout);
-                const modifierMarks = getModifierMarks(r);
-                return (
-                  <div key={i} className="flex items-center gap-0.5 leading-none">
-                    {modifierMarks.length > 0 && (
-                      <span className="text-[7px] text-primary/70">{modifierMarks.join("")}</span>
-                    )}
-                    <span className="text-[8px] text-muted-foreground/40">→</span>
-                    <span className={cn(
-                      "font-bold text-[9px]",
-                      isDisabled ? "text-muted-foreground" : "text-foreground"
-                    )}>
-                      {targetLabel}
-                    </span>
-                  </div>
-                );
-              })}
-              {keyRemaps.length > 2 && (
-                <span className="text-[7px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
-              )}
-            </div>
+            {keyRemaps.slice(0, 2).map((r, i) => {
+              const isDisabled = r.targetKey === null;
+              const targetLabel = getRemapOutputLabel(r, layout);
+              const modifierMarks = getModifierMarks(r);
+              return (
+                <div key={i} className="flex items-center gap-0.5">
+                  {modifierMarks.length > 0 && (
+                    <span className="text-[7px] text-primary/70">{modifierMarks.join("")}</span>
+                  )}
+                  <span className="text-[8px] text-muted-foreground/40">→</span>
+                  <span className={cn(
+                    "font-bold text-[9px]",
+                    isDisabled ? "text-muted-foreground" : "text-foreground"
+                  )}>
+                    {targetLabel}
+                  </span>
+                </div>
+              );
+            })}
+            {keyRemaps.length > 2 && (
+              <span className="text-[7px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
+            )}
           </div>
         ) : (
           /* 通常のキーラベル */
