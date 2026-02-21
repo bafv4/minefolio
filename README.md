@@ -1,22 +1,99 @@
 # Minefolio
 
-Minecraftスピードランナーのポートフォリオプラットフォーム
+Minecraftスピードランナー向けのポートフォリオ/設定共有アプリです。
 
-## 機能
+## サイト概要
 
-- プロフィール管理（キーバインド、デバイス設定、記録）
-- 外部API連携（Speedrun.com、PaceMan、Twitch、YouTube）
-- プレイヤー検索・比較
-- Cloudflare Pages + D1（SQLite）でデプロイ
+Minefolio は、Minecraft スピードランナーが自分のプロフィールやプレイ設定を整理し、他の走者と共有するためのサイトです。  
+「どんな環境で、どんなキー配置で、どんな操作をしているか」を見やすく可視化し、学習・比較・自己紹介に使えることを目的としています。
+
+主な利用シーン:
+
+- 自分のプロフィールページを公開して、SNS で共有する
+- 他の走者のキー配置・デバイス情報を参考にする
+- サーチクラフトやリマップ設定を記録し、再現しやすくする
+- 設定をプリセット化して、用途ごとに切り替える
+
+## コア仕様（機能のあらまし）
+
+### 1. プロフィール公開
+
+- 公開プロフィールページ（`/player/:slug`）を作成できます
+- 表示項目の例:
+  - 表示名 / MCID / 代名詞
+  - ロール（例: 走者）
+  - 一言（short bio）や自己紹介
+  - エディション、入力方法、プラットフォームなどのバッジ
+- 公開/非公開設定に応じて一覧ページでの露出を制御します
+
+### 2. キー配置管理
+
+- キーごとの操作割り当てを編集できます
+- キー編集モーダルで、操作割り当て・リマップ・カスタムアクションをまとめて編集できます
+- モーダル内の編集は即時反映ではなく、`保存` を押した時点で確定します
+- 一括保存（`save-all`）で各設定をまとめて更新します
+
+### 3. リマップ機能
+
+- 複数リマップを登録できます
+- 変更元キーは修飾キー組み合わせ（Ctrl/Shift/Alt/Meta）に対応します
+- 変更先は以下の3種で扱います:
+  - キー（Web `KeyboardEvent.code` 判定）
+  - 文字
+  - 無効化
+- プレースホルダー文字列（`__character__` など）は保存時に無効化されるよう保護しています
+
+### 4. カスタムアクション
+
+- 任意のアクション名・説明・カテゴリを持つアクションを作成できます
+- トリガーは通常キー・修飾キー組み合わせに対応します
+- 専用タブだけでなく、キー編集モーダルからも追加・編集できます
+
+### 5. サーチクラフト表示
+
+- 検索文字列と入力キーを対応づけて表示できます
+- リマップを考慮した表示に対応しています
+- 修飾キーはマーク表示（例: `◆` `⇧` `⌥` `◇`）で視認性を高めています
+
+### 6. 一覧・検索
+
+- `browse`:
+  - 走者一覧、フィルタ、ソート、ページネーション
+  - 検索は検索ボタン押下時に実行
+  - ローディング表示は結果エリアのみ
+- `keybindings`:
+  - 走者ごとのキー配置/マウス設定比較
+  - 検索は検索ボタン押下時に実行
+  - ローディング表示は結果テーブル領域のみ
+
+### 7. プリセット
+
+- 現在設定をプリセットとして保存できます
+- プリセットの複製・復元に対応しています
+- 必要な設定単位（キー配置、リマップ等）でコピー可能です
+
+## 画面構成（代表）
+
+- `/` : ホーム（フィード）
+- `/browse` : 走者一覧
+- `/keybindings` : キー配置一覧
+- `/player/:slug` : 公開プロフィール
+- `/me/*` : 自分の設定管理（編集・キー配置・プリセット など）
+
+## 権限と公開範囲（仕様）
+
+- 認証ユーザーは自分の設定を編集可能
+- 一覧系は公開プロフィールを対象に表示
+- 非公開プロフィールは一覧検索に出ない想定です
 
 ## 技術スタック
 
 - React 19 + React Router 7
 - TypeScript
-- TailwindCSS 4
+- Tailwind CSS 4
 - Drizzle ORM
 - better-auth
-- Cloudflare Pages & D1
+- libSQL（Turso）/ `@libsql/client`
 
 ## セットアップ
 
@@ -28,96 +105,55 @@ pnpm install
 
 ### 2. 環境変数の設定
 
-`.env.example`をコピーして`.dev.vars`を作成し、必要な環境変数を設定してください。
+`.env.example` をコピーして `.env` を作成し、値を設定してください。
 
 ```bash
-cp .env.example .dev.vars
+cp .env.example .env
 ```
 
-必要な環境変数:
+主な環境変数:
 
-- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`: Discord OAuth認証用
-- `BETTER_AUTH_SECRET`: セッション暗号化用（`openssl rand -base64 32`で生成）
-- `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`: Twitchストリーム連携用
-- `YOUTUBE_API_KEY`: YouTube動画連携用
-- `APP_URL`: アプリケーションのURL
+- `TURSO_DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `BETTER_AUTH_SECRET`
+- `APP_URL`
+- `TWITCH_CLIENT_ID`
+- `TWITCH_CLIENT_SECRET`
+- `YOUTUBE_API_KEY`
+- `LEGACY_API_URL`（任意）
+- `CRON_SECRET`（必要な環境のみ）
 
-**⚠️ 重要**: API キーは絶対にGitにコミットしないでください。`.dev.vars`は`.gitignore`に含まれています。
+`TURSO_DATABASE_URL` 未設定時は `file:local.db` が使われます。
 
-### 3. データベースのセットアップ
-
-ローカル開発用のD1データベースを作成:
-
-```bash
-pnpm wrangler d1 create minefolio_db --local
-```
-
-マイグレーション実行:
-
-```bash
-pnpm db:local
-```
-
-### 4. 開発サーバーの起動
+### 3. 開発サーバー起動
 
 ```bash
 pnpm dev
 ```
 
-アプリケーションは `http://localhost:5173` で利用可能です。
+デフォルト: `http://localhost:5173`
 
-## Cloudflare Pagesへのデプロイ
-
-### 環境変数の設定
-
-Cloudflare Dashboardで以下の環境変数を設定してください:
-
-1. Settings > Environment variables に移動
-2. 以下の変数を追加:
-   - `DISCORD_CLIENT_ID`
-   - `DISCORD_CLIENT_SECRET`
-   - `BETTER_AUTH_SECRET`
-   - `TWITCH_CLIENT_ID`
-   - `TWITCH_CLIENT_SECRET`
-   - `YOUTUBE_API_KEY`
-   - `APP_URL`（本番URL）
-
-### デプロイコマンド
+## 利用可能スクリプト
 
 ```bash
-pnpm deploy
-```
+# 開発
+pnpm dev
 
-## データベース管理
+# ビルド / 実行
+pnpm build
+pnpm start
 
-```bash
-# スキーマ変更を生成
+# 型チェック / テスト
+pnpm typecheck
+pnpm test
+pnpm test:ui
+pnpm test:coverage
+
+# DB（Drizzle）
 pnpm db:generate
-
-# ローカルDBにマイグレーション
-pnpm db:local
-
-# 本番DBにマイグレーション
-pnpm db:remote
-
-# Drizzle Studio起動
+pnpm db:migrate
+pnpm db:push
 pnpm db:studio
 ```
-
-## スクリプト
-
-- `pnpm dev`: 開発サーバー起動
-- `pnpm build`: 本番ビルド
-- `pnpm start`: 本番サーバー起動
-- `pnpm typecheck`: 型チェック
-- `pnpm deploy`: Cloudflare Pagesにデプロイ
-
-## セキュリティ
-
-- すべてのAPIキーは環境変数で管理
-- `.dev.vars`ファイルは`.gitignore`に含まれており、Gitにコミットされません
-- 本番環境ではCloudflare Dashboardで環境変数を設定
-
-## ライセンス
-
-MIT
