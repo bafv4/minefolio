@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { User, Clock3 } from "lucide-react";
 import { t } from "@/lib/messages";
+import { formatTime } from "@/lib/time-utils";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -16,6 +17,7 @@ export interface ProfileFeedCardPlayer {
   inputMethodBadge: "keyboard_mouse" | "controller" | "touch" | null;
   updatedAt: Date;
   shortBio: string | null;
+  speedrunTimeSec?: number;
 }
 
 function formatRelativeDate(date: Date): string {
@@ -33,6 +35,8 @@ function formatRelativeDate(date: Date): string {
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
   const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const hasSpeedrunTime =
+    typeof player.speedrunTimeSec === "number" && Number.isFinite(player.speedrunTimeSec);
   const userRoleLabel =
     player.role === "runner"
       ? t("common.runner")
@@ -104,10 +108,17 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
             </Badge>
           )}
         </div>
-        <span className="inline-flex items-center gap-1 shrink-0">
-          <Clock3 className="h-3.5 w-3.5" />
-          {formatRelativeDate(player.updatedAt)}
-        </span>
+        {hasSpeedrunTime ? (
+          <span className="inline-flex items-center gap-1 shrink-0 font-mono font-medium text-foreground">
+            <Clock3 className="h-3.5 w-3.5" />
+            {formatTime(Math.round(player.speedrunTimeSec * 1000))}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 shrink-0">
+            <Clock3 className="h-3.5 w-3.5" />
+            {formatRelativeDate(player.updatedAt)}
+          </span>
+        )}
       </div>
     </Link>
   );

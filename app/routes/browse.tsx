@@ -171,16 +171,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
     }
 
-    const sortedBySpeedrunTime = [...playersForSpeedrunSort].sort((a, b) => {
+    const playersWithTargetRecord = playersForSpeedrunSort.filter((player) =>
+      timeMap.has(player.id)
+    );
+
+    const sortedBySpeedrunTime = [...playersWithTargetRecord].sort((a, b) => {
       const aTime = timeMap.get(a.id);
       const bTime = timeMap.get(b.id);
 
       if (typeof aTime === "number" && typeof bTime === "number") {
         if (aTime !== bTime) return aTime - bTime;
-      } else if (typeof aTime === "number") {
-        return -1;
-      } else if (typeof bTime === "number") {
-        return 1;
       }
 
       const aName = (a.displayName || a.mcid || a.slug).toLowerCase();
@@ -192,7 +192,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
     const pagedPlayers = sortedBySpeedrunTime
       .slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
-      .map(({ id: _id, speedruncomUsername: _speedruncomUsername, ...player }) => player);
+      .map(({ id: _id, speedruncomUsername: _speedruncomUsername, ...player }) => ({
+        ...player,
+        speedrunTimeSec: timeMap.get(_id)!,
+      }));
 
     return {
       players: pagedPlayers,
