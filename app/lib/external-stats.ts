@@ -138,6 +138,66 @@ export interface MCSRRankedMatch {
 // ============================================
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
 
+function normalizeSpeedrunText(value: string | undefined | null): string {
+  if (!value) return "";
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function getVariableLabel(
+  pb: SpeedrunComPersonalBest,
+  keywords: string[],
+): string | undefined {
+  if (!pb.run.values || !pb.category?.data?.variables?.data) return undefined;
+
+  for (const variable of pb.category.data.variables.data) {
+    const variableName = normalizeSpeedrunText(variable.name);
+    const isMatch = keywords.some((keyword) =>
+      variableName.includes(normalizeSpeedrunText(keyword))
+    );
+    if (!isMatch) continue;
+
+    const valueId = pb.run.values[variable.id];
+    if (!valueId) continue;
+    const label = variable.values.values[valueId]?.label;
+    if (label) return label;
+  }
+
+  return undefined;
+}
+
+export function isMinecraftJavaAnyGlitchlessRandomSeed116Plus(
+  pb: SpeedrunComPersonalBest,
+): boolean {
+  const gameName = normalizeSpeedrunText(pb.game?.data?.names?.international);
+  const categoryName = normalizeSpeedrunText(pb.category?.data?.name);
+  if (gameName !== "minecraft: java edition") return false;
+  if (categoryName !== "any% glitchless") return false;
+
+  const seedType = normalizeSpeedrunText(
+    getVariableLabel(pb, ["seed", "seed type", "シード"])
+  );
+  const version = normalizeSpeedrunText(
+    pb.versionName ?? getVariableLabel(pb, ["version", "バージョン"])
+  );
+
+  const isRandomSeed = seedType ? seedType.includes("random") : true;
+  const is116Plus = version.includes("1.16+");
+
+  return isRandomSeed && is116Plus;
+}
+
+export function getMinecraftJavaAnyGlitchlessRandomSeed116PlusBestSeconds(
+  personalBests: SpeedrunComPersonalBest[],
+): number | null {
+  const times = personalBests
+    .filter(isMinecraftJavaAnyGlitchlessRandomSeed116Plus)
+    .map((pb) => pb.run.times.primary_t)
+    .filter((time) => Number.isFinite(time) && time > 0);
+
+  if (times.length === 0) return null;
+  return Math.min(...times);
+}
+
 export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunComStats> {
   try {
     // ユーザー情報を取得
@@ -212,6 +272,14 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
     console.error("Speedrun.com API error:", error);
     return { user: null, personalBests: [], error: "APIエラーが発生しました" };
   }
+}
+
+export async function fetchSpeedrunComBestTimeForMinecraftAnyGlitchlessRandomSeed116Plus(
+  username: string,
+): Promise<number | null> {
+  const stats = await fetchSpeedrunComStats(username);
+  if (stats.error) return null;
+  return getMinecraftJavaAnyGlitchlessRandomSeed116PlusBestSeconds(stats.personalBests);
 }
 
 // ============================================

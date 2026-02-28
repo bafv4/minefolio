@@ -2,9 +2,8 @@ import { useLoaderData, useSearchParams, Form, useNavigation } from "react-route
 import { useState } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
-import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
-import { eq, desc, asc, like, sql, or, and, isNotNull } from "drizzle-orm";
+import { eq, desc, asc, like, sql, or, and } from "drizzle-orm";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
+import { fetchSpeedrunComBestTimeForMinecraftAnyGlitchlessRandomSeed116Plus } from "@/lib/external-stats";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
@@ -44,7 +44,8 @@ export const meta: Route.MetaFunction = () => {
 
 const ITEMS_PER_PAGE = 12;
 
-type SortOption = "updatedAt" | "mcid" | "displayName";
+type SortOption = "updatedAt" | "mcid" | "displayName" | "speedrunTime";
+const SPEEDRUN_SORT_CONCURRENCY = 4;
 
 // フィルタオプションの型
 type FilterRole = "runner" | "viewer";
@@ -52,8 +53,7 @@ type FilterEdition = "java" | "bedrock";
 type FilterInputMethod = "keyboard_mouse" | "controller" | "touch";
 type FilterPlatform = "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other";
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
 
   const url = new URL(request.url);
@@ -106,6 +106,111 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // クエリ条件を組み合わせ
   const whereCondition = and(...conditions);
 
+  // お気に入りを取得（slugベース）
+  const cookieHeader = request.headers.get("Cookie");
+  const favoriteSlugs = getFavoritesFromCookie(cookieHeader);
+  const favoritesSet = new Set(favoriteSlugs);
+
+  // Speedrun.com連携ソート（Minecraft: Java Edition / Any% Glitchless / Random Seed / 1.16+）
+  if (sortBy === "speedrunTime") {
+    const playersForSpeedrunSort = await db.query.users.findMany({
+      where: whereCondition,
+      columns: {
+        id: true,
+        mcid: true,
+        uuid: true,
+        slug: true,
+        displayName: true,
+        pronouns: true,
+        role: true,
+        mainEdition: true,
+        mainPlatform: true,
+        inputMethodBadge: true,
+        updatedAt: true,
+        shortBio: true,
+        speedruncomUsername: true,
+      },
+    });
+
+    const timeMap = new Map<string, number>();
+    const usernameTimeCache = new Map<string, number | null>();
+    const speedrunLinkedPlayers = playersForSpeedrunSort.filter(
+      (player) => !!player.speedruncomUsername
+    );
+
+    for (let i = 0; i < speedrunLinkedPlayers.length; i += SPEEDRUN_SORT_CONCURRENCY) {
+      const chunk = speedrunLinkedPlayers.slice(i, i + SPEEDRUN_SORT_CONCURRENCY);
+      const chunkResults = await Promise.all(
+        chunk.map(async (player) => {
+          const username = player.speedruncomUsername;
+          if (!username) return { id: player.id, time: null as number | null };
+
+          if (usernameTimeCache.has(username)) {
+            return { id: player.id, time: usernameTimeCache.get(username) ?? null };
+          }
+
+          try {
+            const time =
+              await fetchSpeedrunComBestTimeForMinecraftAnyGlitchlessRandomSeed116Plus(
+                username
+              );
+            usernameTimeCache.set(username, time);
+            return { id: player.id, time };
+          } catch (error) {
+            console.error(`Failed to fetch Speedrun.com PB for ${username}:`, error);
+            usernameTimeCache.set(username, null);
+            return { id: player.id, time: null as number | null };
+          }
+        })
+      );
+
+      for (const result of chunkResults) {
+        if (typeof result.time === "number" && Number.isFinite(result.time)) {
+          timeMap.set(result.id, result.time);
+        }
+      }
+    }
+
+    const sortedBySpeedrunTime = [...playersForSpeedrunSort].sort((a, b) => {
+      const aTime = timeMap.get(a.id);
+      const bTime = timeMap.get(b.id);
+
+      if (typeof aTime === "number" && typeof bTime === "number") {
+        if (aTime !== bTime) return aTime - bTime;
+      } else if (typeof aTime === "number") {
+        return -1;
+      } else if (typeof bTime === "number") {
+        return 1;
+      }
+
+      const aName = (a.displayName || a.mcid || a.slug).toLowerCase();
+      const bName = (b.displayName || b.mcid || b.slug).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+    const totalCount = sortedBySpeedrunTime.length;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    const pagedPlayers = sortedBySpeedrunTime
+      .slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+      .map(({ id: _id, speedruncomUsername: _speedruncomUsername, ...player }) => player);
+
+    return {
+      players: pagedPlayers,
+      searchQuery,
+      sortBy,
+      currentPage: page,
+      totalPages,
+      totalCount,
+      favoriteSlugs,
+      filters: {
+        roles: filterRoles,
+        editions: filterEditions,
+        inputMethods: filterInputMethods,
+        platforms: filterPlatforms,
+      },
+    };
+  }
+
   // 全体の件数を取得
   const totalCountResult = await db
     .select({ count: sql<number>`count(*)` })
@@ -142,11 +247,6 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     limit: ITEMS_PER_PAGE,
     offset: (page - 1) * ITEMS_PER_PAGE,
   });
-
-  // お気に入りを取得（slugベース）
-  const cookieHeader = request.headers.get("Cookie");
-  const favoriteSlugs = getFavoritesFromCookie(cookieHeader);
-  const favoritesSet = new Set(favoriteSlugs);
 
   // お気に入りを先頭に並べ替え
   const sortedPlayers = playerList.sort((a, b) => {
@@ -523,13 +623,14 @@ export default function BrowsePage() {
             {/* ソート */}
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
             <Select value={sortBy} onValueChange={handleSortChange}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[190px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="updatedAt">更新日順</SelectItem>
                 <SelectItem value="mcid">MCID順</SelectItem>
                 <SelectItem value="displayName">名前順</SelectItem>
+                <SelectItem value="speedrunTime">Speedrun.comタイム順</SelectItem>
               </SelectContent>
             </Select>
           </div>
