@@ -249,6 +249,9 @@ export const categoryRecords = sqliteTable("category_records", {
   subcategory: text("subcategory"),
   version: text("version"),
 
+  // スピードランカテゴリへの参照（新規追加）
+  categoryRefId: text("category_ref_id"),
+
   // 記録タイプ
   recordType: text("record_type", { enum: ["speedruncom", "ranked", "custom"] }).notNull(),
 
@@ -731,3 +734,132 @@ export const customActionsRelations = relations(customActions, ({ one }) => ({
 
 export type CustomAction = typeof customActions.$inferSelect;
 export type NewCustomAction = typeof customActions.$inferInsert;
+
+// ============================================
+// 20. speedrun_categories（スピードランカテゴリ）
+// ============================================
+export const speedrunCategories = sqliteTable("speedrun_categories", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  // 基本情報
+  name: text("name").notNull(),           // 表示名 (例: "Any% Glitchless RSG")
+  slug: text("slug").unique().notNull(),  // URL用スラッグ
+  description: text("description"),
+
+  // Speedrun.com連携（カスタムカテゴリの場合はnull）
+  speedruncomGameId: text("speedruncom_game_id"),      // 例: "j1npme6p"
+  speedruncomCategoryId: text("speedruncom_category_id"), // 例: "mkeyl926"
+  speedruncomVariables: text("speedruncom_variables"), // JSON: サブカテゴリ変数
+
+  // カテゴリ種別
+  categoryType: text("category_type", {
+    enum: ["speedruncom", "ranked", "custom"]
+  }).notNull(),
+
+  // 表示設定
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_speedrun_categories_slug").on(table.slug),
+  index("idx_speedrun_categories_type").on(table.categoryType),
+  index("idx_speedrun_categories_speedruncom").on(table.speedruncomCategoryId),
+]);
+
+export type SpeedrunCategory = typeof speedrunCategories.$inferSelect;
+export type NewSpeedrunCategory = typeof speedrunCategories.$inferInsert;
+
+// ============================================
+// 21. rankings_cache（ランキングキャッシュ）
+// ============================================
+export const rankingsCache = sqliteTable("rankings_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  cacheKey: text("cache_key").unique().notNull(),
+  cacheType: text("cache_type", {
+    enum: ["speedruncom_leaderboard", "ranked_leaderboard"]
+  }).notNull(),
+  categoryId: text("category_id").references(() => speedrunCategories.id, { onDelete: "cascade" }),
+  data: text("data").notNull(), // JSON
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  lastFetched: integer("last_fetched", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_rankings_cache_key").on(table.cacheKey),
+  index("idx_rankings_cache_type").on(table.cacheType),
+  index("idx_rankings_cache_expires").on(table.expiresAt),
+  index("idx_rankings_cache_category").on(table.categoryId),
+]);
+
+export type RankingsCache = typeof rankingsCache.$inferSelect;
+export type NewRankingsCache = typeof rankingsCache.$inferInsert;
+
+// ============================================
+// 22. player_rankings（プレイヤーランキング）
+// ============================================
+export const playerRankings = sqliteTable("player_rankings", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  // ユーザー参照
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // ランキング種別
+  rankingType: text("ranking_type", {
+    enum: ["speedruncom", "ranked_pb", "ranked_elo"]
+  }).notNull(),
+
+  // カテゴリ（Speedrun.comの場合）
+  categoryId: text("category_id").references(() => speedrunCategories.id, { onDelete: "cascade" }),
+
+  // Speedrun.com データ
+  speedruncomRunId: text("speedruncom_run_id"),
+  speedruncomPlayerId: text("speedruncom_player_id"),
+
+  // 承認状態（Speedrun.comの場合）
+  verificationStatus: text("verification_status", {
+    enum: ["verified", "new", "rejected"]
+  }).default("verified"),
+
+  // タイム（ミリ秒）
+  timeMs: integer("time_ms"),
+  timeFormatted: text("time_formatted"),
+
+  // MCSR Ranked Elo データ
+  eloRate: integer("elo_rate"),
+  wins: integer("wins"),
+  losses: integer("losses"),
+  winRate: real("win_rate"),
+
+  // 記録日
+  recordDate: text("record_date"),
+
+  // 動画URL
+  videoUrl: text("video_url"),
+  runWeblink: text("run_weblink"),
+
+  // 更新日時
+  lastFetched: integer("last_fetched", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_player_rankings_user").on(table.userId),
+  index("idx_player_rankings_type").on(table.rankingType),
+  index("idx_player_rankings_category").on(table.categoryId),
+  index("idx_player_rankings_time").on(table.timeMs),
+  index("idx_player_rankings_elo").on(table.eloRate),
+]);
+
+export const playerRankingsRelations = relations(playerRankings, ({ one }) => ({
+  user: one(users, {
+    fields: [playerRankings.userId],
+    references: [users.id],
+  }),
+  category: one(speedrunCategories, {
+    fields: [playerRankings.categoryId],
+    references: [speedrunCategories.id],
+  }),
+}));
+
+export type PlayerRanking = typeof playerRankings.$inferSelect;
+export type NewPlayerRanking = typeof playerRankings.$inferInsert;

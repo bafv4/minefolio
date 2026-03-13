@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Home, Radio, Search, Keyboard, BarChart3, GitCompare, LogIn, MessageSquare } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, GitCompare, LogIn, MessageSquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,10 @@ interface HeaderProps {
 }
 
 const navigation = [
-  { name: "ホーム", href: "/", icon: Home },
   { name: "ライブ", href: "/live", icon: Radio },
   { name: "探す", href: "/browse", icon: Search },
   { name: "操作設定", href: "/keybindings", icon: Keyboard },
-  { name: "統計", href: "/keybindings/stats", icon: BarChart3 },
+  { name: "ランキング", href: "/rankings", icon: Trophy },
   { name: "比較", href: "/compare", icon: GitCompare },
 ];
 
@@ -69,24 +68,28 @@ export function Header({ user }: HeaderProps) {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex md:items-center md:space-x-1">
-              {navigation.map((item, index) => (
-                <div key={item.name} className="flex items-center">
-                  {index > 0 && (
-                    <div className="h-4 w-px bg-border mx-2" />
-                  )}
-                  <Link
-                    to={item.href}
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
-                      location.pathname === item.href
-                        ? "text-foreground bg-accent/50"
-                        : "text-muted-foreground"
+              {navigation.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.name} className="flex items-center">
+                    {index > 0 && (
+                      <div className="h-4 w-px bg-border mx-2" />
                     )}
-                  >
-                    {item.name}
-                  </Link>
-                </div>
-              ))}
+                    <Link
+                      to={item.href}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
+                        location.pathname === item.href
+                          ? "text-foreground bg-accent/50"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.name}
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Right side - Desktop */}

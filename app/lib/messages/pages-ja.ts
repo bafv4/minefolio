@@ -518,9 +518,34 @@ export const PAGES_JA = {
     description: "Minecraftスピードランのランキングとリーダーボードを表示。",
     pageTitle: "ランキング",
     pageDescription: "スピードランのランキングとリーダーボードを表示。",
-    comingSoonTitle: "近日公開",
-    comingSoonDescription: "Speedrun.comやMCSR Rankedとの連携は今後のアップデートで対応予定です。",
-    checkBackLater: "後日またお確かめください",
+    // タブ
+    tabSpeedruncom: "Speedrun.com",
+    tabRanked: "MCSR Ranked",
+    // Speedrun.com
+    selectCategory: "カテゴリを選択",
+    noCategories: "カテゴリが登録されていません",
+    noRankingData: "ランキングデータがありません",
+    // Ranked
+    pbRanking: "PB ランキング",
+    eloRanking: "Elo ランキング",
+    // テーブルヘッダー
+    rank: "#",
+    player: "プレイヤー",
+    time: "タイム",
+    bestTime: "ベストタイム",
+    date: "日付",
+    source: "ソース",
+    links: "リンク",
+    profile: "プロフィール",
+    elo: "Elo",
+    winLoss: "勝敗",
+    winRate: "勝率",
+    // ソースバッジ
+    sourceSrc: "SRC",
+    sourceCustom: "カスタム",
+    // エラー
+    errorSpeedruncom: "Speedrun.comからのデータ取得に失敗しました",
+    errorRanked: "MCSR Rankedからのデータ取得に失敗しました",
   },
   meImport: {
     title: "インポート - Minefolio",

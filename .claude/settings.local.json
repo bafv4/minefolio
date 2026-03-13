@@ -17,7 +17,15 @@
       "Bash(npx drizzle-kit:*)",
       "Bash(sqlite3:*)",
       "Bash(ls:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx tsx:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npm run db:migrate:*)",
+      "Bash(xargs:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

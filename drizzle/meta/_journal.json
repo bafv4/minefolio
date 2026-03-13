@@ -43,6 +43,20 @@
       "when": 1771422293474,
       "tag": "0005_slimy_the_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1773150466323,
+      "tag": "0006_lush_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1773319971482,
+      "tag": "0007_adorable_clint_barton",
+      "breakpoints": true
     }
   ]
 }
