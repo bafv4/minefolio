@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Upload, Trash2, AlertCircle, CheckCircle } from "lucide-react";
 import { t } from "@/lib/messages";
@@ -10,15 +8,13 @@ import { t } from "@/lib/messages";
 interface SkinUploaderProps {
   userId: string;
   currentSkinUrl: string | null;
-  currentModel: "default" | "slim" | null;
-  onUploadComplete: (url: string, model: "default" | "slim") => void;
+  onUploadComplete: (url: string) => void;
   onDelete: () => void;
 }
 
 export function SkinUploader({
   userId,
   currentSkinUrl,
-  currentModel,
   onUploadComplete,
   onDelete,
 }: SkinUploaderProps) {
@@ -26,9 +22,6 @@ export function SkinUploader({
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<"default" | "slim">(
-    currentModel ?? "default"
-  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(
@@ -103,7 +96,6 @@ export function SkinUploader({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: blob.url,
-            model: selectedModel,
           }),
         });
 
@@ -113,7 +105,7 @@ export function SkinUploader({
         }
 
         setSuccess(t("skinUploader.uploadSuccess"));
-        onUploadComplete(blob.url, selectedModel);
+        onUploadComplete(blob.url);
       } catch (e) {
         console.error("Upload error:", e);
         setError(e instanceof Error ? e.message : t("skinUploader.uploadFailed"));
@@ -125,7 +117,7 @@ export function SkinUploader({
         }
       }
     },
-    [userId, selectedModel, onUploadComplete]
+    [userId, onUploadComplete]
   );
 
   const handleDelete = useCallback(async () => {
@@ -155,43 +147,8 @@ export function SkinUploader({
     }
   }, [currentSkinUrl, onDelete]);
 
-  const handleModelChange = useCallback(
-    async (newModel: "default" | "slim") => {
-      setSelectedModel(newModel);
-
-      // すでにカスタムスキンがある場合は、モデルのみ更新
-      if (currentSkinUrl) {
-        setError(null);
-        setSuccess(null);
-
-        try {
-          const response = await fetch("/api/me/skin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: currentSkinUrl,
-              model: newModel,
-            }),
-          });
-
-          if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || t("skinUploader.updateFailed"));
-          }
-
-          setSuccess(t("skinUploader.modelUpdated"));
-          onUploadComplete(currentSkinUrl, newModel);
-        } catch (e) {
-          console.error("Model update error:", e);
-          setError(e instanceof Error ? e.message : t("skinUploader.updateFailed"));
-        }
-      }
-    },
-    [currentSkinUrl, onUploadComplete]
-  );
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* エラー/成功メッセージ */}
       {error && (
         <Alert variant="destructive">
@@ -206,101 +163,67 @@ export function SkinUploader({
         </Alert>
       )}
 
-      {/* スキンモデル選択 */}
-      <div className="space-y-2">
-        <Label>{t("skinUploader.modelLabel")}</Label>
-        <RadioGroup
-          value={selectedModel}
-          onValueChange={(value) => handleModelChange(value as "default" | "slim")}
-          className="flex gap-4"
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="default" id="model-default" />
-            <Label htmlFor="model-default" className="font-normal cursor-pointer">
-              {t("skinUploader.modelDefault")}
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="slim" id="model-slim" />
-            <Label htmlFor="model-slim" className="font-normal cursor-pointer">
-              {t("skinUploader.modelSlim")}
-            </Label>
-          </div>
-        </RadioGroup>
-        <p className="text-xs text-muted-foreground">
-          {t("skinUploader.modelHint")}
-        </p>
-      </div>
-
       {/* ファイルアップロード */}
-      <div className="space-y-2">
-        <Label>{t("skinUploader.uploadLabel")}</Label>
-        <div className="flex gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png"
-            onChange={handleFileSelect}
-            className="hidden"
-            id="skin-upload"
-          />
+      <div className="flex gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png"
+          onChange={handleFileSelect}
+          className="hidden"
+          id="skin-upload"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading || isDeleting}
+        >
+          {isUploading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t("skinUploader.uploading")}
+            </>
+          ) : (
+            <>
+              <Upload className="mr-2 h-4 w-4" />
+              {currentSkinUrl
+                ? t("skinUploader.changeSkin")
+                : t("skinUploader.uploadSkin")}
+            </>
+          )}
+        </Button>
+
+        {currentSkinUrl && (
           <Button
             type="button"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
+            variant="ghost"
+            onClick={handleDelete}
             disabled={isUploading || isDeleting}
           >
-            {isUploading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t("skinUploader.uploading")}
-              </>
+            {isDeleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <>
-                <Upload className="mr-2 h-4 w-4" />
-                {currentSkinUrl
-                  ? t("skinUploader.changeSkin")
-                  : t("skinUploader.uploadSkin")}
-              </>
+              <Trash2 className="mr-2 h-4 w-4" />
             )}
+            {t("skinUploader.deleteSkin")}
           </Button>
-
-          {currentSkinUrl && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleDelete}
-              disabled={isUploading || isDeleting}
-            >
-              {isDeleting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="mr-2 h-4 w-4" />
-              )}
-              {t("skinUploader.deleteSkin")}
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {t("skinUploader.uploadHint")}
-        </p>
+        )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        {t("skinUploader.uploadHint")}
+      </p>
 
       {/* 現在のカスタムスキン表示 */}
       {currentSkinUrl && (
-        <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+        <div className="p-3 bg-muted/50 rounded-lg">
           <p className="text-sm font-medium mb-2">{t("skinUploader.currentSkin")}</p>
-          <div className="flex items-center gap-3">
-            <img
-              src={currentSkinUrl}
-              alt="Custom skin"
-              className="w-16 h-16 image-rendering-pixelated border rounded"
-              style={{ imageRendering: "pixelated" }}
-            />
-            <div className="text-xs text-muted-foreground">
-              <p>{t("skinUploader.model")}: {selectedModel === "slim" ? "Slim (Alex)" : "Default (Steve)"}</p>
-            </div>
-          </div>
+          <img
+            src={currentSkinUrl}
+            alt="Custom skin"
+            className="w-16 h-16 border rounded"
+            style={{ imageRendering: "pixelated" }}
+          />
         </div>
       )}
     </div>

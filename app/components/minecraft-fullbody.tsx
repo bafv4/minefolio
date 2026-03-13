@@ -27,7 +27,10 @@ export type PoseName =
   | "custom";
 
 interface MinecraftFullBodyProps {
-  uuid: string;
+  /** UUID（uuidまたはskinUrlのどちらかが必要） */
+  uuid?: string;
+  /** カスタムスキンURL（uuidまたはskinUrlのどちらかが必要） */
+  skinUrl?: string;
   mcid?: string;
   width?: number;
   height?: number;
@@ -106,6 +109,7 @@ const POSE_ROTATIONS: Record<
 
 const MinecraftFullBodyComponent = ({
   uuid,
+  skinUrl,
   mcid,
   width = 300,
   height = 400,
@@ -121,6 +125,8 @@ const MinecraftFullBodyComponent = ({
   asImage = false,
   slim = false,
 }: MinecraftFullBodyProps) => {
+  // キャッシュキー用の識別子（uuidまたはskinUrl）
+  const skinIdentifier = skinUrl || uuid || STEVE_UUID;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +138,7 @@ const MinecraftFullBodyComponent = ({
 
     // asImageモードの場合、キャッシュをチェック
     if (asImage) {
-      const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom, slim);
+      const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = imageCache.get(cacheKey);
       if (cachedImage) {
         setImageSrc(cachedImage);
@@ -164,12 +170,12 @@ const MinecraftFullBodyComponent = ({
 
         viewerRef.current = viewer;
 
-        // Use local skin proxy API
-        const skinUrl = `/api/skin?uuid=${uuid}`;
+        // スキンURLを決定（カスタムスキンURL > UUID > Steve）
         const skinModel = slim ? "slim" : "default";
+        const skinUrlToLoad = skinUrl || (uuid ? `/api/skin?uuid=${uuid}` : `/api/skin?uuid=${STEVE_UUID}`);
 
         try {
-          await viewer.loadSkin(skinUrl, { model: skinModel });
+          await viewer.loadSkin(skinUrlToLoad, { model: skinModel });
         } catch {
           const steveUrl = `/api/skin?uuid=${STEVE_UUID}`;
           await viewer.loadSkin(steveUrl, { model: skinModel });
@@ -234,7 +240,7 @@ const MinecraftFullBodyComponent = ({
           const dataUrl = canvas.toDataURL("image/png");
 
           // キャッシュに保存
-          const cacheKey = getCacheKey(uuid, pose, width, height, angle, elevation, zoom, slim);
+          const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
           imageCache.set(cacheKey, dataUrl);
 
           setImageSrc(dataUrl);
@@ -260,7 +266,7 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-  }, [uuid, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage, slim]);
+  }, [uuid, skinUrl, skinIdentifier, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage, slim]);
 
   // スケルトン表示（ローディング中）
   const skeleton = (

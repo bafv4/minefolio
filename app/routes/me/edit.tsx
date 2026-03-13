@@ -901,59 +901,122 @@ export default function EditProfilePage() {
       )}
 
       <div className="space-y-6">
-        {/* Avatar & MCID Section */}
+        {/* MCID & Skin Section */}
         <Card>
           <CardHeader>
-            <CardTitle>{t("meEdit.minecraftIdTitle")}</CardTitle>
+            <CardTitle>{t("meEdit.mcidSkinTitle")}</CardTitle>
             <CardDescription>
-              {user.mcid
-                ? t("meEdit.mcidVerifiedDesc")
-                : t("meEdit.mcidUnsetDesc")}
+              {t("meEdit.mcidSkinDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {user.mcid ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl overflow-hidden">
-                    <MinecraftAvatar uuid={user.uuid} size={80} />
+            {/* MCID設定 */}
+            <div className="space-y-3">
+              <Label>{t("meEdit.minecraftIdTitle")}</Label>
+              {user.mcid ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl overflow-hidden">
+                      <MinecraftAvatar uuid={user.uuid} size={64} />
+                    </div>
+                    <div>
+                      <p className="font-medium">@{user.mcid}</p>
+                      <p className="text-xs text-muted-foreground">
+                        UUID: {user.uuid}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">@{user.mcid}</p>
-                    <p className="text-sm text-muted-foreground">
-                      UUID: {user.uuid}
-                    </p>
+                  <div className="flex gap-2">
+                    <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
+                      setIsMcidDialogOpen(open);
+                      if (!open) setNewMcid("");
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {t("meEdit.change")}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>{t("meEdit.changeMcidTitle")}</DialogTitle>
+                          <DialogDescription>
+                            {t("meEdit.changeMcidDesc")}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <mcidFetcher.Form method="post">
+                          <input type="hidden" name="_action" value="set_mcid" />
+                          <div className="space-y-4 py-4">
+                            <Alert>
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>
+                                {t("meEdit.mcidUrlChangeWarning")}
+                              </AlertDescription>
+                            </Alert>
+                            <div className="space-y-2">
+                              <Label htmlFor="new-mcid">{t("meEdit.newMcid")}</Label>
+                              <Input
+                                id="new-mcid"
+                                name="mcid"
+                                value={newMcid}
+                                onChange={(e) => setNewMcid(e.target.value)}
+                                placeholder={t("meEdit.mcidExample")}
+                                minLength={3}
+                                maxLength={16}
+                              />
+                            </div>
+                            {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
+                              <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>{mcidData.error}</AlertDescription>
+                              </Alert>
+                            )}
+                          </div>
+                          <DialogFooter>
+                            <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
+                              {isMcidSubmitting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : null}
+                              {t("meEdit.applyMcidChange")}
+                            </Button>
+                          </DialogFooter>
+                        </mcidFetcher.Form>
+                      </DialogContent>
+                    </Dialog>
+                    <mcidFetcher.Form method="post">
+                      <input type="hidden" name="_action" value="remove_mcid" />
+                      <Button variant="ghost" size="sm" type="submit" disabled={isMcidSubmitting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {t("meEdit.delete")}
+                      </Button>
+                    </mcidFetcher.Form>
                   </div>
                 </div>
-                <div className="flex gap-2">
+              ) : (
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground">{t("meEdit.mcidNotConfigured")}</p>
                   <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
                     setIsMcidDialogOpen(open);
                     if (!open) setNewMcid("");
                   }}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Pencil className="mr-2 h-4 w-4" />
-                        {t("meEdit.change")}
+                      <Button size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        {t("meEdit.setMcid")}
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>{t("meEdit.changeMcidTitle")}</DialogTitle>
+                        <DialogTitle>{t("meEdit.setMcidTitle")}</DialogTitle>
                         <DialogDescription>
-                          {t("meEdit.changeMcidDesc")}
+                          {t("meEdit.setMcidDesc")}
                         </DialogDescription>
                       </DialogHeader>
                       <mcidFetcher.Form method="post">
                         <input type="hidden" name="_action" value="set_mcid" />
                         <div className="space-y-4 py-4">
-                          <Alert>
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>
-                              {t("meEdit.mcidUrlChangeWarning")}
-                            </AlertDescription>
-                          </Alert>
                           <div className="space-y-2">
-                            <Label htmlFor="new-mcid">{t("meEdit.newMcid")}</Label>
+                            <Label htmlFor="new-mcid">{t("meEdit.minecraftIdTitle")}</Label>
                             <Input
                               id="new-mcid"
                               name="mcid"
@@ -976,171 +1039,116 @@ export default function EditProfilePage() {
                             {isMcidSubmitting ? (
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : null}
-                            {t("meEdit.applyMcidChange")}
+                            {t("meEdit.setMcid")}
                           </Button>
                         </DialogFooter>
                       </mcidFetcher.Form>
                     </DialogContent>
                   </Dialog>
-                  <mcidFetcher.Form method="post">
-                    <input type="hidden" name="_action" value="remove_mcid" />
-                    <Button variant="ghost" size="sm" type="submit" disabled={isMcidSubmitting}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      {t("meEdit.delete")}
-                    </Button>
-                  </mcidFetcher.Form>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <div className="w-20 h-20 rounded-xl bg-muted mx-auto mb-4 flex items-center justify-center">
-                  <AlertCircle className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground mb-4">{t("meEdit.mcidNotConfigured")}</p>
-                <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
-                  setIsMcidDialogOpen(open);
-                  if (!open) setNewMcid("");
-                }}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="mr-2 h-4 w-4" />
-                      {t("meEdit.setMcid")}
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>{t("meEdit.setMcidTitle")}</DialogTitle>
-                      <DialogDescription>
-                        {t("meEdit.setMcidDesc")}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <mcidFetcher.Form method="post">
-                      <input type="hidden" name="_action" value="set_mcid" />
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="new-mcid">{t("meEdit.minecraftIdTitle")}</Label>
-                          <Input
-                            id="new-mcid"
-                            name="mcid"
-                            value={newMcid}
-                            onChange={(e) => setNewMcid(e.target.value)}
-                            placeholder={t("meEdit.mcidExample")}
-                            minLength={3}
-                            maxLength={16}
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Custom Skin Upload */}
+            <div className="space-y-3">
+              <Label>{t("skinUploader.customSkinTitle")}</Label>
+              <p className="text-sm text-muted-foreground">
+                {t("skinUploader.customSkinDesc")}
+              </p>
+              {user.customSkinUrl && (
+                <Alert className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {t("skinUploader.customSkinActive")}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <SkinUploader
+                userId={user.id}
+                currentSkinUrl={user.customSkinUrl}
+                onUploadComplete={() => {
+                  window.location.reload();
+                }}
+                onDelete={() => {
+                  window.location.reload();
+                }}
+              />
+            </div>
+
+            {/* Pose Selection - show when user has uuid OR custom skin */}
+            {(user.uuid || user.customSkinUrl) && (
+              <>
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label>{t("meEdit.poseLabel")}</Label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {(["standing", "walking", "waving"] as const).map((pose) => (
+                      <button
+                        key={pose}
+                        type="button"
+                        onClick={() => setSelectedPose(pose)}
+                        className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
+                            ? "border-primary bg-primary/5"
+                            : "border-muted hover:border-muted-foreground/30"
+                          }`}
+                      >
+                        <div className="w-16 h-24">
+                          <MinecraftFullBody
+                            uuid={user.uuid ?? undefined}
+                            skinUrl={user.customSkinUrl ?? undefined}
+                            width={64}
+                            height={96}
+                            pose={pose}
+                            angle={-35}
+                            elevation={5}
+                            zoom={0.9}
+                            slim={formValues.slimSkin}
+                            asImage
                           />
                         </div>
-                        {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
-                          <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>{mcidData.error}</AlertDescription>
-                          </Alert>
-                        )}
-                      </div>
-                      <DialogFooter>
-                        <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
-                          {isMcidSubmitting ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : null}
-                          {t("meEdit.setMcid")}
-                        </Button>
-                      </DialogFooter>
-                    </mcidFetcher.Form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
-
-            {/* Pose Selection - only show when user has uuid */}
-            {user.uuid && (
-              <div className="space-y-3">
-                <Label>{t("meEdit.poseLabel")}</Label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(["standing", "walking", "waving"] as const).map((pose) => (
-                    <button
-                      key={pose}
-                      type="button"
-                      onClick={() => setSelectedPose(pose)}
-                      className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${
-                        selectedPose === pose
-                          ? "border-primary bg-primary/5"
-                          : "border-muted hover:border-muted-foreground/30"
-                      }`}
-                    >
-                      <div className="w-16 h-24">
-                        <MinecraftFullBody
-                          uuid={user.uuid!}
-                          width={64}
-                          height={96}
-                          pose={pose}
-                          angle={-35}
-                          elevation={5}
-                          zoom={0.9}
-                          slim={formValues.slimSkin}
-                          asImage
-                        />
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {pose === "standing" && t("meEdit.poseStanding")}
-                        {pose === "walking" && t("meEdit.poseWalking")}
-                        {pose === "waving" && t("meEdit.poseWaving")}
-                      </span>
-                    </button>
-                  ))}
+                        <span className="text-xs text-muted-foreground">
+                          {pose === "standing" && t("meEdit.poseStanding")}
+                          {pose === "walking" && t("meEdit.poseWalking")}
+                          {pose === "waving" && t("meEdit.poseWaving")}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              </>
+            )}
 
-                {/* Slim Skin Toggle */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Checkbox
-                    id="slimSkin"
-                    checked={formValues.slimSkin}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, slimSkin: checked === true }))
-                    }
-                  />
-                  <Label htmlFor="slimSkin" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.slimSkinLabel")}
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("meEdit.slimSkinHint")}
-                </p>
+            <Separator />
+
+            {/* Skin Model Toggle - 常に表示 */}
+            <div className="space-y-2">
+              <Label>{t("meEdit.skinModelLabel")}</Label>
+              <div className="flex rounded-lg border p-1 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: false }))}
+                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                    }`}
+                >
+                  {t("meEdit.skinModelDefault")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: true }))}
+                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                    }`}
+                >
+                  {t("meEdit.skinModelSlim")}
+                </button>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Custom Skin Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ImageIcon className="h-5 w-5" />
-              {t("skinUploader.customSkinTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("skinUploader.customSkinDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {user.customSkinUrl && (
-              <Alert className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {t("skinUploader.customSkinActive")}
-                </AlertDescription>
-              </Alert>
-            )}
-            <SkinUploader
-              userId={user.id}
-              currentSkinUrl={user.customSkinUrl}
-              currentModel={user.customSkinModel as "default" | "slim" | null}
-              onUploadComplete={() => {
-                // ページをリロードして新しいデータを反映
-                window.location.reload();
-              }}
-              onDelete={() => {
-                window.location.reload();
-              }}
-            />
+            </div>
           </CardContent>
         </Card>
 
