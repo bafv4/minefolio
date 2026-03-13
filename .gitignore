@@ -20,3 +20,6 @@ local.db-wal
 
 # Vercel
 .vercel
+
+# Test coverage
+/coverage/

@@ -1,12 +1,36 @@
 // Mojang API連携
 
+import { z } from "zod";
 import { getCached, setCached, getMojangCacheKey, CacheTTL } from "./cache";
-import {
-  mojangProfileSchema,
-  mojangSessionProfileSchema,
-  mojangTexturesSchema,
-  safeParse,
-} from "./schemas/external-api";
+
+// Zodスキーマ定義
+const mojangProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+const mojangSessionProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  properties: z.array(
+    z.object({
+      name: z.string(),
+      value: z.string(),
+    })
+  ),
+});
+
+const mojangTexturesSchema = z.object({
+  textures: z.object({
+    SKIN: z.object({ url: z.string() }).optional(),
+    CAPE: z.object({ url: z.string() }).optional(),
+  }),
+});
+
+function safeParse<T>(data: unknown, schema: z.ZodSchema<T>): T | null {
+  const result = schema.safeParse(data);
+  return result.success ? result.data : null;
+}
 
 const MOJANG_API_BASE = "https://api.mojang.com";
 const SESSION_SERVER_BASE = "https://sessionserver.mojang.com";
