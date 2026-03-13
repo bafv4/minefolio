@@ -52,6 +52,8 @@ export default [
   // API routes (outside of layout)
   route("api/auth/*", "routes/api/auth/splat.tsx"),
   route("api/skin", "routes/api/skin.ts"),
+  route("api/me/skin", "routes/api/me/skin.ts"),
+  route("api/me/skin/upload-token", "routes/api/me/skin/upload-token.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
 

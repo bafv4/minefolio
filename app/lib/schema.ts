@@ -55,6 +55,11 @@ export const users = sqliteTable("users", {
   profileViews: integer("profile_views").default(0).notNull(),
   lastActive: integer("last_active", { mode: "timestamp" }),
 
+  // カスタムスキン（Vercel Blob）
+  customSkinUrl: text("custom_skin_url"),
+  customSkinModel: text("custom_skin_model", { enum: ["default", "slim"] }),
+  customSkinUpdatedAt: integer("custom_skin_updated_at", { mode: "timestamp" }),
+
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [

@@ -1,4 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
+import { createDb } from "@/lib/db";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 
 // Steve's default skin URL (embedded as base64 fallback would be better, but using official URL)
 const STEVE_SKIN_URL =
@@ -21,14 +24,61 @@ interface TexturesProperty {
   };
 }
 
+// スキン取得の優先順位:
+// 1. customSkinUrl（カスタムスキン）
+// 2. Mojang API（UUID連携済み）
+// 3. Steve（フォールバック）
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const uuid = url.searchParams.get("uuid");
+  const userId = url.searchParams.get("userId");
 
-  if (!uuid) {
-    return new Response("UUID is required", { status: 400 });
+  // userIdが指定された場合はカスタムスキンを優先チェック
+  if (userId) {
+    try {
+      const db = createDb();
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: {
+          customSkinUrl: true,
+          uuid: true,
+        },
+      });
+
+      // カスタムスキンがある場合はそれを返す
+      if (user?.customSkinUrl) {
+        const skinResponse = await fetch(user.customSkinUrl);
+        if (skinResponse.ok) {
+          const skinData = await skinResponse.arrayBuffer();
+          return new Response(skinData, {
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "public, max-age=3600",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      }
+
+      // カスタムスキンがない場合、ユーザーのUUIDでMojang APIを使用
+      if (user?.uuid) {
+        return fetchMojangSkin(user.uuid);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user skin:", error);
+    }
   }
 
+  // UUIDが直接指定された場合（従来の動作）
+  if (!uuid) {
+    return new Response("UUID or userId is required", { status: 400 });
+  }
+
+  return fetchMojangSkin(uuid);
+}
+
+// Mojang APIからスキンを取得
+async function fetchMojangSkin(uuid: string): Promise<Response> {
   // UUIDからハイフンを除去
   const cleanUuid = uuid.replace(/-/g, "");
 

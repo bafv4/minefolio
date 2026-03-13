@@ -54,7 +54,9 @@ import {
   Settings,
   AlertTriangle,
   Download,
+  ImageIcon,
 } from "lucide-react";
+import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { t } from "@/lib/messages";
 
@@ -1104,6 +1106,41 @@ export default function EditProfilePage() {
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Custom Skin Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="h-5 w-5" />
+              {t("skinUploader.customSkinTitle")}
+            </CardTitle>
+            <CardDescription>
+              {t("skinUploader.customSkinDesc")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {user.customSkinUrl && (
+              <Alert className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {t("skinUploader.customSkinActive")}
+                </AlertDescription>
+              </Alert>
+            )}
+            <SkinUploader
+              userId={user.id}
+              currentSkinUrl={user.customSkinUrl}
+              currentModel={user.customSkinModel as "default" | "slim" | null}
+              onUploadComplete={() => {
+                // ページをリロードして新しいデータを反映
+                window.location.reload();
+              }}
+              onDelete={() => {
+                window.location.reload();
+              }}
+            />
           </CardContent>
         </Card>
 
