@@ -60,6 +60,7 @@ export default [
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
+  route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
