@@ -5,7 +5,7 @@ import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq, desc, asc, like, sql, or, and, isNotNull } from "drizzle-orm";
-import { ProfileFeedCard } from "@/components/profile-feed-card";
+import { ProfileFeedCard, ProfileFeedListItem, PlayerViewToggle } from "@/components/profile-feed-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -220,6 +220,7 @@ export default function BrowsePage() {
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
   // アクティブなフィルタ数
   const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
@@ -314,7 +315,7 @@ export default function BrowsePage() {
               </Button>
             </div>
           </Form>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* フィルタ */}
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
               <DialogTrigger asChild>
@@ -532,6 +533,7 @@ export default function BrowsePage() {
                 <SelectItem value="displayName">名前順</SelectItem>
               </SelectContent>
             </Select>
+            <PlayerViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
 
@@ -588,20 +590,42 @@ export default function BrowsePage() {
 
       {/* 走者一覧 */}
       {isNavigating ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <PlayerCardSkeleton key={i} />
-          ))}
-        </div>
+        viewMode === "card" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <PlayerCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-3 px-1">
+                <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : players.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {players.map((player) => (
-            <ProfileFeedCard key={player.slug} player={player} />
-          ))}
-        </div>
+        viewMode === "card" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {players.map((player) => (
+              <ProfileFeedCard key={player.slug} player={player} />
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y">
+            {players.map((player) => (
+              <ProfileFeedListItem key={player.slug} player={player} />
+            ))}
+          </div>
+        )
       ) : (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
+          <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg mb-2">
             {searchQuery || activeFilterCount > 0
               ? t("browse.emptyFiltered")

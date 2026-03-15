@@ -369,6 +369,38 @@ export const authVerifications = sqliteTable("auth_verifications", {
 });
 
 // ============================================
+// 23. guides（ガイド）
+// ============================================
+export const guides = sqliteTable("guides", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  authorId: text("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  content: text("content").notNull().default(""),
+  coverImageUrl: text("cover_image_url"),
+  isPublished: integer("is_published", { mode: "boolean" }).default(false).notNull(),
+  tags: text("tags").default("[]").notNull(),
+  viewCount: integer("view_count").default(0).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => [
+  uniqueIndex("guides_author_slug_uniq").on(t.authorId, t.slug),
+  index("guides_feed_idx").on(t.isPublished, t.updatedAt),
+  index("guides_author_idx").on(t.authorId),
+]);
+
+export const guidesRelations = relations(guides, ({ one }) => ({
+  author: one(users, {
+    fields: [guides.authorId],
+    references: [users.id],
+  }),
+}));
+
+export type Guide = typeof guides.$inferSelect;
+export type NewGuide = typeof guides.$inferInsert;
+
+// ============================================
 // Relations（リレーション定義）
 // ============================================
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -391,6 +423,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   favorites: many(favorites),
   pacemanPaces: many(pacemanPaces),
   customActions: many(customActions),
+  guides: many(guides),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({

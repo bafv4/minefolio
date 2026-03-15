@@ -1,11 +1,17 @@
 import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
 import { lazy, Suspense, useState, useEffect } from "react";
+import {
+  ViewToggle,
+  GuideCardGrid,
+  GuideListView,
+  type GuideItem,
+} from "@/components/guide-list-views";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
@@ -21,6 +27,8 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { formatTime } from "@/lib/time-utils";
+import { formatDistanceToNow } from "date-fns";
+import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 
@@ -169,6 +177,8 @@ import {
   Menu,
   X,
   Loader2,
+  BookOpen,
+  Eye,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -432,6 +442,22 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     isOwner = currentUser?.id === player.id;
   }
 
+  // プレイヤーの公開ガイドを取得
+  const playerGuides = await db.query.guides.findMany({
+    where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
+    orderBy: [desc(guides.updatedAt)],
+    columns: {
+      id: true,
+      slug: true,
+      title: true,
+      summary: true,
+      tags: true,
+      coverImageUrl: true,
+      viewCount: true,
+      updatedAt: true,
+    },
+  });
+
   // 非表示記録IDをパース
   const hiddenSpeedrunRecords: string[] = player.hiddenSpeedrunRecords
     ? JSON.parse(player.hiddenSpeedrunRecords)
@@ -483,11 +509,12 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       hasSearchCrafts: !!p.searchCraftsData,
     })),
     activePresetId,
+    playerGuides,
   };
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -541,6 +568,7 @@ export default function PlayerProfilePage() {
 
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
 
   // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
@@ -549,6 +577,7 @@ export default function PlayerProfilePage() {
     { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
     { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
     { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
+    { value: "guides", icon: BookOpen, label: "ガイド" },
   ];
 
   // 有効なタブ値のリスト
@@ -1285,6 +1314,35 @@ export default function PlayerProfilePage() {
               icon={<Mouse className="h-12 w-12" />}
               title={t("playerProfile.noDevicesTitle")}
               description={t("playerProfile.noDevices")}
+            />
+          )}
+        </TabsContent>
+
+        {/* Guides Tab */}
+        <TabsContent value="guides" className="space-y-4">
+          {playerGuides.length > 0 ? (
+            <>
+              <div className="flex justify-end">
+                <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />
+              </div>
+              {guidesViewMode === "card" ? (
+                <GuideCardGrid
+                  guides={playerGuides as GuideItem[]}
+                  linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
+                  gridCols="sm:grid-cols-2"
+                />
+              ) : (
+                <GuideListView
+                  guides={playerGuides as GuideItem[]}
+                  linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
+                />
+              )}
+            </>
+          ) : (
+            <EmptyState
+              icon={<BookOpen className="h-12 w-12" />}
+              title="ガイドがありません"
+              description="このプレイヤーはまだガイドを公開していません。"
             />
           )}
         </TabsContent>

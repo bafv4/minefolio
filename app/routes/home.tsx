@@ -5,7 +5,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
+import { users, guides } from "@/lib/schema";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
@@ -16,6 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
+import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import {
   ArrowRight,
@@ -29,6 +31,8 @@ import {
   Clock3,
   ExternalLink,
   Youtube,
+  BookOpen,
+  Eye,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -112,6 +116,27 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     limit: 4,
   });
 
+  // 最近更新されたガイド（公開済み、最新4件）
+  const recentGuides = await db
+    .select({
+      id: guides.id,
+      slug: guides.slug,
+      title: guides.title,
+      summary: guides.summary,
+      tags: guides.tags,
+      coverImageUrl: guides.coverImageUrl,
+      viewCount: guides.viewCount,
+      updatedAt: guides.updatedAt,
+      authorSlug: users.slug,
+      authorDisplayName: users.displayName,
+      authorMcid: users.mcid,
+    })
+    .from(guides)
+    .innerJoin(users, eq(guides.authorId, users.id))
+    .where(eq(guides.isPublished, true))
+    .orderBy(desc(guides.updatedAt))
+    .limit(4);
+
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -138,6 +163,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     currentUser,
     mcidToUuid,
     recentlyUpdatedUsers,
+    recentGuides,
     totalPublicProfiles,
     activePublicProfiles,
   };
@@ -398,6 +424,7 @@ export default function HomePage() {
     currentUser,
     mcidToUuid,
     recentlyUpdatedUsers,
+    recentGuides,
     totalPublicProfiles,
     activePublicProfiles,
   } =
@@ -536,6 +563,73 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {recentGuides.length > 0 && (
+        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-primary/10 p-2">
+              <BookOpen className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.guideFeedLabel")}</p>
+              <h2 className="text-xl font-bold">{t("home.sectionGuides")}</h2>
+            </div>
+            <Button variant="ghost" size="sm" asChild className="ml-auto">
+              <Link to="/guides">
+                すべて見る
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {recentGuides.map((g) => {
+              const tags = JSON.parse(g.tags) as string[];
+              const authorName = g.authorDisplayName || g.authorMcid || g.authorSlug;
+              return (
+                <Link
+                  key={g.id}
+                  to={`/guides/${g.authorSlug}/${g.slug}`}
+                  prefetch="intent"
+                  className="group rounded-2xl border border-border/70 bg-background/80 overflow-hidden transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+                >
+                  {g.coverImageUrl && (
+                    <img
+                      src={g.coverImageUrl}
+                      alt={g.title}
+                      className="w-full h-32 object-cover"
+                      loading="lazy"
+                    />
+                  )}
+                  <div className="p-4 space-y-2">
+                    <h3 className="text-sm font-semibold line-clamp-2 group-hover:text-primary transition-colors">
+                      {g.title}
+                    </h3>
+                    {g.summary && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{g.summary}</p>
+                    )}
+                    {tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {tags.slice(0, 3).map((tag) => (
+                          <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                      <span className="truncate">{authorName}</span>
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Eye className="h-3 w-3" />
+                        {g.viewCount}
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {feed.loading.paces ? (
         <SectionSkeleton columns={4} />

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -242,5 +243,668 @@ body {
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
+  }
+
+  /* Tiptap editor styles */
+  .ProseMirror {
+    outline: none;
+    min-height: 400px;
+  }
+
+  .ProseMirror > *:first-child {
+    margin-top: 0;
+  }
+
+  /* Placeholder */
+  .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply text-muted-foreground;
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* Selected node outline */
+  .ProseMirror .ProseMirror-selectednode {
+    @apply outline outline-2 outline-ring rounded;
+  }
+
+  /* Table */
+  .ProseMirror table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+  }
+
+  .ProseMirror td,
+  .ProseMirror th {
+    @apply border border-border p-2 align-top text-left;
+    min-width: 2em;
+    position: relative;
+  }
+
+  .ProseMirror th {
+    @apply bg-muted font-semibold;
+  }
+
+  /* Inline code in editor */
+  .ProseMirror code:not(pre code) {
+    background: oklch(0.96 0.005 250);
+    color: oklch(0.5 0.12 255);
+    padding: 0.15em 0.4em;
+    border-radius: 0.25em;
+    font-size: 0.875em;
+  }
+
+  .dark .ProseMirror code:not(pre code) {
+    background: oklch(0.25 0.02 250);
+    color: oklch(0.72 0.12 255);
+  }
+
+  /* Code block with copy button */
+  .code-block-wrapper {
+    position: relative;
+    margin: 0.75em 0;
+  }
+
+  .code-block-wrapper pre {
+    background: oklch(0.96 0.005 250);
+    border-radius: 0.5em;
+    padding: 1em;
+    overflow-x: auto;
+    font-size: 0.875em;
+    line-height: 1.6;
+  }
+
+  .dark .code-block-wrapper pre {
+    background: oklch(0.2 0.02 260);
+  }
+
+  .code-block-wrapper code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  .code-block-copy {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75em;
+    height: 1.75em;
+    border-radius: 0.375em;
+    background: color-mix(in oklch, var(--background) 80%, transparent);
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+  }
+
+  .code-block-wrapper:hover .code-block-copy {
+    opacity: 1;
+  }
+
+  .code-block-copy:hover {
+    background: var(--muted);
+    color: var(--foreground);
+  }
+
+  /* Fix @tailwindcss/typography auto-added quotes */
+  .prose code::before,
+  .prose code::after {
+    content: none !important;
+  }
+
+  .prose blockquote p:first-of-type::before,
+  .prose blockquote p:last-of-type::after {
+    content: none !important;
+  }
+
+  /* YouTube embed in editor */
+  .ProseMirror div[data-youtube-video] {
+    @apply my-4;
+  }
+
+  .ProseMirror div[data-youtube-video] > iframe {
+    @apply w-full rounded-lg;
+    aspect-ratio: 16 / 9;
+    height: auto;
+  }
+
+  /* YouTube embed in view page */
+  div[data-youtube-video] {
+    @apply my-4;
+  }
+
+  div[data-youtube-video] > iframe {
+    @apply w-full rounded-lg;
+    aspect-ratio: 16 / 9;
+    height: auto;
+  }
+
+  /* Callout blocks — base (editor + view) */
+  .callout {
+    border-radius: 0.5em;
+    padding: 0.75em 1em;
+    margin: 0.5em 0;
+    display: flex;
+    gap: 0.5em;
+    align-items: flex-start;
+  }
+
+  .callout > *:first-child {
+    margin-top: 0;
+  }
+
+  .callout > *:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Editor-only: NodeView icon button + body wrapper */
+  .callout-icon {
+    flex-shrink: 0;
+    font-size: 1.1em;
+    line-height: 1.65;
+    user-select: none;
+  }
+
+  .callout-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .callout-body > *:first-child {
+    margin-top: 0;
+  }
+
+  .callout-body > *:last-child {
+    margin-bottom: 0;
+  }
+
+  /* View page: add icon via ::before (editor uses NodeView instead) */
+  .guide-content .callout::before {
+    flex-shrink: 0;
+    font-size: 1.1em;
+    line-height: 1.65;
+    user-select: none;
+  }
+
+  .guide-content .callout-tip::before { content: "💡"; }
+  .guide-content .callout-info::before { content: "ℹ️"; }
+  .guide-content .callout-warning::before { content: "⚠️"; }
+  .guide-content .callout-danger::before { content: "🚨"; }
+
+  /* Callout type colors */
+  .callout-tip {
+    background: oklch(0.95 0.02 145);
+    border-left: 3px solid oklch(0.65 0.18 145);
+  }
+
+  .callout-info {
+    background: oklch(0.95 0.02 240);
+    border-left: 3px solid oklch(0.6 0.15 240);
+  }
+
+  .callout-warning {
+    background: oklch(0.95 0.04 80);
+    border-left: 3px solid oklch(0.7 0.15 80);
+  }
+
+  .callout-danger {
+    background: oklch(0.95 0.03 25);
+    border-left: 3px solid oklch(0.6 0.2 25);
+  }
+
+  .dark .callout-tip {
+    background: oklch(0.25 0.03 145);
+    border-left-color: oklch(0.55 0.15 145);
+  }
+
+  .dark .callout-info {
+    background: oklch(0.25 0.03 240);
+    border-left-color: oklch(0.5 0.12 240);
+  }
+
+  .dark .callout-warning {
+    background: oklch(0.25 0.04 80);
+    border-left-color: oklch(0.6 0.12 80);
+  }
+
+  .dark .callout-danger {
+    background: oklch(0.25 0.03 25);
+    border-left-color: oklch(0.5 0.15 25);
+  }
+
+  /* Toggle list — editor only (view styles are outside layer) */
+  .ProseMirror details {
+    border: 1px solid var(--border);
+    border-radius: 0.5em;
+    padding: 0.5em 0.75em;
+    margin: 0.5em 0;
+  }
+
+  .ProseMirror details summary {
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  .ProseMirror details summary::marker {
+    content: "▶ ";
+    font-size: 0.75em;
+  }
+
+  .ProseMirror details[open] summary::marker {
+    content: "▼ ";
+    font-size: 0.75em;
+  }
+
+  .ProseMirror details > :not(summary) {
+    margin-top: 0.5em;
+  }
+
+  /* Columns layout — editor */
+  .columns-editor {
+    position: relative;
+    margin: 0.5em 0;
+    border: 1px dashed var(--border);
+    border-radius: 0.5em;
+    padding: 0.25em;
+  }
+
+  .columns-editor-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.125em 0.5em;
+    font-size: 0.7em;
+    color: var(--muted-foreground);
+    user-select: none;
+  }
+
+  .columns-editor-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25em;
+    height: 1.25em;
+    border-radius: 0.25em;
+    color: var(--muted-foreground);
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    cursor: pointer;
+  }
+
+  .columns-editor:hover .columns-editor-delete {
+    opacity: 1;
+  }
+
+  .columns-editor-delete:hover {
+    color: var(--destructive);
+  }
+
+  .columns-content {
+    display: grid;
+    gap: 0.5em;
+  }
+
+  .columns-editor-2 .columns-content {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .columns-editor-3 .columns-content {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .column-editor {
+    border: 1px dashed var(--border);
+    border-radius: 0.375em;
+    padding: 0.5em;
+    min-height: 3em;
+  }
+
+  @media (max-width: 640px) {
+    .columns-editor-2 .columns-content,
+    .columns-editor-3 .columns-content {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Guide link card — base (editor + view) */
+  .guide-link-card {
+    position: relative;
+    margin: 0.75em 0;
+  }
+
+  .guide-link-card:hover .guide-link-inner {
+    border-color: color-mix(in oklch, var(--border) 100%, oklch(0.5 0 0) 30%);
+    box-shadow: 0 2px 8px color-mix(in oklch, var(--foreground) 6%, transparent);
+  }
+
+  .guide-link-inner {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 0.5em;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .guide-link-cover {
+    width: 120px;
+    height: 70px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .guide-link-body {
+    display: flex;
+    align-items: center;
+    gap: 0.625em;
+    padding: 0.625em 0.875em;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .guide-link-icon {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+  }
+
+  .guide-link-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125em;
+    min-width: 0;
+  }
+
+  .guide-link-title {
+    font-weight: 600;
+    font-size: 0.875em;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .guide-link-author {
+    font-size: 0.75em;
+    color: var(--muted-foreground);
+  }
+
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Guide content typography overrides (UNLAYERED — beats prose utility)
+   ───────────────────────────────────────────────────────────── */
+
+.guide-content.prose {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.guide-content.prose :where(p) {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+
+.guide-content.prose :where(h1) {
+  font-size: 1.875em;
+  font-weight: 700;
+  margin-top: 2em;
+  margin-bottom: 0.3em;
+  line-height: 1.25;
+}
+
+.guide-content.prose :where(h2) {
+  font-size: 1.5em;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.25em;
+  line-height: 1.3;
+}
+
+.guide-content.prose :where(h3) {
+  font-size: 1.15em;
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.2em;
+  line-height: 1.35;
+}
+
+.guide-content.prose :where(h4, h5, h6) {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.15em;
+}
+
+.guide-content.prose :where(ul, ol) {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+  padding-left: 1.5em;
+}
+
+.guide-content.prose :where(li) {
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
+}
+
+.guide-content.prose :where(li > p) {
+  margin-top: 0.1em;
+  margin-bottom: 0.1em;
+}
+
+.guide-content.prose :where(blockquote) {
+  font-style: normal;
+  font-weight: normal;
+  border-left-width: 3px;
+  border-left-color: var(--border);
+  padding: 0.5em 1em;
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
+  border-radius: 0 0.25em 0.25em 0;
+  color: inherit;
+  quotes: none;
+}
+
+.guide-content.prose :where(blockquote p) {
+  margin: 0;
+}
+
+.guide-content.prose :where(code):not(pre code) {
+  background: oklch(0.96 0.005 250);
+  color: oklch(0.5 0.12 255);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25em;
+  font-size: 0.875em;
+  font-weight: normal;
+}
+
+.dark .guide-content.prose :where(code):not(pre code) {
+  background: oklch(0.25 0.02 250);
+  color: oklch(0.72 0.12 255);
+}
+
+.guide-content.prose :where(pre) {
+  position: relative;
+  background: oklch(0.96 0.005 250);
+  border-radius: 0.5em;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.dark .guide-content.prose :where(pre) {
+  background: oklch(0.2 0.02 260);
+}
+
+.guide-content.prose :where(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 0.875em;
+}
+
+.guide-content.prose .code-copy-btn {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 0.375em;
+  background: color-mix(in oklch, var(--background) 80%, transparent);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  cursor: pointer;
+  font-size: 0.75em;
+}
+
+.guide-content.prose pre:hover .code-copy-btn {
+  opacity: 1;
+}
+
+.guide-content.prose .code-copy-btn:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.guide-content.prose :where(img) {
+  border-radius: 0.5em;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.guide-content.prose :where(hr) {
+  border-color: var(--border);
+  margin-top: 2em;
+  margin-bottom: 2em;
+}
+
+.guide-content.prose :where(table) {
+  font-size: 0.9em;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.guide-content.prose :where(th) {
+  font-weight: 600;
+  background: color-mix(in oklch, var(--muted) 60%, transparent);
+}
+
+.guide-content.prose :where(a) {
+  color: var(--primary);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+/* Callout overrides inside prose */
+.guide-content.prose .callout {
+  border-radius: 0.5em;
+  padding: 0.75em 1em;
+  margin: 0.5em 0;
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  font-style: normal;
+  color: inherit;
+  border-left-width: 3px;
+}
+
+.guide-content.prose .callout p {
+  margin-top: 0.2em;
+  margin-bottom: 0.2em;
+}
+
+.guide-content.prose .callout p:first-child {
+  margin-top: 0;
+}
+
+.guide-content.prose .callout p:last-child {
+  margin-bottom: 0;
+}
+
+/* Mark / highlight */
+.guide-content.prose mark {
+  color: inherit;
+  border-radius: 0.15em;
+  padding: 0.05em 0.15em;
+}
+
+/* Toggle list (details/summary) */
+.guide-content.prose details {
+  border: 1px solid var(--border);
+  border-radius: 0.5em;
+  padding: 0.5em 0.75em;
+  margin: 0.5em 0;
+}
+
+.guide-content.prose details summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.guide-content.prose details summary::marker {
+  content: "▶ ";
+  font-size: 0.75em;
+}
+
+.guide-content.prose details[open] summary::marker {
+  content: "▼ ";
+  font-size: 0.75em;
+}
+
+.guide-content.prose details > :not(summary) {
+  margin-top: 0.5em;
+}
+
+/* Guide link card in view */
+.guide-content.prose .guide-link-card {
+  margin: 0.75em 0;
+}
+
+.guide-content.prose .guide-link-inner {
+  text-decoration: none;
+  color: inherit;
+}
+
+.guide-content.prose .guide-link-title {
+  color: var(--foreground);
+}
+
+/* Columns layout in view */
+.guide-content.prose div[data-columns] {
+  display: grid;
+  gap: 1em;
+  margin: 0.75em 0;
+}
+
+.guide-content.prose div[data-columns="2"] {
+  grid-template-columns: 1fr 1fr;
+}
+
+.guide-content.prose div[data-columns="3"] {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.guide-content.prose div[data-column] {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .guide-content.prose div[data-columns="2"],
+  .guide-content.prose div[data-columns="3"] {
+    grid-template-columns: 1fr;
   }
 }

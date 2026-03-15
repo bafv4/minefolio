@@ -1,5 +1,5 @@
-import { useNavigation } from "react-router";
-import { useMemo } from "react";
+import { useNavigation, useLocation } from "react-router";
+import { useMemo, useRef } from "react";
 import { Loader2, Lightbulb } from "lucide-react";
 
 // ランダムに表示するTips
@@ -22,14 +22,21 @@ const TIPS = [
 
 export function NavigationProgress() {
   const navigation = useNavigation();
+  const location = useLocation();
   const isNavigating = navigation.state === "loading";
+
+  // 同じパス内のナビゲーション（検索・フィルタ等）ではフルスクリーンローディングを表示しない
+  const isSamePageNavigation =
+    isNavigating &&
+    navigation.location &&
+    navigation.location.pathname === location.pathname;
 
   // ランダムなTipを選択（ナビゲーション開始時に固定）
   const tip = useMemo(() => {
     return TIPS[Math.floor(Math.random() * TIPS.length)];
   }, [isNavigating]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isNavigating) return null;
+  if (!isNavigating || isSamePageNavigation) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">

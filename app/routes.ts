@@ -45,8 +45,16 @@ export default [
         route("import", "routes/me/import.tsx"),
         route("items", "routes/me/items.tsx"),
         route("search-craft", "routes/me/search-craft.tsx"),
+        route("guides", "routes/me/guides/index.tsx"),
+        route("guides/new", "routes/me/guides/new.tsx"),
+        route("guides/:guideId/edit", "routes/me/guides/edit.tsx"),
       ]),
     ]),
+
+    // Public guides
+    route("guides", "routes/guides/index.tsx"),
+    route("guides/:authorSlug", "routes/guides/user.tsx"),
+    route("guides/:authorSlug/:guideSlug", "routes/guides/view.tsx"),
   ]),
 
   // API routes (outside of layout)
@@ -54,6 +62,8 @@ export default [
   route("api/skin", "routes/api/skin.ts"),
   route("api/me/skin", "routes/api/me/skin.ts"),
   route("api/me/skin/upload-token", "routes/api/me/skin/upload-token.ts"),
+  route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
+  route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
 

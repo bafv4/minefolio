@@ -6,7 +6,7 @@ import { eq, and, desc, asc, isNotNull, or, notExists } from "drizzle-orm";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Trophy, Timer, Swords, Video, ExternalLink, Loader2, Clock } from "lucide-react";
+import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 import { Link } from "react-router";
@@ -328,14 +328,6 @@ export default function RankingsPage() {
           </div>
         </div>
       </div>
-
-      {/* ローディングインジケーター */}
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>読み込み中...</span>
-        </div>
-      )}
 
       {/* ランキングテーブル */}
       {isLoading ? (
