@@ -47,9 +47,11 @@ export default [
         route("search-craft", "routes/me/search-craft.tsx"),
         route("guides", "routes/me/guides/index.tsx"),
         route("guides/new", "routes/me/guides/new.tsx"),
-        route("guides/:guideId/edit", "routes/me/guides/edit.tsx"),
       ]),
     ]),
+
+    // Guide editor (independent, outside me/_layout sidebar)
+    route("me/guides/:guideId/edit", "routes/me/guides/edit.tsx"),
 
     // Public guides
     route("guides", "routes/guides/index.tsx"),

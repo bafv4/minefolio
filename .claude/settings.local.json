@@ -36,7 +36,8 @@
       "Bash(pnpm info:*)",
       "Bash(npm view:*)",
       "Bash(npm search:*)",
-      "Bash(pnpm remove:*)"
+      "Bash(pnpm remove:*)",
+      "Bash(grep -l \"GuideEditor\\\\|guide.*editor\" /Users/bafv4/dev/minefolio/app/routes/**/*.tsx)"
     ]
   }
 }

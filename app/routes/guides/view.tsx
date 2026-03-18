@@ -85,6 +85,7 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
       "h1", "h2", "h3", "h4", "h5", "h6",
       "img", "iframe", "div", "figure", "figcaption",
       "details", "summary", "span", "mark",
+      "colgroup", "col",
     ],
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,
@@ -93,6 +94,9 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
       a: ["href", "name", "target", "rel"],
       iframe: ["src", "width", "height", "frameborder", "allowfullscreen", "allow"],
       div: ["data-youtube-video", "data-callout", "data-callout-type", "data-guide-link", "data-columns", "data-column", "class"],
+      table: ["style"],
+      col: ["style"],
+      colgroup: [],
       td: ["colspan", "rowspan", "style"],
       th: ["colspan", "rowspan", "style"],
       span: ["style"],
@@ -102,6 +106,8 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
       "*": {
         color: [/.*/],
         "background-color": [/.*/],
+        "min-width": [/.*/],
+        width: [/.*/],
       },
     },
     allowedIframeHostnames: ["www.youtube.com", "www.youtube-nocookie.com"],

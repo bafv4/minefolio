@@ -602,8 +602,8 @@ export default function PlayerProfilePage() {
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
-      {/* Mobile Menu Toggle */}
-      <div className="lg:hidden">
+      {/* Mobile Menu Toggle — sticky below the site header (h-16 + border) */}
+      <div className="lg:hidden sticky top-16 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-2 pt-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <Button
           variant="outline"
           className="w-full justify-between h-14 py-3 touch-manipulation"
