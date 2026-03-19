@@ -283,7 +283,7 @@ export default function ImportPage() {
           <Upload className="h-6 w-6" />
           {t("meImport.pageTitle")}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t("meImport.pageDescription")}
         </p>
       </div>

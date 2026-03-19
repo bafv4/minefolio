@@ -450,7 +450,7 @@ export default function DevicesPage() {
       } else if (field === "gameSensitivityPercent" && typeof value === "string") {
         const numVal = parseInt(value);
         if (!isNaN(numVal)) {
-          newValues.gameSensitivity = (numVal / 200).toFixed(2);
+          newValues.gameSensitivity = (numVal / 200).toFixed(4);
         } else if (value === "") {
           newValues.gameSensitivity = "";
         }
@@ -570,7 +570,7 @@ export default function DevicesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{t("meDevices.pageTitle")}</h1>
-        <p className="text-muted-foreground">{t("meDevices.pageDescription")}</p>
+        <p className="text-sm text-muted-foreground">{t("meDevices.pageDescription")}</p>
       </div>
 
       {/* プリセット警告・情報 */}

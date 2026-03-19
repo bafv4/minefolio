@@ -113,7 +113,7 @@ export default function UserGuidesPage() {
           <div>
             <Link
               to={`/player/${author.slug}`}
-              className="text-xl font-bold hover:text-primary transition-colors"
+              className="text-2xl font-bold hover:text-primary transition-colors"
             >
               {authorName}
             </Link>
@@ -133,7 +133,7 @@ export default function UserGuidesPage() {
         viewMode === "card" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border rounded-lg overflow-hidden">
+              <div key={i} className="border border-border/70 rounded-xl overflow-hidden">
                 <Skeleton className="h-36 w-full" />
                 <div className="p-4 space-y-2">
                   <Skeleton className="h-5 w-3/4" />

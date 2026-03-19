@@ -537,6 +537,18 @@ body {
     margin-top: 0.5em;
   }
 
+  .ProseMirror .toggle-summary-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-weight: 600;
+    font-size: inherit;
+    font-family: inherit;
+    color: inherit;
+    width: 100%;
+    padding: 0;
+  }
+
   /* Columns layout — editor */
   .columns-editor {
     position: relative;

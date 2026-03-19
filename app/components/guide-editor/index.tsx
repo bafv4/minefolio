@@ -28,6 +28,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Highlight } from "@tiptap/extension-highlight";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -393,6 +394,32 @@ const CalloutExtension = TiptapNode.create({
 });
 
 // Toggle list (details/summary)
+function ToggleListNodeView({ node, updateAttributes }: {
+  node: { attrs: Record<string, string> };
+  updateAttributes: (attrs: Record<string, string>) => void;
+}) {
+  const summaryText = node.attrs.summaryText || "トグル";
+
+  return (
+    <NodeViewWrapper>
+      <details open>
+        <summary contentEditable={false}>
+          <input
+            type="text"
+            value={summaryText}
+            onChange={(e) => updateAttributes({ summaryText: e.target.value })}
+            className="toggle-summary-input"
+            placeholder="トグル"
+          />
+        </summary>
+        <div className="toggle-content">
+          <NodeViewContent />
+        </div>
+      </details>
+    </NodeViewWrapper>
+  );
+}
+
 const ToggleListExtension = TiptapNode.create({
   name: "toggleList",
   group: "block",
@@ -423,6 +450,11 @@ const ToggleListExtension = TiptapNode.create({
       ["summary", {}, (summaryText as string) || "トグル"],
       ["div", { class: "toggle-content" }, 0],
     ];
+  },
+
+  addNodeView() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ReactNodeViewRenderer(ToggleListNodeView as any);
   },
 
   // @ts-expect-error custom commands not in RawCommands
@@ -1503,25 +1535,19 @@ export function GuideEditor({
     children: React.ReactNode;
     sm?: boolean;
   }) => (
-    <button
-      type="button"
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
+    <Toggle
+      size="sm"
+      pressed={active ?? false}
+      onPressedChange={() => onClick()}
+      onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
       disabled={disabled}
       title={ttl}
       className={cn(
-        "flex items-center justify-center rounded transition-colors",
-        sm ? "h-7 w-7" : "h-8 w-8",
-        active
-          ? "bg-secondary text-secondary-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        disabled && "opacity-40 cursor-not-allowed"
+        sm ? "h-7 w-7 min-w-7 px-0" : "h-8 w-8 min-w-8 px-0",
       )}
     >
       {children}
-    </button>
+    </Toggle>
   );
 
   const Sep = () => <div className="w-px h-5 bg-border mx-0.5 shrink-0" />;

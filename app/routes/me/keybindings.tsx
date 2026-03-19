@@ -185,6 +185,40 @@ function getRemapTypeFromTargetKey(targetKey: string | null | undefined): RemapT
   return isKeyRemapTarget(targetKey) ? "keyboard" : "special";
 }
 
+function useRemapType(
+  targetKey: string | null,
+  index: number,
+  onUpdate: (index: number, updates: Partial<RemapEntry>) => void,
+) {
+  const remapType = getRemapTypeFromTargetKey(targetKey);
+  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
+
+  useEffect(() => {
+    if ((selectedRemapType === "special" || selectedRemapType === "keyboard") &&
+        (targetKey === "" || targetKey === null)) {
+      return;
+    }
+    setSelectedRemapType(remapType);
+  }, [remapType, selectedRemapType, targetKey]);
+
+  const handleRemapTypeChange = useCallback((newType: RemapType) => {
+    setSelectedRemapType(newType);
+    switch (newType) {
+      case "disabled":
+        onUpdate(index, { targetKey: null });
+        break;
+      case "special":
+        onUpdate(index, { targetKey: remapType === "special" ? targetKey : "" });
+        break;
+      case "keyboard":
+        onUpdate(index, { targetKey: remapType === "keyboard" && targetKey ? targetKey : "" });
+        break;
+    }
+  }, [index, onUpdate, remapType, targetKey]);
+
+  return { remapType, selectedRemapType, handleRemapTypeChange };
+}
+
 function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
   if (targetKey == null) return null;
   if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
@@ -773,30 +807,7 @@ function RemapRow({
 }) {
   const [isCapturingSource, setIsCapturingSource] = useState(false);
   const [isCapturingTarget, setIsCapturingTarget] = useState(false);
-  const remapType = getRemapTypeFromTargetKey(remap.targetKey);
-  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
-
-  useEffect(() => {
-    if (selectedRemapType === "special" && (remap.targetKey === "" || remap.targetKey === null)) {
-      return;
-    }
-    setSelectedRemapType(remapType);
-  }, [remapType, selectedRemapType, remap.targetKey]);
-
-  const handleRemapTypeChange = (newType: RemapType) => {
-    setSelectedRemapType(newType);
-    switch (newType) {
-      case "disabled":
-        onUpdate(index, { targetKey: null });
-        break;
-      case "special":
-        onUpdate(index, { targetKey: remapType === "special" ? remap.targetKey : "" });
-        break;
-      case "keyboard":
-        onUpdate(index, { targetKey: remapType === "keyboard" && remap.targetKey ? remap.targetKey : "" });
-        break;
-    }
-  };
+  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
 
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
@@ -831,7 +842,7 @@ function RemapRow({
 
         {selectedRemapType === "special" ? (
           <Input
-            value={remapType === "special" ? (remap.targetKey ?? "") : ""}
+            value={selectedRemapType === "special" ? (remap.targetKey ?? "") : ""}
             onChange={(e) => onUpdate(index, { targetKey: e.target.value })}
             placeholder={t("meKeybindings.enterCharacter")}
             className="w-40 h-9 font-mono text-center text-sm"
@@ -900,30 +911,7 @@ function DialogRemapRow({
     onUpdate(index, { sourceKey: newSourceKey });
   };
 
-  const remapType = getRemapTypeFromTargetKey(remap.targetKey);
-  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
-
-  useEffect(() => {
-    if (selectedRemapType === "special" && (remap.targetKey === "" || remap.targetKey === null)) {
-      return;
-    }
-    setSelectedRemapType(remapType);
-  }, [remapType, selectedRemapType, remap.targetKey]);
-
-  const handleRemapTypeChange = (newType: RemapType) => {
-    setSelectedRemapType(newType);
-    switch (newType) {
-      case "disabled":
-        onUpdate(index, { targetKey: null });
-        break;
-      case "special":
-        onUpdate(index, { targetKey: remapType === "special" ? remap.targetKey : "" });
-        break;
-      case "keyboard":
-        onUpdate(index, { targetKey: remapType === "keyboard" && remap.targetKey ? remap.targetKey : "" });
-        break;
-    }
-  };
+  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
 
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
@@ -980,7 +968,7 @@ function DialogRemapRow({
 
         {selectedRemapType === "special" ? (
           <Input
-            value={remapType === "special" ? (remap.targetKey ?? "") : ""}
+            value={selectedRemapType === "special" ? (remap.targetKey ?? "") : ""}
             onChange={(e) => {
               onUpdate(index, { targetKey: e.target.value });
             }}
@@ -1952,7 +1940,7 @@ export default function KeybindingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meKeybindings.pageTitle")}</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t("meKeybindings.pageDescription")}
           </p>
         </div>

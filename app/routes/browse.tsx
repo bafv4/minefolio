@@ -176,9 +176,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
 function PlayerCardSkeleton() {
   return (
-    <div className="border rounded-lg p-3">
+    <div className="border border-border/70 rounded-xl p-3">
       <div className="flex items-center gap-3">
-        <Skeleton className="w-12 h-12 rounded-lg shrink-0" />
+        <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-4 w-24" />
@@ -289,7 +289,7 @@ export default function BrowsePage() {
           <Users className="h-6 w-6" />
           {t("browse.title")}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {`${t("browse.totalCount")} (${totalCount}${t("common.peopleUnit")})`}
         </p>
       </div>
@@ -600,7 +600,7 @@ export default function BrowsePage() {
           <div className="space-y-1">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 py-3 px-1">
-                <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+                <Skeleton className="h-9 w-9 rounded-xl shrink-0" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="h-3 w-48" />

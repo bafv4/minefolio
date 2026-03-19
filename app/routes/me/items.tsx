@@ -228,25 +228,27 @@ export async function action({ context, request }: Route.ActionArgs) {
     try {
       const layouts = JSON.parse(layoutsJson) as ItemLayout[];
 
-      // 既存のレイアウトを全削除
-      await db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+      await db.transaction(async (tx) => {
+        // 既存のレイアウトを全削除
+        await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
 
-      // 新しいレイアウトを挿入
-      const now = new Date();
-      for (let i = 0; i < layouts.length; i++) {
-        const layout = layouts[i];
-        await db.insert(itemLayouts).values({
-          id: layout.id.startsWith("new-") ? createId() : layout.id,
-          userId: user.id,
-          segment: layout.segment,
-          slots: JSON.stringify(layout.slots),
-          offhand: JSON.stringify(layout.offhand),
-          notes: layout.notes || null,
-          displayOrder: i,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+        // 新しいレイアウトを挿入
+        const now = new Date();
+        for (let i = 0; i < layouts.length; i++) {
+          const layout = layouts[i];
+          await tx.insert(itemLayouts).values({
+            id: layout.id.startsWith("new-") ? createId() : layout.id,
+            userId: user.id,
+            segment: layout.segment,
+            slots: JSON.stringify(layout.slots),
+            offhand: JSON.stringify(layout.offhand),
+            notes: layout.notes || null,
+            displayOrder: i,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      });
 
       return { success: true };
     } catch (error) {
@@ -737,7 +739,7 @@ export default function ItemLayoutsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meItems.pageTitle")}</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t("meItems.pageDescription")}
           </p>
         </div>

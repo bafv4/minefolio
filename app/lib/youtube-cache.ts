@@ -282,7 +282,7 @@ async function fetchChannelVideos(
     });
 
     console.log(`[YouTube API] Fetching videos for channel: ${channelId}`);
-    const res = await fetch(`${YOUTUBE_API}/search?${params}`);
+    const res = await fetch(`${YOUTUBE_API}/search?${params}`, { signal: AbortSignal.timeout(10000) });
 
     if (!res.ok) {
       const errorText = await res.text();
@@ -327,7 +327,7 @@ async function resolveChannelIdInternal(
     });
 
     console.log(`[YouTube API] Resolving handle: @${username}`);
-    const res = await fetch(`${YOUTUBE_API}/channels?${params}`);
+    const res = await fetch(`${YOUTUBE_API}/channels?${params}`, { signal: AbortSignal.timeout(10000) });
 
     if (!res.ok) {
       const errorText = await res.text();
@@ -356,7 +356,7 @@ async function checkVideosExist(
       part: "id,status",
     });
 
-    const res = await fetch(`${YOUTUBE_API}/videos?${params}`);
+    const res = await fetch(`${YOUTUBE_API}/videos?${params}`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
 
     const data = await res.json();
@@ -517,7 +517,7 @@ export async function fetchAndCacheLiveStreams(
       });
 
       console.log(`[YouTube API] Searching live streams for channel: ${channelId}`);
-      const searchRes = await fetch(`${YOUTUBE_API}/search?${searchParams}`);
+      const searchRes = await fetch(`${YOUTUBE_API}/search?${searchParams}`, { signal: AbortSignal.timeout(10000) });
       if (searchRes.ok) {
         successfulApiCalls++;
         const searchData = await searchRes.json();
@@ -547,7 +547,7 @@ export async function fetchAndCacheLiveStreams(
       });
 
       console.log(`[YouTube API] Searching upcoming streams for channel: ${channelId}`);
-      const upcomingRes = await fetch(`${YOUTUBE_API}/search?${upcomingParams}`);
+      const upcomingRes = await fetch(`${YOUTUBE_API}/search?${upcomingParams}`, { signal: AbortSignal.timeout(10000) });
       if (upcomingRes.ok) {
         successfulApiCalls++;
         const upcomingData = await upcomingRes.json();
@@ -608,7 +608,7 @@ export async function fetchAndCacheLiveStreams(
       part: "snippet,liveStreamingDetails",
     });
 
-    const videosRes = await fetch(`${YOUTUBE_API}/videos?${videosParams}`);
+    const videosRes = await fetch(`${YOUTUBE_API}/videos?${videosParams}`, { signal: AbortSignal.timeout(10000) });
     if (!videosRes.ok) {
       const errorText = await videosRes.text();
       console.error(`[YouTube API] Videos API failed (${videosRes.status}): ${errorText}`);

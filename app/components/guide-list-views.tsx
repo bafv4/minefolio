@@ -71,13 +71,13 @@ export function GuideCardGrid({
       {guides.map((guide) => {
         const tags = JSON.parse(guide.tags) as string[];
         return (
-          <Link key={guide.id} to={linkFn(guide)} className="group">
-            <Card className="h-full transition-shadow group-hover:shadow-md">
+          <Link key={guide.id} to={linkFn(guide)} prefetch="intent" className="group">
+            <Card className="h-full transition-all group-hover:shadow-sm group-hover:border-primary/40 group-hover:-translate-y-0.5">
               {guide.coverImageUrl && (
                 <img
                   src={guide.coverImageUrl}
                   alt={guide.title}
-                  className="w-full h-36 object-cover rounded-t-lg"
+                  className="w-full h-36 object-cover rounded-t-xl"
                 />
               )}
               <CardHeader className="pb-3">
@@ -138,6 +138,7 @@ export function GuideListView({
           <Link
             key={guide.id}
             to={linkFn(guide)}
+            prefetch="intent"
             className="flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors group"
           >
             <div className="flex-1 min-w-0">

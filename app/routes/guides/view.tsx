@@ -124,7 +124,12 @@ const MinecraftAvatarLazy = lazy(() =>
 
 export default function GuideViewPage() {
   const { guide, author } = useLoaderData<typeof loader>();
-  const tags = JSON.parse(guide.tags) as string[];
+  let tags: string[] = [];
+  try {
+    tags = JSON.parse(guide.tags) as string[];
+  } catch {
+    // invalid JSON in tags — fallback to empty
+  }
   const authorName = author.displayName || author.mcid || author.slug;
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -132,23 +137,37 @@ export default function GuideViewPage() {
   useEffect(() => {
     if (!contentRef.current) return;
     const pres = contentRef.current.querySelectorAll("pre");
+    const controllers: AbortController[] = [];
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+
     pres.forEach((pre) => {
       if (pre.querySelector(".code-copy-btn")) return;
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
       btn.title = "コピー";
       btn.textContent = "📋";
+      const controller = new AbortController();
+      controllers.push(controller);
       btn.addEventListener("click", () => {
         const code = pre.querySelector("code");
         const text = code?.textContent ?? pre.textContent ?? "";
         navigator.clipboard.writeText(text).then(() => {
           btn.textContent = "✓";
-          setTimeout(() => { btn.textContent = "📋"; }, 1500);
+          const tid = setTimeout(() => { btn.textContent = "📋"; }, 1500);
+          timeouts.push(tid);
         });
-      });
+      }, { signal: controller.signal });
       pre.style.position = "relative";
       pre.appendChild(btn);
     });
+
+    return () => {
+      controllers.forEach((c) => c.abort());
+      timeouts.forEach((t) => clearTimeout(t));
+      pres.forEach((pre) => {
+        pre.querySelectorAll(".code-copy-btn").forEach((btn) => btn.remove());
+      });
+    };
   }, []);
 
   return (

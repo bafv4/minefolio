@@ -135,18 +135,18 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNameRequired") };
     }
 
-    // 全ての既存プリセットを非アクティブに
-    await db
-      .update(configPresets)
-      .set({ isActive: false, updatedAt: now })
-      .where(eq(configPresets.userId, user.id));
-
-    // 既存のkeybindings/keyRemaps/playerConfigs/itemLayouts/searchCraftsを削除
-    await db.delete(keybindings).where(eq(keybindings.userId, user.id));
-    await db.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
-    await db.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
-    await db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
-    await db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+    // 全ての既存プリセットを非アクティブにし、データを削除（トランザクションで原子的に実行）
+    await db.transaction(async (tx) => {
+      await tx
+        .update(configPresets)
+        .set({ isActive: false, updatedAt: now })
+        .where(eq(configPresets.userId, user.id));
+      await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
+      await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
+      await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
+      await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+      await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+    });
 
     const presetId = createId();
 
@@ -698,7 +698,7 @@ export default function PresetsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{t("mePresets.pageTitle")}</h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t("mePresets.pageDescription")}
         </p>
       </div>

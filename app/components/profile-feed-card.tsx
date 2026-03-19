@@ -75,7 +75,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <p>@{player.mcid}</p>
               {player.pronouns && (
-                <span className="rounded-full border border-border/70 bg-background px-1.5 py-0.5 text-[10px] leading-none">
+                <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] leading-none">
                   {player.pronouns}
                 </span>
               )}

@@ -715,7 +715,7 @@ export default function SearchCraftPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meSearchCraft.pageTitle")}</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>

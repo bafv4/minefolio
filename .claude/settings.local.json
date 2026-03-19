@@ -37,7 +37,22 @@
       "Bash(npm view:*)",
       "Bash(npm search:*)",
       "Bash(pnpm remove:*)",
-      "Bash(grep -l \"GuideEditor\\\\|guide.*editor\" /Users/bafv4/dev/minefolio/app/routes/**/*.tsx)"
+      "Bash(grep -l \"GuideEditor\\\\|guide.*editor\" /Users/bafv4/dev/minefolio/app/routes/**/*.tsx)",
+      "Bash(grep -h className.*rounded /Users/bafv4/dev/minefolio/app/routes/*.tsx /Users/bafv4/dev/minefolio/app/components/*.tsx)",
+      "Bash(grep -h \"border rounded\\\\|rounded.*border\" /Users/bafv4/dev/minefolio/app/routes/*.tsx /Users/bafv4/dev/minefolio/app/components/*.tsx)",
+      "Bash(npx esbuild:*)",
+      "Bash(npx vite:*)",
+      "Bash(grep -l \"remap\" /Users/bafv4/dev/minefolio/app/components/*.tsx)",
+      "Bash(wc -l /Users/bafv4/dev/minefolio/app/routes/me/*.tsx)",
+      "Bash(grep -n \"profileVisibility\\\\|keybindings.*public\\\\|public.*keybindings\" /Users/bafv4/dev/minefolio/app/routes/*.tsx)",
+      "Bash(git worktree:*)",
+      "Bash(git branch:*)",
+      "Bash(grep -r process.env /Users/bafv4/dev/minefolio/app/lib/*.ts)",
+      "mcp__shadcn__search_items_in_registries",
+      "Bash(grep -l \"SwitchPrimitive\\\\|CheckboxPrimitive\\\\|Switch\\\\|Checkbox\" /Users/bafv4/dev/minefolio/app/**/*.tsx)",
+      "mcp__shadcn__get_item_examples_from_registries",
+      "mcp__shadcn__view_items_in_registries",
+      "Bash(npx shadcn@latest add toggle -y)"
     ]
   }
 }

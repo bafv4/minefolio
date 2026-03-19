@@ -1,5 +1,5 @@
 import { useLoaderData } from "react-router";
-import { useState, useEffect, useReducer, useCallback, memo } from "react";
+import { useState, useEffect, useReducer, useCallback, memo, useMemo } from "react";
 import type { Route } from "./+types/live";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -212,23 +212,35 @@ export default function LivePage() {
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
   // フィルタリング
-  const filteredLiveRuns = currentUser?.showPacemanOnHome === false && currentUser?.mcid
-    ? feed.liveRuns.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
-    : feed.liveRuns;
+  const filteredLiveRuns = useMemo(() =>
+    currentUser?.showPacemanOnHome === false && currentUser?.mcid
+      ? feed.liveRuns.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
+      : feed.liveRuns,
+    [feed.liveRuns, currentUser?.showPacemanOnHome, currentUser?.mcid]
+  );
 
-  const filteredLiveStreams = currentUser?.showTwitchOnHome === false && currentUser?.mcid
-    ? feed.liveStreams.filter(stream =>
-        !stream.mcid || stream.mcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
-      )
-    : feed.liveStreams;
+  const filteredLiveStreams = useMemo(() =>
+    currentUser?.showTwitchOnHome === false && currentUser?.mcid
+      ? feed.liveStreams.filter(stream =>
+          !stream.mcid || stream.mcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+        )
+      : feed.liveStreams,
+    [feed.liveStreams, currentUser?.showTwitchOnHome, currentUser?.mcid]
+  );
 
-  const filteredYoutubeLiveStreams = currentUser?.showYoutubeOnHome === false && currentUser?.mcid
-    ? feed.youtubeLiveStreams.filter(stream =>
-        !stream.minefolioMcid || stream.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
-      )
-    : feed.youtubeLiveStreams;
+  const filteredYoutubeLiveStreams = useMemo(() =>
+    currentUser?.showYoutubeOnHome === false && currentUser?.mcid
+      ? feed.youtubeLiveStreams.filter(stream =>
+          !stream.minefolioMcid || stream.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
+        )
+      : feed.youtubeLiveStreams,
+    [feed.youtubeLiveStreams, currentUser?.showYoutubeOnHome, currentUser?.mcid]
+  );
 
-  const mergedMcidToUuid = { ...mcidToUuid, ...feed.mcidToUuid };
+  const mergedMcidToUuid = useMemo(() =>
+    ({ ...mcidToUuid, ...feed.mcidToUuid }),
+    [mcidToUuid, feed.mcidToUuid]
+  );
 
   // ライブペースを取得する関数
   const fetchLiveRuns = useCallback(() => {
@@ -291,10 +303,10 @@ export default function LivePage() {
   }, [fetchLiveRuns]);
 
   return (
-    <div className="flex-1 flex flex-col space-y-8">
+    <div className="flex-1 flex flex-col space-y-6">
       <section className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">ライブ</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold">ライブ</h1>
+        <p className="text-sm text-muted-foreground">
           現在進行中のペースとライブ配信
         </p>
       </section>

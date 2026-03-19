@@ -141,7 +141,7 @@ const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
 export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunComStats> {
   try {
     // ユーザー情報を取得
-    const userRes = await fetch(`${SPEEDRUN_API_BASE}/users?lookup=${encodeURIComponent(username)}`);
+    const userRes = await fetch(`${SPEEDRUN_API_BASE}/users?lookup=${encodeURIComponent(username)}`, { signal: AbortSignal.timeout(30000) });
     if (!userRes.ok) {
       return { user: null, personalBests: [], error: "ユーザーが見つかりません" };
     }
@@ -156,7 +156,8 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
 
     // 自己ベストを取得（embeded game, category, platform, variables情報も取得）
     const pbRes = await fetch(
-      `${SPEEDRUN_API_BASE}/users/${user.id}/personal-bests?embed=game.platforms,category.variables`
+      `${SPEEDRUN_API_BASE}/users/${user.id}/personal-bests?embed=game.platforms,category.variables`,
+      { signal: AbortSignal.timeout(30000) }
     );
     if (!pbRes.ok) {
       return { user, personalBests: [], error: "記録の取得に失敗しました" };
@@ -223,7 +224,7 @@ const PACEMAN_API_BASE = "https://paceman.gg/stats/api";
 export async function checkPaceManPlayer(playerName: string): Promise<PaceManStats> {
   try {
     // getSessionStats APIはプレイヤーが存在しない場合 {"error":"Unknown user"} を返す
-    const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`);
+    const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return { isRegistered: false };
     const data = await res.json() as { error?: string } | Record<string, unknown> | null;
     // エラーレスポンスの場合は未登録
@@ -250,7 +251,7 @@ const MATCH_TYPE_RANKED = 2;
 export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRankedStats> {
   try {
     // ユーザー情報を取得（存在確認を兼ねる）
-    const userRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}`);
+    const userRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}`, { signal: AbortSignal.timeout(10000) });
     if (!userRes.ok) {
       return { isRegistered: false, user: null, seasonData: null, recentMatches: [] };
     }
@@ -313,7 +314,8 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
 
     // 最近のRankedマッチ履歴を取得（type=2でRankedモードのみ、30件）
     const matchesRes = await fetch(
-      `${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30&type=${MATCH_TYPE_RANKED}`
+      `${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30&type=${MATCH_TYPE_RANKED}`,
+      { signal: AbortSignal.timeout(10000) }
     );
     let recentMatches: MCSRRankedMatch[] = [];
 

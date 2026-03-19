@@ -158,7 +158,7 @@ export default function GuidesIndexPage() {
         viewMode === "card" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border rounded-lg overflow-hidden">
+              <div key={i} className="border border-border/70 rounded-xl overflow-hidden">
                 <Skeleton className="h-36 w-full" />
                 <div className="p-4 space-y-2">
                   <Skeleton className="h-5 w-3/4" />

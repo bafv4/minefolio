@@ -42,7 +42,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
 
   return (
     <Link to={`/player/${player.slug}`} prefetch="intent">
-      <Card className="group transition-all duration-200 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 cursor-pointer h-full active:scale-[0.98] active:opacity-90">
+      <Card className="group transition-all hover:shadow-sm hover:border-primary/40 hover:-translate-y-0.5 cursor-pointer h-full">
         <CardContent className="p-3 h-[88px] flex items-center">
           <div className="flex items-center gap-3 w-full">
             <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">

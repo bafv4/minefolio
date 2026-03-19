@@ -59,7 +59,8 @@ export async function fetchUuidFromMcid(mcid: string): Promise<string> {
   }
 
   const response = await fetch(
-    `${MOJANG_API_BASE}/users/profiles/minecraft/${encodeURIComponent(mcid)}`
+    `${MOJANG_API_BASE}/users/profiles/minecraft/${encodeURIComponent(mcid)}`,
+    { signal: AbortSignal.timeout(10000) }
   );
 
   if (!response.ok) {
@@ -91,7 +92,8 @@ export async function fetchMcidFromUuid(uuid: string): Promise<string> {
   const uuidWithoutHyphens = uuid.replace(/-/g, "");
 
   const response = await fetch(
-    `${SESSION_SERVER_BASE}/session/minecraft/profile/${uuidWithoutHyphens}`
+    `${SESSION_SERVER_BASE}/session/minecraft/profile/${uuidWithoutHyphens}`,
+    { signal: AbortSignal.timeout(10000) }
   );
 
   if (!response.ok) {
@@ -167,7 +169,8 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
   const uuidWithoutHyphens = uuid.replace(/-/g, "");
 
   const response = await fetch(
-    `${SESSION_SERVER_BASE}/session/minecraft/profile/${uuidWithoutHyphens}`
+    `${SESSION_SERVER_BASE}/session/minecraft/profile/${uuidWithoutHyphens}`,
+    { signal: AbortSignal.timeout(10000) }
   );
 
   if (!response.ok) {

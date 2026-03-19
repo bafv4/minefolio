@@ -46,7 +46,7 @@ export async function getTwitchAppToken(
   try {
     const res = await fetch(
       `${TWITCH_AUTH}?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
-      { method: "POST" }
+      { method: "POST", signal: AbortSignal.timeout(10000) }
     );
 
     if (!res.ok) {
@@ -102,6 +102,7 @@ export async function getLiveStreams(
           "Client-ID": clientId,
           Authorization: `Bearer ${accessToken}`,
         },
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!res.ok) {

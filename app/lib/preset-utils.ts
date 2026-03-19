@@ -30,6 +30,10 @@ export interface PresetPlayerConfigData {
   fov?: number | null;
   guiScale?: number | null;
   gameLanguage?: string | null;
+  mouseModel?: string | null;
+  windowsSpeed?: number | null;
+  windowsSpeedMultiplier?: number | null;
+  notes?: string | null;
 }
 
 /**
@@ -109,6 +113,10 @@ export function serializePlayerConfig(config: PlayerConfig): string {
     fov: config.fov,
     guiScale: config.guiScale,
     gameLanguage: config.gameLanguage,
+    mouseModel: config.mouseModel,
+    windowsSpeed: config.windowsSpeed,
+    windowsSpeedMultiplier: config.windowsSpeedMultiplier,
+    notes: config.notes,
   };
   return JSON.stringify(data);
 }

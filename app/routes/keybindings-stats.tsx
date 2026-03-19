@@ -547,11 +547,11 @@ export default function KeybindingsStatsPage() {
       {/* ヘッダー */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-8 w-8" />
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <BarChart3 className="h-6 w-6" />
             {t("keybindingsStats.title")}
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             {t("keybindingsStats.description")}
           </p>
         </div>

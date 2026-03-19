@@ -9,7 +9,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const db = createDb();
 
   const url = new URL(request.url);
-  const q = url.searchParams.get("q")?.trim() || "";
+  const q = url.searchParams.get("q")?.trim().slice(0, 100) || "";
 
   if (q.length < 1) {
     return Response.json({ guides: [] });

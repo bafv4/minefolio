@@ -39,7 +39,7 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
   }
 
   try {
-    const res = await fetch(PACEMAN_API);
+    const res = await fetch(PACEMAN_API, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
     const data = (await res.json()) as PaceManLiveRun[];
     // 非表示・チート検出されたものを除外
@@ -176,7 +176,7 @@ export async function fetchRecentRuns(
       limit: limit.toString(),
     });
     // 末尾スラッシュが必要
-    const res = await fetch(`${PACEMAN_STATS_API}/getRecentRuns/?${params}`);
+    const res = await fetch(`${PACEMAN_STATS_API}/getRecentRuns/?${params}`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
     const data = (await res.json()) as PaceManRecentRunRaw[];
 

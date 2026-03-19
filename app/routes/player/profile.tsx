@@ -306,6 +306,14 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
+  // プライベートプロフィールは本人以外に404を返す
+  if (
+    player.profileVisibility === "private" &&
+    session?.user?.id !== player.discordId
+  ) {
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
+  }
+
   // プリセット一覧を取得
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, player.id),
@@ -601,69 +609,66 @@ export default function PlayerProfilePage() {
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
-      {/* Mobile Menu Toggle — sticky below the site header (h-16 + border) */}
-      <div className="lg:hidden sticky top-16 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-2 pt-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <Button
-          variant="outline"
-          className="w-full justify-between h-14 py-3 touch-manipulation"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          <div className="flex items-center gap-3">
-            {player.uuid ? (
-              <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
-                <MinecraftAvatar
-                  uuid={player.uuid}
-                  mcid={player.mcid}
-                  size={32}
-                  className="rounded"
-                />
-              </Suspense>
-            ) : player.discordAvatar ? (
-              <img
-                src={player.discordAvatar}
-                alt={player.displayName ?? "Avatar"}
-                className="w-8 h-8 rounded"
+    <>
+    {/* Mobile Menu Toggle — extracted outside Tabs for reliable sticky behavior */}
+    <div className="lg:hidden sticky top-16 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-2 pt-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border/40">
+      <Button
+        variant="outline"
+        className="w-full justify-between h-14 py-3 touch-manipulation"
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+      >
+        <div className="flex items-center gap-3">
+          {player.uuid ? (
+            <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
+              <MinecraftAvatar
+                uuid={player.uuid}
+                mcid={player.mcid}
+                size={32}
+                className="rounded"
               />
-            ) : (
-              <div className="w-8 h-8 bg-muted rounded" />
-            )}
-            <div className="text-left">
-              <p className="font-medium text-sm">{player.displayName ?? player.mcid ?? player.slug}</p>
-              {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
-            </div>
+            </Suspense>
+          ) : player.discordAvatar ? (
+            <img
+              src={player.discordAvatar}
+              alt={player.displayName ?? "Avatar"}
+              className="w-8 h-8 rounded"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-muted rounded" />
+          )}
+          <div className="text-left">
+            <p className="font-medium text-sm">{player.displayName ?? player.mcid ?? player.slug}</p>
+            {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
           </div>
-          {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-        </Button>
+        </div>
+        {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+      </Button>
 
-        {/* Mobile Menu Dropdown */}
-        {mobileMenuOpen && (
-          <div className="mt-2 p-2 border rounded-lg bg-background space-y-1">
-            <TabsList className="flex flex-col h-auto w-full bg-transparent gap-1">
-              {/* Profile Tab */}
-              <TabsTrigger
-                value="profile"
-                className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <User className="h-4 w-4 shrink-0" />
-                <span>{t("playerProfile.profile")}</span>
-              </TabsTrigger>
-              {tabItems.map((item) => (
-                <TabsTrigger
-                  key={item.value}
-                  value={item.value}
-                  className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-        )}
-      </div>
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="mt-2 p-2 border rounded-xl bg-background space-y-1">
+          <button
+            className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === "profile" ? "bg-secondary font-medium" : "hover:bg-muted")}
+            onClick={() => { handleTabChange("profile"); setMobileMenuOpen(false); }}
+          >
+            <User className="h-4 w-4 shrink-0" />
+            <span>{t("playerProfile.profile")}</span>
+          </button>
+          {tabItems.map((item) => (
+            <button
+              key={item.value}
+              className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === item.value ? "bg-secondary font-medium" : "hover:bg-muted")}
+              onClick={() => { handleTabChange(item.value); setMobileMenuOpen(false); }}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-56 shrink-0">
@@ -1198,7 +1203,7 @@ export default function PlayerProfilePage() {
                         {player.playerConfig.gameSensitivity != null && (
                           <DeviceRow
                             label={t("playerProfile.inGameSensitivity")}
-                            value={Math.floor(player.playerConfig.gameSensitivity * 200).toString()}
+                            value={Math.round(player.playerConfig.gameSensitivity * 200).toString()}
                             unit="%"
                           />
                         )}
@@ -1349,6 +1354,7 @@ export default function PlayerProfilePage() {
 
       </div>
     </Tabs>
+    </>
   );
 }
 

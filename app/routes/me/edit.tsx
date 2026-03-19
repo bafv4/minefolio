@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -862,7 +862,7 @@ export default function EditProfilePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{t("meEdit.pageTitle")}</h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t("meEdit.pageDescription")}
         </p>
       </div>
@@ -1444,69 +1444,69 @@ export default function EditProfilePage() {
               </p>
 
               <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="showPacemanOnHome"
-                    checked={formValues.showPacemanOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanOnHome: checked === true }))
-                    }
-                  />
+                <div className="flex items-center justify-between">
                   <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showPacemanOnHome")}
                   </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="showTwitchOnHome"
-                    checked={formValues.showTwitchOnHome}
+                  <Switch
+                    id="showPacemanOnHome"
+                    checked={formValues.showPacemanOnHome}
                     onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showTwitchOnHome: checked === true }))
+                      setFormValues((prev) => ({ ...prev, showPacemanOnHome: checked }))
                     }
                   />
+                </div>
+
+                <div className="flex items-center justify-between">
                   <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showTwitchOnHome")}
                   </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="showYoutubeOnHome"
-                    checked={formValues.showYoutubeOnHome}
+                  <Switch
+                    id="showTwitchOnHome"
+                    checked={formValues.showTwitchOnHome}
                     onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showYoutubeOnHome: checked === true }))
+                      setFormValues((prev) => ({ ...prev, showTwitchOnHome: checked }))
                     }
                   />
+                </div>
+
+                <div className="flex items-center justify-between">
                   <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showYoutubeOnHome")}
                   </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="showRankedStats"
-                    checked={formValues.showRankedStats}
+                  <Switch
+                    id="showYoutubeOnHome"
+                    checked={formValues.showYoutubeOnHome}
                     onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showRankedStats: checked === true }))
+                      setFormValues((prev) => ({ ...prev, showYoutubeOnHome: checked }))
                     }
                   />
+                </div>
+
+                <div className="flex items-center justify-between">
                   <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showRankedStats")}
                   </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="showPacemanStats"
-                    checked={formValues.showPacemanStats}
+                  <Switch
+                    id="showRankedStats"
+                    checked={formValues.showRankedStats}
                     onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanStats: checked === true }))
+                      setFormValues((prev) => ({ ...prev, showRankedStats: checked }))
                     }
                   />
+                </div>
+
+                <div className="flex items-center justify-between">
                   <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showPacemanStats")}
                   </Label>
+                  <Switch
+                    id="showPacemanStats"
+                    checked={formValues.showPacemanStats}
+                    onCheckedChange={(checked) =>
+                      setFormValues((prev) => ({ ...prev, showPacemanStats: checked }))
+                    }
+                  />
                 </div>
               </div>
             </div>

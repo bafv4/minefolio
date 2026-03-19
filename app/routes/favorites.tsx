@@ -68,7 +68,7 @@ export default function FavoritesPage() {
             <Heart className="h-6 w-6 text-red-500 fill-current" />
             {t("favorites.title")}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {`${t("favorites.totalCount")} (${favoriteMcids.length}${t("common.peopleUnit")})`}
           </p>
         </div>
@@ -102,7 +102,7 @@ export default function FavoritesPage() {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
+          <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg mb-2">{t("favorites.emptyTitle")}</p>
           <p className="text-sm text-center max-w-md mb-6">
             {hasConsent === false
@@ -134,9 +134,9 @@ export function HydrateFallback() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="border rounded-lg p-3">
+          <div key={i} className="border border-border/70 rounded-xl p-3">
             <div className="flex items-center gap-3">
-              <Skeleton className="w-12 h-12 rounded-lg shrink-0" />
+              <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-5 w-32" />
                 <Skeleton className="h-4 w-24" />

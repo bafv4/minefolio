@@ -312,7 +312,7 @@ export default function ComparePage() {
           <GitCompare className="h-6 w-6" />
           {t("compare.title")}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t("compare.description")}
         </p>
       </div>
