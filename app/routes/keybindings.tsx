@@ -183,6 +183,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      customSkinUrl: true,
     },
     with: {
       keybindings: {
@@ -896,6 +897,7 @@ function PlayerRow({
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    customSkinUrl: string | null;
     keybindings: Array<{
       id: string;
       action: string;
@@ -922,6 +924,7 @@ function PlayerRow({
         >
           <MinecraftAvatar
             uuid={player.uuid}
+            skinUrl={player.customSkinUrl}
             size={28}
             className="rounded-sm shrink-0"
           />
@@ -957,6 +960,7 @@ function RemapRow({
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    customSkinUrl: string | null;
     keyRemaps: Array<{
       id: string;
       sourceKey: string;
@@ -978,6 +982,7 @@ function RemapRow({
         >
           <MinecraftAvatar
             uuid={player.uuid}
+            skinUrl={player.customSkinUrl}
             size={28}
             className="rounded-sm shrink-0"
           />
@@ -1010,6 +1015,7 @@ function CustomActionListRow({
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    customSkinUrl: string | null;
     customActions: Array<{
       id: string;
       actionName: string;
@@ -1033,6 +1039,7 @@ function CustomActionListRow({
         >
           <MinecraftAvatar
             uuid={player.uuid}
+            skinUrl={player.customSkinUrl}
             size={28}
             className="rounded-sm shrink-0"
           />
@@ -1069,6 +1076,7 @@ function MouseSettingsRow({
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    customSkinUrl: string | null;
     playerConfig: {
       keyboardLayout: string | null;
       mouseDpi: number | null;
@@ -1116,6 +1124,7 @@ function MouseSettingsRow({
         >
           <MinecraftAvatar
             uuid={player.uuid}
+            skinUrl={player.customSkinUrl}
             size={28}
             className="rounded-sm shrink-0"
           />

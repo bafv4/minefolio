@@ -16,6 +16,7 @@ interface PlayerCardProps {
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    customSkinUrl?: string | null;
     discordAvatar?: string | null;
     location: string | null;
     updatedAt: Date;
@@ -47,7 +48,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
           <div className="flex items-center gap-3 w-full">
             <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
               {player.uuid ? (
-                <MinecraftAvatar uuid={player.uuid} size={48} />
+                <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
               ) : player.discordAvatar ? (
                 <img
                   src={player.discordAvatar}

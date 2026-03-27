@@ -54,7 +54,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   }
 
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true, slug: true, displayName: true },
+    columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
   });
   const registeredMcids = allUserMcids
     .filter((u) => u.mcid !== null)
@@ -74,6 +74,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       .filter((u) => u.mcid !== null)
       .map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
   );
+  const mcidToSkinUrl = Object.fromEntries(
+    allUserMcids
+      .filter((u) => u.mcid !== null && u.customSkinUrl !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
+  );
 
   return {
     currentUser,
@@ -81,6 +86,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     mcidToUuid,
     mcidToSlug,
     mcidToDisplayName,
+    mcidToSkinUrl,
   };
 }
 
@@ -88,6 +94,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 interface LiveRunsResponse {
   liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
 }
 
 interface TwitchStreamWithUser {
@@ -97,6 +104,7 @@ interface TwitchStreamWithUser {
   slug: string;
   displayName: string | null;
   discordAvatar: string | null;
+  customSkinUrl: string | null;
 }
 
 interface TwitchStreamsResponse {
@@ -113,6 +121,7 @@ interface FeedState {
   liveStreams: TwitchStreamWithUser[];
   youtubeLiveStreams: CachedYouTubeLive[];
   mcidToUuid: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
   loading: {
     liveRuns: boolean;
     streams: boolean;
@@ -126,7 +135,7 @@ interface FeedState {
 }
 
 type FeedAction =
-  | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string> } }
+  | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
   | { type: "SET_STREAMS"; payload: TwitchStreamWithUser[] }
   | { type: "SET_YOUTUBE_LIVE"; payload: CachedYouTubeLive[] }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
@@ -136,6 +145,7 @@ const initialFeedState: FeedState = {
   liveStreams: [],
   youtubeLiveStreams: [],
   mcidToUuid: {},
+  mcidToSkinUrl: {},
   loading: {
     liveRuns: true,
     streams: true,
@@ -157,6 +167,9 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         mcidToUuid: action.payload.mcidToUuid
           ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
           : state.mcidToUuid,
+        mcidToSkinUrl: action.payload.mcidToSkinUrl
+          ? { ...state.mcidToSkinUrl, ...action.payload.mcidToSkinUrl }
+          : state.mcidToSkinUrl,
         loading: { ...state.loading, liveRuns: false },
       };
     case "SET_STREAMS":
@@ -204,7 +217,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 3 }: { columns
 });
 
 export default function LivePage() {
-  const { currentUser, registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName } =
+  const { currentUser, registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToSkinUrl } =
     useLoaderData<typeof loader>();
 
   const registeredMcidSet = new Set(registeredMcids);
@@ -241,6 +254,10 @@ export default function LivePage() {
     ({ ...mcidToUuid, ...feed.mcidToUuid }),
     [mcidToUuid, feed.mcidToUuid]
   );
+  const mergedMcidToSkinUrl = useMemo(() =>
+    ({ ...mcidToSkinUrl, ...feed.mcidToSkinUrl }),
+    [mcidToSkinUrl, feed.mcidToSkinUrl]
+  );
 
   // ライブペースを取得する関数
   const fetchLiveRuns = useCallback(() => {
@@ -249,7 +266,7 @@ export default function LivePage() {
       .then((data) => {
         dispatch({
           type: "SET_LIVE_RUNS",
-          payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid },
+          payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid, mcidToSkinUrl: data.mcidToSkinUrl },
         });
       })
       .catch((err) => {
@@ -266,7 +283,7 @@ export default function LivePage() {
         .then((data) => {
           dispatch({
             type: "SET_LIVE_RUNS",
-            payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid },
+            payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid, mcidToSkinUrl: data.mcidToSkinUrl },
           });
         })
         .catch((err) => {
@@ -379,6 +396,7 @@ export default function LivePage() {
               mcidToSlug={mcidToSlug}
               mcidToUuid={mergedMcidToUuid}
               mcidToDisplayName={mcidToDisplayName}
+              mcidToSkinUrl={mergedMcidToSkinUrl}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">

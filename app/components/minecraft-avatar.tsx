@@ -6,6 +6,7 @@ const HEAD_OVERLAY = { x: 40, y: 8, width: 8, height: 8 };
 
 interface MinecraftAvatarProps {
   uuid: string | null | undefined;
+  skinUrl?: string | null;
   mcid?: string | null;
   size?: number;
   overlay?: boolean;
@@ -14,6 +15,7 @@ interface MinecraftAvatarProps {
 
 const MinecraftAvatarComponent = ({
   uuid,
+  skinUrl,
   mcid,
   size = 64,
   overlay = true,
@@ -31,9 +33,9 @@ const MinecraftAvatarComponent = ({
       setIsLoading(true);
       setError(false);
 
-      // Use local skin proxy API (use Steve if no uuid)
+      // Use custom skin URL if available, otherwise local skin proxy API
       const targetUuid = uuid || STEVE_UUID;
-      const skinUrl = `/api/skin?uuid=${targetUuid}`;
+      const resolvedSkinUrl = skinUrl || `/api/skin?uuid=${targetUuid}`;
       const fallbackSkinUrl = `/api/skin?uuid=${STEVE_UUID}`;
 
       const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -49,7 +51,7 @@ const MinecraftAvatarComponent = ({
       try {
         let skinImage: HTMLImageElement;
         try {
-          skinImage = await loadImage(skinUrl);
+          skinImage = await loadImage(resolvedSkinUrl);
         } catch {
           skinImage = await loadImage(fallbackSkinUrl);
         }
@@ -125,7 +127,7 @@ const MinecraftAvatarComponent = ({
     return () => {
       cancelled = true;
     };
-  }, [uuid, size, overlay]);
+  }, [uuid, skinUrl, size, overlay]);
 
   return (
     <div

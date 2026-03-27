@@ -20,9 +20,10 @@ interface LivePaceListProps {
   mcidToSlug: Record<string, string>;
   mcidToUuid: Record<string, string | null>;
   mcidToDisplayName: Record<string, string>;
+  mcidToSkinUrl?: Record<string, string>;
 }
 
-export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName }: LivePaceListProps) {
+export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }: LivePaceListProps) {
   if (runs.length === 0) {
     return null;
   }
@@ -46,6 +47,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
             const isRegistered = registeredMcidSet.has(mcidLower);
             const slug = mcidToSlug[mcidLower];
             const uuid = mcidToUuid[mcidLower];
+            const skinUrl = mcidToSkinUrl?.[mcidLower];
             const displayName = mcidToDisplayName[mcidLower];
 
             return (
@@ -57,7 +59,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                       className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                     >
                       {uuid && (
-                        <MinecraftAvatar uuid={uuid} size={24} className="rounded shrink-0" />
+                        <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={24} className="rounded shrink-0" />
                       )}
                       <div className="min-w-0">
                         <span className="font-medium block truncate">

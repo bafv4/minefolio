@@ -12,9 +12,10 @@ interface StreamCardProps {
   slug: string;
   displayName: string | null;
   discordAvatar: string | null;
+  customSkinUrl?: string | null;
 }
 
-export function StreamCard({ stream, mcid, uuid, slug, displayName, discordAvatar }: StreamCardProps) {
+export function StreamCard({ stream, mcid, uuid, slug, displayName, discordAvatar, customSkinUrl }: StreamCardProps) {
   const thumbnailUrl = getThumbnailUrl(stream.thumbnail_url, 320, 180);
   const startedAt = new Date(stream.started_at);
   const now = Date.now();
@@ -81,7 +82,7 @@ export function StreamCard({ stream, mcid, uuid, slug, displayName, discordAvata
             {/* アバター */}
             {hasMinecraftAvatar ? (
               <Link to={`/player/${slug}`} className="flex-shrink-0">
-                <MinecraftAvatar uuid={uuid} size={24} className="rounded" />
+                <MinecraftAvatar uuid={uuid} skinUrl={customSkinUrl} size={24} className="rounded" />
               </Link>
             ) : discordAvatar ? (
               <Link to={`/player/${slug}`} className="flex-shrink-0">

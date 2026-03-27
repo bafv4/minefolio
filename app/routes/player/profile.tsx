@@ -622,6 +622,7 @@ export default function PlayerProfilePage() {
             <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
               <MinecraftAvatar
                 uuid={player.uuid}
+                skinUrl={player.customSkinUrl}
                 mcid={player.mcid}
                 size={32}
                 className="rounded"
@@ -683,6 +684,7 @@ export default function PlayerProfilePage() {
                 <Suspense fallback={<div className="w-10 h-10 bg-muted rounded animate-pulse" />}>
                   <MinecraftAvatar
                     uuid={player.uuid}
+                    skinUrl={player.customSkinUrl}
                     mcid={player.mcid}
                     size={40}
                     className="rounded shrink-0"
@@ -796,11 +798,12 @@ export default function PlayerProfilePage() {
                     <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
                       <MinecraftFullBody
                         uuid={player.uuid}
+                        skinUrl={player.customSkinUrl ?? undefined}
                         mcid={player.mcid ?? undefined}
                         width={120}
                         height={180}
                         pose={(player.profilePose as PoseName) ?? "waving"}
-                        slim={player.slimSkin ?? false}
+                        slim={player.customSkinModel === "slim" || player.slimSkin || false}
                         angle={-35}
                         elevation={5}
                         zoom={0.9}

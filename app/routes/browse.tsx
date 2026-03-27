@@ -137,6 +137,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       inputMethodBadge: true,
       updatedAt: true,
       shortBio: true,
+      customSkinUrl: true,
     },
     orderBy: [orderByClause],
     limit: ITEMS_PER_PAGE,

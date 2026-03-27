@@ -50,6 +50,7 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
       uuid: true,
       displayName: true,
       discordAvatar: true,
+      customSkinUrl: true,
     },
   });
 
@@ -106,6 +107,7 @@ export default function UserGuidesPage() {
           <Suspense fallback={<div className="w-12 h-12 rounded-full bg-muted shrink-0" />}>
             <MinecraftAvatarLazy
               uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
               size={48}
               className="rounded-full shrink-0"
             />

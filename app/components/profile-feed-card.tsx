@@ -14,6 +14,7 @@ export interface ProfileFeedCardPlayer {
   role: "runner" | "viewer" | null;
   mainEdition: "java" | "bedrock" | null;
   mainPlatform: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
+  customSkinUrl?: string | null;
   inputMethodBadge: "keyboard_mouse" | "controller" | "touch" | null;
   updatedAt: Date;
   shortBio: string | null;
@@ -62,7 +63,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
       <div className="flex items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
           {player.uuid ? (
-            <MinecraftAvatar uuid={player.uuid} size={48} />
+            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm font-semibold text-muted-foreground">
               {displayName[0]?.toUpperCase() ?? "?"}
@@ -133,7 +134,7 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
     >
       <div className="h-9 w-9 shrink-0 rounded-lg overflow-hidden">
         {player.uuid ? (
-          <MinecraftAvatar uuid={player.uuid} size={36} />
+          <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={36} />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-muted text-xs font-semibold text-muted-foreground">
             {displayName[0]?.toUpperCase() ?? "?"}

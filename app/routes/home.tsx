@@ -88,12 +88,17 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用）
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true },
+    columns: { mcid: true, uuid: true, customSkinUrl: true },
   });
   const mcidToUuid = Object.fromEntries(
     allUserMcids
       .filter((u) => u.mcid !== null)
       .map((u) => [u.mcid!.toLowerCase(), u.uuid])
+  );
+  const mcidToSkinUrl = Object.fromEntries(
+    allUserMcids
+      .filter((u) => u.mcid !== null && u.customSkinUrl !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
   );
 
   // 最近更新されたプロフィール（公開設定のみ、最新4件）- DBのみなので即時取得
@@ -111,6 +116,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       inputMethodBadge: true,
       updatedAt: true,
       shortBio: true,
+      customSkinUrl: true,
     },
     orderBy: [desc(users.updatedAt)],
     limit: 4,
@@ -162,6 +168,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     isRegistered,
     currentUser,
     mcidToUuid,
+    mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
     totalPublicProfiles,
@@ -279,10 +286,12 @@ function HomePaceFeedCard({
   run,
   uuid,
   displayName,
+  skinUrl,
 }: {
   run: CachedPace;
   uuid?: string;
   displayName?: string;
+  skinUrl?: string;
 }) {
   const isFinished = run.timeline === "Finish";
   const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
@@ -305,7 +314,7 @@ function HomePaceFeedCard({
         <Link to={`/player/${run.mcid}`} prefetch="intent" className="relative z-10 shrink-0">
           {uuid ? (
             <div className="h-11 w-11 rounded-xl transition-opacity hover:opacity-80">
-              <MinecraftAvatar uuid={uuid} size={44} />
+              <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} />
             </div>
           ) : (
             <div className="h-11 w-11 rounded-xl bg-muted transition-opacity hover:opacity-80" />
@@ -379,7 +388,7 @@ function HomeVideoFeedCard({ video }: { video: CachedYouTubeVideo }) {
           {video.slug ? (
             <Link to={`/player/${video.slug}`} prefetch="intent" className="relative z-10 inline-flex min-w-0 items-center gap-2 hover:text-primary transition-colors">
               {video.uuid ? (
-                <MinecraftAvatar uuid={video.uuid} size={20} className="rounded-md" />
+                <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
               ) : video.discordAvatar ? (
                 <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
               ) : (
@@ -427,6 +436,7 @@ export default function HomePage() {
     isRegistered,
     currentUser,
     mcidToUuid,
+    mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
     totalPublicProfiles,
@@ -665,6 +675,7 @@ export default function HomePage() {
                 run={run}
                 uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
                 displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
+                skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
               />
             ))}
           </div>

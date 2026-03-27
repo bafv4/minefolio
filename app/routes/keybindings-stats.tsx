@@ -143,6 +143,7 @@ interface PlayerInfo {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  customSkinUrl: string | null;
 }
 
 interface KeybindingStats {
@@ -244,6 +245,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
         mcid: users.mcid,
         uuid: users.uuid,
         displayName: users.displayName,
+        customSkinUrl: users.customSkinUrl,
       })
       .from(keybindings)
       .innerJoin(users, eq(keybindings.userId, users.id))
@@ -253,7 +255,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
     const keyGroups = new Map<string, PlayerInfo[]>();
     for (const r of results) {
       const players = keyGroups.get(r.keyCode) ?? [];
-      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName });
+      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
       keyGroups.set(r.keyCode, players);
     }
 
@@ -287,6 +289,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      customSkinUrl: users.customSkinUrl,
     })
     .from(keyRemaps)
     .innerJoin(users, eq(keyRemaps.userId, users.id))
@@ -301,11 +304,12 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      customSkinUrl: users.customSkinUrl,
     })
     .from(keybindings)
     .innerJoin(users, eq(keybindings.userId, users.id))
     .where(publicCondition)
-    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName);
+    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.customSkinUrl);
 
   // F3キーをそのまま使っているユーザー
   const f3DefaultUsers = usersWithKeybindingsData.filter(
@@ -324,6 +328,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
         mcid: u.mcid,
         uuid: u.uuid,
         displayName: u.displayName,
+        customSkinUrl: u.customSkinUrl,
       }))
     );
   }
@@ -332,7 +337,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
   for (const r of f3InputRemaps) {
     const inputKey = r.sourceKey ?? t("meKeybindings.unassigned");
     const players = f3Groups.get(inputKey) ?? [];
-    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName });
+    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
     f3Groups.set(inputKey, players);
   }
 
@@ -362,6 +367,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      customSkinUrl: users.customSkinUrl,
     })
     .from(playerConfigs)
     .innerJoin(users, eq(playerConfigs.userId, users.id))
@@ -384,6 +390,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        customSkinUrl: c.customSkinUrl,
       })),
     };
   });
@@ -429,6 +436,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        customSkinUrl: c.customSkinUrl,
       })),
     };
   });
@@ -468,6 +476,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        customSkinUrl: c.customSkinUrl,
       })),
     };
   });
@@ -496,12 +505,14 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      customSkinUrl: c.customSkinUrl,
     })),
     offPlayers: offConfigs.map((c) => ({
       slug: c.slug,
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      customSkinUrl: c.customSkinUrl,
     })),
   };
 
@@ -855,7 +866,7 @@ export default function KeybindingsStatsPage() {
                   className="flex items-center gap-3 p-2 rounded-md hover:bg-muted transition-colors"
                   onClick={() => setDialogOpen(false)}
                 >
-                  <MinecraftAvatar uuid={player.uuid} size={32} className="rounded-sm shrink-0" />
+                  <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={32} className="rounded-sm shrink-0" />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
                       {player.displayName ?? player.mcid ?? player.slug}

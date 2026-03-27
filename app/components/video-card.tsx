@@ -77,7 +77,7 @@ export function VideoCard({ video }: VideoCardProps) {
             {/* アバター */}
             {hasMinecraftAvatar && video.slug ? (
               <Link to={`/player/${video.slug}`} className="flex-shrink-0">
-                <MinecraftAvatar uuid={video.uuid!} size={24} className="rounded" />
+                <MinecraftAvatar uuid={video.uuid!} skinUrl={video.customSkinUrl} size={24} className="rounded" />
               </Link>
             ) : video.discordAvatar && video.slug ? (
               <Link to={`/player/${video.slug}`} className="flex-shrink-0">

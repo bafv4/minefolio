@@ -40,6 +40,7 @@ interface RankingEntry {
   losses: number | null;
   winRate: number | null;
   verificationStatus: "verified" | "new" | null; // 承認状態
+  customSkinUrl: string | null;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -83,6 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: users.uuid,
           slug: users.slug,
           displayName: users.displayName,
+          customSkinUrl: users.customSkinUrl,
         })
         .from(playerRankings)
         .innerJoin(users, eq(playerRankings.userId, users.id))
@@ -136,6 +138,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           losses: null,
           winRate: null,
           verificationStatus: r.verificationStatus as "verified" | "new" | null,
+          customSkinUrl: r.customSkinUrl,
         };
       });
     }
@@ -152,6 +155,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: users.uuid,
           slug: users.slug,
           displayName: users.displayName,
+          customSkinUrl: users.customSkinUrl,
         })
         .from(playerRankings)
         .innerJoin(users, eq(playerRankings.userId, users.id))
@@ -182,6 +186,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         losses: null,
         winRate: null,
         verificationStatus: null,
+        customSkinUrl: r.customSkinUrl,
       }));
     } else {
       // MCSR Ranked Elo ランキング（公開ユーザー＋Ranked統計公開のみ）
@@ -197,6 +202,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: users.uuid,
           slug: users.slug,
           displayName: users.displayName,
+          customSkinUrl: users.customSkinUrl,
         })
         .from(playerRankings)
         .innerJoin(users, eq(playerRankings.userId, users.id))
@@ -227,6 +233,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         losses: r.losses,
         winRate: r.winRate,
         verificationStatus: null,
+        customSkinUrl: r.customSkinUrl,
       }));
     }
   }
@@ -401,6 +408,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                   >
                     <MinecraftAvatar
                       uuid={entry.uuid}
+                      skinUrl={entry.customSkinUrl}
                       size={28}
                       className={`rounded-sm shrink-0 ${isPending ? "opacity-70" : ""}`}
                     />
@@ -488,6 +496,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
                 >
                   <MinecraftAvatar
                     uuid={entry.uuid}
+                    skinUrl={entry.customSkinUrl}
                     size={28}
                     className="rounded-sm shrink-0"
                   />
@@ -542,6 +551,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
                 >
                   <MinecraftAvatar
                     uuid={entry.uuid}
+                    skinUrl={entry.customSkinUrl}
                     size={28}
                     className="rounded-sm shrink-0"
                   />

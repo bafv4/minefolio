@@ -35,6 +35,7 @@ interface UserDataCache {
   registeredMcids: string[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
 }
 
 async function getCachedUserData(): Promise<UserDataCache | null> {
@@ -49,6 +50,7 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      customSkinUrl: users.customSkinUrl,
     })
     .from(users)
     .where(and(isNotNull(users.mcid), isNotNull(users.uuid)));
@@ -60,6 +62,11 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
     ),
     mcidToDisplayName: Object.fromEntries(
       usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
+    ),
+    mcidToSkinUrl: Object.fromEntries(
+      usersWithMcid
+        .filter((u) => u.customSkinUrl !== null)
+        .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
     ),
   };
 
@@ -81,6 +88,7 @@ interface TwitchLinkData {
   slug: string;
   displayName: string | null;
   discordAvatar: string | null;
+  customSkinUrl: string | null;
 }
 interface TwitchLinkCache {
   links: TwitchLinkData[];
@@ -100,6 +108,7 @@ async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
       slug: users.slug,
       displayName: users.displayName,
       discordAvatar: users.discordAvatar,
+      customSkinUrl: users.customSkinUrl,
     })
     .from(socialLinks)
     .innerJoin(users, eq(socialLinks.userId, users.id))
@@ -166,13 +175,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     case "live-runs": {
       // 共通キャッシュキー（お気に入りに依存しない）
       const cacheKey = "home-feed:live-runs:all";
-      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string> };
+      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
 
       const cached = await getCached<LiveRunsCache>(cacheKey);
       if (cached) {
         // お気に入りでソートして返す
         const sortedRuns = sortByFavorite(cached.liveRuns, favoritesSet);
-        return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: cached.mcidToUuid }, CDN_CACHE.LIVE_RUNS);
+        return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: cached.mcidToUuid, mcidToSkinUrl: cached.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
       }
 
       // ユーザーデータとライブランを並列取得
@@ -189,6 +198,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       const result: LiveRunsCache = {
         liveRuns: filteredLiveRuns,
         mcidToUuid: userData.mcidToUuid,
+        mcidToSkinUrl: userData.mcidToSkinUrl,
       };
 
       // キャッシュに保存
@@ -196,7 +206,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       // お気に入りでソートして返す
       const sortedRuns = sortByFavorite(result.liveRuns, favoritesSet);
-      return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: result.mcidToUuid }, CDN_CACHE.LIVE_RUNS);
+      return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: result.mcidToUuid, mcidToSkinUrl: result.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
     }
 
     case "recent-paces": {
@@ -247,6 +257,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
           recentPaces: sortedPaces,
           mcidToUuid: userData.mcidToUuid,
           mcidToDisplayName: userData.mcidToDisplayName,
+          mcidToSkinUrl: userData.mcidToSkinUrl,
         },
         CDN_CACHE.PACES
       );
@@ -296,6 +307,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
           slug: link?.slug ?? "",
           displayName: link?.displayName ?? null,
           discordAvatar: link?.discordAvatar ?? null,
+          customSkinUrl: link?.customSkinUrl ?? null,
         };
       });
 

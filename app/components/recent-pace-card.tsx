@@ -19,6 +19,7 @@ interface RecentPaceCardProps {
   isRegistered: boolean;
   uuid?: string;
   displayName?: string;
+  skinUrl?: string;
 }
 
 // ミリ秒を "m:ss" 形式に変換
@@ -43,7 +44,7 @@ function getRelativeTime(unixSeconds: number): string {
   return `${diffDays}日前`;
 }
 
-export function RecentPaceCard({ run, isRegistered, uuid, displayName }: RecentPaceCardProps) {
+export function RecentPaceCard({ run, isRegistered, uuid, displayName, skinUrl }: RecentPaceCardProps) {
   const isFinished = run.timeline === "Finish";
   // PaceManのユーザーページにリンク
   const paceManUrl = `https://paceman.gg/stats/player/${encodeURIComponent(run.mcid)}`;
@@ -63,7 +64,7 @@ export function RecentPaceCard({ run, isRegistered, uuid, displayName }: RecentP
     >
       {uuid && (
         <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0">
-          <MinecraftAvatar uuid={uuid} size={40} />
+          <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={40} />
         </div>
       )}
       <div className="flex-1 min-w-0">

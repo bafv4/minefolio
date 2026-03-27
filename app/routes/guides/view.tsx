@@ -225,6 +225,7 @@ export default function GuideViewPage() {
           >
             <MinecraftAvatarLazy
               uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
               size={20}
               className="rounded-full shrink-0"
             />
@@ -259,6 +260,7 @@ export default function GuideViewPage() {
           >
             <MinecraftAvatarLazy
               uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
               size={40}
               className="rounded-full"
             />

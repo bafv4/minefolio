@@ -95,7 +95,7 @@ export function YouTubeLiveCard({ stream }: YouTubeLiveCardProps) {
             {/* アバター */}
             {hasMinecraftAvatar && stream.slug ? (
               <Link to={`/player/${stream.slug}`} className="flex-shrink-0">
-                <MinecraftAvatar uuid={stream.uuid!} size={24} className="rounded" />
+                <MinecraftAvatar uuid={stream.uuid!} skinUrl={stream.customSkinUrl} size={24} className="rounded" />
               </Link>
             ) : stream.discordAvatar && stream.slug ? (
               <Link to={`/player/${stream.slug}`} className="flex-shrink-0">

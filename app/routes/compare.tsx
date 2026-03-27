@@ -89,6 +89,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      customSkinUrl: true,
     },
     orderBy: [asc(users.slug)],
     limit: 100,
@@ -124,6 +125,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         uuid: true,
         slug: true,
         displayName: true,
+        customSkinUrl: true,
       },
       with: {
         keybindings: true,
@@ -158,6 +160,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
           uuid: user.uuid,
           slug: user.slug,
           displayName: user.displayName,
+          customSkinUrl: user.customSkinUrl,
           matches,
           total,
           similarity,
@@ -341,7 +344,7 @@ export default function ComparePage() {
                 {filteredPlayers1.map((p) => (
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} />
+                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
                       <span>{p.displayName ?? p.mcid ?? p.slug}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
@@ -383,7 +386,7 @@ export default function ComparePage() {
                 {filteredPlayers2.map((p) => (
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} />
+                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
                       <span>{p.displayName ?? p.mcid ?? p.slug}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
@@ -412,7 +415,7 @@ export default function ComparePage() {
             <CardContent className="pt-6">
               <div className="flex flex-wrap items-center justify-center gap-6">
                 <div className="flex items-center gap-2">
-                  <MinecraftAvatar uuid={player1.uuid} size={40} />
+                  <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
                   <div>
                     <p className="font-bold">{player1.displayName ?? player1.mcid ?? player1.slug}</p>
                     {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
@@ -436,7 +439,7 @@ export default function ComparePage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <MinecraftAvatar uuid={player2.uuid} size={40} />
+                  <MinecraftAvatar uuid={player2.uuid} size={40} skinUrl={player2.customSkinUrl} />
                   <div>
                     <p className="font-bold">{player2.displayName ?? player2.mcid ?? player2.slug}</p>
                     {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
@@ -614,7 +617,7 @@ function SimilarPlayersSection({
                 className="flex items-center justify-between p-3 rounded-lg border hover:bg-secondary/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <MinecraftAvatar uuid={player.uuid} size={32} />
+                  <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
                   <div>
                     <p className="font-medium">{player.displayName ?? player.mcid ?? player.slug}</p>
                     {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}

@@ -31,6 +31,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     },
   });
 
+  // Discordアバターが変更されていたらDBを更新
+  if (user && session.user.image !== user.discordAvatar) {
+    await db
+      .update(users)
+      .set({ discordAvatar: session.user.image ?? null })
+      .where(eq(users.discordId, session.user.id));
+    user.discordAvatar = session.user.image ?? null;
+  }
+
   return { user: user ?? null };
 }
 

@@ -917,7 +917,7 @@ export default function EditProfilePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-xl overflow-hidden">
-                      <MinecraftAvatar uuid={user.uuid} size={64} />
+                      <MinecraftAvatar uuid={user.uuid} skinUrl={user.customSkinUrl} size={64} />
                     </div>
                     <div>
                       <p className="font-medium">@{user.mcid}</p>
