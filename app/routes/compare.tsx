@@ -23,13 +23,22 @@ import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-re
 import { useState, useMemo } from "react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = `${t("compare.title")} - Minefolio`;
+  const description = t("compare.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: `${t("compare.title")} - Minefolio` },
-    {
-      name: "description",
-      content: t("compare.description"),
-    },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -76,6 +85,7 @@ const categoryLabels: Record<string, string> = {
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
   const url = new URL(request.url);
 
@@ -107,7 +117,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     });
 
     if (!player1Data) {
-      return { allPlayers, player1: null, player2: null, similarPlayers: [] };
+      return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
     }
 
     // p1のキーバインドをマップ化
@@ -175,12 +185,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       player1: player1Data,
       player2: null,
       similarPlayers,
+      appUrl,
     };
   }
 
   // 両方指定されていない場合は選択画面のみ
   if (!p1 || !p2) {
-    return { allPlayers, player1: null, player2: null, similarPlayers: [] };
+    return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
   }
 
   // 両走者のデータを取得（slugで検索）
@@ -208,6 +219,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     player1: player1Data ?? null,
     player2: player2Data ?? null,
     similarPlayers: [],
+    appUrl,
   };
 }
 

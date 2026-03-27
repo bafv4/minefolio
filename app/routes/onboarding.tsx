@@ -27,10 +27,22 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle2, AlertCircle, Info, SkipForward } from "lucide-react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("onboarding.title");
+  const description = t("onboarding.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("onboarding.title") },
-    { name: "description", content: t("onboarding.description") },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -59,6 +71,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       image: session.user.image,
     },
     legacyApiUrl: env.LEGACY_API_URL ?? "https://mchotkeys.vercel.app",
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
 }
 

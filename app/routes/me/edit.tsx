@@ -270,8 +270,10 @@ export async function action({ context, request }: Route.ActionArgs) {
   // ソーシャルリンクの操作
   if (actionType === "create_link" || actionType === "update_link") {
     const id = formData.get("id") as string | null;
-    const platform = formData.get("platform") as "speedruncom" | "youtube" | "twitch" | "twitter";
+    const platform = formData.get("platform") as "speedruncom" | "youtube" | "twitch" | "twitter" | "custom";
     const identifier = (formData.get("identifier") as string)?.trim();
+    const customLabel = (formData.get("customLabel") as string)?.trim() || null;
+    const customUrl = (formData.get("customUrl") as string)?.trim() || null;
 
     if (!platform || !identifier) {
       return { error: t("meEdit.platformAndIdRequired") };
@@ -283,9 +285,21 @@ export async function action({ context, request }: Route.ActionArgs) {
     }
 
     // IDの形式をバリデーション
-    // YouTubeは日本語ハンドルを許可（Unicode文字を含む）
-    // その他のプラットフォームは英数字、ハイフン、アンダースコアのみ
-    if (platform === "youtube") {
+    if (platform === "custom") {
+      // カスタムSNSはラベルとURLが必須
+      if (!customLabel) {
+        return { error: t("meEdit.customLabelRequired") };
+      }
+      if (!customUrl) {
+        return { error: t("meEdit.customUrlRequired") };
+      }
+      // URLの形式チェック
+      try {
+        new URL(customUrl);
+      } catch {
+        return { error: t("meEdit.customUrlInvalid") };
+      }
+    } else if (platform === "youtube") {
       // YouTubeハンドルは日本語などUnicode文字を許可
       // 空白、@、URL特殊文字は禁止
       if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
@@ -296,25 +310,22 @@ export async function action({ context, request }: Route.ActionArgs) {
       if (!/^[\w\-]+$/.test(identifier)) {
         return { error: t("meEdit.idAllowedChars") };
       }
-
-      // 先頭と末尾のハイフン/アンダースコアを禁止
-      if (/^[-_]|[-_]$/.test(identifier)) {
-        return { error: t("meEdit.idNoEdgeHyphenUnderscore") };
-      }
     }
 
     try {
       if (actionType === "create_link") {
-        // 同じプラットフォームの既存リンクがあるか確認
-        const existingPlatform = await db.query.socialLinks.findFirst({
-          where: (links, { and, eq: eqOp }) => and(
-            eqOp(links.userId, user.id),
-            eqOp(links.platform, platform)
-          ),
-        });
+        // カスタム以外は同じプラットフォームの重複チェック
+        if (platform !== "custom") {
+          const existingPlatform = await db.query.socialLinks.findFirst({
+            where: (links, { and, eq: eqOp }) => and(
+              eqOp(links.userId, user.id),
+              eqOp(links.platform, platform)
+            ),
+          });
 
-        if (existingPlatform) {
-          return { error: t("meEdit.platformLinkExistsForEdit", { platform }) };
+          if (existingPlatform) {
+            return { error: t("meEdit.platformLinkExistsForEdit", { platform }) };
+          }
         }
 
         await db.insert(socialLinks).values({
@@ -322,6 +333,8 @@ export async function action({ context, request }: Route.ActionArgs) {
           userId: user.id,
           platform,
           identifier,
+          customLabel: platform === "custom" ? customLabel : null,
+          customUrl: platform === "custom" ? customUrl : null,
         });
 
         // Speedrun.comの場合、speedruncomUsernameも自動設定
@@ -332,17 +345,19 @@ export async function action({ context, request }: Route.ActionArgs) {
             .where(eq(users.id, user.id));
         }
       } else if (id) {
-        // 更新時に別のプラットフォームに変更する場合、重複チェック
-        const existingPlatform = await db.query.socialLinks.findFirst({
-          where: (links, { and, eq: eqOp, ne }) => and(
-            eqOp(links.userId, user.id),
-            eqOp(links.platform, platform),
-            ne(links.id, id)
-          ),
-        });
+        // カスタム以外は更新時に別のプラットフォームに変更する場合、重複チェック
+        if (platform !== "custom") {
+          const existingPlatform = await db.query.socialLinks.findFirst({
+            where: (links, { and, eq: eqOp, ne }) => and(
+              eqOp(links.userId, user.id),
+              eqOp(links.platform, platform),
+              ne(links.id, id)
+            ),
+          });
 
-        if (existingPlatform) {
-          return { error: t("meEdit.platformLinkExistsSimple", { platform }) };
+          if (existingPlatform) {
+            return { error: t("meEdit.platformLinkExistsSimple", { platform }) };
+          }
         }
 
         // 更新前のリンク情報を取得
@@ -352,7 +367,13 @@ export async function action({ context, request }: Route.ActionArgs) {
 
         await db
           .update(socialLinks)
-          .set({ platform, identifier, updatedAt: new Date() })
+          .set({
+            platform,
+            identifier,
+            customLabel: platform === "custom" ? customLabel : null,
+            customUrl: platform === "custom" ? customUrl : null,
+            updatedAt: new Date(),
+          })
           .where(eq(socialLinks.id, id));
 
         // Speedrun.comの場合、speedruncomUsernameも自動更新
@@ -522,6 +543,7 @@ const platformOptions = [
   { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
+  { value: "custom", label: t("meEdit.customSns"), placeholder: "e.g. username", prefix: "" },
 ] as const;
 
 function getPlatformIcon(platform: string) {
@@ -534,12 +556,14 @@ function getPlatformIcon(platform: string) {
       return <Twitter className="h-4 w-4" />;
     case "speedruncom":
       return <ExternalLink className="h-4 w-4" />;
+    case "custom":
+      return <Share2 className="h-4 w-4" />;
     default:
       return <ExternalLink className="h-4 w-4" />;
   }
 }
 
-function getPlatformUrl(platform: string, identifier: string): string {
+function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string {
   switch (platform) {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
@@ -550,6 +574,8 @@ function getPlatformUrl(platform: string, identifier: string): string {
       return `https://www.twitch.tv/${identifier}`;
     case "twitter":
       return `https://x.com/${identifier}`;
+    case "custom":
+      return customUrlValue || "#";
     default:
       return "#";
   }
@@ -561,13 +587,14 @@ function SocialLinkDialog({
   linkFetcher,
   isSubmitting,
 }: {
-  editingLink: { id: string; platform: string; identifier: string } | null;
+  editingLink: { id: string; platform: string; identifier: string; customLabel: string | null; customUrl: string | null } | null;
   linkFetcher: ReturnType<typeof useFetcher<typeof action>>;
   isSubmitting: boolean;
 }) {
   const [selectedPlatform, setSelectedPlatform] = useState(editingLink?.platform ?? "youtube");
 
   const currentOption = platformOptions.find((opt) => opt.value === selectedPlatform);
+  const isCustom = selectedPlatform === "custom";
 
   return (
     <linkFetcher.Form method="post">
@@ -599,12 +626,38 @@ function SocialLinkDialog({
             </SelectContent>
           </Select>
         </div>
+        {isCustom && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="custom-label">{t("meEdit.customLabelField")}</Label>
+              <Input
+                id="custom-label"
+                name="customLabel"
+                defaultValue={editingLink?.customLabel ?? ""}
+                placeholder={t("meEdit.customLabelPlaceholder")}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-url">{t("meEdit.customUrlField")}</Label>
+              <Input
+                id="custom-url"
+                name="customUrl"
+                defaultValue={editingLink?.customUrl ?? ""}
+                placeholder={t("meEdit.customUrlPlaceholder")}
+                required
+              />
+            </div>
+          </>
+        )}
         <div className="space-y-2">
-          <Label htmlFor="link-identifier">{t("meEdit.userId")}</Label>
+          <Label htmlFor="link-identifier">{isCustom ? t("meEdit.userId") : t("meEdit.userId")}</Label>
           <div className="flex items-center">
-            <span className="text-sm text-muted-foreground mr-2 shrink-0">
-              {currentOption?.prefix}
-            </span>
+            {!isCustom && (
+              <span className="text-sm text-muted-foreground mr-2 shrink-0">
+                {currentOption?.prefix}
+              </span>
+            )}
             <Input
               id="link-identifier"
               name="identifier"
@@ -615,7 +668,7 @@ function SocialLinkDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            {t("meEdit.socialIdHint")}
+            {isCustom ? t("meEdit.customIdentifierHint") : t("meEdit.socialIdHint")}
           </p>
         </div>
       </div>
@@ -1556,8 +1609,10 @@ export default function EditProfilePage() {
           {links.length > 0 ? (
             <div className="space-y-2">
               {links.map((link) => {
-                const platformLabel = platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
-                const url = getPlatformUrl(link.platform, link.identifier);
+                const platformLabel = link.platform === "custom" && link.customLabel
+                  ? link.customLabel
+                  : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
+                const url = getPlatformUrl(link.platform, link.identifier, link.customUrl);
                 return (
                   <div key={link.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">

@@ -230,8 +230,10 @@ export const searchCrafts = sqliteTable("search_crafts", {
 export const socialLinks = sqliteTable("social_links", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  platform: text("platform", { enum: ["speedruncom", "youtube", "twitch", "twitter"] }).notNull(),
+  platform: text("platform", { enum: ["speedruncom", "youtube", "twitch", "twitter", "custom"] }).notNull(),
   identifier: text("identifier").notNull(), // ユーザー名やチャンネルID
+  customLabel: text("custom_label"), // カスタムSNSの表示名
+  customUrl: text("custom_url"), // カスタムSNSのURL
   displayOrder: integer("display_order").default(0).notNull(),
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

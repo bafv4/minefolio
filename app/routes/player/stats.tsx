@@ -1,6 +1,7 @@
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
+import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { sql } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
@@ -43,15 +44,30 @@ function getRelativeTime(dateStr: string): string {
 }
 
 export const meta: Route.MetaFunction = ({ params, data }) => {
-  // dataがある場合はmcidを使用、なければslugを表示
   const displayName = data?.mcid || params.slug;
+  const title = t("playerStats.metaTitle", { name: displayName });
+  const description = t("playerStats.metaDescription", { name: displayName });
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = data?.mcid
+    ? `${appUrl}/og-image?mcid=${encodeURIComponent(data.mcid)}`
+    : `${appUrl}/og-image?slug=${encodeURIComponent(params.slug || "")}`;
   return [
-    { title: t("playerStats.metaTitle", { name: displayName }) },
-    { name: "description", content: t("playerStats.metaDescription", { name: displayName }) },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "profile" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, context }: Route.LoaderArgs) {
+  const env = context.env ?? getEnv();
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const { slug } = params;
   const db = createDb();
   const normalizedSlug = slug?.toLowerCase();
@@ -94,6 +110,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     externalStats,
     netherEnterCount,
     recentPaces,
+    appUrl,
   };
 }
 

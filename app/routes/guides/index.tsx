@@ -17,10 +17,24 @@ import {
   type GuideItem,
 } from "@/components/guide-list-views";
 
-export const meta = () => [
-  { title: t("guides.title") },
-  { name: "description", content: t("guides.pageDesc") },
-];
+export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> | undefined }) => {
+  const title = t("guides.title");
+  const description = t("guides.pageDesc");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
+  return [
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
+  ];
+};
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
   const env = context.env ?? getEnv();
@@ -72,7 +86,8 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     .slice(0, 20)
     .map(([name]) => name);
 
-  return { guides: filtered, allTags, tag, q };
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  return { guides: filtered, allTags, tag, q, appUrl };
 }
 
 export default function GuidesIndexPage() {

@@ -21,12 +21,28 @@ import type { PaceManLiveRun } from "@/lib/paceman";
 import type { TwitchStream } from "@/lib/twitch";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
-  return [{ title: t("live.metaTitle") }];
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("live.metaTitle");
+  const description = "リアルタイムのMinecraftスピードラン状況";
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
+  return [
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
+  ];
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -87,6 +103,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     mcidToSlug,
     mcidToDisplayName,
     mcidToSkinUrl,
+    appUrl,
   };
 }
 

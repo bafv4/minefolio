@@ -833,12 +833,17 @@ body {
   margin-bottom: 2em;
 }
 
-.guide-content.prose :where(table) {
-  font-size: 0.9em;
+.guide-content.prose .table-scroll-wrapper {
+  overflow-x: auto;
   margin-top: 0.75em;
   margin-bottom: 0.75em;
+  -webkit-overflow-scrolling: touch;
+}
+
+.guide-content.prose :where(table) {
+  font-size: 0.9em;
   table-layout: fixed;
-  width: 100%;
+  min-width: 100%;
   overflow-wrap: break-word;
 }
 

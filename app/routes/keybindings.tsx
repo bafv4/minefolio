@@ -31,10 +31,22 @@ import { getRemapOutputLabel, getRemapSourceLabel } from "@/lib/remap-utils";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("keybindings.metaTitle");
+  const description = t("keybindings.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("keybindings.metaTitle") },
-    { name: "description", content: t("keybindings.description") },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -217,7 +229,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     (p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0
   );
 
-  return { players, search };
+  return { players, search, appUrl: env.APP_URL || "https://minefolio.pages.dev" };
 }
 
 // マウスソートのキー型

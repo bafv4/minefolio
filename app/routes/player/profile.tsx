@@ -902,9 +902,9 @@ export default function PlayerProfilePage() {
                 <div className="flex flex-wrap gap-2">
                   {player.socialLinks.map((link) => (
                     <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
-                      <a href={getSocialUrl(link.platform, link.identifier)} target="_blank" rel="noopener noreferrer">
-                        <SocialIcon platform={link.platform as "speedruncom" | "youtube" | "twitch" | "twitter"} />
-                        <span className="font-medium">{getSocialPlatformName(link.platform)}</span>
+                      <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
+                        <SocialIcon platform={link.platform} />
+                        <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
                         <span className="text-muted-foreground">{link.identifier}</span>
                       </a>
                     </Button>
@@ -1759,15 +1759,15 @@ function SearchCraftCard({
           {/* 検索文字列と押すキー */}
           {craft.searchStr && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex items-baseline gap-2 min-w-0">
                 <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono">
+                <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all">
                   {craft.searchStr}
                 </code>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground shrink-0">{t("playerProfile.inputKeysLabel")}</span>
-                <div className="flex items-center gap-1">
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
+                <div className="flex flex-wrap items-center gap-1">
                   {keyInfos.map((info, idx) => {
                     // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
                     const baseKeyCode = info.keyCode.includes("+")
@@ -1866,7 +1866,7 @@ function RecordCard({
 function SocialIcon({
   platform,
 }: {
-  platform: "speedruncom" | "youtube" | "twitch" | "twitter";
+  platform: string;
 }) {
   switch (platform) {
     case "youtube":
@@ -1882,23 +1882,24 @@ function SocialIcon({
   }
 }
 
-function getSocialUrl(platform: string, identifier: string): string {
+function getSocialUrl(platform: string, identifier: string, customUrl?: string | null): string {
   switch (platform) {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
     case "youtube":
-      // YouTubeハンドルには@が必要
       return `https://www.youtube.com/@${identifier}`;
     case "twitch":
       return `https://www.twitch.tv/${identifier}`;
     case "twitter":
       return `https://x.com/${identifier}`;
+    case "custom":
+      return customUrl || "#";
     default:
       return "#";
   }
 }
 
-function getSocialPlatformName(platform: string): string {
+function getSocialPlatformName(platform: string, customLabel?: string | null): string {
   switch (platform) {
     case "speedruncom":
       return "Speedrun.com";
@@ -1908,6 +1909,8 @@ function getSocialPlatformName(platform: string): string {
       return "Twitch";
     case "twitter":
       return "X";
+    case "custom":
+      return customLabel || platform;
     default:
       return platform;
   }

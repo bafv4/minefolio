@@ -521,10 +521,7 @@ function VirtualKeyboardComponent({
       >
         {/* リマップがある場合 */}
         {keyRemaps.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-0.5 max-w-full overflow-hidden leading-none">
-            <span className="font-medium text-[9px] text-muted-foreground/50">
-              {displayLabel}
-            </span>
+          <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-hidden leading-none">
             {keyRemaps.slice(0, 2).map((r, i) => {
               const isDisabled = r.targetKey === null;
               const targetLabel = getRemapOutputLabel(r, layout);
@@ -534,6 +531,9 @@ function VirtualKeyboardComponent({
                   {modifierMarks.length > 0 && (
                     <span className="text-[7px] text-primary/70">{modifierMarks.join("")}</span>
                   )}
+                  <span className="font-medium text-[9px] text-muted-foreground/50">
+                    {displayLabel}
+                  </span>
                   <span className="text-[8px] text-muted-foreground/40">→</span>
                   <span className={cn(
                     "font-bold text-[9px]",

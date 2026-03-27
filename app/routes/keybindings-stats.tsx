@@ -27,11 +27,24 @@ import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { t } from "@/lib/messages";
+import { getEnv } from "@/lib/env.server";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("keybindingsStats.metaTitle");
+  const description = t("keybindingsStats.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("keybindingsStats.metaTitle") },
-    { name: "description", content: t("keybindingsStats.description") },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -203,9 +216,11 @@ interface LoaderData {
   totalPlayers: number;
   playersWithKeybindings: number;
   playersWithMouseSettings: number;
+  appUrl: string;
 }
 
 export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData> {
+  const env = context.env ?? getEnv();
   const db = createDb();
 
   // 公開ユーザーのみ対象
@@ -526,6 +541,7 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
     totalPlayers,
     playersWithKeybindings,
     playersWithMouseSettings,
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
 }
 

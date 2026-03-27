@@ -32,13 +32,22 @@ import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { getFavoritesFromCookie } from "@/lib/favorites";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("browse.metaTitle");
+  const description = t("browse.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("browse.metaTitle") },
-    {
-      name: "description",
-      content: t("browse.description"),
-    },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -172,6 +181,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       inputMethods: filterInputMethods,
       platforms: filterPlatforms,
     },
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
 }
 

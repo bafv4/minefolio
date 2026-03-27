@@ -13,25 +13,35 @@ import { useCookieConsent } from "@/components/cookie-consent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("favorites.metaTitle");
+  const description = t("favorites.description");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("favorites.metaTitle") },
-    {
-      name: "description",
-      content: t("favorites.description"),
-    },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
 
   const cookieHeader = request.headers.get("Cookie");
   const favoriteMcids = getFavoritesFromCookie(cookieHeader);
 
   if (favoriteMcids.length === 0) {
-    return { players: [], favoriteMcids };
+    return { players: [], favoriteMcids, appUrl };
   }
 
   // お気に入りの走者情報を取得
@@ -53,7 +63,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     .map((mcid) => players.find((p) => p.mcid === mcid))
     .filter((p): p is NonNullable<typeof p> => p != null);
 
-  return { players: sortedPlayers, favoriteMcids };
+  return { players: sortedPlayers, favoriteMcids, appUrl };
 }
 
 export default function FavoritesPage() {

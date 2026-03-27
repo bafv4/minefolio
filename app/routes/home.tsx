@@ -12,6 +12,7 @@ import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
@@ -32,7 +33,6 @@ import {
   ExternalLink,
   Youtube,
   BookOpen,
-  Eye,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -601,53 +601,18 @@ export default function HomePage() {
               </Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {recentGuides.map((g) => {
-              const tags = JSON.parse(g.tags) as string[];
-              const authorName = g.authorDisplayName || g.authorMcid || g.authorSlug;
-              return (
-                <Link
-                  key={g.id}
-                  to={`/guides/${g.authorSlug}/${g.slug}`}
-                  prefetch="intent"
-                  className="group rounded-2xl border border-border/70 bg-background/80 overflow-hidden transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
-                >
-                  {g.coverImageUrl && (
-                    <img
-                      src={g.coverImageUrl}
-                      alt={g.title}
-                      className="w-full h-32 object-cover"
-                      loading="lazy"
-                    />
-                  )}
-                  <div className="p-4 space-y-2">
-                    <h3 className="text-sm font-semibold line-clamp-2 group-hover:text-primary transition-colors">
-                      {g.title}
-                    </h3>
-                    {g.summary && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{g.summary}</p>
-                    )}
-                    {tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                      <span className="truncate">{authorName}</span>
-                      <span className="flex items-center gap-1 shrink-0">
-                        <Eye className="h-3 w-3" />
-                        {g.viewCount}
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+          <GuideCardGrid
+            guides={recentGuides.map((g) => ({
+              ...g,
+              authorName: g.authorDisplayName || g.authorMcid || g.authorSlug,
+              _authorSlug: g.authorSlug,
+            })) as (GuideItem & { _authorSlug: string })[]}
+            linkFn={(guide) => {
+              const item = guide as GuideItem & { _authorSlug: string };
+              return `/guides/${item._authorSlug}/${guide.slug}`;
+            }}
+            gridCols="md:grid-cols-2 lg:grid-cols-4"
+          />
         </section>
       )}
 

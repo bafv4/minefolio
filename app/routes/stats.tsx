@@ -11,13 +11,22 @@ import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = t("stats.metaTitle");
+  const description = t("stats.metaDescription");
+  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = `${appUrl}/og-image`;
   return [
-    { title: t("stats.metaTitle") },
-    {
-      name: "description",
-      content: t("stats.metaDescription"),
-    },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 };
 
@@ -306,6 +315,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     usersWithKeybindings,
     actionToKeyStats,
     keyToActionStats,
+    appUrl: env.APP_URL || "https://minefolio.pages.dev",
     mouseStats: {
       totalConfigs: mouseConfigs.length,
       dpiDistribution,

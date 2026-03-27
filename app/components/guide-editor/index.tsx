@@ -822,6 +822,9 @@ export function GuideEditor({
   const guideLinkRef = useRef<HTMLDivElement>(null);
   const guideLinkSearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  // Ref to allow paste handler to call handleImageUpload (defined after useEditor)
+  const imageUploadRef = useRef<(file: File) => void>(() => {});
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false }),
@@ -879,6 +882,21 @@ export function GuideEditor({
     editorProps: {
       attributes: {
         class: "outline-none min-h-100",
+      },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              imageUploadRef.current(file);
+              return true;
+            }
+          }
+        }
+        return false;
       },
     },
   });
@@ -1458,6 +1476,9 @@ export function GuideEditor({
     },
     [editor, userId, guideId]
   );
+
+  // Keep ref in sync so paste handler can call the latest handleImageUpload
+  imageUploadRef.current = handleImageUpload;
 
   const handleCoverUpload = useCallback(
     async (file: File) => {

@@ -29,9 +29,20 @@ export function meta({
     return [{ title: "ユーザーが見つかりません - Minefolio" }];
   }
   const name = data.author.displayName || data.author.mcid || data.author.slug;
+  const title = `${name}のガイド - Minefolio`;
+  const description = `${name}が公開しているガイド一覧`;
+  const ogImage = `${data.appUrl}/og-image?slug=${encodeURIComponent(data.author.slug)}`;
   return [
-    { title: `${name}のガイド - Minefolio` },
-    { name: "description", content: `${name}が公開しているガイド一覧` },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 }
 
@@ -73,7 +84,8 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
     },
   });
 
-  return { author, guides: authorGuides };
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  return { author, guides: authorGuides, appUrl };
 }
 
 const MinecraftAvatarLazy = lazy(() =>

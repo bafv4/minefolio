@@ -23,12 +23,20 @@ export function meta({
   if (!data?.guide) {
     return [{ title: "ガイドが見つかりません - Minefolio" }];
   }
+  const title = `${data.guide.title} - Minefolio`;
+  const description = data.guide.summary || `${data.author.displayName || data.author.mcid}のガイド`;
+  const ogImage = data.guide.coverImageUrl || `${data.appUrl}/og-image`;
   return [
-    { title: `${data.guide.title} - Minefolio` },
-    {
-      name: "description",
-      content: data.guide.summary || `${data.author.displayName || data.author.mcid}のガイド`,
-    },
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "article" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: ogImage },
+    { name: "twitter:card", content: data.guide.coverImageUrl ? "summary_large_image" : "summary" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: ogImage },
   ];
 }
 
@@ -113,7 +121,14 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
     allowedIframeHostnames: ["www.youtube.com", "www.youtube-nocookie.com"],
   });
 
-  return { guide: { ...guide, sanitizedContent }, author };
+  // Wrap <table> in a scrollable container so wide tables scroll on mobile
+  const wrappedContent = sanitizedContent.replace(
+    /<table(\s|>)/g,
+    '<div class="table-scroll-wrapper"><table$1'
+  ).replace(/<\/table>/g, '</table></div>');
+
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl };
 }
 
 const MinecraftAvatarLazy = lazy(() =>

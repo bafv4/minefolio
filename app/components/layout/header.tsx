@@ -1,6 +1,6 @@
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, GitCompare, LogIn, MessageSquare, BookOpen } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 
 interface HeaderProps {
   user?: {
@@ -35,7 +36,14 @@ const navigation = [
 export function Header({ user }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+
+  const handleLogout = useCallback(async () => {
+    await authClient.signOut();
+    navigate("/", { replace: true });
+    window.location.reload();
+  }, [navigate]);
 
   // メニューが開いている時はスクロールを無効化
   useEffect(() => {
@@ -154,11 +162,9 @@ export function Header({ user }: HeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link to="/api/auth/logout">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        ログアウト
-                      </Link>
+                    <DropdownMenuItem onSelect={handleLogout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      ログアウト
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -308,14 +314,17 @@ export function Header({ user }: HeaderProps) {
                     フィードバック
                   </Link>
 
-                  <Link
-                    to="/api/auth/logout"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
+                  <button
+                    type="button"
+                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors touch-manipulation w-full"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
                   >
                     <LogOut className="h-6 w-6" />
                     ログアウト
-                  </Link>
+                  </button>
                 </div>
               ) : (
                 <Link
