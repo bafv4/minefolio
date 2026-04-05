@@ -68,6 +68,7 @@ export default [
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
