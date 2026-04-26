@@ -217,6 +217,7 @@ export const searchCrafts = sqliteTable("search_crafts", {
   keys: text("keys").notNull(), // JSON配列
   searchStr: text("search_str"),
   comment: text("comment"),
+  timing: text("timing", { enum: ["bastion", "fortress", "other"] }), // クラフトタイミング（null=区分なし）
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

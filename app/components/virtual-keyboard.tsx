@@ -521,7 +521,7 @@ function VirtualKeyboardComponent({
       >
         {/* リマップがある場合 */}
         {keyRemaps.length > 0 ? (
-          <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-hidden leading-none">
+          <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-visible">
             {keyRemaps.slice(0, 2).map((r, i) => {
               const isDisabled = r.targetKey === null;
               const targetLabel = getRemapOutputLabel(r, layout);
@@ -730,7 +730,7 @@ function VirtualKeyboardComponent({
                   </span>
                   <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
                   <span className={cn(
-                    "font-bold leading-none text-[11px]",
+                    "font-bold leading-tight text-[11px]",
                     isRemapDisabled ? "text-muted-foreground" : "text-foreground"
                   )}>
                     {remapTargetLabel}
@@ -924,7 +924,7 @@ export function VirtualMouse({
             </span>
             <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
             <span className={cn(
-              "font-bold leading-none text-[11px]",
+              "font-bold leading-tight text-[11px]",
               isRemapDisabled ? "text-muted-foreground" : "text-foreground"
             )}>
               {remapTargetLabel}
@@ -1154,7 +1154,7 @@ export function VirtualNumpad({
             </span>
             <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
             <span className={cn(
-              "font-bold leading-none text-[11px]",
+              "font-bold leading-tight text-[11px]",
               isRemapDisabled ? "text-muted-foreground" : "text-foreground"
             )}>
               {remapTargetLabel}

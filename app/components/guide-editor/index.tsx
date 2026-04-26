@@ -77,6 +77,8 @@ import {
   Columns2,
   Columns3,
   ImagePlus,
+  Keyboard,
+  Package,
 } from "lucide-react";
 import { t } from "@/lib/messages";
 
@@ -520,6 +522,140 @@ function GuideLinkNodeView({
   );
 }
 
+// ========================================
+// キーバインド埋め込みブロック
+// ========================================
+
+function KeybindEmbedNodeView({
+  node,
+  deleteNode,
+}: {
+  node: { attrs: Record<string, string> };
+  deleteNode: () => void;
+}) {
+  return (
+    <NodeViewWrapper>
+      <div className="relative group my-2 rounded-lg border bg-card p-4" contentEditable={false}>
+        <div className="flex items-center gap-2 text-sm">
+          <Keyboard className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{t("guideEditor.embedKeybindLabel")}</span>
+          <span className="text-muted-foreground">— {node.attrs.userSlug}</span>
+          {node.attrs.presetName && (
+            <Badge variant="outline" className="text-xs">{node.attrs.presetName}</Badge>
+          )}
+        </div>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); deleteNode(); }}
+          className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+const KeybindEmbedExtension = TiptapNode.create({
+  name: "keybindEmbed",
+  group: "block",
+  atom: true,
+
+  addAttributes() {
+    return {
+      userSlug: { default: "" },
+      presetName: { default: null },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-keybind-embed]" }];
+  },
+
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, unknown> }) {
+    return [
+      "div",
+      mergeAttributes({
+        "data-keybind-embed": "",
+        "data-user-slug": HTMLAttributes.userSlug as string,
+        ...(HTMLAttributes.presetName ? { "data-preset-name": HTMLAttributes.presetName as string } : {}),
+      }),
+    ];
+  },
+
+  addNodeView() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ReactNodeViewRenderer(KeybindEmbedNodeView as any);
+  },
+});
+
+// ========================================
+// サーチクラフト埋め込みブロック
+// ========================================
+
+function SearchCraftEmbedNodeView({
+  node,
+  deleteNode,
+}: {
+  node: { attrs: Record<string, string> };
+  deleteNode: () => void;
+}) {
+  return (
+    <NodeViewWrapper>
+      <div className="relative group my-2 rounded-lg border bg-card p-4" contentEditable={false}>
+        <div className="flex items-center gap-2 text-sm">
+          <Package className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{t("guideEditor.embedSearchCraftLabel")}</span>
+          <span className="text-muted-foreground">— {node.attrs.userSlug}</span>
+          {node.attrs.presetName && (
+            <Badge variant="outline" className="text-xs">{node.attrs.presetName}</Badge>
+          )}
+        </div>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); deleteNode(); }}
+          className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+const SearchCraftEmbedExtension = TiptapNode.create({
+  name: "searchCraftEmbed",
+  group: "block",
+  atom: true,
+
+  addAttributes() {
+    return {
+      userSlug: { default: "" },
+      presetName: { default: null },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-searchcraft-embed]" }];
+  },
+
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, unknown> }) {
+    return [
+      "div",
+      mergeAttributes({
+        "data-searchcraft-embed": "",
+        "data-user-slug": HTMLAttributes.userSlug as string,
+        ...(HTMLAttributes.presetName ? { "data-preset-name": HTMLAttributes.presetName as string } : {}),
+      }),
+    ];
+  },
+
+  addNodeView() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ReactNodeViewRenderer(SearchCraftEmbedNodeView as any);
+  },
+});
+
 const GuideLinkExtension = TiptapNode.create({
   name: "guideLink",
   group: "block",
@@ -822,6 +958,11 @@ export function GuideEditor({
   const guideLinkRef = useRef<HTMLDivElement>(null);
   const guideLinkSearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  // ── Embed dialog state ──────────────────────
+  const [embedDialogOpen, setEmbedDialogOpen] = useState<"keybind" | "searchcraft" | null>(null);
+  const [embedSlug, setEmbedSlug] = useState("");
+  const [embedPreset, setEmbedPreset] = useState("");
+
   // Ref to allow paste handler to call handleImageUpload (defined after useEditor)
   const imageUploadRef = useRef<(file: File) => void>(() => {});
 
@@ -871,6 +1012,8 @@ export function GuideEditor({
       CalloutExtension,
       ToggleListExtension,
       GuideLinkExtension,
+      KeybindEmbedExtension,
+      SearchCraftEmbedExtension,
       ColumnsExtension,
       ColumnExtension,
     ],
@@ -1155,6 +1298,25 @@ export function GuideEditor({
     },
     [editor]
   );
+
+  const handleInsertEmbed = useCallback(() => {
+    if (!editor || !embedDialogOpen || !embedSlug.trim()) return;
+    const type = embedDialogOpen === "keybind" ? "keybindEmbed" : "searchCraftEmbed";
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type,
+        attrs: {
+          userSlug: embedSlug.trim(),
+          presetName: embedPreset.trim() || null,
+        },
+      })
+      .run();
+    setEmbedDialogOpen(null);
+    setEmbedSlug("");
+    setEmbedPreset("");
+  }, [editor, embedDialogOpen, embedSlug, embedPreset]);
 
   // Apply block type change via handle
   const applyBlockType = useCallback((type: string) => {
@@ -2400,6 +2562,68 @@ export function GuideEditor({
               </div>
             )}
           </div>
+
+          {/* Player data embeds */}
+          <TB
+            onClick={() => { setEmbedDialogOpen("keybind"); setEmbedSlug(""); setEmbedPreset(""); }}
+            title={t("guideEditor.embedKeybind")}
+          >
+            <Keyboard className="h-4 w-4" />
+          </TB>
+          <TB
+            onClick={() => { setEmbedDialogOpen("searchcraft"); setEmbedSlug(""); setEmbedPreset(""); }}
+            title={t("guideEditor.embedSearchCraft")}
+          >
+            <Package className="h-4 w-4" />
+          </TB>
+
+          {/* Embed insert dialog */}
+          {embedDialogOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+              onClick={() => setEmbedDialogOpen(null)}
+            >
+              <div
+                className="bg-popover border rounded-lg shadow-xl w-96 p-4 space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-sm font-semibold">
+                  {embedDialogOpen === "keybind"
+                    ? t("guideEditor.embedKeybindTitle")
+                    : t("guideEditor.embedSearchCraftTitle")}
+                </h3>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">{t("guideEditor.embedUserSlug")}</label>
+                    <Input
+                      value={embedSlug}
+                      onChange={(e) => setEmbedSlug(e.target.value)}
+                      placeholder="mcid or slug"
+                      className="h-8"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">{t("guideEditor.embedPresetName")}</label>
+                    <Input
+                      value={embedPreset}
+                      onChange={(e) => setEmbedPreset(e.target.value)}
+                      placeholder=""
+                      className="h-8"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEmbedDialogOpen(null)}>
+                    {t("guideEditor.embedCancel")}
+                  </Button>
+                  <Button size="sm" onClick={handleInsertEmbed} disabled={!embedSlug.trim()}>
+                    {t("guideEditor.embedInsert")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Sep />
 

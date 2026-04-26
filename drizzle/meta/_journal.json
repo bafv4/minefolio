@@ -71,6 +71,13 @@
       "when": 1774618400815,
       "tag": "0009_normal_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1777183543912,
+      "tag": "0010_long_namor",
+      "breakpoints": true
     }
   ]
 }

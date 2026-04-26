@@ -63,7 +63,10 @@
       "Bash(then echo:*)",
       "Bash(for f:*)",
       "Read(//private/tmp/claude-501/-Users-bafv4-dev-minefolio/292e1cc2-1450-4fd1-9fc1-5ebcf0a2990c/tasks/**)",
-      "Bash(npx react-router:*)"
+      "Bash(npx react-router:*)",
+      "Bash(pnpm db:generate)",
+      "Bash(pnpm db:migrate)",
+      "Bash(npx dotenv:*)"
     ]
   }
 }

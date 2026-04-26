@@ -30,6 +30,7 @@ import { formatTime } from "@/lib/time-utils";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
+import { getGameLanguageName } from "@/lib/game-languages";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 
 // クライアントサイドのみでレンダリング
@@ -425,6 +426,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           keys: string;
           searchStr: string | null;
           comment: string | null;
+          timing?: "bastion" | "fortress" | "other" | null;
         }>;
         displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
           id: `preset-craft-${idx}`,
@@ -434,6 +436,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           keys: craft.keys,
           searchStr: craft.searchStr,
           comment: craft.comment,
+          timing: craft.timing ?? null,
           createdAt: new Date(),
           updatedAt: new Date(),
         }));
@@ -1095,16 +1098,11 @@ export default function PlayerProfilePage() {
                   </Badge>
                 </div>
               )}
-              <div className="space-y-4">
-                {player.searchCrafts.map((craft) => (
-                  <SearchCraftCard
-                    key={craft.id}
-                    craft={craft}
-                    keyRemaps={player.keyRemaps}
-                    fingerAssignments={userFingerAssignments}
-                  />
-                ))}
-              </div>
+              <SearchCraftList
+                crafts={player.searchCrafts}
+                keyRemaps={player.keyRemaps}
+                fingerAssignments={userFingerAssignments}
+              />
             </>
           ) : (
             <EmptyState
@@ -1485,33 +1483,7 @@ function getItemDisplayName(itemId: string): string {
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
-// ゲーム言語コードから言語名を取得するマッピング
-const GAME_LANGUAGE_NAMES: Record<string, string> = {
-  "en_us": "English (US)",
-  "en_gb": "English (UK)",
-  "ja_jp": t("common.langJaJp"),
-  "zh_cn": t("common.langZhCn"),
-  "zh_tw": t("common.langZhTw"),
-  "ko_kr": "한국어",
-  "de_de": "Deutsch",
-  "fr_fr": "Français",
-  "es_es": "Español (España)",
-  "es_mx": "Español (México)",
-  "it_it": "Italiano",
-  "pt_br": "Português (Brasil)",
-  "pt_pt": "Português (Portugal)",
-  "ru_ru": "Русский",
-  "pl_pl": "Polski",
-  "nl_nl": "Nederlands",
-  "sv_se": "Svenska",
-  "da_dk": "Dansk",
-  "no_no": "Norsk",
-  "fi_fi": "Suomi",
-};
-
-function getGameLanguageName(code: string): string {
-  return GAME_LANGUAGE_NAMES[code.toLowerCase()] || code;
-}
+// ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
 // プラットフォーム表示名を取得
 function getPlatformLabel(platform: string): string {
@@ -1713,6 +1685,86 @@ function KeyBadge({
   );
 }
 
+const TIMING_LABELS: Record<string, string> = {
+  bastion: "Bastion",
+  fortress: "Fortress",
+  other: t("playerProfile.timingOther"),
+};
+
+const TIMING_ORDER = ["bastion", "fortress", "other"] as const;
+
+function SearchCraftList({
+  crafts,
+  keyRemaps,
+  fingerAssignments,
+}: {
+  crafts: Array<{
+    id: string;
+    sequence: number;
+    items: string;
+    searchStr: string | null;
+    comment: string | null;
+    timing: string | null;
+  }>;
+  keyRemaps: RemapInfo[];
+  fingerAssignments: Record<string, FingerType[]>;
+}) {
+  const hasAnyTiming = crafts.some((c) => c.timing);
+
+  if (!hasAnyTiming) {
+    // タイミング未設定：従来通りフラットに表示
+    return (
+      <div className="space-y-4">
+        {crafts.map((craft) => (
+          <SearchCraftCard
+            key={craft.id}
+            craft={craft}
+            keyRemaps={keyRemaps}
+            fingerAssignments={fingerAssignments}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // タイミング別にグループ化
+  const grouped = new Map<string | null, typeof crafts>();
+  for (const craft of crafts) {
+    const key = craft.timing;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(craft);
+  }
+
+  // ソート: bastion → fortress → other → null(指定なし)
+  const sortedKeys: (string | null)[] = [];
+  for (const timing of TIMING_ORDER) {
+    if (grouped.has(timing)) sortedKeys.push(timing);
+  }
+  if (grouped.has(null)) sortedKeys.push(null);
+
+  return (
+    <div className="space-y-6">
+      {sortedKeys.map((timing) => (
+        <div key={timing ?? "__none"} className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground border-b pb-1">
+            {timing ? TIMING_LABELS[timing] ?? timing : t("playerProfile.timingUnspecified")}
+          </h3>
+          <div className="space-y-4">
+            {grouped.get(timing)!.map((craft) => (
+              <SearchCraftCard
+                key={craft.id}
+                craft={craft}
+                keyRemaps={keyRemaps}
+                fingerAssignments={fingerAssignments}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SearchCraftCard({
   craft,
   keyRemaps,
@@ -1724,6 +1776,7 @@ function SearchCraftCard({
     items: string;
     searchStr: string | null;
     comment: string | null;
+    timing: string | null;
   };
   keyRemaps: RemapInfo[];
   fingerAssignments: Record<string, FingerType[]>;

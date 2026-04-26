@@ -5,8 +5,8 @@ import {
 } from "react-router";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, guides } from "@/lib/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
+import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,14 @@ import { Eye, ArrowLeft, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { lazy, Suspense, useEffect, useRef } from "react";
+import {
+  extractEmbedRefs,
+  getUniqueEmbedSlugs,
+  splitContentAtEmbeds,
+  KeybindEmbedView,
+  SearchCraftEmbedView,
+  type EmbedUserData,
+} from "@/components/guide-embeds";
 
 export function meta({
   data,
@@ -101,7 +109,7 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
       img: ["src", "alt", "title", "width", "height"],
       a: ["href", "name", "target", "rel"],
       iframe: ["src", "width", "height", "frameborder", "allowfullscreen", "allow"],
-      div: ["data-youtube-video", "data-callout", "data-callout-type", "data-guide-link", "data-columns", "data-column", "class"],
+      div: ["data-youtube-video", "data-callout", "data-callout-type", "data-guide-link", "data-columns", "data-column", "data-keybind-embed", "data-searchcraft-embed", "data-user-slug", "data-preset-name", "class"],
       table: ["style"],
       col: ["style"],
       colgroup: [],
@@ -127,8 +135,88 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
     '<div class="table-scroll-wrapper"><table$1'
   ).replace(/<\/table>/g, '</table></div>');
 
+  // Extract embed references and fetch user data
+  const embedRefs = extractEmbedRefs(wrappedContent);
+  const embedSlugs = getUniqueEmbedSlugs(embedRefs);
+  const embedUsers: Record<string, EmbedUserData> = {};
+
+  if (embedSlugs.length > 0) {
+    const embedUserRows = await db.query.users.findMany({
+      where: inArray(users.slug, embedSlugs),
+      columns: {
+        id: true,
+        slug: true,
+        displayName: true,
+        mcid: true,
+      },
+      with: {
+        keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
+        keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
+        playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
+        searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+        configPresets: {
+          columns: {
+            name: true,
+            isActive: true,
+            keybindingsData: true,
+            remapsData: true,
+            playerConfigData: true,
+            searchCraftsData: true,
+          },
+        },
+      },
+    });
+
+    // Also try matching by mcid for slugs that didn't match
+    const matchedSlugs = new Set(embedUserRows.map((u) => u.slug));
+    const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
+    if (unmatchedSlugs.length > 0) {
+      const byMcid = await db.query.users.findMany({
+        where: inArray(users.mcid, unmatchedSlugs),
+        columns: {
+          id: true,
+          slug: true,
+          displayName: true,
+          mcid: true,
+        },
+        with: {
+          keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
+          keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
+          playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
+          searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+          configPresets: {
+            columns: {
+              name: true,
+              isActive: true,
+              keybindingsData: true,
+              remapsData: true,
+              playerConfigData: true,
+              searchCraftsData: true,
+            },
+          },
+        },
+      });
+      embedUserRows.push(...byMcid);
+    }
+
+    for (const u of embedUserRows) {
+      const data: EmbedUserData = {
+        slug: u.slug,
+        displayName: u.displayName,
+        mcid: u.mcid,
+        presets: u.configPresets,
+        keybindings: u.keybindings,
+        keyRemaps: u.keyRemaps,
+        playerConfig: u.playerConfig,
+        searchCrafts: u.searchCrafts,
+      };
+      embedUsers[u.slug] = data;
+      if (u.mcid) embedUsers[u.mcid] = data;
+    }
+  }
+
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
-  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl };
+  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl, embedUsers };
 }
 
 const MinecraftAvatarLazy = lazy(() =>
@@ -138,7 +226,7 @@ const MinecraftAvatarLazy = lazy(() =>
 );
 
 export default function GuideViewPage() {
-  const { guide, author } = useLoaderData<typeof loader>();
+  const { guide, author, embedUsers } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
     tags = JSON.parse(guide.tags) as string[];
@@ -258,10 +346,10 @@ export default function GuideViewPage() {
       </div>
 
       {/* Content */}
-      <div
-        ref={contentRef}
-        className="guide-content prose prose-neutral dark:prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: guide.sanitizedContent }}
+      <GuideContent
+        contentRef={contentRef}
+        html={guide.sanitizedContent}
+        embedUsers={embedUsers}
       />
 
       {/* Author card at bottom */}
@@ -291,5 +379,52 @@ export default function GuideViewPage() {
         </Link>
       </div>
     </article>
+  );
+}
+
+// コンテンツ描画（embed部分をReactコンポーネントに分離）
+function GuideContent({
+  contentRef,
+  html,
+  embedUsers,
+}: {
+  contentRef: React.RefObject<HTMLDivElement | null>;
+  html: string;
+  embedUsers: Record<string, EmbedUserData>;
+}) {
+  const segments = splitContentAtEmbeds(html);
+  const hasEmbeds = segments.some((s) => s.type !== "html");
+
+  // embedが無ければ従来通り
+  if (!hasEmbeds) {
+    return (
+      <div
+        ref={contentRef}
+        className="guide-content prose prose-neutral dark:prose-invert max-w-none"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
+
+  return (
+    <div ref={contentRef} className="guide-content prose prose-neutral dark:prose-invert max-w-none">
+      {segments.map((seg, i) => {
+        if (seg.type === "html") {
+          return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
+        }
+        const userData = embedUsers[seg.userSlug];
+        if (!userData) {
+          return (
+            <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              ユーザー「{seg.userSlug}」が見つかりません
+            </div>
+          );
+        }
+        if (seg.type === "keybind-embed") {
+          return <KeybindEmbedView key={i} userData={userData} presetName={seg.presetName} />;
+        }
+        return <SearchCraftEmbedView key={i} userData={userData} presetName={seg.presetName} />;
+      })}
+    </div>
   );
 }

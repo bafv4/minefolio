@@ -107,7 +107,9 @@ type SearchCraftItem = {
   keys: string[];
   searchStr: string | null;
   comment: string | null;
+  timing: "bastion" | "fortress" | "other" | null;
 };
+
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -137,6 +139,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     keys: JSON.parse(craft.keys) as string[],
     searchStr: craft.searchStr,
     comment: craft.comment,
+    timing: craft.timing ?? null,
   }));
 
   // 全プリセットを取得（コピー機能用）
@@ -255,6 +258,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
           searchStr: craft.searchStr || null,
           comment: craft.comment || null,
+          timing: craft.timing || null,
           createdAt: now,
           updatedAt: now,
         });
@@ -512,15 +516,34 @@ function EditableSearchCraftCard({
                 </Button>
               </div>
 
-              {/* クラフト文字列 */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.searchLabel")}</Label>
-                <Input
-                  value={craft.searchStr || ""}
-                  onChange={(e) => handleSearchStrChange(e.target.value)}
-                  placeholder="scr"
-                  className="font-mono h-8 w-32"
-                />
+              {/* クラフト文字列 & タイミング */}
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.searchLabel")}</Label>
+                  <Input
+                    value={craft.searchStr || ""}
+                    onChange={(e) => handleSearchStrChange(e.target.value)}
+                    placeholder="scr"
+                    className="font-mono h-8 w-32"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.timing")}</Label>
+                  <Select
+                    value={craft.timing ?? "__none"}
+                    onValueChange={(value) => onUpdate({ ...craft, timing: value === "__none" ? null : value as SearchCraftItem["timing"] })}
+                  >
+                    <SelectTrigger className="h-8 w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">{t("meSearchCraft.timingNone")}</SelectItem>
+                      <SelectItem value="bastion">Bastion</SelectItem>
+                      <SelectItem value="fortress">Fortress</SelectItem>
+                      <SelectItem value="other">{t("meSearchCraft.timingOther")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* 展開時：コメント */}
@@ -647,6 +670,7 @@ export default function SearchCraftPage() {
       keys: [],
       searchStr: null,
       comment: null,
+      timing: null,
     };
     setCrafts((prev) => [...prev, newCraft]);
   }, [crafts.length]);
