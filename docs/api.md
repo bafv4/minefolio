@@ -1,4 +1,8 @@
-# APIルート仕様書
+# APIルート仕様書（内部用・全API）
+
+このドキュメントは Minefolio 内部の全 API ルートを掲載した開発者向け仕様書です。
+
+公開API のみを抜粋した一般公開版は [`app/content/api.md`](../app/content/api.md) にあり、`/developers` ページで閲覧できます。仕様変更時は両方の更新を検討してください。
 
 ## 概要
 
