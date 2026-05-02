@@ -1094,4 +1094,12 @@ export const PAGES_JA = {
     noGuides: "公開されているガイドはまだありません",
     searchPlaceholder: "タイトルや概要で検索...",
   },
+  fullbodyViewer: {
+    avatarLabel: "Minecraftアバター",
+    avatarLabelOf: "{name}のMinecraftアバター",
+    showHint: "操作ヒントを表示",
+    hideHint: "操作ヒントを閉じる",
+    reset: "表示をリセット",
+    hintText: "ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮",
+  },
 } as const;

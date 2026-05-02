@@ -1,6 +1,13 @@
-import { useRef, useEffect, useState, memo } from "react";
+import { useRef, useEffect, useState, useCallback, memo } from "react";
+import type { SkinViewer } from "skinview3d";
+import { HelpCircle, RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { t } from "@/lib/messages";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
+
+const ICON_BUTTON_CLASS =
+  "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm";
 
 // 静止画像キャッシュ（同じUUID/ポーズの組み合わせを再利用）
 const imageCache = new Map<string, string>();
@@ -131,10 +138,9 @@ const MinecraftFullBodyComponent = ({
   interactive = false,
   showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
-  // キャッシュキー用の識別子（uuidまたはskinUrl）
   const skinIdentifier = skinUrl || uuid || STEVE_UUID;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewerRef = useRef<any>(null);
+  const viewerRef = useRef<SkinViewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
@@ -146,7 +152,6 @@ const MinecraftFullBodyComponent = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // asImageモードの場合、キャッシュをチェック
     if (effectiveAsImage) {
       const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = imageCache.get(cacheKey);
@@ -233,23 +238,19 @@ const MinecraftFullBodyComponent = ({
           }
         }
 
-        // Enable auto-rotate if requested (only when not rendering as image)
         if (rotate && !effectiveAsImage) {
           viewer.autoRotate = true;
           viewer.autoRotateSpeed = 1;
         }
 
-        // インタラクティブ操作（ズーム・回転・移動）を有効化
         if (interactive && viewer.controls) {
           viewer.controls.enableZoom = true;
           viewer.controls.enableRotate = true;
           viewer.controls.enablePan = true;
-          // 右クリックでなく左クリックでもパンできるよう screenSpacePanning を有効化
+          // screenSpacePanning: 通常の右ドラッグパンを有効化（カメラ向きに依存しない）
           viewer.controls.screenSpacePanning = true;
-          // ズーム範囲を制限（過度に近づきすぎ・遠ざかりすぎ防止）
           viewer.controls.minDistance = 20;
           viewer.controls.maxDistance = 200;
-          // 初期状態を保存しておく（リセット用）
           if (typeof viewer.controls.saveState === "function") {
             viewer.controls.saveState();
           }
@@ -257,21 +258,18 @@ const MinecraftFullBodyComponent = ({
 
         viewer.render();
 
-        // 静止画像として出力する場合
         if (effectiveAsImage) {
-          // レンダリングが完了するのを少し待つ
+          // toDataURL がレンダリング完了後の正しいフレームを拾えるよう一拍置く
           await new Promise((resolve) => setTimeout(resolve, 100));
           viewer.render();
 
           const dataUrl = canvas.toDataURL("image/png");
 
-          // キャッシュに保存
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
           imageCache.set(cacheKey, dataUrl);
 
           setImageSrc(dataUrl);
 
-          // viewerを破棄してリソースを解放
           viewer.dispose();
           viewerRef.current = null;
         }
@@ -292,17 +290,39 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-  }, [uuid, skinUrl, skinIdentifier, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim, interactive]);
+    // skinIdentifier は uuid/skinUrl から派生、interactive は effectiveAsImage に内包されるので除外。
+    // width/height は別 effect で setSize() を呼んで再初期化を回避するため依存に含めない。
+  }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim]);
 
-  // インタラクティブモード時のリセット処理
-  const handleReset = () => {
+  // サイズ変更時は dispose せず setSize で軽量に更新
+  useEffect(() => {
+    const v = viewerRef.current;
+    if (!v || effectiveAsImage) return;
+    v.setSize(width, height);
+  }, [width, height, effectiveAsImage]);
+
+  // インタラクティブモード時、画面外では描画ループを停止して負荷を抑える
+  useEffect(() => {
+    if (!interactive) return;
+    const canvas = canvasRef.current;
+    if (!canvas || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const v = viewerRef.current;
+      if (!v) return;
+      for (const entry of entries) {
+        v.renderPaused = !entry.isIntersecting;
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [interactive]);
+
+  const handleReset = useCallback(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
-    if (viewer.controls && typeof viewer.controls.reset === "function") {
-      viewer.controls.reset();
-      viewer.render();
-    }
-  };
+    if (!viewer?.controls || typeof viewer.controls.reset !== "function") return;
+    viewer.controls.reset();
+    viewer.render();
+  }, []);
 
   // スケルトン表示（ローディング中）
   const skeleton = (
@@ -341,7 +361,7 @@ const MinecraftFullBodyComponent = ({
     return (
       <img
         src={imageSrc}
-        alt={mcid ? `${mcid}'s Minecraft avatar` : "Minecraft avatar"}
+        alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
         width={width}
         height={height}
         className={className}
@@ -372,6 +392,9 @@ const MinecraftFullBodyComponent = ({
     );
   }
 
+  const showControls = interactive && !isLoading;
+  const showHintBubble = showControls && showInteractiveHint && hintVisible;
+
   return (
     <div style={{ position: "relative", width, height }}>
       <canvas
@@ -385,73 +408,47 @@ const MinecraftFullBodyComponent = ({
           touchAction: interactive ? "none" : undefined,
           cursor: interactive ? "grab" : undefined,
         }}
-        aria-label={mcid ? `${mcid}'s Minecraft avatar` : "Minecraft avatar"}
+        aria-label={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
       />
       {isLoading && skeleton}
 
-      {/* インタラクティブモード時のコントロール（リセット・ヒント） */}
-      {interactive && !isLoading && (
+      {showControls && (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
           {showInteractiveHint && (
             <button
               type="button"
               onClick={() => setHintVisible((v) => !v)}
-              aria-label={hintVisible ? "操作ヒントを閉じる" : "操作ヒントを表示"}
+              aria-label={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
               aria-pressed={hintVisible}
-              title={hintVisible ? "操作ヒントを閉じる" : "操作ヒントを表示"}
-              className={
-                "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm " +
-                (hintVisible
+              title={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
+              className={cn(
+                ICON_BUTTON_CLASS,
+                hintVisible
                   ? "bg-primary text-primary-foreground border-primary/40"
-                  : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground")
-              }
+                  : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+              )}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-3.5 h-3.5"
-                aria-hidden
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                <path d="M12 17h.01" />
-              </svg>
+              <HelpCircle className="w-3.5 h-3.5" aria-hidden />
             </button>
           )}
           <button
             type="button"
             onClick={handleReset}
-            aria-label="表示をリセット"
-            title="表示をリセット"
-            className="flex items-center justify-center w-7 h-7 rounded-full bg-background/70 hover:bg-background border text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
+            aria-label={t("fullbodyViewer.reset")}
+            title={t("fullbodyViewer.reset")}
+            className={cn(
+              ICON_BUTTON_CLASS,
+              "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+            )}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-3.5 h-3.5"
-              aria-hidden
-            >
-              <path d="M3 12a9 9 0 1 0 3-6.7" />
-              <path d="M3 4v5h5" />
-            </svg>
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden />
           </button>
         </div>
       )}
 
-      {/* インタラクティブモード時のヒント（ヒントボタンで表示制御） */}
-      {interactive && showInteractiveHint && hintVisible && !isLoading && (
+      {showHintBubble && (
         <div className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] leading-tight text-center text-muted-foreground bg-background/85 backdrop-blur-sm rounded px-1.5 py-0.5 pointer-events-none">
-          ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮
+          {t("fullbodyViewer.hintText")}
         </div>
       )}
     </div>

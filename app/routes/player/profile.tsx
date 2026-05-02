@@ -30,6 +30,7 @@ import { formatTime } from "@/lib/time-utils";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 
@@ -41,6 +42,10 @@ const MinecraftFullBody = lazy(() =>
 const MinecraftAvatar = lazy(() =>
   import("@/components/minecraft-avatar").then((mod) => ({ default: mod.MinecraftAvatar }))
 );
+
+const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
+const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
+const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
 export function meta({ data, params }: Route.MetaArgs) {
@@ -613,19 +618,8 @@ export default function PlayerProfilePage() {
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
 
   // スキン3Dビューワのサイズ（モバイルでは大きめに）
-  const [skinViewSize, setSkinViewSize] = useState({ width: 240, height: 280 });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
-    const update = () => {
-      setSkinViewSize(
-        mq.matches ? { width: 320, height: 380 } : { width: 240, height: 280 },
-      );
-    };
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
+  const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
+  const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
 
   // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
@@ -854,7 +848,7 @@ export default function PlayerProfilePage() {
           {/* Header: Skin + Basic Info */}
           <Card>
             <CardContent className="pt-4 pb-4">
-              <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (
                   <div className="flex justify-center sm:justify-start shrink-0">
