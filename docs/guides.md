@@ -120,18 +120,26 @@
 
 ## 管理ページ（ルーティング）
 
-### /me/guides — 自分のガイド一覧
+`/me` 配下から切り離され、`/my-guides` 系として独立したルートになっている。ヘッダーのユーザードロップダウン（「設定」の直下）からアクセスできる。
+
+### /my-guides — 自分のガイド一覧
 
 - ログインユーザーが作成した全ガイド（公開・非公開含む）を表示
 
-### /me/guides/new — 新規作成
+### /my-guides/new — 新規作成
 
 - ガイドエディタを表示し、新規ガイドを作成
 
-### /me/guides/:guideId/edit — 編集
+### /my-guides/:guideSlug/edit — 編集
 
-- 既存ガイドの編集画面
-- **独立レイアウト**: `me/_layout` の外に配置。エディタ用の独自レイアウトを使用
+- 既存ガイドの編集画面（`(authorId, slug)` で本人のガイドを特定）
+- **独立レイアウト**: `me/_layout` のサイドバーに依存しないフルスクリーン編集画面
+- タイトル/本文/サマリー/タグ inputs はブラウザ標準の綴りバリデーション（`spellcheck`）を無効化
+- スティッキーヘッダーとツールバーは背景透明（`backdrop-blur-sm` のみ）
+
+### 公開ガイド表示時の編集導線
+
+- `/guides/:authorSlug/:guideSlug` でログイン中ユーザーがそのガイドのオーナーの場合、ページ上部に編集ボタンが表示され `/my-guides/:guideSlug/edit` へ遷移できる
 
 ### APIエンドポイント
 
@@ -152,9 +160,9 @@
 
 ### 管理ページ
 
-- `app/routes/me/guides/edit.tsx` — ガイド編集ページ
-- `app/routes/me/guides/new.tsx` — ガイド新規作成ページ
-- `app/routes/me/guides/index.tsx` — 自分のガイド一覧ページ
+- `app/routes/my-guides/edit.tsx` — ガイド編集ページ
+- `app/routes/my-guides/new.tsx` — ガイド新規作成ページ
+- `app/routes/my-guides/index.tsx` — 自分のガイド一覧ページ
 
 ### コンポーネント
 

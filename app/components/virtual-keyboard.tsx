@@ -364,6 +364,7 @@ interface VirtualKeyboardProps {
   showRemaps?: boolean; // リマップを表示
   useDefaultFingerAssignments?: boolean; // デフォルトの指割り当てを使用
   hideNumpad?: boolean; // テンキーを非表示にする
+  alwaysShowActions?: string[]; // showActionLabels=false でも常に表示する操作名
 }
 
 // メインキーボードの行の合計幅を計算（USレイアウト Row2基準: 15ユニット）
@@ -384,6 +385,7 @@ function VirtualKeyboardComponent({
   showRemaps = false,
   useDefaultFingerAssignments = false,
   hideNumpad = false,
+  alwaysShowActions,
 }: VirtualKeyboardProps) {
   const isJIS = layout === "JIS" || layout === "JIS_TKL";
   const isTKL = layout === "US_TKL" || layout === "JIS_TKL";
@@ -468,7 +470,13 @@ function VirtualKeyboardComponent({
       : "bg-foreground/80 text-background";
 
     // 操作名を表示するかどうか
-    const showAction = showActionLabels && bindings.length > 0;
+    // showActionLabels が true なら全バインディング、そうでなければ alwaysShowActions に含まれるアクションのみ表示
+    const filteredBindings = showActionLabels
+      ? bindings
+      : alwaysShowActions && alwaysShowActions.length > 0
+        ? bindings.filter((b) => alwaysShowActions.includes(b.action))
+        : [];
+    const showAction = filteredBindings.length > 0;
 
     // リマップのツールチップ説明を生成
     const getRemapTooltipText = (r: RemapInfo): string => {
@@ -560,7 +568,7 @@ function VirtualKeyboardComponent({
         {/* 操作名チップ（下部）- リマップがあっても表示 */}
         {showAction && (
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
-            {bindings.map((binding, i) => (
+            {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
                 "rounded px-1 py-0 truncate leading-none text-[8px]",
                 chipClass

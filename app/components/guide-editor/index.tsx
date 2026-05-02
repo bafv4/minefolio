@@ -410,6 +410,9 @@ function ToggleListNodeView({ node, updateAttributes }: {
             type="text"
             value={summaryText}
             onChange={(e) => updateAttributes({ summaryText: e.target.value })}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
             className="toggle-summary-input"
             placeholder="トグル"
           />
@@ -1025,6 +1028,9 @@ export function GuideEditor({
     editorProps: {
       attributes: {
         class: "outline-none min-h-100",
+        spellcheck: "false",
+        autocorrect: "off",
+        autocapitalize: "off",
       },
       handlePaste: (_view, event) => {
         const items = event.clipboardData?.items;
@@ -2162,12 +2168,12 @@ export function GuideEditor({
       )}
 
       {/* ── Sticky header: top bar + metadata + toolbar ── */}
-      <div className="sticky top-0 z-40 bg-background pb-1 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 space-y-3">
+      <div className="sticky top-0 z-40 backdrop-blur-sm pb-1 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 space-y-3">
 
         {/* ── Top bar ── */}
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="ghost" size="sm" asChild className="-ml-1">
-            <Link to="/me/guides">
+            <Link to="/my-guides">
               <ArrowLeft className="h-4 w-4 mr-1" />
               ガイド一覧
             </Link>
@@ -2244,7 +2250,7 @@ export function GuideEditor({
         </div>
 
         {/* ── Toolbar ── */}
-        <div className="flex items-center gap-0.5 flex-wrap border rounded-lg px-2 py-1.5 bg-muted/30">
+        <div className="flex items-center gap-0.5 flex-wrap border rounded-lg px-2 py-1.5 bg-transparent">
           <TB
             onClick={() => editor.chain().focus().toggleBold().run()}
             active={editor.isActive("bold")}
@@ -2857,6 +2863,9 @@ export function GuideEditor({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={t("guideEditor.titlePlaceholder")}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           className="w-full text-2xl font-bold bg-transparent border-none outline-none focus:ring-0 p-0"
         />
 
@@ -2924,6 +2933,9 @@ export function GuideEditor({
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           placeholder={t("guideEditor.summaryPlaceholder")}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           className="text-sm"
         />
 
@@ -2951,6 +2963,9 @@ export function GuideEditor({
                 }
               }}
               placeholder={t("guideEditor.tagPlaceholder")}
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               className="text-sm bg-transparent border-none outline-none focus:ring-0 min-w-24"
             />
           )}

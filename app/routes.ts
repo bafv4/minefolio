@@ -45,13 +45,13 @@ export default [
         route("import", "routes/me/import.tsx"),
         route("items", "routes/me/items.tsx"),
         route("search-craft", "routes/me/search-craft.tsx"),
-        route("guides", "routes/me/guides/index.tsx"),
-        route("guides/new", "routes/me/guides/new.tsx"),
       ]),
     ]),
 
-    // Guide editor (independent, outside me/_layout sidebar)
-    route("me/guides/:guideId/edit", "routes/me/guides/edit.tsx"),
+    // My guides (separated from /me, no sidebar)
+    route("my-guides", "routes/my-guides/index.tsx"),
+    route("my-guides/new", "routes/my-guides/new.tsx"),
+    route("my-guides/:guideSlug/edit", "routes/my-guides/edit.tsx"),
 
     // Public guides
     route("guides", "routes/guides/index.tsx"),

@@ -98,7 +98,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
     })
     .returning();
 
-  return redirect(`/me/guides/${newGuide.id}/edit`);
+  return redirect(`/my-guides/${newGuide.slug}/edit`);
 }
 
 export default function NewGuidePage() {

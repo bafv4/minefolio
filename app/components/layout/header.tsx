@@ -150,6 +150,12 @@ export function Header({ user }: HeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
+                      <Link to="/my-guides">
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        マイガイド
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
                         お気に入り
@@ -294,6 +300,15 @@ export function Header({ user }: HeaderProps) {
                   >
                     <Settings className="h-6 w-6" />
                     設定
+                  </Link>
+
+                  <Link
+                    to="/my-guides"
+                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <BookOpen className="h-6 w-6" />
+                    マイガイド
                   </Link>
 
                   <Link
