@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { t } from "@/lib/messages";
 import { getEnv } from "@/lib/env.server";
+import { excludeViewersCondition } from "@/lib/users-filter";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   const title = t("keybindingsStats.metaTitle");
@@ -223,8 +224,11 @@ export async function loader({ context }: Route.LoaderArgs): Promise<LoaderData>
   const env = context.env ?? getEnv();
   const db = createDb();
 
-  // 公開ユーザーのみ対象
-  const publicCondition = eq(users.profileVisibility, "public");
+  // 公開ユーザーのみ対象（視聴者ロールは除外）
+  const publicCondition = and(
+    eq(users.profileVisibility, "public"),
+    excludeViewersCondition,
+  );
 
   // 総走者数
   const [totalResult] = await db

@@ -5,9 +5,10 @@
 
 import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { isNotNull } from "drizzle-orm";
+import { isNotNull, and } from "drizzle-orm";
 import { fetchRecentRunsForUsers } from "@/lib/paceman";
 import { cachePacemanPaces } from "@/lib/paceman-cache";
+import { excludeViewersCondition } from "@/lib/users-filter";
 
 export async function loader({ context, request }: { request: Request; context: any }) {
   // セキュリティ: Vercel Cron認証
@@ -27,11 +28,11 @@ export async function loader({ context, request }: { request: Request; context: 
   try {
     const db = createDb();
 
-    // MCIDを持つすべてのユーザーを取得
+    // MCIDを持つすべてのユーザーを取得（視聴者ロールは除外）
     const usersWithMcid = await db
       .select({ mcid: users.mcid })
       .from(users)
-      .where(isNotNull(users.mcid));
+      .where(and(isNotNull(users.mcid), excludeViewersCondition));
 
     const registeredMcids = usersWithMcid.map((u) => u.mcid!.toLowerCase());
 

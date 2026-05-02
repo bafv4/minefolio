@@ -11,6 +11,7 @@ import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getFavoritesFromDb } from "@/lib/favorites";
+import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
 
@@ -57,7 +58,7 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
-    .where(and(isNotNull(users.mcid), isNotNull(users.uuid)));
+    .where(and(isNotNull(users.mcid), isNotNull(users.uuid), excludeViewersCondition));
 
   const data: UserDataCache = {
     registeredMcids: usersWithMcid.map((u) => u.mcid!.toLowerCase()),
@@ -122,7 +123,8 @@ async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
     .where(
       and(
         eq(users.profileVisibility, "public"),
-        eq(socialLinks.platform, "twitch")
+        eq(socialLinks.platform, "twitch"),
+        excludeViewersCondition,
       )
     );
 
@@ -255,9 +257,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         .orderBy(desc(pacemanPaces.date))
         .limit(100);
 
+      // 視聴者ロールのペースを除外（userData.registeredMcidsはviewer除外済み）
+      const registeredMcidSet = new Set(userData.registeredMcids);
+      const filteredPaces = paces.filter((p) =>
+        registeredMcidSet.has(p.mcid.toLowerCase()),
+      );
+
       // 同じワールド（pacemanRunId）のペースは最新（最も進んだ）Splitのみを残す
-      const runIdToLatestPace = new Map<number, typeof paces[0]>();
-      for (const pace of paces) {
+      const runIdToLatestPace = new Map<number, typeof filteredPaces[0]>();
+      for (const pace of filteredPaces) {
         const existing = runIdToLatestPace.get(pace.pacemanRunId);
         // rtaが長い方が進んでいるので、より長いrtaを持つものを選択
         if (!existing || pace.rta > existing.rta) {

@@ -6,6 +6,7 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
+import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
@@ -101,9 +102,12 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
   );
 
-  // 最近更新されたプロフィール（公開設定のみ、最新4件）- DBのみなので即時取得
+  // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
   const recentlyUpdatedUsers = await db.query.users.findMany({
-    where: eq(users.profileVisibility, "public"),
+    where: and(
+      eq(users.profileVisibility, "public"),
+      excludeViewersCondition,
+    ),
     columns: {
       mcid: true,
       uuid: true,
@@ -149,7 +153,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const totalPublicProfilesResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(users)
-    .where(eq(users.profileVisibility, "public"));
+    .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition));
   const totalPublicProfiles = totalPublicProfilesResult[0]?.count ?? 0;
 
   const activePublicProfilesResult = await db
@@ -158,7 +162,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     .where(
       and(
         eq(users.profileVisibility, "public"),
-        gte(users.updatedAt, oneWeekAgo)
+        gte(users.updatedAt, oneWeekAgo),
+        excludeViewersCondition,
       )
     );
   const activePublicProfiles = activePublicProfilesResult[0]?.count ?? 0;
