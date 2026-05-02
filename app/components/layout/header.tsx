@@ -152,7 +152,7 @@ export function Header({ user }: HeaderProps) {
                     <DropdownMenuItem asChild>
                       <Link to="/my-guides">
                         <BookOpen className="mr-2 h-4 w-4" />
-                        マイガイド
+                        ガイド
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -308,7 +308,7 @@ export function Header({ user }: HeaderProps) {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <BookOpen className="h-6 w-6" />
-                    マイガイド
+                    ガイド
                   </Link>
 
                   <Link

@@ -12,9 +12,18 @@
 
 ### ガイド
 
-- ガイド管理ページを `/me/guides/*` から `/my-guides/*` に移動。ヘッダーのユーザードロップダウンに「マイガイド」リンクを追加。
+- ガイド管理ページを `/me/guides/*` から `/my-guides/*` に移動。ヘッダーのユーザードロップダウンに「ガイド」リンクを追加。
 - 編集ページのURLを `/my-guides/:guideSlug/edit` に変更。
 - 編集ページでブラウザの綴りバリデーションを無効化。
 - 編集ページのスティッキーヘッダーとツールバーを背景透明化。
 - 公開ガイド表示ページ（`/guides/:authorSlug/:guideSlug`）でオーナー本人がアクセスした場合に編集ボタンを表示。
 - ガイド内のリマップキーボードに「チャット」操作を表示するように。
+
+### お気に入り機能の刷新
+
+- お気に入りの保存先を Cookie から DB（ログイン中）／localStorage（未ログイン）に変更。デバイス間でお気に入りが共有されるように。
+- `favorites` テーブルを slug ベースに刷新。
+- `/api/favorites` を GET/POST/PUT 対応に書き換え。`POST /api/users/by-slugs` を新設。
+- 旧 `minefolio_favorites` Cookie は API 応答で自動削除。
+- ログイン直後に localStorage の旧お気に入りを DB に一括同期。
+- ログイン中はクライアント側で sessionStorage にキャッシュし、ページ間の状態を保持。

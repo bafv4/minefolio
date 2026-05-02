@@ -29,7 +29,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
-import { getFavoritesFromCookie } from "@/lib/favorites";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
+import { getFavoritesFromDb } from "@/lib/favorites";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -64,6 +66,8 @@ type FilterPlatform = "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile"
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   const url = new URL(request.url);
   const searchQuery = url.searchParams.get("q") || "";
@@ -153,12 +157,20 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     offset: (page - 1) * ITEMS_PER_PAGE,
   });
 
-  // お気に入りを取得（slugベース）
-  const cookieHeader = request.headers.get("Cookie");
-  const favoriteSlugs = getFavoritesFromCookie(cookieHeader);
+  // ログイン中のみ DB から slug 一覧を取得して並べ替え用に使用
+  let favoriteSlugs: string[] = [];
+  if (session) {
+    const me = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    if (me) {
+      favoriteSlugs = await getFavoritesFromDb(db, me.id);
+    }
+  }
   const favoritesSet = new Set(favoriteSlugs);
 
-  // お気に入りを先頭に並べ替え
+  // お気に入りを先頭に並べ替え（ログイン中のみ初期SSRに反映）
   const sortedPlayers = playerList.sort((a, b) => {
     const aIsFavorite = favoritesSet.has(a.slug);
     const bIsFavorite = favoritesSet.has(b.slug);
@@ -174,7 +186,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     currentPage: page,
     totalPages,
     totalCount,
-    favoriteSlugs,
+    isLoggedIn: !!session,
     filters: {
       roles: filterRoles,
       editions: filterEditions,

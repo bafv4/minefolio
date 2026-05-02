@@ -3,12 +3,14 @@
 
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, pacemanPaces } from "@/lib/schema";
 import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
-import { getFavoritesFromCookie } from "@/lib/favorites";
+import { getFavoritesFromDb } from "@/lib/favorites";
 import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
 
@@ -36,6 +38,7 @@ interface UserDataCache {
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
+  mcidToSlug: Record<string, string>;
 }
 
 async function getCachedUserData(): Promise<UserDataCache | null> {
@@ -49,6 +52,7 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
     .select({
       mcid: users.mcid,
       uuid: users.uuid,
+      slug: users.slug,
       displayName: users.displayName,
       customSkinUrl: users.customSkinUrl,
     })
@@ -67,6 +71,9 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       usersWithMcid
         .filter((u) => u.customSkinUrl !== null)
         .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
+    ),
+    mcidToSlug: Object.fromEntries(
+      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.slug])
     ),
   };
 
@@ -131,15 +138,18 @@ async function getTwitchLinks(): Promise<TwitchLinkCache> {
 }
 
 // お気に入りソート関数（時間順を維持）
-function sortByFavorite<T extends { mcid?: string | null; nickname?: string | null; minefolioMcid?: string | null; time?: number }>(
+// favoriteSlugsSet: ログイン中ユーザーのお気に入りslug集合
+// mcidToSlug: アイテムのmcidからslugへのマッピング（item.slugが既にある場合は不要）
+function sortByFavorite<T extends { mcid?: string | null; nickname?: string | null; minefolioMcid?: string | null; slug?: string | null; time?: number }>(
   items: T[],
-  favoritesSet: Set<string>
+  favoriteSlugsSet: Set<string>,
+  mcidToSlug: Record<string, string> = {},
 ): T[] {
   return [...items].sort((a, b) => {
-    const aMcid = (a.mcid || a.nickname || a.minefolioMcid || "").toLowerCase();
-    const bMcid = (b.mcid || b.nickname || b.minefolioMcid || "").toLowerCase();
-    const aIsFavorite = favoritesSet.has(aMcid);
-    const bIsFavorite = favoritesSet.has(bMcid);
+    const aSlug = a.slug || mcidToSlug[(a.mcid || a.nickname || a.minefolioMcid || "").toLowerCase()];
+    const bSlug = b.slug || mcidToSlug[(b.mcid || b.nickname || b.minefolioMcid || "").toLowerCase()];
+    const aIsFavorite = aSlug ? favoriteSlugsSet.has(aSlug) : false;
+    const bIsFavorite = bSlug ? favoriteSlugsSet.has(bSlug) : false;
     // お気に入りを先頭に
     if (aIsFavorite && !bIsFavorite) return -1;
     if (!aIsFavorite && bIsFavorite) return 1;
@@ -166,21 +176,36 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");
 
-  // お気に入りを取得（ソートのみに使用、キャッシュキーには含めない）
-  const cookieHeader = request.headers.get("Cookie");
-  const favoriteMcids = getFavoritesFromCookie(cookieHeader);
-  const favoritesSet = new Set(favoriteMcids.map((m) => m.toLowerCase()));
+  // ログイン中ユーザーのお気に入り（slug）を取得（ソートのみに使用、キャッシュキーには含めない）
+  let favoriteSlugsSet = new Set<string>();
+  try {
+    const db = createDb();
+    const auth = createAuth(db, env);
+    const session = await getOptionalSession(request, auth);
+    if (session) {
+      const me = await db.query.users.findFirst({
+        where: eq(users.discordId, session.user.id),
+        columns: { id: true },
+      });
+      if (me) {
+        const slugs = await getFavoritesFromDb(db, me.id);
+        favoriteSlugsSet = new Set(slugs);
+      }
+    }
+  } catch {
+    // セッション取得失敗時はお気に入り無しで続行
+  }
 
   switch (feedType) {
     case "live-runs": {
       // 共通キャッシュキー（お気に入りに依存しない）
       const cacheKey = "home-feed:live-runs:all";
-      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
+      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string>; mcidToSlug: Record<string, string> };
 
       const cached = await getCached<LiveRunsCache>(cacheKey);
       if (cached) {
         // お気に入りでソートして返す
-        const sortedRuns = sortByFavorite(cached.liveRuns, favoritesSet);
+        const sortedRuns = sortByFavorite(cached.liveRuns, favoriteSlugsSet, cached.mcidToSlug);
         return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: cached.mcidToUuid, mcidToSkinUrl: cached.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
       }
 
@@ -199,13 +224,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         liveRuns: filteredLiveRuns,
         mcidToUuid: userData.mcidToUuid,
         mcidToSkinUrl: userData.mcidToSkinUrl,
+        mcidToSlug: userData.mcidToSlug,
       };
 
       // キャッシュに保存
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
 
       // お気に入りでソートして返す
-      const sortedRuns = sortByFavorite(result.liveRuns, favoritesSet);
+      const sortedRuns = sortByFavorite(result.liveRuns, favoriteSlugsSet, result.mcidToSlug);
       return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: result.mcidToUuid, mcidToSkinUrl: result.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
     }
 
@@ -251,7 +277,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         time: Math.floor(p.date.getTime() / 1000),
       }));
 
-      const sortedPaces = sortByFavorite(pacesWithTime, favoritesSet);
+      const sortedPaces = sortByFavorite(pacesWithTime, favoriteSlugsSet, userData.mcidToSlug);
       return jsonResponse(
         {
           recentPaces: sortedPaces,
@@ -277,7 +303,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
       const cached = await getCached<TwitchCache>(cacheKey);
       if (cached) {
-        const sortedStreams = sortByFavorite(cached.liveStreams, favoritesSet);
+        const sortedStreams = sortByFavorite(cached.liveStreams, favoriteSlugsSet);
         return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.TWITCH);
       }
 
@@ -314,7 +340,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       const result: TwitchCache = { liveStreams };
       await setCached(cacheKey, result, CACHE_TTL.TWITCH);
 
-      const sortedStreams = sortByFavorite(liveStreams, favoritesSet);
+      const sortedStreams = sortByFavorite(liveStreams, favoriteSlugsSet);
       return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.TWITCH);
     }
 
@@ -323,7 +349,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       const cachedVideos = await getCachedVideos();
 
       if (cachedVideos && cachedVideos.length > 0) {
-        const sortedVideos = sortByFavorite(cachedVideos, favoritesSet);
+        const sortedVideos = sortByFavorite(cachedVideos, favoriteSlugsSet);
         return jsonResponse({ recentVideos: sortedVideos }, CDN_CACHE.YOUTUBE);
       }
 

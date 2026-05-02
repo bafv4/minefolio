@@ -183,7 +183,6 @@ import {
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
-import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
 import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
@@ -500,11 +499,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     ? JSON.parse(player.hiddenSpeedrunRecords)
     : [];
 
-  // お気に入り状態を確認（slugベースに変更）
-  const cookieHeader = request.headers.get("Cookie");
-  const favorites = getFavoritesFromCookie(cookieHeader);
-  const isFavorited = isFavorite(favorites, player.slug);
-
   // PaceManの統計情報を取得（MCIDがある場合のみ）
   let pacemanStats = null;
   if (player.mcid) {
@@ -536,7 +530,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     },
     isOwner,
     hiddenSpeedrunRecords,
-    isFavorited,
     pacemanStats,
     presets: presets.map((p) => ({
       id: p.id,
@@ -552,7 +545,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const navigation = useNavigation();
@@ -929,7 +922,7 @@ export default function PlayerProfilePage() {
                         </Link>
                       </Button>
                     )}
-                    {player.mcid && <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />}
+                    <FavoriteButton slug={player.slug} />
                     <ShareButton
                       title={`${player.displayName ?? player.mcid ?? player.slug} - Minefolio`}
                       description={player.shortBio ?? undefined}

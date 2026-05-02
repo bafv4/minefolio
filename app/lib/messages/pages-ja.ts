@@ -95,7 +95,7 @@ export const PAGES_JA = {
     cookieRequired: "お気に入り機能を使用するにはCookieの承諾が必要です。",
     enableCookie: "Cookieを有効にする",
     emptyTitle: "お気に入りがありません",
-    cookieNotice: "お気に入りはブラウザのCookieに保存されます。別のブラウザやデバイスでは表示されません。",
+    cookieNotice: "お気に入りはブラウザに保存されます。別のブラウザやデバイスでは表示されません。",
   },
   live: {
     title: "ライブ",
@@ -1031,7 +1031,7 @@ export const PAGES_JA = {
   },
   meGuides: {
     title: "ガイド - Minefolio",
-    pageTitle: "自分流ガイド",
+    pageTitle: "ガイド",
     pageDesc: "攻略法や設定のガイドを作成・公開できます",
     newGuide: "新規作成",
     noGuides: "ガイドがまだありません。最初のガイドを作成してみましょう。",

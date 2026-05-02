@@ -71,7 +71,8 @@
       "Bash(grep -iE \"error TS|app[\\\\\\\\/]\")",
       "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/index.tsx app/routes/my-guides/index.tsx)",
       "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/new.tsx app/routes/my-guides/new.tsx)",
-      "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/edit.tsx app/routes/my-guides/edit.tsx)"
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/edit.tsx app/routes/my-guides/edit.tsx)",
+      "Bash(git mv *)"
     ]
   }
 }

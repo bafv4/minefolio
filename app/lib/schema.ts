@@ -645,10 +645,10 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  favoriteMcid: text("favorite_mcid").notNull(),
+  favoriteSlug: text("favorite_slug").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  uniqueIndex("idx_favorites_user_mcid").on(table.userId, table.favoriteMcid),
+  uniqueIndex("idx_favorites_user_slug").on(table.userId, table.favoriteSlug),
   index("idx_favorites_user_id").on(table.userId),
 ]);
 
