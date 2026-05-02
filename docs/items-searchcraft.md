@@ -137,6 +137,17 @@ import {
 
 - アイテム配置: セグメントごとにホットバー9スロット + オフハンドのアイテムアイコンを表示
 - サーチクラフト: シーケンス順にアイテムアイコン、サーチ文字列、押すキーを表示
+- 複数プリセットがある場合はプリセット切替ドロップダウンが表示される
+
+---
+
+## 編集ページとプリセットの同期
+
+`/me/items` および `/me/search-craft` の編集ページは v1.4.0 で次のように変更された：
+
+- 上部に **PresetSelector** ドロップダウンを表示（詳細は [`docs/presets.md`](presets.md) 参照）
+- `saveAll` 保存後に `syncActivePresetSnapshot(db, userId, ["itemLayouts"])` または `["searchCrafts"]` が呼ばれ、アクティブプリセットの該当 `*Data` JSON が最新化される（書き込みスルー）
+- 保存リクエストにロード時の `presetId` を含め、別タブ等で切替済みなら `mePresets.staleSession` で拒否
 
 ---
 

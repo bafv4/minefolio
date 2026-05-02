@@ -74,7 +74,10 @@
       "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/edit.tsx app/routes/my-guides/edit.tsx)",
       "Bash(git mv *)",
       "Bash(pnpm install *)",
-      "Bash(git -C c:/Users/yuanq/dev/minefolio mv docs/changelog/changelog.md app/content/changelog.md)"
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv docs/changelog/changelog.md app/content/changelog.md)",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\yuanq\\\\dev\\\\minefolio\\\\docs\" -Filter \"*.md\")",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio log --oneline 8685eb4..HEAD)"
     ]
   }
 }

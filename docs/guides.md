@@ -150,6 +150,18 @@
 
 ---
 
+## /developers ページとの関係
+
+v1.4.0 で新設された [`/developers`](developers.md) ページが、API ドキュメント・更新履歴・データエクスポートを掲載するハブとなっている。フッターの `Developers` リンクからアクセス可能。
+
+- 公開 API の仕様は `app/content/api.md`（`/developers/api` でレンダリング）
+- ユーザー向け更新履歴は `app/content/changelog.md`（`/developers/changelog` でレンダリング）
+- ガイド機能の API（`/api/guides/search`）も `app/content/api.md` に掲載されている
+
+詳細は [`docs/developers.md`](developers.md) 参照。
+
+---
+
 ## 関連ファイル
 
 ### 公開ページ
