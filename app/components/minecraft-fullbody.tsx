@@ -47,6 +47,10 @@ interface MinecraftFullBodyProps {
   asImage?: boolean;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
+  /** ユーザーによる回転・拡大縮小・移動操作を有効化（asImageは強制無効化される） */
+  interactive?: boolean;
+  /** インタラクティブモード時にヒントボタン（？）を表示するかどうか。クリックでヒント表示をトグル。 */
+  showInteractiveHint?: boolean;
 }
 
 const POSE_ROTATIONS: Record<
@@ -124,6 +128,8 @@ const MinecraftFullBodyComponent = ({
   rotate = false,
   asImage = false,
   slim = false,
+  interactive = false,
+  showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
   // キャッシュキー用の識別子（uuidまたはskinUrl）
   const skinIdentifier = skinUrl || uuid || STEVE_UUID;
@@ -131,13 +137,17 @@ const MinecraftFullBodyComponent = ({
   const viewerRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [hintVisible, setHintVisible] = useState(false);
+
+  // interactive モードでは静止画化を強制無効化（操作不能なため）
+  const effectiveAsImage = interactive ? false : asImage;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     // asImageモードの場合、キャッシュをチェック
-    if (asImage) {
+    if (effectiveAsImage) {
       const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = imageCache.get(cacheKey);
       if (cachedImage) {
@@ -224,15 +234,31 @@ const MinecraftFullBodyComponent = ({
         }
 
         // Enable auto-rotate if requested (only when not rendering as image)
-        if (rotate && !asImage) {
+        if (rotate && !effectiveAsImage) {
           viewer.autoRotate = true;
           viewer.autoRotateSpeed = 1;
+        }
+
+        // インタラクティブ操作（ズーム・回転・移動）を有効化
+        if (interactive && viewer.controls) {
+          viewer.controls.enableZoom = true;
+          viewer.controls.enableRotate = true;
+          viewer.controls.enablePan = true;
+          // 右クリックでなく左クリックでもパンできるよう screenSpacePanning を有効化
+          viewer.controls.screenSpacePanning = true;
+          // ズーム範囲を制限（過度に近づきすぎ・遠ざかりすぎ防止）
+          viewer.controls.minDistance = 20;
+          viewer.controls.maxDistance = 200;
+          // 初期状態を保存しておく（リセット用）
+          if (typeof viewer.controls.saveState === "function") {
+            viewer.controls.saveState();
+          }
         }
 
         viewer.render();
 
         // 静止画像として出力する場合
-        if (asImage) {
+        if (effectiveAsImage) {
           // レンダリングが完了するのを少し待つ
           await new Promise((resolve) => setTimeout(resolve, 100));
           viewer.render();
@@ -266,7 +292,17 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-  }, [uuid, skinUrl, skinIdentifier, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage, slim]);
+  }, [uuid, skinUrl, skinIdentifier, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim, interactive]);
+
+  // インタラクティブモード時のリセット処理
+  const handleReset = () => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (viewer.controls && typeof viewer.controls.reset === "function") {
+      viewer.controls.reset();
+      viewer.render();
+    }
+  };
 
   // スケルトン表示（ローディング中）
   const skeleton = (
@@ -301,7 +337,7 @@ const MinecraftFullBodyComponent = ({
   );
 
   // 静止画像モードの場合
-  if (asImage && imageSrc) {
+  if (effectiveAsImage && imageSrc) {
     return (
       <img
         src={imageSrc}
@@ -319,7 +355,7 @@ const MinecraftFullBodyComponent = ({
   }
 
   // asImageモードでローディング中はスケルトン + 非表示canvas
-  if (asImage && isLoading) {
+  if (effectiveAsImage && isLoading) {
     return (
       <div className={className} style={{ position: "relative", width, height }}>
         {skeleton}
@@ -346,10 +382,78 @@ const MinecraftFullBodyComponent = ({
           height,
           opacity: isLoading ? 0 : 1,
           transition: "opacity 0.2s",
+          touchAction: interactive ? "none" : undefined,
+          cursor: interactive ? "grab" : undefined,
         }}
         aria-label={mcid ? `${mcid}'s Minecraft avatar` : "Minecraft avatar"}
       />
       {isLoading && skeleton}
+
+      {/* インタラクティブモード時のコントロール（リセット・ヒント） */}
+      {interactive && !isLoading && (
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          {showInteractiveHint && (
+            <button
+              type="button"
+              onClick={() => setHintVisible((v) => !v)}
+              aria-label={hintVisible ? "操作ヒントを閉じる" : "操作ヒントを表示"}
+              aria-pressed={hintVisible}
+              title={hintVisible ? "操作ヒントを閉じる" : "操作ヒントを表示"}
+              className={
+                "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm " +
+                (hintVisible
+                  ? "bg-primary text-primary-foreground border-primary/40"
+                  : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground")
+              }
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-3.5 h-3.5"
+                aria-hidden
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <path d="M12 17h.01" />
+              </svg>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            aria-label="表示をリセット"
+            title="表示をリセット"
+            className="flex items-center justify-center w-7 h-7 rounded-full bg-background/70 hover:bg-background border text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-3.5 h-3.5"
+              aria-hidden
+            >
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 4v5h5" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* インタラクティブモード時のヒント（ヒントボタンで表示制御） */}
+      {interactive && showInteractiveHint && hintVisible && !isLoading && (
+        <div className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] leading-tight text-center text-muted-foreground bg-background/85 backdrop-blur-sm rounded px-1.5 py-0.5 pointer-events-none">
+          ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮
+        </div>
+      )}
     </div>
   );
 };

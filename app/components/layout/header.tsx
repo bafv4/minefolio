@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, GitCompare, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,6 @@ const navigation = [
   { name: "探す", href: "/browse", icon: Search },
   { name: "操作設定", href: "/keybindings", icon: Keyboard },
   { name: "ランキング", href: "/rankings", icon: Trophy },
-  { name: "比較", href: "/compare", icon: GitCompare },
   { name: "ガイド", href: "/guides", icon: BookOpen },
 ];
 

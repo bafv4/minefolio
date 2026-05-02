@@ -175,7 +175,7 @@ import {
   GitCompare,
   Save,
   User,
-  Menu,
+  ChevronsDown,
   X,
   Loader2,
   BookOpen,
@@ -612,6 +612,21 @@ export default function PlayerProfilePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
 
+  // スキン3Dビューワのサイズ（モバイルでは大きめに）
+  const [skinViewSize, setSkinViewSize] = useState({ width: 240, height: 280 });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => {
+      setSkinViewSize(
+        mq.matches ? { width: 320, height: 380 } : { width: 240, height: 280 },
+      );
+    };
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
     { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
@@ -676,7 +691,7 @@ export default function PlayerProfilePage() {
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
           </div>
         </div>
-        {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
       </Button>
 
       {/* Mobile Menu Dropdown */}
@@ -843,19 +858,20 @@ export default function PlayerProfilePage() {
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (
                   <div className="flex justify-center sm:justify-start shrink-0">
-                    <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
+                    <Suspense fallback={<SkinSkeleton width={skinViewSize.width} height={skinViewSize.height} />}>
                       <MinecraftFullBody
                         uuid={player.uuid}
                         skinUrl={player.customSkinUrl ?? undefined}
                         mcid={player.mcid ?? undefined}
-                        width={120}
-                        height={180}
+                        width={skinViewSize.width}
+                        height={skinViewSize.height}
                         pose={(player.profilePose as PoseName) ?? "waving"}
                         slim={player.customSkinModel === "slim" || player.slimSkin || false}
                         angle={-35}
                         elevation={5}
                         zoom={0.9}
-                        asImage
+                        interactive
+                        showInteractiveHint
                       />
                     </Suspense>
                   </div>
