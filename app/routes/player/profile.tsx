@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation } from "react-router";
 import { lazy, Suspense, useState, useEffect } from "react";
 import {
   ViewToggle,
@@ -330,6 +330,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       fingerAssignmentsData: true,
       itemLayoutsData: true,
       searchCraftsData: true,
+      customKeysData: true,
     },
   });
 
@@ -340,6 +341,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   let displayKeyRemaps = player.keyRemaps;
   let displayItemLayouts = player.itemLayouts;
   let displaySearchCrafts = player.searchCrafts;
+  let displayCustomKeys = player.customKeys;
 
   if (presetId && presets.length > 0) {
     const selectedPreset = presets.find((p) => p.id === presetId);
@@ -441,6 +443,30 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           updatedAt: new Date(),
         }));
       }
+
+      // プリセットのカスタムキー定義を適用
+      if (selectedPreset.customKeysData) {
+        const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
+          keyCode: string;
+          keyName: string;
+          category: "mouse" | "keyboard" | "controller";
+          position: string | null;
+          size: string | null;
+          notes: string | null;
+        }>;
+        displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
+          id: `preset-customkey-${idx}`,
+          userId: player.id,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category,
+          position: ck.position,
+          size: ck.size,
+          notes: ck.notes,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
     }
   }
 
@@ -506,6 +532,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       keyRemaps: displayKeyRemaps,
       itemLayouts: displayItemLayouts,
       searchCrafts: displaySearchCrafts,
+      customKeys: displayCustomKeys,
     },
     isOwner,
     hiddenSpeedrunRecords,
@@ -526,18 +553,29 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 
 export default function PlayerProfilePage() {
   const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const revalidator = useRevalidator();
+  const navigation = useNavigation();
+
+  // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
+  const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
 
   // プリセット選択ハンドラー
   const handlePresetChange = (presetId: string) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (presetId === "current") {
-      newParams.delete("preset");
-    } else {
-      newParams.set("preset", presetId);
-    }
-    navigate(`?${newParams.toString()}`, { preventScrollReset: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (presetId === "current") {
+          next.delete("preset");
+        } else {
+          next.set("preset", presetId);
+        }
+        return next;
+      },
+      { preventScrollReset: true, replace: true },
+    );
+    // 明示的に loader を再実行（クエリ変更だけでは再検証されないケースの保険）
+    revalidator.revalidate();
   };
 
   // 廃止されたアクションを除外
@@ -761,7 +799,21 @@ export default function PlayerProfilePage() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-6">
+      <div className="flex-1 min-w-0 space-y-6 relative">
+        {/* プリセット切替中のオーバーレイ（メインコンテンツ全体を覆う） */}
+        {isSwitchingPreset && (
+          <div
+            className="absolute inset-0 z-30 flex items-start justify-center rounded-lg bg-background/70 backdrop-blur-sm"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="sticky top-32 mt-8 flex items-center gap-3 rounded-full border bg-card px-4 py-2 shadow-md">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">{t("playerProfile.presetLoading")}</span>
+            </div>
+          </div>
+        )}
+
         {/* Mobile Preset Selector */}
         {showPresetSelector && (
           <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">

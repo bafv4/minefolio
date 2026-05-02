@@ -66,7 +66,9 @@
       "Bash(npx react-router:*)",
       "Bash(pnpm db:generate)",
       "Bash(pnpm db:migrate)",
-      "Bash(npx dotenv:*)"
+      "Bash(npx dotenv:*)",
+      "Bash(DEBUG=* npx drizzle-kit migrate)",
+      "Bash(grep -iE \"error TS|app[\\\\\\\\/]\")"
     ]
   }
 }

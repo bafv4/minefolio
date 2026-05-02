@@ -46,15 +46,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { t } from "@/lib/messages";
 import { GAME_LANGUAGE_OPTIONS } from "@/lib/game-languages";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { configHistory } from "@/lib/schema";
+import { createId } from "@paralleldrive/cuid2";
+import { PresetSelector } from "@/components/preset-selector";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meDevices.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
+  }
+  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
+  if (formAction === "/me/presets") {
+    return true;
   }
   return false;
 }
@@ -169,6 +177,16 @@ export async function action({ context, request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  const presetId = (formData.get("presetId") as string | null) || null;
+
+  try {
+    await assertPresetIsActive(db, user.id, presetId);
+  } catch (e) {
+    if (e instanceof PresetMismatchError) {
+      return { error: t("mePresets.staleSession") };
+    }
+    throw e;
+  }
 
   // 入力方法の更新
   const inputMethodValue = formData.get("inputMethod") as string | null;
@@ -239,6 +257,18 @@ export async function action({ context, request }: Route.ActionArgs) {
       .where(eq(playerConfigs.id, user.playerConfig.id));
   }
 
+  // アクティブプリセットスナップショット同期
+  await syncActivePresetSnapshot(db, user.id, ["playerConfig", "fingers"]);
+
+  // 変更履歴を記録
+  await db.insert(configHistory).values({
+    id: createId(),
+    userId: user.id,
+    changeType: "device",
+    changeDescription: t("meDevices.deviceChangeHistory"),
+    createdAt: new Date(),
+  });
+
   return { success: true };
 }
 
@@ -267,36 +297,47 @@ export default function DevicesPage() {
   const data = fetcher.data;
 
   // コントローラー設定の初期値
-  const initialControllerSettings = parseControllerSettings(config?.controllerSettings);
+  // loaderデータからフォーム値を構築するヘルパー
+  const buildFormValues = useCallback(() => {
+    const ics = parseControllerSettings(config?.controllerSettings);
+    return {
+      inputMethod: inputMethod ?? "",
+      keyboardLayout: config?.keyboardLayout ?? "",
+      keyboardModel: config?.keyboardModel ?? "",
+      mouseModel: config?.mouseModel ?? "",
+      mouseDpi: config?.mouseDpi?.toString() ?? "",
+      gameSensitivity: config?.gameSensitivity?.toString() ?? "",
+      gameSensitivityPercent: config?.gameSensitivity != null ? Math.round(config.gameSensitivity * 200).toString() : "",
+      windowsSpeed: config?.windowsSpeed?.toString() ?? "",
+      windowsSpeedMultiplier: config?.windowsSpeedMultiplier?.toString() ?? "",
+      toggleSprint: config?.toggleSprint ?? false,
+      toggleSneak: config?.toggleSneak ?? false,
+      autoJump: config?.autoJump ?? false,
+      rawInput: config?.rawInput ?? true,
+      mouseAcceleration: config?.mouseAcceleration ?? false,
+      gameLanguage: config?.gameLanguage ?? "",
+      fov: config?.fov?.toString() ?? "",
+      guiScale: config?.guiScale?.toString() ?? "",
+      notes: config?.notes ?? "",
+      // コントローラー設定
+      controllerModel: ics.controllerModel ?? "",
+      lookSensitivity: ics.lookSensitivity?.toString() ?? "50",
+      invertYAxis: ics.invertYAxis ?? false,
+      vibration: ics.vibration ?? true,
+    };
+  }, [config, inputMethod]);
 
   // フォームの値をトラッキング
-  const [formValues, setFormValues] = useState({
-    inputMethod: inputMethod ?? "",
-    keyboardLayout: config?.keyboardLayout ?? "",
-    keyboardModel: config?.keyboardModel ?? "",
-    mouseModel: config?.mouseModel ?? "",
-    mouseDpi: config?.mouseDpi?.toString() ?? "",
-    gameSensitivity: config?.gameSensitivity?.toString() ?? "",
-    gameSensitivityPercent: config?.gameSensitivity != null ? Math.round(config.gameSensitivity * 200).toString() : "",
-    windowsSpeed: config?.windowsSpeed?.toString() ?? "",
-    windowsSpeedMultiplier: config?.windowsSpeedMultiplier?.toString() ?? "",
-    toggleSprint: config?.toggleSprint ?? false,
-    toggleSneak: config?.toggleSneak ?? false,
-    autoJump: config?.autoJump ?? false,
-    rawInput: config?.rawInput ?? true,
-    mouseAcceleration: config?.mouseAcceleration ?? false,
-    gameLanguage: config?.gameLanguage ?? "",
-    fov: config?.fov?.toString() ?? "",
-    guiScale: config?.guiScale?.toString() ?? "",
-    notes: config?.notes ?? "",
-    // コントローラー設定
-    controllerModel: initialControllerSettings.controllerModel ?? "",
-    lookSensitivity: initialControllerSettings.lookSensitivity?.toString() ?? "50",
-    invertYAxis: initialControllerSettings.invertYAxis ?? false,
-    vibration: initialControllerSettings.vibration ?? true,
-  });
+  const [formValues, setFormValues] = useState(buildFormValues);
 
-  const initialFormValues = useRef({ ...formValues });
+  const initialFormValues = useRef(formValues);
+
+  // loaderデータが変わったらフォーム値と基準値を再同期（プリセット切替時など）
+  useEffect(() => {
+    const next = buildFormValues();
+    setFormValues(next);
+    initialFormValues.current = next;
+  }, [buildFormValues]);
 
   // コピー元プリセット選択ダイアログ
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
@@ -338,6 +379,9 @@ export default function DevicesPage() {
   // 保存処理
   const handleSave = useCallback(() => {
     const formData = new FormData();
+    if (activePreset) {
+      formData.set("presetId", activePreset.id);
+    }
     formData.set("inputMethod", formValues.inputMethod);
     formData.set("keyboardLayout", formValues.keyboardLayout);
     formData.set("keyboardModel", formValues.keyboardModel);
@@ -363,7 +407,7 @@ export default function DevicesPage() {
       vibration: formValues.vibration,
     }));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues]);
+  }, [fetcher, formValues, activePreset]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -443,43 +487,13 @@ export default function DevicesPage() {
         <p className="text-sm text-muted-foreground">{t("meDevices.pageDescription")}</p>
       </div>
 
-      {/* プリセット警告・情報 */}
-      {!hasPresets && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">{t("meDevices.noPresetWarning")}</span>
-            <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">{t("meDevices.createPreset")}</Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-      {activePreset && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">{t("meDevices.editingPreset")} <strong>{activePreset.name}</strong></span>
-            <div className="flex gap-2 shrink-0">
-              {presets.length > 1 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={() => setCopyDialogOpen(true)}
-                >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t("meDevices.copyFromOtherPreset")}</span>
-                  <span className="sm:hidden">{t("meDevices.copyShort")}</span>
-                </Button>
-              )}
-              <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("meDevices.managePresets")}</Button>
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* プリセットセレクター */}
+      <PresetSelector
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        activePresetId={activePreset?.id ?? null}
+        hasChanges={hasChanges}
+        onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
+      />
 
       {/* 入力方法セレクター */}
       <Card>

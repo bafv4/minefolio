@@ -542,6 +542,8 @@ export const configPresets = sqliteTable("config_presets", {
   fingerAssignmentsData: text("finger_assignments_data"), // JSON: 指割り当て
   itemLayoutsData: text("item_layouts_data"), // JSON: アイテム配置のスナップショット
   searchCraftsData: text("search_crafts_data"), // JSON: サーチクラフトのスナップショット
+  customKeysData: text("custom_keys_data"), // JSON: カスタムキー定義のスナップショット
+  customActionsData: text("custom_actions_data"), // JSON: カスタムアクションのスナップショット
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

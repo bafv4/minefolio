@@ -4,7 +4,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, keyRemaps, playerConfigs, configPresets } from "@/lib/schema";
+import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
 import { eq, desc } from "drizzle-orm";
 import { ImportDialog } from "@/components/import-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, Keyboard, Settings, Info } from "lucide-react";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import type { ParsedRemap } from "@/lib/import-parser";
-import { createPresetFromImport } from "@/lib/preset-utils";
+import { createPresetFromImport, syncActivePresetSnapshot } from "@/lib/preset-utils";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = () => {
@@ -126,6 +126,18 @@ export async function action({ context, request }: Route.ActionArgs) {
     const updatedKeyRemaps = await db.query.keyRemaps.findMany({
       where: eq(keyRemaps.userId, user.id),
     });
+    const updatedItemLayouts = await db.query.itemLayouts.findMany({
+      where: eq(itemLayouts.userId, user.id),
+    });
+    const updatedSearchCrafts = await db.query.searchCrafts.findMany({
+      where: eq(searchCrafts.userId, user.id),
+    });
+    const updatedCustomKeys = await db.query.customKeys.findMany({
+      where: eq(customKeys.userId, user.id),
+    });
+    const updatedCustomActions = await db.query.customActions.findMany({
+      where: eq(customActions.userId, user.id),
+    });
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
     const existingPresets = await db.query.configPresets.findMany({
@@ -138,8 +150,24 @@ export async function action({ context, request }: Route.ActionArgs) {
         user.id,
         updatedKeybindings,
         updatedPlayerConfig ?? null,
-        updatedKeyRemaps
+        updatedKeyRemaps,
+        updatedItemLayouts,
+        updatedSearchCrafts,
+        updatedCustomKeys,
+        updatedCustomActions,
       );
+    } else {
+      // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
+      await syncActivePresetSnapshot(db, user.id, [
+        "keybindings",
+        "playerConfig",
+        "remaps",
+        "fingers",
+        "itemLayouts",
+        "searchCrafts",
+        "customKeys",
+        "customActions",
+      ]);
     }
 
     return { success: true, type: "remaps", count: remaps.length, presetCreated: existingPresets.length === 0 };
@@ -244,6 +272,18 @@ export async function action({ context, request }: Route.ActionArgs) {
     const updatedKeyRemaps = await db.query.keyRemaps.findMany({
       where: eq(keyRemaps.userId, user.id),
     });
+    const updatedItemLayouts = await db.query.itemLayouts.findMany({
+      where: eq(itemLayouts.userId, user.id),
+    });
+    const updatedSearchCrafts = await db.query.searchCrafts.findMany({
+      where: eq(searchCrafts.userId, user.id),
+    });
+    const updatedCustomKeys = await db.query.customKeys.findMany({
+      where: eq(customKeys.userId, user.id),
+    });
+    const updatedCustomActions = await db.query.customActions.findMany({
+      where: eq(customActions.userId, user.id),
+    });
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
     const existingPresets = await db.query.configPresets.findMany({
@@ -256,8 +296,24 @@ export async function action({ context, request }: Route.ActionArgs) {
         user.id,
         updatedKeybindings,
         updatedPlayerConfig ?? null,
-        updatedKeyRemaps
+        updatedKeyRemaps,
+        updatedItemLayouts,
+        updatedSearchCrafts,
+        updatedCustomKeys,
+        updatedCustomActions,
       );
+    } else {
+      // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
+      await syncActivePresetSnapshot(db, user.id, [
+        "keybindings",
+        "playerConfig",
+        "remaps",
+        "fingers",
+        "itemLayouts",
+        "searchCrafts",
+        "customKeys",
+        "customActions",
+      ]);
     }
 
     return {

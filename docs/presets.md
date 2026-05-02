@@ -23,6 +23,8 @@
 | `fingerAssignmentsData` | text (JSON) | 指割り当て |
 | `itemLayoutsData` | text (JSON) | アイテム配置のスナップショット |
 | `searchCraftsData` | text (JSON) | サーチクラフトのスナップショット |
+| `customKeysData` | text (JSON) | カスタムキー定義のスナップショット |
+| `customActionsData` | text (JSON) | カスタムアクションのスナップショット |
 | `createdAt` | timestamp | 作成日時 |
 | `updatedAt` | timestamp | 更新日時 |
 
@@ -58,14 +60,23 @@
   mouseModel?: string | null;
   windowsSpeed?: number | null;
   windowsSpeedMultiplier?: number | null;
+  cm360?: number | null;
   notes?: string | null;
+  controllerSettings?: string | null; // JSON文字列
 }
 ```
 
 #### PresetRemapData
 
 ```typescript
-{ sourceKey: string; targetKey: string | null; software: string | null; notes: string | null; }
+{
+  sourceKey: string;
+  targetKey: string | null;
+  software: string | null;
+  notes: string | null;
+  outputMode?: "key" | "character" | null;
+  outputCharacter?: string | null;
+}
 ```
 
 #### PresetItemLayoutData
@@ -77,14 +88,46 @@
 #### PresetSearchCraftData
 
 ```typescript
-{ sequence: number; items: string; keys: string; searchStr: string | null; comment: string | null; }
+{
+  sequence: number;
+  items: string;
+  keys: string;
+  searchStr: string | null;
+  comment: string | null;
+  timing?: "bastion" | "fortress" | "other" | null;
+}
+```
+
+#### PresetCustomKeyData
+
+```typescript
+{
+  keyCode: string;
+  keyName: string;
+  category: "mouse" | "keyboard" | "controller";
+  position: string | null;
+  size: string | null;
+  notes: string | null;
+}
+```
+
+#### PresetCustomActionData
+
+```typescript
+{
+  actionName: string;
+  description: string | null;
+  category: "other" | "macro" | "tool";
+  triggerKey: string;
+  displayOrder: number;
+}
 ```
 
 ### isActive フラグの管理
 
 - ユーザーごとに最大1つのプリセットが `isActive = true`
-- プリセット切替時: 既存のアクティブプリセットを `false` にしてから新しいプリセットを `true` に設定
-- アクティブプリセットが存在する場合、プロフィール表示時にそのプリセットのデータを優先表示
+- プリセット切替時: `apply-preset` がトランザクション内で **ライブテーブルを全削除→プリセットスナップショットから完全復元** し、既存のアクティブプリセットを `false` にしてから新しいプリセットを `true` に設定する。
+- アクティブプリセット = 「現在編集中のプリセット = ライブテーブル」というモデル。`/me/keybindings` 等の編集ページの保存時には `syncActivePresetSnapshot` がアクティブプリセットの該当 `*Data` を最新化する（書き込みスルー）。
 
 ### シリアライズ関数
 
@@ -97,7 +140,11 @@
 | `serializeRemaps(remaps)` | `KeyRemap[]` → `PresetRemapData[]` のJSON文字列 |
 | `serializeItemLayouts(layouts)` | `ItemLayout[]` → `PresetItemLayoutData[]` のJSON文字列 |
 | `serializeSearchCrafts(crafts)` | `SearchCraft[]` → `PresetSearchCraftData[]` のJSON文字列 |
+| `serializeCustomKeys(keys)` | `CustomKey[]` → `PresetCustomKeyData[]` のJSON文字列 |
+| `serializeCustomActions(actions)` | `CustomAction[]` → `PresetCustomActionData[]` のJSON文字列 |
 | `createPreset(db, options)` | プリセットをDBに作成 |
+| `syncActivePresetSnapshot(db, userId, kinds)` | ライブテーブルの内容をアクティブプリセットの `*Data` に反映 |
+| `assertPresetIsActive(db, userId, presetId)` | フォーム送信時の `presetId` がアクティブプリセットと一致するか検証（不一致なら `PresetMismatchError`） |
 
 ---
 
@@ -156,15 +203,32 @@
 
 `app/routes/player/profile.tsx` でプロフィールを表示する際:
 
-1. ユーザーのアクティブプリセット（`isActive = true`）を検索
-2. アクティブプリセットが存在する場合、プリセット内のJSON データ（`keybindingsData`, `playerConfigData` 等）をデシリアライズして表示に使用
-3. アクティブプリセットが存在しない場合、通常のDBデータをそのまま表示
+1. デフォルト表示はライブテーブル（`keybindings`, `playerConfigs`, `keyRemaps`, `itemLayouts`, `searchCrafts`, `customKeys`）の内容をそのまま使用する。
+2. URLクエリ `?presetId=...` が指定された場合は、そのプリセットのスナップショットJSONをデシリアライズして上書き表示する（過去プリセットの参照用）。
+3. アクティブプリセットのスナップショットは編集タブの保存時に都度同期されているため、ライブテーブルとほぼ常に同一内容を持つ。
+
+---
+
+## 編集ページとプリセットの同期
+
+`/me/keybindings` `/me/devices` `/me/items` `/me/search-craft` の各タブには、上部に **PresetSelector**（`app/components/preset-selector.tsx`）が表示され、以下の動作をする:
+
+- 現在のアクティブプリセットを選択中として表示
+- ドロップダウンで他プリセットへ切替可能（`apply-preset` を呼ぶ）
+- 未保存の変更がある間はドロップダウンが非活性化（`hasChanges` フラグで制御）。Tooltipで理由を表示。
+- 各タブの選択状態は `isActive = true` のサーバー状態で同期される
+
+各保存ハンドラはフォームに `presetId`（ロード時のアクティブID）を含めて送信し、サーバー側 `assertPresetIsActive` で現在のアクティブと突き合わせる。不一致（別タブで切替済みなど）の場合は `mePresets.staleSession` エラーを返す。
+
+保存成功後、サーバーは `syncActivePresetSnapshot` でアクティブプリセットの該当 `*Data` を更新する。
 
 ---
 
 ## 関連ファイル
 
 - `app/routes/me/presets.tsx` - プリセット管理画面（CRUD操作）
-- `app/lib/preset-utils.ts` - プリセットのシリアライズ/作成ユーティリティ
+- `app/routes/me/keybindings.tsx` / `devices.tsx` / `items.tsx` / `search-craft.tsx` - 編集ページ（PresetSelectorと保存→同期の呼び出し）
+- `app/components/preset-selector.tsx` - 編集中プリセットの表示・切替コンポーネント
+- `app/lib/preset-utils.ts` - プリセットのシリアライズ／同期／競合検証ユーティリティ
 - `app/lib/schema.ts` - `configPresets`, `configHistory` テーブル定義
 - `app/routes/player/profile.tsx` - プロフィール表示時のプリセット適用ロジック

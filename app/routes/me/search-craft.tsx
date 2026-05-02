@@ -84,15 +84,22 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { t } from "@/lib/messages";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { configHistory } from "@/lib/schema";
+import { PresetSelector } from "@/components/preset-selector";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meSearchCraft.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
+  }
+  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
+  if (formAction === "/me/presets") {
+    return true;
   }
   return false;
 }
@@ -236,6 +243,16 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const actionType = formData.get("_action") as string;
+  const presetId = (formData.get("presetId") as string | null) || null;
+
+  try {
+    await assertPresetIsActive(db, user.id, presetId);
+  } catch (e) {
+    if (e instanceof PresetMismatchError) {
+      return { error: t("mePresets.staleSession") };
+    }
+    throw e;
+  }
 
   if (actionType === "saveAll") {
     const craftsJson = formData.get("crafts") as string;
@@ -243,26 +260,40 @@ export async function action({ context, request }: Route.ActionArgs) {
     try {
       const crafts = JSON.parse(craftsJson) as SearchCraftItem[];
 
-      // 既存のサーチクラフトを全削除
-      await db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
-
-      // 新しいサーチクラフトを挿入
       const now = new Date();
-      for (let i = 0; i < crafts.length; i++) {
-        const craft = crafts[i];
-        await db.insert(searchCrafts).values({
-          id: craft.id.startsWith("new-") ? createId() : craft.id,
-          userId: user.id,
-          sequence: i + 1,
-          items: JSON.stringify(craft.items),
-          keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
-          searchStr: craft.searchStr || null,
-          comment: craft.comment || null,
-          timing: craft.timing || null,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+      await db.transaction(async (tx) => {
+        // 既存のサーチクラフトを全削除
+        await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+
+        // 新しいサーチクラフトを挿入
+        for (let i = 0; i < crafts.length; i++) {
+          const craft = crafts[i];
+          await tx.insert(searchCrafts).values({
+            id: craft.id.startsWith("new-") ? createId() : craft.id,
+            userId: user.id,
+            sequence: i + 1,
+            items: JSON.stringify(craft.items),
+            keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
+            searchStr: craft.searchStr || null,
+            comment: craft.comment || null,
+            timing: craft.timing || null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      });
+
+      // アクティブプリセットスナップショット同期
+      await syncActivePresetSnapshot(db, user.id, ["searchCrafts"]);
+
+      // 変更履歴を記録
+      await db.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "game_setting",
+        changeDescription: t("meSearchCraft.searchCraftChangeHistory"),
+        createdAt: now,
+      });
 
       return { success: true };
     } catch (error) {
@@ -701,11 +732,14 @@ export default function SearchCraftPage() {
       return;
     }
 
-    fetcher.submit(
-      { _action: "saveAll", crafts: JSON.stringify(crafts) },
-      { method: "post" }
-    );
-  }, [crafts, fetcher]);
+    const formData = new FormData();
+    formData.set("_action", "saveAll");
+    formData.set("crafts", JSON.stringify(crafts));
+    if (activePreset) {
+      formData.set("presetId", activePreset.id);
+    }
+    fetcher.submit(formData, { method: "post" });
+  }, [crafts, fetcher, activePreset]);
 
   const handleReset = useCallback(() => {
     setCrafts(initialCrafts);
@@ -749,47 +783,13 @@ export default function SearchCraftPage() {
         </Button>
       </div>
 
-      {/* プリセット警告・情報 */}
-      {!hasPresets && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meSearchCraft.noPresetWarning")}
-            </span>
-            <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">{t("meSearchCraft.createPreset")}</Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-      {activePreset && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meSearchCraft.editingPreset")} <strong>{activePreset.name}</strong>
-            </span>
-            <div className="flex gap-2 shrink-0">
-              {presets.length > 1 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={() => setCopyDialogOpen(true)}
-                >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t("meSearchCraft.copyFromOtherPreset")}</span>
-                  <span className="sm:hidden">{t("meSearchCraft.copyShort")}</span>
-                </Button>
-              )}
-              <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("meSearchCraft.managePresets")}</Button>
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* プリセットセレクター */}
+      <PresetSelector
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        activePresetId={activePreset?.id ?? null}
+        hasChanges={hasChanges}
+        onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
+      />
 
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {crafts.length > 0 ? (
