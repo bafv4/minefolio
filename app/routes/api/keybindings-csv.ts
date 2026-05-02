@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { users, keybindings, keyRemaps, customActions } from "@/lib/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, and, inArray } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
 
@@ -48,11 +48,20 @@ function escapeCsv(v: string): string {
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const sections = url.searchParams.get("sections")?.split(",") ?? ["actions"];
+  // 個別指定: userSlugs=slug1,slug2 のように指定すると対象を絞り込む。未指定なら全公開ユーザー。
+  const userSlugsParam = url.searchParams.get("userSlugs");
+  const userSlugs = userSlugsParam
+    ? userSlugsParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : null;
 
   const db = createDb();
 
+  const whereCondition = userSlugs && userSlugs.length > 0
+    ? and(eq(users.profileVisibility, "public"), inArray(users.slug, userSlugs))
+    : eq(users.profileVisibility, "public");
+
   const allPlayers = await db.query.users.findMany({
-    where: eq(users.profileVisibility, "public"),
+    where: whereCondition,
     orderBy: [desc(users.createdAt)],
     columns: {
       id: true,
