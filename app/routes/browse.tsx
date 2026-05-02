@@ -1,5 +1,5 @@
 import { useLoaderData, useSearchParams, Form, useNavigation } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -29,7 +29,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
-import { getFavoritesFromCookie } from "@/lib/favorites";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
+import { getFavoritesFromDb } from "@/lib/favorites";
+import { excludeViewersCondition } from "@/lib/users-filter";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -64,6 +67,8 @@ type FilterPlatform = "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile"
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   const url = new URL(request.url);
   const searchQuery = url.searchParams.get("q") || "";
@@ -90,11 +95,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     );
   }
 
-  // フィルタ条件（複数選択対応：OR条件で組み合わせ）
+  // ロールフィルタ
   if (filterRoles.length > 0) {
+    // 明示的にロールを選んだ場合はそのロールのみ表示（viewer も含めて絞り込み可能）
     conditions.push(
       or(...filterRoles.map((role) => eq(users.role, role)))!
     );
+  } else {
+    // フィルタ未指定の場合、視聴者ロールはデフォルトで除外
+    conditions.push(excludeViewersCondition!);
   }
   if (filterEditions.length > 0) {
     conditions.push(
@@ -153,12 +162,20 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     offset: (page - 1) * ITEMS_PER_PAGE,
   });
 
-  // お気に入りを取得（slugベース）
-  const cookieHeader = request.headers.get("Cookie");
-  const favoriteSlugs = getFavoritesFromCookie(cookieHeader);
+  // ログイン中のみ DB から slug 一覧を取得して並べ替え用に使用
+  let favoriteSlugs: string[] = [];
+  if (session) {
+    const me = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    if (me) {
+      favoriteSlugs = await getFavoritesFromDb(db, me.id);
+    }
+  }
   const favoritesSet = new Set(favoriteSlugs);
 
-  // お気に入りを先頭に並べ替え
+  // お気に入りを先頭に並べ替え（ログイン中のみ初期SSRに反映）
   const sortedPlayers = playerList.sort((a, b) => {
     const aIsFavorite = favoritesSet.has(a.slug);
     const bIsFavorite = favoritesSet.has(b.slug);
@@ -174,7 +191,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     currentPage: page,
     totalPages,
     totalCount,
-    favoriteSlugs,
+    isLoggedIn: !!session,
     filters: {
       roles: filterRoles,
       editions: filterEditions,
@@ -233,7 +250,17 @@ export default function BrowsePage() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
-  // アクティブなフィルタ数
+  // ダイアログ内のドラフト状態（「完了」ボタンで適用）
+  const [draftFilters, setDraftFilters] = useState(filters);
+
+  // ダイアログを開くたびに現在の URL フィルタをドラフトに同期
+  useEffect(() => {
+    if (isFilterDialogOpen) {
+      setDraftFilters(filters);
+    }
+  }, [isFilterDialogOpen, filters]);
+
+  // アクティブなフィルタ数（適用済み）
   const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
 
   const handleSortChange = (value: string) => {
@@ -255,6 +282,7 @@ export default function BrowsePage() {
     setSearchParams(newParams);
   };
 
+  // 適用済みフィルタを直接URLから操作（フィルタチップの×ボタン用）
   const handleFilterChange = (key: string, value: string, checked: boolean) => {
     const newParams = new URLSearchParams(searchParams);
 
@@ -276,14 +304,37 @@ export default function BrowsePage() {
     setSearchParams(newParams);
   };
 
-  const clearAllFilters = () => {
+  // ドラフトフィルタの操作（ダイアログ内のチェックボックス用、URL は変更しない）
+  const handleDraftFilterChange = (key: keyof typeof draftFilters, value: string, checked: boolean) => {
+    setDraftFilters((prev) => {
+      const list = prev[key] as string[];
+      if (checked) {
+        if (list.includes(value)) return prev;
+        return { ...prev, [key]: [...list, value] };
+      }
+      return { ...prev, [key]: list.filter((v) => v !== value) };
+    });
+  };
+
+  // 「完了」: ドラフトを URL に反映
+  const applyDraftFilters = () => {
     const newParams = new URLSearchParams(searchParams);
     newParams.delete("role");
     newParams.delete("edition");
     newParams.delete("input");
     newParams.delete("platform");
+    draftFilters.roles.forEach((v) => newParams.append("role", v));
+    draftFilters.editions.forEach((v) => newParams.append("edition", v));
+    draftFilters.inputMethods.forEach((v) => newParams.append("input", v));
+    draftFilters.platforms.forEach((v) => newParams.append("platform", v));
     newParams.delete("page");
     setSearchParams(newParams);
+    setIsFilterDialogOpen(false);
+  };
+
+  // 「すべてクリア」: ドラフトをクリア（適用は完了ボタン）
+  const clearDraftFilters = () => {
+    setDraftFilters({ roles: [], editions: [], inputMethods: [], platforms: [] });
   };
 
   const goToPage = (page: number) => {
@@ -356,9 +407,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="role-runner"
-                          checked={filters.roles.includes("runner")}
+                          checked={draftFilters.roles.includes("runner")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("role", "runner", !!checked);
+                            handleDraftFilterChange("roles", "runner", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="role-runner" className="cursor-pointer">{t("browse.roleRunner")}</RadixLabel>
@@ -366,9 +417,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="role-viewer"
-                          checked={filters.roles.includes("viewer")}
+                          checked={draftFilters.roles.includes("viewer")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("role", "viewer", !!checked);
+                            handleDraftFilterChange("roles", "viewer", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="role-viewer" className="cursor-pointer">{t("browse.roleViewer")}</RadixLabel>
@@ -383,9 +434,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="edition-java"
-                          checked={filters.editions.includes("java")}
+                          checked={draftFilters.editions.includes("java")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("edition", "java", !!checked);
+                            handleDraftFilterChange("editions", "java", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="edition-java" className="cursor-pointer">Java Edition</RadixLabel>
@@ -393,9 +444,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="edition-bedrock"
-                          checked={filters.editions.includes("bedrock")}
+                          checked={draftFilters.editions.includes("bedrock")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("edition", "bedrock", !!checked);
+                            handleDraftFilterChange("editions", "bedrock", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="edition-bedrock" className="cursor-pointer">Bedrock Edition</RadixLabel>
@@ -410,9 +461,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-windows"
-                          checked={filters.platforms.includes("pc_windows")}
+                          checked={draftFilters.platforms.includes("pc_windows")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "pc_windows", !!checked);
+                            handleDraftFilterChange("platforms", "pc_windows", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-windows" className="cursor-pointer">Windows</RadixLabel>
@@ -420,9 +471,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-mac"
-                          checked={filters.platforms.includes("pc_mac")}
+                          checked={draftFilters.platforms.includes("pc_mac")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "pc_mac", !!checked);
+                            handleDraftFilterChange("platforms", "pc_mac", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-mac" className="cursor-pointer">Mac</RadixLabel>
@@ -430,9 +481,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-linux"
-                          checked={filters.platforms.includes("pc_linux")}
+                          checked={draftFilters.platforms.includes("pc_linux")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "pc_linux", !!checked);
+                            handleDraftFilterChange("platforms", "pc_linux", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-linux" className="cursor-pointer">Linux</RadixLabel>
@@ -440,9 +491,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-switch"
-                          checked={filters.platforms.includes("switch")}
+                          checked={draftFilters.platforms.includes("switch")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "switch", !!checked);
+                            handleDraftFilterChange("platforms", "switch", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-switch" className="cursor-pointer">Switch</RadixLabel>
@@ -450,9 +501,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-mobile"
-                          checked={filters.platforms.includes("mobile")}
+                          checked={draftFilters.platforms.includes("mobile")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "mobile", !!checked);
+                            handleDraftFilterChange("platforms", "mobile", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-mobile" className="cursor-pointer">Mobile</RadixLabel>
@@ -460,9 +511,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="platform-other"
-                          checked={filters.platforms.includes("other")}
+                          checked={draftFilters.platforms.includes("other")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("platform", "other", !!checked);
+                            handleDraftFilterChange("platforms", "other", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="platform-other" className="cursor-pointer">その他</RadixLabel>
@@ -477,9 +528,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="input-kbm"
-                          checked={filters.inputMethods.includes("keyboard_mouse")}
+                          checked={draftFilters.inputMethods.includes("keyboard_mouse")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("input", "keyboard_mouse", !!checked);
+                            handleDraftFilterChange("inputMethods", "keyboard_mouse", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="input-kbm" className="cursor-pointer">キーボード/マウス</RadixLabel>
@@ -487,9 +538,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="input-controller"
-                          checked={filters.inputMethods.includes("controller")}
+                          checked={draftFilters.inputMethods.includes("controller")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("input", "controller", !!checked);
+                            handleDraftFilterChange("inputMethods", "controller", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="input-controller" className="cursor-pointer">コントローラー</RadixLabel>
@@ -497,9 +548,9 @@ export default function BrowsePage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="input-touch"
-                          checked={filters.inputMethods.includes("touch")}
+                          checked={draftFilters.inputMethods.includes("touch")}
                           onCheckedChange={(checked) => {
-                            handleFilterChange("input", "touch", !!checked);
+                            handleDraftFilterChange("inputMethods", "touch", !!checked);
                           }}
                         />
                         <RadixLabel htmlFor="input-touch" className="cursor-pointer">タッチ</RadixLabel>
@@ -509,14 +560,11 @@ export default function BrowsePage() {
                 </div>
 
                 <DialogFooter className="flex-col sm:flex-row gap-2">
-                  {activeFilterCount > 0 && (
+                  {(draftFilters.roles.length + draftFilters.editions.length + draftFilters.inputMethods.length + draftFilters.platforms.length) > 0 && (
                     <Button
                       variant="outline"
                       className="w-full sm:w-auto"
-                      onClick={() => {
-                        clearAllFilters();
-                        setIsFilterDialogOpen(false);
-                      }}
+                      onClick={clearDraftFilters}
                     >
                       <X className="h-4 w-4 mr-2" />
                       すべてクリア
@@ -524,7 +572,7 @@ export default function BrowsePage() {
                   )}
                   <Button
                     className="w-full sm:w-auto"
-                    onClick={() => setIsFilterDialogOpen(false)}
+                    onClick={applyDraftFilters}
                   >
                     完了
                   </Button>

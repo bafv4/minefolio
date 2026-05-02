@@ -4,13 +4,15 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, ArrowLeft, Calendar } from "lucide-react";
+import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { lazy, Suspense, useEffect, useRef } from "react";
@@ -48,9 +50,11 @@ export function meta({
   ];
 }
 
-export async function loader({ context, params }: LoaderFunctionArgs) {
+export async function loader({ context, request, params }: LoaderFunctionArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   const { authorSlug, guideSlug } = params as {
     authorSlug: string;
@@ -215,8 +219,18 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
     }
   }
 
+  // ログインユーザーがガイドのオーナーかチェック
+  let isOwner = false;
+  if (session) {
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    isOwner = currentUser?.id === author.id;
+  }
+
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
-  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl, embedUsers };
+  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl, embedUsers, isOwner };
 }
 
 const MinecraftAvatarLazy = lazy(() =>
@@ -226,7 +240,7 @@ const MinecraftAvatarLazy = lazy(() =>
 );
 
 export default function GuideViewPage() {
-  const { guide, author, embedUsers } = useLoaderData<typeof loader>();
+  const { guide, author, embedUsers, isOwner } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
     tags = JSON.parse(guide.tags) as string[];
@@ -275,14 +289,22 @@ export default function GuideViewPage() {
 
   return (
     <article className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-      {/* Back button */}
-      <div className="mb-6">
+      {/* Back button + Owner edit button */}
+      <div className="mb-6 flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2">
           <Link to="/guides">
             <ArrowLeft className="h-4 w-4 mr-1" />
             ガイド一覧
           </Link>
         </Button>
+        {isOwner && (
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/my-guides/${guide.slug}/edit`}>
+              <Pencil className="h-4 w-4 mr-1" />
+              編集
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Cover image */}

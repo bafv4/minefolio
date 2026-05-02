@@ -310,19 +310,33 @@ type ControllerSettings = {
 - プレイヤー検索・フィルタリング機能
 - ソート機能（各カラム）
 - プレイヤー名クリックでプロフィールページへ遷移
+- **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
 
 ### /keybindings/stats（統計ページ）
 
 キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。
 
+「登録走者数」「キーバインド設定者数」「マウス設定者数」の集計からは視聴者ロールを除外している（v1.4.0〜）。
+
 ### CSVエクスポート
 
-フッターのエクスポートボタンからモーダルダイアログで出力項目を選択し、`/api/keybindings-csv` エンドポイントからCSVをダウンロードする。
+`/developers/export` ページから出力項目と対象ユーザーを選んでダウンロードする（v1.4.0 でフッターから移動）。
 
 - セクション選択: `actions`, `remaps`, `custom-actions`, `mouse` の中から複数選択可能
-- クエリパラメータ: `?sections=actions,remaps,mouse`
-- 公開プロフィールのプレイヤーのみ出力対象
+- 対象ユーザー: 設定登録済みの全公開ユーザー（デフォルト）または個別指定（検索 UI）
+- API: `GET /api/keybindings-csv?sections=...&userSlugs=...`（`userSlugs` は任意、未指定なら全ユーザー）
 - キーバインドは各プレイヤーのキーボード配列に応じた表示ラベルで出力
+
+---
+
+## 編集ページとプリセットの同期
+
+`/me/keybindings` の編集ページは v1.4.0 で次のように変更された：
+
+- 上部に **PresetSelector** ドロップダウンを表示（詳細は [`docs/presets.md`](presets.md) 参照）
+- 保存（`save-keybindings` / `save-remaps` / `save-fingers` / `save-custom-keys` / `save-custom-actions` / `save-all`）の各 intent で `syncActivePresetSnapshot(db, userId, kinds)` を呼び、アクティブプリセットの該当 `*Data` JSON を最新化（書き込みスルー）
+- カスタムキー定義（`customKeys`）とカスタムアクション（`customActions`）もプリセットスナップショットの対象（`customKeysData` / `customActionsData` カラム）
+- 保存リクエストにロード時の `presetId` を含め、別タブ等で切替済みなら `mePresets.staleSession` で拒否
 
 ---
 

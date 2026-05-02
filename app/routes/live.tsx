@@ -7,6 +7,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { excludeViewersCondition } from "@/lib/users-filter";
 import { LivePaceList } from "@/components/live-pace-list";
 import { StreamCard } from "@/components/stream-card";
 import { YouTubeLiveCard } from "@/components/youtube-live-card";
@@ -70,6 +71,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   }
 
   const allUserMcids = await db.query.users.findMany({
+    where: excludeViewersCondition,
     columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
   });
   const registeredMcids = allUserMcids

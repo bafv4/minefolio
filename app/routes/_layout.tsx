@@ -8,6 +8,8 @@ import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { CookieConsentBanner } from "@/components/cookie-consent";
+import { FavoritesProvider } from "@/hooks/use-favorites";
+import { getFavoritesFromDb } from "@/lib/favorites";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -17,13 +19,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   if (!session) {
-    return { user: null };
+    return { user: null, initialFavorites: [] as string[] };
   }
 
   // Get user from our users table
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
     columns: {
+      id: true,
       mcid: true,
       slug: true,
       displayName: true,
@@ -40,21 +43,29 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     user.discordAvatar = session.user.image ?? null;
   }
 
-  return { user: user ?? null };
+  // ログイン中ユーザーのお気に入りを SSR 用に取得
+  const initialFavorites = user ? await getFavoritesFromDb(db, user.id) : [];
+
+  return {
+    user: user ? { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar } : null,
+    initialFavorites,
+  };
 }
 
 export default function Layout() {
-  const { user } = useLoaderData<typeof loader>();
+  const { user, initialFavorites } = useLoaderData<typeof loader>();
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <NavigationProgress />
-      <Header user={user} />
-      <main className="flex-1 flex flex-col container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Outlet />
-      </main>
-      <Footer />
-      <CookieConsentBanner />
-    </div>
+    <FavoritesProvider isLoggedIn={!!user} initialFavorites={initialFavorites}>
+      <div className="flex min-h-screen flex-col">
+        <NavigationProgress />
+        <Header user={user} />
+        <main className="flex-1 flex flex-col container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Outlet />
+        </main>
+        <Footer />
+        <CookieConsentBanner />
+      </div>
+    </FavoritesProvider>
   );
 }

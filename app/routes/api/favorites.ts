@@ -1,66 +1,105 @@
 import type { Route } from "./+types/favorites";
+import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
+import { getEnv } from "@/lib/env.server";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import {
-  getFavoritesFromCookie,
-  createFavoritesCookieValue,
-  addToFavorites,
-  removeFromFavorites,
+  buildLegacyFavoritesCookieDeletion,
+  getFavoritesFromDb,
+  addFavoriteToDb,
+  removeFavoriteFromDb,
+  syncLocalFavoritesToDb,
 } from "@/lib/favorites";
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const mcid = formData.get("mcid") as string;
-  const actionType = formData.get("action") as string;
-
-  if (!mcid || !["add", "remove"].includes(actionType)) {
-    return new Response(JSON.stringify({ error: "Invalid request" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+function jsonResponse(body: unknown, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
-
-  const cookieHeader = request.headers.get("Cookie");
-  const currentFavorites = getFavoritesFromCookie(cookieHeader);
-
-  let newFavorites: string[];
-  if (actionType === "add") {
-    newFavorites = addToFavorites(currentFavorites, mcid);
-  } else {
-    newFavorites = removeFromFavorites(currentFavorites, mcid);
-  }
-
-  const cookieValue = createFavoritesCookieValue(newFavorites);
-
-  // リファラーにリダイレクト（安全性チェック付き）
-  let redirectUrl = "/";
-  const referer = request.headers.get("Referer");
-
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      const requestUrl = new URL(request.url);
-
-      // 同一オリジンの場合のみリダイレクトを許可
-      if (refererUrl.origin === requestUrl.origin) {
-        redirectUrl = refererUrl.pathname + refererUrl.search + refererUrl.hash;
-      }
-    } catch {
-      // URL解析エラーの場合は "/" にフォールバック
-      redirectUrl = "/";
-    }
-  }
-
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: redirectUrl,
-      "Set-Cookie": cookieValue,
-    },
-  });
+  // 旧 minefolio_favorites Cookie を自動削除（残っていれば）
+  headers.append("Set-Cookie", buildLegacyFavoritesCookieDeletion());
+  return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const cookieHeader = request.headers.get("Cookie");
-  const favorites = getFavoritesFromCookie(cookieHeader);
+async function getCurrentUser(request: Request, context: Route.LoaderArgs["context"]) {
+  const env = context.env ?? getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
+  if (!session) return { db, user: null };
+  const user = await db.query.users.findFirst({
+    where: eq(users.discordId, session.user.id),
+    columns: { id: true },
+  });
+  return { db, user };
+}
 
-  return Response.json({ favorites });
+/**
+ * GET /api/favorites
+ * - 認証済み: DB から slug 一覧を取得
+ * - 未認証: 空配列を返す
+ */
+export async function loader({ context, request }: Route.LoaderArgs) {
+  const { db, user } = await getCurrentUser(request, context);
+  if (!user) {
+    return jsonResponse({ favorites: [] });
+  }
+  const list = await getFavoritesFromDb(db, user.id);
+  return jsonResponse({ favorites: list });
+}
+
+/**
+ * POST /api/favorites { slug, action: "add" | "remove" }
+ *   → 認証必須、お気に入りを追加/削除して最新リストを返す
+ *
+ * PUT /api/favorites { slugs: string[] }
+ *   → 認証必須、localStorage→DBの一括同期（重複は無視）
+ */
+export async function action({ context, request }: Route.ActionArgs) {
+  const { db, user } = await getCurrentUser(request, context);
+  if (!user) {
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const method = request.method.toUpperCase();
+
+  if (method === "POST") {
+    let body: { slug?: unknown; action?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
+    }
+    const slug = typeof body.slug === "string" ? body.slug : "";
+    const actionType = body.action;
+    if (!slug || (actionType !== "add" && actionType !== "remove")) {
+      return jsonResponse({ error: "Invalid request" }, { status: 400 });
+    }
+    if (actionType === "add") {
+      await addFavoriteToDb(db, user.id, slug);
+    } else {
+      await removeFavoriteFromDb(db, user.id, slug);
+    }
+    const list = await getFavoritesFromDb(db, user.id);
+    return jsonResponse({ favorites: list });
+  }
+
+  if (method === "PUT") {
+    let body: { slugs?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
+    }
+    const slugs = Array.isArray(body.slugs)
+      ? body.slugs.filter((v): v is string => typeof v === "string")
+      : [];
+    await syncLocalFavoritesToDb(db, user.id, slugs);
+    const list = await getFavoritesFromDb(db, user.id);
+    return jsonResponse({ favorites: list });
+  }
+
+  return jsonResponse({ error: "Method not allowed" }, { status: 405 });
 }

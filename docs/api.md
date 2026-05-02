@@ -1,4 +1,8 @@
-# APIルート仕様書
+# APIルート仕様書（内部用・全API）
+
+このドキュメントは Minefolio 内部の全 API ルートを掲載した開発者向け仕様書です。
+
+公開API のみを抜粋した一般公開版は [`app/content/api.md`](../app/content/api.md) にあり、`/developers` ページで閲覧できます。仕様変更時は両方の更新を検討してください。
 
 ## 概要
 
@@ -14,7 +18,8 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/me/skin/upload-token` | POST | 必須 | スキンアップロードトークン発行 |
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
-| `/api/favorites` | GET/POST | 不要 | お気に入り管理（Cookie） |
+| `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
+| `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
 | `/api/keybindings-csv` | GET | 不要 | キー配置CSVエクスポート |
 | `/api/set-locale` | POST | 不要 | ロケール切替（Cookie） |
@@ -146,21 +151,56 @@ Minecraftスキン画像を返す。
 
 ---
 
+### `GET /api/favorites`
+
+ログイン中ユーザーのお気に入り一覧（slug配列）を返す。未認証の場合は空配列。
+
+**レスポンス:** `{ "favorites": ["slug1", "slug2"] }`
+
+旧 Cookie `minefolio_favorites` が残っていれば自動削除（`Set-Cookie: ... Max-Age=0`）。
+
 ### `POST /api/favorites`
 
-お気に入りの追加・削除を行う。
+お気に入りの追加・削除を行う。**認証必須**。
 
-**リクエストボディ（FormData）:**
-| 名前 | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `mcid` | string | ○ | 対象プレイヤーのMCID |
-| `action` | string | ○ | `add` または `remove` |
+**リクエストボディ（JSON）:**
+```json
+{ "slug": "playerSlug", "action": "add" | "remove" }
+```
 
-**レスポンス:** リファラーへの302リダイレクト + `Set-Cookie`（お気に入りリスト更新）
+**レスポンス:** `{ "favorites": ["slug1", "slug2", ...] }`（更新後の一覧）
 
-**GET /api/favorites** はCookieからお気に入りリストを返す: `{ "favorites": ["mcid1", "mcid2"] }`
+### `PUT /api/favorites`
 
-**関連ファイル:** `app/routes/api/favorites.ts`, `app/lib/favorites.ts`
+localStorage → DB 一括同期用。**認証必須**。
+
+**リクエストボディ（JSON）:**
+```json
+{ "slugs": ["slug1", "slug2"] }
+```
+
+DB に存在しない slug のみ追加（重複は無視）。レスポンスは `POST` と同形式。
+
+**関連ファイル:** `app/routes/api/favorites.ts`, `app/lib/favorites.ts`, `app/lib/favorites-client.ts`, `app/hooks/use-favorites.tsx`
+
+---
+
+### `POST /api/users/by-slugs`
+
+スラッグ配列からユーザー詳細を取得する（未ログインユーザーがlocalStorageのお気に入り一覧から走者カードを表示するために使用）。
+
+**リクエストボディ（JSON）:**
+```json
+{ "slugs": ["slug1", "slug2"] }
+```
+
+最大100件まで。
+
+**レスポンス:** `{ "users": [{ slug, mcid, uuid, displayName, shortBio, location, updatedAt, customSkinUrl, slimSkin }, ...] }`
+
+入力順にソートされる。
+
+**関連ファイル:** `app/routes/api/users/by-slugs.ts`
 
 ---
 

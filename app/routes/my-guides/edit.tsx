@@ -31,11 +31,11 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
 
   const guide = await db.query.guides.findFirst({
     where: and(
-      eq(guides.id, params.guideId as string),
+      eq(guides.slug, params.guideSlug as string),
       eq(guides.authorId, user.id)
     ),
   });
-  if (!guide) return redirect("/me/guides");
+  if (!guide) return redirect("/my-guides");
 
   return { guide, user };
 }
@@ -58,7 +58,7 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
 
   const guide = await db.query.guides.findFirst({
     where: and(
-      eq(guides.id, params.guideId as string),
+      eq(guides.slug, params.guideSlug as string),
       eq(guides.authorId, user.id)
     ),
   });

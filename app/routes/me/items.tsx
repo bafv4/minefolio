@@ -66,15 +66,22 @@ import {
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { t } from "@/lib/messages";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { configHistory } from "@/lib/schema";
+import { PresetSelector } from "@/components/preset-selector";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meItems.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
+  }
+  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
+  if (formAction === "/me/presets") {
+    return true;
   }
   return false;
 }
@@ -221,6 +228,16 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const actionType = formData.get("_action") as string;
+  const presetId = (formData.get("presetId") as string | null) || null;
+
+  try {
+    await assertPresetIsActive(db, user.id, presetId);
+  } catch (e) {
+    if (e instanceof PresetMismatchError) {
+      return { error: t("mePresets.staleSession") };
+    }
+    throw e;
+  }
 
   if (actionType === "saveAll") {
     const layoutsJson = formData.get("layouts") as string;
@@ -228,12 +245,12 @@ export async function action({ context, request }: Route.ActionArgs) {
     try {
       const layouts = JSON.parse(layoutsJson) as ItemLayout[];
 
+      const now = new Date();
       await db.transaction(async (tx) => {
         // 既存のレイアウトを全削除
         await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
 
         // 新しいレイアウトを挿入
-        const now = new Date();
         for (let i = 0; i < layouts.length; i++) {
           const layout = layouts[i];
           await tx.insert(itemLayouts).values({
@@ -248,6 +265,18 @@ export async function action({ context, request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
+      });
+
+      // アクティブプリセットスナップショット同期
+      await syncActivePresetSnapshot(db, user.id, ["itemLayouts"]);
+
+      // 変更履歴を記録
+      await db.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "game_setting",
+        changeDescription: t("meItems.itemLayoutChangeHistory"),
+        createdAt: now,
       });
 
       return { success: true };
@@ -699,11 +728,14 @@ export default function ItemLayoutsPage() {
       return;
     }
 
-    fetcher.submit(
-      { _action: "saveAll", layouts: JSON.stringify(layouts) },
-      { method: "post" }
-    );
-  }, [layouts, fetcher]);
+    const formData = new FormData();
+    formData.set("_action", "saveAll");
+    formData.set("layouts", JSON.stringify(layouts));
+    if (activePreset) {
+      formData.set("presetId", activePreset.id);
+    }
+    fetcher.submit(formData, { method: "post" });
+  }, [layouts, fetcher, activePreset]);
 
   const handleReset = useCallback(() => {
     setLayouts(initialLayouts);
@@ -749,47 +781,13 @@ export default function ItemLayoutsPage() {
         </Button>
       </div>
 
-      {/* プリセット警告・情報 */}
-      {!hasPresets && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meItems.noPresetWarning")}
-            </span>
-            <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">{t("meItems.createPreset")}</Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-      {activePreset && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meItems.editingPreset")} <strong>{activePreset.name}</strong>
-            </span>
-            <div className="flex gap-2 shrink-0">
-              {presets.length > 1 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={() => setCopyDialogOpen(true)}
-                >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t("meItems.copyFromOtherPreset")}</span>
-                  <span className="sm:hidden">{t("meItems.copyShort")}</span>
-                </Button>
-              )}
-              <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("meItems.managePresets")}</Button>
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* プリセットセレクター */}
+      <PresetSelector
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        activePresetId={activePreset?.id ?? null}
+        hasChanges={hasChanges}
+        onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
+      />
 
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {layouts.length > 0 ? (

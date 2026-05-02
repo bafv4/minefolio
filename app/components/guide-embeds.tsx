@@ -213,6 +213,7 @@ export function KeybindEmbedView({
             fingerAssignments={fingerAssignments}
             showRemaps
             showFingerAssignments
+            alwaysShowActions={["chat"]}
             hideNumpad
           />
         </div>

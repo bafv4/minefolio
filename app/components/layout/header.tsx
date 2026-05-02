@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, GitCompare, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,6 @@ const navigation = [
   { name: "探す", href: "/browse", icon: Search },
   { name: "操作設定", href: "/keybindings", icon: Keyboard },
   { name: "ランキング", href: "/rankings", icon: Trophy },
-  { name: "比較", href: "/compare", icon: GitCompare },
   { name: "ガイド", href: "/guides", icon: BookOpen },
 ];
 
@@ -147,6 +146,12 @@ export function Header({ user }: HeaderProps) {
                       <Link to="/me/edit">
                         <Settings className="mr-2 h-4 w-4" />
                         設定
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/my-guides">
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        ガイド
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -294,6 +299,15 @@ export function Header({ user }: HeaderProps) {
                   >
                     <Settings className="h-6 w-6" />
                     設定
+                  </Link>
+
+                  <Link
+                    to="/my-guides"
+                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <BookOpen className="h-6 w-6" />
+                    ガイド
                   </Link>
 
                   <Link

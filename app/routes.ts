@@ -28,6 +28,10 @@ export default [
     route("compare", "routes/compare.tsx"),
     route("favorites", "routes/favorites.tsx"),
     route("feedback", "routes/feedback.tsx"),
+    route("developers", "routes/developers/index.tsx"),
+    route("developers/api", "routes/developers/api.tsx"),
+    route("developers/changelog", "routes/developers/changelog.tsx"),
+    route("developers/export", "routes/developers/export.tsx"),
 
     // Player profile (public) - slugはMCIDまたは@{内部ID}形式
     route("player/:slug", "routes/player/profile.tsx"),
@@ -45,13 +49,13 @@ export default [
         route("import", "routes/me/import.tsx"),
         route("items", "routes/me/items.tsx"),
         route("search-craft", "routes/me/search-craft.tsx"),
-        route("guides", "routes/me/guides/index.tsx"),
-        route("guides/new", "routes/me/guides/new.tsx"),
       ]),
     ]),
 
-    // Guide editor (independent, outside me/_layout sidebar)
-    route("me/guides/:guideId/edit", "routes/me/guides/edit.tsx"),
+    // My guides (separated from /me, no sidebar)
+    route("my-guides", "routes/my-guides/index.tsx"),
+    route("my-guides/new", "routes/my-guides/new.tsx"),
+    route("my-guides/:guideSlug/edit", "routes/my-guides/edit.tsx"),
 
     // Public guides
     route("guides", "routes/guides/index.tsx"),
@@ -67,6 +71,7 @@ export default [
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
+  route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
 

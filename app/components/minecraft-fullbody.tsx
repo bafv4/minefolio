@@ -1,6 +1,13 @@
-import { useRef, useEffect, useState, memo } from "react";
+import { useRef, useEffect, useState, useCallback, memo } from "react";
+import type { SkinViewer } from "skinview3d";
+import { HelpCircle, RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { t } from "@/lib/messages";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
+
+const ICON_BUTTON_CLASS =
+  "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm";
 
 // 静止画像キャッシュ（同じUUID/ポーズの組み合わせを再利用）
 const imageCache = new Map<string, string>();
@@ -47,6 +54,10 @@ interface MinecraftFullBodyProps {
   asImage?: boolean;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
+  /** ユーザーによる回転・拡大縮小・移動操作を有効化（asImageは強制無効化される） */
+  interactive?: boolean;
+  /** インタラクティブモード時にヒントボタン（？）を表示するかどうか。クリックでヒント表示をトグル。 */
+  showInteractiveHint?: boolean;
 }
 
 const POSE_ROTATIONS: Record<
@@ -124,20 +135,24 @@ const MinecraftFullBodyComponent = ({
   rotate = false,
   asImage = false,
   slim = false,
+  interactive = false,
+  showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
-  // キャッシュキー用の識別子（uuidまたはskinUrl）
   const skinIdentifier = skinUrl || uuid || STEVE_UUID;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewerRef = useRef<any>(null);
+  const viewerRef = useRef<SkinViewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [hintVisible, setHintVisible] = useState(false);
+
+  // interactive モードでは静止画化を強制無効化（操作不能なため）
+  const effectiveAsImage = interactive ? false : asImage;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // asImageモードの場合、キャッシュをチェック
-    if (asImage) {
+    if (effectiveAsImage) {
       const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = imageCache.get(cacheKey);
       if (cachedImage) {
@@ -223,29 +238,38 @@ const MinecraftFullBodyComponent = ({
           }
         }
 
-        // Enable auto-rotate if requested (only when not rendering as image)
-        if (rotate && !asImage) {
+        if (rotate && !effectiveAsImage) {
           viewer.autoRotate = true;
           viewer.autoRotateSpeed = 1;
         }
 
+        if (interactive && viewer.controls) {
+          viewer.controls.enableZoom = true;
+          viewer.controls.enableRotate = true;
+          viewer.controls.enablePan = true;
+          // screenSpacePanning: 通常の右ドラッグパンを有効化（カメラ向きに依存しない）
+          viewer.controls.screenSpacePanning = true;
+          viewer.controls.minDistance = 20;
+          viewer.controls.maxDistance = 200;
+          if (typeof viewer.controls.saveState === "function") {
+            viewer.controls.saveState();
+          }
+        }
+
         viewer.render();
 
-        // 静止画像として出力する場合
-        if (asImage) {
-          // レンダリングが完了するのを少し待つ
+        if (effectiveAsImage) {
+          // toDataURL がレンダリング完了後の正しいフレームを拾えるよう一拍置く
           await new Promise((resolve) => setTimeout(resolve, 100));
           viewer.render();
 
           const dataUrl = canvas.toDataURL("image/png");
 
-          // キャッシュに保存
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
           imageCache.set(cacheKey, dataUrl);
 
           setImageSrc(dataUrl);
 
-          // viewerを破棄してリソースを解放
           viewer.dispose();
           viewerRef.current = null;
         }
@@ -266,7 +290,39 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-  }, [uuid, skinUrl, skinIdentifier, width, height, pose, angle, elevation, zoom, background, walk, run, rotate, asImage, slim]);
+    // skinIdentifier は uuid/skinUrl から派生、interactive は effectiveAsImage に内包されるので除外。
+    // width/height は別 effect で setSize() を呼んで再初期化を回避するため依存に含めない。
+  }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim]);
+
+  // サイズ変更時は dispose せず setSize で軽量に更新
+  useEffect(() => {
+    const v = viewerRef.current;
+    if (!v || effectiveAsImage) return;
+    v.setSize(width, height);
+  }, [width, height, effectiveAsImage]);
+
+  // インタラクティブモード時、画面外では描画ループを停止して負荷を抑える
+  useEffect(() => {
+    if (!interactive) return;
+    const canvas = canvasRef.current;
+    if (!canvas || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const v = viewerRef.current;
+      if (!v) return;
+      for (const entry of entries) {
+        v.renderPaused = !entry.isIntersecting;
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [interactive]);
+
+  const handleReset = useCallback(() => {
+    const viewer = viewerRef.current;
+    if (!viewer?.controls || typeof viewer.controls.reset !== "function") return;
+    viewer.controls.reset();
+    viewer.render();
+  }, []);
 
   // スケルトン表示（ローディング中）
   const skeleton = (
@@ -301,11 +357,11 @@ const MinecraftFullBodyComponent = ({
   );
 
   // 静止画像モードの場合
-  if (asImage && imageSrc) {
+  if (effectiveAsImage && imageSrc) {
     return (
       <img
         src={imageSrc}
-        alt={mcid ? `${mcid}'s Minecraft avatar` : "Minecraft avatar"}
+        alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
         width={width}
         height={height}
         className={className}
@@ -319,7 +375,7 @@ const MinecraftFullBodyComponent = ({
   }
 
   // asImageモードでローディング中はスケルトン + 非表示canvas
-  if (asImage && isLoading) {
+  if (effectiveAsImage && isLoading) {
     return (
       <div className={className} style={{ position: "relative", width, height }}>
         {skeleton}
@@ -336,6 +392,9 @@ const MinecraftFullBodyComponent = ({
     );
   }
 
+  const showControls = interactive && !isLoading;
+  const showHintBubble = showControls && showInteractiveHint && hintVisible;
+
   return (
     <div style={{ position: "relative", width, height }}>
       <canvas
@@ -346,10 +405,52 @@ const MinecraftFullBodyComponent = ({
           height,
           opacity: isLoading ? 0 : 1,
           transition: "opacity 0.2s",
+          touchAction: interactive ? "none" : undefined,
+          cursor: interactive ? "grab" : undefined,
         }}
-        aria-label={mcid ? `${mcid}'s Minecraft avatar` : "Minecraft avatar"}
+        aria-label={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
       />
       {isLoading && skeleton}
+
+      {showControls && (
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          {showInteractiveHint && (
+            <button
+              type="button"
+              onClick={() => setHintVisible((v) => !v)}
+              aria-label={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
+              aria-pressed={hintVisible}
+              title={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
+              className={cn(
+                ICON_BUTTON_CLASS,
+                hintVisible
+                  ? "bg-primary text-primary-foreground border-primary/40"
+                  : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+              )}
+            >
+              <HelpCircle className="w-3.5 h-3.5" aria-hidden />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            aria-label={t("fullbodyViewer.reset")}
+            title={t("fullbodyViewer.reset")}
+            className={cn(
+              ICON_BUTTON_CLASS,
+              "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+            )}
+          >
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
+      )}
+
+      {showHintBubble && (
+        <div className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] leading-tight text-center text-muted-foreground bg-background/85 backdrop-blur-sm rounded px-1.5 py-0.5 pointer-events-none">
+          {t("fullbodyViewer.hintText")}
+        </div>
+      )}
     </div>
   );
 };

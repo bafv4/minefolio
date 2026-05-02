@@ -179,15 +179,38 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `walk` | `boolean` | `false` | 歩行アニメーション |
 | `run` | `boolean` | `false` | 走行アニメーション |
 | `rotate` | `boolean` | `false` | 自動回転 |
-| `asImage` | `boolean` | `false` | 静止画像として出力 |
+| `asImage` | `boolean` | `false` | 静止画像として出力（`interactive` が `true` のときは強制無効） |
 | `slim` | `boolean` | `false` | スリムスキンモデル |
+| `interactive` | `boolean` | `false` | OrbitControls による回転・拡大縮小・移動を有効化 |
+| `showInteractiveHint` | `boolean` | `false` | インタラクティブモード時に右上にヒント切替ボタン（？）を表示 |
 
 ポーズ種別: `standing`, `walking`, `running`, `waving`, `sitting`, `custom`
 
-静止画像モード (`asImage: true`):
-- レンダリング後にCanvasをPNG化し `<img>` として出力
+#### 静止画像モード (`asImage: true`)
+
+- レンダリング後に Canvas を PNG 化して `<img>` として出力
 - 結果はメモリキャッシュ (`Map`) に保存し、同じパラメータの再レンダリングを回避
 - Viewer は描画完了後に `dispose()` でリソース解放
+- `interactive` が `true` の場合は強制的に無効化される
+
+#### インタラクティブモード (`interactive: true`)
+
+v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザーが視点を操作できる：
+
+- 左ドラッグで回転、右ドラッグで平行移動、ホイール/ピンチで拡大縮小
+- `enablePan` + `screenSpacePanning` を有効化
+- ズーム範囲は `minDistance: 20` 〜 `maxDistance: 200` に制限
+- 初期化直後に `controls.saveState()` を呼び、リセットボタンで `controls.reset()` できるようにする
+- 右上に **リセットボタン**（`RotateCcw` アイコン）と、`showInteractiveHint=true` のとき **ヒント切替ボタン**（`HelpCircle`）を配置。ヒントボタンを押すと「ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮」のテキストがビューポート下部に表示される
+
+##### パフォーマンス最適化
+
+- **画面外で描画停止**: `IntersectionObserver` で canvas の可視性を監視し、ビューポート外では `viewer.renderPaused = true` に切り替えてアニメーションループを停止
+- **サイズ変更時の再初期化回避**: `width` / `height` を主 effect の依存に含めず、別 effect で `viewer.setSize(width, height)` を呼ぶことで、レスポンシブ切替時の `dispose()` + 再構築 + skin 再ロードを回避
+
+#### i18n
+
+`fullbodyViewer.*`（`avatarLabel` / `avatarLabelOf` / `showHint` / `hideHint` / `reset` / `hintText`）に集約。
 
 ---
 
@@ -214,6 +237,41 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `twitch` | ユーザー名 | `https://www.twitch.tv/{identifier}` |
 | `twitter` | ユーザー名 | `https://x.com/{identifier}` |
 | `custom` | 任意 | `customUrl` を直接使用、`customLabel` が必要 |
+
+---
+
+## プロフィール表示ページのレイアウト
+
+### スキン表示
+
+`/player/:slug` ではスキン全身表示を **インタラクティブモード**（`interactive` + `showInteractiveHint`）で描画する。サイズはレスポンシブ：
+
+| 画面幅 | サイズ |
+|---|---|
+| `(max-width: 640px)`（モバイル） | 320 × 380 |
+| それ以外（デスクトップ） | 240 × 280 |
+
+判定には `app/hooks/use-media-query.ts` の `useMediaQuery(query, ssrDefault)` フックを使用。SSR セーフ。
+
+スキンと右側の基本情報は `flex-col sm:flex-row sm:items-center` で、デスクトップ時は上下中央揃え。
+
+### モバイルタブ選択ドロワー
+
+モバイル表示時の上部スティッキーボタンには `ChevronsDown` アイコンを使用（v1.4.0 でハンバーガー `Menu` から変更）。展開中は `X` アイコンに切り替わる。
+
+### プリセット切替
+
+`presets.length > 0` で対象タブ（`keybindings` / `devices` / `items` / `searchcraft`）を表示中のときは、プリセット切替ドロップダウンを描画する：
+
+- デスクトップではサイドバーに表示
+- モバイルではメインコンテンツ上部に表示
+- 選択肢に切替時は URL クエリ `?preset=...` を `setSearchParams` で更新し、`useRevalidator().revalidate()` も併せて呼ぶ
+- 切替中（`navigation.state === "loading"` または `revalidator.state === "loading"`）はメインコンテンツ右カラムにローディングオーバーレイを表示。サイドバー（プリセット選択 UI を含む）は表示維持
+
+### 視聴者ロールの扱い
+
+- 個別プロフィールページ自体は `role = "viewer"` のユーザーでも表示する（直接 URL アクセスは可能）
+- 各種一覧（`/browse` / `/keybindings` / ホーム画面など）からはデフォルトで除外される — 詳細は各画面の仕様書参照
 
 ---
 
@@ -284,5 +342,6 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/routes/og-image.tsx` | OGP画像生成API |
 | `app/components/minecraft-avatar.tsx` | 顔アイコンコンポーネント (2D) |
 | `app/components/minecraft-fullbody.tsx` | 全身コンポーネント (3D, skinview3d) |
+| `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |

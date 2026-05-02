@@ -86,7 +86,7 @@ export default function MyGuidesPage() {
           <p className="text-muted-foreground text-sm">{t("meGuides.pageDesc")}</p>
         </div>
         <Button asChild>
-          <Link to="/me/guides/new">
+          <Link to="/my-guides/new">
             <Plus className="h-4 w-4 mr-2" />
             {t("meGuides.newGuide")}
           </Link>
@@ -98,7 +98,7 @@ export default function MyGuidesPage() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground mb-4">{t("meGuides.noGuides")}</p>
             <Button asChild>
-              <Link to="/me/guides/new">
+              <Link to="/my-guides/new">
                 <Plus className="h-4 w-4 mr-2" />
                 {t("meGuides.newGuide")}
               </Link>
@@ -167,7 +167,7 @@ export default function MyGuidesPage() {
                       </Button>
                     )}
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/me/guides/${guide.id}/edit`}>
+                      <Link to={`/my-guides/${guide.slug}/edit`}>
                         <Pencil className="h-4 w-4" />
                       </Link>
                     </Button>

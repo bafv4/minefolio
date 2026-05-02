@@ -4,6 +4,7 @@
 import { eq, desc, and, lt, ne } from "drizzle-orm";
 import { createDb } from "./db";
 import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
+import { excludeViewersCondition } from "./users-filter";
 import { createId } from "@paralleldrive/cuid2";
 import type { YouTubeVideo, YouTubeSearchResult } from "./youtube";
 
@@ -387,7 +388,8 @@ export async function getRegisteredYouTubeChannels(): Promise<Array<{ channelId:
     .where(
       and(
         eq(users.profileVisibility, "public"),
-        eq(socialLinks.platform, "youtube")
+        eq(socialLinks.platform, "youtube"),
+        excludeViewersCondition,
       )
     );
 

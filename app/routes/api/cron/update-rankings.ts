@@ -11,6 +11,7 @@
 import { createDb } from "@/lib/db";
 import { users, speedrunCategories, playerRankings, type User } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
+import { excludeViewersCondition } from "@/lib/users-filter";
 
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
 const RANKED_API_BASE = "https://mcsrranked.com/api";
@@ -252,9 +253,9 @@ export async function loader({ context, request }: { request: Request; context: 
       where: eq(speedrunCategories.isActive, true),
     });
 
-    // 公開ユーザーを取得
+    // 公開ユーザーを取得（視聴者ロールは除外）
     const allUsers = await db.query.users.findMany({
-      where: eq(users.profileVisibility, "public"),
+      where: and(eq(users.profileVisibility, "public"), excludeViewersCondition),
       columns: {
         id: true,
         mcid: true,

@@ -4,10 +4,10 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
+import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData } from "@/lib/preset-utils";
+import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,8 @@ export async function action({ context, request }: Route.ActionArgs) {
       keyRemaps: true,
       itemLayouts: true,
       searchCrafts: true,
+      customKeys: true,
+      customActions: true,
     },
   });
 
@@ -135,8 +137,23 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNameRequired") };
     }
 
-    // 全ての既存プリセットを非アクティブにし、データを削除（トランザクションで原子的に実行）
+    let sourcePreset: typeof configPresets.$inferSelect | undefined;
+    if (sourceType === "copy" && sourcePresetId) {
+      sourcePreset = await db.query.configPresets.findFirst({
+        where: eq(configPresets.id, sourcePresetId),
+      });
+      if (!sourcePreset || sourcePreset.userId !== user.id) {
+        return { error: t("mePresets.sourcePresetNotFound") };
+      }
+    }
+
+    const presetId = createId();
+    const trimmedName = name.trim();
+    const trimmedDescription = description?.trim() || null;
+
+    // ライブテーブル削除＋新データ挿入＋プリセット行作成を単一トランザクションで実行
     await db.transaction(async (tx) => {
+      // 既存プリセット非アクティブ化、ライブテーブル全クリア
       await tx
         .update(configPresets)
         .set({ isActive: false, updatedAt: now })
@@ -146,163 +163,170 @@ export async function action({ context, request }: Route.ActionArgs) {
       await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
       await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
       await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
-    });
+      await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
+      await tx.delete(customActions).where(eq(customActions.userId, user.id));
 
-    const presetId = createId();
-
-    if (sourceType === "copy" && sourcePresetId) {
-      // 既存プリセットからコピー
-      const sourcePreset = await db.query.configPresets.findFirst({
-        where: eq(configPresets.id, sourcePresetId),
-      });
-
-      if (!sourcePreset || sourcePreset.userId !== user.id) {
-        return { error: t("mePresets.sourcePresetNotFound") };
-      }
-
-      // プリセットを作成（アクティブ状態で）
-      await db.insert(configPresets).values({
-        id: presetId,
-        userId: user.id,
-        name: name.trim(),
-        description: description?.trim() || null,
-        isActive: true,
-        keybindingsData: sourcePreset.keybindingsData,
-        playerConfigData: sourcePreset.playerConfigData,
-        remapsData: sourcePreset.remapsData,
-        fingerAssignmentsData: sourcePreset.fingerAssignmentsData,
-        itemLayoutsData: sourcePreset.itemLayoutsData,
-        searchCraftsData: sourcePreset.searchCraftsData,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      // プリセットのデータを実際のテーブルに展開
-      // キーバインドを作成
-      if (sourcePreset.keybindingsData) {
-        const kbData = JSON.parse(sourcePreset.keybindingsData) as PresetKeybindingData[];
-        for (const kb of kbData) {
-          await db.insert(keybindings).values({
-            id: createId(),
-            userId: user.id,
-            action: kb.action,
-            keyCode: kb.keyCode,
-            category: kb.category as "movement" | "combat" | "inventory" | "ui",
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 走者設定を作成
-      if (sourcePreset.playerConfigData) {
-        const configData = JSON.parse(sourcePreset.playerConfigData) as PresetPlayerConfigData;
-        await db.insert(playerConfigs).values({
-          id: createId(),
-          userId: user.id,
-          keyboardLayout: configData.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
-          keyboardModel: configData.keyboardModel,
-          mouseDpi: configData.mouseDpi,
-          gameSensitivity: configData.gameSensitivity,
-          rawInput: configData.rawInput,
-          mouseAcceleration: configData.mouseAcceleration,
-          toggleSprint: configData.toggleSprint,
-          toggleSneak: configData.toggleSneak,
-          autoJump: configData.autoJump,
-          fov: configData.fov,
-          guiScale: configData.guiScale,
-          gameLanguage: configData.gameLanguage,
-          fingerAssignments: sourcePreset.fingerAssignmentsData,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-
-      // リマップを作成
-      if (sourcePreset.remapsData) {
-        const remapData = JSON.parse(sourcePreset.remapsData) as PresetRemapData[];
-        for (const remap of remapData) {
-          await db.insert(keyRemaps).values({
-            id: createId(),
-            userId: user.id,
-            sourceKey: remap.sourceKey,
-            targetKey: sanitizeRemapTargetKey(remap.targetKey),
-            software: remap.software,
-            notes: remap.notes,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // アイテム配置を作成
-      if (sourcePreset.itemLayoutsData) {
-        const layoutData = JSON.parse(sourcePreset.itemLayoutsData) as PresetItemLayoutData[];
-        for (const layout of layoutData) {
-          await db.insert(itemLayouts).values({
-            id: createId(),
-            userId: user.id,
-            segment: layout.segment,
-            slots: layout.slots,
-            offhand: layout.offhand,
-            notes: layout.notes,
-            displayOrder: layout.displayOrder,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // サーチクラフトを作成
-      if (sourcePreset.searchCraftsData) {
-        const craftData = JSON.parse(sourcePreset.searchCraftsData) as PresetSearchCraftData[];
-        for (const craft of craftData) {
-          await db.insert(searchCrafts).values({
-            id: createId(),
-            userId: user.id,
-            sequence: craft.sequence,
-            items: craft.items,
-            keys: craft.keys,
-            searchStr: craft.searchStr,
-            comment: craft.comment,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 履歴に記録
-      await db.insert(configHistory).values({
-        id: createId(),
-        userId: user.id,
-        changeType: "preset_switch",
-        changeDescription: t("mePresets.copiedAndApplied", { source: sourcePreset.name, name: name.trim() }),
-        presetId,
-        createdAt: now,
-      });
-
-      return { success: true, message: t("mePresets.createdAndApplied", { name: name.trim() }) };
-    } else {
-      // 現在の設定から作成、またはデフォルト設定から作成
+      // 挿入するデータをソース別に決定
       let keybindingsData: string | null = null;
       let playerConfigData: string | null = null;
       let remapsData: string | null = null;
       let fingerAssignmentsData: string | null = null;
       let itemLayoutsData: string | null = null;
       let searchCraftsData: string | null = null;
+      let customKeysData: string | null = null;
+      let customActionsData: string | null = null;
 
-      if (user.keybindings.length > 0) {
-        // 現在の設定がある場合はそれを使用
+      if (sourcePreset) {
+        // 既存プリセットからコピー
+        keybindingsData = sourcePreset.keybindingsData;
+        playerConfigData = sourcePreset.playerConfigData;
+        remapsData = sourcePreset.remapsData;
+        fingerAssignmentsData = sourcePreset.fingerAssignmentsData;
+        itemLayoutsData = sourcePreset.itemLayoutsData;
+        searchCraftsData = sourcePreset.searchCraftsData;
+        customKeysData = sourcePreset.customKeysData;
+        customActionsData = sourcePreset.customActionsData;
+
+        // ライブテーブルへの展開
+        if (keybindingsData) {
+          const kbData = JSON.parse(keybindingsData) as PresetKeybindingData[];
+          for (const kb of kbData) {
+            await tx.insert(keybindings).values({
+              id: createId(),
+              userId: user.id,
+              action: kb.action,
+              keyCode: kb.keyCode,
+              category: kb.category as "movement" | "combat" | "inventory" | "ui",
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+        if (playerConfigData) {
+          const configData = JSON.parse(playerConfigData) as PresetPlayerConfigData;
+          await tx.insert(playerConfigs).values({
+            id: createId(),
+            userId: user.id,
+            keyboardLayout: configData.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
+            keyboardModel: configData.keyboardModel,
+            mouseDpi: configData.mouseDpi,
+            gameSensitivity: configData.gameSensitivity,
+            rawInput: configData.rawInput,
+            mouseAcceleration: configData.mouseAcceleration,
+            toggleSprint: configData.toggleSprint,
+            toggleSneak: configData.toggleSneak,
+            autoJump: configData.autoJump,
+            fov: configData.fov,
+            guiScale: configData.guiScale,
+            gameLanguage: configData.gameLanguage,
+            mouseModel: configData.mouseModel,
+            windowsSpeed: configData.windowsSpeed,
+            windowsSpeedMultiplier: configData.windowsSpeedMultiplier,
+            cm360: configData.cm360,
+            notes: configData.notes,
+            controllerSettings: configData.controllerSettings,
+            fingerAssignments: fingerAssignmentsData,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        if (remapsData) {
+          const remapData = JSON.parse(remapsData) as PresetRemapData[];
+          for (const remap of remapData) {
+            await tx.insert(keyRemaps).values({
+              id: createId(),
+              userId: user.id,
+              sourceKey: remap.sourceKey,
+              targetKey: sanitizeRemapTargetKey(remap.targetKey),
+              software: remap.software,
+              notes: remap.notes,
+              outputMode: remap.outputMode ?? "key",
+              outputCharacter: remap.outputCharacter ?? null,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+        if (itemLayoutsData) {
+          const layoutData = JSON.parse(itemLayoutsData) as PresetItemLayoutData[];
+          for (const layout of layoutData) {
+            await tx.insert(itemLayouts).values({
+              id: createId(),
+              userId: user.id,
+              segment: layout.segment,
+              slots: layout.slots,
+              offhand: layout.offhand,
+              notes: layout.notes,
+              displayOrder: layout.displayOrder,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+        if (searchCraftsData) {
+          const craftData = JSON.parse(searchCraftsData) as PresetSearchCraftData[];
+          for (const craft of craftData) {
+            await tx.insert(searchCrafts).values({
+              id: createId(),
+              userId: user.id,
+              sequence: craft.sequence,
+              items: craft.items,
+              keys: craft.keys,
+              searchStr: craft.searchStr,
+              comment: craft.comment,
+              timing: craft.timing ?? null,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+        if (customKeysData) {
+          const ckData = JSON.parse(customKeysData) as PresetCustomKeyData[];
+          for (const ck of ckData) {
+            await tx.insert(customKeys).values({
+              id: createId(),
+              userId: user.id,
+              keyCode: ck.keyCode,
+              keyName: ck.keyName,
+              category: ck.category,
+              position: ck.position,
+              size: ck.size,
+              notes: ck.notes,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+        if (customActionsData) {
+          const caData = JSON.parse(customActionsData) as PresetCustomActionData[];
+          for (const ca of caData) {
+            await tx.insert(customActions).values({
+              id: createId(),
+              userId: user.id,
+              actionName: ca.actionName,
+              description: ca.description,
+              category: ca.category,
+              triggerKey: ca.triggerKey,
+              displayOrder: ca.displayOrder,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+      } else if (user.keybindings.length > 0) {
+        // 現在のライブテーブル内容（メモリ上）から作成
         keybindingsData = serializeKeybindings(user.keybindings);
         playerConfigData = user.playerConfig ? serializePlayerConfig(user.playerConfig) : null;
         remapsData = user.keyRemaps.length > 0 ? serializeRemaps(user.keyRemaps) : null;
         fingerAssignmentsData = user.playerConfig?.fingerAssignments ?? null;
         itemLayoutsData = user.itemLayouts.length > 0 ? serializeItemLayouts(user.itemLayouts) : null;
         searchCraftsData = user.searchCrafts.length > 0 ? serializeSearchCrafts(user.searchCrafts) : null;
+        customKeysData = user.customKeys.length > 0 ? serializeCustomKeys(user.customKeys) : null;
+        customActionsData = user.customActions.length > 0 ? serializeCustomActions(user.customActions) : null;
 
-        // 既存設定をコピー（削除後に再作成）
+        // 既存設定をライブテーブルに再挿入（削除後の復元）
         for (const kb of user.keybindings) {
-          await db.insert(keybindings).values({
+          await tx.insert(keybindings).values({
             id: createId(),
             userId: user.id,
             action: kb.action,
@@ -312,9 +336,8 @@ export async function action({ context, request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
-
         if (user.playerConfig) {
-          await db.insert(playerConfigs).values({
+          await tx.insert(playerConfigs).values({
             id: createId(),
             userId: user.id,
             keyboardLayout: user.playerConfig.keyboardLayout,
@@ -329,27 +352,33 @@ export async function action({ context, request }: Route.ActionArgs) {
             fov: user.playerConfig.fov,
             guiScale: user.playerConfig.guiScale,
             gameLanguage: user.playerConfig.gameLanguage,
+            mouseModel: user.playerConfig.mouseModel,
+            windowsSpeed: user.playerConfig.windowsSpeed,
+            windowsSpeedMultiplier: user.playerConfig.windowsSpeedMultiplier,
+            cm360: user.playerConfig.cm360,
+            notes: user.playerConfig.notes,
+            controllerSettings: user.playerConfig.controllerSettings,
             fingerAssignments: user.playerConfig.fingerAssignments,
             createdAt: now,
             updatedAt: now,
           });
         }
-
         for (const remap of user.keyRemaps) {
-          await db.insert(keyRemaps).values({
+          await tx.insert(keyRemaps).values({
             id: createId(),
             userId: user.id,
             sourceKey: remap.sourceKey,
             targetKey: sanitizeRemapTargetKey(remap.targetKey),
             software: remap.software,
             notes: remap.notes,
+            outputMode: remap.outputMode ?? "key",
+            outputCharacter: remap.outputCharacter ?? null,
             createdAt: now,
             updatedAt: now,
           });
         }
-
         for (const layout of user.itemLayouts) {
-          await db.insert(itemLayouts).values({
+          await tx.insert(itemLayouts).values({
             id: createId(),
             userId: user.id,
             segment: layout.segment,
@@ -361,9 +390,8 @@ export async function action({ context, request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
-
         for (const craft of user.searchCrafts) {
-          await db.insert(searchCrafts).values({
+          await tx.insert(searchCrafts).values({
             id: createId(),
             userId: user.id,
             sequence: craft.sequence,
@@ -371,12 +399,40 @@ export async function action({ context, request }: Route.ActionArgs) {
             keys: craft.keys,
             searchStr: craft.searchStr,
             comment: craft.comment,
+            timing: craft.timing,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        for (const ck of user.customKeys) {
+          await tx.insert(customKeys).values({
+            id: createId(),
+            userId: user.id,
+            keyCode: ck.keyCode,
+            keyName: ck.keyName,
+            category: ck.category,
+            position: ck.position,
+            size: ck.size,
+            notes: ck.notes,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        for (const ca of user.customActions) {
+          await tx.insert(customActions).values({
+            id: createId(),
+            userId: user.id,
+            actionName: ca.actionName,
+            description: ca.description,
+            category: ca.category,
+            triggerKey: ca.triggerKey,
+            displayOrder: ca.displayOrder,
             createdAt: now,
             updatedAt: now,
           });
         }
       } else {
-        // デフォルト設定を使用
+        // デフォルト設定から作成
         const defaultKbs = DEFAULT_KEYBINDINGS.map((kb) => ({
           action: kb.action,
           keyCode: kb.keyCode,
@@ -384,9 +440,8 @@ export async function action({ context, request }: Route.ActionArgs) {
         }));
         keybindingsData = JSON.stringify(defaultKbs);
 
-        // デフォルトキーバインドを作成
         for (const kb of DEFAULT_KEYBINDINGS) {
-          await db.insert(keybindings).values({
+          await tx.insert(keybindings).values({
             id: createId(),
             userId: user.id,
             action: kb.action,
@@ -397,8 +452,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           });
         }
 
-        // デフォルト走者設定を作成
-        await db.insert(playerConfigs).values({
+        await tx.insert(playerConfigs).values({
           id: createId(),
           userId: user.id,
           keyboardLayout: "US",
@@ -415,12 +469,12 @@ export async function action({ context, request }: Route.ActionArgs) {
         });
       }
 
-      // プリセットを作成（アクティブ状態で）
-      await db.insert(configPresets).values({
+      // プリセット行を作成（アクティブ状態）
+      await tx.insert(configPresets).values({
         id: presetId,
         userId: user.id,
-        name: name.trim(),
-        description: description?.trim() || null,
+        name: trimmedName,
+        description: trimmedDescription,
         isActive: true,
         keybindingsData,
         playerConfigData,
@@ -428,22 +482,27 @@ export async function action({ context, request }: Route.ActionArgs) {
         fingerAssignmentsData,
         itemLayoutsData,
         searchCraftsData,
+        customKeysData,
+        customActionsData,
         createdAt: now,
         updatedAt: now,
       });
 
-      // 履歴に記録
-      await db.insert(configHistory).values({
+      // 履歴記録
+      const description = sourcePreset
+        ? t("mePresets.copiedAndApplied", { source: sourcePreset.name, name: trimmedName })
+        : t("mePresets.createdFromCurrentAndApplied", { name: trimmedName });
+      await tx.insert(configHistory).values({
         id: createId(),
         userId: user.id,
         changeType: "preset_switch",
-        changeDescription: t("mePresets.createdFromCurrentAndApplied", { name: name.trim() }),
+        changeDescription: description,
         presetId,
         createdAt: now,
       });
+    });
 
-      return { success: true, message: t("mePresets.createdAndApplied", { name: name.trim() }) };
-    }
+    return { success: true, message: t("mePresets.createdAndApplied", { name: trimmedName }) };
   }
 
   // プリセット削除
@@ -487,145 +546,205 @@ export async function action({ context, request }: Route.ActionArgs) {
     // 現在の設定をバックアップ（履歴用）
     const previousKeybindings = JSON.stringify(user.keybindings);
 
-    // キーバインドを復元
-    if (preset.keybindingsData) {
-      const keybindingsFromPreset = JSON.parse(preset.keybindingsData) as Array<{
-        action: string;
-        keyCode: string;
-        category: string;
-      }>;
+    await db.transaction(async (tx) => {
+      // ライブテーブル全クリア（フルシンク）
+      await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
+      await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
+      await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+      await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
+      await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
+      await tx.delete(customActions).where(eq(customActions.userId, user.id));
 
-      for (const kbData of keybindingsFromPreset) {
-        const existingKb = user.keybindings.find((kb) => kb.action === kbData.action);
-        if (existingKb) {
-          await db
-            .update(keybindings)
-            .set({ keyCode: kbData.keyCode, updatedAt: now })
-            .where(eq(keybindings.id, existingKb.id));
+      // キーバインドを復元
+      if (preset.keybindingsData) {
+        const keybindingsFromPreset = JSON.parse(preset.keybindingsData) as PresetKeybindingData[];
+        for (const kbData of keybindingsFromPreset) {
+          await tx.insert(keybindings).values({
+            id: createId(),
+            userId: user.id,
+            action: kbData.action,
+            keyCode: kbData.keyCode,
+            category: kbData.category as "movement" | "combat" | "inventory" | "ui",
+            createdAt: now,
+            updatedAt: now,
+          });
         }
       }
-    }
 
-    // 走者設定を復元
-    if (preset.playerConfigData && user.playerConfig) {
-      const configFromPreset = JSON.parse(preset.playerConfigData);
-      await db
-        .update(playerConfigs)
-        .set({
-          ...configFromPreset,
-          fingerAssignments: preset.fingerAssignmentsData,
-          updatedAt: now,
-        })
-        .where(eq(playerConfigs.id, user.playerConfig.id));
-    }
-
-    // リマップを復元
-    if (preset.remapsData) {
-      // 既存のリマップを削除
-      await db.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
-
-      // プリセットのリマップを追加
-      const remapsFromPreset = JSON.parse(preset.remapsData) as Array<{
-        sourceKey: string;
-        targetKey: string | null;
-        software: string | null;
-        notes: string | null;
-      }>;
-
-      for (const remapData of remapsFromPreset) {
-        await db.insert(keyRemaps).values({
-          id: createId(),
-          userId: user.id,
-          sourceKey: remapData.sourceKey,
-          targetKey: sanitizeRemapTargetKey(remapData.targetKey),
-          software: remapData.software,
-          notes: remapData.notes,
-          createdAt: now,
-          updatedAt: now,
-        });
+      // 走者設定を復元
+      if (preset.playerConfigData) {
+        const configFromPreset = JSON.parse(preset.playerConfigData) as PresetPlayerConfigData;
+        if (user.playerConfig) {
+          await tx
+            .update(playerConfigs)
+            .set({
+              keyboardLayout: configFromPreset.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
+              keyboardModel: configFromPreset.keyboardModel ?? null,
+              mouseDpi: configFromPreset.mouseDpi ?? null,
+              gameSensitivity: configFromPreset.gameSensitivity ?? null,
+              rawInput: configFromPreset.rawInput ?? true,
+              mouseAcceleration: configFromPreset.mouseAcceleration ?? false,
+              toggleSprint: configFromPreset.toggleSprint ?? null,
+              toggleSneak: configFromPreset.toggleSneak ?? null,
+              autoJump: configFromPreset.autoJump ?? null,
+              fov: configFromPreset.fov ?? null,
+              guiScale: configFromPreset.guiScale ?? null,
+              gameLanguage: configFromPreset.gameLanguage ?? null,
+              mouseModel: configFromPreset.mouseModel ?? null,
+              windowsSpeed: configFromPreset.windowsSpeed ?? null,
+              windowsSpeedMultiplier: configFromPreset.windowsSpeedMultiplier ?? null,
+              cm360: configFromPreset.cm360 ?? null,
+              notes: configFromPreset.notes ?? null,
+              controllerSettings: configFromPreset.controllerSettings ?? null,
+              fingerAssignments: preset.fingerAssignmentsData,
+              updatedAt: now,
+            })
+            .where(eq(playerConfigs.id, user.playerConfig.id));
+        } else {
+          await tx.insert(playerConfigs).values({
+            id: createId(),
+            userId: user.id,
+            keyboardLayout: configFromPreset.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
+            keyboardModel: configFromPreset.keyboardModel ?? null,
+            mouseDpi: configFromPreset.mouseDpi ?? null,
+            gameSensitivity: configFromPreset.gameSensitivity ?? null,
+            rawInput: configFromPreset.rawInput ?? true,
+            mouseAcceleration: configFromPreset.mouseAcceleration ?? false,
+            toggleSprint: configFromPreset.toggleSprint ?? null,
+            toggleSneak: configFromPreset.toggleSneak ?? null,
+            autoJump: configFromPreset.autoJump ?? null,
+            fov: configFromPreset.fov ?? null,
+            guiScale: configFromPreset.guiScale ?? null,
+            gameLanguage: configFromPreset.gameLanguage ?? null,
+            mouseModel: configFromPreset.mouseModel ?? null,
+            windowsSpeed: configFromPreset.windowsSpeed ?? null,
+            windowsSpeedMultiplier: configFromPreset.windowsSpeedMultiplier ?? null,
+            cm360: configFromPreset.cm360 ?? null,
+            notes: configFromPreset.notes ?? null,
+            controllerSettings: configFromPreset.controllerSettings ?? null,
+            fingerAssignments: preset.fingerAssignmentsData,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       }
-    }
 
-    // アイテム配置を復元
-    if (preset.itemLayoutsData) {
-      // 既存のアイテム配置を削除
-      await db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
-
-      // プリセットのアイテム配置を追加
-      const layoutsFromPreset = JSON.parse(preset.itemLayoutsData) as Array<{
-        segment: string;
-        slots: string;
-        offhand: string | null;
-        notes: string | null;
-        displayOrder: number;
-      }>;
-
-      for (const layoutData of layoutsFromPreset) {
-        await db.insert(itemLayouts).values({
-          id: createId(),
-          userId: user.id,
-          segment: layoutData.segment,
-          slots: layoutData.slots,
-          offhand: layoutData.offhand,
-          notes: layoutData.notes,
-          displayOrder: layoutData.displayOrder,
-          createdAt: now,
-          updatedAt: now,
-        });
+      // リマップを復元
+      if (preset.remapsData) {
+        const remapsFromPreset = JSON.parse(preset.remapsData) as PresetRemapData[];
+        for (const remapData of remapsFromPreset) {
+          await tx.insert(keyRemaps).values({
+            id: createId(),
+            userId: user.id,
+            sourceKey: remapData.sourceKey,
+            targetKey: sanitizeRemapTargetKey(remapData.targetKey),
+            software: remapData.software,
+            notes: remapData.notes,
+            outputMode: remapData.outputMode ?? "key",
+            outputCharacter: remapData.outputCharacter ?? null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       }
-    }
 
-    // サーチクラフトを復元
-    if (preset.searchCraftsData) {
-      // 既存のサーチクラフトを削除
-      await db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
-
-      // プリセットのサーチクラフトを追加
-      const craftsFromPreset = JSON.parse(preset.searchCraftsData) as Array<{
-        sequence: number;
-        items: string;
-        keys: string;
-        searchStr: string | null;
-        comment: string | null;
-      }>;
-
-      for (const craftData of craftsFromPreset) {
-        await db.insert(searchCrafts).values({
-          id: createId(),
-          userId: user.id,
-          sequence: craftData.sequence,
-          items: craftData.items,
-          keys: craftData.keys,
-          searchStr: craftData.searchStr,
-          comment: craftData.comment,
-          createdAt: now,
-          updatedAt: now,
-        });
+      // アイテム配置を復元
+      if (preset.itemLayoutsData) {
+        const layoutsFromPreset = JSON.parse(preset.itemLayoutsData) as PresetItemLayoutData[];
+        for (const layoutData of layoutsFromPreset) {
+          await tx.insert(itemLayouts).values({
+            id: createId(),
+            userId: user.id,
+            segment: layoutData.segment,
+            slots: layoutData.slots,
+            offhand: layoutData.offhand,
+            notes: layoutData.notes,
+            displayOrder: layoutData.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       }
-    }
 
-    // 全てのプリセットを非アクティブに
-    await db
-      .update(configPresets)
-      .set({ isActive: false, updatedAt: now })
-      .where(eq(configPresets.userId, user.id));
+      // サーチクラフトを復元
+      if (preset.searchCraftsData) {
+        const craftsFromPreset = JSON.parse(preset.searchCraftsData) as PresetSearchCraftData[];
+        for (const craftData of craftsFromPreset) {
+          await tx.insert(searchCrafts).values({
+            id: createId(),
+            userId: user.id,
+            sequence: craftData.sequence,
+            items: craftData.items,
+            keys: craftData.keys,
+            searchStr: craftData.searchStr,
+            comment: craftData.comment,
+            timing: craftData.timing ?? null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
 
-    // このプリセットをアクティブに
-    await db
-      .update(configPresets)
-      .set({ isActive: true, updatedAt: now })
-      .where(eq(configPresets.id, presetId));
+      // カスタムキー定義を復元
+      if (preset.customKeysData) {
+        const ckFromPreset = JSON.parse(preset.customKeysData) as PresetCustomKeyData[];
+        for (const ck of ckFromPreset) {
+          await tx.insert(customKeys).values({
+            id: createId(),
+            userId: user.id,
+            keyCode: ck.keyCode,
+            keyName: ck.keyName,
+            category: ck.category,
+            position: ck.position,
+            size: ck.size,
+            notes: ck.notes,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
 
-    // 履歴に記録
-    await db.insert(configHistory).values({
-      id: createId(),
-      userId: user.id,
-      changeType: "preset_switch",
-      changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
-      previousData: previousKeybindings,
-      newData: preset.keybindingsData,
-      presetId,
-      createdAt: now,
+      // カスタムアクションを復元
+      if (preset.customActionsData) {
+        const caFromPreset = JSON.parse(preset.customActionsData) as PresetCustomActionData[];
+        for (const ca of caFromPreset) {
+          await tx.insert(customActions).values({
+            id: createId(),
+            userId: user.id,
+            actionName: ca.actionName,
+            description: ca.description,
+            category: ca.category,
+            triggerKey: ca.triggerKey,
+            displayOrder: ca.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // 全てのプリセットを非アクティブに
+      await tx
+        .update(configPresets)
+        .set({ isActive: false, updatedAt: now })
+        .where(eq(configPresets.userId, user.id));
+
+      // このプリセットをアクティブに
+      await tx
+        .update(configPresets)
+        .set({ isActive: true, updatedAt: now })
+        .where(eq(configPresets.id, presetId));
+
+      // 履歴に記録
+      await tx.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "preset_switch",
+        changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
+        previousData: previousKeybindings,
+        newData: preset.keybindingsData,
+        presetId,
+        createdAt: now,
+      });
     });
 
     return { success: true, message: t("mePresets.appliedPreset", { name: preset.name }) };

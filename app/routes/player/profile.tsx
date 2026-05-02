@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useNavigate } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation } from "react-router";
 import { lazy, Suspense, useState, useEffect } from "react";
 import {
   ViewToggle,
@@ -30,6 +30,7 @@ import { formatTime } from "@/lib/time-utils";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 
@@ -41,6 +42,10 @@ const MinecraftFullBody = lazy(() =>
 const MinecraftAvatar = lazy(() =>
   import("@/components/minecraft-avatar").then((mod) => ({ default: mod.MinecraftAvatar }))
 );
+
+const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
+const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
+const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
 export function meta({ data, params }: Route.MetaArgs) {
@@ -175,7 +180,7 @@ import {
   GitCompare,
   Save,
   User,
-  Menu,
+  ChevronsDown,
   X,
   Loader2,
   BookOpen,
@@ -183,7 +188,6 @@ import {
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
-import { getFavoritesFromCookie, isFavorite } from "@/lib/favorites";
 import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
@@ -330,6 +334,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       fingerAssignmentsData: true,
       itemLayoutsData: true,
       searchCraftsData: true,
+      customKeysData: true,
     },
   });
 
@@ -340,6 +345,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   let displayKeyRemaps = player.keyRemaps;
   let displayItemLayouts = player.itemLayouts;
   let displaySearchCrafts = player.searchCrafts;
+  let displayCustomKeys = player.customKeys;
 
   if (presetId && presets.length > 0) {
     const selectedPreset = presets.find((p) => p.id === presetId);
@@ -441,6 +447,30 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           updatedAt: new Date(),
         }));
       }
+
+      // プリセットのカスタムキー定義を適用
+      if (selectedPreset.customKeysData) {
+        const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
+          keyCode: string;
+          keyName: string;
+          category: "mouse" | "keyboard" | "controller";
+          position: string | null;
+          size: string | null;
+          notes: string | null;
+        }>;
+        displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
+          id: `preset-customkey-${idx}`,
+          userId: player.id,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category,
+          position: ck.position,
+          size: ck.size,
+          notes: ck.notes,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
     }
   }
 
@@ -474,11 +504,6 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     ? JSON.parse(player.hiddenSpeedrunRecords)
     : [];
 
-  // お気に入り状態を確認（slugベースに変更）
-  const cookieHeader = request.headers.get("Cookie");
-  const favorites = getFavoritesFromCookie(cookieHeader);
-  const isFavorited = isFavorite(favorites, player.slug);
-
   // PaceManの統計情報を取得（MCIDがある場合のみ）
   let pacemanStats = null;
   if (player.mcid) {
@@ -506,10 +531,10 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       keyRemaps: displayKeyRemaps,
       itemLayouts: displayItemLayouts,
       searchCrafts: displaySearchCrafts,
+      customKeys: displayCustomKeys,
     },
     isOwner,
     hiddenSpeedrunRecords,
-    isFavorited,
     pacemanStats,
     presets: presets.map((p) => ({
       id: p.id,
@@ -525,19 +550,30 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, isFavorited, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const { player, isOwner, hiddenSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const revalidator = useRevalidator();
+  const navigation = useNavigation();
+
+  // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
+  const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
 
   // プリセット選択ハンドラー
   const handlePresetChange = (presetId: string) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (presetId === "current") {
-      newParams.delete("preset");
-    } else {
-      newParams.set("preset", presetId);
-    }
-    navigate(`?${newParams.toString()}`, { preventScrollReset: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (presetId === "current") {
+          next.delete("preset");
+        } else {
+          next.set("preset", presetId);
+        }
+        return next;
+      },
+      { preventScrollReset: true, replace: true },
+    );
+    // 明示的に loader を再実行（クエリ変更だけでは再検証されないケースの保険）
+    revalidator.revalidate();
   };
 
   // 廃止されたアクションを除外
@@ -580,6 +616,10 @@ export default function PlayerProfilePage() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
+
+  // スキン3Dビューワのサイズ（モバイルでは大きめに）
+  const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
+  const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
 
   // タブ項目の定義（編集画面のメニュー順に合わせる）
   const tabItems = [
@@ -645,7 +685,7 @@ export default function PlayerProfilePage() {
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
           </div>
         </div>
-        {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
       </Button>
 
       {/* Mobile Menu Dropdown */}
@@ -761,7 +801,21 @@ export default function PlayerProfilePage() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-6">
+      <div className="flex-1 min-w-0 space-y-6 relative">
+        {/* プリセット切替中のオーバーレイ（メインコンテンツ全体を覆う） */}
+        {isSwitchingPreset && (
+          <div
+            className="absolute inset-0 z-30 flex items-start justify-center rounded-lg bg-background/70 backdrop-blur-sm"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="sticky top-32 mt-8 flex items-center gap-3 rounded-full border bg-card px-4 py-2 shadow-md">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">{t("playerProfile.presetLoading")}</span>
+            </div>
+          </div>
+        )}
+
         {/* Mobile Preset Selector */}
         {showPresetSelector && (
           <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">
@@ -794,23 +848,24 @@ export default function PlayerProfilePage() {
           {/* Header: Skin + Basic Info */}
           <Card>
             <CardContent className="pt-4 pb-4">
-              <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (
                   <div className="flex justify-center sm:justify-start shrink-0">
-                    <Suspense fallback={<SkinSkeleton width={120} height={180} />}>
+                    <Suspense fallback={<SkinSkeleton width={skinViewSize.width} height={skinViewSize.height} />}>
                       <MinecraftFullBody
                         uuid={player.uuid}
                         skinUrl={player.customSkinUrl ?? undefined}
                         mcid={player.mcid ?? undefined}
-                        width={120}
-                        height={180}
+                        width={skinViewSize.width}
+                        height={skinViewSize.height}
                         pose={(player.profilePose as PoseName) ?? "waving"}
                         slim={player.customSkinModel === "slim" || player.slimSkin || false}
                         angle={-35}
                         elevation={5}
                         zoom={0.9}
-                        asImage
+                        interactive
+                        showInteractiveHint
                       />
                     </Suspense>
                   </div>
@@ -877,7 +932,7 @@ export default function PlayerProfilePage() {
                         </Link>
                       </Button>
                     )}
-                    {player.mcid && <FavoriteButton mcid={player.mcid} isFavorite={isFavorited} />}
+                    <FavoriteButton slug={player.slug} />
                     <ShareButton
                       title={`${player.displayName ?? player.mcid ?? player.slug} - Minefolio`}
                       description={player.shortBio ?? undefined}

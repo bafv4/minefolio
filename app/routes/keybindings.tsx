@@ -28,6 +28,7 @@ import {
 import { Search, Keyboard, Mouse, Users, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, X, SlidersHorizontal, ArrowRight, WandSparkles } from "lucide-react";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel } from "@/lib/remap-utils";
+import { excludeViewersCondition } from "@/lib/users-filter";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
@@ -172,8 +173,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // 新着順で固定
   const orderBy = desc(users.createdAt);
 
-  // 公開プロフィールのみ表示
-  const baseCondition = eq(users.profileVisibility, "public");
+  // 公開プロフィールのみ表示（視聴者ロールは除外）
+  const baseCondition = and(
+    eq(users.profileVisibility, "public"),
+    excludeViewersCondition,
+  );
 
   // 検索条件（MCID、displayName、slugで検索）
   const searchCondition = search

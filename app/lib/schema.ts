@@ -542,6 +542,8 @@ export const configPresets = sqliteTable("config_presets", {
   fingerAssignmentsData: text("finger_assignments_data"), // JSON: 指割り当て
   itemLayoutsData: text("item_layouts_data"), // JSON: アイテム配置のスナップショット
   searchCraftsData: text("search_crafts_data"), // JSON: サーチクラフトのスナップショット
+  customKeysData: text("custom_keys_data"), // JSON: カスタムキー定義のスナップショット
+  customActionsData: text("custom_actions_data"), // JSON: カスタムアクションのスナップショット
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
@@ -643,10 +645,10 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  favoriteMcid: text("favorite_mcid").notNull(),
+  favoriteSlug: text("favorite_slug").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  uniqueIndex("idx_favorites_user_mcid").on(table.userId, table.favoriteMcid),
+  uniqueIndex("idx_favorites_user_slug").on(table.userId, table.favoriteSlug),
   index("idx_favorites_user_id").on(table.userId),
 ]);
 

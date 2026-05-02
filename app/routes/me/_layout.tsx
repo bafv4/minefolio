@@ -17,7 +17,6 @@ import {
   Loader2,
   Save,
   Upload,
-  BookOpen,
 } from "lucide-react";
 import { t } from "@/lib/messages";
 
@@ -47,7 +46,6 @@ const mainNavItems = [
   { to: "/me/devices", label: t("meLayout.devices"), icon: Mouse },
   { to: "/me/items", label: t("meLayout.itemLayouts"), icon: Package },
   { to: "/me/search-craft", label: t("meLayout.searchCraft"), icon: Search },
-  { to: "/me/guides", label: t("meLayout.guides"), icon: BookOpen },
 ];
 
 // 補助的なナビゲーション項目（区切り線の下）

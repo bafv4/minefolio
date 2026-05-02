@@ -20,6 +20,8 @@ __tests__/
 # Documentation
 *.md
 !README.md
+# app/content/ 配下は Vite ?raw import でバンドルに取り込むため残す
+!app/content/**/*.md
 
 # IDE
 .vscode/

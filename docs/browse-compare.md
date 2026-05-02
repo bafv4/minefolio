@@ -10,6 +10,7 @@
 
 - **公開プロフィールのみ**: `profileVisibility = "public"` のユーザーのみ表示
 - 非公開・限定公開プロフィールは一覧に表示されない
+- **視聴者ロールはデフォルトで非表示**：ロールフィルタで `viewer` を明示的に選択した場合のみ表示される。実装は `app/lib/users-filter.ts` の `excludeViewersCondition` を `where` に組み込む方式
 
 ### 検索
 
@@ -36,21 +37,30 @@
 | `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch` |
 | `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
 
+ロールフィルタで何も選択していない時のみ視聴者ロールが除外される（前述）。「視聴者」を選択した場合はそのまま表示される。
+
+#### フィルタダイアログの動作
+
+- フィルタダイアログ内のチェックボックスはローカル `draftFilters` のみを更新
+- 「完了」ボタンで URL 検索パラメータに反映 → `loader` が再実行される
+- ダイアログ外のフィルタチップ（×ボタン）は即時反映
+
 ### ページネーション
 
 - 1ページあたり12件（`ITEMS_PER_PAGE = 12`）
 - クエリパラメータ `page` でページ番号指定
 - 前へ/次へボタンで遷移
 
+### お気に入り並べ替え
+
+- ログイン中ユーザーのお気に入りを `loader` で DB から取得し、リストの先頭に並び替える
+- 未ログイン時は SSR 時点でのお気に入り情報がないため、初期表示は通常順序のまま（クライアント側 hydrate 後に `useFavorites` フックの状態を参照）
+
 ### 表示コンポーネント
 
 - `ProfileFeedCard` - カード表示モード
 - `ProfileFeedListItem` - リスト表示モード
 - `PlayerViewToggle` - 表示切替
-
-### カスタムスキン対応
-
-- Cookieからお気に入り一覧を取得（`getFavoritesFromCookie`）し、お気に入りマーク表示に使用
 
 ---
 
@@ -59,6 +69,8 @@
 ### 概要
 
 2人のプレイヤーのキー配置・デバイス設定を並べて比較する画面。
+
+> v1.4.0 でヘッダー・モバイルナビからリンクを削除しました。直接URLでアクセスすれば引き続き利用可能です。
 
 ### 比較対象の指定
 
@@ -107,50 +119,31 @@
 
 ### 概要
 
-お気に入りに登録したプレイヤーの一覧画面。Cookieベース（非ログイン対応）およびDBベースの管理をサポート。
+お気に入りに登録したプレイヤーの一覧画面。v1.4.0 以降、ログインユーザーは DB がマスター、未ログインユーザーは `localStorage` ベースで管理する。詳細は [`docs/favorites.md`](favorites.md) を参照。
 
-### Cookieベースのお気に入り
+### loader 処理
 
-- `getFavoritesFromCookie(cookieHeader)` でCookieからお気に入りMCID一覧を取得
-- ログインしていなくてもお気に入りが利用可能
-- Cookie同意（`useCookieConsent`）が必要
+- **ログイン中**: `getFavoritesFromDb(db, userId)` で slug 一覧を取得 → `users` テーブルから JOIN で詳細取得 → 入力順でソートして返却
+- **未ログイン**: SSR 時点では空のプレースホルダーを返し、クライアント側で `localStorage` から slug 一覧を取得 → `POST /api/users/by-slugs` で詳細取得
 
-### DBベースのお気に入り
+### Cookie 同意未承諾の場合
 
-#### favorites テーブル
+未ログインで Cookie 同意がない場合は localStorage を参照せず、案内バナーを表示する。
 
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| `id` | text (PK) | CUID2 |
-| `userId` | text (FK → users) | ユーザーID |
-| `favoriteMcid` | text | お気に入りプレイヤーのMCID |
-| `createdAt` | timestamp | 作成日時 |
+### 関連 API
 
-#### インデックス
+- `GET /api/favorites` — お気に入り一覧（slug 配列、未認証は空配列）
+- `POST /api/favorites` — お気に入り追加・削除（認証必須）
+- `PUT /api/favorites` — localStorage→DB の一括同期（認証必須、ログイン時に自動実行）
+- `POST /api/users/by-slugs` — slug 配列からユーザー詳細を取得（最大100件）
 
-- `idx_favorites_user_mcid` (UNIQUE) - ユーザー + MCIDの組み合わせで一意
-- `idx_favorites_user_id` - ユーザーIDで検索
-
-### /api/favorites
-
-お気に入りの追加・削除を行うAPIエンドポイント。
-
-| メソッド | 操作 |
-|---------|------|
-| POST | お気に入り追加 |
-| DELETE | お気に入り削除 |
+旧 Cookie `minefolio_favorites` は `/api/favorites` の応答で `Set-Cookie: ... Max-Age=0` により自動削除される。
 
 ### 表示
 
 - `PlayerCard` コンポーネントでプレイヤーカード表示
 - お気に入りが空の場合、案内メッセージ表示
-- `FavoriteButton` コンポーネントで各プレイヤーカードにお気に入りトグルボタンを表示
-
-### loader処理
-
-1. Cookieからお気に入りMCID一覧を取得
-2. 空の場合は早期リターン
-3. `users` テーブルから該当MCIDのプレイヤー情報を `inArray` で一括取得
+- `FavoriteButton` コンポーネントで各プレイヤーカードにお気に入りトグルボタンを表示（v1.4.0 から `slug` プロップを受け取る）
 
 ---
 
@@ -174,14 +167,18 @@
 - `app/routes/browse.tsx` - プレイヤー一覧画面
 - `app/routes/compare.tsx` - プレイヤー比較画面
 - `app/routes/favorites.tsx` - お気に入り画面
-- `app/routes/api/favorites.ts` - お気に入りAPI
+- `app/routes/api/favorites.ts` - お気に入りAPI（GET / POST / PUT）
+- `app/routes/api/users/by-slugs.ts` - スラッグ配列からユーザー詳細を取得
 
 ### ライブラリ
-- `app/lib/favorites.ts` - お気に入りCookie管理（`getFavoritesFromCookie`）
+- `app/lib/users-filter.ts` - 視聴者ロール除外条件 `excludeViewersCondition`
+- `app/lib/favorites.ts` - サーバー側 DB CRUD（`getFavoritesFromDb` / `addFavoriteToDb` / `removeFavoriteFromDb` / `syncLocalFavoritesToDb`）+ 旧 Cookie 削除ヘッダー生成
+- `app/lib/favorites-client.ts` - クライアント側 localStorage / sessionStorage 操作
+- `app/hooks/use-favorites.tsx` - `FavoritesProvider` + `useFavorites` フック
 - `app/lib/keybindings.ts` - キーバインドのラベル変換（`getActionLabel`, `getKeyLabel`, `normalizeKeyCode`）
 
 ### コンポーネント
 - `app/components/player-card.tsx` - プレイヤーカード
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード（カード/リスト表示切替対応）
-- `app/components/favorite-button.tsx` - お気に入りボタン
+- `app/components/favorite-button.tsx` - お気に入りボタン（slug ベース）
 - `app/components/minecraft-avatar.tsx` - Minecraftアバター表示

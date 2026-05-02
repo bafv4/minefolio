@@ -66,7 +66,18 @@
       "Bash(npx react-router:*)",
       "Bash(pnpm db:generate)",
       "Bash(pnpm db:migrate)",
-      "Bash(npx dotenv:*)"
+      "Bash(npx dotenv:*)",
+      "Bash(DEBUG=* npx drizzle-kit migrate)",
+      "Bash(grep -iE \"error TS|app[\\\\\\\\/]\")",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/index.tsx app/routes/my-guides/index.tsx)",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/new.tsx app/routes/my-guides/new.tsx)",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv app/routes/me/guides/edit.tsx app/routes/my-guides/edit.tsx)",
+      "Bash(git mv *)",
+      "Bash(pnpm install *)",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio mv docs/changelog/changelog.md app/content/changelog.md)",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\yuanq\\\\dev\\\\minefolio\\\\docs\" -Filter \"*.md\")",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(git -C c:/Users/yuanq/dev/minefolio log --oneline 8685eb4..HEAD)"
     ]
   }
 }

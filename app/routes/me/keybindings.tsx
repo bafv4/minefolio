@@ -41,16 +41,22 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
 import { isKeyRemapTarget } from "@/lib/remap-utils";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { PresetSelector } from "@/components/preset-selector";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meKeybindings.title") }];
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
-  // actionがある場合はデフォルトの動作に従う
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
+  // 自ルートのアクション結果がある場合はデフォルトの動作に従う
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
+  }
+  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
+  if (formAction === "/me/presets") {
+    return true;
   }
   // それ以外（ナビゲーションなど）では再検証しない
   return false;
@@ -424,6 +430,16 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
+  const presetId = (formData.get("presetId") as string | null) || null;
+
+  try {
+    await assertPresetIsActive(db, user.id, presetId);
+  } catch (e) {
+    if (e instanceof PresetMismatchError) {
+      return { error: t("mePresets.staleSession") };
+    }
+    throw e;
+  }
 
   // キーバインド保存
   if (intent === "save-keybindings") {
@@ -432,6 +448,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     await persistKeybindingUpdates(db, updates, new Date(), {
       normalizeEmptyToUnbound: true,
     });
+    await syncActivePresetSnapshot(db, user.id, ["keybindings"]);
 
     return { success: true, message: t("meKeybindings.saveKeybindings") };
   }
@@ -443,6 +460,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     const now = new Date();
     await persistRemaps(db, user.id, remapsData, now);
+    await syncActivePresetSnapshot(db, user.id, ["remaps"]);
 
     return { success: true, message: t("meKeybindings.saveRemaps") };
   }
@@ -452,6 +470,7 @@ export async function action({ context, request }: Route.ActionArgs) {
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     const now = new Date();
     await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
+    await syncActivePresetSnapshot(db, user.id, ["fingers"]);
 
     return { success: true, message: t("meKeybindings.saveFingers") };
   }
@@ -490,6 +509,16 @@ export async function action({ context, request }: Route.ActionArgs) {
       await persistCustomActions(db, user.id, customActionsData, now);
     }
 
+    // アクティブプリセットスナップショット同期
+    const syncKinds: Array<"keybindings" | "remaps" | "fingers" | "customActions"> = [];
+    if (keybindingsJson) syncKinds.push("keybindings");
+    if (remapsJson) syncKinds.push("remaps");
+    if (fingerAssignmentsJson) syncKinds.push("fingers");
+    if (customActionsJson) syncKinds.push("customActions");
+    if (syncKinds.length > 0) {
+      await syncActivePresetSnapshot(db, user.id, syncKinds);
+    }
+
     // 変更履歴を記録
     const changes: string[] = [];
     if (keybindingsJson) changes.push(t("meKeybindings.tabActions"));
@@ -524,6 +553,13 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
+      await syncActivePresetSnapshot(db, user.id, [
+        "keybindings",
+        "remaps",
+        "fingers",
+        "customKeys",
+        "playerConfig",
+      ]);
       return {
         success: true,
         message: t("meKeybindings.importSummary", {
@@ -572,6 +608,8 @@ export async function action({ context, request }: Route.ActionArgs) {
       }
     }
 
+    await syncActivePresetSnapshot(db, user.id, ["customKeys"]);
+
     return { success: true, message: t("meKeybindings.saveCustomKeys") };
   }
 
@@ -582,6 +620,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     const now = new Date();
     await persistCustomActions(db, user.id, customActionsData, now);
+    await syncActivePresetSnapshot(db, user.id, ["customActions"]);
 
     return { success: true, message: t("meKeybindings.saveCustomActions") };
   }
@@ -1191,18 +1230,83 @@ export default function KeybindingsPage() {
     isInitializedRef.current = true;
   }, []);
 
-  // トースト通知
+  // loaderデータが変わったらローカル状態を再同期（プリセット切替時など）
+  useEffect(() => {
+    setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
+  }, [initialRemaps]);
+
+  useEffect(() => {
+    setLocalFingerAssignments(
+      playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {},
+    );
+  }, [playerConfig?.fingerAssignments]);
+
+  useEffect(() => {
+    setLocalCustomKeys(
+      initialCustomKeys.map((ck) => ({
+        id: ck.id,
+        keyCode: ck.keyCode,
+        keyName: ck.keyName,
+        category: ck.category as "mouse" | "keyboard",
+      })),
+    );
+  }, [initialCustomKeys]);
+
+  useEffect(() => {
+    setLocalCustomActions(
+      initialCustomActions.map((ca) => ({
+        id: ca.id,
+        actionName: ca.actionName,
+        description: ca.description,
+        category: ca.category as "other" | "macro" | "tool",
+        triggerKey: ca.triggerKey,
+        displayOrder: ca.displayOrder,
+      })),
+    );
+  }, [initialCustomActions]);
+
+  // キーバインドが loader で更新されたらローカル変更（差分）をクリア
+  useEffect(() => {
+    setKeybindingChanges({});
+  }, [kbs]);
+
+  // トースト通知 + 保存完了時のローカル状態リセット
   useEffect(() => {
     if (!data || data === prevDataRef.current) return;
+    if (fetcher.state !== "idle") return; // 再検証完了まで待つ
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
       toast.success(data.message);
+      // 保存完了後、すべてのローカル状態を最新の loader データから再構築
+      // （hasUnsavedChanges を確実に false にして FloatingSaveBar を非表示にする）
       setKeybindingChanges({});
+      setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
+      setLocalFingerAssignments(
+        playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {},
+      );
+      setLocalCustomActions(
+        initialCustomActions.map((ca) => ({
+          id: ca.id,
+          actionName: ca.actionName,
+          description: ca.description,
+          category: ca.category as "other" | "macro" | "tool",
+          triggerKey: ca.triggerKey,
+          displayOrder: ca.displayOrder,
+        })),
+      );
+      setLocalCustomKeys(
+        initialCustomKeys.map((ck) => ({
+          id: ck.id,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category as "mouse" | "keyboard",
+        })),
+      );
     } else if ("error" in data) {
       toast.error(data.error);
     }
-  }, [data]);
+  }, [data, fetcher.state, initialRemaps, playerConfig?.fingerAssignments, initialCustomActions, initialCustomKeys]);
 
   // ========== Computed Values ==========
   const deprecatedActions = ["toggleHud"];
@@ -1249,7 +1353,11 @@ export default function KeybindingsPage() {
   // 未保存の変更チェック
   const hasKeybindingChanges = Object.keys(keybindingChanges).length > 0;
   const hasRemapChanges = useMemo(() => {
-    const originalRemapMap = new Map(initialRemaps.map((r) => [r.id, r]));
+    // localRemaps は dbRemapsToUiRemaps 経由で値が正規化される一方、
+    // initialRemaps は DB の生値なので比較時に同じ正規化を適用する
+    const originalRemapMap = new Map(
+      initialRemaps.map((r) => [r.id, dbRemapToUiRemap(r)] as const),
+    );
     for (const remap of localRemaps) {
       if (remap._isNew) return true;
       if (remap._delete) return true;
@@ -1264,6 +1372,10 @@ export default function KeybindingsPage() {
       ) {
         return true;
       }
+    }
+    // 件数が一致しなければ変更ありとみなす（追加/削除の検知）
+    if (localRemaps.filter((r) => !r._delete).length !== initialRemaps.length) {
+      return true;
     }
     return false;
   }, [localRemaps, initialRemaps]);
@@ -1746,6 +1858,9 @@ export default function KeybindingsPage() {
   const handleSave = useCallback(() => {
     const formData = new FormData();
     formData.set("intent", "save-all");
+    if (activePreset) {
+      formData.set("presetId", activePreset.id);
+    }
 
     // キーバインド変更をJSON化
     const keybindingUpdates = Object.entries(keybindingChanges).map(([id, keyCode]) => ({
@@ -1766,7 +1881,7 @@ export default function KeybindingsPage() {
     formData.set("customActions", JSON.stringify(localCustomActions));
 
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions]);
+  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset]);
 
   // デバッグ: 現在のデータを表示
   const handleDebugLog = useCallback(() => {
@@ -1797,11 +1912,13 @@ export default function KeybindingsPage() {
       toast.error(t("meKeybindings.legacyApiNotConfigured"));
       return;
     }
-    importFetcher.submit(
-      { intent: "import-legacy" },
-      { method: "post" }
-    );
-  }, [importFetcher, legacyApiUrl]);
+    const formData = new FormData();
+    formData.set("intent", "import-legacy");
+    if (activePreset) {
+      formData.set("presetId", activePreset.id);
+    }
+    importFetcher.submit(formData, { method: "post" });
+  }, [importFetcher, legacyApiUrl, activePreset]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string, target: "keybindings" | "remaps" | "fingers" | "all") => {
@@ -1980,56 +2097,16 @@ export default function KeybindingsPage() {
         )}
       </div>
 
-      {/* 現在のプリセット表示 */}
-      {activePreset && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meKeybindings.editingPreset")} <strong>{activePreset.name}</strong>
-            </span>
-            <div className="flex gap-2 shrink-0">
-              {presets.length > 1 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    setCopyTarget("all");
-                    setCopyDialogOpen(true);
-                  }}
-                >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t("meKeybindings.copyFromOtherPreset")}</span>
-                  <span className="sm:hidden">{t("meKeybindings.copyShort")}</span>
-                </Button>
-              )}
-              <Link to="/me/presets" className="shrink-0">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                  {t("meKeybindings.managePresets")}
-                </Button>
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* プリセットがない場合の警告 */}
-      {!hasPresets && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm">
-              {t("meKeybindings.noPresetWarning")}
-            </span>
-            <Link to="/me/presets" className="shrink-0">
-              <Button size="sm" className="w-full sm:w-auto">
-                {t("meKeybindings.createPreset")}
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* プリセットセレクター */}
+      <PresetSelector
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        activePresetId={activePreset?.id ?? null}
+        hasChanges={hasUnsavedChanges}
+        onCopyFromOther={presets.length > 1 ? () => {
+          setCopyTarget("all");
+          setCopyDialogOpen(true);
+        } : undefined}
+      />
 
       {/* コントローラーモード: コントローラービュー */}
       {isControllerMode ? (
