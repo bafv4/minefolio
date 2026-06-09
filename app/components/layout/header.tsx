@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
@@ -44,17 +50,7 @@ export function Header({ user }: HeaderProps) {
     window.location.reload();
   }, [navigate]);
 
-  // メニューが開いている時はスクロールを無効化
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileMenuOpen]);
+  // Sheet（Radix Dialog）がスクロールロック・フォーカストラップ・Escape を自動管理
 
   // ルート変更時にメニューを閉じる
   useEffect(() => {
@@ -64,7 +60,10 @@ export function Header({ user }: HeaderProps) {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <nav
+          aria-label="メインナビゲーション"
+          className="container mx-auto px-4 sm:px-6 lg:px-8"
+        >
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <div className="flex items-center">
@@ -180,57 +179,39 @@ export function Header({ user }: HeaderProps) {
               )}
             </div>
 
-            {/* Mobile menu button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-              <span className="sr-only">メニューを開閉</span>
-            </Button>
-          </div>
-        </nav>
-      </header>
-
-      {/* Mobile Full Screen Navigation */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] md:hidden">
-          {/* 背景オーバーレイ */}
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-
-          {/* メニューコンテンツ */}
-          <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col bg-background">
-            {/* ヘッダー部分 */}
-            <div className="flex h-16 items-center justify-between px-4 border-b border-border shrink-0">
-              <Link
-                to="/"
-                className="flex items-center space-x-2"
-                onClick={() => setMobileMenuOpen(false)}
+            {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  aria-label="メニューを開く"
+                >
+                  <Menu className="h-6 w-6" aria-hidden />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                className="w-full sm:max-w-sm p-0 flex flex-col gap-0"
               >
-                <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
-                <span className="text-xl font-bold">Minefolio</span>
-              </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <X className="h-6 w-6" />
-                <span className="sr-only">メニューを閉じる</span>
-              </Button>
-            </div>
-
-            {/* Navigation Links */}
-            <div className="flex-1 overflow-y-auto px-4 py-6">
+                <SheetTitle className="sr-only">モバイルナビゲーション</SheetTitle>
+                {/* ヘッダー部分 */}
+                <div className="flex h-16 items-center justify-between px-4 border-b border-border shrink-0">
+                  <Link
+                    to="/"
+                    className="flex items-center space-x-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
+                    <span className="text-xl font-bold">Minefolio</span>
+                  </Link>
+                </div>
+                {/* Navigation Links */}
+                <nav
+                  aria-label="モバイルナビゲーション"
+                  className="flex-1 overflow-y-auto px-4 py-6"
+                >
               <div className="flex flex-col space-y-2">
                 {navigation.map((item) => {
                   const Icon = item.icon;
@@ -350,7 +331,7 @@ export function Header({ user }: HeaderProps) {
                   ログイン
                 </Link>
               )}
-            </div>
+            </nav>
 
             {/* Footer - Theme Toggle */}
             <div className="border-t border-border px-4 py-4 bg-background shrink-0">
@@ -378,9 +359,11 @@ export function Header({ user }: HeaderProps) {
                 </div>
               </div>
             </div>
+              </SheetContent>
+            </Sheet>
           </div>
-        </div>
-      )}
+        </nav>
+      </header>
     </>
   );
 }

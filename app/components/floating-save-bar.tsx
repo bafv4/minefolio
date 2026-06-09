@@ -24,6 +24,9 @@ export function FloatingSaveBar({
 }: FloatingSaveBarProps) {
   return (
     <div
+      role="region"
+      aria-label="保存バー"
+      aria-hidden={!hasChanges}
       className={cn(
         "fixed bottom-4 left-0 right-0 mx-auto z-50",
         "w-[calc(100%-2rem)] max-w-2xl",
@@ -35,7 +38,10 @@ export function FloatingSaveBar({
         className
       )}
     >
-      <div className="flex items-center justify-center sm:justify-start gap-3">
+      <div
+        className="flex items-center justify-center sm:justify-start gap-3"
+        aria-live="polite"
+      >
         {hasChanges && (
           <Badge
             variant="outline"
@@ -44,6 +50,9 @@ export function FloatingSaveBar({
             <span className="hidden sm:inline">未保存の変更があります</span>
             <span className="sm:hidden">未保存</span>
           </Badge>
+        )}
+        {isSubmitting && (
+          <span className="sr-only">保存中です</span>
         )}
       </div>
       <div className="flex gap-2">

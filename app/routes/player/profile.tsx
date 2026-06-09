@@ -185,9 +185,17 @@ import {
   Loader2,
   BookOpen,
   Eye,
+  Maximize2,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
 
 // Windowsポインター速度の乗数（11/11がデフォルト）
@@ -582,6 +590,7 @@ export default function PlayerProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const navigation = useNavigation();
+  const [skin3dOpen, setSkin3dOpen] = useState(false);
 
   // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
   const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
@@ -924,22 +933,75 @@ export default function PlayerProfilePage() {
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (
                   <div className="flex justify-center sm:justify-start shrink-0">
-                    <Suspense fallback={<SkinSkeleton width={skinViewSize.width} height={skinViewSize.height} />}>
-                      <MinecraftFullBody
-                        uuid={player.uuid}
-                        skinUrl={player.customSkinUrl ?? undefined}
-                        mcid={player.mcid ?? undefined}
-                        width={skinViewSize.width}
-                        height={skinViewSize.height}
-                        pose={(player.profilePose as PoseName) ?? "waving"}
-                        slim={player.customSkinModel === "slim" || player.slimSkin || false}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        interactive
-                        showInteractiveHint
-                      />
-                    </Suspense>
+                    <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
+                      <DialogTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="スキンを 3D で表示"
+                          className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Suspense
+                            fallback={
+                              <SkinSkeleton
+                                width={skinViewSize.width}
+                                height={skinViewSize.height}
+                              />
+                            }
+                          >
+                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                            <MinecraftFullBody
+                              uuid={player.uuid}
+                              skinUrl={player.customSkinUrl ?? undefined}
+                              mcid={player.mcid ?? undefined}
+                              width={skinViewSize.width}
+                              height={skinViewSize.height}
+                              pose={(player.profilePose as PoseName) ?? "waving"}
+                              slim={player.customSkinModel === "slim" || player.slimSkin || false}
+                              angle={-35}
+                              elevation={5}
+                              zoom={0.9}
+                              asImage
+                            />
+                          </Suspense>
+                          <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                            <Maximize2
+                              className="h-8 w-8 text-foreground drop-shadow"
+                              aria-hidden
+                            />
+                          </div>
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>
+                            {player.displayName ?? player.mcid ?? player.slug} のスキン
+                          </DialogTitle>
+                        </DialogHeader>
+                        {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
+                        {skin3dOpen && (
+                          <div className="flex justify-center">
+                            <Suspense
+                              fallback={<SkinSkeleton width={360} height={480} />}
+                            >
+                              <MinecraftFullBody
+                                uuid={player.uuid}
+                                skinUrl={player.customSkinUrl ?? undefined}
+                                mcid={player.mcid ?? undefined}
+                                width={360}
+                                height={480}
+                                pose={(player.profilePose as PoseName) ?? "waving"}
+                                slim={player.customSkinModel === "slim" || player.slimSkin || false}
+                                angle={-35}
+                                elevation={5}
+                                zoom={0.9}
+                                interactive
+                                showInteractiveHint
+                              />
+                            </Suspense>
+                          </div>
+                        )}
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 )}
 

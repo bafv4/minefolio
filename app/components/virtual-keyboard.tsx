@@ -489,6 +489,15 @@ function VirtualKeyboardComponent({
         : [];
     const showAction = filteredBindings.length > 0;
 
+    const ariaLabel = [
+      `${displayLabel} キー`,
+      ...filteredBindings.map((b) => getActionLabel(b.action)),
+      ...keyRemaps.map(
+        (r) =>
+          `リマップ ${getRemapSourceLabel(r.sourceKey, layout)} → ${getRemapOutputLabel(r, layout)}`,
+      ),
+    ].join("、");
+
     // リマップのツールチップ説明を生成
     const getRemapTooltipText = (r: RemapInfo): string => {
       if (r.targetKey === null) {
@@ -516,6 +525,7 @@ function VirtualKeyboardComponent({
     const keyElement = (
       <button
         type="button"
+        aria-label={ariaLabel}
         onClick={() => onKeyClick?.(key.code)}
         className={cn(
           "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
@@ -713,9 +723,19 @@ function VirtualKeyboardComponent({
             !!remap &&
             ck.label.length + 1 + (remapTargetLabel?.length ?? 0) > remapInlineBudget;
 
+          const ariaLabel = [
+            `${ck.label} キー`,
+            ...bindings.map((b) => getActionLabel(b.action)),
+            ...(remap
+              ? [
+                  `リマップ ${getRemapSourceLabel(remap.sourceKey, layout)} → ${getRemapOutputLabel(remap, layout)}`,
+                ]
+              : []),
+          ].join("、");
           const keyElement = (
             <button
               type="button"
+              aria-label={ariaLabel}
               onClick={() => onKeyClick?.(ck.code)}
               className={cn(
                 "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
@@ -942,9 +962,19 @@ export function VirtualMouse({
       !!remap &&
       button.label.length + 1 + (remapTargetLabel?.length ?? 0) > 5;
 
+    const ariaLabel = [
+      `${isCustom ? button.label : getKeyLabel(button.code)} ボタン`,
+      ...bindings.map((b) => getActionLabel(b.action)),
+      ...(remap
+        ? [
+            `リマップ ${getRemapSourceLabel(remap.sourceKey)} → ${getRemapOutputLabel(remap)}`,
+          ]
+        : []),
+    ].join("、");
     const buttonElement = (
       <button
         type="button"
+        aria-label={ariaLabel}
         onClick={() => onButtonClick?.(button.code)}
         className={cn(
           "flex flex-col items-center justify-center rounded-md border-2 transition-colors",
@@ -1177,9 +1207,20 @@ export function VirtualNumpad({
     const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
     const isRemapDisabled = remap?.targetKey === null;
 
+    const ariaLabel = [
+      `${displayLabel} キー`,
+      ...bindings.map((b) => getActionLabel(b.action)),
+      ...(remap
+        ? [
+            `リマップ ${getRemapSourceLabel(remap.sourceKey)} → ${getRemapOutputLabel(remap)}`,
+          ]
+        : []),
+    ].join("、");
+
     const keyElement = (
       <button
         type="button"
+        aria-label={ariaLabel}
         onClick={() => onKeyClick?.(key.code)}
         className={cn(
           "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
