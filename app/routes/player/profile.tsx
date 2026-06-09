@@ -931,79 +931,77 @@ export default function PlayerProfilePage() {
             <CardContent className="pt-4 pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
-                {player.uuid && (
-                  <div className="flex justify-center sm:justify-start shrink-0">
-                    <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
-                      <DialogTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="スキンを 3D で表示"
-                          className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <Suspense
-                            fallback={
-                              <SkinSkeleton
+                {player.uuid && (() => {
+                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
+                  const skinProps = {
+                    uuid: player.uuid,
+                    skinUrl: player.customSkinUrl ?? undefined,
+                    mcid: player.mcid ?? undefined,
+                    pose: (player.profilePose as PoseName) ?? "waving",
+                    slim:
+                      player.customSkinModel === "slim" || player.slimSkin || false,
+                    angle: -35,
+                    elevation: 5,
+                    zoom: 0.9,
+                  };
+                  const modalSize = { width: 360, height: 480 };
+                  return (
+                    <div className="flex justify-center sm:justify-start shrink-0">
+                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="スキンを 3D で表示"
+                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <Suspense
+                              fallback={
+                                <SkinSkeleton
+                                  width={skinViewSize.width}
+                                  height={skinViewSize.height}
+                                />
+                              }
+                            >
+                              {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                              <MinecraftFullBody
+                                {...skinProps}
                                 width={skinViewSize.width}
                                 height={skinViewSize.height}
-                              />
-                            }
-                          >
-                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                            <MinecraftFullBody
-                              uuid={player.uuid}
-                              skinUrl={player.customSkinUrl ?? undefined}
-                              mcid={player.mcid ?? undefined}
-                              width={skinViewSize.width}
-                              height={skinViewSize.height}
-                              pose={(player.profilePose as PoseName) ?? "waving"}
-                              slim={player.customSkinModel === "slim" || player.slimSkin || false}
-                              angle={-35}
-                              elevation={5}
-                              zoom={0.9}
-                              asImage
-                            />
-                          </Suspense>
-                          <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                            <Maximize2
-                              className="h-8 w-8 text-foreground drop-shadow"
-                              aria-hidden
-                            />
-                          </div>
-                        </button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>
-                            {player.displayName ?? player.mcid ?? player.slug} のスキン
-                          </DialogTitle>
-                        </DialogHeader>
-                        {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
-                        {skin3dOpen && (
-                          <div className="flex justify-center">
-                            <Suspense
-                              fallback={<SkinSkeleton width={360} height={480} />}
-                            >
-                              <MinecraftFullBody
-                                uuid={player.uuid}
-                                skinUrl={player.customSkinUrl ?? undefined}
-                                mcid={player.mcid ?? undefined}
-                                width={360}
-                                height={480}
-                                pose={(player.profilePose as PoseName) ?? "waving"}
-                                slim={player.customSkinModel === "slim" || player.slimSkin || false}
-                                angle={-35}
-                                elevation={5}
-                                zoom={0.9}
-                                interactive
-                                showInteractiveHint
+                                asImage
                               />
                             </Suspense>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                )}
+                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                              <Maximize2
+                                className="h-8 w-8 text-foreground drop-shadow"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {player.displayName ?? player.mcid ?? player.slug} のスキン
+                            </DialogTitle>
+                          </DialogHeader>
+                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
+                          {skin3dOpen && (
+                            <div className="flex justify-center">
+                              <Suspense fallback={<SkinSkeleton {...modalSize} />}>
+                                <MinecraftFullBody
+                                  {...skinProps}
+                                  {...modalSize}
+                                  interactive
+                                  showInteractiveHint
+                                />
+                              </Suspense>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })()}
 
                 {/* Info */}
                 <div className="flex-1 space-y-4">

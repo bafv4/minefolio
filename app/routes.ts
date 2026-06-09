@@ -74,6 +74,7 @@ export default [
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
+  route("api/browse", "routes/api/browse.ts"),
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),

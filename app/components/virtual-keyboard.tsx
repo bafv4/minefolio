@@ -15,6 +15,25 @@ const MODIFIER_ICON_MAP: Record<string, LucideIcon> = {
   Meta: Command,
 };
 
+/** 共通: キー/ボタンの aria-label を組み立てる */
+function buildKeyAriaLabel(opts: {
+  displayLabel: string;
+  noun?: string; // 「キー」 or 「ボタン」
+  bindings: Array<{ action: string }>;
+  remaps: RemapInfo[];
+  layout?: string | null;
+}): string {
+  const noun = opts.noun ?? "キー";
+  return [
+    `${opts.displayLabel} ${noun}`,
+    ...opts.bindings.map((b) => getActionLabel(b.action)),
+    ...opts.remaps.map(
+      (r) =>
+        `リマップ ${getRemapSourceLabel(r.sourceKey, opts.layout)} → ${getRemapOutputLabel(r, opts.layout)}`,
+    ),
+  ].join("、");
+}
+
 // キーボードレイアウト定義
 type KeyDefinition = {
   code: string;
@@ -489,14 +508,12 @@ function VirtualKeyboardComponent({
         : [];
     const showAction = filteredBindings.length > 0;
 
-    const ariaLabel = [
-      `${displayLabel} キー`,
-      ...filteredBindings.map((b) => getActionLabel(b.action)),
-      ...keyRemaps.map(
-        (r) =>
-          `リマップ ${getRemapSourceLabel(r.sourceKey, layout)} → ${getRemapOutputLabel(r, layout)}`,
-      ),
-    ].join("、");
+    const ariaLabel = buildKeyAriaLabel({
+      displayLabel,
+      bindings: filteredBindings,
+      remaps: keyRemaps,
+      layout,
+    });
 
     // リマップのツールチップ説明を生成
     const getRemapTooltipText = (r: RemapInfo): string => {
@@ -723,15 +740,12 @@ function VirtualKeyboardComponent({
             !!remap &&
             ck.label.length + 1 + (remapTargetLabel?.length ?? 0) > remapInlineBudget;
 
-          const ariaLabel = [
-            `${ck.label} キー`,
-            ...bindings.map((b) => getActionLabel(b.action)),
-            ...(remap
-              ? [
-                  `リマップ ${getRemapSourceLabel(remap.sourceKey, layout)} → ${getRemapOutputLabel(remap, layout)}`,
-                ]
-              : []),
-          ].join("、");
+          const ariaLabel = buildKeyAriaLabel({
+            displayLabel: ck.label,
+            bindings,
+            remaps: remap ? [remap] : [],
+            layout,
+          });
           const keyElement = (
             <button
               type="button"
@@ -962,15 +976,12 @@ export function VirtualMouse({
       !!remap &&
       button.label.length + 1 + (remapTargetLabel?.length ?? 0) > 5;
 
-    const ariaLabel = [
-      `${isCustom ? button.label : getKeyLabel(button.code)} ボタン`,
-      ...bindings.map((b) => getActionLabel(b.action)),
-      ...(remap
-        ? [
-            `リマップ ${getRemapSourceLabel(remap.sourceKey)} → ${getRemapOutputLabel(remap)}`,
-          ]
-        : []),
-    ].join("、");
+    const ariaLabel = buildKeyAriaLabel({
+      displayLabel: isCustom ? button.label : getKeyLabel(button.code),
+      noun: "ボタン",
+      bindings,
+      remaps: remap ? [remap] : [],
+    });
     const buttonElement = (
       <button
         type="button"
@@ -1207,15 +1218,11 @@ export function VirtualNumpad({
     const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
     const isRemapDisabled = remap?.targetKey === null;
 
-    const ariaLabel = [
-      `${displayLabel} キー`,
-      ...bindings.map((b) => getActionLabel(b.action)),
-      ...(remap
-        ? [
-            `リマップ ${getRemapSourceLabel(remap.sourceKey)} → ${getRemapOutputLabel(remap)}`,
-          ]
-        : []),
-    ].join("、");
+    const ariaLabel = buildKeyAriaLabel({
+      displayLabel,
+      bindings,
+      remaps: remap ? [remap] : [],
+    });
 
     const keyElement = (
       <button

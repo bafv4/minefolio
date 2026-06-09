@@ -1,10 +1,8 @@
-import { useLoaderData, useSearchParams, Form, useNavigation } from "react-router";
+import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { eq, desc, asc, like, sql, or, and, isNotNull } from "drizzle-orm";
 import { ProfileFeedCard, ProfileFeedListItem, PlayerViewToggle } from "@/components/profile-feed-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,8 +29,12 @@ import { Label as RadixLabel } from "@/components/ui/label";
 import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
-import { getFavoritesFromDb } from "@/lib/favorites";
-import { excludeViewersCondition } from "@/lib/users-filter";
+import {
+  loadBrowsePage,
+  parseBrowseSearchParams,
+  getViewerFavoriteSlugs,
+} from "@/lib/browse-query.server";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -54,15 +56,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-const ITEMS_PER_PAGE = 12;
-
-type SortOption = "updatedAt" | "mcid" | "displayName";
-
-// フィルタオプションの型
-type FilterRole = "runner" | "viewer";
-type FilterEdition = "java" | "bedrock";
-type FilterInputMethod = "keyboard_mouse" | "controller" | "touch";
-type FilterPlatform = "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other";
+// 走者カードのスケルトン用カウントは UI 個別に管理（loader 側ページサイズは browse-query.server に集約）
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -71,132 +65,31 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   const url = new URL(request.url);
-  const searchQuery = url.searchParams.get("q") || "";
-  const sortBy = (url.searchParams.get("sort") as SortOption) || "updatedAt";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
-
-  // フィルタパラメータ（複数選択対応）
-  const filterRoles = url.searchParams.getAll("role") as FilterRole[];
-  const filterEditions = url.searchParams.getAll("edition") as FilterEdition[];
-  const filterInputMethods = url.searchParams.getAll("input") as FilterInputMethod[];
-  const filterPlatforms = url.searchParams.getAll("platform") as FilterPlatform[];
-
-  // ベースクエリ条件：公開プロフィールのみ
-  const conditions = [eq(users.profileVisibility, "public")];
-
-  // 検索条件（MCID、displayName、slugで検索）
-  if (searchQuery) {
-    conditions.push(
-      or(
-        like(users.mcid, `%${searchQuery}%`),
-        like(users.displayName, `%${searchQuery}%`),
-        like(users.slug, `%${searchQuery}%`)
-      )!
-    );
-  }
-
-  // ロールフィルタ
-  if (filterRoles.length > 0) {
-    // 明示的にロールを選んだ場合はそのロールのみ表示（viewer も含めて絞り込み可能）
-    conditions.push(
-      or(...filterRoles.map((role) => eq(users.role, role)))!
-    );
-  } else {
-    // フィルタ未指定の場合、視聴者ロールはデフォルトで除外
-    conditions.push(excludeViewersCondition!);
-  }
-  if (filterEditions.length > 0) {
-    conditions.push(
-      or(...filterEditions.map((edition) => eq(users.mainEdition, edition)))!
-    );
-  }
-  if (filterInputMethods.length > 0) {
-    conditions.push(
-      or(...filterInputMethods.map((input) => eq(users.inputMethodBadge, input)))!
-    );
-  }
-  if (filterPlatforms.length > 0) {
-    conditions.push(
-      or(...filterPlatforms.map((platform) => eq(users.mainPlatform, platform)))!
-    );
-  }
-
-  // クエリ条件を組み合わせ
-  const whereCondition = and(...conditions);
-
-  // 全体の件数を取得
-  const totalCountResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(whereCondition);
-  const totalCount = totalCountResult[0]?.count || 0;
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-  // ソート設定
-  const orderByClause =
-    sortBy === "mcid"
-      ? asc(users.mcid)
-      : sortBy === "displayName"
-        ? asc(users.displayName)
-        : desc(users.updatedAt);
-
-  // ユーザー一覧を取得
-  const playerList = await db.query.users.findMany({
-    where: whereCondition,
-    columns: {
-      mcid: true,
-      uuid: true,
-      slug: true,
-      displayName: true,
-      pronouns: true,
-      role: true,
-      mainEdition: true,
-      mainPlatform: true,
-      inputMethodBadge: true,
-      updatedAt: true,
-      shortBio: true,
-      customSkinUrl: true,
-    },
-    orderBy: [orderByClause],
-    limit: ITEMS_PER_PAGE,
-    offset: (page - 1) * ITEMS_PER_PAGE,
-  });
-
-  // ログイン中のみ DB から slug 一覧を取得して並べ替え用に使用
-  let favoriteSlugs: string[] = [];
-  if (session) {
-    const me = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: { id: true },
-    });
-    if (me) {
-      favoriteSlugs = await getFavoritesFromDb(db, me.id);
-    }
-  }
-  const favoritesSet = new Set(favoriteSlugs);
-
-  // お気に入りを先頭に並べ替え（ログイン中のみ初期SSRに反映）
-  const sortedPlayers = playerList.sort((a, b) => {
-    const aIsFavorite = favoritesSet.has(a.slug);
-    const bIsFavorite = favoritesSet.has(b.slug);
-    if (aIsFavorite && !bIsFavorite) return -1;
-    if (!aIsFavorite && bIsFavorite) return 1;
-    return 0;
-  });
+  const args = parseBrowseSearchParams(url.searchParams);
+  const favoriteSlugs = await getViewerFavoriteSlugs(
+    db,
+    session?.user?.id ?? null,
+  );
+  const { players, totalPages, totalCount, hasMore } = await loadBrowsePage(
+    db,
+    args,
+    favoriteSlugs,
+  );
 
   return {
-    players: sortedPlayers,
-    searchQuery,
-    sortBy,
-    currentPage: page,
+    players,
+    searchQuery: args.q,
+    sortBy: args.sort,
+    currentPage: args.page,
     totalPages,
     totalCount,
+    hasMore,
     isLoggedIn: !!session,
     filters: {
-      roles: filterRoles,
-      editions: filterEditions,
-      inputMethods: filterInputMethods,
-      platforms: filterPlatforms,
+      roles: args.roles,
+      editions: args.editions,
+      inputMethods: args.inputMethods,
+      platforms: args.platforms,
     },
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
@@ -241,12 +134,22 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export default function BrowsePage() {
-  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, filters } =
+  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
+
+  // 無限スクロール
+  const filtersKey = `${searchQuery}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}`;
+  const infinite = useInfiniteScroll<(typeof players)[number]>({
+    initialItems: players,
+    initialPage: currentPage,
+    initialHasMore: hasMore,
+    endpoint: "/api/browse",
+    resetDeps: [filtersKey],
+  });
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
@@ -669,16 +572,16 @@ export default function BrowsePage() {
             ))}
           </div>
         )
-      ) : players.length > 0 ? (
+      ) : infinite.items.length > 0 ? (
         viewMode === "card" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {players.map((player) => (
+            {infinite.items.map((player) => (
               <ProfileFeedCard key={player.slug} player={player} />
             ))}
           </div>
         ) : (
           <div className="divide-y">
-            {players.map((player) => (
+            {infinite.items.map((player) => (
               <ProfileFeedListItem key={player.slug} player={player} />
             ))}
           </div>
@@ -709,60 +612,31 @@ export default function BrowsePage() {
         </div>
       )}
 
-      {/* ページネーション */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1 || isNavigating}
-          >
-            {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            前へ
-          </Button>
-          <div className="flex items-center gap-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((page) => {
-                // 現在のページの前後2ページと、最初・最後のページを表示
-                return (
-                  page === 1 ||
-                  page === totalPages ||
-                  Math.abs(page - currentPage) <= 2
-                );
-              })
-              .map((page, index, array) => {
-                // 省略記号を表示
-                const prevPage = array[index - 1];
-                const showEllipsis = prevPage && page - prevPage > 1;
+      {/* スクリーンリーダー向け追加読み込み通知 */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {infinite.liveMessage}
+      </div>
 
-                return (
-                  <span key={page} className="flex items-center">
-                    {showEllipsis && (
-                      <span className="px-2 text-muted-foreground">...</span>
-                    )}
-                    <Button
-                      variant={page === currentPage ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => goToPage(page)}
-                      className="min-w-[36px]"
-                    >
-                      {page}
-                    </Button>
-                  </span>
-                );
-              })}
-          </div>
+      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック */}
+      {infinite.items.length > 0 && infinite.hasMore && (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= totalPages || isNavigating}
+            onClick={infinite.loadMore}
+            disabled={infinite.isLoadingMore}
           >
-            {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            次へ
+            {infinite.isLoadingMore && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+            )}
+            もっと読み込む
           </Button>
         </div>
+      )}
+      {infinite.items.length > 0 && !infinite.hasMore && totalCount > 0 && (
+        <p className="text-center text-sm text-muted-foreground py-6">
+          すべての走者を表示しました ({totalCount} 件)
+        </p>
       )}
     </div>
   );

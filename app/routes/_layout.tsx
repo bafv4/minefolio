@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { CookieConsentBanner } from "@/components/cookie-consent";
+import { BackToTopButton } from "@/components/back-to-top-button";
 import { FavoritesProvider } from "@/hooks/use-favorites";
 import { getFavoritesFromDb } from "@/lib/favorites";
 
@@ -85,6 +86,7 @@ export default function Layout() {
         </main>
         <Footer />
         <CookieConsentBanner />
+        <BackToTopButton />
         </div>
       </FavoritesProvider>
     </NuqsAdapter>
