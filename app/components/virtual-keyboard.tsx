@@ -1,8 +1,19 @@
 import { memo } from "react";
+import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, parseKeyCombination, type FingerType } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { KeyInfoTrigger, type KeyInfoData } from "@/components/key-info-trigger";
+
+// 修飾キーの lucide アイコンマップ（リマップ表示用）。
+// Shift = ArrowBigUp、Ctrl = ChevronUp、Alt = Option、Meta = Command。
+const MODIFIER_ICON_MAP: Record<string, LucideIcon> = {
+  Ctrl: ChevronUp,
+  Shift: ArrowBigUp,
+  Alt: Option,
+  Meta: Command,
+};
 
 // キーボードレイアウト定義
 type KeyDefinition = {
@@ -493,20 +504,13 @@ function VirtualKeyboardComponent({
     };
 
     // リマップのソースキーの修飾キーマーク（シンボルで表示）
-    const getModifierMarks = (r: RemapInfo): string[] => {
+    const getModifierIcons = (r: RemapInfo): LucideIcon[] => {
       if (!r.sourceKey.includes("+")) return [];
       const parsed = parseKeyCombination(r.sourceKey);
       if (parsed.modifiers.length === 0) return [];
-      // 修飾キーをマーク形式で表示
-      return parsed.modifiers.map(m => {
-        switch(m) {
-          case "Ctrl": return "◆";  // Ctrl
-          case "Shift": return "⇧"; // Shift
-          case "Alt": return "⌥";   // Alt
-          case "Meta": return "◇";  // Win/Meta
-          default: return "●";
-        }
-      });
+      return parsed.modifiers
+        .map((m) => MODIFIER_ICON_MAP[m])
+        .filter((Icon): Icon is LucideIcon => !!Icon);
     };
 
     const keyElement = (
@@ -533,11 +537,15 @@ function VirtualKeyboardComponent({
             {keyRemaps.slice(0, 2).map((r, i) => {
               const isDisabled = r.targetKey === null;
               const targetLabel = getRemapOutputLabel(r, layout);
-              const modifierMarks = getModifierMarks(r);
+              const modifierIcons = getModifierIcons(r);
               return (
                 <div key={i} className="flex items-center gap-0.5">
-                  {modifierMarks.length > 0 && (
-                    <span className="text-[7px] text-primary/70">{modifierMarks.join("")}</span>
+                  {modifierIcons.length > 0 && (
+                    <span className="flex items-center gap-0 text-primary/70">
+                      {modifierIcons.map((Icon, mi) => (
+                        <Icon key={mi} className="h-2.5 w-2.5" strokeWidth={2.5} />
+                      ))}
+                    </span>
                   )}
                   <span className="font-medium text-[9px] text-muted-foreground/50">
                     {displayLabel}
@@ -565,12 +573,13 @@ function VirtualKeyboardComponent({
             {displayLabel}
           </span>
         )}
-        {/* 操作名チップ（下部）- リマップがあっても表示 */}
+        {/* 操作名チップ（下部）- リマップがあっても表示。
+            複数操作を持つキーで全件読めるよう折り返しを許容（truncate しない）。 */}
         {showAction && (
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
-                "rounded px-1 py-0 truncate leading-none text-[8px]",
+                "rounded px-1 py-0 leading-none text-[8px]",
                 chipClass
               )}>
                 {getShortActionLabel(binding.action)}
@@ -582,43 +591,18 @@ function VirtualKeyboardComponent({
     );
 
     // ツールチップでバインディング情報を表示
-    if (bindings.length > 0 || (showFingerAssignments && finger) || keyRemaps.length > 0) {
-      return (
-        <Tooltip key={`${rowIndex}-${keyIndex}`}>
-          <TooltipTrigger asChild>{keyElement}</TooltipTrigger>
-          <TooltipContent>
-            <p className="font-medium">{getKeyLabel(key.code)}</p>
-            {keyRemaps.length > 0 && (
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                {keyRemaps.map((r, i) => {
-                  // ソースキーの表示（修飾キー組み合わせの場合）
-                  const sourceLabel = getRemapSourceLabel(r.sourceKey, layout);
-                  return (
-                    <p key={i}>
-                      {sourceLabel} → {getRemapTooltipText(r)}
-                    </p>
-                  );
-                })}
-              </div>
-            )}
-            {bindings.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                {bindings.map((binding, i) => (
-                  <p key={i}>{getActionLabel(binding.action)}</p>
-                ))}
-              </div>
-            )}
-            {showFingerAssignments && finger && (
-              <p className="text-xs text-muted-foreground">
-                指: {FINGER_LABELS[finger]}
-              </p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return <div key={`${rowIndex}-${keyIndex}`}>{keyElement}</div>;
+    const info: KeyInfoData = {
+      title: getKeyLabel(key.code, layout),
+      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+      remaps: keyRemaps,
+      finger: showFingerAssignments ? finger : undefined,
+      layout,
+    };
+    return (
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+        {keyElement}
+      </KeyInfoTrigger>
+    );
   };
 
   // キーボードセクションのレンダリング
@@ -713,6 +697,22 @@ function VirtualKeyboardComponent({
           const remapTargetLabel = remap ? getRemapOutputLabel(remap, layout) : null;
           const isRemapDisabled = remap?.targetKey === null;
 
+          // カスタムキーのラベル長に応じてフォントサイズを段階的に切替。
+          // baseSize×2.5 の最大幅を超えるものは truncate で省略し、Tooltip でフル表示。
+          const labelFontClass = (text: string) =>
+            text.length <= 4
+              ? "text-[11px]"
+              : text.length <= 7
+              ? "text-[10px]"
+              : "text-[9px]";
+
+          // リマップ表示時、ラベル + → + ターゲット の合計が長く 1 行に収まりにくい場合は
+          // 矢印以降を改行して下段に表示する（ラベル単体が truncate されるケース対策）。
+          const remapInlineBudget = 5;
+          const isRemapStacked =
+            !!remap &&
+            ck.label.length + 1 + (remapTargetLabel?.length ?? 0) > remapInlineBudget;
+
           const keyElement = (
             <button
               type="button"
@@ -728,37 +728,77 @@ function VirtualKeyboardComponent({
               )}
               style={{
                 minWidth: `${baseSize}px`,
+                maxWidth: `${baseSize * 2.5}px`,
                 height: `${baseSize}px`,
               }}
             >
               {remap ? (
-                <div className="flex flex-wrap items-center justify-center gap-0.5 max-w-full">
-                  <span className="font-medium leading-none text-[9px] text-muted-foreground/50">
-                    {ck.label}
-                  </span>
-                  <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
-                  <span className={cn(
-                    "font-bold leading-tight text-[11px]",
-                    isRemapDisabled ? "text-muted-foreground" : "text-foreground"
-                  )}>
-                    {remapTargetLabel}
-                  </span>
-                </div>
+                isRemapStacked ? (
+                  <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
+                    <span
+                      className={cn(
+                        "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                        labelFontClass(ck.label),
+                      )}
+                    >
+                      {ck.label}
+                    </span>
+                    <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+                      <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                      <span
+                        className={cn(
+                          "font-bold leading-tight truncate min-w-0",
+                          labelFontClass(remapTargetLabel ?? ""),
+                          isRemapDisabled ? "text-muted-foreground" : "text-foreground",
+                        )}
+                      >
+                        {remapTargetLabel}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+                    <span
+                      className={cn(
+                        "font-medium leading-none truncate min-w-0 text-muted-foreground/50",
+                        labelFontClass(ck.label),
+                      )}
+                    >
+                      {ck.label}
+                    </span>
+                    <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                    <span
+                      className={cn(
+                        "font-bold leading-tight truncate min-w-0",
+                        labelFontClass(remapTargetLabel ?? ""),
+                        isRemapDisabled ? "text-muted-foreground" : "text-foreground",
+                      )}
+                    >
+                      {remapTargetLabel}
+                    </span>
+                  </div>
+                )
               ) : (
-                <span className={cn(
-                  "font-semibold leading-none text-[11px]",
-                  !(showFingerAssignments && finger) && "text-muted-foreground"
-                )}>
+                <span
+                  className={cn(
+                    "font-semibold leading-none truncate max-w-full",
+                    labelFontClass(ck.label),
+                    !(showFingerAssignments && finger) && "text-muted-foreground",
+                  )}
+                >
                   {ck.label}
                 </span>
               )}
               {showAction && (
                 <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
                   {bindings.map((binding, i) => (
-                    <span key={i} className={cn(
-                      "rounded px-1 py-0 truncate leading-none text-[8px]",
-                      chipClass
-                    )}>
+                    <span
+                      key={i}
+                      className={cn(
+                        "rounded px-1 py-0 leading-none text-[8px]",
+                        chipClass,
+                      )}
+                    >
                       {getShortActionLabel(binding.action)}
                     </span>
                   ))}
@@ -767,42 +807,19 @@ function VirtualKeyboardComponent({
             </button>
           );
 
-          if (bindings.length > 0 || (showFingerAssignments && finger) || remap) {
-            return (
-              <Tooltip key={ck.code}>
-                <TooltipTrigger asChild>{keyElement}</TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-medium">{ck.label}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{ck.code}</p>
-                  {remap && (
-                    <p className="text-xs text-muted-foreground">
-                      リマップ: {remap.targetKey === null
-                        ? "無効化"
-                        : isSpecialRemapTarget(remap.targetKey)
-                          ? `文字「${remap.targetKey}」を出力`
-                          : remap.targetKey
-                            ? getKeyLabel(remap.targetKey, layout)
-                            : "無効化"}
-                    </p>
-                  )}
-                  {bindings.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      {bindings.map((binding, i) => (
-                        <p key={i}>{getActionLabel(binding.action)}</p>
-                      ))}
-                    </div>
-                  )}
-                  {showFingerAssignments && finger && (
-                    <p className="text-xs text-muted-foreground">
-                      指: {FINGER_LABELS[finger]}
-                    </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return <div key={ck.code}>{keyElement}</div>;
+          // カスタムキーは情報の有無に関わらず常に Tooltip/Dialog を表示する。
+          const info: KeyInfoData = {
+            title: ck.label,
+            bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+            remaps: remap ? [remap] : [],
+            finger: showFingerAssignments ? finger : undefined,
+            layout,
+          };
+          return (
+            <KeyInfoTrigger key={ck.code} info={info} alwaysShow>
+              {keyElement}
+            </KeyInfoTrigger>
+          );
         })}
       </div>
     );
@@ -899,7 +916,7 @@ export function VirtualMouse({
     { code: "Mouse4", label: "サイド2" },
   ];
 
-  const renderButton = (button: typeof buttons[0], index: number) => {
+  const renderButton = (button: typeof buttons[0], index: number, isCustom = false) => {
     const bindings = getBindingsForButton(button.code);
     const finger = showFingerAssignments ? getFingerForButton(button.code) : undefined;
     const remap = showRemaps ? getRemapForButton(button.code) : undefined;
@@ -912,6 +929,18 @@ export function VirtualMouse({
     // リマップ先の表示ラベル
     const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
     const isRemapDisabled = remap?.targetKey === null;
+
+    // カスタムボタンのラベル長に応じたフォント縮小 + リマップ 2 段化判定
+    const labelFontClass = (text: string) =>
+      text.length <= 4
+        ? "text-[11px]"
+        : text.length <= 7
+        ? "text-[10px]"
+        : "text-[9px]";
+    const isRemapStacked =
+      isCustom &&
+      !!remap &&
+      button.label.length + 1 + (remapTargetLabel?.length ?? 0) > 5;
 
     const buttonElement = (
       <button
@@ -926,21 +955,46 @@ export function VirtualMouse({
         style={{ width: `${width}px`, height: `${height}px` }}
       >
         {remap ? (
-          <div className="flex items-center gap-0.5">
-            <span className="font-medium leading-none text-[9px] text-muted-foreground/50">
-              {button.label}
-            </span>
-            <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
-            <span className={cn(
-              "font-bold leading-tight text-[11px]",
-              isRemapDisabled ? "text-muted-foreground" : "text-foreground"
-            )}>
-              {remapTargetLabel}
-            </span>
-          </div>
+          isRemapStacked ? (
+            <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
+              <span
+                className={cn(
+                  "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                  labelFontClass(button.label),
+                )}
+              >
+                {button.label}
+              </span>
+              <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+                <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                <span
+                  className={cn(
+                    "font-bold leading-tight truncate min-w-0",
+                    labelFontClass(remapTargetLabel ?? ""),
+                    isRemapDisabled ? "text-muted-foreground" : "text-foreground",
+                  )}
+                >
+                  {remapTargetLabel}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-nowrap items-center gap-0.5 min-w-0 max-w-full">
+              <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
+                {button.label}
+              </span>
+              <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+              <span className={cn(
+                "font-bold leading-tight truncate min-w-0 text-[11px]",
+                isRemapDisabled ? "text-muted-foreground" : "text-foreground"
+              )}>
+                {remapTargetLabel}
+              </span>
+            </div>
+          )
         ) : (
           <span className={cn(
-            "font-semibold leading-none text-[11px]",
+            "font-semibold leading-none truncate max-w-full text-[11px]",
             !finger && "text-muted-foreground"
           )}>
             {button.label}
@@ -952,7 +1006,7 @@ export function VirtualMouse({
               <span
                 key={i}
                 className={cn(
-                  "rounded px-1 py-0 truncate max-w-full leading-none text-[8px]",
+                  "rounded px-1 py-0 leading-none text-[8px]",
                   chipClass
                 )}
               >
@@ -964,32 +1018,18 @@ export function VirtualMouse({
       </button>
     );
 
-    if (bindings.length > 0 || remap) {
-      return (
-        <Tooltip key={button.code}>
-          <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
-          <TooltipContent>
-            <p className="font-medium">{getKeyLabel(button.code)}</p>
-            {remap && (
-              <p className="text-xs text-muted-foreground">
-                リマップ: {remap.targetKey === null
-                  ? "無効化"
-                  : isSpecialRemapTarget(remap.targetKey)
-                    ? `文字「${remap.targetKey}」を出力`
-                    : remap.targetKey
-                      ? getKeyLabel(remap.targetKey)
-                      : "無効化"}
-              </p>
-            )}
-            {bindings.map((binding, i) => (
-              <p key={i} className="text-xs text-muted-foreground">{getActionLabel(binding.action)}</p>
-            ))}
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return <div key={button.code}>{buttonElement}</div>;
+    // カスタムボタンは常に表示、通常ボタンは情報があるときのみ。
+    const info: KeyInfoData = {
+      title: isCustom ? button.label : getKeyLabel(button.code),
+      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+      remaps: remap ? [remap] : [],
+      finger: showFingerAssignments ? finger : undefined,
+    };
+    return (
+      <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom}>
+        {buttonElement}
+      </KeyInfoTrigger>
+    );
   };
 
   // カスタムマウスボタンをフィルタ
@@ -1016,7 +1056,7 @@ export function VirtualMouse({
           {customMouseButtons.length > 0 && (
             <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
               {customMouseButtons.map((cb, index) =>
-                renderButton({ code: cb.code, label: cb.label }, buttons.length + index)
+                renderButton({ code: cb.code, label: cb.label }, buttons.length + index, true)
               )}
             </div>
           )}
@@ -1156,13 +1196,13 @@ export function VirtualNumpad({
         }}
       >
         {remap ? (
-          <div className="flex flex-wrap items-center justify-center gap-0.5 max-w-full">
-            <span className="font-medium leading-none text-[9px] text-muted-foreground/50">
+          <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+            <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
               {displayLabel}
             </span>
-            <span className="leading-none text-[9px] text-muted-foreground/40">→</span>
+            <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
             <span className={cn(
-              "font-bold leading-tight text-[11px]",
+              "font-bold leading-tight truncate min-w-0 text-[11px]",
               isRemapDisabled ? "text-muted-foreground" : "text-foreground"
             )}>
               {remapTargetLabel}
@@ -1170,7 +1210,7 @@ export function VirtualNumpad({
           </div>
         ) : (
           <span className={cn(
-            "font-semibold leading-none text-[11px]",
+            "font-semibold leading-none truncate max-w-full text-[11px]",
             !(showFingerAssignments && finger) && "text-muted-foreground"
           )}>
             {displayLabel}
@@ -1180,7 +1220,7 @@ export function VirtualNumpad({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span key={i} className={cn(
-                "rounded px-1 py-0 truncate leading-none text-[8px]",
+                "rounded px-1 py-0 leading-none text-[8px]",
                 chipClass
               )}>
                 {getShortActionLabel(binding.action)}
@@ -1191,41 +1231,17 @@ export function VirtualNumpad({
       </button>
     );
 
-    if (bindings.length > 0 || (showFingerAssignments && finger) || remap) {
-      return (
-        <Tooltip key={`${rowIndex}-${keyIndex}`}>
-          <TooltipTrigger asChild>{keyElement}</TooltipTrigger>
-          <TooltipContent>
-            <p className="font-medium">{getKeyLabel(key.code)}</p>
-            {remap && (
-              <p className="text-xs text-muted-foreground">
-                リマップ: {remap.targetKey === null
-                  ? "無効化"
-                  : isSpecialRemapTarget(remap.targetKey)
-                    ? `文字「${remap.targetKey}」を出力`
-                    : remap.targetKey
-                      ? getKeyLabel(remap.targetKey)
-                      : "無効化"}
-              </p>
-            )}
-            {bindings.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                {bindings.map((binding, i) => (
-                  <p key={i}>{getActionLabel(binding.action)}</p>
-                ))}
-              </div>
-            )}
-            {showFingerAssignments && finger && (
-              <p className="text-xs text-muted-foreground">
-                指: {FINGER_LABELS[finger]}
-              </p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return <div key={`${rowIndex}-${keyIndex}`}>{keyElement}</div>;
+    const info: KeyInfoData = {
+      title: getKeyLabel(key.code),
+      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+      remaps: remap ? [remap] : [],
+      finger: showFingerAssignments ? finger : undefined,
+    };
+    return (
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+        {keyElement}
+      </KeyInfoTrigger>
+    );
   };
 
   return (

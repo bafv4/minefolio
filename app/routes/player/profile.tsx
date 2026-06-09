@@ -11,7 +11,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
@@ -138,7 +138,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, getKeyCombinationLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
@@ -304,6 +304,9 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       customKeys: {
         orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
       },
+      customActions: {
+        orderBy: [asc(customActions.displayOrder), asc(customActions.actionName)],
+      },
     },
   });
 
@@ -335,6 +338,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       itemLayoutsData: true,
       searchCraftsData: true,
       customKeysData: true,
+      customActionsData: true,
     },
   });
 
@@ -346,6 +350,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   let displayItemLayouts = player.itemLayouts;
   let displaySearchCrafts = player.searchCrafts;
   let displayCustomKeys = player.customKeys;
+  let displayCustomActions = player.customActions;
 
   if (presetId && presets.length > 0) {
     const selectedPreset = presets.find((p) => p.id === presetId);
@@ -471,6 +476,28 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           updatedAt: new Date(),
         }));
       }
+
+      // プリセットのカスタムアクションを適用
+      if (selectedPreset.customActionsData) {
+        const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
+          actionName: string;
+          description: string | null;
+          category: "other" | "macro" | "tool";
+          triggerKey: string;
+          displayOrder: number;
+        }>;
+        displayCustomActions = presetCustomActions.map((ca, idx) => ({
+          id: `preset-customaction-${idx}`,
+          userId: player.id,
+          actionName: ca.actionName,
+          description: ca.description,
+          category: ca.category,
+          triggerKey: ca.triggerKey,
+          displayOrder: ca.displayOrder,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
     }
   }
 
@@ -532,6 +559,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       itemLayouts: displayItemLayouts,
       searchCrafts: displaySearchCrafts,
       customKeys: displayCustomKeys,
+      customActions: displayCustomActions,
     },
     isOwner,
     hiddenSpeedrunRecords,
@@ -579,27 +607,71 @@ export default function PlayerProfilePage() {
   // 廃止されたアクションを除外
   const deprecatedActions = ["toggleHud"];
 
-  // Group keybindings by category
-  const keybindingsByCategory = player.keybindings
-    .filter((kb) => !deprecatedActions.includes(kb.action))
-    .reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) {
-          acc[kb.category] = [];
-        }
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof player.keybindings>
-    );
+  // アクション → キーバインドの逆引きマップ（表示順を明示的に制御するため）
+  const keybindingsByAction = new Map(
+    player.keybindings
+      .filter((kb) => !deprecatedActions.includes(kb.action))
+      .map((kb) => [kb.action, kb] as const)
+  );
 
-  const categoryOrder = ["movement", "combat", "inventory", "ui"];
-  const categoryLabels: Record<string, string> = {
-    movement: t("playerProfile.movement"),
-    combat: t("playerProfile.combat"),
-    inventory: t("playerProfile.inventory"),
-    ui: t("playerProfile.ui"),
+  // カスタムキーの keyCode → 表示名（keyName）の解決マップ。
+  // リマップやカスタムアクションが "0x05" のような非標準キーコードを参照しているとき、
+  // 生のキーコードではなくユーザー登録名を優先表示するために使う。
+  const customKeyLabelByCode = new Map<string, string>(
+    player.customKeys.map((ck) => [normalizeKeyCode(ck.keyCode), ck.keyName])
+  );
+  const resolveKeyLabel = (keyCode: string): string => {
+    const customLabel = customKeyLabelByCode.get(normalizeKeyCode(keyCode));
+    if (customLabel) return customLabel;
+    return getKeyLabel(keyCode);
   };
+  const resolveKeyCombinationLabel = (combo: string): string => {
+    if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
+    const parsed = parseKeyCombination(combo);
+    const keyLabel = resolveKeyLabel(parsed.keyCode);
+    if (parsed.modifiers.length === 0) return keyLabel;
+    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+    return [...modifierLabels, keyLabel].join("+");
+  };
+  // 同時押しを別 chip で並べるためのラベル配列ヘルパー
+  const resolveKeyCombinationChips = (combo: string): string[] => {
+    if (!combo || combo === UNBOUND_KEY) return [resolveKeyLabel(combo)];
+    const parsed = parseKeyCombination(combo);
+    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+    return [...modifierLabels, resolveKeyLabel(parsed.keyCode)];
+  };
+
+  // List View の表示グループ定義（要件: 移動 → インベントリ → 戦闘・UI）
+  type KeybindingDisplayGroup = {
+    key: string;
+    label: string;
+    colorClass: string;
+    actions: string[];
+  };
+  const keybindingDisplayGroups: KeybindingDisplayGroup[] = [
+    {
+      key: "movement",
+      label: t("playerProfile.movement"),
+      colorClass: getCategoryColorClass("movement"),
+      actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
+    },
+    {
+      key: "inventory",
+      label: t("playerProfile.inventory"),
+      colorClass: getCategoryColorClass("inventory"),
+      actions: [
+        "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
+        "hotbar6", "hotbar7", "hotbar8", "hotbar9",
+        "swapHands", "inventory", "pickBlock", "drop",
+      ],
+    },
+    {
+      key: "combat-ui",
+      label: t("playerProfile.combatAndUi"),
+      colorClass: getCategoryColorClass("combat"),
+      actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
+    },
+  ];
 
   // ユーザーの指割り当てをパース
   const userFingerAssignments = player.playerConfig?.fingerAssignments
@@ -1074,15 +1146,17 @@ export default function PlayerProfilePage() {
 
               {/* List View */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {categoryOrder.map((category) => {
-                  const bindings = keybindingsByCategory[category];
-                  if (!bindings || bindings.length === 0) return null;
+                {keybindingDisplayGroups.map((group) => {
+                  const bindings = group.actions
+                    .map((action) => keybindingsByAction.get(action))
+                    .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
+                  if (bindings.length === 0) return null;
 
                   return (
-                    <Card key={category}>
+                    <Card key={group.key}>
                       <CardHeader className="py-2">
-                        <CardTitle className={`text-base font-semibold ${getCategoryColorClass(category)}`}>
-                          {categoryLabels[category]}
+                        <CardTitle className={`text-base font-semibold ${group.colorClass}`}>
+                          {group.label}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="pt-0 pb-3">
@@ -1094,7 +1168,7 @@ export default function PlayerProfilePage() {
                             >
                               <span className="text-sm">{getActionLabel(kb.action)}</span>
                               <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
-                                {getKeyLabel(kb.keyCode)}
+                                {resolveKeyLabel(kb.keyCode)}
                               </kbd>
                             </div>
                           ))}
@@ -1103,6 +1177,99 @@ export default function PlayerProfilePage() {
                     </Card>
                   );
                 })}
+
+                {/* カスタムアクション（登録されている場合のみ） */}
+                {player.customActions.length > 0 && (
+                  <Card>
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-base font-semibold">
+                        {t("playerProfile.customActions")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-3">
+                      <div className="divide-y">
+                        {player.customActions.map((ca) => {
+                          const chips = resolveKeyCombinationChips(ca.triggerKey);
+                          return (
+                            <div
+                              key={ca.id}
+                              className="flex justify-between items-center gap-3 py-2.5"
+                            >
+                              <span className="text-sm">{ca.actionName}</span>
+                              <div className="flex items-center gap-1">
+                                {chips.map((label, i) => (
+                                  <span key={i} className="flex items-center gap-1">
+                                    {i > 0 && (
+                                      <span className="text-muted-foreground text-xs">+</span>
+                                    )}
+                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                      {label}
+                                    </kbd>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* リマップ（登録されている場合のみ） */}
+                {player.keyRemaps.length > 0 && (
+                  <Card>
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-base font-semibold">
+                        {t("playerProfile.remaps")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-3">
+                      <div className="divide-y">
+                        {player.keyRemaps.map((remap) => {
+                          const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
+                          const targetChips =
+                            remap.outputMode === "character" && remap.outputCharacter
+                              ? [remap.outputCharacter]
+                              : remap.targetKey
+                              ? resolveKeyCombinationChips(remap.targetKey)
+                              : ["-"];
+                          const renderChipGroup = (
+                            chips: string[],
+                            justify: "start" | "end",
+                          ) => (
+                            <div
+                              className={`flex items-center gap-1 ${
+                                justify === "start" ? "justify-start" : "justify-end"
+                              }`}
+                            >
+                              {chips.map((label, i) => (
+                                <span key={i} className="flex items-center gap-1">
+                                  {i > 0 && (
+                                    <span className="text-muted-foreground text-xs">+</span>
+                                  )}
+                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                    {label}
+                                  </kbd>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                          return (
+                            <div
+                              key={remap.id}
+                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5"
+                            >
+                              {renderChipGroup(sourceChips, "start")}
+                              <span className="text-muted-foreground text-sm">→</span>
+                              {renderChipGroup(targetChips, "end")}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </>
           ) : (
