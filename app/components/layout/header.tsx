@@ -88,7 +88,7 @@ export function Header({ user }: HeaderProps) {
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
                         location.pathname === item.href
-                          ? "text-foreground bg-accent/50"
+                          ? "text-brand bg-brand/10"
                           : "text-muted-foreground"
                       )}
                     >
@@ -241,7 +241,7 @@ export function Header({ user }: HeaderProps) {
                       className={cn(
                         "flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl transition-colors touch-manipulation",
                         location.pathname === item.href
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-brand text-brand-foreground"
                           : "bg-secondary/50 text-foreground hover:bg-secondary"
                       )}
                       onClick={() => setMobileMenuOpen(false)}
@@ -343,7 +343,7 @@ export function Header({ user }: HeaderProps) {
               ) : (
                 <Link
                   to="/login"
-                  className="flex items-center justify-center gap-3 px-4 py-4 text-lg font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors touch-manipulation"
+                  className="flex items-center justify-center gap-3 px-4 py-4 text-lg font-medium rounded-xl bg-brand text-brand-foreground hover:bg-brand/90 transition-colors touch-manipulation"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <LogIn className="h-6 w-6" />

@@ -1,0 +1,128 @@
+diff --git a/app/app.css b/app/app.css
+index e2acdf2..98e8f90 100644
+--- a/app/app.css
++++ b/app/app.css
+@@ -36,6 +36,9 @@ body {
+   --color-popover-foreground: var(--popover-foreground);
+   --color-primary: var(--primary);
+   --color-primary-foreground: var(--primary-foreground);
++  --color-brand: var(--brand);
++  --color-brand-foreground: var(--brand-foreground);
++  --color-brand-link: var(--brand-link);
+   --color-secondary: var(--secondary);
+   --color-secondary-foreground: var(--secondary-foreground);
+   --color-muted: var(--muted);
+@@ -85,7 +88,7 @@ body {
+   --destructive: oklch(0.577 0.245 27.325);
+   --border: oklch(0.929 0.013 255.508);
+   --input: oklch(0.929 0.013 255.508);
+-  --ring: oklch(0.704 0.04 256.788);
++  --ring: oklch(0.53 0.13 162);
+   --chart-1: oklch(0.646 0.222 41.116);
+   --chart-2: oklch(0.6 0.118 184.704);
+   --chart-3: oklch(0.398 0.07 227.392);
+@@ -100,9 +103,14 @@ body {
+   --sidebar-border: oklch(0.929 0.013 255.508);
+   --sidebar-ring: oklch(0.704 0.04 256.788);
+ 
++  /* Brand accent (emerald) — primary interactive color */
++  --brand: oklch(0.53 0.13 162);
++  --brand-foreground: oklch(0.985 0.01 162);
++  --brand-link: oklch(0.48 0.13 160);
++
+   /* Semantic colors */
+-  --success: oklch(0.723 0.191 142.303);
+-  --success-foreground: oklch(1 0 0);
++  --success: oklch(0.56 0.16 139);
++  --success-foreground: oklch(0.985 0.01 139);
+   --warning: oklch(0.828 0.189 84.429);
+   --warning-foreground: oklch(0.129 0.042 264.695);
+   --info: oklch(0.623 0.214 259.815);
+@@ -144,7 +152,7 @@ body {
+   --destructive: oklch(0.704 0.191 22.216);
+   --border: oklch(1 0 0 / 10%);
+   --input: oklch(0.279 0.041 260.031);
+-  --ring: oklch(0.551 0.027 264.364);
++  --ring: oklch(0.58 0.14 162);
+   --chart-1: oklch(0.488 0.243 264.376);
+   --chart-2: oklch(0.696 0.17 162.48);
+   --chart-3: oklch(0.769 0.188 70.08);
+@@ -159,9 +167,14 @@ body {
+   --sidebar-border: oklch(1 0 0 / 10%);
+   --sidebar-ring: oklch(0.551 0.027 264.364);
+ 
++  /* Brand accent (emerald) — primary interactive color */
++  --brand: oklch(0.58 0.14 162);
++  --brand-foreground: oklch(0.18 0.03 162);
++  --brand-link: oklch(0.74 0.14 160);
++
+   /* Semantic colors (dark mode adjustments) */
+-  --success: oklch(0.792 0.209 151.711);
+-  --success-foreground: oklch(0.129 0.042 264.695);
++  --success: oklch(0.70 0.16 140);
++  --success-foreground: oklch(0.16 0.03 140);
+   --warning: oklch(0.852 0.199 91.936);
+   --warning-foreground: oklch(0.129 0.042 264.695);
+   --info: oklch(0.707 0.165 254.624);
+@@ -235,7 +248,7 @@ body {
+ 
+   /* Interactive link styles */
+   .link-hover {
+-    @apply transition-colors duration-200 hover:text-primary;
++    @apply transition-colors duration-200 hover:text-brand-link;
+   }
+ 
+   /* Minecraft pixelated image style */
+diff --git a/app/components/layout/header.tsx b/app/components/layout/header.tsx
+index e9d5a10..b2f7b3e 100644
+--- a/app/components/layout/header.tsx
++++ b/app/components/layout/header.tsx
+@@ -88,7 +88,7 @@ export function Header({ user }: HeaderProps) {
+                       className={cn(
+                         "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
+                         location.pathname === item.href
+-                          ? "text-foreground bg-accent/50"
++                          ? "text-brand bg-brand/10"
+                           : "text-muted-foreground"
+                       )}
+                     >
+@@ -241,7 +241,7 @@ export function Header({ user }: HeaderProps) {
+                       className={cn(
+                         "flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl transition-colors touch-manipulation",
+                         location.pathname === item.href
+-                          ? "bg-primary text-primary-foreground"
++                          ? "bg-brand text-brand-foreground"
+                           : "bg-secondary/50 text-foreground hover:bg-secondary"
+                       )}
+                       onClick={() => setMobileMenuOpen(false)}
+@@ -343,7 +343,7 @@ export function Header({ user }: HeaderProps) {
+               ) : (
+                 <Link
+                   to="/login"
+-                  className="flex items-center justify-center gap-3 px-4 py-4 text-lg font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors touch-manipulation"
++                  className="flex items-center justify-center gap-3 px-4 py-4 text-lg font-medium rounded-xl bg-brand text-brand-foreground hover:bg-brand/90 transition-colors touch-manipulation"
+                   onClick={() => setMobileMenuOpen(false)}
+                 >
+                   <LogIn className="h-6 w-6" />
+diff --git a/app/components/ui/button.tsx b/app/components/ui/button.tsx
+index 07f79ae..6477c1c 100644
+--- a/app/components/ui/button.tsx
++++ b/app/components/ui/button.tsx
+@@ -9,7 +9,7 @@ const buttonVariants = cva(
+   {
+     variants: {
+       variant: {
+-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/80 hover:shadow-md",
++        default: "bg-brand text-brand-foreground shadow-sm hover:bg-brand/90 hover:shadow-md",
+         destructive:
+           "bg-destructive text-white shadow-sm hover:bg-destructive/80 hover:shadow-md focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+         outline:
+@@ -18,7 +18,7 @@ const buttonVariants = cva(
+           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/70 hover:shadow-sm",
+         ghost:
+           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+-        link: "text-primary underline-offset-4 hover:underline",
++        link: "text-brand-link underline-offset-4 hover:underline",
+       },
+       size: {
+         default: "h-9 px-4 py-2 has-[>svg]:px-3",

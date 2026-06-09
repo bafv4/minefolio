@@ -1,4 +1,5 @@
 import { Outlet, useLoaderData } from "react-router";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import type { Route } from "./+types/_layout";
 import { Header, Footer, NavigationProgress } from "@/components/layout";
 import { createDb } from "@/lib/db";
@@ -63,16 +64,29 @@ export default function Layout() {
   const { user, initialFavorites } = useLoaderData<typeof loader>();
 
   return (
-    <FavoritesProvider isLoggedIn={!!user} initialFavorites={initialFavorites}>
-      <div className="flex min-h-screen flex-col">
+    <NuqsAdapter>
+      <FavoritesProvider isLoggedIn={!!user} initialFavorites={initialFavorites}>
+        <div className="flex min-h-screen flex-col">
+        {/* スキップリンク（Tab フォーカス時のみ表示） */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          本文へスキップ
+        </a>
         <NavigationProgress />
         <Header user={user} />
-        <main className="flex-1 flex flex-col container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 flex flex-col container mx-auto px-4 sm:px-6 lg:px-8 py-8 focus-visible:outline-none"
+        >
           <Outlet />
         </main>
         <Footer />
         <CookieConsentBanner />
-      </div>
-    </FavoritesProvider>
+        </div>
+      </FavoritesProvider>
+    </NuqsAdapter>
   );
 }
