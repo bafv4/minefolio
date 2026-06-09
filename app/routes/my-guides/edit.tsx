@@ -80,13 +80,46 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
     ? (formData.get("coverImageUrl") as string) || null
     : guide.coverImageUrl;
 
+  // tags の検証: JSON 配列であること、最大 10 件、各タグは 50 文字以内
+  const jsonError = (key: "errorTagsInvalid" | "errorTagsTooMany" | "errorTagTooLong") =>
+    new Response(JSON.stringify({ error: t(`meGuides.${key}`) }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  let validatedTags: string[];
+  try {
+    const parsed: unknown = JSON.parse(tagsRaw);
+    if (!Array.isArray(parsed)) {
+      return jsonError("errorTagsInvalid");
+    }
+    if (parsed.length > 10) {
+      return jsonError("errorTagsTooMany");
+    }
+    const cleaned: string[] = [];
+    for (const raw of parsed) {
+      if (typeof raw !== "string") {
+        return jsonError("errorTagsInvalid");
+      }
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) continue;
+      if (trimmed.length > 50) {
+        return jsonError("errorTagTooLong");
+      }
+      cleaned.push(trimmed);
+    }
+    validatedTags = cleaned;
+  } catch {
+    return jsonError("errorTagsInvalid");
+  }
+
   await db
     .update(guides)
     .set({
       title,
       content,
       summary,
-      tags: tagsRaw,
+      tags: JSON.stringify(validatedTags),
       isPublished,
       coverImageUrl,
       updatedAt: new Date(),

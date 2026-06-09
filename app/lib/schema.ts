@@ -73,6 +73,8 @@ export const users = sqliteTable("users", {
 // ============================================
 // 2. player_configs（プレイヤー設定）
 // ============================================
+// 1 user : 1 player_config を `.unique()` 修飾子で保証している（Drizzle が
+// `user_id` カラムに UNIQUE 制約付き索引を自動生成する）。
 export const playerConfigs = sqliteTable("player_configs", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
@@ -602,11 +604,16 @@ export type NewConfigHistoryEntry = typeof configHistory.$inferInsert;
 // ============================================
 // 15. paceman_paces（PaceManペースキャッシュ）
 // ============================================
+// 【整合性ポリシー】userId の onDelete は "set null" を維持する。
+// 理由: ペース履歴は PaceMan API から MCID 起点で取り込むデータであり、
+//   ユーザー削除後も mcid カラムは残るため、同じ MCID で再登録された場合は
+//   バッチで mcid → users.mcid を引き当てて再リンクできる。
+//   よって孤児化レコードは「未リンク状態」として保持する価値があり、cascade では失われる。
 export const pacemanPaces = sqliteTable("paceman_paces", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   pacemanRunId: integer("paceman_run_id").notNull(), // PaceMan APIのランID（同じランのスプリットをグループ化するために使用）
-  mcid: text("mcid").notNull(), // プレイヤーのMCID
-  userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意）
+  mcid: text("mcid").notNull(), // プレイヤーのMCID（userId が null でも mcid から再リンク可能）
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意、mcid 経由で再リンク前提）
 
   // ペース情報
   timeline: text("timeline").notNull(), // "Eye Spy", "Enter Nether", "Obtain Blaze Rods", etc.
@@ -640,12 +647,18 @@ export type PacemanPace = typeof pacemanPaces.$inferSelect;
 export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 
 // ============================================
-// 15. favorites（お気に入りプレイヤー）
+// 16. favorites（お気に入りプレイヤー）
 // ============================================
+// 【整合性ポリシー】favoriteSlug は users.slug を参照する弱参照（外部キー制約なし）。
+// 理由: slug はユーザー側で変更可能（MCID 変更などにより再生成される）であり、
+//   FK 制約を付けると slug 変更時の更新パスが複雑化するため。
+// 副作用: 参照先 user の削除 / slug 変更で favorites が孤児化する可能性がある。
+//   - GC: 必要に応じて `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` を別途実行
+//   - slug 変更時は アプリケーション層で旧 slug → 新 slug の追従更新を行う
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  favoriteSlug: text("favorite_slug").notNull(),
+  favoriteSlug: text("favorite_slug").notNull(), // users.slug への弱参照（FK 制約なし、上記ポリシー参照）
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("idx_favorites_user_slug").on(table.userId, table.favoriteSlug),

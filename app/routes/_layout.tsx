@@ -34,20 +34,27 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     },
   });
 
-  // Discordアバターが変更されていたらDBを更新
-  if (user && session.user.image !== user.discordAvatar) {
-    await db
-      .update(users)
-      .set({ discordAvatar: session.user.image ?? null })
-      .where(eq(users.discordId, session.user.id));
+  if (!user) {
+    return { user: null, initialFavorites: [] as string[] };
+  }
+
+  // アバター更新（必要なら）と initialFavorites 取得を並列実行（DB ラウンドトリップ削減）
+  const needsAvatarUpdate = session.user.image !== user.discordAvatar;
+  const [, initialFavorites] = await Promise.all([
+    needsAvatarUpdate
+      ? db
+          .update(users)
+          .set({ discordAvatar: session.user.image ?? null })
+          .where(eq(users.discordId, session.user.id))
+      : Promise.resolve(),
+    getFavoritesFromDb(db, user.id),
+  ]);
+  if (needsAvatarUpdate) {
     user.discordAvatar = session.user.image ?? null;
   }
 
-  // ログイン中ユーザーのお気に入りを SSR 用に取得
-  const initialFavorites = user ? await getFavoritesFromDb(db, user.id) : [];
-
   return {
-    user: user ? { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar } : null,
+    user: { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar },
     initialFavorites,
   };
 }

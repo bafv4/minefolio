@@ -55,6 +55,15 @@ export function FavoritesProvider({
   const [isLoading, setIsLoading] = useState(false);
   const initializedRef = useRef(false);
 
+  // 連打レース対策: 直前のリクエストの完了を待ってから次の toggle を実行（直列化）。
+  // また closure ベースだとロールバック時に stale state を復元してしまうため、
+  // 常に最新の favorites を参照できるよう ref も保持する。
+  const toggleChainRef = useRef<Promise<void>>(Promise.resolve());
+  const favoritesRef = useRef<string[]>(initialFavorites);
+  useEffect(() => {
+    favoritesRef.current = favorites;
+  }, [favorites]);
+
   const needsCookieConsent = !isLoggedIn && hasConsent !== true;
 
   // マウント時の初期化（1回のみ）
@@ -137,37 +146,50 @@ export function FavoritesProvider({
     async (slug: string) => {
       if (needsCookieConsent) return;
 
-      const isCurrentlyFavorite = favorites.includes(slug);
-      const action = isCurrentlyFavorite ? "remove" : "add";
+      // 直前のリクエストの完了を待ってから直列実行（レース回避）
+      const run = toggleChainRef.current.then(async () => {
+        const current = favoritesRef.current;
+        const isCurrentlyFavorite = current.includes(slug);
+        const action = isCurrentlyFavorite ? "remove" : "add";
 
-      // 楽観的更新
-      const optimistic = isCurrentlyFavorite
-        ? favorites.filter((s) => s !== slug)
-        : [slug, ...favorites];
-      setFavorites(optimistic);
+        // 楽観的更新（最新 state を起点に）
+        const optimistic = isCurrentlyFavorite
+          ? current.filter((s) => s !== slug)
+          : [slug, ...current];
+        favoritesRef.current = optimistic;
+        setFavorites(optimistic);
 
-      if (isLoggedIn) {
-        try {
-          const r = await fetch("/api/favorites", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slug, action }),
-          });
-          if (!r.ok) throw new Error("API error");
-          const data = (await r.json()) as { favorites: string[] };
-          setFavorites(data.favorites);
-          setSessionFavorites(data.favorites);
-        } catch {
-          setFavorites(favorites); // ロールバック
+        if (isLoggedIn) {
+          try {
+            const r = await fetch("/api/favorites", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ slug, action }),
+            });
+            if (!r.ok) throw new Error("API error");
+            const data = (await r.json()) as { favorites: string[] };
+            favoritesRef.current = data.favorites;
+            setFavorites(data.favorites);
+            setSessionFavorites(data.favorites);
+          } catch {
+            // ロールバック: 楽観的更新の直前の state（current）に戻す
+            favoritesRef.current = current;
+            setFavorites(current);
+          }
+        } else {
+          const next = isCurrentlyFavorite
+            ? removeLocalFavorite(slug)
+            : addLocalFavorite(slug);
+          favoritesRef.current = next;
+          setFavorites(next);
         }
-      } else {
-        const next = isCurrentlyFavorite
-          ? removeLocalFavorite(slug)
-          : addLocalFavorite(slug);
-        setFavorites(next);
-      }
+      });
+
+      // 失敗を握りつぶしてチェーンが切れないようにする
+      toggleChainRef.current = run.catch(() => {});
+      return run;
     },
-    [favorites, isLoggedIn, needsCookieConsent],
+    [isLoggedIn, needsCookieConsent],
   );
 
   const value = useMemo<FavoritesContextValue>(

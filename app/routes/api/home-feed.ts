@@ -17,7 +17,7 @@ import { getCachedVideos } from "@/lib/youtube-cache";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
-  LIVE_RUNS: 10 * 1000, // 10秒（リアルタイム性重視）
+  LIVE_RUNS: 30 * 1000, // 30秒（PaceMan API への負荷を軽減）
   TWITCH: 60 * 1000, // 1分
   PACES: 5 * 60 * 1000, // 5分
   USER_DATA: 60 * 1000, // 1分（ユーザーデータ）
@@ -26,7 +26,7 @@ const CACHE_TTL = {
 
 // CDNキャッシュヘッダー（秒）
 const CDN_CACHE = {
-  LIVE_RUNS: 10, // 10秒（リアルタイム性重視）
+  LIVE_RUNS: 30, // 30秒（CACHE_TTL.LIVE_RUNS と整合）
   TWITCH: 30, // 30秒
   PACES: 60, // 1分
   YOUTUBE: 300, // 5分
@@ -330,10 +330,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       const userLogins = twitchLinks.map((l) => l.identifier);
       const streams = await getLiveStreams(clientId, token, userLogins);
 
+      // O(n²) を避けるため identifier（小文字）→ TwitchLinkData の Map を構築
+      const twitchLinkByIdentifier = new Map<string, TwitchLinkData>(
+        twitchLinks.map((l) => [l.identifier.toLowerCase(), l])
+      );
+
       const liveStreams = streams.map((stream) => {
-        const link = twitchLinks.find(
-          (l) => l.identifier.toLowerCase() === stream.user_login.toLowerCase()
-        );
+        const link = twitchLinkByIdentifier.get(stream.user_login.toLowerCase());
         return {
           stream,
           mcid: link?.mcid ?? null,

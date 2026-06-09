@@ -10,6 +10,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
+import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
@@ -294,14 +295,14 @@ export default function GuideViewPage() {
         <Button variant="ghost" size="sm" asChild className="-ml-2">
           <Link to="/guides">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            ガイド一覧
+            {t("guides.pageTitle")}
           </Link>
         </Button>
         {isOwner && (
           <Button variant="outline" size="sm" asChild>
             <Link to={`/my-guides/${guide.slug}/edit`}>
               <Pencil className="h-4 w-4 mr-1" />
-              編集
+              {t("guideEditor.edit")}
             </Link>
           </Button>
         )}

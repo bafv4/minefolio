@@ -1047,6 +1047,9 @@ export const PAGES_JA = {
     errorTitleRequired: "タイトルを入力してください",
     errorTitleTooLong: "タイトルは200文字以内で入力してください",
     errorLimitReached: "ガイドの上限（100件）に達しています",
+    errorTagsInvalid: "タグの形式が不正です",
+    errorTagsTooMany: "タグは10件までです",
+    errorTagTooLong: "タグは50文字以内で入力してください",
   },
   guideEditor: {
     save: "保存",

@@ -10,7 +10,9 @@ const ICON_BUTTON_CLASS =
   "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm";
 
 // 静止画像キャッシュ（同じUUID/ポーズの組み合わせを再利用）
+// Map は挿入順を保持するため、サイズ超過時は最古を削除して簡易 LRU として利用。
 const imageCache = new Map<string, string>();
+const IMAGE_CACHE_LIMIT = 50;
 
 function getCacheKey(
   uuid: string,
@@ -23,6 +25,25 @@ function getCacheKey(
   slim: boolean
 ): string {
   return `${uuid}-${pose}-${width}-${height}-${angle}-${elevation}-${zoom}-${slim ? "slim" : "default"}`;
+}
+
+// 最近使ったキーを末尾に再挿入することで純 LRU として動作
+function getCachedImage(key: string): string | undefined {
+  const value = imageCache.get(key);
+  if (value === undefined) return undefined;
+  imageCache.delete(key);
+  imageCache.set(key, value);
+  return value;
+}
+
+function setCachedImage(key: string, value: string): void {
+  if (imageCache.has(key)) imageCache.delete(key);
+  imageCache.set(key, value);
+  while (imageCache.size > IMAGE_CACHE_LIMIT) {
+    const firstKey = imageCache.keys().next().value;
+    if (firstKey === undefined) break;
+    imageCache.delete(firstKey);
+  }
 }
 
 export type PoseName =
@@ -154,7 +175,7 @@ const MinecraftFullBodyComponent = ({
 
     if (effectiveAsImage) {
       const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
-      const cachedImage = imageCache.get(cacheKey);
+      const cachedImage = getCachedImage(cacheKey);
       if (cachedImage) {
         setImageSrc(cachedImage);
         setIsLoading(false);
@@ -266,7 +287,7 @@ const MinecraftFullBodyComponent = ({
           const dataUrl = canvas.toDataURL("image/png");
 
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
-          imageCache.set(cacheKey, dataUrl);
+          setCachedImage(cacheKey, dataUrl);
 
           setImageSrc(dataUrl);
 
