@@ -64,9 +64,9 @@ export function useInfiniteScroll<T>({
   // fetcher 完了時に items に append
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
-    // 追加ロード開始後に検索条件が変わっていたら、その結果は捨てる
+    // 進行中ロードが無い（null）か、開始後に検索条件が変わっていれば結果を捨てる
     // （別の検索条件のページが現在のリストへ混入するのを防ぐ）
-    if (loadedSigRef.current === null || loadedSigRef.current !== paramsSignature(searchParams)) {
+    if (loadedSigRef.current !== paramsSignature(searchParams)) {
       return;
     }
     const data = fetcher.data;
