@@ -1,7 +1,7 @@
 // ブロックハンドル。ブロック左に表示し、種別変更 / 削除 / テーブル行列操作を提供。
 // デスクトップ: ポインタ位置から posAtCoords（マウスは高精度）。
 // タッチ: selectionUpdate でアクティブブロックを追従（旧 posAtCoords のタッチ不安定を回避）。
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -50,6 +50,20 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
   const [state, setState] = useState<HandleState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ハンドルは編集領域の外（ブロック左）に出るため、マウスが領域を離れた瞬間に
+  // 消すとハンドルへ到達できない。遅延して消し、ハンドル上では取り消す。
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const menuOpenRef = useRef(menuOpen);
+  menuOpenRef.current = menuOpen;
+
+  const cancelHide = useCallback(() => clearTimeout(hideTimer.current), []);
+  const scheduleHide = useCallback(() => {
+    clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      if (!menuOpenRef.current) setState(null);
+    }, 400);
+  }, []);
+
   /** 指定位置のトップレベルブロックの矩形を求める */
   const computeAt = useCallback(
     (pos: number): HandleState | null => {
@@ -80,22 +94,21 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
     if (touch) return;
     const dom = editor.view.dom as HTMLElement;
     const onMove = (e: MouseEvent) => {
-      if (menuOpen) return;
+      if (menuOpenRef.current) return;
+      cancelHide();
       const res = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
       if (!res) return;
       const next = computeAt(res.pos);
       if (next) setState(next);
     };
-    const onLeave = () => {
-      if (!menuOpen) setState(null);
-    };
     dom.addEventListener("mousemove", onMove);
-    dom.addEventListener("mouseleave", onLeave);
+    dom.addEventListener("mouseleave", scheduleHide);
     return () => {
       dom.removeEventListener("mousemove", onMove);
-      dom.removeEventListener("mouseleave", onLeave);
+      dom.removeEventListener("mouseleave", scheduleHide);
+      cancelHide();
     };
-  }, [editor, touch, menuOpen, computeAt]);
+  }, [editor, touch, computeAt, cancelHide, scheduleHide]);
 
   // タッチ: 選択変更でアクティブブロックを追従
   useEffect(() => {
@@ -167,14 +180,17 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
           aria-label="ブロック操作"
           aria-haspopup="menu"
           onMouseDown={(e) => e.preventDefault()}
+          onMouseEnter={cancelHide}
+          onMouseLeave={scheduleHide}
           style={{
             position: "fixed",
-            left: state.left - 28,
+            // ブロック左端からハンドルまでを padding-right で埋め、移動時の dead zone を無くす
+            left: state.left - 30,
             top: state.top + state.height / 2,
             transform: "translateY(-50%)",
             zIndex: EDITOR_Z.handle,
           }}
-          className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors opacity-60 hover:opacity-100"
+          className="h-6 w-8 pr-2 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors opacity-60 hover:opacity-100"
         >
           <GripVertical className="h-4 w-4" />
         </button>
