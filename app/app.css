@@ -1014,6 +1014,13 @@ body {
   gap: 1em;
 }
 
+/* React NodeView は contentDOM の内側に [data-node-view-content-react] ラッパーを
+   挿入するため、これが唯一のグリッドアイテムになりカラムが縦積みになる。
+   ラッパーを display:contents にして、各カラムを直接グリッドアイテムにする。 */
+.guide-content .columns-content > [data-node-view-content-react] {
+  display: contents;
+}
+
 @media (max-width: 640px) {
   .guide-content .columns-editor-2 .columns-content,
   .guide-content .columns-editor-3 .columns-content {
