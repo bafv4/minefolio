@@ -66,7 +66,7 @@ export function ToolbarButton({
           )}
         </Toggle>
       </TooltipTrigger>
-      <TooltipContent className="z-[65] flex items-center gap-2">
+      <TooltipContent side="bottom" showArrow={false} className="z-[65] flex items-center gap-2">
         <span>{label}</span>
         {shortcut && (
           <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">

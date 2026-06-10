@@ -488,6 +488,10 @@ body {
   .guide-content .callout-warning::before { content: "⚠️"; }
   .guide-content .callout-danger::before { content: "🚨"; }
 
+  /* エディタ内は NodeView がアイコンを描画するため ::before のアイコンを抑止
+     （これがないと公開ビューと違いアイコンが二重表示になる） */
+  .guide-content .ProseMirror .callout::before { content: none; }
+
   /* Callout type colors */
   .callout-tip {
     background: oklch(0.95 0.02 145);
@@ -569,23 +573,34 @@ body {
     padding: 0;
   }
 
-  /* Columns layout — editor */
+  /* Columns layout — editor（公開ビュー div[data-columns] と同じ見た目に揃える） */
   .columns-editor {
     position: relative;
-    margin: 0.5em 0;
-    border: 1px dashed var(--border);
-    border-radius: 0.5em;
-    padding: 0.25em;
+    margin: 0.75em 0;
   }
 
+  /* 編集アフォーダンス（カラム数 + 削除）はホバー時のみ右上に小さく表示 */
   .columns-editor-label {
+    position: absolute;
+    top: -0.6em;
+    right: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.5em;
-    padding: 0.125em 0.5em;
+    gap: 0.25em;
+    padding: 0.1em 0.4em;
+    border-radius: 0.375em;
+    background: var(--popover);
+    border: 1px solid var(--border);
     font-size: 0.7em;
     color: var(--muted-foreground);
     user-select: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .columns-editor:hover .columns-editor-label {
+    opacity: 1;
   }
 
   .columns-editor-delete {
@@ -596,22 +611,18 @@ body {
     height: 1.25em;
     border-radius: 0.25em;
     color: var(--muted-foreground);
-    opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
+    transition: color 0.15s;
     cursor: pointer;
-  }
-
-  .columns-editor:hover .columns-editor-delete {
-    opacity: 1;
   }
 
   .columns-editor-delete:hover {
     color: var(--destructive);
   }
 
+  /* グリッド・間隔は公開ビューと一致 */
   .columns-content {
     display: grid;
-    gap: 0.5em;
+    gap: 1em;
   }
 
   .columns-editor-2 .columns-content {
@@ -623,10 +634,14 @@ body {
   }
 
   .column-editor {
-    border: 1px dashed var(--border);
+    min-width: 0;
     border-radius: 0.375em;
-    padding: 0.5em;
-    min-height: 3em;
+  }
+
+  /* カラム境界はホバー時のみ薄く表示（編集の目印） */
+  .columns-editor:hover .column-editor {
+    outline: 1px dashed var(--border);
+    outline-offset: 3px;
   }
 
   @media (max-width: 640px) {

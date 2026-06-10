@@ -117,6 +117,21 @@ export function insertHorizontalRule(editor: Editor): void {
   editor.chain().focus().setHorizontalRule().run();
 }
 
+/** コールアウト種別 */
+export type CalloutType = "tip" | "info" | "warning" | "danger";
+
+/** 指定タイプのコールアウトで現在ブロックを包む */
+export function insertCallout(editor: Editor, calloutType: CalloutType): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (editor.chain().focus() as any).toggleCallout({ calloutType }).run();
+}
+
+/** トグルリストで現在ブロックを包む */
+export function insertToggle(editor: Editor): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (editor.chain().focus() as any).setToggleList().run();
+}
+
 /** N カラム（2 or 3）の段組を挿入する */
 export function insertColumns(editor: Editor, cols: 2 | 3): void {
   editor

@@ -27,6 +27,9 @@ import {
   Quote,
   Terminal,
   Lightbulb,
+  Info,
+  TriangleAlert,
+  Siren,
   ChevronRight,
   ChevronDown,
   Link as LinkIcon,
@@ -64,8 +67,11 @@ import {
   insertTable,
   insertHorizontalRule,
   insertColumns,
+  insertCallout,
+  insertToggle,
   applyTableOp,
   type BlockType,
+  type CalloutType,
 } from "../lib/block-commands";
 import { EDITOR_Z } from "../constants";
 import type { SaveMode } from "../hooks/use-guide-save";
@@ -89,6 +95,8 @@ interface DesktopToolbarProps {
   onGuideLink: () => void;
 }
 
+// テキストブロックの種別変換（ホームタブのドロップダウン）。
+// コールアウト/トグルは「挿入」タブへ分離（種別を選んで挿入する性質のため）。
 const BLOCK_TYPES: { type: BlockType; label: string; icon: LucideIcon }[] = [
   { type: "paragraph", label: "テキスト", icon: Type },
   { type: "heading1", label: "見出し 1", icon: Heading1 },
@@ -98,8 +106,14 @@ const BLOCK_TYPES: { type: BlockType; label: string; icon: LucideIcon }[] = [
   { type: "orderedList", label: "番号付きリスト", icon: ListOrdered },
   { type: "blockquote", label: "引用", icon: Quote },
   { type: "codeBlock", label: "コードブロック", icon: Terminal },
-  { type: "callout", label: "コールアウト", icon: Lightbulb },
-  { type: "toggleList", label: "トグルリスト", icon: ChevronRight },
+];
+
+// コールアウト種別（挿入タブのドロップダウン）
+const CALLOUT_TYPES: { type: CalloutType; label: string; icon: LucideIcon }[] = [
+  { type: "tip", label: "ヒント", icon: Lightbulb },
+  { type: "info", label: "情報", icon: Info },
+  { type: "warning", label: "警告", icon: TriangleAlert },
+  { type: "danger", label: "危険", icon: Siren },
 ];
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -116,8 +130,6 @@ function currentBlock(editor: Editor): { label: string; icon: LucideIcon } {
   if (editor.isActive("orderedList")) return { label: "番号付きリスト", icon: ListOrdered };
   if (editor.isActive("blockquote")) return { label: "引用", icon: Quote };
   if (editor.isActive("codeBlock")) return { label: "コードブロック", icon: Terminal };
-  if (editor.isActive("callout")) return { label: "コールアウト", icon: Lightbulb };
-  if (editor.isActive("toggleList")) return { label: "トグルリスト", icon: ChevronRight };
   return { label: "テキスト", icon: Type };
 }
 
@@ -203,7 +215,7 @@ export function DesktopToolbar({
     <>
       <div
         ref={barRef}
-        className="fixed top-16 left-0 right-0 border-b bg-background/95 backdrop-blur"
+        className="fixed top-16 left-0 right-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
         style={{ zIndex: EDITOR_Z.toolbar }}
         role="toolbar"
         aria-label="エディタツールバー"
@@ -344,6 +356,37 @@ export function DesktopToolbar({
                 </ToolbarButton>
                 <ToolbarButton label="3 カラム" onClick={() => insertColumns(editor, 3)}>
                   <Columns3 className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarSeparator />
+                {/* コールアウト: 種別を選んで挿入 */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors"
+                      aria-label="コールアウトを挿入"
+                      title="コールアウト"
+                    >
+                      <Lightbulb className="h-4 w-4 text-muted-foreground" />
+                      <span className="hidden lg:inline">コールアウト</span>
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {CALLOUT_TYPES.map((opt) => {
+                      const Icon = opt.icon;
+                      return (
+                        <DropdownMenuItem key={opt.type} onClick={() => insertCallout(editor, opt.type)}>
+                          <Icon className="h-4 w-4 text-muted-foreground" />
+                          {opt.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <ToolbarButton label="トグルリスト" onClick={() => insertToggle(editor)}>
+                  <ChevronRight className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
                 <ToolbarButton label="ガイドリンク" onClick={onGuideLink}>

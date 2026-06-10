@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Palette, Paintbrush } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TEXT_COLORS, BG_COLORS, CELL_COLORS } from "../constants";
 import { setCellBackground, setCellTextColor } from "../lib/block-commands";
 import { cn } from "@/lib/utils";
@@ -22,30 +23,36 @@ function PickerTrigger({
 }) {
   const labelable = showLabel !== undefined;
   return (
-    <PopoverTrigger asChild>
-      <button
-        type="button"
-        title={label}
-        aria-label={label}
-        onMouseDown={(e) => e.preventDefault()}
-        className={cn(
-          "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors",
-          labelable ? "h-8 justify-start px-2" : "h-7 w-7 justify-center",
-        )}
-      >
-        {children}
-        {labelable && (
-          <span
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={label}
+            onMouseDown={(e) => e.preventDefault()}
             className={cn(
-              "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
-              showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+              "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors",
+              labelable ? "h-8 justify-start px-2" : "h-7 w-7 justify-center",
             )}
           >
-            {label}
-          </span>
-        )}
-      </button>
-    </PopoverTrigger>
+            {children}
+            {labelable && (
+              <span
+                className={cn(
+                  "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
+                  showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+                )}
+              >
+                {label}
+              </span>
+            )}
+          </button>
+        </PopoverTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" showArrow={false} className="z-[65]">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
