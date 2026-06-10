@@ -167,21 +167,6 @@ export function GuideEditor({
   );
   imageUploadRef.current = handleImageUpload;
 
-  const handleCoverUpload = useCallback(
-    async (file: File) => {
-      const url = await coverUpload.uploadTo(
-        buildCoverImagePath(userId, guideId, file),
-        file,
-        "サムネイルのアップロードに失敗しました",
-      );
-      if (url) {
-        setCoverImageUrl(url);
-        setDirty(true);
-      }
-    },
-    [userId, guideId, coverUpload],
-  );
-
   // ── スラッシュコマンドのコンテキスト注入 ──────
   const slashContext: SlashCommandContext = useMemo(
     () => ({
@@ -300,36 +285,23 @@ export function GuideEditor({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        title={title}
-        onTitleChange={(v) => {
-          setTitle(v);
-          markDirty();
-        }}
-        summary={summary}
-        onSummaryChange={(v) => {
-          setSummary(v);
-          markDirty();
-        }}
-        tags={tags}
-        onAddTag={(tag) => {
-          setTags((prev) => [...prev, tag]);
-          markDirty();
-        }}
-        onRemoveTag={(tag) => {
-          setTags((prev) => prev.filter((x) => x !== tag));
-          markDirty();
-        }}
-        coverImageUrl={coverImageUrl}
-        onCoverUpload={handleCoverUpload}
-        onCoverRemove={() => {
-          setCoverImageUrl(null);
-          markDirty();
-        }}
+        initialValues={{ title, summary, tags, coverImageUrl, isPublished }}
+        uploadCover={(file) =>
+          coverUpload.uploadTo(
+            buildCoverImagePath(userId, guideId, file),
+            file,
+            "サムネイルのアップロードに失敗しました",
+          )
+        }
         isUploadingCover={coverUpload.isUploading}
         uploadError={coverUpload.error ?? imageUpload.error}
-        isPublished={isPublished}
-        onTogglePublish={(next) => {
-          setIsPublished(next);
+        onApply={(v) => {
+          // モーダル内 State を全体 State へ反映（保存はしない → ダーティに）
+          setTitle(v.title);
+          setSummary(v.summary);
+          setTags(v.tags);
+          setCoverImageUrl(v.coverImageUrl);
+          setIsPublished(v.isPublished);
           markDirty();
         }}
       />
