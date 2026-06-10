@@ -9,8 +9,12 @@ import { t } from "@/lib/messages";
 interface UseGuideEditorOptions {
   /** 初期 HTML 本文 */
   initialContent: string;
-  /** 本文更新時のコールバック（HTML 文字列） */
-  onUpdate: (html: string) => void;
+  /**
+   * 本文が変更されたときの通知（ダーティ判定用）。
+   * パフォーマンスのため HTML はここで渡さない（毎キー入力の getHTML を避ける）。
+   * 保存時に editor.getHTML() を呼ぶこと。
+   */
+  onUpdate: () => void;
   /** 画像ペースト時のアップロード処理（File を受け取る） */
   onImagePaste: (file: File) => void;
 }
@@ -26,8 +30,8 @@ export function useGuideEditor({
     extensions: [...buildExtensions(t("guideEditor.contentPlaceholder")), SlashCommand],
     immediatelyRender: false,
     content: initialContent,
-    onUpdate: ({ editor }) => {
-      onUpdate(editor.getHTML());
+    onUpdate: () => {
+      onUpdate();
     },
     editorProps: {
       attributes: {

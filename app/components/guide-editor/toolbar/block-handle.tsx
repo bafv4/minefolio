@@ -64,6 +64,25 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
     }, 400);
   }, []);
 
+  // 同じブロック・同じ位置なら再レンダリングしない（マウス移動での setState 連発を抑制）
+  const applyState = useCallback((next: HandleState | null) => {
+    setState((prev) => {
+      if (prev === next) return prev;
+      if (
+        prev &&
+        next &&
+        prev.pos === next.pos &&
+        prev.inTable === next.inTable &&
+        Math.abs(prev.top - next.top) < 0.5 &&
+        Math.abs(prev.left - next.left) < 0.5 &&
+        Math.abs(prev.height - next.height) < 0.5
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
   /** 指定位置のトップレベルブロックの矩形を求める */
   const computeAt = useCallback(
     (pos: number): HandleState | null => {
@@ -89,40 +108,47 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
     [editor],
   );
 
-  // デスクトップ: マウス移動でブロックを追従
+  // デスクトップ: マウス移動でブロックを追従（rAF スロットル + 変化時のみ更新）
   useEffect(() => {
     if (touch) return;
     const dom = editor.view.dom as HTMLElement;
+    let raf: number | null = null;
     const onMove = (e: MouseEvent) => {
       if (menuOpenRef.current) return;
       cancelHide();
-      const res = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-      if (!res) return;
-      const next = computeAt(res.pos);
-      if (next) setState(next);
+      const x = e.clientX;
+      const y = e.clientY;
+      if (raf != null) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        const res = editor.view.posAtCoords({ left: x, top: y });
+        if (!res) return;
+        applyState(computeAt(res.pos));
+      });
     };
     dom.addEventListener("mousemove", onMove);
     dom.addEventListener("mouseleave", scheduleHide);
     return () => {
       dom.removeEventListener("mousemove", onMove);
       dom.removeEventListener("mouseleave", scheduleHide);
+      if (raf != null) cancelAnimationFrame(raf);
       cancelHide();
     };
-  }, [editor, touch, computeAt, cancelHide, scheduleHide]);
+  }, [editor, touch, computeAt, cancelHide, scheduleHide, applyState]);
 
   // タッチ: 選択変更でアクティブブロックを追従
   useEffect(() => {
     if (!touch) return;
     const update = () => {
-      if (menuOpen) return;
-      setState(computeAt(editor.state.selection.from));
+      if (menuOpenRef.current) return;
+      applyState(computeAt(editor.state.selection.from));
     };
     update();
     editor.on("selectionUpdate", update);
     return () => {
       editor.off("selectionUpdate", update);
     };
-  }, [editor, touch, menuOpen, computeAt]);
+  }, [editor, touch, computeAt, applyState]);
 
   if (!state) return null;
 

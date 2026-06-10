@@ -50,12 +50,14 @@ export function GuideEditor({
   guideSlug,
 }: GuideEditorProps) {
   // ── 本文・メタ状態 ──────────────────────────
+  // 本文(content)は editor を真実源とし React state に持たない（毎キー再レンダリング回避）。
   const [title, setTitle] = useState(initialTitle);
-  const [content, setContent] = useState(initialContent);
   const [summary, setSummary] = useState(initialSummary);
   const [tags, setTags] = useState<string[]>(initialTags);
   const [isPublished, setIsPublished] = useState(initialIsPublished);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
+  // 未保存変更フラグ。同値 setState は React がバイパスするため毎キー再レンダリングしない。
+  const [dirty, setDirty] = useState(false);
 
   // ── ダイアログ状態 ──────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -72,24 +74,43 @@ export function GuideEditor({
 
   const editor = useGuideEditor({
     initialContent,
-    onUpdate: setContent,
+    onUpdate: () => setDirty(true),
     onImagePaste: (file) => imageUploadRef.current(file),
   });
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ── 手動保存（自動セーブ廃止） ──────────────
-  const { save, isDirty, saving, lastSaved } = useGuideSave({
-    title,
-    content,
-    summary,
-    tags,
-    isPublished,
-    coverImageUrl,
-  });
+  const { submit, saving, lastSaved } = useGuideSave();
+
+  // メタ情報の変更でもダーティに（本文は editor.onUpdate がフラグを立てる）
+  const metaInit = useRef(true);
+  useEffect(() => {
+    if (metaInit.current) {
+      metaInit.current = false;
+      return;
+    }
+    setDirty(true);
+  }, [title, summary, tags, isPublished, coverImageUrl]);
+
+  const save = useCallback(
+    (mode: "draft" | "publish") => {
+      if (!editor) return;
+      submit(mode, {
+        title,
+        content: editor.getHTML(),
+        summary,
+        tags,
+        isPublished,
+        coverImageUrl,
+      });
+      setDirty(false);
+    },
+    [editor, submit, title, summary, tags, isPublished, coverImageUrl],
+  );
 
   // 未保存離脱警告
-  const blocker = useUnsavedWarning(isDirty);
+  const blocker = useUnsavedWarning(dirty);
 
   // ── ハンドラ ──────────────────────────────
   const handleLinkInsert = useCallback(() => {
@@ -178,7 +199,7 @@ export function GuideEditor({
       {editor && (
         <DesktopToolbar
           editor={editor}
-          isDirty={isDirty}
+          isDirty={dirty}
           saving={saving}
           lastSaved={lastSaved}
           onSaveDraft={() => save("draft")}

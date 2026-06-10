@@ -1,6 +1,7 @@
 // 手動保存フック（自動セーブ廃止）。
 // - draft（仮保存）: ドラフト列へ保存。公開版は変えない。
 // - publish（保存）: 公開版を書き換え、ドラフトをクリアする。
+// パフォーマンスのため content 等を reactive に保持せず、保存時に値を受け取る。
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useFetcher } from "react-router";
 
@@ -15,10 +16,6 @@ export interface GuideSaveValues {
 
 export type SaveMode = "draft" | "publish";
 
-function signature(v: GuideSaveValues): string {
-  return JSON.stringify([v.title, v.content, v.summary, v.tags, v.isPublished, v.coverImageUrl]);
-}
-
 function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
   const fd = new FormData();
   fd.append("_action", mode);
@@ -32,33 +29,25 @@ function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
 }
 
 export interface UseGuideSaveResult {
-  /** 保存を実行（draft = 仮保存 / publish = 保存） */
-  save: (mode: SaveMode) => void;
-  /** 最後の保存以降に未保存の変更があるか */
-  isDirty: boolean;
+  /** 保存を実行（draft = 仮保存 / publish = 保存）。値は呼び出し時に渡す */
+  submit: (mode: SaveMode, values: GuideSaveValues) => void;
   /** 送信中 */
   saving: boolean;
   /** 直近の保存結果 */
   lastSaved: { mode: SaveMode; at: Date } | null;
 }
 
-export function useGuideSave(values: GuideSaveValues): UseGuideSaveResult {
+export function useGuideSave(): UseGuideSaveResult {
   const fetcher = useFetcher();
-  const [savedSig, setSavedSig] = useState(() => signature(values));
   const [lastSaved, setLastSaved] = useState<{ mode: SaveMode; at: Date } | null>(null);
   const pendingMode = useRef<SaveMode | null>(null);
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
 
-  const isDirty = signature(values) !== savedSig;
   const saving = fetcher.state !== "idle";
 
-  const save = useCallback(
-    (mode: SaveMode) => {
-      const v = valuesRef.current;
+  const submit = useCallback(
+    (mode: SaveMode, values: GuideSaveValues) => {
       pendingMode.current = mode;
-      fetcher.submit(toFormData(v, mode), { method: "post" });
-      setSavedSig(signature(v));
+      fetcher.submit(toFormData(values, mode), { method: "post" });
     },
     [fetcher],
   );
@@ -71,5 +60,5 @@ export function useGuideSave(values: GuideSaveValues): UseGuideSaveResult {
     }
   }, [fetcher.state]);
 
-  return { save, isDirty, saving, lastSaved };
+  return { submit, saving, lastSaved };
 }
