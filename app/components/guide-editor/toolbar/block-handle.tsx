@@ -181,11 +181,13 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
           aria-haspopup="menu"
           onMouseDown={(e) => e.preventDefault()}
           onMouseEnter={cancelHide}
+          onMouseMove={cancelHide}
           onMouseLeave={scheduleHide}
           style={{
             position: "fixed",
-            // ブロック左端からハンドルまでを padding-right で埋め、移動時の dead zone を無くす
-            left: state.left - 30,
+            // ブロック左端からハンドルまでを padding-right で埋め、移動時の dead zone を無くす。
+            // 狭い画面ではコンテンツが端に寄るため、画面外へ出ないよう左端をクランプ。
+            left: Math.max(4, state.left - 30),
             top: state.top + state.height / 2,
             transform: "translateY(-50%)",
             zIndex: EDITOR_Z.handle,

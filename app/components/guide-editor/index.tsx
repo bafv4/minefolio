@@ -196,7 +196,8 @@ export function GuideEditor({
         />
       )}
 
-      <div className="mx-auto w-full max-w-3xl px-4">
+      {/* コンテンツ幅は公開ビュー（guides/view.tsx の article）と一致させ WYSIWYG にする */}
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
         <Link
           to="/my-guides"
           className="inline-flex items-center gap-1.5 mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
