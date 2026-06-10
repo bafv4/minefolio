@@ -3,6 +3,7 @@
 import { useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { buildExtensions } from "../editor-config";
+import { SlashCommand } from "../extensions/slash-command";
 import { t } from "@/lib/messages";
 
 interface UseGuideEditorOptions {
@@ -21,7 +22,8 @@ export function useGuideEditor({
   onImagePaste,
 }: UseGuideEditorOptions): Editor | null {
   return useEditor({
-    extensions: buildExtensions(t("guideEditor.contentPlaceholder")),
+    // buildExtensions（HTML スキーマ = round-trip 担保）+ 編集 UX 専用の slash を合成
+    extensions: [...buildExtensions(t("guideEditor.contentPlaceholder")), SlashCommand],
     immediatelyRender: false,
     content: initialContent,
     onUpdate: ({ editor }) => {
