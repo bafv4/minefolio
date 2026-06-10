@@ -230,30 +230,27 @@ export function DesktopToolbar({
               ))}
             </div>
 
-            {/* 右側: 設定 / プレビュー | 仮保存 / 保存（下に保存状態） */}
-            <div className="ml-auto flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1.5">
-                <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings} title="ガイド設定">
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden md:inline">ガイド設定</span>
-                </Button>
-                <Button asChild type="button" variant="ghost" size="sm" title={t("guideEditor.preview")}>
-                  <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
-                    <Eye className="h-4 w-4" />
-                    <span className="hidden md:inline">{t("guideEditor.preview")}</span>
-                  </Link>
-                </Button>
-                <ToolbarSeparator />
-                <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
-                  <FileEdit className="h-4 w-4" />
-                  <span className="hidden md:inline">仮保存</span>
-                </Button>
-                <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
-                  <Save className="h-4 w-4" />
-                  <span className="hidden md:inline">{t("guideEditor.save")}</span>
-                </Button>
-              </div>
-              <SaveIndicator isDirty={isDirty} saving={saving} lastSaved={lastSaved} />
+            {/* 右側: 設定 / プレビュー | 仮保存 / 保存 */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings} title="ガイド設定">
+                <Settings className="h-4 w-4" />
+                <span className="hidden md:inline">ガイド設定</span>
+              </Button>
+              <Button asChild type="button" variant="ghost" size="sm" title={t("guideEditor.preview")}>
+                <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
+                  <Eye className="h-4 w-4" />
+                  <span className="hidden md:inline">{t("guideEditor.preview")}</span>
+                </Link>
+              </Button>
+              <ToolbarSeparator />
+              <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
+                <FileEdit className="h-4 w-4" />
+                <span className="hidden md:inline">仮保存</span>
+              </Button>
+              <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
+                <Save className="h-4 w-4" />
+                <span className="hidden md:inline">{t("guideEditor.save")}</span>
+              </Button>
             </div>
           </div>
 
@@ -399,6 +396,11 @@ export function DesktopToolbar({
                 </ToolbarButton>
               </>
             )}
+
+            {/* 保存状態はツール行の右端に表示 */}
+            <div className="ml-auto pl-2">
+              <SaveIndicator isDirty={isDirty} saving={saving} lastSaved={lastSaved} />
+            </div>
           </div>
         </div>
       </div>
