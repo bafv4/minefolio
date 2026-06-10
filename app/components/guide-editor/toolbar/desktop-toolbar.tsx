@@ -38,10 +38,10 @@ import {
   Package,
   FileText,
   Youtube as YoutubeIcon,
-  Maximize2,
-  Minimize2,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
+import { useEditorRerender } from "../hooks/use-editor-rerender";
 import {
   setBlockType,
   insertTable,
@@ -145,6 +146,9 @@ export function DesktopToolbar({
   onEmbed,
   onGuideLink,
 }: DesktopToolbarProps) {
+  // 編集位置（選択）の変化にツールバー表示を追従させる
+  useEditorRerender(editor);
+
   const block = currentBlock(editor);
   const BlockIcon = block.icon;
 
@@ -175,21 +179,13 @@ export function DesktopToolbar({
     <>
       <div
         ref={barRef}
-        className="fixed top-16 left-0 right-0 flex flex-wrap items-center gap-0.5 border-b bg-background/95 backdrop-blur px-2 py-1.5"
+        className="fixed top-16 left-0 right-0 border-b bg-background/95 backdrop-blur"
         style={{ zIndex: EDITOR_Z.toolbar }}
         role="toolbar"
         aria-label="エディタツールバー"
       >
-        {/* 折りたたみ / 展開トグル（常にアイコンのみ） */}
-        <ToolbarButton
-          label={expanded ? "ツールバーを折りたたむ" : "ツールバーを展開"}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </ToolbarButton>
-
-        <ToolbarSeparator />
-
+        {/* 内容幅は本文（max-w-5xl）に揃える */}
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 flex flex-wrap items-center gap-0.5 py-1.5">
         {/* 履歴 */}
         <ToolbarButton label="元に戻す" showLabel={expanded} disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
           <Undo2 className="h-4 w-4" />
@@ -318,6 +314,20 @@ export function DesktopToolbar({
               {t("guideEditor.preview")}
             </Link>
           </Button>
+
+          {/* 折りたたみ / 展開トグル（右端、Chevron） */}
+          <ToolbarButton
+            label={expanded ? "ツールバーを折りたたむ" : "ツールバーを展開"}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <ChevronUp
+              className={cn(
+                "h-4 w-4 transition-transform duration-200",
+                expanded ? "rotate-0" : "rotate-180",
+              )}
+            />
+          </ToolbarButton>
+        </div>
         </div>
       </div>
 

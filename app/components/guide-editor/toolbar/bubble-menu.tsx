@@ -6,6 +6,7 @@ import type { Editor } from "@tiptap/core";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
+import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
 
 interface EditorBubbleMenuProps {
@@ -17,6 +18,7 @@ interface EditorBubbleMenuProps {
 }
 
 export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbleMenuProps) {
+  useEditorRerender(editor);
   return (
     <BubbleMenu
       editor={editor}

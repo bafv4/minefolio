@@ -27,6 +27,9 @@ export function ToolbarButton({
   sm,
   showLabel,
 }: ToolbarButtonProps) {
+  // showLabel が指定された文脈（常設ツールバー）では、ラベルを常に描画し
+  // max-width/opacity のトランジションで開閉をアニメーションする。
+  const labelable = showLabel !== undefined;
   return (
     <Toggle
       size="sm"
@@ -38,15 +41,24 @@ export function ToolbarButton({
       title={label}
       aria-label={label}
       className={cn(
-        showLabel
-          ? "h-8 w-auto justify-start gap-1.5 px-2"
+        labelable
+          ? "h-8 justify-start px-2"
           : sm
             ? "h-7 w-7 min-w-7 px-0"
             : "h-8 w-8 min-w-8 px-0",
       )}
     >
       {children}
-      {showLabel && <span className="text-xs whitespace-nowrap">{label}</span>}
+      {labelable && (
+        <span
+          className={cn(
+            "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
+            showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+          )}
+        >
+          {label}
+        </span>
+      )}
     </Toggle>
   );
 }

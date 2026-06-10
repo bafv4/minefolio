@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/core";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, Plus } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
+import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
 
 interface MobileToolbarProps {
@@ -11,6 +12,7 @@ interface MobileToolbarProps {
 }
 
 export function MobileToolbar({ editor, onLink }: MobileToolbarProps) {
+  useEditorRerender(editor);
   // "/" を挿入してスラッシュメニューを起動
   const insertSlash = () => editor.chain().focus().insertContent("/").run();
 

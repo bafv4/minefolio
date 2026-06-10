@@ -6,6 +6,7 @@ import { Palette, Paintbrush } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { TEXT_COLORS, BG_COLORS, CELL_COLORS } from "../constants";
 import { setCellBackground, setCellTextColor } from "../lib/block-commands";
+import { cn } from "@/lib/utils";
 
 type SwatchKind = "text" | "bg";
 
@@ -19,6 +20,7 @@ function PickerTrigger({
   children: ReactNode;
   showLabel?: boolean;
 }) {
+  const labelable = showLabel !== undefined;
   return (
     <PopoverTrigger asChild>
       <button
@@ -26,14 +28,22 @@ function PickerTrigger({
         title={label}
         aria-label={label}
         onMouseDown={(e) => e.preventDefault()}
-        className={
-          showLabel
-            ? "h-8 inline-flex items-center justify-start gap-1.5 px-2 rounded-md text-foreground hover:bg-muted transition-colors"
-            : "h-7 w-7 inline-flex items-center justify-center rounded-md text-foreground hover:bg-muted transition-colors"
-        }
+        className={cn(
+          "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors",
+          labelable ? "h-8 justify-start px-2" : "h-7 w-7 justify-center",
+        )}
       >
         {children}
-        {showLabel && <span className="text-xs whitespace-nowrap">{label}</span>}
+        {labelable && (
+          <span
+            className={cn(
+              "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
+              showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+            )}
+          >
+            {label}
+          </span>
+        )}
       </button>
     </PopoverTrigger>
   );
