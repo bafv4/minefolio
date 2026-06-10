@@ -1092,6 +1092,12 @@ export const PAGES_JA = {
     embedSearchCraftTitle: "サーチクラフトを埋め込む",
     embedKeybindLabel: "リマップ",
     embedSearchCraftLabel: "サーチクラフト",
+    contentAriaLabel: "ガイド本文エディタ",
+    back: "ガイド一覧に戻る",
+    unsavedLeaveTitle: "未保存の変更があります",
+    unsavedLeaveDesc: "このページを離れると、保存されていない変更は失われます。",
+    stay: "編集を続ける",
+    leave: "保存せず離れる",
   },
   guides: {
     title: "ガイド一覧 - Minefolio",
