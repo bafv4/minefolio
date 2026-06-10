@@ -217,7 +217,8 @@ export function GuideEditor({
     if (editor) insertGuideLink(editor, guide);
   };
 
-  const previewUrl = `/guides/${authorSlug}/${guideSlug}`;
+  // プレビューはドラフト（仮保存）内容を表示（著者本人のみ。未保存ドラフトが無ければ公開版）
+  const previewUrl = `/guides/${authorSlug}/${guideSlug}?draft=1`;
 
   return (
     <div className="flex flex-col">

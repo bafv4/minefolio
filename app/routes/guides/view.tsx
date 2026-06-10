@@ -80,27 +80,47 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  const guide = await db.query.guides.findFirst({
-    where: and(
-      eq(guides.authorId, author.id),
-      eq(guides.slug, guideSlug),
-      eq(guides.isPublished, true)
-    ),
-  });
+  // 著者本人なら ?draft=1 でドラフト（仮保存）内容をプレビューできる
+  const wantDraft = new URL(request.url).searchParams.get("draft") === "1";
+  let isOwner = false;
+  if (session) {
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    isOwner = currentUser?.id === author.id;
+  }
+  const draftPreview = wantDraft && isOwner;
+
+  const guideConditions = [eq(guides.authorId, author.id), eq(guides.slug, guideSlug)];
+  // ドラフトプレビュー時は未公開でも取得可。それ以外は公開済みのみ。
+  if (!draftPreview) guideConditions.push(eq(guides.isPublished, true));
+
+  const guide = await db.query.guides.findFirst({ where: and(...guideConditions) });
 
   if (!guide) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Increment view count (fire and forget)
-  db.update(guides)
-    .set({ viewCount: sql`${guides.viewCount} + 1` })
-    .where(eq(guides.id, guide.id))
-    .then(() => {})
-    .catch(() => {});
+  // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
+  const previewingDraft = draftPreview && guide.draftUpdatedAt !== null;
+  const viewTitle = previewingDraft ? guide.draftTitle ?? guide.title : guide.title;
+  const viewSummary = previewingDraft ? guide.draftSummary : guide.summary;
+  const viewCover = previewingDraft ? guide.draftCoverImageUrl : guide.coverImageUrl;
+  const viewTags = previewingDraft ? guide.draftTags ?? guide.tags : guide.tags;
+  const viewContent = previewingDraft ? guide.draftContent ?? guide.content : guide.content;
+
+  // ドラフトプレビューでは閲覧数を増やさない
+  if (!draftPreview) {
+    db.update(guides)
+      .set({ viewCount: sql`${guides.viewCount} + 1` })
+      .where(eq(guides.id, guide.id))
+      .then(() => {})
+      .catch(() => {});
+  }
 
   // Sanitize HTML on the server
-  const sanitizedContent = sanitizeHtml(guide.content, {
+  const sanitizedContent = sanitizeHtml(viewContent, {
     allowedTags: [
       ...sanitizeHtml.defaults.allowedTags,
       "h1", "h2", "h3", "h4", "h5", "h6",
@@ -220,18 +240,22 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
     }
   }
 
-  // ログインユーザーがガイドのオーナーかチェック
-  let isOwner = false;
-  if (session) {
-    const currentUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: { id: true },
-    });
-    isOwner = currentUser?.id === author.id;
-  }
-
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
-  return { guide: { ...guide, sanitizedContent: wrappedContent }, author, appUrl, embedUsers, isOwner };
+  return {
+    guide: {
+      ...guide,
+      title: viewTitle,
+      summary: viewSummary,
+      coverImageUrl: viewCover,
+      tags: viewTags,
+      sanitizedContent: wrappedContent,
+    },
+    author,
+    appUrl,
+    embedUsers,
+    isOwner,
+    previewingDraft,
+  };
 }
 
 const MinecraftAvatarLazy = lazy(() =>
@@ -241,7 +265,7 @@ const MinecraftAvatarLazy = lazy(() =>
 );
 
 export default function GuideViewPage() {
-  const { guide, author, embedUsers, isOwner } = useLoaderData<typeof loader>();
+  const { guide, author, embedUsers, isOwner, previewingDraft } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
     tags = JSON.parse(guide.tags) as string[];
@@ -290,6 +314,11 @@ export default function GuideViewPage() {
 
   return (
     <article className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      {previewingDraft && (
+        <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
+        </div>
+      )}
       {/* Back button + Owner edit button */}
       <div className="mb-6 flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2">

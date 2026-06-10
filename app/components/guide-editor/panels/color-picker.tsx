@@ -108,6 +108,9 @@ export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showL
       <PopoverContent
         className="w-52 p-2 space-y-2"
         onMouseDown={(e) => e.preventDefault()}
+        // 開いてもフォーカスをエディタから奪わない（選択範囲を保持し、
+        // バブルメニュー内で開いてもバブルが閉じてクラッシュしないようにする）
+        onOpenAutoFocus={(e) => e.preventDefault()}
         align="start"
       >
         <ColorSwatchGrid
@@ -145,6 +148,9 @@ export function CellColorPicker({ editor }: { editor: Editor }) {
       <PopoverContent
         className="w-52 p-2 space-y-2"
         onMouseDown={(e) => e.preventDefault()}
+        // 開いてもフォーカスをエディタから奪わない（選択範囲を保持し、
+        // バブルメニュー内で開いてもバブルが閉じてクラッシュしないようにする）
+        onOpenAutoFocus={(e) => e.preventDefault()}
         align="start"
       >
         <ColorSwatchGrid

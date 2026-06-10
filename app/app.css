@@ -999,3 +999,24 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* エディタ内の段組も公開ビューと同じく横並びに。
+   @layer components の優先度問題を避けるため unlayered で明示する。 */
+.guide-content .columns-editor-2 .columns-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+}
+
+.guide-content .columns-editor-3 .columns-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1em;
+}
+
+@media (max-width: 640px) {
+  .guide-content .columns-editor-2 .columns-content,
+  .guide-content .columns-editor-3 .columns-content {
+    grid-template-columns: 1fr;
+  }
+}
