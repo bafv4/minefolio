@@ -12,12 +12,11 @@ export interface GuideEditorProps {
   initialTags: string[];
   initialIsPublished: boolean;
   initialCoverImageUrl: string | null;
+  /** 読み込み時に未コミットのドラフトが存在したか */
+  initialHasDraft: boolean;
   authorSlug: string;
   guideSlug: string;
 }
-
-/** オートセーブの状態 */
-export type SaveStatus = "saved" | "saving" | "unsaved";
 
 /**
  * スラッシュコマンドが必要とする宿主（index.tsx）側のダイアログ操作。

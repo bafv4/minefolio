@@ -21,9 +21,19 @@
 | coverImageUrl | string | カバー画像URL（Vercel Blob） |
 | isPublished | boolean | 公開状態 |
 | tags | JSON配列 | タグ一覧 |
+| draftTitle / draftSummary / draftContent / draftCoverImageUrl / draftTags | nullable | 仮保存（ドラフト）用。公開版と独立して編集中の内容を保持 |
+| draftUpdatedAt | timestamp (nullable) | ドラフト保存日時。非 null = 未コミットのドラフトあり |
 | viewCount | integer | 閲覧数 |
 | createdAt | timestamp | 作成日時 |
-| updatedAt | timestamp | 更新日時 |
+| updatedAt | timestamp | 更新日時（保存=公開版更新時のみ） |
+
+#### 保存モデル（仮保存 / 保存）
+
+- **仮保存（draft）**: ドラフト列 (`draft*`) のみ更新。公開版 (`content` 等) と `isPublished` は変更しない。公開中の表示は変わらない。
+- **保存（publish）**: 公開版を書き換え、`isPublished` を反映し、ドラフト列を `null` にクリア（コミット）。`updatedAt` を更新。
+- 編集画面の読み込み時、未コミットのドラフト (`draftUpdatedAt != null`) があればそれを優先して開く。
+- 自動保存は廃止。`_action` = `draft` / `publish` を FormData で送信して区別する。
+- 公開ビュー (`guides/view.tsx`) は常に公開版 (`content`) を読むため、ドラフトは公開表示に影響しない。
 
 ### ユニーク制約
 
@@ -40,7 +50,8 @@
 - **TipTap 3.x** ベースのリッチテキストエディタ
 - v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
 - 操作モデルは複数の導線を併用:
-  - **常設ツールバー**（Word ライクなリボン、ヘッダー直下に sticky 固定）で履歴・ブロック種別・整形・リスト・メディア/表/段組挿入・埋め込み・保存/公開/プレビューを網羅 — `toolbar/desktop-toolbar.tsx`
+  - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: Undo/Redo・保存状態・仮保存/保存・設定・プレビュー。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。
+  - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・タグ・公開設定を集約（ツールバーの「設定」から開く）。
   - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）
   - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）
   - **ブロックハンドル**でブロック種別変更 / 削除 / テーブル行列操作 — `toolbar/block-handle.tsx`

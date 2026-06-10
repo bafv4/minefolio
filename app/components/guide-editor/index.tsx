@@ -20,7 +20,7 @@ import { t } from "@/lib/messages";
 import type { GuideEditorProps, SlashCommandContext } from "./types";
 import type { SlashCommandStorage } from "./extensions/slash-command";
 import { useGuideEditor } from "./hooks/use-guide-editor";
-import { useAutoSave } from "./hooks/use-auto-save";
+import { useGuideSave } from "./hooks/use-guide-save";
 import {
   useImageUpload,
   buildInlineImagePath,
@@ -28,7 +28,7 @@ import {
 } from "./hooks/use-image-upload";
 import { useUnsavedWarning } from "./hooks/use-unsaved-warning";
 import { insertEmbed, insertGuideLink } from "./lib/block-commands";
-import { MetadataFields } from "./panels/metadata-fields";
+import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
@@ -45,6 +45,7 @@ export function GuideEditor({
   initialTags,
   initialIsPublished,
   initialCoverImageUrl,
+  initialHasDraft,
   authorSlug,
   guideSlug,
 }: GuideEditorProps) {
@@ -57,6 +58,7 @@ export function GuideEditor({
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
 
   // ── ダイアログ状態 ──────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
 
@@ -76,8 +78,8 @@ export function GuideEditor({
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // ── オートセーブ ──────────────────────────
-  const { status, lastSavedAt, saveNow } = useAutoSave({
+  // ── 手動保存（自動セーブ廃止） ──────────────
+  const { save, isDirty, saving, lastSaved } = useGuideSave({
     title,
     content,
     summary,
@@ -86,19 +88,8 @@ export function GuideEditor({
     coverImageUrl,
   });
 
-  // 公開トグルは即時保存
-  const publishInit = useRef(true);
-  useEffect(() => {
-    if (publishInit.current) {
-      publishInit.current = false;
-      return;
-    }
-    saveNow();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPublished]);
-
   // 未保存離脱警告
-  const blocker = useUnsavedWarning(status !== "saved");
+  const blocker = useUnsavedWarning(isDirty);
 
   // ── ハンドラ ──────────────────────────────
   const handleLinkInsert = useCallback(() => {
@@ -187,11 +178,12 @@ export function GuideEditor({
       {editor && (
         <DesktopToolbar
           editor={editor}
-          saveStatus={status}
-          lastSavedAt={lastSavedAt}
-          onSave={saveNow}
-          isPublished={isPublished}
-          onTogglePublish={setIsPublished}
+          isDirty={isDirty}
+          saving={saving}
+          lastSaved={lastSaved}
+          onSaveDraft={() => save("draft")}
+          onSavePublish={() => save("publish")}
+          onOpenSettings={() => setSettingsOpen(true)}
           previewUrl={previewUrl}
           onImagePicker={() => imageInputRef.current?.click()}
           onYoutube={slashContext.insertYoutube}
@@ -203,28 +195,27 @@ export function GuideEditor({
 
       {/* コンテンツ幅は公開ビュー（guides/view.tsx の article）と一致させ WYSIWYG にする */}
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-        <Link
-          to="/my-guides"
-          className="inline-flex items-center gap-1.5 mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("guideEditor.back")}
-        </Link>
+        <div className="flex items-center justify-between gap-2 mt-4">
+          <Link
+            to="/my-guides"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("guideEditor.back")}
+          </Link>
+          {/* タイトルは設定モーダルで編集。本文上には現在のタイトルを見出しとして表示 */}
+        </div>
 
-        <MetadataFields
-          title={title}
-          onTitleChange={setTitle}
-          summary={summary}
-          onSummaryChange={setSummary}
-          tags={tags}
-          onAddTag={(tag) => setTags((prev) => [...prev, tag])}
-          onRemoveTag={(tag) => setTags((prev) => prev.filter((x) => x !== tag))}
-          coverImageUrl={coverImageUrl}
-          onCoverUpload={handleCoverUpload}
-          onCoverRemove={() => setCoverImageUrl(null)}
-          isUploadingCover={coverUpload.isUploading}
-          uploadError={coverUpload.error ?? imageUpload.error}
-        />
+        {/* 仮保存中のドラフトを編集していることの通知（保存で公開版へ反映） */}
+        {initialHasDraft && lastSaved?.mode !== "publish" && (
+          <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+            未公開のドラフトを編集中です。「保存」で公開版へ反映されます。
+          </div>
+        )}
+
+        <h1 className="text-2xl font-bold mt-3 break-words">
+          {title || t("guideEditor.titlePlaceholder")}
+        </h1>
 
         <div className="py-3 min-h-100">
           <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">
@@ -250,6 +241,25 @@ export function GuideEditor({
           if (file) handleImageUpload(file);
           e.target.value = "";
         }}
+      />
+
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        title={title}
+        onTitleChange={setTitle}
+        summary={summary}
+        onSummaryChange={setSummary}
+        tags={tags}
+        onAddTag={(tag) => setTags((prev) => [...prev, tag])}
+        onRemoveTag={(tag) => setTags((prev) => prev.filter((x) => x !== tag))}
+        coverImageUrl={coverImageUrl}
+        onCoverUpload={handleCoverUpload}
+        onCoverRemove={() => setCoverImageUrl(null)}
+        isUploadingCover={coverUpload.isUploading}
+        uploadError={coverUpload.error ?? imageUpload.error}
+        isPublished={isPublished}
+        onTogglePublish={setIsPublished}
       />
 
       <EmbedDialog

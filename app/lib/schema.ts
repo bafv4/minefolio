@@ -386,6 +386,14 @@ export const guides = sqliteTable("guides", {
   coverImageUrl: text("cover_image_url"),
   isPublished: integer("is_published", { mode: "boolean" }).default(false).notNull(),
   tags: text("tags").default("[]").notNull(),
+  // ドラフト（仮保存）用。公開版とは独立して編集中の内容を保持する。
+  // いずれかが非 null のとき「未コミットのドラフトあり」とみなす。
+  draftTitle: text("draft_title"),
+  draftSummary: text("draft_summary"),
+  draftContent: text("draft_content"),
+  draftCoverImageUrl: text("draft_cover_image_url"),
+  draftTags: text("draft_tags"),
+  draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
   viewCount: integer("view_count").default(0).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
