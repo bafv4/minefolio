@@ -4,7 +4,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { EditorContent } from "@tiptap/react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -46,6 +47,7 @@ export function GuideEditor({
   initialIsPublished,
   initialCoverImageUrl,
   initialHasDraft,
+  publishedSnapshot,
   authorSlug,
   guideSlug,
 }: GuideEditorProps) {
@@ -58,6 +60,8 @@ export function GuideEditor({
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
   // 未保存変更フラグ。同値 setState は React がバイパスするため毎キー再レンダリングしない。
   const [dirty, setDirty] = useState(false);
+  // DB にコミット済みドラフトが存在するか（仮保存で true、保存/破棄で false）。
+  const [draftActive, setDraftActive] = useState(initialHasDraft);
 
   // ── ダイアログ状態 ──────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -83,15 +87,9 @@ export function GuideEditor({
   // ── 手動保存（自動セーブ廃止） ──────────────
   const { submit, saving, lastSaved } = useGuideSave();
 
-  // メタ情報の変更でもダーティに（本文は editor.onUpdate がフラグを立てる）
-  const metaInit = useRef(true);
-  useEffect(() => {
-    if (metaInit.current) {
-      metaInit.current = false;
-      return;
-    }
-    setDirty(true);
-  }, [title, summary, tags, isPublished, coverImageUrl]);
+  // メタ情報はラベル付きハンドラ側でダーティを立てる（ロールバック時の一括リセットと
+  // 衝突しないよう、effect ではなく明示的にマークする）。本文は editor.onUpdate が立てる。
+  const markDirty = useCallback(() => setDirty(true), []);
 
   const save = useCallback(
     (mode: "draft" | "publish") => {
@@ -105,9 +103,33 @@ export function GuideEditor({
         coverImageUrl,
       });
       setDirty(false);
+      setDraftActive(mode === "draft");
     },
     [editor, submit, title, summary, tags, isPublished, coverImageUrl],
   );
+
+  // ドラフトを破棄して公開版へロールバック（エディタ・メタを公開版へ戻し、ドラフト列を null に）
+  const handleRollback = useCallback(() => {
+    if (!editor) return;
+    // setContent は onUpdate→setDirty(true) を発火するが、同一ハンドラ内の
+    // 後続 setDirty(false) が最終値になる（React のバッチ処理）。
+    editor.commands.setContent(publishedSnapshot.content);
+    setTitle(publishedSnapshot.title);
+    setSummary(publishedSnapshot.summary);
+    setTags(publishedSnapshot.tags);
+    setCoverImageUrl(publishedSnapshot.coverImageUrl);
+    setIsPublished(publishedSnapshot.isPublished);
+    submit("discard", {
+      title: publishedSnapshot.title,
+      content: publishedSnapshot.content,
+      summary: publishedSnapshot.summary,
+      tags: publishedSnapshot.tags,
+      isPublished: publishedSnapshot.isPublished,
+      coverImageUrl: publishedSnapshot.coverImageUrl,
+    });
+    setDirty(false);
+    setDraftActive(false);
+  }, [editor, publishedSnapshot, submit]);
 
   // 未保存離脱警告
   const blocker = useUnsavedWarning(dirty);
@@ -152,7 +174,10 @@ export function GuideEditor({
         file,
         "サムネイルのアップロードに失敗しました",
       );
-      if (url) setCoverImageUrl(url);
+      if (url) {
+        setCoverImageUrl(url);
+        setDirty(true);
+      }
     },
     [userId, guideId, coverUpload],
   );
@@ -227,10 +252,21 @@ export function GuideEditor({
           {/* タイトルは設定モーダルで編集。本文上には現在のタイトルを見出しとして表示 */}
         </div>
 
-        {/* 仮保存中のドラフトを編集していることの通知（保存で公開版へ反映） */}
-        {initialHasDraft && lastSaved?.mode !== "publish" && (
-          <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            未公開のドラフトを編集中です。「保存」で公開版へ反映されます。
+        {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
+        {draftActive && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+            <span>未公開のドラフトを編集中です。「保存」で公開版へ反映、または公開版に戻せます。</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={handleRollback}
+              disabled={saving}
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              公開版に戻す
+            </Button>
           </div>
         )}
 
@@ -264,19 +300,37 @@ export function GuideEditor({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         title={title}
-        onTitleChange={setTitle}
+        onTitleChange={(v) => {
+          setTitle(v);
+          markDirty();
+        }}
         summary={summary}
-        onSummaryChange={setSummary}
+        onSummaryChange={(v) => {
+          setSummary(v);
+          markDirty();
+        }}
         tags={tags}
-        onAddTag={(tag) => setTags((prev) => [...prev, tag])}
-        onRemoveTag={(tag) => setTags((prev) => prev.filter((x) => x !== tag))}
+        onAddTag={(tag) => {
+          setTags((prev) => [...prev, tag]);
+          markDirty();
+        }}
+        onRemoveTag={(tag) => {
+          setTags((prev) => prev.filter((x) => x !== tag));
+          markDirty();
+        }}
         coverImageUrl={coverImageUrl}
         onCoverUpload={handleCoverUpload}
-        onCoverRemove={() => setCoverImageUrl(null)}
+        onCoverRemove={() => {
+          setCoverImageUrl(null);
+          markDirty();
+        }}
         isUploadingCover={coverUpload.isUploading}
         uploadError={coverUpload.error ?? imageUpload.error}
         isPublished={isPublished}
-        onTogglePublish={setIsPublished}
+        onTogglePublish={(next) => {
+          setIsPublished(next);
+          markDirty();
+        }}
       />
 
       <EmbedDialog

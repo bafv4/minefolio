@@ -55,7 +55,17 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
         tags: guide.tags,
       };
 
-  return { guide: { ...guide, ...resolved }, user, hasDraft };
+  // 公開版のスナップショット（ロールバック時にエディタを公開版へ戻すため）。
+  const published = {
+    title: guide.title,
+    summary: guide.summary ?? "",
+    content: guide.content,
+    coverImageUrl: guide.coverImageUrl,
+    tags: guide.tags,
+    isPublished: guide.isPublished,
+  };
+
+  return { guide: { ...guide, ...resolved }, user, hasDraft, published };
 }
 
 export async function action({ context, request, params }: ActionFunctionArgs) {
@@ -88,8 +98,28 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
   }
 
   const formData = await request.formData();
+  const action = formData.get("_action");
+
+  // "discard" = ドラフトを破棄し公開版へロールバック（ドラフト列を null に戻す）。
+  if (action === "discard") {
+    await db
+      .update(guides)
+      .set({
+        draftTitle: null,
+        draftSummary: null,
+        draftContent: null,
+        draftCoverImageUrl: null,
+        draftTags: null,
+        draftUpdatedAt: null,
+      })
+      .where(eq(guides.id, guide.id));
+    return new Response(JSON.stringify({ success: true, mode: "discard" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
-  const saveMode = formData.get("_action") === "draft" ? "draft" : "publish";
+  const saveMode = action === "draft" ? "draft" : "publish";
 
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;
@@ -187,7 +217,7 @@ function safeParseTags(raw: string | null | undefined): string[] {
 }
 
 export default function GuideEditPage() {
-  const { guide, user, hasDraft } = useLoaderData<typeof loader>();
+  const { guide, user, hasDraft, published } = useLoaderData<typeof loader>();
 
   return (
     <GuideEditor
@@ -200,6 +230,14 @@ export default function GuideEditPage() {
       initialIsPublished={guide.isPublished}
       initialCoverImageUrl={guide.coverImageUrl}
       initialHasDraft={hasDraft}
+      publishedSnapshot={{
+        title: published.title,
+        summary: published.summary,
+        content: published.content,
+        coverImageUrl: published.coverImageUrl,
+        tags: safeParseTags(published.tags),
+        isPublished: published.isPublished,
+      }}
       authorSlug={user.slug}
       guideSlug={guide.slug}
     />

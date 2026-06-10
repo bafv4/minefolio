@@ -14,7 +14,7 @@ export interface GuideSaveValues {
   coverImageUrl: string | null;
 }
 
-export type SaveMode = "draft" | "publish";
+export type SaveMode = "draft" | "publish" | "discard";
 
 function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
   const fd = new FormData();

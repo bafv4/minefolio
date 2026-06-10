@@ -31,8 +31,9 @@
 
 - **仮保存（draft）**: ドラフト列 (`draft*`) のみ更新。公開版 (`content` 等) と `isPublished` は変更しない。公開中の表示は変わらない。
 - **保存（publish）**: 公開版を書き換え、`isPublished` を反映し、ドラフト列を `null` にクリア（コミット）。`updatedAt` を更新。
-- 編集画面の読み込み時、未コミットのドラフト (`draftUpdatedAt != null`) があればそれを優先して開く。
-- 自動保存は廃止。`_action` = `draft` / `publish` を FormData で送信して区別する。
+- **公開版に戻す（discard / ロールバック）**: ドラフト列を `null` に戻し、編集中の内容を公開版へ復元する。
+- 不変条件: **ドラフト列が `null` = ドラフトと公開版が同じ**。読み込み時、未コミットのドラフト (`draftUpdatedAt != null`) があればそれを優先し、無ければ公開版を読み込む。
+- 自動保存は廃止。`_action` = `draft` / `publish` / `discard` を FormData で送信して区別する。
 - 公開ビュー (`guides/view.tsx`) は常に公開版 (`content`) を読むため、ドラフトは公開表示に影響しない。
 
 ### ユニーク制約

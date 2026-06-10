@@ -14,8 +14,20 @@ export interface GuideEditorProps {
   initialCoverImageUrl: string | null;
   /** 読み込み時に未コミットのドラフトが存在したか */
   initialHasDraft: boolean;
+  /** 公開版のスナップショット（ドラフトを破棄して公開版へロールバックするのに使う） */
+  publishedSnapshot: GuidePublishedSnapshot;
   authorSlug: string;
   guideSlug: string;
+}
+
+/** 公開版の各フィールド（ロールバック用） */
+export interface GuidePublishedSnapshot {
+  title: string;
+  summary: string;
+  content: string;
+  coverImageUrl: string | null;
+  tags: string[];
+  isPublished: boolean;
 }
 
 /**
