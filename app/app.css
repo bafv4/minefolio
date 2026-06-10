@@ -214,12 +214,17 @@ body {
 
   body {
     @apply bg-background text-foreground;
-    /* 本文領域はクリーンな素地に。装飾パターンはヒーロー等の限定領域に閉じ込める。 */
     background-image:
       radial-gradient(circle at 1px 1px,
-        color-mix(in oklch, var(--border) 22%, transparent) 1.2px,
-        transparent 0);
-    background-size: 24px 24px;
+        color-mix(in oklch, var(--border) 48%, transparent) 1.2px,
+        transparent 0),
+      linear-gradient(to right,
+        color-mix(in oklch, var(--border) 32%, transparent) 1px,
+        transparent 1px),
+      linear-gradient(to bottom,
+        color-mix(in oklch, var(--border) 38%, transparent) 1px,
+        transparent 1px);
+    background-size: 16px 16px, 34px 34px, 34px 34px;
   }
 
   /* Interactive elements cursor styles */

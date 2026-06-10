@@ -27,6 +27,9 @@ export function createAuth(db: Database, env: {
         clientId: env.DISCORD_CLIENT_ID,
         clientSecret: env.DISCORD_CLIENT_SECRET,
         scope: ["identify", "email"],
+        // サインインのたびに Discord プロフィール（アイコン等）を取り込み直す。
+        // 既定では作成時のみ取得するため、アイコン変更が反映されない問題を解消。
+        overrideUserInfoOnSignIn: true,
       },
     },
     session: {

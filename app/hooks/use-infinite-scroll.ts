@@ -23,6 +23,14 @@ interface FetchResponse<T> {
   page: number;
 }
 
+/** page を除いた検索/フィルタ条件の署名（追加ロードの陳腐化判定に使う） */
+function paramsSignature(sp: URLSearchParams): string {
+  const p = new URLSearchParams(sp);
+  p.delete("page");
+  p.sort();
+  return p.toString();
+}
+
 export function useInfiniteScroll<T>({
   initialItems,
   initialPage,
@@ -37,6 +45,8 @@ export function useInfiniteScroll<T>({
   const fetcher = useFetcher<FetchResponse<T>>();
   const [searchParams] = useSearchParams();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // 進行中の追加ロードが、どの検索条件で開始されたかを記録（陳腐化判定用）
+  const loadedSigRef = useRef<string | null>(null);
 
   // 検索/フィルタ/ソートが変わったらリセット
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,6 +55,8 @@ export function useInfiniteScroll<T>({
     setPage(initialPage);
     setHasMore(initialHasMore);
     setAddedCount(0);
+    // 進行中ロードの結果は破棄（条件が変わったため）
+    loadedSigRef.current = null;
     // resetDeps は呼び出し側責任
     // 依存配列は呼び出し側から展開して渡す
   }, [initialItems, initialPage, initialHasMore, ...resetDeps]);
@@ -52,6 +64,11 @@ export function useInfiniteScroll<T>({
   // fetcher 完了時に items に append
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
+    // 追加ロード開始後に検索条件が変わっていたら、その結果は捨てる
+    // （別の検索条件のページが現在のリストへ混入するのを防ぐ）
+    if (loadedSigRef.current === null || loadedSigRef.current !== paramsSignature(searchParams)) {
+      return;
+    }
     const data = fetcher.data;
     const newItems = data.items;
     if (newItems.length === 0 && !data.hasMore) {
@@ -62,13 +79,16 @@ export function useInfiniteScroll<T>({
     setPage(data.page);
     setHasMore(data.hasMore);
     setAddedCount(newItems.length);
-  }, [fetcher.state, fetcher.data]);
+    loadedSigRef.current = null;
+  }, [fetcher.state, fetcher.data, searchParams]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || fetcher.state !== "idle") return;
     const nextPage = page + 1;
     const params = new URLSearchParams(searchParams);
     params.set("page", String(nextPage));
+    // この追加ロードが開始された時点の検索条件を記録
+    loadedSigRef.current = paramsSignature(searchParams);
     fetcher.load(`${endpoint}?${params.toString()}`);
   }, [hasMore, fetcher, page, searchParams, endpoint]);
 
