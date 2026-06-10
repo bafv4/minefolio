@@ -175,6 +175,17 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
   });
 }
 
+/** tags は JSON 文字列だが、データ不整合があってもクラッシュしないよう防御的に解析する */
+function safeParseTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed.filter((t) => typeof t === "string") as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function GuideEditPage() {
   const { guide, user, hasDraft } = useLoaderData<typeof loader>();
 
@@ -185,7 +196,7 @@ export default function GuideEditPage() {
       initialTitle={guide.title}
       initialContent={guide.content}
       initialSummary={guide.summary ?? ""}
-      initialTags={JSON.parse(guide.tags) as string[]}
+      initialTags={safeParseTags(guide.tags)}
       initialIsPublished={guide.isPublished}
       initialCoverImageUrl={guide.coverImageUrl}
       initialHasDraft={hasDraft}

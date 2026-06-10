@@ -386,17 +386,19 @@ export const guides = sqliteTable("guides", {
   coverImageUrl: text("cover_image_url"),
   isPublished: integer("is_published", { mode: "boolean" }).default(false).notNull(),
   tags: text("tags").default("[]").notNull(),
+  viewCount: integer("view_count").default(0).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   // ドラフト（仮保存）用。公開版とは独立して編集中の内容を保持する。
   // いずれかが非 null のとき「未コミットのドラフトあり」とみなす。
+  // ※ マイグレーションの ALTER ADD は末尾に追加されるため、列定義も末尾に置き
+  //    物理順と一致させる（中間挿入だと db:push がテーブル再作成→データ破損を起こす）。
   draftTitle: text("draft_title"),
   draftSummary: text("draft_summary"),
   draftContent: text("draft_content"),
   draftCoverImageUrl: text("draft_cover_image_url"),
   draftTags: text("draft_tags"),
   draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
-  viewCount: integer("view_count").default(0).notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (t) => [
   uniqueIndex("guides_author_slug_uniq").on(t.authorId, t.slug),
   index("guides_feed_idx").on(t.isPublished, t.updatedAt),
