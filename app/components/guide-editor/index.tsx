@@ -213,10 +213,6 @@ export function GuideEditor({
           </div>
         )}
 
-        <h1 className="text-2xl font-bold mt-3 break-words">
-          {title || t("guideEditor.titlePlaceholder")}
-        </h1>
-
         <div className="py-3 min-h-100">
           <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">
             {editor && !isTouch && (

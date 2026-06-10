@@ -5,7 +5,6 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/core";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
-import { InlineColorPicker } from "../panels/color-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
 
@@ -74,7 +73,6 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       <ToolbarButton sm label="リンク" active={editor.isActive("link")} onClick={onLink}>
         <LinkIcon className="h-4 w-4" />
       </ToolbarButton>
-      <InlineColorPicker editor={editor} />
     </BubbleMenu>
   );
 }
