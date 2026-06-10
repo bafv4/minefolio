@@ -37,9 +37,34 @@
 
 ### エディタ基盤
 
-- **TipTap 3.20.4** ベースのリッチテキストエディタ
-- ツールバーは **shadcn/ui の Toggle コンポーネント** を使用
-- フローティングツールバー対応
+- **TipTap 3.x** ベースのリッチテキストエディタ
+- v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
+- 操作モデルは 3 系統に分離:
+  - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）
+  - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）
+  - **ブロックハンドル**でブロック種別変更 / 削除 / テーブル行列操作 — `toolbar/block-handle.tsx`
+- モバイル/タッチ完全対応: `(hover:none)` で分岐し、バブルの代わりに下部固定ツールバー（`toolbar/mobile-toolbar.tsx`）。ブロックハンドルはタッチ時 `selectionUpdate` ベースで追従。
+- アクセシビリティ: `role`/`aria-label`、保存状態の `aria-live`、本文の `role=textbox`。
+- 自動保存（`hooks/use-auto-save.ts`、debounce 2000ms、最終保存時刻表示）と未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
+
+#### ディレクトリ構成（`app/components/guide-editor/`）
+
+| 配下 | 役割 |
+|------|------|
+| `index.tsx` | 宿主。メタ欄 + ツールバー + 本文 + ダイアログの組立（約 280 行） |
+| `editor-config.ts` | `buildExtensions()` — 拡張配列の単一ソース |
+| `extensions/` | カスタム拡張（callout / toggle-list / guide-link / keybind-embed / searchcraft-embed / columns / table / image / code-block / youtube / slash-command） |
+| `node-views/` | React NodeView（表示 + 属性編集） |
+| `slash-command/` | items / menu / renderer |
+| `toolbar/` | desktop / mobile / bubble / block-handle / 共通ボタン |
+| `panels/` | metadata-fields / color-picker / embed-dialog / guide-link-search |
+| `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
+| `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
+
+#### HTML 互換性
+
+- 本文は `editor.getHTML()` の HTML 文字列として保存され、表示側 `routes/guides/view.tsx` が同じ HTML を `sanitize-html` で描画する。
+- 拡張の `parseHTML`/`renderHTML` は旧実装からバイト等価で移植。`extensions/__tests__/round-trip.test.ts` が parse→render の不動点性（既存ガイドを無編集再保存しても差分ゼロ）を担保する。
 
 ### 対応フォーマット
 
