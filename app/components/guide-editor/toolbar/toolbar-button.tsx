@@ -14,6 +14,8 @@ interface ToolbarButtonProps {
   children: ReactNode;
   /** 小サイズ（h-7） */
   sm?: boolean;
+  /** 展開表示時、アイコンの右にラベル文字も表示する */
+  showLabel?: boolean;
 }
 
 export function ToolbarButton({
@@ -23,6 +25,7 @@ export function ToolbarButton({
   label,
   children,
   sm,
+  showLabel,
 }: ToolbarButtonProps) {
   return (
     <Toggle
@@ -34,9 +37,16 @@ export function ToolbarButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={cn(sm ? "h-7 w-7 min-w-7 px-0" : "h-8 w-8 min-w-8 px-0")}
+      className={cn(
+        showLabel
+          ? "h-8 w-auto justify-start gap-1.5 px-2"
+          : sm
+            ? "h-7 w-7 min-w-7 px-0"
+            : "h-8 w-8 min-w-8 px-0",
+      )}
     >
       {children}
+      {showLabel && <span className="text-xs whitespace-nowrap">{label}</span>}
     </Toggle>
   );
 }

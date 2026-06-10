@@ -10,7 +10,15 @@ import { setCellBackground, setCellTextColor } from "../lib/block-commands";
 type SwatchKind = "text" | "bg";
 
 /** Popover トリガー兼ツールバーボタン（Radix の ref 転送のため素の button を使う） */
-function PickerTrigger({ label, children }: { label: string; children: ReactNode }) {
+function PickerTrigger({
+  label,
+  children,
+  showLabel,
+}: {
+  label: string;
+  children: ReactNode;
+  showLabel?: boolean;
+}) {
   return (
     <PopoverTrigger asChild>
       <button
@@ -18,9 +26,14 @@ function PickerTrigger({ label, children }: { label: string; children: ReactNode
         title={label}
         aria-label={label}
         onMouseDown={(e) => e.preventDefault()}
-        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-foreground hover:bg-muted transition-colors"
+        className={
+          showLabel
+            ? "h-8 inline-flex items-center justify-start gap-1.5 px-2 rounded-md text-foreground hover:bg-muted transition-colors"
+            : "h-7 w-7 inline-flex items-center justify-center rounded-md text-foreground hover:bg-muted transition-colors"
+        }
       >
         {children}
+        {showLabel && <span className="text-xs whitespace-nowrap">{label}</span>}
       </button>
     </PopoverTrigger>
   );
@@ -69,10 +82,10 @@ function ColorSwatchGrid({
 }
 
 /** インライン整形用の文字色・背景色ピッカー（バブルメニュー / ツールバーで使用） */
-export function InlineColorPicker({ editor }: { editor: Editor }) {
+export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showLabel?: boolean }) {
   return (
     <Popover>
-      <PickerTrigger label="文字色・背景色">
+      <PickerTrigger label="文字色・背景色" showLabel={showLabel}>
         <Palette className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent

@@ -1,6 +1,6 @@
-// デスクトップ常設ツールバー（Word ライクなリボン）。ヘッダー直下に sticky 固定。
-// ブロック挿入・整形・メディア・埋め込み・メタ操作を一通り備える
-// （slash コマンド / bubble メニューと併用できる発見可能な導線）。
+// デスクトップ常設ツールバー（Word ライクなリボン）。ヘッダー直下に fixed 固定し
+// スクロールしても移動しない。折りたたみ（アイコンのみ）/ 展開（ラベル併記）の 2 モード。
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
@@ -38,6 +38,8 @@ import {
   Package,
   FileText,
   Youtube as YoutubeIcon,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +60,8 @@ import {
 import { EDITOR_Z } from "../constants";
 import type { SaveStatus } from "../types";
 import { t } from "@/lib/messages";
+
+const EXPANDED_STORAGE_KEY = "guideEditorToolbarExpanded";
 
 interface DesktopToolbarProps {
   editor: Editor;
@@ -144,142 +148,181 @@ export function DesktopToolbar({
   const block = currentBlock(editor);
   const BlockIcon = block.icon;
 
+  // 折りたたみ / 展開（localStorage に保存）
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const saved = localStorage.getItem(EXPANDED_STORAGE_KEY);
+    if (saved !== null) setExpanded(saved === "1");
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, expanded ? "1" : "0");
+  }, [expanded]);
+
+  // fixed 化に伴い、本文を押し下げるためバー高さを計測してスペーサーに反映
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barHeight, setBarHeight] = useState(0);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const update = () => setBarHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div
-      className="sticky top-16 flex flex-wrap items-center gap-0.5 border-b bg-background/95 backdrop-blur px-2 py-1.5"
-      style={{ zIndex: EDITOR_Z.toolbar }}
-      role="toolbar"
-      aria-label="エディタツールバー"
-    >
-      {/* 履歴 */}
-      <ToolbarButton label="元に戻す" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
-        <Undo2 className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label="やり直し" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
-        <Redo2 className="h-4 w-4" />
-      </ToolbarButton>
-
-      <ToolbarSeparator />
-
-      {/* ブロック種別 */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors min-w-32"
-            aria-label="ブロックの種別"
-          >
-            <BlockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">{block.label}</span>
-            <ChevronDown className="h-3.5 w-3.5 ml-auto shrink-0 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
-          {BLOCK_TYPES.map((opt) => {
-            const Icon = opt.icon;
-            return (
-              <DropdownMenuItem key={opt.type} onClick={() => setBlockType(editor, opt.type)}>
-                <Icon className="h-4 w-4 text-muted-foreground" />
-                {opt.label}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <ToolbarSeparator />
-
-      {/* インライン整形 */}
-      <ToolbarButton label={t("guideEditor.bold")} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
-        <Bold className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.italic")} active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
-        <Italic className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.strike")} active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
-        <Strikethrough className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.code")} active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
-        <Code className="h-4 w-4" />
-      </ToolbarButton>
-      <InlineColorPicker editor={editor} />
-
-      <ToolbarSeparator />
-
-      {/* リスト・引用・コード */}
-      <ToolbarButton label={t("guideEditor.unorderedList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
-        <List className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.orderedList")} active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-        <ListOrdered className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.blockquote")} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
-        <Quote className="h-4 w-4" />
-      </ToolbarButton>
-
-      <ToolbarSeparator />
-
-      {/* 挿入: メディア・表・段組 */}
-      <ToolbarButton label={t("guideEditor.link")} active={editor.isActive("link")} onClick={onLink}>
-        <LinkIcon className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.image")} onClick={onImagePicker}>
-        <ImageIcon className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.youtube")} onClick={onYoutube}>
-        <YoutubeIcon className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.table")} onClick={() => insertTable(editor)}>
-        <Table2 className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.horizontalRule")} onClick={() => insertHorizontalRule(editor)}>
-        <Minus className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label="2 カラム" onClick={() => insertColumns(editor, 2)}>
-        <Columns2 className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label="3 カラム" onClick={() => insertColumns(editor, 3)}>
-        <Columns3 className="h-4 w-4" />
-      </ToolbarButton>
-
-      <ToolbarSeparator />
-
-      {/* 埋め込み */}
-      <ToolbarButton label="ガイドリンク" onClick={onGuideLink}>
-        <FileText className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.embedKeybind")} onClick={() => onEmbed("keybind")}>
-        <Keyboard className="h-4 w-4" />
-      </ToolbarButton>
-      <ToolbarButton label={t("guideEditor.embedSearchCraft")} onClick={() => onEmbed("searchcraft")}>
-        <Package className="h-4 w-4" />
-      </ToolbarButton>
-
-      {/* メタ操作 */}
-      <div className="ml-auto flex items-center gap-1.5">
-        <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
-        <Button type="button" variant="ghost" size="sm" onClick={onSave} disabled={saveStatus === "saving"}>
-          <Save className="h-4 w-4" />
-          {t("guideEditor.save")}
-        </Button>
-        <Button
-          type="button"
-          variant={isPublished ? "default" : "outline"}
-          size="sm"
-          onClick={() => onTogglePublish(!isPublished)}
-          aria-pressed={isPublished}
+    <>
+      <div
+        ref={barRef}
+        className="fixed top-16 left-0 right-0 flex flex-wrap items-center gap-0.5 border-b bg-background/95 backdrop-blur px-2 py-1.5"
+        style={{ zIndex: EDITOR_Z.toolbar }}
+        role="toolbar"
+        aria-label="エディタツールバー"
+      >
+        {/* 折りたたみ / 展開トグル（常にアイコンのみ） */}
+        <ToolbarButton
+          label={expanded ? "ツールバーを折りたたむ" : "ツールバーを展開"}
+          onClick={() => setExpanded((v) => !v)}
         >
-          {isPublished ? <Globe className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-          {isPublished ? t("guideEditor.published") : t("guideEditor.draft")}
-        </Button>
-        <Button asChild type="button" variant="ghost" size="sm">
-          <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
-            <Eye className="h-4 w-4" />
-            {t("guideEditor.preview")}
-          </Link>
-        </Button>
+          {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </ToolbarButton>
+
+        <ToolbarSeparator />
+
+        {/* 履歴 */}
+        <ToolbarButton label="元に戻す" showLabel={expanded} disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
+          <Undo2 className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label="やり直し" showLabel={expanded} disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
+          <Redo2 className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarSeparator />
+
+        {/* ブロック種別 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors min-w-32"
+              aria-label="ブロックの種別"
+            >
+              <BlockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{block.label}</span>
+              <ChevronDown className="h-3.5 w-3.5 ml-auto shrink-0 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            {BLOCK_TYPES.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <DropdownMenuItem key={opt.type} onClick={() => setBlockType(editor, opt.type)}>
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  {opt.label}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <ToolbarSeparator />
+
+        {/* インライン整形 */}
+        <ToolbarButton label={t("guideEditor.bold")} showLabel={expanded} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+          <Bold className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.italic")} showLabel={expanded} active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+          <Italic className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.strike")} showLabel={expanded} active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
+          <Strikethrough className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.code")} showLabel={expanded} active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
+          <Code className="h-4 w-4" />
+        </ToolbarButton>
+        <InlineColorPicker editor={editor} showLabel={expanded} />
+
+        <ToolbarSeparator />
+
+        {/* リスト・引用 */}
+        <ToolbarButton label={t("guideEditor.unorderedList")} showLabel={expanded} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+          <List className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.orderedList")} showLabel={expanded} active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+          <ListOrdered className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.blockquote")} showLabel={expanded} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+          <Quote className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarSeparator />
+
+        {/* 挿入: メディア・表・段組 */}
+        <ToolbarButton label={t("guideEditor.link")} showLabel={expanded} active={editor.isActive("link")} onClick={onLink}>
+          <LinkIcon className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.image")} showLabel={expanded} onClick={onImagePicker}>
+          <ImageIcon className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.youtube")} showLabel={expanded} onClick={onYoutube}>
+          <YoutubeIcon className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.table")} showLabel={expanded} onClick={() => insertTable(editor)}>
+          <Table2 className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.horizontalRule")} showLabel={expanded} onClick={() => insertHorizontalRule(editor)}>
+          <Minus className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label="2 カラム" showLabel={expanded} onClick={() => insertColumns(editor, 2)}>
+          <Columns2 className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label="3 カラム" showLabel={expanded} onClick={() => insertColumns(editor, 3)}>
+          <Columns3 className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarSeparator />
+
+        {/* 埋め込み */}
+        <ToolbarButton label="ガイドリンク" showLabel={expanded} onClick={onGuideLink}>
+          <FileText className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.embedKeybind")} showLabel={expanded} onClick={() => onEmbed("keybind")}>
+          <Keyboard className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label={t("guideEditor.embedSearchCraft")} showLabel={expanded} onClick={() => onEmbed("searchcraft")}>
+          <Package className="h-4 w-4" />
+        </ToolbarButton>
+
+        {/* メタ操作 */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
+          <Button type="button" variant="ghost" size="sm" onClick={onSave} disabled={saveStatus === "saving"}>
+            <Save className="h-4 w-4" />
+            {t("guideEditor.save")}
+          </Button>
+          <Button
+            type="button"
+            variant={isPublished ? "default" : "outline"}
+            size="sm"
+            onClick={() => onTogglePublish(!isPublished)}
+            aria-pressed={isPublished}
+          >
+            {isPublished ? <Globe className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            {isPublished ? t("guideEditor.published") : t("guideEditor.draft")}
+          </Button>
+          <Button asChild type="button" variant="ghost" size="sm">
+            <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
+              <Eye className="h-4 w-4" />
+              {t("guideEditor.preview")}
+            </Link>
+          </Button>
+        </div>
       </div>
-    </div>
+
+      {/* fixed バーの高さ分のスペーサー（本文を押し下げる） */}
+      <div aria-hidden style={{ height: barHeight }} />
+    </>
   );
 }
