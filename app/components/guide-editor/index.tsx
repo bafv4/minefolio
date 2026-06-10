@@ -193,6 +193,11 @@ export function GuideEditor({
           isPublished={isPublished}
           onTogglePublish={setIsPublished}
           previewUrl={previewUrl}
+          onImagePicker={() => imageInputRef.current?.click()}
+          onYoutube={slashContext.insertYoutube}
+          onLink={handleLinkInsert}
+          onEmbed={(kind) => setEmbedKind(kind)}
+          onGuideLink={() => setGuideLinkOpen(true)}
         />
       )}
 
