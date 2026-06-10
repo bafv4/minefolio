@@ -59,14 +59,13 @@ export function setBlockType(editor: Editor, type: BlockType): void {
       chain.toggleCodeBlock().run();
       return;
     case "callout":
-      chain.run();
+      // focus + wrap を 1 チェーンで原子的に実行（ドロップダウンからのフォーカス喪失対策）
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (editor.commands as any).toggleCallout({ calloutType: "tip" });
+      (chain as any).toggleCallout({ calloutType: "tip" }).run();
       return;
     case "toggleList":
-      chain.run();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (editor.commands as any).setToggleList();
+      (chain as any).setToggleList().run();
       return;
   }
 }
