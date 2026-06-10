@@ -20,6 +20,7 @@ import {
   Bold,
   Italic,
   Strikethrough,
+  Underline as UnderlineIcon,
   Code,
   List,
   ListOrdered,
@@ -43,6 +44,9 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Trash2,
+  Combine,
+  PanelTop,
+  PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -128,22 +132,28 @@ function SaveIndicator({
   lastSaved: { mode: SaveMode; at: Date } | null;
 }) {
   const time = lastSaved ? lastSaved.at.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : null;
+  if (saving) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        保存中…
+      </span>
+    );
+  }
+  if (isDirty) {
+    // 未保存の変更あり → 警告色
+    return (
+      <span className="text-xs text-warning whitespace-nowrap" aria-live="polite">
+        未保存の変更があります
+      </span>
+    );
+  }
+  // 保存済み（変更なし）→ 成功色
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
-      {saving ? (
-        <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          保存中…
-        </>
-      ) : isDirty ? (
-        <span>未保存の変更</span>
-      ) : lastSaved ? (
-        <>
-          <Check className="h-3.5 w-3.5 text-success" />
-          {lastSaved.mode === "draft" ? "仮保存済み" : "保存済み"}
-          {time && <span className="tabular-nums">{time}</span>}
-        </>
-      ) : null}
+    <span className="flex items-center gap-1 text-xs text-success whitespace-nowrap" aria-live="polite">
+      <Check className="h-3.5 w-3.5" />
+      {lastSaved?.mode === "draft" ? "仮保存済み" : "保存済み"}
+      {time && <span className="tabular-nums">{time}</span>}
     </span>
   );
 }
@@ -169,6 +179,12 @@ export function DesktopToolbar({
   const block = currentBlock(editor);
   const BlockIcon = block.icon;
   const inTable = editor.isActive("table");
+
+  // 「テーブル」タブはテーブル選択時のみ表示。テーブルから外れたら home へ戻す。
+  useEffect(() => {
+    if (tab === "table" && !inTable) setTab("home");
+  }, [tab, inTable]);
+  const visibleTabs = inTable ? TABS : TABS.filter((tt) => tt.key !== "table");
 
   // fixed 化に伴うスペーサー高さ計測
   const barRef = useRef<HTMLDivElement>(null);
@@ -196,7 +212,7 @@ export function DesktopToolbar({
           {/* 1段目: タブ + メタ操作 */}
           <div className="flex items-center gap-1 pt-1.5">
             <div className="flex items-center gap-0.5" role="tablist" aria-label="ツールバータブ">
-              {TABS.map(({ key, label }) => (
+              {visibleTabs.map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
@@ -214,33 +230,39 @@ export function DesktopToolbar({
               ))}
             </div>
 
-            <div className="ml-auto flex items-center gap-1.5">
+            {/* 右側: 設定 / プレビュー | 仮保存 / 保存（下に保存状態） */}
+            <div className="ml-auto flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5">
+                <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings} title="ガイド設定">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden md:inline">ガイド設定</span>
+                </Button>
+                <Button asChild type="button" variant="ghost" size="sm" title={t("guideEditor.preview")}>
+                  <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
+                    <Eye className="h-4 w-4" />
+                    <span className="hidden md:inline">{t("guideEditor.preview")}</span>
+                  </Link>
+                </Button>
+                <ToolbarSeparator />
+                <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
+                  <FileEdit className="h-4 w-4" />
+                  <span className="hidden md:inline">仮保存</span>
+                </Button>
+                <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
+                  <Save className="h-4 w-4" />
+                  <span className="hidden md:inline">{t("guideEditor.save")}</span>
+                </Button>
+              </div>
               <SaveIndicator isDirty={isDirty} saving={saving} lastSaved={lastSaved} />
-              <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
-                <FileEdit className="h-4 w-4" />
-                仮保存
-              </Button>
-              <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
-                <Save className="h-4 w-4" />
-                {t("guideEditor.save")}
-              </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={onOpenSettings} aria-label="ガイド設定" title="ガイド設定">
-                <Settings className="h-4 w-4" />
-              </Button>
-              <Button asChild type="button" variant="ghost" size="icon" aria-label={t("guideEditor.preview")} title={t("guideEditor.preview")}>
-                <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
-                  <Eye className="h-4 w-4" />
-                </Link>
-              </Button>
             </div>
           </div>
 
           {/* 2段目: 常時表示の Undo/Redo + アクティブタブのツール */}
           <div className="flex flex-wrap items-center gap-0.5 py-1.5">
-            <ToolbarButton label="元に戻す" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
+            <ToolbarButton label="元に戻す" shortcut="Ctrl Z" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
               <Undo2 className="h-4 w-4" />
             </ToolbarButton>
-            <ToolbarButton label="やり直し" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
+            <ToolbarButton label="やり直し" shortcut="Ctrl Shift Z" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
               <Redo2 className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarSeparator />
@@ -273,16 +295,19 @@ export function DesktopToolbar({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <ToolbarSeparator />
-                <ToolbarButton label={t("guideEditor.bold")} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+                <ToolbarButton label={t("guideEditor.bold")} shortcut="Ctrl B" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
                   <Bold className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label={t("guideEditor.italic")} active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+                <ToolbarButton label={t("guideEditor.italic")} shortcut="Ctrl I" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
                   <Italic className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label={t("guideEditor.strike")} active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
+                <ToolbarButton label="下線" shortcut="Ctrl U" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+                  <UnderlineIcon className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton label={t("guideEditor.strike")} shortcut="Ctrl Shift S" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
                   <Strikethrough className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label={t("guideEditor.code")} active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
+                <ToolbarButton label={t("guideEditor.code")} shortcut="Ctrl E" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
                   <Code className="h-4 w-4" />
                 </ToolbarButton>
                 <InlineColorPicker editor={editor} />
@@ -338,11 +363,6 @@ export function DesktopToolbar({
 
             {tab === "table" && (
               <>
-                {!inTable && (
-                  <span className="text-xs text-muted-foreground px-2">
-                    テーブル内にカーソルを置くと操作できます
-                  </span>
-                )}
                 <ToolbarButton label="上に行を追加" disabled={!inTable} onClick={() => applyTableOp(editor, "addRowBefore")}>
                   <ArrowUpToLine className="h-4 w-4" />
                 </ToolbarButton>
@@ -363,7 +383,17 @@ export function DesktopToolbar({
                   <Trash2 className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
+                <ToolbarButton label="セルを結合 / 分割" disabled={!inTable} onClick={() => applyTableOp(editor, "mergeOrSplit")}>
+                  <Combine className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton label="見出し行を切替" disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderRow")}>
+                  <PanelTop className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton label="見出し列を切替" disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderColumn")}>
+                  <PanelLeft className="h-4 w-4" />
+                </ToolbarButton>
                 {inTable && <CellColorPicker editor={editor} />}
+                <ToolbarSeparator />
                 <ToolbarButton label="テーブルを削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteTable")}>
                   <Table2 className="h-4 w-4" />
                 </ToolbarButton>

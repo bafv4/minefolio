@@ -1,7 +1,8 @@
 // ツールバー共通プリミティブ。desktop-toolbar / bubble-menu / mobile-toolbar で再利用。
-// 旧 index.tsx の TB / Sep を切り出し、a11y（aria-label / aria-pressed）を明示する。
+// shadcn Tooltip でリッチなツールチップ（ラベル + ショートカット）を表示する。
 import type { ReactNode } from "react";
 import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface ToolbarButtonProps {
@@ -11,6 +12,8 @@ interface ToolbarButtonProps {
   disabled?: boolean;
   /** ツールチップ兼アクセシブル名 */
   label: string;
+  /** ツールチップに表示するキーボードショートカット（例: "Ctrl B"） */
+  shortcut?: string;
   children: ReactNode;
   /** 小サイズ（h-7） */
   sm?: boolean;
@@ -23,6 +26,7 @@ export function ToolbarButton({
   active,
   disabled,
   label,
+  shortcut,
   children,
   sm,
   showLabel,
@@ -31,35 +35,46 @@ export function ToolbarButton({
   // max-width/opacity のトランジションで開閉をアニメーションする。
   const labelable = showLabel !== undefined;
   return (
-    <Toggle
-      size="sm"
-      pressed={active ?? false}
-      onPressedChange={() => onClick()}
-      // mousedown でのフォーカス移動を防ぎ、選択範囲を保持する
-      onMouseDown={(e) => e.preventDefault()}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className={cn(
-        labelable
-          ? "h-8 justify-start px-2"
-          : sm
-            ? "h-7 w-7 min-w-7 px-0"
-            : "h-8 w-8 min-w-8 px-0",
-      )}
-    >
-      {children}
-      {labelable && (
-        <span
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Toggle
+          size="sm"
+          pressed={active ?? false}
+          onPressedChange={() => onClick()}
+          // mousedown でのフォーカス移動を防ぎ、選択範囲を保持する
+          onMouseDown={(e) => e.preventDefault()}
+          disabled={disabled}
+          aria-label={label}
           className={cn(
-            "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
-            showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+            labelable
+              ? "h-8 justify-start px-2"
+              : sm
+                ? "h-7 w-7 min-w-7 px-0"
+                : "h-8 w-8 min-w-8 px-0",
           )}
         >
-          {label}
-        </span>
-      )}
-    </Toggle>
+          {children}
+          {labelable && (
+            <span
+              className={cn(
+                "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
+                showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
+              )}
+            >
+              {label}
+            </span>
+          )}
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent className="flex items-center gap-2">
+        <span>{label}</span>
+        {shortcut && (
+          <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {shortcut}
+          </kbd>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

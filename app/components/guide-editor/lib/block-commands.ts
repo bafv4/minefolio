@@ -17,7 +17,7 @@ export type BlockType =
   | "callout"
   | "toggleList";
 
-/** テーブル行・列操作 */
+/** テーブル行・列・セル操作 */
 export type TableOp =
   | "addRowBefore"
   | "addRowAfter"
@@ -25,7 +25,10 @@ export type TableOp =
   | "addColBefore"
   | "addColAfter"
   | "deleteCol"
-  | "deleteTable";
+  | "deleteTable"
+  | "mergeOrSplit"
+  | "toggleHeaderRow"
+  | "toggleHeaderColumn";
 
 /** 現在の選択ブロックを指定種別へ変換する */
 export function setBlockType(editor: Editor, type: BlockType): void {
@@ -92,6 +95,15 @@ export function applyTableOp(editor: Editor, op: TableOp): void {
       return;
     case "deleteTable":
       chain.deleteTable().run();
+      return;
+    case "mergeOrSplit":
+      chain.mergeOrSplit().run();
+      return;
+    case "toggleHeaderRow":
+      chain.toggleHeaderRow().run();
+      return;
+    case "toggleHeaderColumn":
+      chain.toggleHeaderColumn().run();
       return;
   }
 }

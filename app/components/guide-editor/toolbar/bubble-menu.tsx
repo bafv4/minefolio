@@ -4,7 +4,7 @@
 import { useCallback } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/core";
-import { Bold, Italic, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
@@ -47,6 +47,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       <ToolbarButton
         sm
         label="太字"
+        shortcut="Ctrl B"
         active={editor.isActive("bold")}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
@@ -55,6 +56,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       <ToolbarButton
         sm
         label="斜体"
+        shortcut="Ctrl I"
         active={editor.isActive("italic")}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
@@ -62,7 +64,17 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       </ToolbarButton>
       <ToolbarButton
         sm
+        label="下線"
+        shortcut="Ctrl U"
+        active={editor.isActive("underline")}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+      >
+        <UnderlineIcon className="h-4 w-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        sm
         label="取り消し線"
+        shortcut="Ctrl Shift S"
         active={editor.isActive("strike")}
         onClick={() => editor.chain().focus().toggleStrike().run()}
       >
@@ -71,6 +83,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       <ToolbarButton
         sm
         label="インラインコード"
+        shortcut="Ctrl E"
         active={editor.isActive("code")}
         onClick={() => editor.chain().focus().toggleCode().run()}
       >

@@ -1,6 +1,6 @@
 // モバイル下部固定ツールバー。バブルメニューが無効なタッチ環境で整形 + ブロック挿入を提供。
 import type { Editor } from "@tiptap/core";
-import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, Plus } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Link as LinkIcon, Plus } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
@@ -37,6 +37,9 @@ export function MobileToolbar({ editor, onLink }: MobileToolbarProps) {
       </ToolbarButton>
       <ToolbarButton sm label="斜体" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
         <Italic className="h-4 w-4" />
+      </ToolbarButton>
+      <ToolbarButton sm label="下線" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <UnderlineIcon className="h-4 w-4" />
       </ToolbarButton>
       <ToolbarButton sm label="取り消し線" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
         <Strikethrough className="h-4 w-4" />
