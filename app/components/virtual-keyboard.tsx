@@ -40,6 +40,10 @@ type KeyDefinition = {
   label?: string;
   width?: number; // 1 = 1unit (40px base)
   height?: number;
+  /** キー外観の追加クラス */
+  className?: string;
+  /** JIS の L 字 Enter として専用描画する（2段分の単一ボタン・上方向に伸長） */
+  jisEnter?: boolean;
 };
 
 type KeyboardRow = KeyDefinition[];
@@ -180,9 +184,11 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
     { code: "KeyP", label: "P" },
     { code: "BracketLeft", label: "@" },
     { code: "BracketRight", label: "[" },
-    { code: "_spacer_jis", width: 0.25 },
+    // 下段の Enter（2段分の高さ）が上方向へ伸びる領域を確保するスペーサー
+    // （右端を他段（15ユニット）に揃える）
+    { code: "_spacer_jis", width: 1.5 },
   ],
-  // Row 4: ASDF row (Enterが2段)
+  // Row 4: ASDF row（Enter は2段分の単一ボタン）
   [
     { code: "CapsLock", label: "Caps", width: 1.75 },
     { code: "KeyA", label: "A" },
@@ -197,7 +203,9 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
     { code: "Semicolon", label: ";" },
     { code: "Quote", label: ":" },
     { code: "Backslash", label: "]" },
-    { code: "Enter", width: 1.5 },
+    // JIS Enter: 専用コンポーネントで L 字・2段分の単一ボタンとして描画
+    // （右端を他段（15ユニット）に揃える）
+    { code: "Enter", label: "Enter", width: 1.25, height: 2, jisEnter: true },
   ],
   // Row 5: ZXCV row
   [
@@ -215,16 +223,18 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
     { code: "IntlRo", label: "\\" },
     { code: "ShiftRight", label: "Shift", width: 1.75 },
   ],
-  // Row 6: Bottom row (変換、無変換追加)
+  // Row 6: Bottom row (変換・無変換・右Win・メニュー含む)
   [
     { code: "ControlLeft", label: "Ctrl", width: 1.25 },
     { code: "MetaLeft", label: "Win", width: 1.25 },
     { code: "AltLeft", label: "Alt", width: 1.25 },
     { code: "NonConvert", label: "無変換", width: 1.25 },
-    { code: "Space", label: "Space", width: 3.5 },
+    { code: "Space", label: "Space", width: 3 },
     { code: "Convert", label: "変換", width: 1.25 },
     { code: "KanaMode", label: "かな", width: 1.25 },
     { code: "AltRight", label: "Alt", width: 1.25 },
+    { code: "MetaRight", label: "Win", width: 1 },
+    { code: "ContextMenu", label: "Menu", width: 1 },
     { code: "ControlRight", label: "Ctrl", width: 1.25 },
   ],
 ];
@@ -348,6 +358,93 @@ interface VirtualKeyboardProps {
   alwaysShowActions?: string[]; // showActionLabels=false でも常に表示する操作名
 }
 
+// JIS の L 字 Enter（リターン）専用キー。
+// 2段分の高さを持つ「1つのボタン」。内部を上段（広い）+ 下段（狭い・右寄せ）の
+// 角丸・枠線つき矩形2枚で構成し、継ぎ目を重ねて1キーの L 字に見せる。
+// 上方向へネガティブマージンで伸ばして上段に重ね、左方向へずらして [ ] の段差に合わせる。
+const JIS_ENTER_TOP_UNITS = 1.5; // 上段（広い側）の幅
+const JIS_ENTER_BOTTOM_UNITS = 1.25; // 下段（狭い側）の幅
+const JIS_ENTER_HEIGHT_UNITS = 2; // 2段分の高さ
+
+function JisEnterKey({
+  baseSize,
+  gap,
+  label,
+  ariaLabel,
+  chips,
+  keyClass,
+  isHighlighted,
+  clickable,
+  onClick,
+}: {
+  baseSize: number;
+  gap: number;
+  label: string;
+  ariaLabel: string;
+  chips: React.ReactNode;
+  keyClass: string;
+  isHighlighted: boolean;
+  clickable: boolean;
+  onClick: () => void;
+}) {
+  const unit = (u: number) => u * baseSize + (u - 1) * gap;
+  const topPx = unit(JIS_ENTER_TOP_UNITS);
+  const bottomPx = unit(JIS_ENTER_BOTTOM_UNITS);
+  const rowPx = baseSize;
+  const totalHeightPx = JIS_ENTER_HEIGHT_UNITS * baseSize + (JIS_ENTER_HEIGHT_UNITS - 1) * gap;
+  // 上段へ伸ばす量（1段 + gap）
+  const marginTopPx = -((baseSize + gap) * (JIS_ENTER_HEIGHT_UNITS - 1));
+  // 左へずらして段差を作る。隣キーとの隙間（gap）は他キー同様に残す
+  const marginLeftPx = -(topPx - bottomPx);
+
+  // group-hover で、上下どちらにホバーしても両方が同じホバー表示になる
+  const rectBase = cn(
+    "absolute border-2 transition-colors",
+    keyClass,
+    isHighlighted && "border-primary",
+    clickable
+      ? "group-hover:bg-secondary/80 group-hover:border-primary/50"
+      : "group-hover:bg-secondary",
+  );
+
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className={cn(
+        "group relative shrink-0 select-none",
+        clickable && "cursor-pointer",
+        isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background rounded-md",
+      )}
+      style={{
+        width: topPx,
+        height: totalHeightPx,
+        marginTop: marginTopPx,
+        marginLeft: marginLeftPx,
+      }}
+    >
+      {/* 上段（広い側）。下辺は角丸・枠線なしにして下段と継ぎ目なく一体化（中央の横線を出さない） */}
+      <div
+        aria-hidden
+        className={cn(rectBase, "rounded-md rounded-b-none border-b-0 left-0")}
+        style={{ top: 0, width: topPx, height: rowPx }}
+      />
+      {/* 下段（狭い側・右寄せ）。上辺は角丸・枠線なしにして上段とちょうど接する */}
+      <div
+        className={cn(
+          rectBase,
+          "rounded-md rounded-t-none border-t-0 right-0 flex flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium",
+        )}
+        style={{ top: rowPx, width: bottomPx, height: totalHeightPx - rowPx }}
+      >
+        <span className="font-semibold leading-none">{label}</span>
+        {chips}
+      </div>
+    </button>
+  );
+}
+
 // メインキーボードの行の合計幅を計算（USレイアウト Row2基準: 15ユニット）
 const MAIN_KEYBOARD_UNITS = 15;
 
@@ -380,13 +477,15 @@ function VirtualKeyboardComponent({
 
   // キーコードからバインディング情報を検索（正規化して検索、複数操作対応）
   const getBindingsForKey = (keyCode: string): KeybindingInfoList => {
-    // まず直接検索
-    if (keybindings[keyCode]) return keybindings[keyCode];
-    // 正規化したキーコードで検索
+    // 直接 → 正規化 → 小文字 の順に検索
     const normalized = normalizeKeyCode(keyCode);
-    if (keybindings[normalized]) return keybindings[normalized];
-    // 小文字で検索
-    return keybindings[keyCode.toLowerCase()] || [];
+    const list =
+      keybindings[keyCode] ||
+      keybindings[normalized] ||
+      keybindings[keyCode.toLowerCase()] ||
+      [];
+    // toggleHud はバーチャルキーボード上には表示しない
+    return list.filter((b) => b.action !== "toggleHud");
   };
 
   // キーコードから指割り当てを取得（正規化して検索）
@@ -490,6 +589,14 @@ function VirtualKeyboardComponent({
         .filter((Icon): Icon is LucideIcon => !!Icon);
     };
 
+    // 修飾キー（Shift/Ctrl/Alt 等）付きでのみ発動するリマップか
+    const remapHasModifier = (r: RemapInfo): boolean =>
+      r.sourceKey.includes("+") && parseKeyCombination(r.sourceKey).modifiers.length > 0;
+    // 全リマップが修飾キー条件付き = 単独押しでは元のキーがそのまま入力される
+    // → 元キーのラベルも表示する
+    const remapsOnlyWithModifier =
+      keyRemaps.length > 0 && keyRemaps.every(remapHasModifier);
+
     const keyElement = (
       <button
         type="button"
@@ -502,7 +609,8 @@ function VirtualKeyboardComponent({
             ? fingerKeyClass
             : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
           isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
+          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
+          key.className
         )}
         style={{
           width: `${width}px`,
@@ -512,6 +620,15 @@ function VirtualKeyboardComponent({
         {/* リマップがある場合 */}
         {keyRemaps.length > 0 ? (
           <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-visible">
+            {/* 全リマップが修飾キー条件付きなら、単独押しの元キーラベルを通常表示 */}
+            {remapsOnlyWithModifier && (
+              <span className={cn(
+                "font-semibold leading-none text-[11px]",
+                !(showFingerAssignments && finger) && "text-muted-foreground"
+              )}>
+                {displayLabel}
+              </span>
+            )}
             {keyRemaps.slice(0, 2).map((r, i) => {
               const isDisabled = r.targetKey === null;
               const targetLabel = getRemapOutputLabel(r, layout);
@@ -576,9 +693,44 @@ function VirtualKeyboardComponent({
       finger: showFingerAssignments ? finger : undefined,
       layout,
     };
+
+    // JIS の L 字 Enter は専用コンポーネントで描画（2段分の単一ボタン）
+    const renderedKey = key.jisEnter ? (
+      <JisEnterKey
+        baseSize={baseSize}
+        gap={gap}
+        label={displayLabel}
+        ariaLabel={ariaLabel}
+        chips={
+          showAction ? (
+            <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+              {filteredBindings.map((binding, i) => (
+                <span
+                  key={i}
+                  className={cn("rounded px-1 py-0 leading-none text-[8px]", chipClass)}
+                >
+                  {getShortActionLabel(binding.action)}
+                </span>
+              ))}
+            </div>
+          ) : null
+        }
+        keyClass={
+          showFingerAssignments && finger
+            ? fingerKeyClass
+            : "bg-secondary/50 border-border/50 text-muted-foreground"
+        }
+        isHighlighted={isHighlighted}
+        clickable={!!onKeyClick}
+        onClick={() => onKeyClick?.(key.code)}
+      />
+    ) : (
+      keyElement
+    );
+
     return (
       <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
-        {keyElement}
+        {renderedKey}
       </KeyInfoTrigger>
     );
   };
@@ -1187,7 +1339,8 @@ export function VirtualNumpad({
             ? fingerKeyClass
             : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
           isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
+          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
+          key.className
         )}
         style={{
           width: `${width}px`,
