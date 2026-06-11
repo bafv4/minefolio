@@ -1,9 +1,9 @@
 import {
-  getKeyCombinationLabel,
   getKeyLabel,
   normalizeKeyCode,
   normalizeKeyCombination,
   parseKeyCombination,
+  MODIFIER_LABELS,
 } from "./keybindings";
 
 export type RemapInfo = {
@@ -72,15 +72,40 @@ export function toPersistedRemapPayload(remap: RemapInfo): PersistedRemapPayload
   };
 }
 
-export function getRemapOutputLabel(remap: RemapInfo, layout?: string | null): string {
-  if (remap.targetKey === null) return "×";
-  if (isSpecialRemapTarget(remap.targetKey)) return remap.targetKey;
-  return getKeyLabel(remap.targetKey, layout);
+/** 単一キーの表示ラベル。customKeyNames があれば標準ラベルより優先する。 */
+function resolveKeyLabel(
+  keyCode: string,
+  layout?: string | null,
+  customKeyNames?: Record<string, string>,
+): string {
+  const custom =
+    customKeyNames?.[keyCode] ?? customKeyNames?.[normalizeKeyCode(keyCode)];
+  return custom ?? getKeyLabel(keyCode, layout);
 }
 
-export function getRemapSourceLabel(sourceKey: string, layout?: string | null): string {
-  if (sourceKey.includes("+")) return getKeyCombinationLabel(sourceKey, layout);
-  return getKeyLabel(sourceKey, layout);
+export function getRemapOutputLabel(
+  remap: RemapInfo,
+  layout?: string | null,
+  customKeyNames?: Record<string, string>,
+): string {
+  if (remap.targetKey === null) return "×";
+  if (isSpecialRemapTarget(remap.targetKey)) return remap.targetKey;
+  return resolveKeyLabel(remap.targetKey, layout, customKeyNames);
+}
+
+export function getRemapSourceLabel(
+  sourceKey: string,
+  layout?: string | null,
+  customKeyNames?: Record<string, string>,
+): string {
+  if (sourceKey.includes("+")) {
+    const parsed = parseKeyCombination(sourceKey);
+    const keyLabel = resolveKeyLabel(parsed.keyCode, layout, customKeyNames);
+    if (parsed.modifiers.length === 0) return keyLabel;
+    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+    return [...modifierLabels, keyLabel].join("+");
+  }
+  return resolveKeyLabel(sourceKey, layout, customKeyNames);
 }
 
 function keyCodeToChar(keyCode: string): string {

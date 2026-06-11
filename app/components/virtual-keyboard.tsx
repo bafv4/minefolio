@@ -321,7 +321,7 @@ type KeybindingInfo = {
 // 複数操作対応の型
 type KeybindingInfoList = KeybindingInfo[];
 
-type FingerAssignment = Record<string, FingerType[]>;
+export type FingerAssignment = Record<string, FingerType[]>;
 
 // カスタムキーボタン定義型
 type CustomKeyboardButton = {

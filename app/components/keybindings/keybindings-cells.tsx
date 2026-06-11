@@ -2,7 +2,6 @@
 // 旧 keybindings.tsx の PlayerRow / RemapRow / CustomActionListRow / MouseSettingsRow を
 // セル単位に分解し、再利用可能にしたもの。
 import { Link } from "react-router";
-import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { cn } from "@/lib/utils";
@@ -10,6 +9,7 @@ import {
   getKeyLabel,
   getKeyCombinationLabel,
   isUnbound,
+  normalizeKeyCode,
 } from "@/lib/keybindings";
 import {
   getRemapSourceLabel,
@@ -20,7 +20,6 @@ import {
   calculateCursorSpeed,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
-import { useCompareBasket, COMPARE_BASKET_LIMIT } from "@/hooks/use-compare-basket";
 import { t } from "@/lib/messages";
 
 /** 走者列の最小データ */
@@ -79,66 +78,23 @@ function truncateByVisualWidth(str: string, maxWidth = 10): string {
  * ========================================================== */
 
 export function RunnerCell({ player }: { player: PlayerSummary }) {
-  const basket = useCompareBasket();
-  const inBasket = basket.has(player.slug);
-  const disabled = !inBasket && basket.isFull;
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (disabled) return;
-    basket.toggle(player.slug);
-  };
   return (
-    <div className="flex items-center gap-2 min-w-0 w-full">
-      <Link
-        to={`/player/${player.slug}`}
-        className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 flex-1"
-      >
-        <MinecraftAvatar
-          uuid={player.uuid}
-          skinUrl={player.customSkinUrl}
-          size={28}
-          className="rounded-sm shrink-0"
-        />
-        <div className="min-w-0">
-          <p className="font-medium text-sm truncate">
-            {player.displayName ?? player.mcid ?? player.slug}
-          </p>
-        </div>
-      </Link>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={disabled}
-        aria-pressed={inBasket}
-        aria-label={
-          inBasket
-            ? "比較バスケットから外す"
-            : disabled
-            ? `比較バスケットは最大 ${COMPARE_BASKET_LIMIT} 件です`
-            : "比較バスケットに追加"
-        }
-        title={
-          inBasket
-            ? "比較から外す"
-            : disabled
-            ? `最大 ${COMPARE_BASKET_LIMIT} 件まで`
-            : "比較に追加"
-        }
-        className={cn(
-          "shrink-0 p-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          inBasket
-            ? "text-brand hover:bg-brand/10"
-            : "text-muted-foreground/50 hover:text-foreground hover:bg-muted",
-          disabled && "opacity-30 cursor-not-allowed hover:bg-transparent",
-        )}
-      >
-        <Star
-          className={cn("h-4 w-4", inBasket && "fill-brand")}
-          aria-hidden
-        />
-      </button>
-    </div>
+    <Link
+      to={`/player/${player.slug}`}
+      className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 w-full"
+    >
+      <MinecraftAvatar
+        uuid={player.uuid}
+        skinUrl={player.customSkinUrl}
+        size={28}
+        className="rounded-sm shrink-0"
+      />
+      <div className="min-w-0">
+        <p className="font-medium text-sm truncate">
+          {player.displayName ?? player.mcid ?? player.slug}
+        </p>
+      </div>
+    </Link>
   );
 }
 
@@ -149,16 +105,24 @@ export function RunnerCell({ player }: { player: PlayerSummary }) {
 export function KeyBadge({
   keyCode,
   keyboardLayout,
+  customKeyNames,
 }: {
   keyCode: string;
   keyboardLayout?: string | null;
+  /** カスタムキー keyCode → 表示名。標準ラベルより優先して使用する。 */
+  customKeyNames?: Record<string, string>;
 }) {
   if (isUnbound(keyCode)) {
     return <span className="text-muted-foreground/40">-</span>;
   }
-  const label = keyCode.includes("+")
-    ? getKeyCombinationLabel(keyCode, keyboardLayout)
-    : getKeyLabel(keyCode, keyboardLayout);
+  // カスタムキー名があれば最優先（正規化前後どちらの keyCode でも引けるようにする）
+  const customName =
+    customKeyNames?.[keyCode] ?? customKeyNames?.[normalizeKeyCode(keyCode)];
+  const label =
+    customName ??
+    (keyCode.includes("+")
+      ? getKeyCombinationLabel(keyCode, keyboardLayout)
+      : getKeyLabel(keyCode, keyboardLayout));
   const truncated = truncateByVisualWidth(label);
   const isMouse =
     keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
@@ -182,12 +146,83 @@ export function KeyBadge({
 export function ActionKeyCell({
   keyCode,
   keyboardLayout,
+  customKeyNames,
 }: {
   keyCode: string | undefined;
   keyboardLayout?: string | null;
+  customKeyNames?: Record<string, string>;
 }) {
   if (!keyCode) return <span className="text-muted-foreground/40">-</span>;
-  return <KeyBadge keyCode={keyCode} keyboardLayout={keyboardLayout} />;
+  return (
+    <KeyBadge
+      keyCode={keyCode}
+      keyboardLayout={keyboardLayout}
+      customKeyNames={customKeyNames}
+    />
+  );
+}
+
+// customKeys 配列の参照をキーにマップをキャッシュ。
+// 列セルごと（同一行で複数回）に呼ばれても再構築しない。
+const customKeyNamesCache = new WeakMap<object, Record<string, string>>();
+
+/** 行の customKeys 配列から keyCode → 表示名マップを生成（参照単位でメモ化） */
+export function buildCustomKeyNames(
+  customKeys: Array<{ keyCode: string; keyName: string }> | undefined,
+): Record<string, string> | undefined {
+  if (!customKeys || customKeys.length === 0) return undefined;
+  const cached = customKeyNamesCache.get(customKeys);
+  if (cached) return cached;
+  const map: Record<string, string> = {};
+  for (const ck of customKeys) map[ck.keyCode] = ck.keyName;
+  customKeyNamesCache.set(customKeys, map);
+  return map;
+}
+
+/* ============================================================
+ * ホットバーセル（hotbar1〜9 をすべて 1 行で表示。折り返さない）
+ * 各スロットの上に番号、その下に割り当てキーを並べる。
+ * ========================================================== */
+
+type HotbarKeybinding = { action: string; keyCode: string };
+
+export function HotbarSummaryCell({
+  keybindings,
+  keyboardLayout,
+  customKeyNames,
+}: {
+  keybindings: HotbarKeybinding[];
+  keyboardLayout?: string | null;
+  customKeyNames?: Record<string, string>;
+}) {
+  const byAction = new Map(keybindings.map((k) => [k.action, k.keyCode]));
+  const slots = Array.from({ length: 9 }, (_, i) => ({
+    n: i + 1,
+    keyCode: byAction.get(`hotbar${i + 1}`),
+  }));
+
+  if (slots.every((s) => s.keyCode == null)) {
+    return <span className="text-muted-foreground/40">-</span>;
+  }
+
+  return (
+    <div className="flex flex-nowrap items-end gap-1">
+      {slots.map(({ n, keyCode }) => (
+        <span key={n} className="inline-flex flex-col items-center gap-0.5">
+          <span className="text-[9px] leading-none text-muted-foreground">{n}</span>
+          {keyCode ? (
+            <KeyBadge
+              keyCode={keyCode}
+              keyboardLayout={keyboardLayout}
+              customKeyNames={customKeyNames}
+            />
+          ) : (
+            <span className="text-muted-foreground/40 text-xs px-1">-</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 /* ============================================================
@@ -205,9 +240,11 @@ export type RemapItem = {
 export function RemapCell({
   remaps,
   keyboardLayout,
+  customKeyNames,
 }: {
   remaps: RemapItem[];
   keyboardLayout?: string | null;
+  customKeyNames?: Record<string, string>;
 }) {
   if (remaps.length === 0) {
     return <span className="text-muted-foreground/40 text-sm">-</span>;
@@ -216,8 +253,8 @@ export function RemapCell({
     <div className="flex flex-wrap gap-1.5">
       {remaps.map((remap) => (
         <Badge key={remap.id} variant="secondary" className="font-mono text-xs">
-          {getRemapSourceLabel(remap.sourceKey, keyboardLayout)} →{" "}
-          {getRemapOutputLabel(remap, keyboardLayout)}
+          {getRemapSourceLabel(remap.sourceKey, keyboardLayout, customKeyNames)} →{" "}
+          {getRemapOutputLabel(remap, keyboardLayout, customKeyNames)}
         </Badge>
       ))}
     </div>
@@ -266,6 +303,7 @@ export function CustomActionCell({
 
 export type MouseConfig = {
   keyboardLayout: string | null;
+  fingerAssignments?: string | null;
   mouseDpi: number | null;
   gameSensitivity: number | null;
   windowsSpeed: number | null;

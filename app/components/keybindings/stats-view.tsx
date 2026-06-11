@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { BarChart3, Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
+import { Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -51,17 +51,6 @@ export function StatsView({ data }: StatsViewProps) {
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      {/* ヘッダー（タイトル + 説明） */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          {t("keybindingsStats.title")}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {t("keybindingsStats.description")}
-        </p>
-      </div>
-
       {/* 概要 */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -445,29 +434,34 @@ function KeybindingStatCard({
               <button
                 key={key.keyCode}
                 type="button"
-                className="w-full flex items-center gap-2 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+                className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
                 onClick={() => onPlayerClick(`${stat.label}: ${label}`, key.players)}
               >
-                <span className="text-sm text-muted-foreground w-4">{index + 1}.</span>
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "font-mono text-xs min-w-16 px-2 justify-center shrink-0",
-                    isMouse &&
-                      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                  )}
-                >
-                  {label}
-                </Badge>
-                <div className="flex-1">
-                  <Progress value={key.percentage} className="h-1.5" />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm text-muted-foreground w-4 shrink-0">
+                      {index + 1}.
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      title={label}
+                      className={cn(
+                        "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
+                        isMouse &&
+                          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                      )}
+                    >
+                      <span className="truncate">{label}</span>
+                    </Badge>
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {t("keybindingsStats.peoplePercent", {
+                      count: key.count,
+                      percent: key.percentage.toFixed(0),
+                    })}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground w-20 text-right shrink-0">
-                  {t("keybindingsStats.peoplePercent", {
-                    count: key.count,
-                    percent: key.percentage.toFixed(0),
-                  })}
-                </span>
+                <Progress value={key.percentage} className="h-1.5" />
               </button>
             );
           })}
@@ -520,29 +514,34 @@ function F3RemapStatCard({
               <button
                 key={inputKey}
                 type="button"
-                className="w-full flex items-center gap-2 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+                className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
                 onClick={() => onPlayerClick(dialogTitle, target.players)}
               >
-                <span className="text-sm text-muted-foreground w-4">{index + 1}.</span>
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "font-mono text-xs min-w-16 px-2 justify-center shrink-0",
-                    isMouse &&
-                      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                  )}
-                >
-                  {label}
-                </Badge>
-                <div className="flex-1">
-                  <Progress value={target.percentage} className="h-1.5" />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm text-muted-foreground w-4 shrink-0">
+                      {index + 1}.
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      title={label}
+                      className={cn(
+                        "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
+                        isMouse &&
+                          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                      )}
+                    >
+                      <span className="truncate">{label}</span>
+                    </Badge>
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {t("keybindingsStats.peoplePercent", {
+                      count: target.count,
+                      percent: target.percentage.toFixed(0),
+                    })}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground w-20 text-right shrink-0">
-                  {t("keybindingsStats.peoplePercent", {
-                    count: target.count,
-                    percent: target.percentage.toFixed(0),
-                  })}
-                </span>
+                <Progress value={target.percentage} className="h-1.5" />
               </button>
             );
           })}

@@ -6,7 +6,6 @@ import {
   keybindingsParsers,
   parseSort,
   formatSort,
-  type View,
   type Tab,
 } from "@/lib/keybindings-search-params";
 import { calculateCm360 } from "@/lib/mouse-settings";
@@ -24,14 +23,10 @@ export type FilterablePlayer = {
 };
 
 export function useKeybindingsFilters() {
-  // `q` だけは loader を再走させる必要があるため shallow: false。
-  // それ以外の URL パラメータはクライアント側で完結する（デフォルト shallow: true）。
+  // フィルタ（数値範囲・ユーザー絞り込み）・サブタブはクライアント側で完結する。
   const [params, setParams] = useQueryStates(keybindingsParsers);
 
-  const setView = (view: View) => setParams({ view });
   const setTab = (tab: Tab) => setParams({ tab });
-  const setQ = (q: string) =>
-    setParams({ q: q || null }, { shallow: false });
   const setRange = (
     range: Partial<{
       dpiMin: number | null;
@@ -44,10 +39,20 @@ export function useKeybindingsFilters() {
   ) => setParams(range);
   const setSort = (key: string | null, direction: "asc" | "desc" | null) =>
     setParams({ sort: key && direction ? formatSort(key, direction) : null });
-  const setIds = (ids: string[]) => setParams({ ids });
+
+  // 表示ユーザー絞り込み（slug 一覧）。表・ビジュアル横断でクライアント適用。
+  const setUsers = (users: string[]) =>
+    setParams({ users: users.length > 0 ? users : null });
+  const toggleUser = (slug: string) => {
+    const next = params.users.includes(slug)
+      ? params.users.filter((s) => s !== slug)
+      : [...params.users, slug];
+    setUsers(next);
+  };
+  const clearUsers = () => setUsers([]);
+
   const clearAll = () =>
     setParams({
-      q: null,
       dpiMin: null,
       dpiMax: null,
       sensMin: null,
@@ -59,13 +64,11 @@ export function useKeybindingsFilters() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (params.q) count += 1;
     if (params.dpiMin != null || params.dpiMax != null) count += 1;
     if (params.sensMin != null || params.sensMax != null) count += 1;
     if (params.cm360Min != null || params.cm360Max != null) count += 1;
     return count;
   }, [
-    params.q,
     params.dpiMin,
     params.dpiMax,
     params.sensMin,
@@ -88,7 +91,14 @@ export function useKeybindingsFilters() {
       sensMax,
       cm360Min,
       cm360Max,
+      users,
     } = params;
+
+    // 表示ユーザー絞り込み（指定があれば、その slug のみ表示）
+    if (users.length > 0) {
+      const set = new Set(users);
+      players = players.filter((p) => set.has(p.slug));
+    }
 
     const hasMouseFilter =
       dpiMin != null ||
@@ -134,12 +144,12 @@ export function useKeybindingsFilters() {
   return {
     params,
     setParams,
-    setView,
     setTab,
-    setQ,
     setRange,
     setSort,
-    setIds,
+    setUsers,
+    toggleUser,
+    clearUsers,
     clearAll,
     activeFilterCount,
     sort,

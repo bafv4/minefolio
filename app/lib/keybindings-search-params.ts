@@ -1,5 +1,5 @@
 // /keybindings 配下の URL ↔ state 同期用 nuqs parser 定義。
-// すべてのビュー（table/grid/stats/compare）とサブタブ、フィルタを統合管理する。
+// すべてのビュー（grid/table/stats）とサブタブ、フィルタを統合管理する。
 import {
   parseAsArrayOf,
   parseAsFloat,
@@ -7,13 +7,15 @@ import {
   parseAsStringEnum,
 } from "nuqs";
 
-/** ビュー */
-export const VIEW_OPTIONS = ["table", "grid", "stats", "compare"] as const;
-export type View = (typeof VIEW_OPTIONS)[number];
-
-/** テーブルビュー内のサブタブ */
+/**
+ * 表ビュー内のサブタブ。操作はプレイヤー画面と同じ粒度
+ * （移動 / インベントリ / 戦闘・UI）で分け、加えてリマップ・カスタム・マウス。
+ * ビュー（表 / ビジュアル / 統計）自体は独立ルートに分割済み。
+ */
 export const TAB_OPTIONS = [
-  "actions",
+  "movement",
+  "inventory",
+  "combat-ui",
   "remaps",
   "custom-actions",
   "mouse",
@@ -26,17 +28,15 @@ export type Tab = (typeof TAB_OPTIONS)[number];
  * - 他のフィルタはクライアント側で完結する（loader 再走しない）。
  */
 export const keybindingsParsers = {
-  view: parseAsStringEnum([...VIEW_OPTIONS]).withDefault("table"),
-  tab: parseAsStringEnum([...TAB_OPTIONS]).withDefault("actions"),
-  q: parseAsString.withDefault(""),
+  tab: parseAsStringEnum([...TAB_OPTIONS]).withDefault("movement"),
   dpiMin: parseAsFloat,
   dpiMax: parseAsFloat,
   sensMin: parseAsFloat,
   sensMax: parseAsFloat,
   cm360Min: parseAsFloat,
   cm360Max: parseAsFloat,
-  /** 比較バスケットの走者 slug 一覧 */
-  ids: parseAsArrayOf(parseAsString).withDefault([]),
+  /** 表示するユーザーを限定する slug 一覧（空なら全件表示）。表・ビジュアル横断で適用。 */
+  users: parseAsArrayOf(parseAsString).withDefault([]),
   /** ソート "key:dir" 形式（例: "cm360:asc"） */
   sort: parseAsString.withDefault(""),
 } as const;

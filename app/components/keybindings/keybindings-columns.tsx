@@ -6,9 +6,11 @@ import { calculateCm360, calculateCursorSpeed } from "@/lib/mouse-settings";
 import { t } from "@/lib/messages";
 import {
   ActionKeyCell,
+  buildCustomKeyNames,
   Cm360Cell,
   CursorSpeedCell,
   DpiCell,
+  HotbarSummaryCell,
   RawInputCell,
   AccelerationCell,
   RemapCell,
@@ -37,6 +39,7 @@ export type KeybindingsRow = {
   }>;
   keyRemaps: RemapItem[];
   customActions: CustomActionItem[];
+  customKeys?: Array<{ keyCode: string; keyName: string; category: string }>;
   playerConfig: MouseConfig;
 };
 
@@ -50,56 +53,73 @@ const runnerColumn: ColumnDef<KeybindingsRow> = {
   cell: ({ row }) => <RunnerCell player={row.original} />,
   enableSorting: false,
   size: 224,
+  minSize: 140,
 };
 
 /* ============================================================
- * actions プリセット（19 列）
+ * アクション列ジェネレーター
+ * 操作はプレイヤー画面と同じ粒度（移動 / インベントリ / 戦闘・UI）で分割する。
  * ========================================================== */
 
-const ACTION_KEYS = [
-  { action: "forward", short: "Fwd" },
-  { action: "back", short: "Back" },
-  { action: "left", short: "Left" },
-  { action: "right", short: "Right" },
-  { action: "sprint", short: "Spr" },
-  { action: "sneak", short: "Snk" },
-  { action: "inventory", short: "Inv" },
-  { action: "swapHands", short: "OH" },
-  { action: "drop", short: "Drop" },
-  { action: "pickBlock", short: "Pick" },
-  { action: "hotbar1", short: "HB1" },
-  { action: "hotbar2", short: "HB2" },
-  { action: "hotbar3", short: "HB3" },
-  { action: "hotbar4", short: "HB4" },
-  { action: "hotbar5", short: "HB5" },
-  { action: "hotbar6", short: "HB6" },
-  { action: "hotbar7", short: "HB7" },
-  { action: "hotbar8", short: "HB8" },
-  { action: "hotbar9", short: "HB9" },
-] as const;
-
-export const actionsColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
-  ...ACTION_KEYS.map<ColumnDef<KeybindingsRow>>(({ action, short }) => ({
+/** アクション 1 件分のキー表示列を生成 */
+function actionColumn(action: string): ColumnDef<KeybindingsRow> {
+  return {
     id: `action.${action}`,
-    header: () => (
-      <span title={getActionLabel(action)}>
-        <span className="hidden sm:inline">{getActionLabel(action)}</span>
-        <span className="sm:hidden">{short}</span>
-      </span>
-    ),
+    header: () => <span title={getActionLabel(action)}>{getActionLabel(action)}</span>,
     accessorFn: (row) =>
       row.keybindings.find((kb) => kb.action === action)?.keyCode ?? null,
     cell: ({ getValue, row }) => (
       <ActionKeyCell
         keyCode={getValue<string | null>() ?? undefined}
         keyboardLayout={row.original.playerConfig?.keyboardLayout}
+        customKeyNames={buildCustomKeyNames(row.original.customKeys)}
       />
     ),
     enableSorting: false,
-    size: 64,
+    size: 88,
+    minSize: 56,
     meta: { align: "center" as const },
-  })),
+  };
+}
+
+const hotbarColumn: ColumnDef<KeybindingsRow> = {
+  id: "action.hotbar",
+  header: () => (
+    <span title={t("keybindings.hotbarColumn")}>{t("keybindings.hotbarColumn")}</span>
+  ),
+  cell: ({ row }) => (
+    <HotbarSummaryCell
+      keybindings={row.original.keybindings}
+      keyboardLayout={row.original.playerConfig?.keyboardLayout}
+      customKeyNames={buildCustomKeyNames(row.original.customKeys)}
+    />
+  ),
+  enableSorting: false,
+  // hotbar1〜9 をすべて 1 行で表示するため、デフォルトで十分広く取る
+  size: 360,
+  minSize: 140,
+  meta: { align: "left" as const },
+};
+
+// 移動: 前進・後退・左右・ジャンプ・スニーク・ダッシュ
+export const movementColumns: ColumnDef<KeybindingsRow>[] = [
+  runnerColumn,
+  ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map(actionColumn),
+];
+
+// インベントリ: ホットバー（集約）・オフハンド・インベントリ・ブロック選択・ドロップ
+export const inventoryColumns: ColumnDef<KeybindingsRow>[] = [
+  runnerColumn,
+  hotbarColumn,
+  ...["swapHands", "inventory", "pickBlock", "drop"].map(actionColumn),
+];
+
+// 戦闘・UI: 攻撃・使用・視点切替・チャット・コマンド・全画面
+export const combatUiColumns: ColumnDef<KeybindingsRow>[] = [
+  runnerColumn,
+  ...["attack", "use", "togglePerspective", "chat", "command", "fullscreen"].map(
+    actionColumn,
+  ),
 ];
 
 /* ============================================================
@@ -115,10 +135,12 @@ export const remapsColumns: ColumnDef<KeybindingsRow>[] = [
       <RemapCell
         remaps={row.original.keyRemaps}
         keyboardLayout={row.original.playerConfig?.keyboardLayout}
+        customKeyNames={buildCustomKeyNames(row.original.customKeys)}
       />
     ),
     enableSorting: false,
     size: 600,
+    minSize: 200,
   },
 ];
 
@@ -262,9 +284,11 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
   },
 ];
 
-/** プリセット名 → ColumnDef */
+/** プリセット名 → ColumnDef（プリセット名は TAB_OPTIONS と一致） */
 export const COLUMN_PRESETS = {
-  actions: actionsColumns,
+  movement: movementColumns,
+  inventory: inventoryColumns,
+  "combat-ui": combatUiColumns,
   remaps: remapsColumns,
   "custom-actions": customActionsColumns,
   mouse: mouseColumns,

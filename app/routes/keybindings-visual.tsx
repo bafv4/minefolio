@@ -1,17 +1,15 @@
-// /keybindings/stats — 統計ビュー（独立ルート）。
+// /keybindings/visual — ビジュアル（カード）ビュー。
 import { useLoaderData } from "react-router";
-import type { Route } from "./+types/keybindings-stats";
+import type { Route } from "./+types/keybindings-visual";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { loadKeybindingsStats } from "@/lib/keybindings-stats.server";
-import { StatsView } from "@/components/keybindings/stats-view";
-import { ViewSwitcher } from "@/components/keybindings/view-switcher";
-import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
+import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
+import { KeybindingsListLayout } from "@/components/keybindings/keybindings-list-layout";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ data }) => {
-  const title = t("keybindingsStats.metaTitle");
-  const description = t("keybindingsStats.description");
+  const title = t("keybindings.metaTitle");
+  const description = t("keybindings.description");
   const appUrl = data?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
@@ -32,19 +30,11 @@ export async function loader({ context }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
-  const stats = await loadKeybindingsStats(db);
-  return { stats, appUrl };
+  const players = await loadKeybindingsListPlayers(db);
+  return { players, appUrl };
 }
 
-export default function KeybindingsStatsPage() {
-  const { stats } = useLoaderData<typeof loader>();
-  return (
-    <div className="flex-1 flex flex-col space-y-5">
-      <KeybindingsPageTitle />
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <ViewSwitcher />
-      </div>
-      <StatsView data={stats} />
-    </div>
-  );
+export default function KeybindingsVisualPage() {
+  const { players } = useLoaderData<typeof loader>();
+  return <KeybindingsListLayout players={players} mode="visual" />;
 }

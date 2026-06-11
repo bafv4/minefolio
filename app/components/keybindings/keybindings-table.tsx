@@ -51,9 +51,15 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
         setSort(first.id, first.desc ? "desc" : "asc");
       }
     },
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
+    defaultColumn: { minSize: 48 },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  // 列リサイズの現在値（columnSizing が変わるたびに gridTemplateColumns を再計算）
+  const columnSizing = table.getState().columnSizing;
 
   const rowModel = table.getRowModel();
 
@@ -71,13 +77,17 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
       : undefined,
   });
 
-  // grid-template-columns 値: 列の size を px で連結
+  // grid-template-columns 値: リサイズ後の実サイズ（getSize）を px で連結
   const gridTemplateColumns = useMemo(
     () =>
-      columns
-        .map((col) => `${col.size ?? 100}px`)
+      table
+        .getVisibleLeafColumns()
+        .map((col) => `${col.getSize()}px`)
         .join(" "),
-    [columns],
+    // table はレンダーごとに生成されるため依存に含めない。
+    // 実際に幅が変わるのは columnSizing / columns の変化時のみ。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columnSizing, columns],
   );
 
   const headers = table.getHeaderGroups()[0]?.headers ?? [];
@@ -101,12 +111,13 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
             (header.column.columnDef.meta as { align?: string } | undefined)
               ?.align ?? "left";
           const isFirst = idx === 0;
+          const canResize = header.column.getCanResize();
           return (
             <div
               role="columnheader"
               key={header.id}
               className={cn(
-                "flex items-center gap-1 px-2 py-2 border-r border-border/60",
+                "relative flex items-center gap-1 px-2 py-2 border-r border-border/60 whitespace-nowrap overflow-hidden",
                 align === "center" && "justify-center",
                 align === "right" && "justify-end",
                 isFirst && "sticky left-0 z-10 bg-muted border-r-2",
@@ -116,22 +127,42 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
                 <button
                   type="button"
                   onClick={header.column.getToggleSortingHandler()}
-                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  className="inline-flex items-center gap-1 min-w-0 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
-                  {flexRender(
-                    header.column.columnDef.header,
-                    header.getContext(),
-                  )}
+                  <span className="truncate">
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+                  </span>
                   {sortDir === "asc" ? (
-                    <ArrowUp className="h-3 w-3" aria-hidden />
+                    <ArrowUp className="h-3 w-3 shrink-0" aria-hidden />
                   ) : sortDir === "desc" ? (
-                    <ArrowDown className="h-3 w-3" aria-hidden />
+                    <ArrowDown className="h-3 w-3 shrink-0" aria-hidden />
                   ) : (
-                    <ArrowUpDown className="h-3 w-3 opacity-40" aria-hidden />
+                    <ArrowUpDown className="h-3 w-3 shrink-0 opacity-40" aria-hidden />
                   )}
                 </button>
               ) : (
-                flexRender(header.column.columnDef.header, header.getContext())
+                <span className="truncate">
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </span>
+              )}
+
+              {/* リサイズハンドル（右端をドラッグ） */}
+              {canResize && (
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  onMouseDown={header.getResizeHandler()}
+                  onTouchStart={header.getResizeHandler()}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none touch-none",
+                    "hover:bg-primary/40",
+                    header.column.getIsResizing() && "bg-primary/60",
+                  )}
+                />
               )}
             </div>
           );
@@ -170,11 +201,11 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
                     role="gridcell"
                     key={cell.id}
                     className={cn(
-                      "flex items-center px-2 py-2 min-w-0",
+                      "flex items-center px-2 py-2 min-w-0 overflow-hidden",
                       align === "center" && "justify-center",
                       align === "right" && "justify-end",
                       isFirst &&
-                        "sticky left-0 z-10 bg-background border-r-2 border-border",
+                        "sticky left-0 z-10 bg-card border-r-2 border-border",
                     )}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
