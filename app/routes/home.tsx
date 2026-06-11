@@ -1,4 +1,4 @@
-import { useLoaderData, Link } from "react-router";
+import { useLoaderData, Link, useNavigate } from "react-router";
 import { useEffect, useReducer, memo, useMemo } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
@@ -451,6 +451,16 @@ export default function HomePage() {
     useLoaderData<typeof loader>();
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
+  const navigate = useNavigate();
+
+  // 「ランダムで見る」をAlt(Option)キー押下中にクリックすると隠しページへ。
+  // Shift(新規ウィンドウ)/Ctrl・Cmd(新規タブ)やテキスト選択と競合しないAltを使用。
+  const handleRandomClick = (e: React.MouseEvent) => {
+    if (e.altKey) {
+      e.preventDefault();
+      navigate("/secret-grid");
+    }
+  };
 
   // フィルタリング
   const filteredRecentPaces = useMemo(() =>
@@ -551,7 +561,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <Link to="/random-player">
+                <Link to="/random-player" onClick={handleRandomClick}>
                   <Shuffle className="mr-2 h-4 w-4" />
                   {t("home.ctaRandom")}
                 </Link>

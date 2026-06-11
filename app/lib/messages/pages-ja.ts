@@ -54,6 +54,11 @@ export const PAGES_JA = {
     justWithinHour: "1時間以内",
     videosCount: "{count}件",
   },
+  secretGrid: {
+    title: "??? - Minefolio",
+    hint: "T キーでプロフィールをランダムに入れ替え",
+    empty: "表示できるプロフィールがありません",
+  },
   browse: {
     title: "プロフィールを探す",
     metaTitle: "探す - Minefolio",

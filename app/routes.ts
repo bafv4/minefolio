@@ -22,6 +22,7 @@ export default [
     // Browse & Rankings
     route("browse", "routes/browse.tsx"),
     route("random-player", "routes/random-player.ts"),
+    route("secret-grid", "routes/secret-grid.tsx"),
     route("keybindings", "routes/keybindings.tsx"),
     route("keybindings/visual", "routes/keybindings-visual.tsx"),
     route("keybindings/stats", "routes/keybindings-stats.tsx"),
