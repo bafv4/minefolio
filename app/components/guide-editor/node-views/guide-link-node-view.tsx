@@ -13,7 +13,7 @@ export function GuideLinkNodeView({
 }) {
   return (
     <NodeViewWrapper>
-      <div className="guide-link-card" contentEditable={false}>
+      <div className="guide-link-card group" contentEditable={false}>
         <a
           href={node.attrs.guideUrl}
           target="_blank"

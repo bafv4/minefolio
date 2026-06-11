@@ -124,39 +124,3 @@ export async function createDefaultsForNewUser(_db: Database, _userId: string) {
   // デフォルトのキーバインドやプレイヤー設定は作成しない
   // ユーザーがoptions.txtをインポートするか、手動で設定することを想定
 }
-
-// Windowsポインター速度の乗数（11/11がデフォルト）
-const WINDOWS_SPEED_MULTIPLIERS: Record<number, number> = {
-  1: 0.03125,
-  2: 0.0625,
-  3: 0.125,
-  4: 0.25,
-  5: 0.375,
-  6: 0.5,
-  7: 0.625,
-  8: 0.75,
-  9: 0.875,
-  10: 1,
-  11: 1.25,
-  12: 1.5,
-  13: 1.75,
-  14: 2,
-  15: 2.25,
-  16: 2.5,
-  17: 2.75,
-  18: 3,
-  19: 3.25,
-  20: 3.5,
-};
-
-// cm/360 計算式
-export function calculateCm360(
-  dpi: number,
-  sensitivity: number,
-  windowsSpeed: number = 11
-): number {
-  const mcSensitivity = sensitivity * 0.6 + 0.2;
-  const winMultiplier = WINDOWS_SPEED_MULTIPLIERS[windowsSpeed] ?? 1.25;
-  const eDPI = dpi * mcSensitivity * winMultiplier;
-  return Math.round((360 / eDPI) * 2.54 * 10) / 10;
-}

@@ -683,10 +683,15 @@ export default function PlayerProfilePage() {
     },
   ];
 
-  // ユーザーの指割り当てをパース
-  const userFingerAssignments = player.playerConfig?.fingerAssignments
-    ? JSON.parse(player.playerConfig.fingerAssignments)
-    : {};
+  // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
+  const userFingerAssignments = (() => {
+    if (!player.playerConfig?.fingerAssignments) return {};
+    try {
+      return JSON.parse(player.playerConfig.fingerAssignments);
+    } catch {
+      return {};
+    }
+  })();
 
   // リマップを表示用形式に変換（disabled/characterの扱いを統一）
   const remapsForKeyboard = toUiRemaps(player.keyRemaps);

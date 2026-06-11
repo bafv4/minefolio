@@ -18,6 +18,7 @@ import {
   type PresetKey,
 } from "./keybindings-columns";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
+import { t } from "@/lib/messages";
 
 const ROW_ESTIMATED_SIZE = 56;
 /** remaps / custom-actions は内容次第で背丈が伸びるため、初期見積もりを上げる */
@@ -219,7 +220,7 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
 
       {rowModel.rows.length === 0 && (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-          該当する走者がいません
+          {t("keybindings.noPlayers")}
         </div>
       )}
     </div>
