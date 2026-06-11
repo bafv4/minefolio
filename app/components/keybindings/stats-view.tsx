@@ -4,6 +4,7 @@ import { Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -442,17 +443,21 @@ function KeybindingStatCard({
                     <span className="text-sm text-muted-foreground w-4 shrink-0">
                       {index + 1}.
                     </span>
-                    <Badge
-                      variant="secondary"
-                      title={label}
-                      className={cn(
-                        "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
-                        isMouse &&
-                          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                      )}
-                    >
-                      <span className="truncate">{label}</span>
-                    </Badge>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
+                            isMouse &&
+                              "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                          )}
+                        >
+                          <span className="truncate">{label}</span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{label}</TooltipContent>
+                    </Tooltip>
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                     {t("keybindingsStats.peoplePercent", {
@@ -522,17 +527,21 @@ function F3RemapStatCard({
                     <span className="text-sm text-muted-foreground w-4 shrink-0">
                       {index + 1}.
                     </span>
-                    <Badge
-                      variant="secondary"
-                      title={label}
-                      className={cn(
-                        "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
-                        isMouse &&
-                          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                      )}
-                    >
-                      <span className="truncate">{label}</span>
-                    </Badge>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
+                            isMouse &&
+                              "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                          )}
+                        >
+                          <span className="truncate">{label}</span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{label}</TooltipContent>
+                    </Tooltip>
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                     {t("keybindingsStats.peoplePercent", {

@@ -78,20 +78,23 @@ function ColorSwatchGrid({
       <p className="text-xs font-medium text-muted-foreground px-1 mb-1">{label}</p>
       <div className="flex flex-wrap gap-1">
         {colors.map((c) => (
-          <button
-            key={c.name}
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onPick(c.value || null);
-            }}
-            title={c.name}
-            aria-label={c.name}
-            className="h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all"
-            style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value || "transparent" }}
-          >
-            {kind === "text" ? "A" : c.value ? "" : "✕"}
-          </button>
+          <Tooltip key={c.name}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(c.value || null);
+                }}
+                aria-label={c.name}
+                className="h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all"
+                style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value || "transparent" }}
+              >
+                {kind === "text" ? "A" : c.value ? "" : "✕"}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent showArrow={false}>{c.name}</TooltipContent>
+          </Tooltip>
         ))}
       </div>
     </div>

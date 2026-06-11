@@ -2,6 +2,7 @@
 // 旧 index.tsx GuideLinkNodeView から逐語移植（class 名 guide-link-* を保持）。
 import { NodeViewWrapper } from "@tiptap/react";
 import { FileText, Trash2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 export function GuideLinkNodeView({
   node,
@@ -38,17 +39,21 @@ export function GuideLinkNodeView({
             </div>
           </div>
         </a>
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            deleteNode();
-          }}
-          title="リンクを削除"
-          className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                deleteNode();
+              }}
+              className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>リンクを削除</TooltipContent>
+        </Tooltip>
       </div>
     </NodeViewWrapper>
   );

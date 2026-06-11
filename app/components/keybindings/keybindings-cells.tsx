@@ -3,6 +3,7 @@
 // セル単位に分解し、再利用可能にしたもの。
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { cn } from "@/lib/utils";
 import {
@@ -139,7 +140,16 @@ export function KeyBadge({
       {truncated}
     </Badge>
   );
-  return label !== truncated ? <span title={label}>{badge}</span> : badge;
+  return label !== truncated ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>{badge}</span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  ) : (
+    badge
+  );
 }
 
 /** 行データからアクションキー1つを取り出して描画 */
@@ -357,12 +367,14 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
 export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
   if (config?.windowsSpeedMultiplier != null) {
     return (
-      <span
-        className="font-mono text-sm"
-        title={t("keybindings.customMultiplier")}
-      >
-        x{config.windowsSpeedMultiplier.toFixed(3)}
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="font-mono text-sm">
+            x{config.windowsSpeedMultiplier.toFixed(3)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t("keybindings.customMultiplier")}</TooltipContent>
+      </Tooltip>
     );
   }
   if (config?.windowsSpeed != null) {

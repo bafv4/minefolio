@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ImagePlus, Trash2, Loader2, AlertCircle, X } from "lucide-react";
 import { t } from "@/lib/messages";
 
@@ -90,22 +91,30 @@ export function MetadataFields({
                 className="h-20 rounded-lg object-cover aspect-2/1 border"
               />
               <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => coverInputRef.current?.click()}
-                  className="h-7 w-7 flex items-center justify-center bg-white/90 text-gray-700 rounded-md text-xs"
-                  title="変更"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={onCoverRemove}
-                  className="h-7 w-7 flex items-center justify-center bg-white/90 text-destructive rounded-md text-xs"
-                  title="削除"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => coverInputRef.current?.click()}
+                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-gray-700 rounded-md text-xs"
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>変更</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={onCoverRemove}
+                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-destructive rounded-md text-xs"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>削除</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           ) : (

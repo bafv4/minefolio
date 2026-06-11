@@ -2,6 +2,7 @@
 // 旧 index.tsx ColumnsNodeView / ColumnNodeView から逐語移植（class 名 columns-editor*/column-editor を保持）。
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { Trash2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 export function ColumnsNodeView({
   node,
@@ -16,17 +17,21 @@ export function ColumnsNodeView({
       <div className={`columns-editor columns-editor-${cols}`}>
         <div className="columns-editor-label" contentEditable={false}>
           <span>{cols}カラム</span>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              deleteNode();
-            }}
-            title="段組を削除"
-            className="columns-editor-delete"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  deleteNode();
+                }}
+                className="columns-editor-delete"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>段組を削除</TooltipContent>
+          </Tooltip>
         </div>
         <NodeViewContent className="columns-content" />
       </div>

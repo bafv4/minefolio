@@ -35,6 +35,7 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
@@ -328,22 +329,26 @@ export default function BrowsePage() {
                   )}
                 />
                 {/* 正規表現トグル（VSCode の検索のように検索欄内に配置） */}
-                <button
-                  type="button"
-                  onClick={toggleRegex}
-                  aria-pressed={useRegex}
-                  aria-label={t("browse.regexLabel")}
-                  title={t("browse.regexLabel")}
-                  className={cn(
-                    "absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    useRegex
-                      ? "bg-primary/15 text-primary ring-1 ring-primary/40"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <Regex className="h-4 w-4" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={toggleRegex}
+                      aria-pressed={useRegex}
+                      aria-label={t("browse.regexLabel")}
+                      className={cn(
+                        "absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        useRegex
+                          ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      <Regex className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("browse.regexLabel")}</TooltipContent>
+                </Tooltip>
               </div>
               <Button type="submit">
                 <Search className="mr-2 h-4 w-4" />

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
 import { createDb } from "@/lib/db";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Trophy, Timer, Swords, Video, ExternalLink, Clock, Loader2 } from "lucide-react";
@@ -218,9 +219,14 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
               >
                 <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
                   {isPending ? (
-                    <span className="text-muted-foreground" title="審査待ち">
-                      <Clock className="h-4 w-4 inline" />
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-muted-foreground">
+                          <Clock className="h-4 w-4 inline" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>審査待ち</TooltipContent>
+                    </Tooltip>
                   ) : entry.rank !== null && entry.rank <= 3 ? (
                     <span className={
                       entry.rank === 1 ? "text-yellow-500" :

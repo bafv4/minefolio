@@ -52,6 +52,7 @@ import {
   PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -244,16 +245,26 @@ export function DesktopToolbar({
 
             {/* 右側: 設定 / プレビュー | 仮保存 / 保存 */}
             <div className="ml-auto flex items-center gap-1.5">
-              <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings} title="ガイド設定">
-                <Settings className="h-4 w-4" />
-                <span className="hidden md:inline">ガイド設定</span>
-              </Button>
-              <Button asChild type="button" variant="ghost" size="sm" title={t("guideEditor.preview")}>
-                <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
-                  <Eye className="h-4 w-4" />
-                  <span className="hidden md:inline">{t("guideEditor.preview")}</span>
-                </Link>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings}>
+                    <Settings className="h-4 w-4" />
+                    <span className="hidden md:inline">ガイド設定</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" showArrow={false}>ガイド設定</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button asChild type="button" variant="ghost" size="sm">
+                    <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
+                      <Eye className="h-4 w-4" />
+                      <span className="hidden md:inline">{t("guideEditor.preview")}</span>
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" showArrow={false}>{t("guideEditor.preview")}</TooltipContent>
+              </Tooltip>
               <ToolbarSeparator />
               <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
                 <FileEdit className="h-4 w-4" />
@@ -360,19 +371,23 @@ export function DesktopToolbar({
                 <ToolbarSeparator />
                 {/* コールアウト: 種別を選んで挿入 */}
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors"
-                      aria-label="コールアウトを挿入"
-                      title="コールアウト"
-                    >
-                      <Lightbulb className="h-4 w-4 text-muted-foreground" />
-                      <span className="hidden lg:inline">コールアウト</span>
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                  </DropdownMenuTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors"
+                          aria-label="コールアウトを挿入"
+                        >
+                          <Lightbulb className="h-4 w-4 text-muted-foreground" />
+                          <span className="hidden lg:inline">コールアウト</span>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" showArrow={false}>コールアウト</TooltipContent>
+                  </Tooltip>
                   <DropdownMenuContent align="start" className="w-40">
                     {CALLOUT_TYPES.map((opt) => {
                       const Icon = opt.icon;

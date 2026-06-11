@@ -7,6 +7,7 @@ import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
 import { t } from "@/lib/messages";
@@ -350,9 +351,12 @@ function StatBar({
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-20 text-sm font-medium truncate" title={label}>
-        {label}
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-20 text-sm font-medium truncate">{label}</div>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
       <div className="flex-1">
         <Progress value={barWidth} className="h-6" />
       </div>

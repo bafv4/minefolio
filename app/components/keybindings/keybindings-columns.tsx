@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { getActionLabel } from "@/lib/keybindings";
 import { calculateCm360, calculateCursorSpeed } from "@/lib/mouse-settings";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { t } from "@/lib/messages";
 import {
   ActionKeyCell,
@@ -65,7 +66,14 @@ const runnerColumn: ColumnDef<KeybindingsRow> = {
 function actionColumn(action: string): ColumnDef<KeybindingsRow> {
   return {
     id: `action.${action}`,
-    header: () => <span title={getActionLabel(action)}>{getActionLabel(action)}</span>,
+    header: () => (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{getActionLabel(action)}</span>
+        </TooltipTrigger>
+        <TooltipContent>{getActionLabel(action)}</TooltipContent>
+      </Tooltip>
+    ),
     accessorFn: (row) =>
       row.keybindings.find((kb) => kb.action === action)?.keyCode ?? null,
     cell: ({ getValue, row }) => (
@@ -85,7 +93,12 @@ function actionColumn(action: string): ColumnDef<KeybindingsRow> {
 const hotbarColumn: ColumnDef<KeybindingsRow> = {
   id: "action.hotbar",
   header: () => (
-    <span title={t("keybindings.hotbarColumn")}>{t("keybindings.hotbarColumn")}</span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>{t("keybindings.hotbarColumn")}</span>
+      </TooltipTrigger>
+      <TooltipContent>{t("keybindings.hotbarColumn")}</TooltipContent>
+    </Tooltip>
   ),
   cell: ({ row }) => (
     <HotbarSummaryCell
@@ -195,12 +208,17 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
   {
     id: "mouse.sensitivity",
     header: () => (
-      <span title={t("keybindings.inGameSensitivityRange")}>
-        <span className="hidden sm:inline">
-          {t("keybindings.inGameSensitivityRange")}
-        </span>
-        <span className="sm:hidden">Sens</span>
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <span className="hidden sm:inline">
+              {t("keybindings.inGameSensitivityRange")}
+            </span>
+            <span className="sm:hidden">Sens</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t("keybindings.inGameSensitivityRange")}</TooltipContent>
+      </Tooltip>
     ),
     accessorFn: (row) => sensitivityPercent(row.playerConfig),
     cell: ({ row }) => <SensitivityCell config={row.original.playerConfig} />,
@@ -212,12 +230,17 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
   {
     id: "mouse.cm360",
     header: () => (
-      <span title={t("keybindings.turnDistanceRange")}>
-        <span className="hidden sm:inline">
-          {t("keybindings.turnDistanceRange")}
-        </span>
-        <span className="sm:hidden">Turn</span>
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <span className="hidden sm:inline">
+              {t("keybindings.turnDistanceRange")}
+            </span>
+            <span className="sm:hidden">Turn</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t("keybindings.turnDistanceRange")}</TooltipContent>
+      </Tooltip>
     ),
     accessorFn: (row) => {
       const config = row.playerConfig;

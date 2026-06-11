@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { Copy, ClipboardCheck } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 export function CodeBlockNodeView({
   node,
@@ -21,20 +22,24 @@ export function CodeBlockNodeView({
   return (
     <NodeViewWrapper>
       <div className="code-block-wrapper">
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={handleCopy}
-          title="コピー"
-          contentEditable={false}
-          className="code-block-copy"
-        >
-          {copied ? (
-            <ClipboardCheck className="h-3.5 w-3.5" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleCopy}
+              contentEditable={false}
+              className="code-block-copy"
+            >
+              {copied ? (
+                <ClipboardCheck className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>コピー</TooltipContent>
+        </Tooltip>
         <pre>
           {/* @ts-expect-error as="code" works at runtime */}
           <NodeViewContent as="code" />

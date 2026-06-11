@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, memo } from "react";
 import type { SkinViewer } from "skinview3d";
 import { HelpCircle, RotateCcw } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
@@ -436,34 +437,44 @@ const MinecraftFullBodyComponent = ({
       {showControls && (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
           {showInteractiveHint && (
-            <button
-              type="button"
-              onClick={() => setHintVisible((v) => !v)}
-              aria-label={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
-              aria-pressed={hintVisible}
-              title={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
-              className={cn(
-                ICON_BUTTON_CLASS,
-                hintVisible
-                  ? "bg-primary text-primary-foreground border-primary/40"
-                  : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
-              )}
-            >
-              <HelpCircle className="w-3.5 h-3.5" aria-hidden />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setHintVisible((v) => !v)}
+                  aria-label={hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
+                  aria-pressed={hintVisible}
+                  className={cn(
+                    ICON_BUTTON_CLASS,
+                    hintVisible
+                      ? "bg-primary text-primary-foreground border-primary/40"
+                      : "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+                  )}
+                >
+                  <HelpCircle className="w-3.5 h-3.5" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {hintVisible ? t("fullbodyViewer.hideHint") : t("fullbodyViewer.showHint")}
+              </TooltipContent>
+            </Tooltip>
           )}
-          <button
-            type="button"
-            onClick={handleReset}
-            aria-label={t("fullbodyViewer.reset")}
-            title={t("fullbodyViewer.reset")}
-            className={cn(
-              ICON_BUTTON_CLASS,
-              "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
-            )}
-          >
-            <RotateCcw className="w-3.5 h-3.5" aria-hidden />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleReset}
+                aria-label={t("fullbodyViewer.reset")}
+                className={cn(
+                  ICON_BUTTON_CLASS,
+                  "bg-background/70 hover:bg-background text-foreground/70 hover:text-foreground",
+                )}
+              >
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{t("fullbodyViewer.reset")}</TooltipContent>
+          </Tooltip>
         </div>
       )}
 

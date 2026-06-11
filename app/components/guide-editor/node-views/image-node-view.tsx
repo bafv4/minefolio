@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import { Trash2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function ImageNodeView({
@@ -56,17 +57,21 @@ export function ImageNodeView({
           style={{ width: width ? `${width}px` : undefined }}
           draggable={false}
         />
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            deleteNode();
-          }}
-          title="画像を削除"
-          className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                deleteNode();
+              }}
+              className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>画像を削除</TooltipContent>
+        </Tooltip>
         {/* Resize handle */}
         <div
           onMouseDown={handleResizeStart}

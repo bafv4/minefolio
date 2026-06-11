@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { setBlockType, applyTableOp, setCellBackground, type BlockType } from "../lib/block-commands";
 import { CELL_COLORS } from "../constants";
 import { EDITOR_Z } from "../constants";
@@ -243,20 +244,23 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
             <p className="px-2 py-1 text-xs font-medium text-muted-foreground">セル背景色</p>
             <div className="flex flex-wrap gap-1 px-2 py-1">
               {CELL_COLORS.map((c) => (
-                <button
-                  key={c.name}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    applyCellColor(c.value || null);
-                  }}
-                  title={c.name}
-                  aria-label={c.name}
-                  className="h-5 w-5 rounded border border-border hover:ring-2 hover:ring-ring transition-all flex items-center justify-center"
-                  style={{ backgroundColor: c.value || "transparent" }}
-                >
-                  {!c.value && <span className="text-[10px]">✕</span>}
-                </button>
+                <Tooltip key={c.name}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyCellColor(c.value || null);
+                      }}
+                      aria-label={c.name}
+                      className="h-5 w-5 rounded border border-border hover:ring-2 hover:ring-ring transition-all flex items-center justify-center"
+                      style={{ backgroundColor: c.value || "transparent" }}
+                    >
+                      {!c.value && <span className="text-[10px]">✕</span>}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent showArrow={false}>{c.name}</TooltipContent>
+                </Tooltip>
               ))}
             </div>
             <div className="border-t my-1" />

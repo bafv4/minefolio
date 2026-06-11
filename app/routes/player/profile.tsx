@@ -150,6 +150,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -1815,56 +1816,63 @@ function ItemLayoutCard({
                 const slotNum = i + 1;
                 const items = slotMap.get(slotNum) || [];
                 return (
-                  <div
-                    key={slotNum}
-                    className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-                    title={items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
-                  >
-                    {items.length > 0 ? (
-                      <>
-                        <MinecraftItemIcon
-                          itemId={items[0]}
-                          size={36}
-                          textureBaseUrl={TEXTURE_BASE_URL}
-                          className="pixelated"
-                        />
-                        {items.length > 1 && (
-                          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                            {items.length}
-                          </span>
+                  <Tooltip key={slotNum}>
+                    <TooltipTrigger asChild>
+                      <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
+                        {items.length > 0 ? (
+                          <>
+                            <MinecraftItemIcon
+                              itemId={items[0]}
+                              size={36}
+                              textureBaseUrl={TEXTURE_BASE_URL}
+                              className="pixelated"
+                            />
+                            {items.length > 1 && (
+                              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                {items.length}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{slotNum}</span>
                         )}
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{slotNum}</span>
-                    )}
-                  </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
+                    </TooltipContent>
+                  </Tooltip>
                 );
               })}
             </div>
             {/* オフハンド */}
             <div className="w-px h-10 bg-border mx-1" />
-            <div
-              className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-              title={offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
-            >
-              {offhand.length > 0 ? (
-                <>
-                  <MinecraftItemIcon
-                    itemId={offhand[0]}
-                    size={36}
-                    textureBaseUrl={TEXTURE_BASE_URL}
-                    className="pixelated"
-                  />
-                  {offhand.length > 1 && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                      {offhand.length}
-                    </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
+                  {offhand.length > 0 ? (
+                    <>
+                      <MinecraftItemIcon
+                        itemId={offhand[0]}
+                        size={36}
+                        textureBaseUrl={TEXTURE_BASE_URL}
+                        className="pixelated"
+                      />
+                      {offhand.length > 1 && (
+                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {offhand.length}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">OH</span>
                   )}
-                </>
-              ) : (
-                <span className="text-xs text-muted-foreground">OH</span>
-              )}
-            </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
+              </TooltipContent>
+            </Tooltip>
             </div>
           </div>
 
@@ -1951,19 +1959,23 @@ function KeyBadge({
   };
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-        finger
-          ? fingerClass
-          : "bg-secondary/50 border-border/50 text-muted-foreground",
-        isRemapped && "ring-1 ring-primary ring-offset-1",
-        needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
-      )}
-      title={getTooltipText()}
-    >
-      {label}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
+            finger
+              ? fingerClass
+              : "bg-secondary/50 border-border/50 text-muted-foreground",
+            isRemapped && "ring-1 ring-primary ring-offset-1",
+            needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
+          )}
+        >
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{getTooltipText()}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -2730,32 +2742,36 @@ function StatsContent({
                         ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
                         : null;
                       const relativeDate = pace?.date ? formatRelativeDateTime(pace.date) : "";
+                      const dateLabel = pace?.date ? new Date(pace.date).toLocaleString() : null;
 
                       return runUrl ? (
-                        <a
-                          key={`run-${pace.pacemanRunId}`}
-                          href={runUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            "flex items-center justify-between p-2 rounded text-sm transition-colors",
-                            timeline === "Finish"
-                              ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
-                              : "bg-secondary/30 hover:bg-secondary/50"
-                          )}
-                          title={pace?.date ? new Date(pace.date).toLocaleString() : undefined}
-                        >
-                          <div className="min-w-0">
-                            <PaceManSplitMark timeline={timeline} className="font-medium" />
-                            {relativeDate && (
-                              <p className="text-xs text-muted-foreground">{relativeDate}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono">{formatTime(rta)}</span>
-                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                          </div>
-                        </a>
+                        <Tooltip key={`run-${pace.pacemanRunId}`}>
+                          <TooltipTrigger asChild>
+                            <a
+                              href={runUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                "flex items-center justify-between p-2 rounded text-sm transition-colors",
+                                timeline === "Finish"
+                                  ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
+                                  : "bg-secondary/30 hover:bg-secondary/50"
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <PaceManSplitMark timeline={timeline} className="font-medium" />
+                                {relativeDate && (
+                                  <p className="text-xs text-muted-foreground">{relativeDate}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono">{formatTime(rta)}</span>
+                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                            </a>
+                          </TooltipTrigger>
+                          {dateLabel && <TooltipContent>{dateLabel}</TooltipContent>}
+                        </Tooltip>
                       ) : (
                         <div
                           key={`${timeline}-${idx}`}

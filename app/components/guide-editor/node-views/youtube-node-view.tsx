@@ -2,6 +2,7 @@
 // 旧 index.tsx YoutubeNodeView / getYouTubeEmbedUrl から逐語移植。
 import { NodeViewWrapper } from "@tiptap/react";
 import { Trash2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 /** youtu.be / watch?v= / embed/ いずれの URL からも nocookie 埋め込み URL を生成 */
 function getYouTubeEmbedUrl(src: string): string {
@@ -32,17 +33,21 @@ export function YoutubeNodeView({
             title="YouTube video"
           />
         </div>
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            deleteNode();
-          }}
-          title="動画を削除"
-          className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                deleteNode();
+              }}
+              className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>動画を削除</TooltipContent>
+        </Tooltip>
       </div>
     </NodeViewWrapper>
   );
