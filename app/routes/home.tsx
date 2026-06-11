@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Youtube,
   BookOpen,
+  Shuffle,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ data }) => {
@@ -547,6 +548,12 @@ export default function HomePage() {
                 <Link to="/browse">
                   <Compass className="mr-2 h-4 w-4" />
                   {t("home.ctaBrowse")}
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+                <Link to="/random-player">
+                  <Shuffle className="mr-2 h-4 w-4" />
+                  {t("home.ctaRandom")}
                 </Link>
               </Button>
             </div>

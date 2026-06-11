@@ -38,6 +38,7 @@ export const PAGES_JA = {
     heroDescription: "Minefolioは、MinecraftのRTAコミュニティに特化したプロフィール作成サイトです。",
     ctaStart: "はじめてみる",
     ctaBrowse: "プロフィールを探す",
+    ctaRandom: "ランダムで見る",
     profileTotal: "公開プロフィール総数",
     profileActive: "アクティブプロフィール数（7日）",
     sectionProfiles: "最近更新されたプロフィール",

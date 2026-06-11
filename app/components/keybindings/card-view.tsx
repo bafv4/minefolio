@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
   VirtualKeyboard,
+  VirtualMouse,
   keybindingsToMap,
   type FingerAssignment,
 } from "@/components/virtual-keyboard";
@@ -63,7 +64,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
     | "JIS_TKL";
 
   // 非仮想化リストのため、フィルタ変更による再レンダーで全カードが再計算されないようメモ化。
-  const { fingerAssignments, remaps, keybindingsMap, customKeyboardKeys } =
+  const { fingerAssignments, remaps, keybindingsMap, customKeyboardKeys, customButtons } =
     useMemo(
       () => ({
         fingerAssignments: parseFingers(player.playerConfig?.fingerAssignments),
@@ -72,6 +73,11 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
         customKeyboardKeys: (player.customKeys ?? [])
           .filter((ck) => ck.category === "keyboard")
           .map((ck) => ({ code: ck.keyCode, label: ck.keyName })),
+        customButtons: (player.customKeys ?? []).map((ck) => ({
+          code: ck.keyCode,
+          label: ck.keyName,
+          category: ck.category as "mouse" | "keyboard",
+        })),
       }),
       [player.playerConfig?.fingerAssignments, player.keyRemaps, player.keybindings, player.customKeys],
     );
@@ -80,7 +86,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   const customActionCount = player.customActions.length;
 
   return (
-    <Card className="flex flex-col [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+    <Card className="flex flex-col [content-visibility:auto] [contain-intrinsic-size:auto_560px]">
       <CardHeader className="py-3">
         <div className="flex items-center gap-2 min-w-0">
           <Link
@@ -103,19 +109,32 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
         </div>
       </CardHeader>
       <CardContent className="pt-0 pb-4 flex flex-col gap-3">
-        {/* ビジュアルキーボード（読み取り専用・コンパクト） */}
-        <div className="overflow-x-auto pb-1 w-full">
-          <VirtualKeyboard
-            layout={layout}
-            keybindings={keybindingsMap}
-            fingerAssignments={fingerAssignments}
-            remaps={remaps}
-            customKeys={customKeyboardKeys}
-            showActionLabels
-            showFingerAssignments
-            showRemaps
-            hideNumpad
-          />
+        {/* キーボード + マウス（カスタムボタン含む）。広い画面では横並び。読み取り専用。 */}
+        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+          <div className="overflow-x-auto pb-1 min-w-0 lg:flex-1">
+            <VirtualKeyboard
+              layout={layout}
+              keybindings={keybindingsMap}
+              fingerAssignments={fingerAssignments}
+              remaps={remaps}
+              customKeys={customKeyboardKeys}
+              showActionLabels
+              showFingerAssignments
+              showRemaps
+              hideNumpad
+            />
+          </div>
+          <div className="overflow-x-auto pb-1 shrink-0">
+            <VirtualMouse
+              keybindings={keybindingsMap}
+              fingerAssignments={fingerAssignments}
+              remaps={remaps}
+              customButtons={customButtons}
+              showActionLabels
+              showFingerAssignments
+              showRemaps
+            />
+          </div>
         </div>
 
         {/* マウス要約 + リマップ/カスタムアクション件数 */}
