@@ -1408,6 +1408,17 @@ export default function KeybindingsPage() {
 
   const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges;
 
+  // 未保存の変更があるままページを離れようとしたら警告（タブを閉じる/リロード等）
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
+
   // 現在選択中のキーに関するデータ
   // 複数の操作が同じキーに割り当てられている場合はすべて取得
   const selectedKeyBindings = editingKeyCode

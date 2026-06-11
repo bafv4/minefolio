@@ -63,13 +63,14 @@ export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
       return null;
     }
 
-    // MCIDからユーザー情報を取得
+    // MCIDからユーザー情報を取得（視聴者ロールは除外）
     const mcids = recentVideos
       .map(v => v.minefolioMcid)
       .filter((mcid): mcid is string => mcid !== null);
 
     const usersData = mcids.length > 0
       ? await db.query.users.findMany({
+          where: excludeViewersCondition,
           columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true, customSkinUrl: true },
         })
       : [];
@@ -80,7 +81,14 @@ export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
         .map(u => [u.mcid!.toLowerCase(), u])
     );
 
-    return recentVideos.map(v => {
+    // 視聴者ロールに紐づく動画（minefolioMcid あり かつ userMap に無し）を除外。
+    // minefolioMcid が null の動画は紐付け無しのため残す。
+    const filteredVideos = recentVideos.filter(v => {
+      if (!v.minefolioMcid) return true;
+      return userMap.has(v.minefolioMcid.toLowerCase());
+    });
+
+    return filteredVideos.map(v => {
       const user = v.minefolioMcid ? userMap.get(v.minefolioMcid.toLowerCase()) : null;
       return {
         videoId: v.videoId,
@@ -442,13 +450,14 @@ export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
       orderBy: [desc(youtubeLiveCache.concurrentViewers)],
     });
 
-    // MCIDからユーザー情報を取得
+    // MCIDからユーザー情報を取得（視聴者ロールは除外）
     const mcids = streams
       .map(s => s.minefolioMcid)
       .filter((mcid): mcid is string => mcid !== null);
 
     const usersData = mcids.length > 0
       ? await db.query.users.findMany({
+          where: excludeViewersCondition,
           columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true, customSkinUrl: true },
         })
       : [];
@@ -459,7 +468,13 @@ export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
         .map(u => [u.mcid!.toLowerCase(), u])
     );
 
-    return streams.map(s => {
+    // 視聴者ロールに紐づく配信（minefolioMcid あり かつ userMap に無し）を除外
+    const filteredStreams = streams.filter(s => {
+      if (!s.minefolioMcid) return true;
+      return userMap.has(s.minefolioMcid.toLowerCase());
+    });
+
+    return filteredStreams.map(s => {
       const user = s.minefolioMcid ? userMap.get(s.minefolioMcid.toLowerCase()) : null;
       return {
         videoId: s.videoId,

@@ -11,7 +11,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
@@ -138,7 +138,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, getKeyCombinationLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
@@ -150,6 +150,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -185,86 +186,23 @@ import {
   Loader2,
   BookOpen,
   Eye,
+  Maximize2,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
-
-// Windowsポインター速度の乗数（11/11がデフォルト）
-// https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
-const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
-  1: 0.03125,
-  2: 0.0625,
-  3: 0.125,
-  4: 0.25,
-  5: 0.375,
-  6: 0.5,
-  7: 0.625,
-  8: 0.75,
-  9: 0.875,
-  10: 1,
-  11: 1.25,
-  12: 1.5,
-  13: 1.75,
-  14: 2,
-  15: 2.25,
-  16: 2.5,
-  17: 2.75,
-  18: 3,
-  19: 3.25,
-  20: 3.5,
-};
-
-// Windowsポインター速度乗数を取得（カスタム係数優先）
-function getWindowsMultiplier(
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined
-): number {
-  // カスタム係数が設定されている場合はそれを優先
-  if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
-    return windowsSpeedMultiplier;
-  }
-  // Windowsポインター速度から乗数を取得
-  return windowsSpeed != null ? (WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? 1.0) : 1.0;
-}
-
-// カーソル速度（実効DPI）を計算
-// RawInputの状態に関わらず、DPIにWindows速度の係数をかける
-function calculateCursorSpeed(
-  dpi: number | null | undefined,
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined = null
-): number | null {
-  if (dpi == null) return null;
-
-  // RawInputの状態に関わらず、Windows速度係数を適用
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return Math.round(dpi * winMultiplier);
-}
-
-// 振り向き（cm/360）を計算
-// 計算式: 6096 / (DPI * 8 * (0.6 * sensitivity + 0.2)^3) / 2
-function calculateCm360(
-  dpi: number | null | undefined,
-  sensitivity: number | null | undefined,
-  rawInput: boolean | null | undefined,
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined = null
-): number | null {
-  if (dpi == null || sensitivity == null) return null;
-
-  const f = 0.6 * sensitivity + 0.2;
-  const cm360Base = 6096 / (dpi * 8 * f * f * f) / 2;
-
-  // Raw Input が ON の場合、Windowsポインター速度は無視
-  if (rawInput === true) {
-    return cm360Base;
-  }
-
-  // Raw Input が OFF の場合、Windowsポインター速度を考慮
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return cm360Base / winMultiplier;
-}
+import {
+  calculateCm360,
+  calculateCursorSpeed,
+  WINDOWS_POINTER_MULTIPLIERS,
+} from "@/lib/mouse-settings";
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -304,6 +242,9 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       customKeys: {
         orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
       },
+      customActions: {
+        orderBy: [asc(customActions.displayOrder), asc(customActions.actionName)],
+      },
     },
   });
 
@@ -335,6 +276,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       itemLayoutsData: true,
       searchCraftsData: true,
       customKeysData: true,
+      customActionsData: true,
     },
   });
 
@@ -346,6 +288,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   let displayItemLayouts = player.itemLayouts;
   let displaySearchCrafts = player.searchCrafts;
   let displayCustomKeys = player.customKeys;
+  let displayCustomActions = player.customActions;
 
   if (presetId && presets.length > 0) {
     const selectedPreset = presets.find((p) => p.id === presetId);
@@ -471,6 +414,28 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
           updatedAt: new Date(),
         }));
       }
+
+      // プリセットのカスタムアクションを適用
+      if (selectedPreset.customActionsData) {
+        const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
+          actionName: string;
+          description: string | null;
+          category: "other" | "macro" | "tool";
+          triggerKey: string;
+          displayOrder: number;
+        }>;
+        displayCustomActions = presetCustomActions.map((ca, idx) => ({
+          id: `preset-customaction-${idx}`,
+          userId: player.id,
+          actionName: ca.actionName,
+          description: ca.description,
+          category: ca.category,
+          triggerKey: ca.triggerKey,
+          displayOrder: ca.displayOrder,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
     }
   }
 
@@ -532,6 +497,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       itemLayouts: displayItemLayouts,
       searchCrafts: displaySearchCrafts,
       customKeys: displayCustomKeys,
+      customActions: displayCustomActions,
     },
     isOwner,
     hiddenSpeedrunRecords,
@@ -554,6 +520,7 @@ export default function PlayerProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const navigation = useNavigation();
+  const [skin3dOpen, setSkin3dOpen] = useState(false);
 
   // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
   const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
@@ -579,32 +546,81 @@ export default function PlayerProfilePage() {
   // 廃止されたアクションを除外
   const deprecatedActions = ["toggleHud"];
 
-  // Group keybindings by category
-  const keybindingsByCategory = player.keybindings
-    .filter((kb) => !deprecatedActions.includes(kb.action))
-    .reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) {
-          acc[kb.category] = [];
-        }
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof player.keybindings>
-    );
+  // アクション → キーバインドの逆引きマップ（表示順を明示的に制御するため）
+  const keybindingsByAction = new Map(
+    player.keybindings
+      .filter((kb) => !deprecatedActions.includes(kb.action))
+      .map((kb) => [kb.action, kb] as const)
+  );
 
-  const categoryOrder = ["movement", "combat", "inventory", "ui"];
-  const categoryLabels: Record<string, string> = {
-    movement: t("playerProfile.movement"),
-    combat: t("playerProfile.combat"),
-    inventory: t("playerProfile.inventory"),
-    ui: t("playerProfile.ui"),
+  // カスタムキーの keyCode → 表示名（keyName）の解決マップ。
+  // リマップやカスタムアクションが "0x05" のような非標準キーコードを参照しているとき、
+  // 生のキーコードではなくユーザー登録名を優先表示するために使う。
+  const customKeyLabelByCode = new Map<string, string>(
+    player.customKeys.map((ck) => [normalizeKeyCode(ck.keyCode), ck.keyName])
+  );
+  const resolveKeyLabel = (keyCode: string): string => {
+    const customLabel = customKeyLabelByCode.get(normalizeKeyCode(keyCode));
+    if (customLabel) return customLabel;
+    return getKeyLabel(keyCode);
+  };
+  const resolveKeyCombinationLabel = (combo: string): string => {
+    if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
+    const parsed = parseKeyCombination(combo);
+    const keyLabel = resolveKeyLabel(parsed.keyCode);
+    if (parsed.modifiers.length === 0) return keyLabel;
+    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+    return [...modifierLabels, keyLabel].join("+");
+  };
+  // 同時押しを別 chip で並べるためのラベル配列ヘルパー
+  const resolveKeyCombinationChips = (combo: string): string[] => {
+    if (!combo || combo === UNBOUND_KEY) return [resolveKeyLabel(combo)];
+    const parsed = parseKeyCombination(combo);
+    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
+    return [...modifierLabels, resolveKeyLabel(parsed.keyCode)];
   };
 
-  // ユーザーの指割り当てをパース
-  const userFingerAssignments = player.playerConfig?.fingerAssignments
-    ? JSON.parse(player.playerConfig.fingerAssignments)
-    : {};
+  // List View の表示グループ定義（要件: 移動 → インベントリ → 戦闘・UI）
+  type KeybindingDisplayGroup = {
+    key: string;
+    label: string;
+    colorClass: string;
+    actions: string[];
+  };
+  const keybindingDisplayGroups: KeybindingDisplayGroup[] = [
+    {
+      key: "movement",
+      label: t("playerProfile.movement"),
+      colorClass: getCategoryColorClass("movement"),
+      actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
+    },
+    {
+      key: "inventory",
+      label: t("playerProfile.inventory"),
+      colorClass: getCategoryColorClass("inventory"),
+      actions: [
+        "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
+        "hotbar6", "hotbar7", "hotbar8", "hotbar9",
+        "swapHands", "inventory", "pickBlock", "drop",
+      ],
+    },
+    {
+      key: "combat-ui",
+      label: t("playerProfile.combatAndUi"),
+      colorClass: getCategoryColorClass("combat"),
+      actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
+    },
+  ];
+
+  // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
+  const userFingerAssignments = (() => {
+    if (!player.playerConfig?.fingerAssignments) return {};
+    try {
+      return JSON.parse(player.playerConfig.fingerAssignments);
+    } catch {
+      return {};
+    }
+  })();
 
   // リマップを表示用形式に変換（disabled/characterの扱いを統一）
   const remapsForKeyboard = toUiRemaps(player.keyRemaps);
@@ -850,26 +866,77 @@ export default function PlayerProfilePage() {
             <CardContent className="pt-4 pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
-                {player.uuid && (
-                  <div className="flex justify-center sm:justify-start shrink-0">
-                    <Suspense fallback={<SkinSkeleton width={skinViewSize.width} height={skinViewSize.height} />}>
-                      <MinecraftFullBody
-                        uuid={player.uuid}
-                        skinUrl={player.customSkinUrl ?? undefined}
-                        mcid={player.mcid ?? undefined}
-                        width={skinViewSize.width}
-                        height={skinViewSize.height}
-                        pose={(player.profilePose as PoseName) ?? "waving"}
-                        slim={player.customSkinModel === "slim" || player.slimSkin || false}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        interactive
-                        showInteractiveHint
-                      />
-                    </Suspense>
-                  </div>
-                )}
+                {player.uuid && (() => {
+                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
+                  const skinProps = {
+                    uuid: player.uuid,
+                    skinUrl: player.customSkinUrl ?? undefined,
+                    mcid: player.mcid ?? undefined,
+                    pose: (player.profilePose as PoseName) ?? "waving",
+                    slim:
+                      player.customSkinModel === "slim" || player.slimSkin || false,
+                    angle: -35,
+                    elevation: 5,
+                    zoom: 0.9,
+                  };
+                  const modalSize = { width: 360, height: 480 };
+                  return (
+                    <div className="flex justify-center sm:justify-start shrink-0">
+                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="スキンを 3D で表示"
+                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <Suspense
+                              fallback={
+                                <SkinSkeleton
+                                  width={skinViewSize.width}
+                                  height={skinViewSize.height}
+                                />
+                              }
+                            >
+                              {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                              <MinecraftFullBody
+                                {...skinProps}
+                                width={skinViewSize.width}
+                                height={skinViewSize.height}
+                                asImage
+                              />
+                            </Suspense>
+                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                              <Maximize2
+                                className="h-8 w-8 text-foreground drop-shadow"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {player.displayName ?? player.mcid ?? player.slug} のスキン
+                            </DialogTitle>
+                          </DialogHeader>
+                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
+                          {skin3dOpen && (
+                            <div className="flex justify-center">
+                              <Suspense fallback={<SkinSkeleton {...modalSize} />}>
+                                <MinecraftFullBody
+                                  {...skinProps}
+                                  {...modalSize}
+                                  interactive
+                                  showInteractiveHint
+                                />
+                              </Suspense>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })()}
 
                 {/* Info */}
                 <div className="flex-1 space-y-4">
@@ -1074,15 +1141,17 @@ export default function PlayerProfilePage() {
 
               {/* List View */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {categoryOrder.map((category) => {
-                  const bindings = keybindingsByCategory[category];
-                  if (!bindings || bindings.length === 0) return null;
+                {keybindingDisplayGroups.map((group) => {
+                  const bindings = group.actions
+                    .map((action) => keybindingsByAction.get(action))
+                    .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
+                  if (bindings.length === 0) return null;
 
                   return (
-                    <Card key={category}>
+                    <Card key={group.key}>
                       <CardHeader className="py-2">
-                        <CardTitle className={`text-base font-semibold ${getCategoryColorClass(category)}`}>
-                          {categoryLabels[category]}
+                        <CardTitle className={`text-base font-semibold ${group.colorClass}`}>
+                          {group.label}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="pt-0 pb-3">
@@ -1094,7 +1163,7 @@ export default function PlayerProfilePage() {
                             >
                               <span className="text-sm">{getActionLabel(kb.action)}</span>
                               <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
-                                {getKeyLabel(kb.keyCode)}
+                                {resolveKeyLabel(kb.keyCode)}
                               </kbd>
                             </div>
                           ))}
@@ -1103,6 +1172,99 @@ export default function PlayerProfilePage() {
                     </Card>
                   );
                 })}
+
+                {/* カスタムアクション（登録されている場合のみ） */}
+                {player.customActions.length > 0 && (
+                  <Card>
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-base font-semibold">
+                        {t("playerProfile.customActions")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-3">
+                      <div className="divide-y">
+                        {player.customActions.map((ca) => {
+                          const chips = resolveKeyCombinationChips(ca.triggerKey);
+                          return (
+                            <div
+                              key={ca.id}
+                              className="flex justify-between items-center gap-3 py-2.5"
+                            >
+                              <span className="text-sm">{ca.actionName}</span>
+                              <div className="flex items-center gap-1">
+                                {chips.map((label, i) => (
+                                  <span key={i} className="flex items-center gap-1">
+                                    {i > 0 && (
+                                      <span className="text-muted-foreground text-xs">+</span>
+                                    )}
+                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                      {label}
+                                    </kbd>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* リマップ（登録されている場合のみ） */}
+                {player.keyRemaps.length > 0 && (
+                  <Card>
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-base font-semibold">
+                        {t("playerProfile.remaps")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-3">
+                      <div className="divide-y">
+                        {player.keyRemaps.map((remap) => {
+                          const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
+                          const targetChips =
+                            remap.outputMode === "character" && remap.outputCharacter
+                              ? [remap.outputCharacter]
+                              : remap.targetKey
+                              ? resolveKeyCombinationChips(remap.targetKey)
+                              : ["-"];
+                          const renderChipGroup = (
+                            chips: string[],
+                            justify: "start" | "end",
+                          ) => (
+                            <div
+                              className={`flex items-center gap-1 ${
+                                justify === "start" ? "justify-start" : "justify-end"
+                              }`}
+                            >
+                              {chips.map((label, i) => (
+                                <span key={i} className="flex items-center gap-1">
+                                  {i > 0 && (
+                                    <span className="text-muted-foreground text-xs">+</span>
+                                  )}
+                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                    {label}
+                                  </kbd>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                          return (
+                            <div
+                              key={remap.id}
+                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5"
+                            >
+                              {renderChipGroup(sourceChips, "start")}
+                              <span className="text-muted-foreground text-sm">→</span>
+                              {renderChipGroup(targetChips, "end")}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </>
           ) : (
@@ -1588,56 +1750,63 @@ function ItemLayoutCard({
                 const slotNum = i + 1;
                 const items = slotMap.get(slotNum) || [];
                 return (
-                  <div
-                    key={slotNum}
-                    className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-                    title={items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
-                  >
-                    {items.length > 0 ? (
-                      <>
-                        <MinecraftItemIcon
-                          itemId={items[0]}
-                          size={36}
-                          textureBaseUrl={TEXTURE_BASE_URL}
-                          className="pixelated"
-                        />
-                        {items.length > 1 && (
-                          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                            {items.length}
-                          </span>
+                  <Tooltip key={slotNum}>
+                    <TooltipTrigger asChild>
+                      <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
+                        {items.length > 0 ? (
+                          <>
+                            <MinecraftItemIcon
+                              itemId={items[0]}
+                              size={36}
+                              textureBaseUrl={TEXTURE_BASE_URL}
+                              className="pixelated"
+                            />
+                            {items.length > 1 && (
+                              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                {items.length}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{slotNum}</span>
                         )}
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{slotNum}</span>
-                    )}
-                  </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
+                    </TooltipContent>
+                  </Tooltip>
                 );
               })}
             </div>
             {/* オフハンド */}
             <div className="w-px h-10 bg-border mx-1" />
-            <div
-              className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative"
-              title={offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
-            >
-              {offhand.length > 0 ? (
-                <>
-                  <MinecraftItemIcon
-                    itemId={offhand[0]}
-                    size={36}
-                    textureBaseUrl={TEXTURE_BASE_URL}
-                    className="pixelated"
-                  />
-                  {offhand.length > 1 && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                      {offhand.length}
-                    </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
+                  {offhand.length > 0 ? (
+                    <>
+                      <MinecraftItemIcon
+                        itemId={offhand[0]}
+                        size={36}
+                        textureBaseUrl={TEXTURE_BASE_URL}
+                        className="pixelated"
+                      />
+                      {offhand.length > 1 && (
+                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {offhand.length}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">OH</span>
                   )}
-                </>
-              ) : (
-                <span className="text-xs text-muted-foreground">OH</span>
-              )}
-            </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
+              </TooltipContent>
+            </Tooltip>
             </div>
           </div>
 
@@ -1724,19 +1893,23 @@ function KeyBadge({
   };
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-        finger
-          ? fingerClass
-          : "bg-secondary/50 border-border/50 text-muted-foreground",
-        isRemapped && "ring-1 ring-primary ring-offset-1",
-        needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
-      )}
-      title={getTooltipText()}
-    >
-      {label}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
+            finger
+              ? fingerClass
+              : "bg-secondary/50 border-border/50 text-muted-foreground",
+            isRemapped && "ring-1 ring-primary ring-offset-1",
+            needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
+          )}
+        >
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{getTooltipText()}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -2503,32 +2676,36 @@ function StatsContent({
                         ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
                         : null;
                       const relativeDate = pace?.date ? formatRelativeDateTime(pace.date) : "";
+                      const dateLabel = pace?.date ? new Date(pace.date).toLocaleString() : null;
 
                       return runUrl ? (
-                        <a
-                          key={`run-${pace.pacemanRunId}`}
-                          href={runUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            "flex items-center justify-between p-2 rounded text-sm transition-colors",
-                            timeline === "Finish"
-                              ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
-                              : "bg-secondary/30 hover:bg-secondary/50"
-                          )}
-                          title={pace?.date ? new Date(pace.date).toLocaleString() : undefined}
-                        >
-                          <div className="min-w-0">
-                            <PaceManSplitMark timeline={timeline} className="font-medium" />
-                            {relativeDate && (
-                              <p className="text-xs text-muted-foreground">{relativeDate}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono">{formatTime(rta)}</span>
-                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                          </div>
-                        </a>
+                        <Tooltip key={`run-${pace.pacemanRunId}`}>
+                          <TooltipTrigger asChild>
+                            <a
+                              href={runUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                "flex items-center justify-between p-2 rounded text-sm transition-colors",
+                                timeline === "Finish"
+                                  ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
+                                  : "bg-secondary/30 hover:bg-secondary/50"
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <PaceManSplitMark timeline={timeline} className="font-medium" />
+                                {relativeDate && (
+                                  <p className="text-xs text-muted-foreground">{relativeDate}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono">{formatTime(rta)}</span>
+                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                            </a>
+                          </TooltipTrigger>
+                          {dateLabel && <TooltipContent>{dateLabel}</TooltipContent>}
+                        </Tooltip>
                       ) : (
                         <div
                           key={`${timeline}-${idx}`}

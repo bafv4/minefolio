@@ -67,6 +67,8 @@ export async function removeFavoriteFromDb(
 
 /**
  * 一括同期: localStorage から渡された slug 配列を DB に追加（重複は無視）
+ * 既存分は SELECT 1 回で取得し、不足分のみ bulk INSERT で発行する。
+ * uniqueIndex(idx_favorites_user_slug) があるため onConflictDoNothing で並行追加も安全。
  */
 export async function syncLocalFavoritesToDb(
   db: Database,
@@ -76,11 +78,15 @@ export async function syncLocalFavoritesToDb(
   if (localFavorites.length === 0) return;
   const existing = await getFavoritesFromDb(db, userId);
   const existingSet = new Set(existing);
-  for (const slug of localFavorites) {
-    if (!existingSet.has(slug)) {
-      await addFavoriteToDb(db, userId, slug);
-    }
-  }
+  const toInsert = localFavorites.filter((slug) => !existingSet.has(slug));
+  if (toInsert.length === 0) return;
+
+  await db
+    .insert(favorites)
+    .values(toInsert.map((slug) => ({ userId, favoriteSlug: slug })))
+    .onConflictDoNothing({
+      target: [favorites.userId, favorites.favoriteSlug],
+    });
 }
 
 /**

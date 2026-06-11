@@ -78,6 +78,14 @@ export async function action({ context, request }: Route.ActionArgs) {
       return jsonResponse({ error: "Invalid request" }, { status: 400 });
     }
     if (actionType === "add") {
+      // slug が実在するユーザーか確認（架空 slug の孤児エントリ防止）
+      const targetUser = await db.query.users.findFirst({
+        where: eq(users.slug, slug),
+        columns: { id: true },
+      });
+      if (!targetUser) {
+        return jsonResponse({ error: "User not found" }, { status: 404 });
+      }
       await addFavoriteToDb(db, user.id, slug);
     } else {
       await removeFavoriteFromDb(db, user.id, slug);

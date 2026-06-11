@@ -1,17 +1,33 @@
 import { useLoaderData, useSearchParams, useNavigation } from "react-router";
+import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
 import { createDb } from "@/lib/db";
-import { speedrunCategories, playerRankings, users, categoryRecords } from "@/lib/schema";
-import { eq, and, desc, asc, isNotNull, or, notExists } from "drizzle-orm";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react";
+import { Trophy, Timer, Swords, Video, ExternalLink, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import {
+  loadRankingCategories,
+  loadRankings,
+  parseRankingsParams,
+  type RankingEntry,
+} from "@/lib/rankings-query.server";
+import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
+
+/** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ */
+function StickyHeaderShell({ children }: { children: ReactNode }) {
+  return (
+    <table className="w-full caption-bottom text-sm">
+      <TableHeader>{children}</TableHeader>
+    </table>
+  );
+}
 
 export const meta: Route.MetaFunction = ({ data }) => {
   const title = t("rankings.title");
@@ -32,232 +48,25 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-type TabType = "speedruncom" | "ranked";
-type RankedType = "pb" | "elo";
-
-// ランキングエントリの型
-interface RankingEntry {
-  rank: number | null; // 未承認記録はnull
-  userId: string;
-  mcid: string | null;
-  uuid: string | null;
-  slug: string;
-  displayName: string | null;
-  timeMs: number | null;
-  timeFormatted: string | null;
-  recordDate: string | null;
-  videoUrl: string | null;
-  runWeblink: string | null;
-  eloRate: number | null;
-  wins: number | null;
-  losses: number | null;
-  winRate: number | null;
-  verificationStatus: "verified" | "new" | null; // 承認状態
-  customSkinUrl: string | null;
-}
-
 export async function loader({ context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const db = createDb();
   const url = new URL(request.url);
-  const tab = (url.searchParams.get("tab") as TabType) ?? "speedruncom";
-  const categorySlug = url.searchParams.get("category");
-  const rankedType = (url.searchParams.get("rankedType") as RankedType) ?? "pb";
+  const args = parseRankingsParams(url.searchParams);
+  const speedruncomCategories = await loadRankingCategories(db);
 
-  // カテゴリ一覧を取得
-  const categories = await db.query.speedrunCategories.findMany({
-    where: eq(speedrunCategories.isActive, true),
-    orderBy: (cat, { asc }) => [asc(cat.displayOrder)],
-  });
-
-  const speedruncomCategories = categories.filter((c) => c.categoryType === "speedruncom");
-
-  let rankings: RankingEntry[] = [];
-  let selectedCategory: typeof categories[0] | undefined;
-
-  if (tab === "speedruncom") {
-    // デフォルトカテゴリを選択
-    selectedCategory = categorySlug
-      ? speedruncomCategories.find((c) => c.slug === categorySlug)
-      : speedruncomCategories[0];
-
-    if (selectedCategory) {
-      // DBからランキングを取得（公開ユーザーのみ、承認済み + 未承認）
-      // categoryRecordsでisVisible=falseに設定されている記録は除外
-      const dbRankings = await db
-        .select({
-          id: playerRankings.id,
-          userId: playerRankings.userId,
-          timeMs: playerRankings.timeMs,
-          timeFormatted: playerRankings.timeFormatted,
-          recordDate: playerRankings.recordDate,
-          videoUrl: playerRankings.videoUrl,
-          runWeblink: playerRankings.runWeblink,
-          verificationStatus: playerRankings.verificationStatus,
-          mcid: users.mcid,
-          uuid: users.uuid,
-          slug: users.slug,
-          displayName: users.displayName,
-          customSkinUrl: users.customSkinUrl,
-        })
-        .from(playerRankings)
-        .innerJoin(users, eq(playerRankings.userId, users.id))
-        .where(
-          and(
-            eq(playerRankings.rankingType, "speedruncom"),
-            eq(playerRankings.categoryId, selectedCategory.id),
-            isNotNull(playerRankings.timeMs),
-            eq(users.profileVisibility, "public"),
-            or(
-              eq(playerRankings.verificationStatus, "verified"),
-              eq(playerRankings.verificationStatus, "new")
-            ),
-            // categoryRecordsでisVisible=falseに設定されていないこと
-            notExists(
-              db.select({ id: categoryRecords.id })
-                .from(categoryRecords)
-                .where(
-                  and(
-                    eq(categoryRecords.userId, playerRankings.userId),
-                    eq(categoryRecords.categoryRefId, selectedCategory.id),
-                    eq(categoryRecords.isVisible, false)
-                  )
-                )
-            )
-          )
-        )
-        .orderBy(asc(playerRankings.timeMs));
-
-      // 承認済み記録に順位を付ける（未承認は順位なし）
-      let verifiedRank = 0;
-      rankings = dbRankings.map((r) => {
-        const isVerified = r.verificationStatus === "verified";
-        if (isVerified) {
-          verifiedRank++;
-        }
-        return {
-          rank: isVerified ? verifiedRank : null,
-          userId: r.userId,
-          mcid: r.mcid,
-          uuid: r.uuid,
-          slug: r.slug,
-          displayName: r.displayName,
-          timeMs: r.timeMs,
-          timeFormatted: r.timeFormatted,
-          recordDate: r.recordDate,
-          videoUrl: r.videoUrl,
-          runWeblink: r.runWeblink,
-          eloRate: null,
-          wins: null,
-          losses: null,
-          winRate: null,
-          verificationStatus: r.verificationStatus as "verified" | "new" | null,
-          customSkinUrl: r.customSkinUrl,
-        };
-      });
-    }
-  } else if (tab === "ranked") {
-    if (rankedType === "pb") {
-      // MCSR Ranked PB ランキング（公開ユーザー＋Ranked統計公開のみ）
-      const dbRankings = await db
-        .select({
-          id: playerRankings.id,
-          userId: playerRankings.userId,
-          timeMs: playerRankings.timeMs,
-          timeFormatted: playerRankings.timeFormatted,
-          mcid: users.mcid,
-          uuid: users.uuid,
-          slug: users.slug,
-          displayName: users.displayName,
-          customSkinUrl: users.customSkinUrl,
-        })
-        .from(playerRankings)
-        .innerJoin(users, eq(playerRankings.userId, users.id))
-        .where(
-          and(
-            eq(playerRankings.rankingType, "ranked_pb"),
-            isNotNull(playerRankings.timeMs),
-            eq(users.profileVisibility, "public"),
-            eq(users.showRankedStats, true)
-          )
-        )
-        .orderBy(asc(playerRankings.timeMs));
-
-      rankings = dbRankings.map((r, index) => ({
-        rank: index + 1,
-        userId: r.userId,
-        mcid: r.mcid,
-        uuid: r.uuid,
-        slug: r.slug,
-        displayName: r.displayName,
-        timeMs: r.timeMs,
-        timeFormatted: r.timeFormatted,
-        recordDate: null,
-        videoUrl: null,
-        runWeblink: null,
-        eloRate: null,
-        wins: null,
-        losses: null,
-        winRate: null,
-        verificationStatus: null,
-        customSkinUrl: r.customSkinUrl,
-      }));
-    } else {
-      // MCSR Ranked Elo ランキング（公開ユーザー＋Ranked統計公開のみ）
-      const dbRankings = await db
-        .select({
-          id: playerRankings.id,
-          userId: playerRankings.userId,
-          eloRate: playerRankings.eloRate,
-          wins: playerRankings.wins,
-          losses: playerRankings.losses,
-          winRate: playerRankings.winRate,
-          mcid: users.mcid,
-          uuid: users.uuid,
-          slug: users.slug,
-          displayName: users.displayName,
-          customSkinUrl: users.customSkinUrl,
-        })
-        .from(playerRankings)
-        .innerJoin(users, eq(playerRankings.userId, users.id))
-        .where(
-          and(
-            eq(playerRankings.rankingType, "ranked_elo"),
-            isNotNull(playerRankings.eloRate),
-            eq(users.profileVisibility, "public"),
-            eq(users.showRankedStats, true)
-          )
-        )
-        .orderBy(desc(playerRankings.eloRate));
-
-      rankings = dbRankings.map((r, index) => ({
-        rank: index + 1,
-        userId: r.userId,
-        mcid: r.mcid,
-        uuid: r.uuid,
-        slug: r.slug,
-        displayName: r.displayName,
-        timeMs: null,
-        timeFormatted: null,
-        recordDate: null,
-        videoUrl: null,
-        runWeblink: null,
-        eloRate: r.eloRate,
-        wins: r.wins,
-        losses: r.losses,
-        winRate: r.winRate,
-        verificationStatus: null,
-        customSkinUrl: r.customSkinUrl,
-      }));
-    }
-  }
+  const { rankings, selectedCategory } = await loadRankings(
+    db,
+    args,
+    speedruncomCategories,
+  );
 
   return {
-    tab,
+    tab: args.tab,
     categories: speedruncomCategories,
     selectedCategory,
     rankings,
-    rankedType,
+    rankedType: args.rankedType,
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
 }
@@ -267,6 +76,9 @@ export default function RankingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
+
+  // /rankings は遅延読み込み無効。loader が全件返す。
+  const items = data.rankings;
 
   const handleCategoryClick = (category: {
     type: "speedruncom" | "ranked";
@@ -355,8 +167,8 @@ export default function RankingsPage() {
       {isLoading ? (
         <RankingsTableSkeleton />
       ) : data.tab === "speedruncom" ? (
-        data.rankings.length > 0 ? (
-          <SpeedruncomRankingsTable rankings={data.rankings} />
+        items.length > 0 ? (
+          <SpeedruncomRankingsTable rankings={items} />
         ) : (
           <div className="text-center py-12 text-muted-foreground">
             {data.categories.length === 0
@@ -364,11 +176,11 @@ export default function RankingsPage() {
               : "ランキングデータがありません"}
           </div>
         )
-      ) : data.rankings.length > 0 ? (
+      ) : items.length > 0 ? (
         data.rankedType === "pb" ? (
-          <RankedPbTable rankings={data.rankings} />
+          <RankedPbTable rankings={items} />
         ) : (
-          <RankedEloTable rankings={data.rankings} />
+          <RankedEloTable rankings={items} />
         )
       ) : (
         <div className="text-center py-12 text-muted-foreground">
@@ -381,18 +193,22 @@ export default function RankingsPage() {
 
 // Speedrun.com ランキングテーブル
 function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
+  const headerRow = (
+    <TableRow>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">タイム</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">日付</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-center border-b-2">リンク</TableHead>
+    </TableRow>
+  );
   return (
-    <div className="relative border rounded-lg overflow-auto max-h-150">
+    <ScrollUpStickyHeader
+      className="relative border rounded-lg overflow-hidden"
+      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+    >
       <table className="w-full caption-bottom text-sm">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">タイム</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">日付</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 text-center border-b-2">リンク</TableHead>
-          </TableRow>
-        </TableHeader>
+        <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry, index) => {
             const isPending = entry.verificationStatus === "new";
@@ -403,9 +219,14 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
               >
                 <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
                   {isPending ? (
-                    <span className="text-muted-foreground" title="審査待ち">
-                      <Clock className="h-4 w-4 inline" />
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-muted-foreground">
+                          <Clock className="h-4 w-4 inline" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>審査待ち</TooltipContent>
+                    </Tooltip>
                   ) : entry.rank !== null && entry.rank <= 3 ? (
                     <span className={
                       entry.rank === 1 ? "text-yellow-500" :
@@ -474,22 +295,26 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
           })}
         </TableBody>
       </table>
-    </div>
+    </ScrollUpStickyHeader>
   );
 }
 
 // Ranked PB テーブル
 function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
+  const headerRow = (
+    <TableRow>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">ベストタイム</TableHead>
+    </TableRow>
+  );
   return (
-    <div className="relative border rounded-lg overflow-auto max-h-150">
+    <ScrollUpStickyHeader
+      className="relative border rounded-lg overflow-hidden"
+      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+    >
       <table className="w-full caption-bottom text-sm">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">ベストタイム</TableHead>
-          </TableRow>
-        </TableHeader>
+        <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry) => (
             <TableRow key={entry.userId} className="hover:bg-muted/30">
@@ -527,24 +352,28 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
           ))}
         </TableBody>
       </table>
-    </div>
+    </ScrollUpStickyHeader>
   );
 }
 
 // Ranked Elo テーブル
 function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
+  const headerRow = (
+    <TableRow>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">Elo</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">勝敗</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-20 text-right border-b-2">勝率</TableHead>
+    </TableRow>
+  );
   return (
-    <div className="relative border rounded-lg overflow-auto max-h-150">
+    <ScrollUpStickyHeader
+      className="relative border rounded-lg overflow-hidden"
+      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+    >
       <table className="w-full caption-bottom text-sm">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">Elo</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">勝敗</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-20 text-right border-b-2">勝率</TableHead>
-          </TableRow>
-        </TableHeader>
+        <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry) => (
             <TableRow key={entry.userId} className="hover:bg-muted/30">
@@ -588,14 +417,14 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
           ))}
         </TableBody>
       </table>
-    </div>
+    </ScrollUpStickyHeader>
   );
 }
 
 // スケルトンローダー
 function RankingsTableSkeleton() {
   return (
-    <div className="relative border rounded-lg overflow-auto max-h-150">
+    <div className="relative border rounded-lg overflow-hidden">
       <table className="w-full caption-bottom text-sm">
         <TableHeader>
           <TableRow>

@@ -7,7 +7,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, authUsers, authSessions, authAccounts } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
@@ -360,10 +360,14 @@ export async function action({ context, request }: Route.ActionArgs) {
           }
         }
 
-        // 更新前のリンク情報を取得
+        // 更新前のリンク情報を取得（所有確認込み・IDOR 防止）
         const oldLink = await db.query.socialLinks.findFirst({
-          where: eq(socialLinks.id, id),
+          where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
         });
+
+        if (!oldLink) {
+          return { error: t("meEdit.linkSaveFailed") };
+        }
 
         await db
           .update(socialLinks)
@@ -374,7 +378,7 @@ export async function action({ context, request }: Route.ActionArgs) {
             customUrl: platform === "custom" ? customUrl : null,
             updatedAt: new Date(),
           })
-          .where(eq(socialLinks.id, id));
+          .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
 
         // Speedrun.comの場合、speedruncomUsernameも自動更新
         if (platform === "speedruncom") {
@@ -404,15 +408,21 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (actionType === "delete_link") {
     const id = formData.get("id") as string;
     if (id) {
-      // 削除前にリンク情報を取得
+      // 削除前にリンク情報を取得（所有確認込み・IDOR 防止）
       const linkToDelete = await db.query.socialLinks.findFirst({
-        where: eq(socialLinks.id, id),
+        where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
       });
 
-      await db.delete(socialLinks).where(eq(socialLinks.id, id));
+      if (!linkToDelete) {
+        return { success: true, action: "link" };
+      }
+
+      await db
+        .delete(socialLinks)
+        .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
 
       // Speedrun.comリンクを削除した場合、speedruncomUsernameもクリア
-      if (linkToDelete?.platform === "speedruncom") {
+      if (linkToDelete.platform === "speedruncom") {
         await db
           .update(users)
           .set({ speedruncomUsername: null, updatedAt: new Date() })

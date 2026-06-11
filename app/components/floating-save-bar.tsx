@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Save, Loader2, RotateCcw } from "lucide-react";
+import { t } from "@/lib/messages";
 
 interface FloatingSaveBarProps {
   hasChanges: boolean;
@@ -18,12 +19,15 @@ export function FloatingSaveBar({
   isSubmitting,
   onSave,
   onReset,
-  saveLabel = "変更を保存",
-  resetLabel = "変更を取り消す",
+  saveLabel = t("common.saveChanges"),
+  resetLabel = t("common.discardChanges"),
   className,
 }: FloatingSaveBarProps) {
   return (
     <div
+      role="region"
+      aria-label={t("common.saveBar")}
+      aria-hidden={!hasChanges}
       className={cn(
         "fixed bottom-4 left-0 right-0 mx-auto z-50",
         "w-[calc(100%-2rem)] max-w-2xl",
@@ -35,15 +39,21 @@ export function FloatingSaveBar({
         className
       )}
     >
-      <div className="flex items-center justify-center sm:justify-start gap-3">
+      <div
+        className="flex items-center justify-center sm:justify-start gap-3"
+        aria-live="polite"
+      >
         {hasChanges && (
           <Badge
             variant="outline"
             className="text-amber-600 dark:text-amber-400 border-amber-500/50 bg-amber-500/10 text-xs sm:text-sm"
           >
-            <span className="hidden sm:inline">未保存の変更があります</span>
-            <span className="sm:hidden">未保存</span>
+            <span className="hidden sm:inline">{t("common.unsavedChanges")}</span>
+            <span className="sm:hidden">{t("common.unsaved")}</span>
           </Badge>
+        )}
+        {isSubmitting && (
+          <span className="sr-only">{t("common.savingInProgress")}</span>
         )}
       </div>
       <div className="flex gap-2">
@@ -57,7 +67,7 @@ export function FloatingSaveBar({
           >
             <RotateCcw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{resetLabel}</span>
-            <span className="sm:hidden">取消</span>
+            <span className="sm:hidden">{t("common.discard")}</span>
           </Button>
         )}
         <Button
@@ -69,14 +79,14 @@ export function FloatingSaveBar({
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
-              <span className="hidden sm:inline">保存中...</span>
-              <span className="sm:hidden">保存中</span>
+              <span className="hidden sm:inline">{t("common.saving")}...</span>
+              <span className="sm:hidden">{t("common.saving")}</span>
             </>
           ) : (
             <>
               <Save className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{saveLabel}</span>
-              <span className="sm:hidden">保存</span>
+              <span className="sm:hidden">{t("common.save")}</span>
             </>
           )}
         </Button>

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -422,24 +423,27 @@ function HotbarSlot({
           {/* アイテムリスト */}
           <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
             {filteredItems.slice(0, 200).map((itemId) => (
-              <button
-                key={itemId}
-                type="button"
-                onClick={() => toggleItem(itemId)}
-                className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
-                  isItemSelected(itemId)
-                    ? "border-primary bg-primary/20"
-                    : "border-transparent hover:border-border hover:bg-secondary/50"
-                }`}
-                title={formatItemName(itemId)}
-              >
-                <MinecraftItemIcon
-                  itemId={itemId}
-                  size={28}
-                  textureBaseUrl={TEXTURE_BASE_URL}
-                  className="pixelated"
-                />
-              </button>
+              <Tooltip key={itemId}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => toggleItem(itemId)}
+                    className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
+                      isItemSelected(itemId)
+                        ? "border-primary bg-primary/20"
+                        : "border-transparent hover:border-border hover:bg-secondary/50"
+                    }`}
+                  >
+                    <MinecraftItemIcon
+                      itemId={itemId}
+                      size={28}
+                      textureBaseUrl={TEXTURE_BASE_URL}
+                      className="pixelated"
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{formatItemName(itemId)}</TooltipContent>
+              </Tooltip>
             ))}
           </div>
         </div>

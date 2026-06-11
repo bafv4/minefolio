@@ -10,7 +10,7 @@
 
 import { createDb } from "@/lib/db";
 import { users, speedrunCategories, playerRankings, type User } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { excludeViewersCondition } from "@/lib/users-filter";
 
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
@@ -379,29 +379,32 @@ export async function loader({ context, request }: { request: Request; context: 
                   })
                   .where(eq(playerRankings.id, existing.id));
               } else {
-                // 同じカテゴリの古い承認済み記録を削除してから新規作成
-                await db.delete(playerRankings).where(
-                  and(
-                    eq(playerRankings.userId, user.id),
-                    eq(playerRankings.rankingType, "speedruncom"),
-                    eq(playerRankings.categoryId, category.id),
-                    eq(playerRankings.verificationStatus, "verified")
-                  )
-                );
+                // 同じカテゴリの古い承認済み記録を削除してから新規作成。
+                // 削除と挿入をトランザクションで原子化し、並行 cron での孤児化を防ぐ。
+                await db.transaction(async (tx) => {
+                  await tx.delete(playerRankings).where(
+                    and(
+                      eq(playerRankings.userId, user.id),
+                      eq(playerRankings.rankingType, "speedruncom"),
+                      eq(playerRankings.categoryId, category.id),
+                      eq(playerRankings.verificationStatus, "verified")
+                    )
+                  );
 
-                await db.insert(playerRankings).values({
-                  userId: user.id,
-                  rankingType: "speedruncom",
-                  categoryId: category.id,
-                  speedruncomRunId: matchingPb.run.id,
-                  speedruncomPlayerId: speedruncomId,
-                  verificationStatus: "verified",
-                  timeMs,
-                  timeFormatted: formatTimeSeconds(matchingPb.run.times.primary_t),
-                  recordDate: matchingPb.run.date,
-                  videoUrl,
-                  runWeblink: matchingPb.run.weblink,
-                  lastFetched: new Date(),
+                  await tx.insert(playerRankings).values({
+                    userId: user.id,
+                    rankingType: "speedruncom",
+                    categoryId: category.id,
+                    speedruncomRunId: matchingPb.run.id,
+                    speedruncomPlayerId: speedruncomId,
+                    verificationStatus: "verified",
+                    timeMs,
+                    timeFormatted: formatTimeSeconds(matchingPb.run.times.primary_t),
+                    recordDate: matchingPb.run.date,
+                    videoUrl,
+                    runWeblink: matchingPb.run.weblink,
+                    lastFetched: new Date(),
+                  });
                 });
               }
 
@@ -578,7 +581,43 @@ export async function loader({ context, request }: { request: Request; context: 
       }
     }
 
-    console.log(`Rankings update completed: SRC=${speedruncomUpdates}, PB=${rankedPbUpdates}, Elo=${rankedEloUpdates}, IDs resolved=${speedruncomIdResolved}`);
+    // ============================================
+    // 重複した審査済み記録の整理
+    // 同一プレイヤー・同一カテゴリで審査済み(verified)記録が複数ある場合、
+    // 最速（timeMs 最小）のみ残し、遅い方を削除する。
+    // ============================================
+    let duplicatesRemoved = 0;
+    const verifiedRecords = await db.query.playerRankings.findMany({
+      where: and(
+        eq(playerRankings.rankingType, "speedruncom"),
+        eq(playerRankings.verificationStatus, "verified")
+      ),
+      columns: { id: true, userId: true, categoryId: true, timeMs: true },
+    });
+
+    const verifiedGroups = new Map<string, { id: string; timeMs: number }[]>();
+    for (const rec of verifiedRecords) {
+      const key = `${rec.userId}::${rec.categoryId ?? ""}`;
+      const group = verifiedGroups.get(key) ?? [];
+      // timeMs が null の記録は最も遅い扱い（削除対象になりやすく）
+      group.push({ id: rec.id, timeMs: rec.timeMs ?? Number.MAX_SAFE_INTEGER });
+      verifiedGroups.set(key, group);
+    }
+
+    const duplicateIds: string[] = [];
+    for (const group of verifiedGroups.values()) {
+      if (group.length <= 1) continue;
+      group.sort((a, b) => a.timeMs - b.timeMs);
+      // 先頭（最速）を残し、残り（遅い方）を削除対象に
+      for (const rec of group.slice(1)) duplicateIds.push(rec.id);
+    }
+
+    if (duplicateIds.length > 0) {
+      await db.delete(playerRankings).where(inArray(playerRankings.id, duplicateIds));
+      duplicatesRemoved = duplicateIds.length;
+    }
+
+    console.log(`Rankings update completed: SRC=${speedruncomUpdates}, PB=${rankedPbUpdates}, Elo=${rankedEloUpdates}, IDs resolved=${speedruncomIdResolved}, dup removed=${duplicatesRemoved}`);
 
     return Response.json({
       success: true,
@@ -590,6 +629,7 @@ export async function loader({ context, request }: { request: Request; context: 
         rankedPbUpdates,
         rankedEloUpdates,
         speedruncomIdResolved,
+        duplicatesRemoved,
       },
       timestamp: new Date().toISOString(),
     });

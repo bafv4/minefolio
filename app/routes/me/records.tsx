@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -399,18 +400,24 @@ export default function RecordsPage() {
                         isHidden && "opacity-50"
                       )}
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
-                        className="absolute top-2 right-2 p-1.5 rounded hover:bg-secondary transition-colors"
-                        title={isHidden ? t("meRecords.show") : t("meRecords.hide")}
-                      >
-                        {isHidden ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
+                            className="absolute top-2 right-2 p-1.5 rounded hover:bg-secondary transition-colors"
+                          >
+                            {isHidden ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isHidden ? t("meRecords.show") : t("meRecords.hide")}
+                        </TooltipContent>
+                      </Tooltip>
                       <div className="flex items-center justify-between pr-8">
                         <span className="font-medium text-sm truncate">
                           {pb.category?.data?.name ?? "Unknown"}

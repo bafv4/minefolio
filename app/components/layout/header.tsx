@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, X, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
@@ -44,17 +50,7 @@ export function Header({ user }: HeaderProps) {
     window.location.reload();
   }, [navigate]);
 
-  // メニューが開いている時はスクロールを無効化
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileMenuOpen]);
+  // Sheet（Radix Dialog）がスクロールロック・フォーカストラップ・Escape を自動管理
 
   // ルート変更時にメニューを閉じる
   useEffect(() => {
@@ -64,7 +60,10 @@ export function Header({ user }: HeaderProps) {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <nav
+          aria-label="メインナビゲーション"
+          className="container mx-auto px-4 sm:px-6 lg:px-8"
+        >
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <div className="flex items-center">
@@ -88,7 +87,7 @@ export function Header({ user }: HeaderProps) {
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
                         location.pathname === item.href
-                          ? "text-foreground bg-accent/50"
+                          ? "text-brand bg-brand/10"
                           : "text-muted-foreground"
                       )}
                     >
@@ -180,207 +179,172 @@ export function Header({ user }: HeaderProps) {
               )}
             </div>
 
-            {/* Mobile menu button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-              <span className="sr-only">メニューを開閉</span>
-            </Button>
+            {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  aria-label="メニューを開く"
+                >
+                  <Menu className="h-6 w-6" aria-hidden />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
+              >
+                <SheetTitle className="sr-only">ナビゲーション</SheetTitle>
+                {/* ヘッダー */}
+                <div className="flex h-16 items-center px-5 border-b border-border shrink-0">
+                  <Link
+                    to="/"
+                    className="flex items-center gap-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <img src="/icon.png" alt="Minefolio" className="h-7 w-7" />
+                    <span className="text-lg font-bold">Minefolio</span>
+                  </Link>
+                </div>
+
+                <nav
+                  aria-label="モバイルナビゲーション"
+                  className="flex-1 overflow-y-auto px-3 py-4"
+                >
+                  <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    ナビゲーション
+                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {navigation.map((item) => {
+                      const Icon = item.icon;
+                      const active = location.pathname === item.href;
+                      return (
+                        <Link
+                          key={item.name}
+                          to={item.href}
+                          onClick={() => setMobileMenuOpen(false)}
+                          aria-current={active ? "page" : undefined}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation",
+                            active
+                              ? "bg-brand/10 text-brand"
+                              : "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
+                          )}
+                        >
+                          <Icon className="h-5 w-5 shrink-0" />
+                          {item.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {user ? (
+                    <>
+                      <div className="mt-5 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage
+                            src={user.discordAvatar ?? undefined}
+                            alt={user.displayName ?? user.mcid ?? user.slug}
+                          />
+                          <AvatarFallback>
+                            {(user.displayName ?? user.mcid ?? user.slug)[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {user.displayName ?? user.mcid ?? user.slug}
+                          </p>
+                          {user.mcid && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              @{user.mcid}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex flex-col gap-0.5">
+                        {[
+                          { href: `/player/${user.slug}`, icon: User, label: "マイプロフィール" },
+                          { href: "/me/edit", icon: Settings, label: "設定" },
+                          { href: "/my-guides", icon: BookOpen, label: "ガイド" },
+                          { href: "/favorites", icon: Heart, label: "お気に入り" },
+                          { href: "/feedback", icon: MessageSquare, label: "フィードバック" },
+                        ].map(({ href, icon: Icon, label }) => (
+                          <Link
+                            key={href}
+                            to={href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-accent hover:text-accent-foreground transition-colors touch-manipulation"
+                          >
+                            <Icon className="h-5 w-5 shrink-0" />
+                            {label}
+                          </Link>
+                        ))}
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors touch-manipulation w-full"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            handleLogout();
+                          }}
+                        >
+                          <LogOut className="h-5 w-5 shrink-0" />
+                          ログアウト
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <Button asChild className="mt-5 w-full gap-2">
+                      <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                        <LogIn className="h-4 w-4" />
+                        ログイン
+                      </Link>
+                    </Button>
+                  )}
+                </nav>
+
+                {/* フッター: テーマ切替（ViewSwitcher と同じセグメント調） */}
+                <div className="border-t border-border px-4 py-3 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">テーマ</span>
+                    <div className="inline-flex items-center rounded-lg border bg-card p-0.5 gap-0.5">
+                      <button
+                        type="button"
+                        aria-pressed={theme === "light"}
+                        onClick={() => setTheme("light")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          theme === "light"
+                            ? "bg-secondary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Sun className="h-4 w-4" />
+                        ライト
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={theme === "dark"}
+                        onClick={() => setTheme("dark")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          theme === "dark"
+                            ? "bg-secondary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Moon className="h-4 w-4" />
+                        ダーク
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </nav>
       </header>
-
-      {/* Mobile Full Screen Navigation */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] md:hidden">
-          {/* 背景オーバーレイ */}
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-
-          {/* メニューコンテンツ */}
-          <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col bg-background">
-            {/* ヘッダー部分 */}
-            <div className="flex h-16 items-center justify-between px-4 border-b border-border shrink-0">
-              <Link
-                to="/"
-                className="flex items-center space-x-2"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
-                <span className="text-xl font-bold">Minefolio</span>
-              </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <X className="h-6 w-6" />
-                <span className="sr-only">メニューを閉じる</span>
-              </Button>
-            </div>
-
-            {/* Navigation Links */}
-            <div className="flex-1 overflow-y-auto px-4 py-6">
-              <div className="flex flex-col space-y-2">
-                {navigation.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={cn(
-                        "flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl transition-colors touch-manipulation",
-                        location.pathname === item.href
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary/50 text-foreground hover:bg-secondary"
-                      )}
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <Icon className="h-6 w-6" />
-                      {item.name}
-                    </Link>
-                  );
-                })}
-              </div>
-
-              {/* Separator */}
-              <div className="my-6 border-t border-border" />
-
-              {/* User Section */}
-              {user ? (
-                <div className="flex flex-col space-y-2">
-                  {/* User Info */}
-                  <div className="flex items-center gap-4 px-4 py-4 bg-secondary/30 rounded-xl">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage
-                        src={user.discordAvatar ?? undefined}
-                        alt={user.displayName ?? user.mcid ?? user.slug}
-                      />
-                      <AvatarFallback className="text-lg">
-                        {(user.displayName ?? user.mcid ?? user.slug)[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col">
-                      <p className="text-lg font-medium">
-                        {user.displayName ?? user.mcid ?? user.slug}
-                      </p>
-                      {user.mcid && (
-                        <p className="text-sm text-muted-foreground">
-                          @{user.mcid}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* User Menu Items */}
-                  <Link
-                    to={`/player/${user.slug}`}
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <User className="h-6 w-6" />
-                    マイプロフィール
-                  </Link>
-
-                  <Link
-                    to="/me/edit"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Settings className="h-6 w-6" />
-                    設定
-                  </Link>
-
-                  <Link
-                    to="/my-guides"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <BookOpen className="h-6 w-6" />
-                    ガイド
-                  </Link>
-
-                  <Link
-                    to="/favorites"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Heart className="h-6 w-6" />
-                    お気に入り
-                  </Link>
-
-                  <Link
-                    to="/feedback"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-secondary/50 text-foreground hover:bg-secondary transition-colors touch-manipulation"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <MessageSquare className="h-6 w-6" />
-                    フィードバック
-                  </Link>
-
-                  <button
-                    type="button"
-                    className="flex items-center gap-4 px-4 py-4 text-lg font-medium rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors touch-manipulation w-full"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      handleLogout();
-                    }}
-                  >
-                    <LogOut className="h-6 w-6" />
-                    ログアウト
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  to="/login"
-                  className="flex items-center justify-center gap-3 px-4 py-4 text-lg font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors touch-manipulation"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <LogIn className="h-6 w-6" />
-                  ログイン
-                </Link>
-              )}
-            </div>
-
-            {/* Footer - Theme Toggle */}
-            <div className="border-t border-border px-4 py-4 bg-background shrink-0">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">テーマ</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={theme === "light" ? "default" : "outline"}
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => setTheme("light")}
-                  >
-                    <Sun className="h-4 w-4" />
-                    ライト
-                  </Button>
-                  <Button
-                    variant={theme === "dark" ? "default" : "outline"}
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => setTheme("dark")}
-                  >
-                    <Moon className="h-4 w-4" />
-                    ダーク
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

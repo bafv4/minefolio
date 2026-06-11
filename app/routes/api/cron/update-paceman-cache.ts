@@ -63,10 +63,27 @@ export async function loader({ context, request }: { request: Request; context: 
       console.log(`Successfully cached ${recentPaces.length} paces`);
     }
 
+    // 部分失敗を近似計算: 1 件以上の結果が得られたユニークユーザー数を「成功」と見なす。
+    // ※「活動していなかった」と「API が失敗した」の区別はつかないため、参考値。
+    const fetchedNicknames = new Set(
+      recentPaces.map((p) => p.nickname.toLowerCase())
+    );
+    const succeededCount = fetchedNicknames.size;
+    const inactiveOrFailedCount = registeredMcids.length - succeededCount;
+
+    if (inactiveOrFailedCount > 0) {
+      console.warn(
+        `PaceMan partial: ${inactiveOrFailedCount} users had no results (inactive or API failure)`
+      );
+    }
+
     return Response.json({
       success: true,
+      partial: inactiveOrFailedCount > 0,
       message: "PaceMan cache updated successfully",
       usersCount: registeredMcids.length,
+      succeededCount,
+      inactiveOrFailedCount,
       cachedPaces: recentPaces.length,
       timestamp: new Date().toISOString(),
     });

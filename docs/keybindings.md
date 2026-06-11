@@ -298,18 +298,40 @@ type ControllerSettings = {
 
 ### /keybindings（キー配置一覧）
 
-全プレイヤーのキー配置を横断的に閲覧・比較するページ。タブ切り替えで表示内容を変更する。
+全プレイヤーのキー配置を横断的に閲覧・比較する。ビューは**独立したルート**に分割されている。
 
-| タブ | 内容 |
+| ルート | ファイル | 内容 |
+|---|---|---|
+| `/keybindings`（既定） | `routes/keybindings.tsx` | テーブルビュー。サブタブ（`tab`）で表示内容を変更 |
+| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け |
+| `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
+
+- 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する
+- ビュー切替（`ViewSwitcher`）は各ルートへの `<Link>`。表・ビジュアル間は現在の検索パラメータ（フィルタ・`tab`）を維持する。ルート遷移のため読み込み中は共通の `NavigationProgress` オーバーレイが表示される
+
+テーブルビュー（`view=table`）のサブタブ。操作系はプレイヤー画面（プロフィール）と同じ粒度（移動 / インベントリ / 戦闘・UI）で分割する:
+
+| タブ (`tab`) | 内容 |
 |---|---|
-| actions | アクション別キー割り当て一覧 |
+| movement | 移動: forward, back, left, right, jump, sneak, sprint |
+| inventory | インベントリ: hotbar（**1〜9 をすべて横一列で表示・折り返しなし**。デフォルト幅広め）, swapHands, inventory, pickBlock, drop |
+| combat-ui | 戦闘・UI: attack, use, togglePerspective, chat, command, fullscreen |
 | remaps | キーリマップ一覧 |
 | custom-actions | カスタムアクション一覧 |
 | mouse | マウス設定一覧（DPI、感度、cm/360等） |
 
-- プレイヤー検索・フィルタリング機能
+- 列定義は `COLUMN_PRESETS`（`keybindings-columns.tsx`）でプリセット名＝タブ名として管理する
+- **各カラムはドラッグでリサイズ可能**（TanStack Table の `columnResizeMode: "onChange"`）。`KeybindingsTable` は `getSize()` から `grid-template-columns` を算出する
+- ヘッダーは折り返さない（`whitespace-nowrap` + `truncate`）。セルは `overflow-hidden` で列幅にクリップ
+- アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
+
+- **統合フィルターモーダル**（`FilterDialog`）: ユーザー絞り込みと数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
+  - ユーザー絞り込み（`users` パラメータ）: 表示するユーザーを検索してリスト登録する横断フィルター（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
+  - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む
+  - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
 - プレイヤー名クリックでプロフィールページへ遷移
+- ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
 
 ### /keybindings/stats（統計ページ）
@@ -347,7 +369,14 @@ type ControllerSettings = {
 | `app/lib/keybindings.ts` | 定数定義、キーコード正規化、ラベル変換、修飾キー組み合わせ処理、指割り当て、コントローラー設定 |
 | `app/lib/remap-utils.ts` | リマップのUI変換、永続化ペイロード生成、出力ラベル、サーチクラフト連携 |
 | `app/lib/schema.ts` | DBスキーマ定義（keybindings, keyRemaps, customKeys, customActions, playerConfigs） |
-| `app/routes/keybindings.tsx` | 全プレイヤーのキー配置一覧ページ |
+| `app/routes/keybindings.tsx` | 一覧（表ビュー）ルート |
+| `app/routes/keybindings-visual.tsx` | 一覧（ビジュアルビュー）ルート |
+| `app/routes/keybindings-stats.tsx` | 統計ビュールート |
+| `app/lib/keybindings-list.server.ts` | 表・ビジュアル共有の走者一覧ローダー |
+| `app/components/keybindings/keybindings-list-layout.tsx` | 表・ビジュアル共有レイアウト（タイトル・ツールバー・フィルタ適用） |
+| `app/components/keybindings/card-view.tsx` | ビジュアルカードビュー（`VirtualKeyboard` を読み取り専用で再利用） |
+| `app/components/keybindings/filter-dialog.tsx` | 統合フィルターモーダル（ユーザー絞り込み + 数値範囲、適用で反映） |
+| `app/components/keybindings/user-filter.tsx` | ユーザー検索・選択リスト（`UserSelectList`）と選択チップ（`UserFilterChips`、`users` パラメータ） |
 | `app/routes/keybindings-stats.tsx` | キー配置の統計・傾向ページ |
 | `app/routes/me/keybindings.tsx` | 自分のキー配置編集ページ |
 | `app/routes/me/devices.tsx` | 自分のデバイス設定編集ページ |

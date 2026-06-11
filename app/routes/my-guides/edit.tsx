@@ -37,7 +37,35 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
   });
   if (!guide) return redirect("/my-guides");
 
-  return { guide, user };
+  // 未コミットのドラフトがあれば、編集対象としてドラフトを優先する。
+  const hasDraft = guide.draftUpdatedAt !== null;
+  const resolved = hasDraft
+    ? {
+        title: guide.draftTitle ?? guide.title,
+        summary: guide.draftSummary,
+        content: guide.draftContent ?? guide.content,
+        coverImageUrl: guide.draftCoverImageUrl,
+        tags: guide.draftTags ?? guide.tags,
+      }
+    : {
+        title: guide.title,
+        summary: guide.summary,
+        content: guide.content,
+        coverImageUrl: guide.coverImageUrl,
+        tags: guide.tags,
+      };
+
+  // 公開版のスナップショット（ロールバック時にエディタを公開版へ戻すため）。
+  const published = {
+    title: guide.title,
+    summary: guide.summary ?? "",
+    content: guide.content,
+    coverImageUrl: guide.coverImageUrl,
+    tags: guide.tags,
+    isPublished: guide.isPublished,
+  };
+
+  return { guide: { ...guide, ...resolved }, user, hasDraft, published };
 }
 
 export async function action({ context, request, params }: ActionFunctionArgs) {
@@ -70,6 +98,28 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
   }
 
   const formData = await request.formData();
+  const action = formData.get("_action");
+
+  // "discard" = ドラフトを破棄し公開版へロールバック（ドラフト列を null に戻す）。
+  if (action === "discard") {
+    await db
+      .update(guides)
+      .set({
+        draftTitle: null,
+        draftSummary: null,
+        draftContent: null,
+        draftCoverImageUrl: null,
+        draftTags: null,
+        draftUpdatedAt: null,
+      })
+      .where(eq(guides.id, guide.id));
+    return new Response(JSON.stringify({ success: true, mode: "discard" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
+  const saveMode = action === "draft" ? "draft" : "publish";
 
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;
@@ -80,26 +130,94 @@ export async function action({ context, request, params }: ActionFunctionArgs) {
     ? (formData.get("coverImageUrl") as string) || null
     : guide.coverImageUrl;
 
-  await db
-    .update(guides)
-    .set({
-      title,
-      content,
-      summary,
-      tags: tagsRaw,
-      isPublished,
-      coverImageUrl,
-      updatedAt: new Date(),
-    })
-    .where(eq(guides.id, guide.id));
+  // tags の検証: JSON 配列であること、最大 10 件、各タグは 50 文字以内
+  const jsonError = (key: "errorTagsInvalid" | "errorTagsTooMany" | "errorTagTooLong") =>
+    new Response(JSON.stringify({ error: t(`meGuides.${key}`) }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
 
-  return new Response(JSON.stringify({ success: true }), {
+  let validatedTags: string[];
+  try {
+    const parsed: unknown = JSON.parse(tagsRaw);
+    if (!Array.isArray(parsed)) {
+      return jsonError("errorTagsInvalid");
+    }
+    if (parsed.length > 10) {
+      return jsonError("errorTagsTooMany");
+    }
+    const cleaned: string[] = [];
+    for (const raw of parsed) {
+      if (typeof raw !== "string") {
+        return jsonError("errorTagsInvalid");
+      }
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) continue;
+      if (trimmed.length > 50) {
+        return jsonError("errorTagTooLong");
+      }
+      cleaned.push(trimmed);
+    }
+    validatedTags = cleaned;
+  } catch {
+    return jsonError("errorTagsInvalid");
+  }
+
+  const tags = JSON.stringify(validatedTags);
+
+  if (saveMode === "draft") {
+    // 仮保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
+    await db
+      .update(guides)
+      .set({
+        draftTitle: title,
+        draftSummary: summary,
+        draftContent: content,
+        draftCoverImageUrl: coverImageUrl,
+        draftTags: tags,
+        draftUpdatedAt: new Date(),
+      })
+      .where(eq(guides.id, guide.id));
+  } else {
+    // 保存: 公開版を書き換え、ドラフトはコミット済みとしてクリア。
+    await db
+      .update(guides)
+      .set({
+        title,
+        content,
+        summary,
+        tags,
+        isPublished,
+        coverImageUrl,
+        updatedAt: new Date(),
+        draftTitle: null,
+        draftSummary: null,
+        draftContent: null,
+        draftCoverImageUrl: null,
+        draftTags: null,
+        draftUpdatedAt: null,
+      })
+      .where(eq(guides.id, guide.id));
+  }
+
+  return new Response(JSON.stringify({ success: true, mode: saveMode }), {
     headers: { "Content-Type": "application/json" },
   });
 }
 
+/** tags は JSON 文字列だが、データ不整合があってもクラッシュしないよう防御的に解析する */
+function safeParseTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed.filter((t) => typeof t === "string") as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function GuideEditPage() {
-  const { guide, user } = useLoaderData<typeof loader>();
+  const { guide, user, hasDraft, published } = useLoaderData<typeof loader>();
 
   return (
     <GuideEditor
@@ -108,9 +226,18 @@ export default function GuideEditPage() {
       initialTitle={guide.title}
       initialContent={guide.content}
       initialSummary={guide.summary ?? ""}
-      initialTags={JSON.parse(guide.tags) as string[]}
+      initialTags={safeParseTags(guide.tags)}
       initialIsPublished={guide.isPublished}
       initialCoverImageUrl={guide.coverImageUrl}
+      initialHasDraft={hasDraft}
+      publishedSnapshot={{
+        title: published.title,
+        summary: published.summary,
+        content: published.content,
+        coverImageUrl: published.coverImageUrl,
+        tags: safeParseTags(published.tags),
+        isPublished: published.isPublished,
+      }}
       authorSlug={user.slug}
       guideSlug={guide.slug}
     />

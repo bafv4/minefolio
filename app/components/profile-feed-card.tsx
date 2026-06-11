@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { User, Clock3, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatRelativeDate } from "@/lib/relative-time";
 import { t } from "@/lib/messages";
 
 export interface ProfileFeedCardPlayer {
@@ -18,19 +19,6 @@ export interface ProfileFeedCardPlayer {
   inputMethodBadge: "keyboard_mouse" | "controller" | "touch" | null;
   updatedAt: Date;
   shortBio: string | null;
-}
-
-function formatRelativeDate(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - new Date(date).getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "今日";
-  if (diffDays === 1) return "昨日";
-  if (diffDays < 7) return `${diffDays}日前`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}週間前`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}ヶ月前`;
-  return `${Math.floor(diffDays / 365)}年前`;
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {

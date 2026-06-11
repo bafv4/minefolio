@@ -36,6 +36,9 @@ body {
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-link: var(--brand-link);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -79,13 +82,13 @@ body {
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
+  --muted-foreground: oklch(0.46 0.04 256); /* WCAG AA: ≥5.5:1 on light bg */
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --ring: oklch(0.53 0.13 162);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -100,9 +103,14 @@ body {
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
 
+  /* Brand accent (emerald) — primary interactive color */
+  --brand: oklch(0.53 0.13 162);
+  --brand-foreground: oklch(0.985 0.01 162);
+  --brand-link: oklch(0.48 0.13 160);
+
   /* Semantic colors */
-  --success: oklch(0.723 0.191 142.303);
-  --success-foreground: oklch(1 0 0);
+  --success: oklch(0.56 0.16 139);
+  --success-foreground: oklch(0.985 0.01 139);
   --warning: oklch(0.828 0.189 84.429);
   --warning-foreground: oklch(0.129 0.042 264.695);
   --info: oklch(0.623 0.214 259.815);
@@ -144,7 +152,7 @@ body {
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(0.279 0.041 260.031);
-  --ring: oklch(0.551 0.027 264.364);
+  --ring: oklch(0.58 0.14 162);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -159,9 +167,14 @@ body {
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
+  /* Brand accent (emerald) — primary interactive color */
+  --brand: oklch(0.58 0.14 162);
+  --brand-foreground: oklch(0.18 0.03 162);
+  --brand-link: oklch(0.74 0.14 160);
+
   /* Semantic colors (dark mode adjustments) */
-  --success: oklch(0.792 0.209 151.711);
-  --success-foreground: oklch(0.129 0.042 264.695);
+  --success: oklch(0.70 0.16 140);
+  --success-foreground: oklch(0.16 0.03 140);
   --warning: oklch(0.852 0.199 91.936);
   --warning-foreground: oklch(0.129 0.042 264.695);
   --info: oklch(0.707 0.165 254.624);
@@ -185,6 +198,18 @@ body {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Respect prefers-reduced-motion: 動きとスクロール挙動を抑制 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   body {
@@ -235,7 +260,7 @@ body {
 
   /* Interactive link styles */
   .link-hover {
-    @apply transition-colors duration-200 hover:text-primary;
+    @apply transition-colors duration-200 hover:text-brand-link;
   }
 
   /* Minecraft pixelated image style */
@@ -468,6 +493,10 @@ body {
   .guide-content .callout-warning::before { content: "⚠️"; }
   .guide-content .callout-danger::before { content: "🚨"; }
 
+  /* エディタ内は NodeView がアイコンを描画するため ::before のアイコンを抑止
+     （これがないと公開ビューと違いアイコンが二重表示になる） */
+  .guide-content .ProseMirror .callout::before { content: none; }
+
   /* Callout type colors */
   .callout-tip {
     background: oklch(0.95 0.02 145);
@@ -549,23 +578,34 @@ body {
     padding: 0;
   }
 
-  /* Columns layout — editor */
+  /* Columns layout — editor（公開ビュー div[data-columns] と同じ見た目に揃える） */
   .columns-editor {
     position: relative;
-    margin: 0.5em 0;
-    border: 1px dashed var(--border);
-    border-radius: 0.5em;
-    padding: 0.25em;
+    margin: 0.75em 0;
   }
 
+  /* 編集アフォーダンス（カラム数 + 削除）はホバー時のみ右上に小さく表示 */
   .columns-editor-label {
+    position: absolute;
+    top: -0.6em;
+    right: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.5em;
-    padding: 0.125em 0.5em;
+    gap: 0.25em;
+    padding: 0.1em 0.4em;
+    border-radius: 0.375em;
+    background: var(--popover);
+    border: 1px solid var(--border);
     font-size: 0.7em;
     color: var(--muted-foreground);
     user-select: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .columns-editor:hover .columns-editor-label {
+    opacity: 1;
   }
 
   .columns-editor-delete {
@@ -576,22 +616,18 @@ body {
     height: 1.25em;
     border-radius: 0.25em;
     color: var(--muted-foreground);
-    opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
+    transition: color 0.15s;
     cursor: pointer;
-  }
-
-  .columns-editor:hover .columns-editor-delete {
-    opacity: 1;
   }
 
   .columns-editor-delete:hover {
     color: var(--destructive);
   }
 
+  /* グリッド・間隔は公開ビューと一致 */
   .columns-content {
     display: grid;
-    gap: 0.5em;
+    gap: 1em;
   }
 
   .columns-editor-2 .columns-content {
@@ -603,10 +639,14 @@ body {
   }
 
   .column-editor {
-    border: 1px dashed var(--border);
+    min-width: 0;
     border-radius: 0.375em;
-    padding: 0.5em;
-    min-height: 3em;
+  }
+
+  /* カラム境界はホバー時のみ薄く表示（編集の目印） */
+  .columns-editor:hover .column-editor {
+    outline: 1px dashed var(--border);
+    outline-offset: 3px;
   }
 
   @media (max-width: 640px) {
@@ -961,6 +1001,34 @@ body {
 @media (max-width: 640px) {
   .guide-content.prose div[data-columns="2"],
   .guide-content.prose div[data-columns="3"] {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* エディタ内の段組も公開ビューと同じく横並びに。
+   @layer components の優先度問題を避けるため unlayered で明示する。 */
+.guide-content .columns-editor-2 .columns-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+}
+
+.guide-content .columns-editor-3 .columns-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1em;
+}
+
+/* React NodeView は contentDOM の内側に [data-node-view-content-react] ラッパーを
+   挿入するため、これが唯一のグリッドアイテムになりカラムが縦積みになる。
+   ラッパーを display:contents にして、各カラムを直接グリッドアイテムにする。 */
+.guide-content .columns-content > [data-node-view-content-react] {
+  display: contents;
+}
+
+@media (max-width: 640px) {
+  .guide-content .columns-editor-2 .columns-content,
+  .guide-content .columns-editor-3 .columns-content {
     grid-template-columns: 1fr;
   }
 }

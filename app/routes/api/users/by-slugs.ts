@@ -33,7 +33,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const slugs = Array.isArray(body.slugs)
     ? body.slugs
-        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 128)
         .slice(0, MAX_SLUGS)
     : [];
 

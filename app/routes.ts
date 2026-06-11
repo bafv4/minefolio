@@ -21,7 +21,10 @@ export default [
 
     // Browse & Rankings
     route("browse", "routes/browse.tsx"),
+    route("random-player", "routes/random-player.ts"),
+    route("secret-grid", "routes/secret-grid.tsx"),
     route("keybindings", "routes/keybindings.tsx"),
+    route("keybindings/visual", "routes/keybindings-visual.tsx"),
     route("keybindings/stats", "routes/keybindings-stats.tsx"),
     route("rankings", "routes/rankings.tsx"),
     route("stats", "routes/stats.tsx"),
@@ -74,6 +77,7 @@ export default [
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
+  route("api/browse", "routes/api/browse.ts"),
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),

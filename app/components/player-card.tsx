@@ -9,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatRelativeDate } from "@/lib/relative-time";
 
 interface PlayerCardProps {
   player: {
@@ -25,19 +26,6 @@ interface PlayerCardProps {
 }
 
 // 相対時間を計算するヘルパー関数
-function getRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - new Date(date).getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "今日";
-  if (diffDays === 1) return "昨日";
-  if (diffDays < 7) return `${diffDays}日前`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}週間前`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}ヶ月前`;
-  return `${Math.floor(diffDays / 365)}年前`;
-}
-
 function PlayerCardComponent({ player }: PlayerCardProps) {
   const displayName = player.displayName ?? player.mcid ?? player.slug;
 
@@ -89,7 +77,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
                 )}
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {getRelativeTime(player.updatedAt)}
+                  {formatRelativeDate(player.updatedAt)}
                 </span>
               </div>
             </div>

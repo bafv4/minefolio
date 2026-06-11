@@ -35,6 +35,10 @@ export async function action({ context, request }: ActionFunctionArgs) {
     body,
     request,
     onBeforeGenerateToken: async (pathname) => {
+      // user は外側で検証済みだが、コールバック実行時の型ナロー目的で再確認
+      if (!user || !user.id) {
+        throw new Error("Unauthorized");
+      }
       if (!pathname.startsWith(`guides/${user.id}/`)) {
         throw new Error("Invalid path");
       }
