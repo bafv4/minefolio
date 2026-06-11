@@ -23,6 +23,8 @@ export type BrowseFilterPlatform =
 
 export interface BrowseQueryArgs {
   q: string;
+  /** q を正規表現として解釈する（libSQL に REGEXP がないため JS 側で照合） */
+  regex: boolean;
   sort: BrowseSortOption;
   page: number;
   roles: BrowseFilterRole[];
@@ -34,6 +36,7 @@ export interface BrowseQueryArgs {
 export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQueryArgs {
   return {
     q: searchParams.get("q") ?? "",
+    regex: searchParams.get("regex") === "1",
     sort: (searchParams.get("sort") as BrowseSortOption) || "updatedAt",
     page: Math.max(1, parseInt(searchParams.get("page") || "1", 10)),
     roles: searchParams.getAll("role") as BrowseFilterRole[],
@@ -43,6 +46,22 @@ export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQu
   };
 }
 
+/** 一覧で取得する列（通常・正規表現の両パスで共通） */
+const BROWSE_LIST_COLUMNS = {
+  mcid: true,
+  uuid: true,
+  slug: true,
+  displayName: true,
+  pronouns: true,
+  role: true,
+  mainEdition: true,
+  mainPlatform: true,
+  inputMethodBadge: true,
+  updatedAt: true,
+  shortBio: true,
+  customSkinUrl: true,
+} as const;
+
 /**
  * 検索 + フィルタ条件を組み立てる（共通）。
  * デフォルトの視聴者除外もここで吸収する。
@@ -50,12 +69,15 @@ export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQu
 function buildWhere(args: BrowseQueryArgs) {
   const conditions = [eq(users.profileVisibility, "public")];
 
-  if (args.q) {
+  // 検索対象は mcid と displayName のみ。
+  // slug は MCID 登録時は mcid と同一、未登録時は `@{discordId}`（Discord の数値ID）に
+  // なるため、検索に含めると数字パターン等で Discord ID にヒットしてしまう。
+  // 正規表現モードの q は SQL で表現できないため JS 側で照合する（buildWhere では無視）。
+  if (args.q && !args.regex) {
     conditions.push(
       or(
         like(users.mcid, `%${args.q}%`),
         like(users.displayName, `%${args.q}%`),
-        like(users.slug, `%${args.q}%`),
       )!,
     );
   }
@@ -103,6 +125,39 @@ export async function loadBrowsePage(
       ? asc(users.displayName)
       : desc(users.updatedAt);
 
+  const orderBy = favoritePriority
+    ? [favoritePriority, orderByClause]
+    : [orderByClause];
+
+  // 正規表現モード: libSQL に REGEXP がないため、フィルタ条件に一致する全件を
+  // 並び順どおり取得し、JS 側で照合してからページングする。
+  if (args.regex && args.q) {
+    let re: RegExp;
+    try {
+      re = new RegExp(args.q, "i");
+    } catch {
+      // 不正なパターンは「該当なし」として扱う
+      return { players: [], totalCount: 0, totalPages: 0, hasMore: false };
+    }
+    const all = await db.query.users.findMany({
+      where: whereCondition,
+      columns: BROWSE_LIST_COLUMNS,
+      orderBy,
+    });
+    const filtered = all.filter(
+      (u) => re.test(u.mcid ?? "") || re.test(u.displayName ?? ""),
+    );
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / BROWSE_ITEMS_PER_PAGE);
+    const start = (args.page - 1) * BROWSE_ITEMS_PER_PAGE;
+    return {
+      players: filtered.slice(start, start + BROWSE_ITEMS_PER_PAGE),
+      totalCount,
+      totalPages,
+      hasMore: args.page < totalPages,
+    };
+  }
+
   // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
   const [totalCountResult, playerList] = await Promise.all([
     db
@@ -111,23 +166,8 @@ export async function loadBrowsePage(
       .where(whereCondition),
     db.query.users.findMany({
       where: whereCondition,
-      columns: {
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        pronouns: true,
-        role: true,
-        mainEdition: true,
-        mainPlatform: true,
-        inputMethodBadge: true,
-        updatedAt: true,
-        shortBio: true,
-        customSkinUrl: true,
-      },
-      orderBy: favoritePriority
-        ? [favoritePriority, orderByClause]
-        : [orderByClause],
+      columns: BROWSE_LIST_COLUMNS,
+      orderBy,
       limit: BROWSE_ITEMS_PER_PAGE,
       offset: (args.page - 1) * BROWSE_ITEMS_PER_PAGE,
     }),

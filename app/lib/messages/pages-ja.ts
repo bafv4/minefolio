@@ -55,6 +55,9 @@ export const PAGES_JA = {
     emptyFiltered: "条件に一致する人が見つかりません",
     emptyAll: "登録されているプロフィールがありません。",
     searchPlaceholder: "MCID・名前で検索...",
+    searchPlaceholderRegex: "正規表現で検索（例: ^aa|bb$）...",
+    regexLabel: "正規表現",
+    regexInvalid: "正規表現が不正です",
     platformOther: "その他",
   },
   compare: {
