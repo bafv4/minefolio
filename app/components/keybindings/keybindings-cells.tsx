@@ -21,6 +21,7 @@ import {
   calculateCursorSpeed,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+import { truncateByVisualWidth } from "@/lib/text-width";
 import { t } from "@/lib/messages";
 
 /** 走者列の最小データ */
@@ -32,47 +33,6 @@ export type PlayerSummary = {
   customSkinUrl: string | null;
 };
 
-/* ============================================================
- * 文字幅ユーティリティ（全角=2, 半角=1）
- * ========================================================== */
-
-function getVisualWidth(str: string): number {
-  let width = 0;
-  for (const char of str) {
-    const code = char.charCodeAt(0);
-    if (
-      (code >= 0x3000 && code <= 0x9fff) ||
-      (code >= 0xff00 && code <= 0xffef) ||
-      (code >= 0xac00 && code <= 0xd7af)
-    ) {
-      width += 2;
-    } else {
-      width += 1;
-    }
-  }
-  return width;
-}
-
-function truncateByVisualWidth(str: string, maxWidth = 10): string {
-  if (getVisualWidth(str) <= maxWidth) return str;
-  let width = 0;
-  let result = "";
-  for (const char of str) {
-    const code = char.charCodeAt(0);
-    const charWidth =
-      (code >= 0x3000 && code <= 0x9fff) ||
-      (code >= 0xff00 && code <= 0xffef) ||
-      (code >= 0xac00 && code <= 0xd7af)
-        ? 2
-        : 1;
-    if (width + charWidth > maxWidth - 1) {
-      return result + "…";
-    }
-    result += char;
-    width += charWidth;
-  }
-  return str;
-}
 
 /* ============================================================
  * 走者セル（左端 sticky）

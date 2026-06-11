@@ -427,47 +427,16 @@ function KeybindingStatCard({
         <div className="space-y-2">
           {stat.topKeys.map((key, index) => {
             const label = getKeyLabel(key.keyCode);
-            const isMouse =
-              key.keyCode.startsWith("Mouse") ||
-              key.keyCode.toLowerCase().includes("mouse");
-
             return (
-              <button
+              <StatRow
                 key={key.keyCode}
-                type="button"
-                className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+                index={index}
+                label={label}
+                isMouse={isMouseKey(key.keyCode)}
+                count={key.count}
+                percentage={key.percentage}
                 onClick={() => onPlayerClick(`${stat.label}: ${label}`, key.players)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm text-muted-foreground w-4 shrink-0">
-                      {index + 1}.
-                    </span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
-                            isMouse &&
-                              "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                          )}
-                        >
-                          <span className="truncate">{label}</span>
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>{label}</TooltipContent>
-                    </Tooltip>
-                  </span>
-                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                    {t("keybindingsStats.peoplePercent", {
-                      count: key.count,
-                      percent: key.percentage.toFixed(0),
-                    })}
-                  </span>
-                </div>
-                <Progress value={key.percentage} className="h-1.5" />
-              </button>
+              />
             );
           })}
         </div>
@@ -505,57 +474,84 @@ function F3RemapStatCard({
       <CardContent>
         <div className="space-y-2">
           {stat.topTargets.map((target, index) => {
-            const inputKey = target.targetKey;
-            const label = getKeyLabel(inputKey);
-            const isDefault = inputKey === "F3";
-            const isMouse =
-              inputKey.startsWith("Mouse") ||
-              inputKey.toLowerCase().includes("mouse");
-            const dialogTitle = isDefault
-              ? t("keybindingsStats.f3DefaultInput")
-              : t("keybindingsStats.f3WithKey", { key: label });
-
+            const label = getKeyLabel(target.targetKey);
+            const dialogTitle =
+              target.targetKey === "F3"
+                ? t("keybindingsStats.f3DefaultInput")
+                : t("keybindingsStats.f3WithKey", { key: label });
             return (
-              <button
-                key={inputKey}
-                type="button"
-                className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+              <StatRow
+                key={target.targetKey}
+                index={index}
+                label={label}
+                isMouse={isMouseKey(target.targetKey)}
+                count={target.count}
+                percentage={target.percentage}
                 onClick={() => onPlayerClick(dialogTitle, target.players)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm text-muted-foreground w-4 shrink-0">
-                      {index + 1}.
-                    </span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
-                            isMouse &&
-                              "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                          )}
-                        >
-                          <span className="truncate">{label}</span>
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>{label}</TooltipContent>
-                    </Tooltip>
-                  </span>
-                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                    {t("keybindingsStats.peoplePercent", {
-                      count: target.count,
-                      percent: target.percentage.toFixed(0),
-                    })}
-                  </span>
-                </div>
-                <Progress value={target.percentage} className="h-1.5" />
-              </button>
+              />
             );
           })}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function isMouseKey(keyCode: string): boolean {
+  return keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
+}
+
+/** 統計カードの1行（順位 + キー名バッジ + 割合 + バー）。KeybindingStatCard/F3RemapStatCard 共通。 */
+function StatRow({
+  index,
+  label,
+  isMouse,
+  count,
+  percentage,
+  onClick,
+}: {
+  index: number;
+  label: string;
+  isMouse: boolean;
+  count: number;
+  percentage: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="text-sm text-muted-foreground w-4 shrink-0">
+            {index + 1}.
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
+                  isMouse &&
+                    "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                )}
+              >
+                <span className="truncate">{label}</span>
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
+        </span>
+        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+          {t("keybindingsStats.peoplePercent", {
+            count,
+            percent: percentage.toFixed(0),
+          })}
+        </span>
+      </div>
+      <Progress value={percentage} className="h-1.5" />
+    </button>
   );
 }

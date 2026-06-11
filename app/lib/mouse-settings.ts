@@ -30,8 +30,8 @@ export const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
  * Windows ポインター速度の乗数を取得（カスタム係数優先）
  */
 export function getWindowsMultiplier(
-  windowsSpeed: number | null,
-  windowsSpeedMultiplier: number | null,
+  windowsSpeed: number | null | undefined,
+  windowsSpeedMultiplier: number | null | undefined,
 ): number {
   if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
     return windowsSpeedMultiplier;
@@ -47,11 +47,11 @@ export function getWindowsMultiplier(
  * Raw Input が ON のときは Windows ポインター速度を無視
  */
 export function calculateCm360(
-  dpi: number | null,
-  sensitivity: number | null,
-  rawInput: boolean | null,
-  windowsSpeed: number | null,
-  windowsSpeedMultiplier: number | null = null,
+  dpi: number | null | undefined,
+  sensitivity: number | null | undefined,
+  rawInput: boolean | null | undefined,
+  windowsSpeed: number | null | undefined,
+  windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
   if (dpi == null || sensitivity == null) return null;
 
@@ -71,9 +71,9 @@ export function calculateCm360(
  * Raw Input の状態に関わらず DPI に Windows 速度の係数をかける
  */
 export function calculateCursorSpeed(
-  dpi: number | null,
-  windowsSpeed: number | null,
-  windowsSpeedMultiplier: number | null = null,
+  dpi: number | null | undefined,
+  windowsSpeed: number | null | undefined,
+  windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
   if (dpi == null) return null;
   const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);

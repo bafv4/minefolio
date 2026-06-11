@@ -4,6 +4,7 @@ import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCookieConsent, CookieConsentBanner } from "@/components/cookie-consent";
 import { useFavorites } from "@/hooks/use-favorites";
+import { t } from "@/lib/messages";
 
 interface FavoriteButtonProps {
   /** お気に入り対象のスラッグ */
@@ -25,6 +26,7 @@ export function FavoriteButton({
   const [isPending, setIsPending] = useState(false);
 
   const favorite = isFavorite(slug);
+  const label = favorite ? t("favorites.remove") : t("favorites.add");
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -50,6 +52,8 @@ export function FavoriteButton({
         size={size}
         disabled={isPending}
         onClick={handleClick}
+        aria-label={label}
+        aria-pressed={favorite}
         className={cn(
           "transition-colors",
           favorite && "text-red-500 hover:text-red-600",
@@ -58,7 +62,7 @@ export function FavoriteButton({
         <Heart
           className={cn("h-4 w-4", favorite && "fill-current", showLabel && "mr-2")}
         />
-        {showLabel && (favorite ? "お気に入り解除" : "お気に入り")}
+        {showLabel && label}
       </Button>
 
       <CookieConsentBanner

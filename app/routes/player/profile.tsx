@@ -198,82 +198,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
-
-// Windowsポインター速度の乗数（11/11がデフォルト）
-// https://liquipedia.net/counterstrike/Mouse_Settings#Windows_Sensitivity
-const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
-  1: 0.03125,
-  2: 0.0625,
-  3: 0.125,
-  4: 0.25,
-  5: 0.375,
-  6: 0.5,
-  7: 0.625,
-  8: 0.75,
-  9: 0.875,
-  10: 1,
-  11: 1.25,
-  12: 1.5,
-  13: 1.75,
-  14: 2,
-  15: 2.25,
-  16: 2.5,
-  17: 2.75,
-  18: 3,
-  19: 3.25,
-  20: 3.5,
-};
-
-// Windowsポインター速度乗数を取得（カスタム係数優先）
-function getWindowsMultiplier(
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined
-): number {
-  // カスタム係数が設定されている場合はそれを優先
-  if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
-    return windowsSpeedMultiplier;
-  }
-  // Windowsポインター速度から乗数を取得
-  return windowsSpeed != null ? (WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? 1.0) : 1.0;
-}
-
-// カーソル速度（実効DPI）を計算
-// RawInputの状態に関わらず、DPIにWindows速度の係数をかける
-function calculateCursorSpeed(
-  dpi: number | null | undefined,
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined = null
-): number | null {
-  if (dpi == null) return null;
-
-  // RawInputの状態に関わらず、Windows速度係数を適用
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return Math.round(dpi * winMultiplier);
-}
-
-// 振り向き（cm/360）を計算
-// 計算式: 6096 / (DPI * 8 * (0.6 * sensitivity + 0.2)^3) / 2
-function calculateCm360(
-  dpi: number | null | undefined,
-  sensitivity: number | null | undefined,
-  rawInput: boolean | null | undefined,
-  windowsSpeed: number | null | undefined,
-  windowsSpeedMultiplier: number | null | undefined = null
-): number | null {
-  if (dpi == null || sensitivity == null) return null;
-
-  const f = 0.6 * sensitivity + 0.2;
-  const cm360Base = 6096 / (dpi * 8 * f * f * f) / 2;
-
-  // Raw Input が ON の場合、Windowsポインター速度は無視
-  if (rawInput === true) {
-    return cm360Base;
-  }
-
-  // Raw Input が OFF の場合、Windowsポインター速度を考慮
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return cm360Base / winMultiplier;
-}
+import {
+  calculateCm360,
+  calculateCursorSpeed,
+  WINDOWS_POINTER_MULTIPLIERS,
+} from "@/lib/mouse-settings";
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();

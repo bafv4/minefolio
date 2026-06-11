@@ -24,6 +24,17 @@ interface TexturesProperty {
   };
 }
 
+/** https の URL のみ許可（SSRF 防止）。不正・非 https は null。 */
+function toHttpsUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 // スキン取得の優先順位:
 // 1. customSkinUrl（カスタムスキン）
 // 2. Mojang API（UUID連携済み）
@@ -45,9 +56,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       });
 
-      // カスタムスキンがある場合はそれを返す
-      if (user?.customSkinUrl) {
-        const skinResponse = await fetch(user.customSkinUrl);
+      // カスタムスキンがある場合はそれを返す（SSRF 防止のため https のみ許可）
+      const safeCustomSkinUrl = toHttpsUrl(user?.customSkinUrl);
+      if (safeCustomSkinUrl) {
+        const skinResponse = await fetch(safeCustomSkinUrl);
         if (skinResponse.ok) {
           const skinData = await skinResponse.arrayBuffer();
           return new Response(skinData, {
@@ -116,6 +128,9 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
     if (!skinResponse.ok) {
       // フォールバック: Steveのスキンを取得
       const fallbackResponse = await fetch(STEVE_SKIN_URL);
+      if (!fallbackResponse.ok) {
+        return new Response("Failed to fetch skin", { status: 502 });
+      }
       const fallbackData = await fallbackResponse.arrayBuffer();
       return new Response(fallbackData, {
         headers: {

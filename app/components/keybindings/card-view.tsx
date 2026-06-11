@@ -1,7 +1,7 @@
 // /keybindings の「ビジュアル」カードビュー（view=grid）。
 // 各ランナーをカードで一覧し、読み取り専用のコンパクトな VirtualKeyboard で
 // キー配置を視覚的にスキャンできるようにする。発見・参考用途が主目的。
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Link } from "react-router";
 import { ArrowRight, WandSparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +50,12 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
   );
 }
 
-function RunnerKeyboardCard({ player }: { player: KeybindingsRow }) {
+// メモ化 + content-visibility:auto で、多人数時に画面外カードの描画コストを抑える。
+const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
+  player,
+}: {
+  player: KeybindingsRow;
+}) {
   const layout = (player.playerConfig?.keyboardLayout || "US") as
     | "US"
     | "JIS"
@@ -75,7 +80,7 @@ function RunnerKeyboardCard({ player }: { player: KeybindingsRow }) {
   const customActionCount = player.customActions.length;
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <CardHeader className="py-3">
         <div className="flex items-center gap-2 min-w-0">
           <Link
@@ -140,7 +145,7 @@ function RunnerKeyboardCard({ player }: { player: KeybindingsRow }) {
       </CardContent>
     </Card>
   );
-}
+});
 
 function MouseStat({
   label,

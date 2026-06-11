@@ -379,29 +379,32 @@ export async function loader({ context, request }: { request: Request; context: 
                   })
                   .where(eq(playerRankings.id, existing.id));
               } else {
-                // 同じカテゴリの古い承認済み記録を削除してから新規作成
-                await db.delete(playerRankings).where(
-                  and(
-                    eq(playerRankings.userId, user.id),
-                    eq(playerRankings.rankingType, "speedruncom"),
-                    eq(playerRankings.categoryId, category.id),
-                    eq(playerRankings.verificationStatus, "verified")
-                  )
-                );
+                // 同じカテゴリの古い承認済み記録を削除してから新規作成。
+                // 削除と挿入をトランザクションで原子化し、並行 cron での孤児化を防ぐ。
+                await db.transaction(async (tx) => {
+                  await tx.delete(playerRankings).where(
+                    and(
+                      eq(playerRankings.userId, user.id),
+                      eq(playerRankings.rankingType, "speedruncom"),
+                      eq(playerRankings.categoryId, category.id),
+                      eq(playerRankings.verificationStatus, "verified")
+                    )
+                  );
 
-                await db.insert(playerRankings).values({
-                  userId: user.id,
-                  rankingType: "speedruncom",
-                  categoryId: category.id,
-                  speedruncomRunId: matchingPb.run.id,
-                  speedruncomPlayerId: speedruncomId,
-                  verificationStatus: "verified",
-                  timeMs,
-                  timeFormatted: formatTimeSeconds(matchingPb.run.times.primary_t),
-                  recordDate: matchingPb.run.date,
-                  videoUrl,
-                  runWeblink: matchingPb.run.weblink,
-                  lastFetched: new Date(),
+                  await tx.insert(playerRankings).values({
+                    userId: user.id,
+                    rankingType: "speedruncom",
+                    categoryId: category.id,
+                    speedruncomRunId: matchingPb.run.id,
+                    speedruncomPlayerId: speedruncomId,
+                    verificationStatus: "verified",
+                    timeMs,
+                    timeFormatted: formatTimeSeconds(matchingPb.run.times.primary_t),
+                    recordDate: matchingPb.run.date,
+                    videoUrl,
+                    runWeblink: matchingPb.run.weblink,
+                    lastFetched: new Date(),
+                  });
                 });
               }
 
