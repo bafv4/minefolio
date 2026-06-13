@@ -114,25 +114,25 @@ better-authが管理する4テーブル:
    - 3~16文字
    - 他ユーザーと重複不可
 3. Mojang APIでUUIDを取得 (`fetchUuidFromMcid`)
-4. 旧サイト (mchotkeys) のデータ存在チェック
 
 ### ステップ2: 確認・登録
 
 1. MCIDとMinecraftアバターを表示して確認
-2. レガシーデータがある場合、インポートの選択肢を表示
-3. 登録処理:
+2. 登録処理:
    - `createId()` でユーザーID生成 (CUID2)
    - `generateSlug(mcid, discordId)` でスラッグ生成
    - `users` テーブルにINSERT
-   - インポートまたはデフォルト値作成
-4. `/player/{slug}` へリダイレクト
+   - デフォルト値作成 (`createDefaultsForNewUser`)
+3. `/player/{slug}` へリダイレクト
+
+> 旧サイト (mchotkeys) からのデータ引き継ぎボタンは登録フローから削除済み。
 
 ### MCIDスキップ
 
 - MCIDなしでも登録可能 (`_action: "skip"`)
 - スラッグは `@{discordId}` 形式になる
 - `mcid`, `uuid` は `null`
-- デフォルト値のみ作成 (レガシーインポート不可)
+- デフォルト値のみ作成
 
 ---
 

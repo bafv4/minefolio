@@ -11,7 +11,6 @@ import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { createDefaultsForNewUser } from "@/lib/defaults";
-import { importFromLegacy } from "@/lib/legacy-import";
 import { generateSlug } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,7 +69,6 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       name: session.user.name,
       image: session.user.image,
     },
-    legacyApiUrl: env.LEGACY_API_URL ?? "https://mchotkeys.vercel.app",
     appUrl: env.APP_URL || "https://minefolio.pages.dev",
   };
 }
@@ -110,22 +108,10 @@ export async function action({ context, request }: Route.ActionArgs) {
     try {
       const uuid = await fetchUuidFromMcid(mcid);
 
-      // Check for legacy data
-      const legacyApiUrl = env.LEGACY_API_URL ?? "https://mchotkeys.vercel.app";
-      let hasLegacyData = false;
-
-      try {
-        const legacyResponse = await fetch(`${legacyApiUrl}/api/player/${mcid}`);
-        hasLegacyData = legacyResponse.ok;
-      } catch {
-        // Ignore legacy check errors
-      }
-
       return {
         verified: true,
         mcid,
         uuid,
-        hasLegacyData,
       };
     } catch (error) {
       if (error instanceof MojangError) {
@@ -141,7 +127,6 @@ export async function action({ context, request }: Route.ActionArgs) {
     // Step 2: Complete registration (with MCID)
     const mcid = formData.get("mcid") as string;
     const uuid = formData.get("uuid") as string;
-    const importData = formData.get("importData") === "true";
 
     if (!mcid || !uuid) {
       return { error: t("onboarding.errorInvalidRequest") };
@@ -168,16 +153,10 @@ export async function action({ context, request }: Route.ActionArgs) {
       slug,
       displayName: session.user.name,
       discordAvatar: session.user.image,
-      hasImported: importData,
+      hasImported: false,
     });
 
-    // Import from legacy or create defaults
-    if (importData) {
-      const legacyApiUrl = env.LEGACY_API_URL ?? "https://mchotkeys.vercel.app";
-      await importFromLegacy(db, userId, legacyApiUrl, mcid);
-    } else {
-      await createDefaultsForNewUser(db, userId);
-    }
+    await createDefaultsForNewUser(db, userId);
 
     return redirect(`/player/${slug}`);
   }
@@ -341,66 +320,21 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {data.hasLegacyData && (
-                  <div className="space-y-3 p-4 border rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium">
-                          {t("onboarding.legacyFoundTitle")}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {t("onboarding.legacyFoundHint")}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Button
-                        type="submit"
-                        name="importData"
-                        value="true"
-                        className="flex-1 h-11 sm:h-10"
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : null}
-                        {t("onboarding.importData")}
-                      </Button>
-                      <Button
-                        type="submit"
-                        name="importData"
-                        value="false"
-                        variant="outline"
-                        className="flex-1 h-11 sm:h-10"
-                        disabled={isSubmitting}
-                      >
-                        {t("onboarding.startFresh")}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {!data.hasLegacyData && (
-                  <Button
-                    type="submit"
-                    name="importData"
-                    value="false"
-                    className="w-full"
-                    size="lg"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {t("onboarding.creatingProfile")}
-                      </>
-                    ) : (
-                      t("onboarding.completeSetup")
-                    )}
-                  </Button>
-                )}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t("onboarding.creatingProfile")}
+                    </>
+                  ) : (
+                    t("onboarding.completeSetup")
+                  )}
+                </Button>
               </div>
             </fetcher.Form>
           )}

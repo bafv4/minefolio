@@ -6,6 +6,7 @@ import { users } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { and, desc, eq } from "drizzle-orm";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
+import { warmAvatars } from "@/lib/avatar-cache";
 import { t } from "@/lib/messages";
 import { Sparkles } from "lucide-react";
 
@@ -14,14 +15,10 @@ export const meta: Route.MetaFunction = () => [
   { name: "robots", content: "noindex" },
 ];
 
-// プールから重複なしで4件をランダム抽出する。
+// プールから重複アリで4件をランダム抽出する（同じプレイヤーが複数セルに出てもよい）。
 function pickFour<T>(pool: T[]): T[] {
-  if (pool.length <= 4) return pool.slice();
-  const indices = new Set<number>();
-  while (indices.size < 4) {
-    indices.add(Math.floor(Math.random() * pool.length));
-  }
-  return [...indices].map((i) => pool[i]);
+  if (pool.length === 0) return [];
+  return Array.from({ length: 4 }, () => pool[Math.floor(Math.random() * pool.length)]);
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -82,6 +79,10 @@ export default function SecretGridPage() {
     containerRef.current?.focus();
   }, []);
 
+  // プール内の全プレイヤーのスキンを順次プリロードしてキャッシュに入れておく。
+  // これにより入れ替え（重複アリ）の際もアバターを即座に表示できる。
+  useEffect(() => warmAvatars(pool), [pool]);
+
   return (
     <div
       ref={containerRef}
@@ -96,8 +97,8 @@ export default function SecretGridPage() {
 
       {cells.length > 0 ? (
         <div className="grid w-full max-w-2xl grid-cols-2 gap-4">
-          {cells.map((player) => (
-            <ProfileFeedCard key={player.slug} player={player} />
+          {cells.map((player, index) => (
+            <ProfileFeedCard key={`${player.slug}-${index}`} player={player} />
           ))}
         </div>
       ) : (
