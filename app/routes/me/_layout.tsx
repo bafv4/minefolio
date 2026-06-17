@@ -18,6 +18,7 @@ import {
   Save,
   Upload,
 } from "lucide-react";
+import { ShareButton } from "@/components/share-button";
 import { t } from "@/lib/messages";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -35,7 +36,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     return redirect("/onboarding");
   }
 
-  return { user };
+  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+
+  return { user, appUrl };
 }
 
 // 主要なナビゲーション項目
@@ -55,7 +58,7 @@ const secondaryNavItems = [
 ];
 
 export default function MeLayout() {
-  const { user } = useLoaderData<typeof loader>();
+  const { user, appUrl } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
 
   // ナビゲーション中（ローディング中）かどうか
@@ -66,9 +69,19 @@ export default function MeLayout() {
       {/* Sidebar Navigation */}
       <aside className="lg:w-64 shrink-0">
         <nav className="sticky top-24 space-y-1">
-          <div className="mb-4 pb-4 border-b">
-            <p className="font-medium">{user.displayName ?? user.mcid}</p>
-            <p className="text-sm text-muted-foreground">@{user.mcid}</p>
+          <div className="mb-4 pb-4 border-b flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-medium truncate">
+                {user.displayName ?? user.mcid}
+              </p>
+              <p className="text-sm text-muted-foreground truncate">
+                @{user.mcid}
+              </p>
+            </div>
+            <ShareButton
+              title={`${user.displayName ?? user.mcid} - Minefolio`}
+              url={`${appUrl}/player/${user.slug}`}
+            />
           </div>
 
           {/* 主要なナビゲーション項目 */}

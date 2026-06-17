@@ -19,7 +19,9 @@
 - 条件付きクラスは `cn()` ユーティリティ（`@/lib/utils`）を使用
 - カスタムCSSは `app/app.css` に集約
 - CSSカスタムプロパティ（`--primary`, `--muted` 等）でテーマカラーを管理
-- ダークモード: `.dark` クラスベース（`@custom-variant dark`）
+- ダークモード: `.dark`（通常ダーク=Slate）/ `.ultra-dark`（ウルトラダーク=Zinc・より深い黒）のクラスベース。`@custom-variant dark` は両クラスに適用される
+  - テーマは `next-themes`（`themes={["light","dark","ultra-dark"]}`）で管理し、選択は localStorage（key: `theme`）に永続化。`system` のダーク解決先は通常ダーク（Slate）
+  - 切替UIは `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS` に集約（デスクトップのドロップダウン / モバイルのセグメント切替で共有）
 
 ## カラーシステム
 - テーマカラーは **oklch** 形式でCSS変数に定義

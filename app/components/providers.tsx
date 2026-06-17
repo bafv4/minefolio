@@ -12,6 +12,7 @@ export function Providers({ children }: ProvidersProps) {
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
+      themes={["light", "dark", "ultra-dark"]}
     >
       {children}
       <Toaster position="top-right" />

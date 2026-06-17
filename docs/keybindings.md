@@ -183,6 +183,7 @@ export const UNBOUND_KEY = "_UNBOUND";
 - ユニーク制約: `(userId, triggerKey)` の組み合わせ
 - 外部ツール（マクロソフト、DPIスイッチ等）と連携するカスタムアクションを定義
 - 標準のMinecraftアクションに含まれない任意の操作を登録可能
+- 読み取り専用の `VirtualKeyboard` / `VirtualMouse` / `VirtualNumpad`（公開プロフィール・ビジュアルカードビュー）では、`triggerKey` のベースキーが一致するキーのツールチップ（デスクトップ）／情報モーダル（モバイル）に、アクション名・トリガーキー・カテゴリ・説明を表示する（`KeyInfoTrigger` 経由）。修飾キー組み合わせ（例: `Ctrl+KeyX`）はベースキー（`KeyX`）で照合
 
 ---
 
@@ -362,10 +363,25 @@ type ControllerSettings = {
 
 ---
 
+## キーボードビューの画像出力
+
+プロフィール（`/player/:slug?tab=keybindings`）のキーボードビュー右上に「画像で保存」ボタンを表示し、モーダルからキーボードビューを PNG として書き出せる。
+
+- **含める範囲**: 走者情報（アバター・名前）/ キーボード / テンキー（TKL では非表示）/ マウス をチェックボックスで選択
+  - 走者情報ブロックは `MinecraftAvatar`（頭・データURL描画なので画像化時の CORS 汚染なし）+ 表示名 + `@MCID`
+- **記載内容**: リマップ・指の色・操作内容 をスイッチで個別にオン/オフ（`VirtualKeyboard` 等の `showRemaps` / `showFingerAssignments` / `showActionLabels` に対応）
+  - 指の色を表示する場合は `FingerLegend`（凡例）も自動で出力に含める
+- **テーマ**: ライト / ダーク / ウルトラダーク を選択。プレビュー用ノードにテーマクラス（`.light` / `.dark` / `.ultra-dark`）を付与して CSS 変数を局所適用するため、ページのグローバルテーマに依存せず出力できる
+  - そのため指色チップの文字色は `dark:` 変種ではなく CSS 変数 `--finger-chip-fg`（`--color-finger-chip-foreground`）で切り替える
+- 画像化はプレビューノードを `html-to-image` でラスタライズ（クライアントサイド完結）
+  - **ダウンロード**: `toPng` で PNG データURLを生成して保存
+  - **コピー**: `toBlob` で PNG Blob を生成し `navigator.clipboard.write`（`ClipboardItem`）でクリップボードへ。非対応ブラウザ（`ClipboardItem` 無し）ではコピーボタンを表示しない
+
 ## 関連ファイル
 
 | ファイル | 役割 |
 |---|---|
+| `app/components/keybindings/keyboard-export-dialog.tsx` | キーボードビューの画像出力モーダル（範囲・記載内容・テーマ選択 + `html-to-image` 出力） |
 | `app/lib/keybindings.ts` | 定数定義、キーコード正規化、ラベル変換、修飾キー組み合わせ処理、指割り当て、コントローラー設定 |
 | `app/lib/remap-utils.ts` | リマップのUI変換、永続化ペイロード生成、出力ラベル、サーチクラフト連携 |
 | `app/lib/schema.ts` | DBスキーマ定義（keybindings, keyRemaps, customKeys, customActions, playerConfigs） |

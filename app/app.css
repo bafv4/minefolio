@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:is(.dark *));
+/* ダーク variant は通常ダーク（.dark）とウルトラダーク（.ultra-dark）の両方に適用 */
+@custom-variant dark (&:is(.dark *, .ultra-dark *));
 
 @theme {
   --font-sans: "Zen Kaku Gothic New", "Inter", ui-sans-serif, system-ui, sans-serif,
@@ -18,6 +19,12 @@ body {
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
+}
+
+/* ウルトラダークは body の背景にも深い zinc（--background）を使う。
+   （上の dark:bg-gray-950 は青みのある gray-950 のため上書きする） */
+.ultra-dark body {
+  background-color: var(--background);
 }
 
 @theme inline {
@@ -67,9 +74,12 @@ body {
   --color-finger-middle: var(--finger-middle);
   --color-finger-index: var(--finger-index);
   --color-finger-thumb: var(--finger-thumb);
+  --color-finger-chip-foreground: var(--finger-chip-fg);
 }
 
-:root {
+/* :root（既定=ライト）と .light クラス（画像出力プレビュー等で局所的にライトを強制）で共有 */
+:root,
+.light {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
@@ -129,12 +139,15 @@ body {
   --finger-middle: oklch(0.85 0.10 230);
   --finger-index: oklch(0.82 0.12 175);
   --finger-thumb: oklch(0.85 0.12 145);
+  /* 指色チップ上の文字色（ライトでは白）。dark: 変種に依存せず変数で切替えてテーマを局所適用可能にする */
+  --finger-chip-fg: oklch(1 0 0);
 
   /* Discord brand color */
   --discord: oklch(0.546 0.195 270.769);
 }
 
-.dark {
+.dark,
+.ultra-dark {
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
@@ -193,6 +206,40 @@ body {
   --finger-middle: oklch(0.55 0.12 230);
   --finger-index: oklch(0.52 0.15 175);
   --finger-thumb: oklch(0.55 0.15 145);
+  /* 指色チップ上の文字色（ダーク/ウルトラダークでは黒） */
+  --finger-chip-fg: oklch(0 0 0);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   ウルトラダーク — baseColor は zinc を採用し、通常ダークより深い黒。
+   ニュートラル系（背景・面・境界など）のみ zinc に差し替え、ブランド/
+   セマンティック/キーカテゴリ/指の色は .dark から継承する。
+   ─────────────────────────────────────────────────────────────── */
+.ultra-dark {
+  color-scheme: dark;
+
+  --background: oklch(0.1 0.004 286);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.14 0.005 286);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.14 0.005 286);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286);
+  --primary-foreground: oklch(0.21 0.006 286);
+  --secondary: oklch(0.21 0.005 286);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.21 0.005 286);
+  --muted-foreground: oklch(0.705 0.015 286);
+  --accent: oklch(0.23 0.006 286);
+  --accent-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --sidebar: oklch(0.12 0.004 286);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.23 0.006 286);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
 @layer base {
@@ -350,7 +397,7 @@ body {
     font-size: 0.875em;
   }
 
-  .dark .ProseMirror code:not(pre code) {
+  :is(.dark, .ultra-dark) .ProseMirror code:not(pre code) {
     background: oklch(0.25 0.02 250);
     color: oklch(0.72 0.12 255);
   }
@@ -370,7 +417,7 @@ body {
     line-height: 1.6;
   }
 
-  .dark .code-block-wrapper pre {
+  :is(.dark, .ultra-dark) .code-block-wrapper pre {
     background: oklch(0.2 0.02 260);
   }
 
@@ -518,22 +565,22 @@ body {
     border-left: 3px solid oklch(0.6 0.2 25);
   }
 
-  .dark .callout-tip {
+  :is(.dark, .ultra-dark) .callout-tip {
     background: oklch(0.25 0.03 145);
     border-left-color: oklch(0.55 0.15 145);
   }
 
-  .dark .callout-info {
+  :is(.dark, .ultra-dark) .callout-info {
     background: oklch(0.25 0.03 240);
     border-left-color: oklch(0.5 0.12 240);
   }
 
-  .dark .callout-warning {
+  :is(.dark, .ultra-dark) .callout-warning {
     background: oklch(0.25 0.04 80);
     border-left-color: oklch(0.6 0.12 80);
   }
 
-  .dark .callout-danger {
+  :is(.dark, .ultra-dark) .callout-danger {
     background: oklch(0.25 0.03 25);
     border-left-color: oklch(0.5 0.15 25);
   }
@@ -807,7 +854,7 @@ body {
   font-weight: normal;
 }
 
-.dark .guide-content.prose :where(code):not(pre code) {
+:is(.dark, .ultra-dark) .guide-content.prose :where(code):not(pre code) {
   background: oklch(0.25 0.02 250);
   color: oklch(0.72 0.12 255);
 }
@@ -820,7 +867,7 @@ body {
   margin-bottom: 0.75em;
 }
 
-.dark .guide-content.prose :where(pre) {
+:is(.dark, .ultra-dark) .guide-content.prose :where(pre) {
   background: oklch(0.2 0.02 260);
 }
 
