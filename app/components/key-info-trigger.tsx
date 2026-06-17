@@ -79,6 +79,17 @@ export type KeyInfoBinding = {
   category?: string;
 };
 
+export type KeyInfoCustomAction = {
+  /** ユーザー定義のアクション名（例: "DPIスイッチ"） */
+  actionName: string;
+  /** トリガーキー（修飾キー組み合わせ可: "Ctrl+KeyX"） */
+  triggerKey: string;
+  /** アクションの説明（任意） */
+  description?: string | null;
+  /** カテゴリ: other / macro / tool */
+  category?: string;
+};
+
 export type KeyInfoData = {
   /** 表示するキー名（カスタムキーは登録名、通常キーは getKeyLabel の結果） */
   title: string;
@@ -86,10 +97,19 @@ export type KeyInfoData = {
   bindings?: KeyInfoBinding[];
   /** このキーに関わるリマップ（複数対応） */
   remaps?: RemapInfo[];
+  /** このキーをトリガーとするカスタムアクション（複数対応） */
+  customActions?: KeyInfoCustomAction[];
   /** 指割り当て */
   finger?: FingerType;
   /** キーボードレイアウト（JIS/US 判定用） */
   layout?: string | null;
+};
+
+// カスタムアクションのカテゴリ表示ラベル（本ファイルは日本語ハードコード方針に合わせる）
+const CUSTOM_ACTION_CATEGORY_LABELS: Record<string, string> = {
+  other: "その他",
+  macro: "マクロ",
+  tool: "ツール",
 };
 
 /** キーコンビネーション（例: Shift+KeyA）をアイコン chip 列にレンダリング */
@@ -139,7 +159,9 @@ function RemapRow({
           <span className="text-muted-foreground italic">無効化</span>
         ) : remap.targetKey && isSpecialRemapTarget(remap.targetKey) ? (
           <kbd className="inline-flex items-center justify-center px-1 h-5 bg-secondary rounded text-[11px] font-mono">
-            「{remap.targetKey}」
+            <span className="text-muted-foreground/50">「</span>
+            {remap.targetKey}
+            <span className="text-muted-foreground/50">」</span>
           </kbd>
         ) : remap.targetKey ? (
           <KeyComboChips combo={remap.targetKey} layout={layout} />
@@ -163,7 +185,7 @@ function RemapRow({
 
 /** Tooltip と Dialog で共有する Body 部分（タイトル含めない） */
 function KeyInfoBody({ info }: { info: KeyInfoData }) {
-  const { bindings = [], remaps = [], finger, layout = null } = info;
+  const { bindings = [], remaps = [], customActions = [], finger, layout = null } = info;
   return (
     <div className="space-y-2 text-foreground">
       {remaps.length > 0 && (
@@ -204,6 +226,39 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
           </div>
         </div>
       )}
+      {customActions.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
+            カスタムアクション
+          </p>
+          <div className="space-y-1.5">
+            {customActions.map((ca, i) => {
+              const categoryLabel = ca.category
+                ? CUSTOM_ACTION_CATEGORY_LABELS[ca.category]
+                : undefined;
+              return (
+                <div key={i} className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-1 text-xs">
+                    <KeyComboChips combo={ca.triggerKey} layout={layout} />
+                    <span className="text-muted-foreground">→</span>
+                    <span className="font-medium">{ca.actionName}</span>
+                    {categoryLabel && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ({categoryLabel})
+                      </span>
+                    )}
+                  </div>
+                  {ca.description && (
+                    <p className="ml-1 text-[10px] text-muted-foreground whitespace-pre-line">
+                      {ca.description}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {finger && (
         <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40">
           <span
@@ -225,7 +280,7 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
 /**
  * キー要素をラップし、デスクトップでは Tooltip、モバイル（< md）では Dialog でキー情報を表示する。
  *
- * - 情報がない (`bindings` も `remaps` も `finger` も空) かつ `alwaysShow=false` の場合は素通し。
+ * - 情報がない (`bindings` も `remaps` も `customActions` も `finger` も空) かつ `alwaysShow=false` の場合は素通し。
  * - `alwaysShow=true` のときは情報が無くてもタイトルだけの Tooltip/Dialog を出す（カスタムキー用）。
  */
 export function KeyInfoTrigger({
@@ -240,6 +295,7 @@ export function KeyInfoTrigger({
   const hasInfo =
     (info.bindings?.length ?? 0) > 0 ||
     (info.remaps?.length ?? 0) > 0 ||
+    (info.customActions?.length ?? 0) > 0 ||
     !!info.finger;
 
   // SSR ではデスクトップとして扱い、ハイドレーション後にモバイルなら Dialog に切替

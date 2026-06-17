@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { lazy, Suspense, useState, useEffect } from "react";
 import {
   ViewToggle,
@@ -140,6 +140,7 @@ export function HydrateFallback() {
 }
 import { getActionLabel, getKeyLabel, getKeyCombinationLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
 import Markdown from "react-markdown";
@@ -203,6 +204,27 @@ import {
   calculateCursorSpeed,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+
+// タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
+// データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
+// プリセット切替オーバーレイの誤表示を防ぐ）。パス変更・preset 切替などは通常通り。
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    currentUrl.search !== nextUrl.search
+  ) {
+    const cur = new URLSearchParams(currentUrl.search);
+    const next = new URLSearchParams(nextUrl.search);
+    cur.delete("tab");
+    next.delete("tab");
+    if (cur.toString() === next.toString()) return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
@@ -650,17 +672,30 @@ export default function PlayerProfilePage() {
   // 有効なタブ値のリスト
   const validTabs = ["profile", ...tabItems.map((t) => t.value)];
 
-  // URLパラメータからタブを取得（初回のみ）
+  // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
+  // 不正値や未指定時は defaultProfileTab にフォールバック。
   const tabFromUrl = searchParams.get("tab");
   const defaultTab = player.defaultProfileTab ?? "keybindings";
-  const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
+  const resolvedTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
 
-  // タブをローカル状態で管理（URLナビゲーションなし）
-  const [activeTab, setActiveTab] = useState(initialTab);
+  // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
+  const [activeTab, setActiveTab] = useState(resolvedTab);
+  useEffect(() => {
+    setActiveTab(resolvedTab);
+  }, [resolvedTab]);
 
-  // タブ変更ハンドラー（クライアント側のみ、URLは更新しない）
+  // タブ変更ハンドラー: 即時にローカル反映し、URL の `tab` パラメータも更新する。
+  // （`shouldRevalidate` により loader は再実行されない）
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tab);
+        return next;
+      },
+      { preventScrollReset: true, replace: true },
+    );
   };
 
   // プリセット選択を表示するタブ
@@ -1086,7 +1121,31 @@ export default function PlayerProfilePage() {
                 <CardHeader className="py-3">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
-                    <FingerLegend />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <FingerLegend />
+                      <KeyboardExportDialog
+                        layout={keyboardLayout}
+                        keybindings={player.keybindings}
+                        fingerAssignments={userFingerAssignments}
+                        remaps={remapsForKeyboard}
+                        customKeys={player.customKeys
+                          .filter((ck) => ck.category === "keyboard")
+                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                        customButtons={player.customKeys.map((ck) => ({
+                          code: ck.keyCode,
+                          label: ck.keyName,
+                          category: ck.category as "mouse" | "keyboard",
+                        }))}
+                        isTKL={isTKL}
+                        player={{
+                          uuid: player.uuid,
+                          skinUrl: player.customSkinUrl,
+                          mcid: player.mcid,
+                          displayName: player.displayName,
+                          slug: player.slug,
+                        }}
+                      />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0 pb-4">
@@ -1098,6 +1157,7 @@ export default function PlayerProfilePage() {
                         keybindings={keybindingsToMap(player.keybindings)}
                         fingerAssignments={userFingerAssignments}
                         remaps={remapsForKeyboard}
+                        customActions={player.customActions}
                         customKeys={player.customKeys
                           .filter((ck) => ck.category === "keyboard")
                           .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
@@ -1115,6 +1175,7 @@ export default function PlayerProfilePage() {
                             keybindings={keybindingsToMap(player.keybindings)}
                             fingerAssignments={userFingerAssignments}
                             remaps={remapsForKeyboard}
+                            customActions={player.customActions}
                             showActionLabels
                             showFingerAssignments
                             showRemaps
@@ -1124,6 +1185,7 @@ export default function PlayerProfilePage() {
                           keybindings={keybindingsToMap(player.keybindings)}
                           fingerAssignments={userFingerAssignments}
                           remaps={remapsForKeyboard}
+                          customActions={player.customActions}
                           customButtons={player.customKeys.map((ck) => ({
                             code: ck.keyCode,
                             label: ck.keyName,

@@ -38,7 +38,35 @@ export type PlayerSummary = {
  * 走者セル（左端 sticky）
  * ========================================================== */
 
-export function RunnerCell({ player }: { player: PlayerSummary }) {
+export function RunnerCell({
+  player,
+  variant = "default",
+}: {
+  player: PlayerSummary;
+  /** compact: モバイル向け縦並び（頭を大きめ＋名前を下に小さく） */
+  variant?: "default" | "compact";
+}) {
+  const name = player.displayName ?? player.mcid ?? player.slug;
+
+  if (variant === "compact") {
+    return (
+      <Link
+        to={`/player/${player.slug}`}
+        className="flex flex-col items-center gap-1 hover:opacity-80 transition-opacity w-full min-w-0 text-center"
+      >
+        <MinecraftAvatar
+          uuid={player.uuid}
+          skinUrl={player.customSkinUrl}
+          size={40}
+          className="rounded-sm shrink-0"
+        />
+        <span className="w-full truncate text-xs font-medium leading-tight">
+          {name}
+        </span>
+      </Link>
+    );
+  }
+
   return (
     <Link
       to={`/player/${player.slug}`}
@@ -51,9 +79,7 @@ export function RunnerCell({ player }: { player: PlayerSummary }) {
         className="rounded-sm shrink-0"
       />
       <div className="min-w-0">
-        <p className="font-medium text-sm truncate">
-          {player.displayName ?? player.mcid ?? player.slug}
-        </p>
+        <p className="font-medium text-sm truncate">{name}</p>
       </div>
     </Link>
   );

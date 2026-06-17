@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, User, LogOut, Settings, Heart, Sun, Moon, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 
@@ -135,38 +135,42 @@ export function Header({ user }: HeaderProps) {
                       </div>
                     </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to={`/player/${user.slug}`}>
                         <User className="mr-2 h-4 w-4" />
                         マイプロフィール
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/me/edit">
                         <Settings className="mr-2 h-4 w-4" />
                         設定
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/my-guides">
                         <BookOpen className="mr-2 h-4 w-4" />
                         ガイド
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
                         お気に入り
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/feedback">
                         <MessageSquare className="mr-2 h-4 w-4" />
                         フィードバック
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={handleLogout}>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={handleLogout}
+                      className="cursor-pointer"
+                    >
                       <LogOut className="mr-2 h-4 w-4" />
                       ログアウト
                     </DropdownMenuItem>
@@ -306,38 +310,25 @@ export function Header({ user }: HeaderProps) {
 
                 {/* フッター: テーマ切替（ViewSwitcher と同じセグメント調） */}
                 <div className="border-t border-border px-4 py-3 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">テーマ</span>
-                    <div className="inline-flex items-center rounded-lg border bg-card p-0.5 gap-0.5">
+                  <span className="text-sm text-muted-foreground">テーマ</span>
+                  <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
+                    {THEME_OPTIONS.map(({ value, shortLabel, icon: Icon }) => (
                       <button
+                        key={value}
                         type="button"
-                        aria-pressed={theme === "light"}
-                        onClick={() => setTheme("light")}
+                        aria-pressed={theme === value}
+                        onClick={() => setTheme(value)}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                          theme === "light"
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                          theme === value
                             ? "bg-secondary text-foreground"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        <Sun className="h-4 w-4" />
-                        ライト
+                        <Icon className="h-4 w-4 shrink-0" />
+                        {shortLabel}
                       </button>
-                      <button
-                        type="button"
-                        aria-pressed={theme === "dark"}
-                        onClick={() => setTheme("dark")}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                          theme === "dark"
-                            ? "bg-secondary text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Moon className="h-4 w-4" />
-                        ダーク
-                      </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </SheetContent>

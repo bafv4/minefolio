@@ -117,6 +117,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
               keybindings={keybindingsMap}
               fingerAssignments={fingerAssignments}
               remaps={remaps}
+              customActions={player.customActions}
               customKeys={customKeyboardKeys}
               showActionLabels
               showFingerAssignments
@@ -129,6 +130,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
               keybindings={keybindingsMap}
               fingerAssignments={fingerAssignments}
               remaps={remaps}
+              customActions={player.customActions}
               customButtons={customButtons}
               showActionLabels
               showFingerAssignments
