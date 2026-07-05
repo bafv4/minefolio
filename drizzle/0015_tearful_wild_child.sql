@@ -1,0 +1,1 @@
+ALTER TABLE `search_craft_templates` ADD `game_language` text;

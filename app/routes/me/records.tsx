@@ -6,7 +6,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats } from "@/lib/external-stats";
@@ -191,7 +191,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           isVisible,
           updatedAt: new Date(),
         })
-        .where(eq(categoryRecords.id, id));
+        .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
     }
 
     return { success: true };
@@ -200,7 +200,9 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (action === "delete") {
     const id = formData.get("id") as string;
     if (id) {
-      await db.delete(categoryRecords).where(eq(categoryRecords.id, id));
+      await db
+        .delete(categoryRecords)
+        .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
     }
     return { success: true };
   }

@@ -5,7 +5,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
@@ -517,7 +517,21 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
 
-    await db.delete(configPresets).where(eq(configPresets.id, presetId));
+    // アクティブなプリセットを削除すると「アクティブなし + ライブテーブルにデータ残留」の
+    // 不整合状態になる。他のプリセットが残る場合は削除を拒否し、先に切り替えてもらう。
+    if (preset.isActive) {
+      const others = await db.query.configPresets.findMany({
+        where: and(eq(configPresets.userId, user.id), ne(configPresets.id, presetId)),
+        columns: { id: true },
+      });
+      if (others.length > 0) {
+        return { error: t("mePresets.cannotDeleteActive") };
+      }
+    }
+
+    await db
+      .delete(configPresets)
+      .where(and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)));
 
     // 履歴に記録
     await db.insert(configHistory).values({

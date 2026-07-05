@@ -126,9 +126,8 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (action === "complete") {
     // Step 2: Complete registration (with MCID)
     const mcid = formData.get("mcid") as string;
-    const uuid = formData.get("uuid") as string;
 
-    if (!mcid || !uuid) {
+    if (!mcid) {
       return { error: t("onboarding.errorInvalidRequest") };
     }
 
@@ -141,20 +140,37 @@ export async function action({ context, request }: Route.ActionArgs) {
       return { error: t("onboarding.errorMcidTaken") };
     }
 
+    // uuid はクライアント送信値を信用せず、必ず Mojang から再導出する
+    // （mcid→uuid 束縛の偽装を防ぐ）
+    let uuid: string;
+    try {
+      uuid = await fetchUuidFromMcid(mcid);
+    } catch (error) {
+      if (error instanceof MojangError && error.code === "MCID_NOT_FOUND") {
+        return { error: t("onboarding.errorMcidNotFound") };
+      }
+      return { error: t("onboarding.errorVerifyFailed") };
+    }
+
     // Create user with MCID
     const userId = createId();
     const slug = generateSlug(mcid, session.user.id);
 
-    await db.insert(users).values({
-      id: userId,
-      discordId: session.user.id,
-      mcid,
-      uuid,
-      slug,
-      displayName: session.user.name,
-      discordAvatar: session.user.image,
-      hasImported: false,
-    });
+    try {
+      await db.insert(users).values({
+        id: userId,
+        discordId: session.user.id,
+        mcid,
+        uuid,
+        slug,
+        displayName: session.user.name,
+        discordAvatar: session.user.image,
+        hasImported: false,
+      });
+    } catch {
+      // discordId / uuid / slug などの UNIQUE 制約違反（二重登録・競合）
+      return { error: t("onboarding.errorAlreadyRegistered") };
+    }
 
     await createDefaultsForNewUser(db, userId);
 
@@ -166,16 +182,21 @@ export async function action({ context, request }: Route.ActionArgs) {
     const userId = createId();
     const slug = generateSlug(null, session.user.id);
 
-    await db.insert(users).values({
-      id: userId,
-      discordId: session.user.id,
-      mcid: null,
-      uuid: null,
-      slug,
-      displayName: session.user.name,
-      discordAvatar: session.user.image,
-      hasImported: false,
-    });
+    try {
+      await db.insert(users).values({
+        id: userId,
+        discordId: session.user.id,
+        mcid: null,
+        uuid: null,
+        slug,
+        displayName: session.user.name,
+        discordAvatar: session.user.image,
+        hasImported: false,
+      });
+    } catch {
+      // discordId UNIQUE 制約違反（二重 onboarding）
+      return { error: t("onboarding.errorAlreadyRegistered") };
+    }
 
     // Create defaults
     await createDefaultsForNewUser(db, userId);

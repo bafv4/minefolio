@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useId, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/search-craft";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,18 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -31,59 +20,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   Search,
   Plus,
-  Trash2,
-  X,
-  GripVertical,
-  ChevronDown,
-  ChevronUp,
   AlertCircle,
   Settings,
   Copy,
+  Share2,
 } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  MinecraftItemIcon,
-  getCraftableItems,
-  getCraftableItemsByCategory,
-  searchItems,
-  formatItemName,
-  ITEM_CATEGORIES,
-  type ItemCategory,
-} from "@bafv4/mcitems/1.16/react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { SearchCraftListEditor, arrayMove } from "@/components/search-craft-editor";
+import { toUiRemaps } from "@/lib/remap-utils";
 import { t } from "@/lib/messages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -132,6 +81,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       searchCrafts: {
         orderBy: [asc(searchCrafts.sequence)],
       },
+      keyRemaps: true,
     },
   });
 
@@ -167,6 +117,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return {
     userId: user.id,
     crafts,
+    // 入力キーのライブプレビュー用（表示専用）
+    remaps: toUiRemaps(user.keyRemaps),
     activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
     hasPresets: allPresets.length > 0,
     presets: allPresets.map((p) => ({
@@ -306,345 +258,13 @@ export async function action({ context, request }: Route.ActionArgs) {
   return { error: t("meSearchCraft.unknownAction") };
 }
 
-// アイテム選択ダイアログ
-function ItemSelectDialog({
-  isOpen,
-  onClose,
-  selectedItems,
-  onItemsChange,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  selectedItems: string[];
-  onItemsChange: (items: string[]) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
-
-  // mcitemsからクラフト可能なアイテムを取得
-  const filteredItems = search
-    ? searchItems(search).filter(id => getCraftableItems().includes(id))
-    : getCraftableItemsByCategory(selectedCategory);
-
-  const toggleItem = (itemId: string) => {
-    const normalizedId = itemId.startsWith("minecraft:") ? itemId : `minecraft:${itemId}`;
-    if (selectedItems.includes(normalizedId)) {
-      onItemsChange(selectedItems.filter((i) => i !== normalizedId));
-    } else {
-      onItemsChange([...selectedItems, normalizedId]);
-    }
-  };
-
-  const isItemSelected = (itemId: string) => {
-    const normalizedId = itemId.startsWith("minecraft:") ? itemId : `minecraft:${itemId}`;
-    return selectedItems.includes(normalizedId);
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("meSearchCraft.selectItems")}</DialogTitle>
-          <DialogDescription>
-            {t("meSearchCraft.selectItemsDescription")}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder={t("meSearchCraft.searchItems")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1"
-            />
-            <Select
-              value={selectedCategory}
-              onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ITEM_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 選択中のアイテム */}
-          {selectedItems.length > 0 && (
-            <div className="flex flex-wrap gap-1 p-2 bg-secondary/30 rounded-lg">
-              {selectedItems.map((itemId) => (
-                <Badge
-                  key={itemId}
-                  variant="secondary"
-                  className="cursor-pointer flex items-center gap-1 pl-1"
-                  onClick={() => toggleItem(itemId)}
-                >
-                  <MinecraftItemIcon
-                    itemId={itemId}
-                    size={16}
-                    textureBaseUrl={TEXTURE_BASE_URL}
-                    className="pixelated"
-                  />
-                  {formatItemName(itemId)}
-                  <span className="ml-1 text-muted-foreground">×</span>
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* アイテムリスト */}
-          <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-64 overflow-y-auto p-1">
-            {filteredItems.slice(0, 200).map((itemId) => (
-              <Tooltip key={itemId}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => toggleItem(itemId)}
-                    className={`w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center rounded border-2 transition-colors touch-manipulation ${
-                      isItemSelected(itemId)
-                        ? "border-primary bg-primary/20"
-                        : "border-transparent hover:border-border hover:bg-secondary/50"
-                    }`}
-                  >
-                    <MinecraftItemIcon
-                      itemId={itemId}
-                      size={28}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{formatItemName(itemId)}</TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-        </div>
-
-        <DialogFooter>
-            <Button variant="outline" onClick={() => onItemsChange([])}>
-            {t("meSearchCraft.clear")}
-          </Button>
-          <DialogClose asChild>
-            <Button>{t("meSearchCraft.complete")}</Button>
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// インライン編集可能なサーチクラフトカード（ソータブル対応）
-function EditableSearchCraftCard({
-  craft,
-  onUpdate,
-  onDelete,
-}: {
-  craft: SearchCraftItem;
-  onUpdate: (updated: SearchCraftItem) => void;
-  onDelete: () => void;
-}) {
-  const [isExpanded, setIsExpanded] = useState(!craft.searchStr); // 新規作成時は展開
-  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
-
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: craft.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handleSearchStrChange = (value: string) => {
-    onUpdate({ ...craft, searchStr: value || null });
-  };
-
-  const handleCommentChange = (value: string) => {
-    onUpdate({ ...craft, comment: value || null });
-  };
-
-  const handleItemsChange = (items: string[]) => {
-    onUpdate({ ...craft, items });
-  };
-
-  const removeItem = (index: number) => {
-    onUpdate({ ...craft, items: craft.items.filter((_, i) => i !== index) });
-  };
-
-  return (
-    <>
-      <Card
-        ref={setNodeRef}
-        style={style}
-        className={isDragging ? "opacity-50 shadow-lg" : ""}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-start gap-4">
-            {/* Drag handle */}
-            <button
-              {...attributes}
-              {...listeners}
-              className="flex items-center justify-center py-2 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
-            >
-              <GripVertical className="h-5 w-5" />
-            </button>
-
-            {/* Main content */}
-            <div className="flex-1 min-w-0 space-y-3">
-              {/* Header with expand/collapse button */}
-              <div className="flex items-center justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setIsExpanded(!isExpanded)}
-                >
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              {/* アイテム表示 */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {craft.items.map((itemId, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
-                  >
-                    <MinecraftItemIcon
-                      itemId={itemId}
-                      size={20}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
-                    <span className="text-sm">{formatItemName(itemId)}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setIsItemDialogOpen(true)}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  {t("meSearchCraft.add")}
-                </Button>
-              </div>
-
-              {/* クラフト文字列 & タイミング */}
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.searchLabel")}</Label>
-                  <Input
-                    value={craft.searchStr || ""}
-                    onChange={(e) => handleSearchStrChange(e.target.value)}
-                    placeholder="scr"
-                    className="font-mono h-8 w-32"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground shrink-0">{t("meSearchCraft.timing")}</Label>
-                  <Select
-                    value={craft.timing ?? "__none"}
-                    onValueChange={(value) => onUpdate({ ...craft, timing: value === "__none" ? null : value as SearchCraftItem["timing"] })}
-                  >
-                    <SelectTrigger className="h-8 w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none">{t("meSearchCraft.timingNone")}</SelectItem>
-                      <SelectItem value="bastion">Bastion</SelectItem>
-                      <SelectItem value="fortress">Fortress</SelectItem>
-                      <SelectItem value="other">{t("meSearchCraft.timingOther")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* 展開時：コメント */}
-              {isExpanded && (
-                <div className="space-y-2">
-                  <Label htmlFor={`comment-${craft.id}`} className="text-xs text-muted-foreground">
-                    {t("meSearchCraft.commentOptional")}
-                  </Label>
-                  <Textarea
-                    id={`comment-${craft.id}`}
-                    value={craft.comment || ""}
-                    onChange={(e) => handleCommentChange(e.target.value)}
-                    placeholder={t("meSearchCraft.commentPlaceholder")}
-                    rows={2}
-                  />
-                </div>
-              )}
-
-              {/* 折りたたみ時：コメントがあれば表示 */}
-              {!isExpanded && craft.comment && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {craft.comment}
-                </p>
-              )}
-            </div>
-
-            {/* Delete button */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("meSearchCraft.deleteCraftTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("meSearchCraft.deleteCraftDescription")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete}>{t("meSearchCraft.delete")}</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </CardContent>
-      </Card>
-
-      <ItemSelectDialog
-        isOpen={isItemDialogOpen}
-        onClose={() => setIsItemDialogOpen(false)}
-        selectedItems={craft.items}
-        onItemsChange={handleItemsChange}
-      />
-    </>
-  );
-}
+// ItemSelectDialog / EditableSearchCraftCard は @/components/search-craft-editor に抽出済み
 
 export default function SearchCraftPage() {
-  const { crafts: initialCrafts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
+  const { crafts: initialCrafts, remaps, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
-  const dndContextId = useId();
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
@@ -666,18 +286,6 @@ export default function SearchCraftPage() {
       toast.error(data.error);
     }
   }, [fetcher.data]);
-
-  // ドラッグ&ドロップ用のセンサー設定
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
 
   // 変更検知
   const hasChanges = useMemo(() => {
@@ -710,16 +318,8 @@ export default function SearchCraftPage() {
     setCrafts((prev) => [...prev, newCraft]);
   }, [crafts.length]);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      setCrafts((prev) => {
-        const oldIndex = prev.findIndex((c) => c.id === active.id);
-        const newIndex = prev.findIndex((c) => c.id === over.id);
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
+  const handleReorder = useCallback((oldIndex: number, newIndex: number) => {
+    setCrafts((prev) => arrayMove(prev, oldIndex, newIndex));
   }, []);
 
   const handleSave = useCallback(() => {
@@ -781,10 +381,18 @@ export default function SearchCraftPage() {
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>
-        <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
-          <Plus className="mr-2 h-4 w-4" />
-          {t("meSearchCraft.add")}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
+            <Link to="/my-guides/templates">
+              <Share2 className="mr-2 h-4 w-4" />
+              {t("meSearchCraft.publishAsTemplate")}
+            </Link>
+          </Button>
+          <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
+            <Plus className="mr-2 h-4 w-4" />
+            {t("meSearchCraft.add")}
+          </Button>
+        </div>
       </div>
 
       {/* プリセットセレクター */}
@@ -797,28 +405,17 @@ export default function SearchCraftPage() {
 
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {crafts.length > 0 ? (
-        <DndContext
-          id={dndContextId}
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={crafts.map((c) => c.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-3">
-              {crafts.map((craft, index) => (
-                <EditableSearchCraftCard
-                  key={craft.id}
-                  craft={craft}
-                  onUpdate={(updated) => handleUpdateCraft(index, updated)}
-                  onDelete={() => handleDeleteCraft(index)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <Card>
+          <CardContent className="py-1">
+            <SearchCraftListEditor
+              crafts={crafts}
+              remaps={remaps}
+              onUpdate={handleUpdateCraft}
+              onDelete={handleDeleteCraft}
+              onReorder={handleReorder}
+            />
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="text-center py-12">

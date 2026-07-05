@@ -14,10 +14,16 @@ const KEYBOARD_ACTIONS = [
 ] as const;
 
 function escapeCsv(v: string): string {
-  if (v.includes(",") || v.includes('"') || v.includes("\n")) {
-    return `"${v.replace(/"/g, '""')}"`;
+  let s = v;
+  // CSV式（フォーミュラ）インジェクション対策: =,+,-,@,タブ,CR で始まる値は
+  // 表計算ソフトで数式として評価され得るため、先頭に ' を付けて無害化する。
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
   }
-  return v;
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {

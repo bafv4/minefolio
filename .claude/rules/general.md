@@ -62,4 +62,4 @@ const actionType = formData.get("_action") as string;
 - 仕様は`docs`配下にあります
 - 仕様変更・機能内容の追加変更が発生する場合：
   - `docs`配下のドキュメントを追加・修正する
-  - @docs/changelog/changelog.md にチェンジログを記載する
+  - @app/content/changelog.md にチェンジログを記載する（`/developers/changelog` で公開される）

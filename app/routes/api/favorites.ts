@@ -101,8 +101,11 @@ export async function action({ context, request }: Route.ActionArgs) {
     } catch {
       return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
     }
+    // 巨大配列による過負荷を防ぐため、妥当な slug のみを最大500件に制限する。
     const slugs = Array.isArray(body.slugs)
-      ? body.slugs.filter((v): v is string => typeof v === "string")
+      ? body.slugs
+          .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 128)
+          .slice(0, 500)
       : [];
     await syncLocalFavoritesToDb(db, user.id, slugs);
     const list = await getFavoritesFromDb(db, user.id);

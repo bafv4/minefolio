@@ -2,6 +2,8 @@ import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { users } from "@/lib/schema";
 import { sql } from "drizzle-orm";
 import { fetchAllExternalStats, type MCSRRankedMatch } from "@/lib/external-stats";
@@ -65,11 +67,13 @@ export const meta: Route.MetaFunction = ({ params, data }) => {
   ];
 };
 
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ params, context, request }: Route.LoaderArgs) {
   const env = context.env ?? getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const { slug } = params;
   const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
   const normalizedSlug = slug?.toLowerCase();
 
   // slugで走者を検索
@@ -81,10 +85,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       mcid: true,
       slug: true,
       displayName: true,
+      profileVisibility: true,
+      discordId: true,
     },
   });
 
   if (!player) {
+    throw new Response(t("playerStats.notFound"), { status: 404 });
+  }
+
+  // プライベートプロフィールは本人以外に404を返す（profile.tsxと同じ扱い）
+  if (
+    player.profileVisibility === "private" &&
+    session?.user?.id !== player.discordId
+  ) {
     throw new Response(t("playerStats.notFound"), { status: 404 });
   }
 

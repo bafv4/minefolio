@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, User, LogOut, Settings, Heart, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen, FlaskConical } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
+import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 
@@ -102,6 +103,7 @@ export function Header({ user }: HeaderProps) {
             {/* Right side - Desktop */}
             <div className="hidden md:flex items-center space-x-4">
               <ThemeToggle />
+              <WhatsNew />
 
               {user ? (
                 <DropdownMenu>
@@ -154,6 +156,12 @@ export function Header({ user }: HeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link to="/playground">
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        Playground
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
                         お気に入り
@@ -185,16 +193,18 @@ export function Header({ user }: HeaderProps) {
 
             {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="md:hidden"
-                  aria-label="メニューを開く"
-                >
-                  <Menu className="h-6 w-6" aria-hidden />
-                </Button>
-              </SheetTrigger>
+              <div className="flex items-center gap-1 md:hidden">
+                <WhatsNew />
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="メニューを開く"
+                  >
+                    <Menu className="h-6 w-6" aria-hidden />
+                  </Button>
+                </SheetTrigger>
+              </div>
               <SheetContent
                 side="right"
                 className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
@@ -272,6 +282,7 @@ export function Header({ user }: HeaderProps) {
                           { href: `/player/${user.slug}`, icon: User, label: "マイプロフィール" },
                           { href: "/me/edit", icon: Settings, label: "設定" },
                           { href: "/my-guides", icon: BookOpen, label: "ガイド" },
+                          { href: "/playground", icon: FlaskConical, label: "Playground" },
                           { href: "/favorites", icon: Heart, label: "お気に入り" },
                           { href: "/feedback", icon: MessageSquare, label: "フィードバック" },
                         ].map(({ href, icon: Icon, label }) => (

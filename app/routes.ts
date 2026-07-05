@@ -19,6 +19,9 @@ export default [
     // Live
     route("live", "routes/live.tsx"),
 
+    // Paces (最近のペース全件一覧)
+    route("paces", "routes/paces.tsx"),
+
     // Browse & Rankings
     route("browse", "routes/browse.tsx"),
     route("random-player", "routes/random-player.ts"),
@@ -29,6 +32,7 @@ export default [
     route("rankings", "routes/rankings.tsx"),
     route("stats", "routes/stats.tsx"),
     route("compare", "routes/compare.tsx"),
+    route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),
     route("feedback", "routes/feedback.tsx"),
     route("developers", "routes/developers/index.tsx"),
@@ -58,10 +62,15 @@ export default [
     // My guides (separated from /me, no sidebar)
     route("my-guides", "routes/my-guides/index.tsx"),
     route("my-guides/new", "routes/my-guides/new.tsx"),
+    route("my-guides/templates", "routes/my-guides/templates.tsx"),
+    route("my-guides/templates/new", "routes/my-guides/template-new.tsx"),
+    route("my-guides/templates/:templateId/edit", "routes/my-guides/template-edit.tsx"),
     route("my-guides/:guideSlug/edit", "routes/my-guides/edit.tsx"),
 
-    // Public guides
+    // Public guides & searchcraft templates
     route("guides", "routes/guides/index.tsx"),
+    route("guides/templates", "routes/guides/templates/index.tsx"),
+    route("guides/templates/:templateId", "routes/guides/templates/view.tsx"),
     route("guides/:authorSlug", "routes/guides/user.tsx"),
     route("guides/:authorSlug/:guideSlug", "routes/guides/view.tsx"),
   ]),
@@ -76,6 +85,7 @@ export default [
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/paces", "routes/api/paces.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
   route("api/browse", "routes/api/browse.ts"),
 

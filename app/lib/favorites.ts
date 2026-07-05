@@ -78,15 +78,22 @@ export async function syncLocalFavoritesToDb(
   if (localFavorites.length === 0) return;
   const existing = await getFavoritesFromDb(db, userId);
   const existingSet = new Set(existing);
-  const toInsert = localFavorites.filter((slug) => !existingSet.has(slug));
+  // 重複を除いた挿入対象（入力側の重複も Set で除去）
+  const toInsert = [...new Set(localFavorites.filter((slug) => !existingSet.has(slug)))];
   if (toInsert.length === 0) return;
 
-  await db
-    .insert(favorites)
-    .values(toInsert.map((slug) => ({ userId, favoriteSlug: slug })))
-    .onConflictDoNothing({
-      target: [favorites.userId, favorites.favoriteSlug],
-    });
+  // 1回の INSERT が SQLite のバインド変数上限(32766)を超えないようチャンク分割する。
+  // 1行あたり数バインドのため、500行/回なら十分な余裕がある。
+  const CHUNK_SIZE = 500;
+  for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+    const batch = toInsert.slice(i, i + CHUNK_SIZE);
+    await db
+      .insert(favorites)
+      .values(batch.map((slug) => ({ userId, favoriteSlug: slug })))
+      .onConflictDoNothing({
+        target: [favorites.userId, favorites.favoriteSlug],
+      });
+  }
 }
 
 /**

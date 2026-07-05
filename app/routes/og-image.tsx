@@ -116,6 +116,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return new Response("User not found", { status: 404 });
   }
 
+  // 非公開プロフィールのPIIを公開OGP画像に含めない（本人判定不可のため常にデフォルト画像）
+  if (user.profileVisibility === "private") {
+    const origin = new URL(request.url).origin;
+    const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
+    return generateDefaultOgp({
+      title: "Minefolio",
+      description: "Minecraft Speedrunning Portfolio Platform",
+      iconDataUrl,
+    });
+  }
+
   // アバター画像を事前にフェッチ（Discord優先、Minecraftアバターにフォールバック）
   const avatarDataUrl = await fetchAvatarDataUrl({
     discordId: user.discordId,

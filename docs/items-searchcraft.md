@@ -136,7 +136,11 @@ import {
 `app/routes/player/profile.tsx` でプレイヤーのプロフィールページにアイテム配置とサーチクラフトを表示する。
 
 - アイテム配置: セグメントごとにホットバー9スロット + オフハンドのアイテムアイコンを表示
-- サーチクラフト: シーケンス順にアイテムアイコン、サーチ文字列、押すキーを表示
+- サーチクラフト（v1.6.0 で表示刷新）:
+  - **サマリーバー**: ゲーム内言語（日本語名併記）・総件数・キーバッジの凡例（リマップ済み / Shift同時押し / 指割り当て色。指割り当ては設定がある場合のみ）
+  - **タイミング別グループカード**: Bastion（金）/ Fortress（赤）/ その他（青）/ 指定なし の順に、色ドット + 件数付きヘッダーのカードでグループ表示。タイミング未設定のみの場合はヘッダーなしの1枚のカード
+  - **行リスト**: カード内は `divide-y` の行リスト。デスクトップ（lg以上）は「アイテム / サーチ文字列 / 入力キー」の3カラム表（列ヘッダー付き）、モバイルは縦積み + インラインラベル
+  - 各行: シーケンス番号、アイテムチップ、サーチ文字列（クリックでコピー、`navigator.clipboard` + toast）、実入力キーバッジ（指割り当て色・リマップring・Shift琥珀色、ツールチップ付き）、コメント
 - 複数プリセットがある場合はプリセット切替ドロップダウンが表示される
 
 ---
@@ -151,13 +155,20 @@ import {
 
 ---
 
+## テンプレート公開・Playground
+
+サーチクラフト設定はテンプレートとして公開し、他のプレイヤーが自分の設定に反映したり Playground で試したりできる。詳細は [`docs/search-craft-templates.md`](search-craft-templates.md) を参照。
+
+---
+
 ## 関連ファイル
 
 | ファイル | 役割 |
 |---|---|
-| `app/lib/schema.ts` | DBスキーマ定義（itemLayouts, searchCrafts） |
+| `app/lib/schema.ts` | DBスキーマ定義（itemLayouts, searchCrafts, searchCraftTemplates） |
 | `app/routes/me/items.tsx` | アイテム配置編集ページ |
 | `app/routes/me/search-craft.tsx` | サーチクラフト編集ページ |
 | `app/routes/player/profile.tsx` | プロフィールページ（表示側） |
 | `app/lib/remap-utils.ts` | サーチクラフトのキーリマップ連携（`getActualKeyInfos()`） |
+| `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様 |
 | `@bafv4/mcitems` | Minecraft 1.16アイテムアイコン・検索パッケージ |

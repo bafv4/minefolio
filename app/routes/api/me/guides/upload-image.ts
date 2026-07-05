@@ -39,7 +39,11 @@ export async function action({ context, request }: ActionFunctionArgs) {
       if (!user || !user.id) {
         throw new Error("Unauthorized");
       }
-      if (!pathname.startsWith(`guides/${user.id}/`)) {
+      // パストラバーサル対策: 接頭辞一致に加え、'..' セグメントを含むパスを拒否する
+      if (
+        !pathname.startsWith(`guides/${user.id}/`) ||
+        pathname.split("/").includes("..")
+      ) {
         throw new Error("Invalid path");
       }
       return {
