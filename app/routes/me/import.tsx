@@ -70,40 +70,24 @@ export async function action({ context, request }: Route.ActionArgs) {
   const intent = formData.get("intent") as string;
 
   if (intent === "import-remaps") {
-    const remapsJson = formData.get("remaps") as string;
-    const remaps: ParsedRemap[] = JSON.parse(remapsJson);
+    let remaps: ParsedRemap[];
+    try {
+      const parsed = JSON.parse((formData.get("remaps") as string) ?? "");
+      if (!Array.isArray(parsed)) throw new Error("not an array");
+      remaps = parsed as ParsedRemap[];
+    } catch {
+      return { success: false, error: t("meImport.invalidData") };
+    }
+    if (remaps.length > 1000) {
+      return { success: false, error: t("meImport.tooManyItems") };
+    }
 
-    // 既存のリマップを削除して新しいものを挿入
+    // 一意インデックス (userId, sourceKey) に対する upsert なので、
+    // ループ内の冗長な findFirst は不要。onConflictDoUpdate に一本化する。
     for (const remap of remaps) {
-      // 既存のエントリを確認
-      const existing = await db.query.keyRemaps.findFirst({
-        where: eq(keyRemaps.userId, user.id),
-      });
-
-      if (existing) {
-        // 同じsourceKeyがあれば更新、なければ挿入
-        await db
-          .insert(keyRemaps)
-          .values({
-            userId: user.id,
-            sourceKey: remap.sourceKey,
-            targetKey: remap.targetKey,
-            software: remap.software,
-            notes: remap.notes,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [keyRemaps.userId, keyRemaps.sourceKey],
-            set: {
-              targetKey: remap.targetKey,
-              software: remap.software,
-              notes: remap.notes,
-              updatedAt: new Date(),
-            },
-          });
-      } else {
-        await db.insert(keyRemaps).values({
+      await db
+        .insert(keyRemaps)
+        .values({
           userId: user.id,
           sourceKey: remap.sourceKey,
           targetKey: remap.targetKey,
@@ -111,8 +95,16 @@ export async function action({ context, request }: Route.ActionArgs) {
           notes: remap.notes,
           createdAt: new Date(),
           updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [keyRemaps.userId, keyRemaps.sourceKey],
+          set: {
+            targetKey: remap.targetKey,
+            software: remap.software,
+            notes: remap.notes,
+            updatedAt: new Date(),
+          },
         });
-      }
     }
 
     // インポート後にプリセットを自動作成
@@ -174,16 +166,12 @@ export async function action({ context, request }: Route.ActionArgs) {
   }
 
   if (intent === "import-minecraft") {
-    const keybindingsJson = formData.get("keybindings") as string;
-    const gameSettingsJson = formData.get("gameSettings") as string;
-
-    const keybindingsList: Array<{
+    let keybindingsList: Array<{
       action: string;
       keyCode: string;
       category: "movement" | "combat" | "inventory" | "ui";
-    }> = JSON.parse(keybindingsJson);
-
-    const gameSettings: {
+    }>;
+    let gameSettings: {
       toggleSprint?: boolean;
       toggleSneak?: boolean;
       autoJump?: boolean;
@@ -191,7 +179,21 @@ export async function action({ context, request }: Route.ActionArgs) {
       guiScale?: number;
       rawInput?: boolean;
       gameLanguage?: string;
-    } = JSON.parse(gameSettingsJson);
+    };
+    try {
+      const kb = JSON.parse((formData.get("keybindings") as string) ?? "");
+      const gs = JSON.parse((formData.get("gameSettings") as string) ?? "");
+      if (!Array.isArray(kb) || typeof gs !== "object" || gs === null) {
+        throw new Error("invalid shape");
+      }
+      keybindingsList = kb;
+      gameSettings = gs;
+    } catch {
+      return { success: false, error: t("meImport.invalidData") };
+    }
+    if (keybindingsList.length > 1000) {
+      return { success: false, error: t("meImport.tooManyItems") };
+    }
 
     // キーバインドをインポート
     for (const kb of keybindingsList) {

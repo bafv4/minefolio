@@ -16,6 +16,7 @@ import { del } from "@vercel/blob";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { MyContentTabs } from "@/components/content-tabs";
 import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -92,6 +93,8 @@ export default function MyGuidesPage() {
           </Link>
         </Button>
       </div>
+
+      <MyContentTabs active="guides" />
 
       {userGuides.length === 0 ? (
         <Card>

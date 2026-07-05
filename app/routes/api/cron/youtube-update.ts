@@ -15,12 +15,13 @@ import {
 export async function loader({ request, context }: { request: Request; context: any }) {
   const env = context.env ?? getEnv();
 
-  // Vercel CronからのリクエストかAPIキーで認証
+  // Vercel Cron認証。CRON_SECRET は getEnv() の返却に含まれないため
+  // paceman/rankings と同様に context.env / process.env から直接参照する。
   const authHeader = request.headers.get("Authorization");
-  const cronSecret = env.CRON_SECRET;
+  const expectedToken = context.env?.CRON_SECRET || process.env.CRON_SECRET;
 
   // 認証チェック（CRON_SECRETが設定されている場合）
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

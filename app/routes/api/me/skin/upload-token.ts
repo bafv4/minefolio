@@ -46,8 +46,12 @@ export async function action({ context, request }: ActionFunctionArgs) {
       request,
       onBeforeGenerateToken: async (pathname) => {
         // パスがユーザーのスキンディレクトリ内であることを確認
+        // パストラバーサル対策として '..' セグメントも拒否する
         const expectedPrefix = `skins/${user.id}/`;
-        if (!pathname.startsWith(expectedPrefix)) {
+        if (
+          !pathname.startsWith(expectedPrefix) ||
+          pathname.split("/").includes("..")
+        ) {
           throw new Error("Invalid upload path");
         }
 

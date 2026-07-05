@@ -1,12 +1,35 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
-import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { getFavoritesFromDb } from "./favorites";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
+// ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
+const MAX_BROWSE_PAGE = 100_000;
+
+/** LIKE のワイルドカード(%,_)とエスケープ文字(\)を無害化する。 */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * ネストした量指定子（(a+)+ 等）による catastrophic backtracking (ReDoS) を大まかに検出する。
+ * 完全な検出ではないが、代表的な危険パターンと過度に長いパターンを弾く。
+ */
+function isDangerousRegex(pattern: string): boolean {
+  if (pattern.length > 100) return true;
+  return /\((?:[^()]*[*+}][^()]*)\)[*+{]/.test(pattern);
+}
+
+/** page パラメータを安全な整数範囲にクランプする。 */
+function parseBrowsePage(raw: string | null): number {
+  const p = parseInt(raw || "1", 10);
+  if (!Number.isFinite(p) || p < 1) return 1;
+  return Math.min(p, MAX_BROWSE_PAGE);
+}
 
 export type BrowseSortOption = "updatedAt" | "mcid" | "displayName";
 
@@ -38,7 +61,7 @@ export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQu
     q: searchParams.get("q") ?? "",
     regex: searchParams.get("regex") === "1",
     sort: (searchParams.get("sort") as BrowseSortOption) || "updatedAt",
-    page: Math.max(1, parseInt(searchParams.get("page") || "1", 10)),
+    page: parseBrowsePage(searchParams.get("page")),
     roles: searchParams.getAll("role") as BrowseFilterRole[],
     editions: searchParams.getAll("edition") as BrowseFilterEdition[],
     inputMethods: searchParams.getAll("input") as BrowseFilterInputMethod[],
@@ -74,10 +97,12 @@ function buildWhere(args: BrowseQueryArgs) {
   // なるため、検索に含めると数字パターン等で Discord ID にヒットしてしまう。
   // 正規表現モードの q は SQL で表現できないため JS 側で照合する（buildWhere では無視）。
   if (args.q && !args.regex) {
+    // LIKE のワイルドカードをエスケープし、ユーザー入力を部分一致リテラルとして扱う。
+    const likePattern = `%${escapeLike(args.q)}%`;
     conditions.push(
       or(
-        like(users.mcid, `%${args.q}%`),
-        like(users.displayName, `%${args.q}%`),
+        sql`${users.mcid} LIKE ${likePattern} ESCAPE '\\'`,
+        sql`${users.displayName} LIKE ${likePattern} ESCAPE '\\'`,
       )!,
     );
   }
@@ -132,6 +157,10 @@ export async function loadBrowsePage(
   // 正規表現モード: libSQL に REGEXP がないため、フィルタ条件に一致する全件を
   // 並び順どおり取得し、JS 側で照合してからページングする。
   if (args.regex && args.q) {
+    // ReDoS対策: 過度に長い / ネスト量指定子を含む危険なパターンは「該当なし」として拒否する。
+    if (isDangerousRegex(args.q)) {
+      return { players: [], totalCount: 0, totalPages: 0, hasMore: false };
+    }
     let re: RegExp;
     try {
       re = new RegExp(args.q, "i");

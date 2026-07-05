@@ -6,9 +6,10 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks, pacemanPaces } from "@/lib/schema";
-import { eq, and, isNotNull, desc } from "drizzle-orm";
+import { users, socialLinks } from "@/lib/schema";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
+import { getPaceFeedEntries } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getFavoritesFromDb } from "@/lib/favorites";
 import { excludeViewersCondition } from "@/lib/users-filter";
@@ -238,45 +239,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     }
 
     case "recent-paces": {
-      const db = createDb();
       const userData = await getUserData();
 
-      // DBキャッシュからペースを取得（新しい順）
+      // DBキャッシュからペースを取得（新しい順、フィードは最新20件まで）
       // Enter Nether以外の全Split（Bastion, Fortress, First Portal, 2nd Structure以降）を含む
-      // 同じワールド（pacemanRunId）のペースは最新Splitのみ表示するため多めに取得
-      const paces = await db
-        .select({
-          mcid: pacemanPaces.mcid,
-          timeline: pacemanPaces.timeline,
-          rta: pacemanPaces.rta,
-          date: pacemanPaces.date,
-          pacemanRunId: pacemanPaces.pacemanRunId,
-        })
-        .from(pacemanPaces)
-        .where(eq(pacemanPaces.isNetherEnter, false))
-        .orderBy(desc(pacemanPaces.date))
-        .limit(100);
-
-      // 視聴者ロールのペースを除外（userData.registeredMcidsはviewer除外済み）
+      // 視聴者ロールのペースは除外（userData.registeredMcidsはviewer除外済み）
       const registeredMcidSet = new Set(userData.registeredMcids);
-      const filteredPaces = paces.filter((p) =>
-        registeredMcidSet.has(p.mcid.toLowerCase()),
-      );
-
-      // 同じワールド（pacemanRunId）のペースは最新（最も進んだ）Splitのみを残す
-      const runIdToLatestPace = new Map<number, typeof filteredPaces[0]>();
-      for (const pace of filteredPaces) {
-        const existing = runIdToLatestPace.get(pace.pacemanRunId);
-        // rtaが長い方が進んでいるので、より長いrtaを持つものを選択
-        if (!existing || pace.rta > existing.rta) {
-          runIdToLatestPace.set(pace.pacemanRunId, pace);
-        }
-      }
-
-      // Mapから配列に戻し、日時で降順ソートして20件に制限
-      const uniquePaces = Array.from(runIdToLatestPace.values())
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .slice(0, 20);
+      const uniquePaces = await getPaceFeedEntries(registeredMcidSet, { limit: 20 });
 
       // お気に入りソート用にtime（Unix秒）を追加
       const pacesWithTime = uniquePaces.map((p) => ({

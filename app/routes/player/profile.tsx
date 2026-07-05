@@ -32,7 +32,8 @@ import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 
 // クライアントサイドのみでレンダリング
 const MinecraftFullBody = lazy(() =>
@@ -138,8 +139,8 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, getKeyCombinationLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
-import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
+import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
@@ -188,6 +189,7 @@ import {
   BookOpen,
   Eye,
   Maximize2,
+  Languages,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -1368,18 +1370,32 @@ export default function PlayerProfilePage() {
         <TabsContent value="searchcraft" className="space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
-              {/* ゲーム言語表示 */}
-              {player.playerConfig?.gameLanguage && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{t("playerProfile.gameLanguage")}:</span>
-                  <Badge variant="secondary">
-                    {getGameLanguageName(player.playerConfig.gameLanguage)}
+              {/* サマリーバー: ゲーム言語・件数・凡例 */}
+              <div className="rounded-lg border bg-card px-4 py-3 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  {player.playerConfig?.gameLanguage && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Languages className="h-4 w-4" />
+                      <span>{t("playerProfile.gameLanguage")}:</span>
+                      <Badge variant="secondary">
+                        {getGameLanguageName(player.playerConfig.gameLanguage)}
+                      </Badge>
+                    </div>
+                  )}
+                  <Badge variant="outline" className="text-muted-foreground">
+                    {t("playerProfile.searchCraftCount", { count: player.searchCrafts.length })}
                   </Badge>
                 </div>
-              )}
-              <SearchCraftList
-                crafts={player.searchCrafts}
-                keyRemaps={player.keyRemaps}
+                <KeyBadgeLegend
+                  showFingers={Object.keys(userFingerAssignments).length > 0}
+                />
+              </div>
+              <SearchCraftGroupedList
+                crafts={player.searchCrafts.map((craft) => ({
+                  ...craft,
+                  items: JSON.parse(craft.items) as string[],
+                }))}
+                remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
               />
             </>
@@ -1926,221 +1942,7 @@ function ItemLayoutCard({
   );
 }
 
-// キーバッジコンポーネント（修飾キー対応）
-function KeyBadge({
-  keyCode,
-  label,
-  finger,
-  isRemapped,
-  needsShift,
-}: {
-  keyCode: string;
-  label: string;
-  finger?: FingerType;
-  isRemapped?: boolean;
-  needsShift?: boolean;
-}) {
-  const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
-
-  // ツールチップのテキスト
-  const getTooltipText = () => {
-    if (keyCode.includes("+")) {
-      // 修飾キー組み合わせの場合
-      return getKeyCombinationLabel(keyCode);
-    }
-    if (isRemapped) {
-      return t("playerProfile.remapped", { key: getKeyLabel(keyCode) });
-    }
-    return getKeyLabel(keyCode);
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-            finger
-              ? fingerClass
-              : "bg-secondary/50 border-border/50 text-muted-foreground",
-            isRemapped && "ring-1 ring-primary ring-offset-1",
-            needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
-          )}
-        >
-          {label}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{getTooltipText()}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-const TIMING_LABELS: Record<string, string> = {
-  bastion: "Bastion",
-  fortress: "Fortress",
-  other: t("playerProfile.timingOther"),
-};
-
-const TIMING_ORDER = ["bastion", "fortress", "other"] as const;
-
-function SearchCraftList({
-  crafts,
-  keyRemaps,
-  fingerAssignments,
-}: {
-  crafts: Array<{
-    id: string;
-    sequence: number;
-    items: string;
-    searchStr: string | null;
-    comment: string | null;
-    timing: string | null;
-  }>;
-  keyRemaps: RemapInfo[];
-  fingerAssignments: Record<string, FingerType[]>;
-}) {
-  const hasAnyTiming = crafts.some((c) => c.timing);
-
-  if (!hasAnyTiming) {
-    // タイミング未設定：従来通りフラットに表示
-    return (
-      <div className="space-y-4">
-        {crafts.map((craft) => (
-          <SearchCraftCard
-            key={craft.id}
-            craft={craft}
-            keyRemaps={keyRemaps}
-            fingerAssignments={fingerAssignments}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  // タイミング別にグループ化
-  const grouped = new Map<string | null, typeof crafts>();
-  for (const craft of crafts) {
-    const key = craft.timing;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(craft);
-  }
-
-  // ソート: bastion → fortress → other → null(指定なし)
-  const sortedKeys: (string | null)[] = [];
-  for (const timing of TIMING_ORDER) {
-    if (grouped.has(timing)) sortedKeys.push(timing);
-  }
-  if (grouped.has(null)) sortedKeys.push(null);
-
-  return (
-    <div className="space-y-6">
-      {sortedKeys.map((timing) => (
-        <div key={timing ?? "__none"} className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground border-b pb-1">
-            {timing ? TIMING_LABELS[timing] ?? timing : t("playerProfile.timingUnspecified")}
-          </h3>
-          <div className="space-y-4">
-            {grouped.get(timing)!.map((craft) => (
-              <SearchCraftCard
-                key={craft.id}
-                craft={craft}
-                keyRemaps={keyRemaps}
-                fingerAssignments={fingerAssignments}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SearchCraftCard({
-  craft,
-  keyRemaps,
-  fingerAssignments,
-}: {
-  craft: {
-    id: string;
-    sequence: number;
-    items: string;
-    searchStr: string | null;
-    comment: string | null;
-    timing: string | null;
-  };
-  keyRemaps: RemapInfo[];
-  fingerAssignments: Record<string, FingerType[]>;
-}) {
-  const items = JSON.parse(craft.items) as string[];
-  const keyInfos = craft.searchStr ? getActualKeyInfos(craft.searchStr, keyRemaps) : [];
-
-  // キーコードから指割り当てを取得
-  const getFingerForKey = (keyCode: string): FingerType | undefined => {
-    const fingers = fingerAssignments[keyCode] || fingerAssignments[keyCode.toLowerCase()];
-    return fingers?.[0];
-  };
-
-  return (
-    <Card>
-      <CardContent className="px-4 py-3">
-        <div className="flex flex-col gap-2">
-          {/* アイテム */}
-          <div className="flex flex-wrap items-center gap-2">
-            {items.map((itemId, idx) => (
-              <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
-                <MinecraftItemIcon
-                  itemId={itemId}
-                  size={28}
-                  textureBaseUrl={TEXTURE_BASE_URL}
-                  className="pixelated"
-                />
-                <span className="text-base">{getItemDisplayName(itemId)}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* 検索文字列と押すキー */}
-          {craft.searchStr && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all">
-                  {craft.searchStr}
-                </code>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {keyInfos.map((info, idx) => {
-                    // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
-                    const baseKeyCode = info.keyCode.includes("+")
-                      ? info.keyCode.split("+").pop() || info.keyCode
-                      : info.keyCode;
-                    return (
-                      <KeyBadge
-                        key={idx}
-                        keyCode={info.keyCode}
-                        label={info.displayLabel}
-                        finger={getFingerForKey(baseKeyCode)}
-                        isRemapped={info.isRemapped}
-                        needsShift={info.needsShift}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* コメント */}
-          {craft.comment && (
-            <p className="text-sm text-muted-foreground">{craft.comment}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
 
 function RecordCard({
   record,

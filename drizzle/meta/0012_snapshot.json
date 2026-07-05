@@ -1379,36 +1379,36 @@
           "notNull": true,
           "autoincrement": false
         },
-        "favorite_mcid": {
-          "name": "favorite_mcid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "favorite_slug": {
+          "name": "favorite_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "idx_favorites_user_mcid": {
-          "name": "idx_favorites_user_mcid",
-          "columns": [
-            "user_id",
-            "favorite_mcid"
-          ],
-          "isUnique": true
-        },
         "idx_favorites_user_id": {
           "name": "idx_favorites_user_id",
           "columns": [
             "user_id"
           ],
           "isUnique": false
+        },
+        "idx_favorites_user_slug": {
+          "name": "idx_favorites_user_slug",
+          "columns": [
+            "user_id",
+            "favorite_slug"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {

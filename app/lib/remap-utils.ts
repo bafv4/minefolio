@@ -27,7 +27,7 @@ export type PersistedRemapPayload = {
   notes: string | null;
 };
 
-function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
+export function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
   if (targetKey == null) return null;
   if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
   return targetKey;
@@ -108,11 +108,61 @@ export function getRemapSourceLabel(
   return resolveKeyLabel(sourceKey, layout, customKeyNames);
 }
 
-function keyCodeToChar(keyCode: string): string {
+// 記号キーの keyCode → 文字（US配列基準の簡易マッピング。IntlRo/IntlYen はJIS用）
+const CODE_CHAR_MAP: Record<string, string> = {
+  Space: " ",
+  Minus: "-",
+  Equal: "=",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Backquote: "`",
+  IntlRo: "\\",
+  IntlYen: "¥",
+};
+
+// Shift 押下時に別の文字になるキー（US配列基準 + JIS の IntlRo = "_"）
+const SHIFT_CHAR_MAP: Record<string, string> = {
+  Digit1: "!",
+  Digit2: "@",
+  Digit3: "#",
+  Digit4: "$",
+  Digit5: "%",
+  Digit6: "^",
+  Digit7: "&",
+  Digit8: "*",
+  Digit9: "(",
+  Digit0: ")",
+  Minus: "_",
+  Equal: "+",
+  BracketLeft: "{",
+  BracketRight: "}",
+  Backslash: "|",
+  Semicolon: ":",
+  Quote: '"',
+  Comma: "<",
+  Period: ">",
+  Slash: "?",
+  Backquote: "~",
+  IntlRo: "_",
+};
+
+export function keyCodeToChar(keyCode: string): string {
   if (keyCode.startsWith("Key")) return keyCode.slice(3).toLowerCase();
   if (keyCode.startsWith("Digit")) return keyCode.slice(5);
+  if (CODE_CHAR_MAP[keyCode]) return CODE_CHAR_MAP[keyCode];
   if (keyCode.length === 1) return keyCode.toLowerCase();
   return keyCode.toLowerCase();
+}
+
+/** Shift 押下時の出力文字（記号・数字は別文字、それ以外は大文字化） */
+function shiftedChar(keyCode: string, baseChar: string): string {
+  return SHIFT_CHAR_MAP[keyCode] ?? baseChar.toUpperCase();
 }
 
 function charToKeyCode(char: string): string {
@@ -208,6 +258,69 @@ export function getActualKeyInfos(searchStr: string, remaps: RemapInfo[]): Actua
   }
 
   return result;
+}
+
+export type SimulatedKeyOutput = {
+  /** 押した物理キーの表示ラベル（例: "⇧+W"） */
+  pressedLabel: string;
+  /** リマップ適用後の出力文字。null は出力なし（無効化 or 文字を持たないキー） */
+  output: string | null;
+  isRemapped: boolean;
+};
+
+/**
+ * 物理キー入力（修飾キー組み合わせ）にリマップを順方向に適用し、出力文字を求める。
+ * getActualKeyInfos()（文字→押すキーの逆引き）の対になる簡易シミュレーション。
+ * 完全一致（修飾キー込み）→ 基底キー一致（Shift は大文字化として扱う）の順で解決する。
+ */
+export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): SimulatedKeyOutput {
+  const normalized = normalizeKeyCombination(combo);
+  const parsed = parseKeyCombination(normalized);
+  const modifierMarks = parsed.modifiers.map(modifierToMark).join("");
+  const baseChar = keyCodeToChar(parsed.keyCode);
+  // 可視の1文字はその文字、それ以外（Space, F3, ShiftLeft 等）はキーラベルを表示
+  const baseLabel = baseChar.trim().length === 1
+    ? baseChar.toUpperCase()
+    : getKeyLabel(parsed.keyCode);
+  const pressedLabel = parsed.modifiers.length > 0
+    ? `${modifierMarks}+${baseLabel}`
+    : baseLabel;
+
+  const resolveTarget = (targetKey: string | null, shiftApplies: boolean): string | null => {
+    if (targetKey === null) return null;
+    if (isSpecialRemapTarget(targetKey)) return targetKey;
+    const normalizedTarget = normalizeKeyCode(targetKey);
+    const char = keyCodeToChar(normalizedTarget);
+    return shiftApplies ? shiftedChar(normalizedTarget, char) : char;
+  };
+
+  // 完全一致（修飾キー込み・修飾キー単独も含む）
+  const exact = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalized);
+  if (exact) {
+    return { pressedLabel, output: resolveTarget(exact.targetKey, false), isRemapped: true };
+  }
+
+  // 基底キーのみ一致（Shift のみの組み合わせはシフト後の文字として扱う）
+  const onlyShift = parsed.modifiers.length > 0 && parsed.modifiers.every((m) => m === "Shift");
+  if (parsed.modifiers.length === 0 || onlyShift) {
+    const base = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalizeKeyCode(parsed.keyCode));
+    if (base) {
+      return { pressedLabel, output: resolveTarget(base.targetKey, onlyShift), isRemapped: true };
+    }
+    // リマップなし: 印字可能キーのみ文字を出力
+    // 印字可能キー: 英字/数字、または記号マップに載っているキー（CODE_CHAR_MAP と二重管理しない）
+    const isPrintable =
+      /^(Key[A-Z]|Digit[0-9])$/.test(parsed.keyCode) || parsed.keyCode in CODE_CHAR_MAP;
+    if (!isPrintable) return { pressedLabel, output: null, isRemapped: false };
+    return {
+      pressedLabel,
+      output: onlyShift ? shiftedChar(parsed.keyCode, baseChar) : baseChar,
+      isRemapped: false,
+    };
+  }
+
+  // Ctrl/Alt/Meta を含む未定義の組み合わせは文字出力なし
+  return { pressedLabel, output: null, isRemapped: false };
 }
 
 export function matchesRemapSourceKey(remapSourceKey: string, keyCode: string): boolean {

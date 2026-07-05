@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { eq, desc, like, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
   const env = context.env ?? getEnv();
@@ -14,6 +14,9 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   if (q.length < 1) {
     return Response.json({ guides: [] });
   }
+
+  // LIKE のワイルドカード(%,_)をエスケープし、入力を部分一致リテラルとして扱う。
+  const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
   const results = await db
     .select({
@@ -31,7 +34,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     .where(
       and(
         eq(guides.isPublished, true),
-        like(guides.title, `%${q}%`)
+        sql`${guides.title} LIKE ${likePattern} ESCAPE '\\'`
       )
     )
     .orderBy(desc(guides.updatedAt))

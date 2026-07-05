@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 const MAX_SLUGS = 100;
 
@@ -42,8 +42,9 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const db = createDb();
+  // 未認証の一括取得エンドポイントのため、公開プロフィールのみ返す（非公開・限定公開は除外）
   const rows = await db.query.users.findMany({
-    where: inArray(users.slug, slugs),
+    where: and(inArray(users.slug, slugs), eq(users.profileVisibility, "public")),
     columns: {
       slug: true,
       mcid: true,

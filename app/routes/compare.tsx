@@ -92,8 +92,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
 
-  // 走者一覧（選択用）
+  // 走者一覧（選択用）: 一覧なので公開プロフィールのみ
   const allPlayers = await db.query.users.findMany({
+    where: eq(users.profileVisibility, "public"),
     columns: {
       mcid: true,
       uuid: true,
@@ -108,7 +109,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // p1のみ指定の場合、類似走者を検索（slugで検索）
   if (p1 && !p2) {
     const player1Data = await db.query.users.findFirst({
-      where: eq(users.slug, p1),
+      // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
+      where: and(
+        eq(users.slug, p1),
+        inArray(users.profileVisibility, ["public", "unlisted"])
+      ),
       with: {
         keybindings: true,
         playerConfig: true,
@@ -128,7 +133,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
     // 全ユーザーのキーバインドを取得して類似度を計算
     const allUsersWithKeybindings = await db.query.users.findMany({
-      where: sql`${users.slug} != ${p1}`,
+      where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
       columns: {
         id: true,
         mcid: true,
@@ -197,7 +202,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   // 両走者のデータを取得（slugで検索）
   const [player1Data, player2Data] = await Promise.all([
     db.query.users.findFirst({
-      where: eq(users.slug, p1),
+      // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
+      where: and(
+        eq(users.slug, p1),
+        inArray(users.profileVisibility, ["public", "unlisted"])
+      ),
       with: {
         keybindings: true,
         playerConfig: true,
@@ -205,7 +214,10 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       },
     }),
     db.query.users.findFirst({
-      where: eq(users.slug, p2),
+      where: and(
+        eq(users.slug, p2),
+        inArray(users.profileVisibility, ["public", "unlisted"])
+      ),
       with: {
         keybindings: true,
         playerConfig: true,

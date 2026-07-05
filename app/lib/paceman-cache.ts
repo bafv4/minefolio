@@ -1,7 +1,14 @@
 import { createDb } from "./db";
 import { pacemanPaces, users } from "./schema";
-import { eq, and, gte, lt, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lt, desc, inArray, sql } from "drizzle-orm";
 import type { PaceManRecentRun } from "./paceman";
+
+// ペースキャッシュの保持期間の開始時刻（過去2か月）
+function getPaceRetentionStart(): Date {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 2);
+  return d;
+}
 
 // スプリットタイムをタイムラインに変換する型定義
 interface PaceEntry {
@@ -130,6 +137,7 @@ function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
 
 /**
  * PaceManの最近のペース情報をDBにキャッシュする
+ * 既存データは保持し、取得したランと同じ pacemanRunId の行のみ置き換える（蓄積型）
  * @param recentPaces PaceManから取得したペース情報
  */
 export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promise<void> {
@@ -149,15 +157,8 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     userRecords.map((u) => [u.mcid!.toLowerCase(), u.id])
   );
 
-  // 対象MCIDの既存キャッシュを削除（重複防止）
-  for (const mcid of mcids) {
-    await db.delete(pacemanPaces).where(
-      sql`lower(${pacemanPaces.mcid}) = ${mcid}`
-    );
-  }
-
-  // 過去1週間の開始時刻
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // 保持期間の開始時刻（過去2か月）
+  const retentionStart = getPaceRetentionStart();
 
   // 各ペース情報をDBに保存用に変換
   const pacesToInsert: Array<{
@@ -177,8 +178,8 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     const userId = mcidToUserId.get(mcidLower) || null;
     const runDate = new Date(run.time * 1000); // Unix秒からミリ秒に変換
 
-    // 1週間より古いデータはスキップ
-    if (runDate < oneWeekAgo) continue;
+    // 保持期間より古いデータはスキップ
+    if (runDate < retentionStart) continue;
 
     // 各スプリットからペースエントリを抽出
     const entries = extractPaceEntries(run);
@@ -198,17 +199,28 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     }
   }
 
-  // バッチサイズを制限してインサート（SQLiteの変数上限対策）
-  if (pacesToInsert.length > 0) {
+  // 削除→挿入を1トランザクションにまとめる
+  // （途中失敗で削除だけがコミットされると、取得ウィンドウ外の蓄積済みペースが復元不能になるため）
+  await db.transaction(async (tx) => {
+    // 取得したランの既存キャッシュを削除（重複防止・進行中ランのSplit更新）
+    // MCID単位ではなくランID単位で削除することで、取得ウィンドウ外の過去ペースを保持する
+    const fetchedRunIds = [...new Set(recentPaces.map((p) => p.id))];
+    const deleteBatchSize = 100;
+    for (let i = 0; i < fetchedRunIds.length; i += deleteBatchSize) {
+      const batch = fetchedRunIds.slice(i, i + deleteBatchSize);
+      await tx.delete(pacemanPaces).where(inArray(pacemanPaces.pacemanRunId, batch));
+    }
+
+    // バッチサイズを制限してインサート（SQLiteの変数上限対策）
     const batchSize = 50;
     for (let i = 0; i < pacesToInsert.length; i += batchSize) {
       const batch = pacesToInsert.slice(i, i + batchSize);
-      await db.insert(pacemanPaces).values(batch);
+      await tx.insert(pacemanPaces).values(batch);
     }
-  }
 
-  // 1週間より古いデータを削除（他ユーザーの古いデータも含む）
-  await db.delete(pacemanPaces).where(lt(pacemanPaces.date, oneWeekAgo));
+    // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
+    await tx.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart));
+  });
 }
 
 /**
@@ -238,6 +250,77 @@ export async function getRecentPacesFromCache(limit: number = 20): Promise<Cache
     igt: p.igt,
     date: p.date.toISOString(),
   }));
+}
+
+// フィード用ペースエントリ（ホームフィード・ペース一覧で共用）
+export interface PaceFeedEntry {
+  mcid: string;
+  timeline: string;
+  rta: number;
+  date: Date;
+  pacemanRunId: number;
+}
+
+// フィード用ペース一覧の取得条件
+export interface PaceFeedQuery {
+  limit?: number; // 取得件数（未指定で全件）
+  timeline?: string; // 区間指定時はその区間の行のみ（同一ランに同区間は1行なので区間のRTAで表示される）
+}
+
+/**
+ * 全登録ユーザーのフィード用ペース一覧を取得（新しい順）
+ * - Enter Nether を除外
+ * - 同一 pacemanRunId は最も進んだ split（rta最大）のみ採用（timeline指定時はその区間の行）
+ * @param registeredMcids 対象ユーザーのMCID（小文字）集合 — 含まれないペースは除外
+ */
+export async function getPaceFeedEntries(
+  registeredMcids: Set<string>,
+  query: PaceFeedQuery = {},
+): Promise<PaceFeedEntry[]> {
+  const { limit, timeline } = query;
+  const db = createDb();
+
+  const conditions = [
+    eq(pacemanPaces.isNetherEnter, false),
+    // プルーニングはcron経由でしか走らないため、保持期間外のデータを配信しないようガード
+    gte(pacemanPaces.date, getPaceRetentionStart()),
+  ];
+  if (timeline) conditions.push(eq(pacemanPaces.timeline, timeline));
+
+  const baseQuery = db
+    .select({
+      mcid: pacemanPaces.mcid,
+      timeline: pacemanPaces.timeline,
+      rta: pacemanPaces.rta,
+      date: pacemanPaces.date,
+      pacemanRunId: pacemanPaces.pacemanRunId,
+    })
+    .from(pacemanPaces)
+    .where(and(...conditions))
+    // dateは秒精度でタイになり得るため、offsetページングが安定するようランIDで決定的にタイブレーク
+    .orderBy(desc(pacemanPaces.date), desc(pacemanPaces.pacemanRunId));
+
+  // limit指定時は同一ランの複数Split・重複を考慮して多めに取得（全件走査を避ける）
+  const paces = limit !== undefined ? await baseQuery.limit(limit * 5) : await baseQuery;
+
+  const filtered = paces.filter((p) => registeredMcids.has(p.mcid.toLowerCase()));
+
+  // 同じワールド（pacemanRunId）のペースは最新（最も進んだ）Splitのみを残す
+  // timeline指定時は同一ランに1行しかないため実質そのまま通る
+  const runIdToLatestPace = new Map<number, PaceFeedEntry>();
+  for (const pace of filtered) {
+    const existing = runIdToLatestPace.get(pace.pacemanRunId);
+    // rtaが長い方が進んでいるので、より長いrtaを持つものを選択
+    if (!existing || pace.rta > existing.rta) {
+      runIdToLatestPace.set(pace.pacemanRunId, pace);
+    }
+  }
+
+  const sorted = Array.from(runIdToLatestPace.values()).sort(
+    (a, b) => b.date.getTime() - a.date.getTime() || b.pacemanRunId - a.pacemanRunId,
+  );
+
+  return limit !== undefined ? sorted.slice(0, limit) : sorted;
 }
 
 /**

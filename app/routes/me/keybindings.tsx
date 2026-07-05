@@ -37,10 +37,11 @@ import { toast } from "sonner";
 import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
-import { isKeyRemapTarget } from "@/lib/remap-utils";
+import { isKeyRemapTarget, sanitizeRemapTargetKey } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { PresetSelector } from "@/components/preset-selector";
 
@@ -178,7 +179,6 @@ type RemapMutationInput = {
 };
 
 type KeybindingUpdateInput = { id: string; keyCode: string };
-type RemapType = "none" | "keyboard" | "special" | "disabled";
 type PersistedRemapPayload = {
   sourceKey: string;
   targetKey: string | null;
@@ -186,50 +186,8 @@ type PersistedRemapPayload = {
   notes: string | null;
 };
 
-function getRemapTypeFromTargetKey(targetKey: string | null | undefined): RemapType {
-  if (targetKey == null || targetKey === "") return "disabled";
-  return isKeyRemapTarget(targetKey) ? "keyboard" : "special";
-}
-
-function useRemapType(
-  targetKey: string | null,
-  index: number,
-  onUpdate: (index: number, updates: Partial<RemapEntry>) => void,
-) {
-  const remapType = getRemapTypeFromTargetKey(targetKey);
-  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
-
-  useEffect(() => {
-    if ((selectedRemapType === "special" || selectedRemapType === "keyboard") &&
-        (targetKey === "" || targetKey === null)) {
-      return;
-    }
-    setSelectedRemapType(remapType);
-  }, [remapType, selectedRemapType, targetKey]);
-
-  const handleRemapTypeChange = useCallback((newType: RemapType) => {
-    setSelectedRemapType(newType);
-    switch (newType) {
-      case "disabled":
-        onUpdate(index, { targetKey: null });
-        break;
-      case "special":
-        onUpdate(index, { targetKey: remapType === "special" ? targetKey : "" });
-        break;
-      case "keyboard":
-        onUpdate(index, { targetKey: remapType === "keyboard" && targetKey ? targetKey : "" });
-        break;
-    }
-  }, [index, onUpdate, remapType, targetKey]);
-
-  return { remapType, selectedRemapType, handleRemapTypeChange };
-}
-
-function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
-  if (targetKey == null) return null;
-  if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
-  return targetKey;
-}
+// RemapType / getRemapTypeFromTargetKey / useRemapType は @/components/remap-row、
+// sanitizeRemapTargetKey は @/lib/remap-utils に抽出済み
 
 type CustomActionMutationInput = {
   id?: string;
@@ -257,7 +215,9 @@ async function persistRemaps(
 ) {
   for (const remap of remapsData) {
     if (remap._delete && remap.id) {
-      await db.delete(keyRemaps).where(eq(keyRemaps.id, remap.id));
+      await db
+        .delete(keyRemaps)
+        .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
     }
   }
 
@@ -282,7 +242,7 @@ async function persistRemaps(
       await db
         .update(keyRemaps)
         .set({ ...payload, updatedAt: now })
-        .where(eq(keyRemaps.id, remap.id));
+        .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
       continue;
     }
 
@@ -300,7 +260,7 @@ async function persistRemaps(
       await db
         .update(keyRemaps)
         .set({ ...payload, updatedAt: now })
-        .where(eq(keyRemaps.id, existing.id));
+        .where(and(eq(keyRemaps.id, existing.id), eq(keyRemaps.userId, userId)));
       continue;
     }
 
@@ -316,6 +276,7 @@ async function persistRemaps(
 
 async function persistKeybindingUpdates(
   db: ReturnType<typeof createDb>,
+  userId: string,
   updates: KeybindingUpdateInput[],
   now: Date,
   options: { normalizeEmptyToUnbound: boolean }
@@ -326,7 +287,7 @@ async function persistKeybindingUpdates(
       await db
         .update(keybindings)
         .set({ keyCode, updatedAt: now })
-        .where(eq(keybindings.id, update.id));
+        .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
       continue;
     }
 
@@ -334,7 +295,7 @@ async function persistKeybindingUpdates(
     await db
       .update(keybindings)
       .set({ keyCode: update.keyCode, updatedAt: now })
-      .where(eq(keybindings.id, update.id));
+      .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
   }
 }
 
@@ -373,7 +334,9 @@ async function persistCustomActions(
 ) {
   for (const action of actionsData) {
     if (action._delete && action.id) {
-      await db.delete(customActions).where(eq(customActions.id, action.id));
+      await db
+        .delete(customActions)
+        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
     }
   }
 
@@ -395,7 +358,7 @@ async function persistCustomActions(
           displayOrder: order++,
           updatedAt: now,
         })
-        .where(eq(customActions.id, action.id));
+        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
       continue;
     }
 
@@ -410,6 +373,42 @@ async function persistCustomActions(
       createdAt: now,
       updatedAt: now,
     });
+  }
+}
+
+/** formData 由来の JSON 配列を安全にパースする（不正なら null）。 */
+function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? (v as T[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** fingerAssignments の JSON 文字列がオブジェクトとして妥当か検証する。 */
+function isValidFingerAssignmentsJson(raw: string): boolean {
+  try {
+    const v = JSON.parse(raw);
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+}
+
+/** fingerAssignments を安全にパースする（不正・未設定なら {}）。表示側で使用。 */
+function parseFingerAssignments(
+  raw: string | null | undefined,
+): Record<string, FingerType[]> {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v)
+      ? (v as Record<string, FingerType[]>)
+      : {};
+  } catch {
+    return {};
   }
 }
 
@@ -443,9 +442,11 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // キーバインド保存
   if (intent === "save-keybindings") {
-    const keybindingsJson = formData.get("keybindings") as string;
-    const updates = JSON.parse(keybindingsJson) as KeybindingUpdateInput[];
-    await persistKeybindingUpdates(db, updates, new Date(), {
+    const updates = parseJsonArray<KeybindingUpdateInput>(
+      formData.get("keybindings") as string,
+    );
+    if (!updates) return { error: t("meKeybindings.invalidPayload") };
+    await persistKeybindingUpdates(db, user.id, updates, new Date(), {
       normalizeEmptyToUnbound: true,
     });
     await syncActivePresetSnapshot(db, user.id, ["keybindings"]);
@@ -455,8 +456,10 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // リマップ保存
   if (intent === "save-remaps") {
-    const remapsJson = formData.get("remaps") as string;
-    const remapsData = JSON.parse(remapsJson) as RemapMutationInput[];
+    const remapsData = parseJsonArray<RemapMutationInput>(
+      formData.get("remaps") as string,
+    );
+    if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
     await persistRemaps(db, user.id, remapsData, now);
@@ -468,6 +471,9 @@ export async function action({ context, request }: Route.ActionArgs) {
   // 指割り当て保存
   if (intent === "save-fingers") {
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
+    if (!fingerAssignmentsJson || !isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
     const now = new Date();
     await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
     await syncActivePresetSnapshot(db, user.id, ["fingers"]);
@@ -485,27 +491,33 @@ export async function action({ context, request }: Route.ActionArgs) {
 
     // キーバインド
     if (keybindingsJson) {
-      const updates = JSON.parse(keybindingsJson) as KeybindingUpdateInput[];
-      await persistKeybindingUpdates(db, updates, now, {
+      const updates = parseJsonArray<KeybindingUpdateInput>(keybindingsJson);
+      if (!updates) return { error: t("meKeybindings.invalidPayload") };
+      await persistKeybindingUpdates(db, user.id, updates, now, {
         normalizeEmptyToUnbound: false,
       });
     }
 
     // リマップ
     if (remapsJson) {
-      const remapsData = JSON.parse(remapsJson) as RemapMutationInput[];
+      const remapsData = parseJsonArray<RemapMutationInput>(remapsJson);
+      if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
       await persistRemaps(db, user.id, remapsData, now);
     }
 
     // 指割り当て
     if (fingerAssignmentsJson) {
+      if (!isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
+        return { error: t("meKeybindings.invalidPayload") };
+      }
       await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
     }
 
     // カスタムアクション
     const customActionsJson = formData.get("customActions") as string;
     if (customActionsJson) {
-      const customActionsData = JSON.parse(customActionsJson) as CustomActionMutationInput[];
+      const customActionsData = parseJsonArray<CustomActionMutationInput>(customActionsJson);
+      if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
       await persistCustomActions(db, user.id, customActionsData, now);
     }
 
@@ -578,14 +590,18 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // カスタムキー保存
   if (intent === "save-custom-keys") {
-    const customKeysJson = formData.get("customKeys") as string;
-    const customKeysData = JSON.parse(customKeysJson) as CustomKeyMutationInput[];
+    const customKeysData = parseJsonArray<CustomKeyMutationInput>(
+      formData.get("customKeys") as string,
+    );
+    if (!customKeysData) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
 
     for (const ck of customKeysData) {
       if (ck._delete && ck.id) {
-        await db.delete(customKeys).where(eq(customKeys.id, ck.id));
+        await db
+          .delete(customKeys)
+          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
       } else if (ck.id) {
         await db.update(customKeys)
           .set({
@@ -594,7 +610,7 @@ export async function action({ context, request }: Route.ActionArgs) {
             category: ck.category,
             updatedAt: now,
           })
-          .where(eq(customKeys.id, ck.id));
+          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
       } else if (ck.keyCode && ck.keyName) {
         await db.insert(customKeys).values({
           id: createId(),
@@ -615,8 +631,10 @@ export async function action({ context, request }: Route.ActionArgs) {
 
   // カスタムアクション保存
   if (intent === "save-custom-actions") {
-    const customActionsJson = formData.get("customActions") as string;
-    const customActionsData = JSON.parse(customActionsJson) as CustomActionMutationInput[];
+    const customActionsData = parseJsonArray<CustomActionMutationInput>(
+      formData.get("customActions") as string,
+    );
+    if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
     await persistCustomActions(db, user.id, customActionsData, now);
@@ -747,305 +765,8 @@ type CustomKeyEntry = {
 // リマップ行コンポーネント
 // =====================================
 
-/** キーキャプチャボタン（リマップ元/先で共通化） */
-function KeyCaptureButton({
-  value,
-  placeholder,
-  keyboardLayout,
-  isCapturing,
-  setIsCapturing,
-  onCapture,
-  allowModifiers = false,
-  className,
-}: {
-  value: string;
-  placeholder: string;
-  keyboardLayout: string | null;
-  isCapturing: boolean;
-  setIsCapturing: (v: boolean) => void;
-  onCapture: (keyCode: string) => void;
-  allowModifiers?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onFocus={() => setIsCapturing(true)}
-      onBlur={() => setIsCapturing(false)}
-      onKeyDown={(e) => {
-        if (!isCapturing) return;
-        e.preventDefault();
-
-        if (allowModifiers) {
-          // 修飾キー単独の場合
-          const modifierKeyCodes = [
-            "ShiftLeft", "ShiftRight",
-            "ControlLeft", "ControlRight",
-            "AltLeft", "AltRight",
-            "MetaLeft", "MetaRight",
-          ];
-          if (modifierKeyCodes.includes(e.code)) {
-            onCapture(e.code);
-            (e.target as HTMLElement).blur();
-            return;
-          }
-
-          // 修飾キー組み合わせを構築
-          const modifiers: string[] = [];
-          if (e.ctrlKey) modifiers.push("Ctrl");
-          if (e.shiftKey) modifiers.push("Shift");
-          if (e.altKey) modifiers.push("Alt");
-          if (e.metaKey) modifiers.push("Meta");
-          const combo = modifiers.length > 0
-            ? [...modifiers, e.code].join("+")
-            : e.code;
-          onCapture(combo);
-        } else {
-          // 修飾キーは無視（リマップ先用）
-          if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
-          onCapture(e.code);
-        }
-        (e.target as HTMLElement).blur();
-      }}
-      className={cn(
-        "min-w-28 h-9 px-3 rounded-md border text-sm font-mono transition-colors",
-        "bg-secondary/50 hover:bg-secondary/70",
-        "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-        isCapturing ? "border-primary" : "border-input",
-        className
-      )}
-    >
-      {isCapturing ? (
-        <span className="text-muted-foreground">{t("meKeybindings.pressKey")}</span>
-      ) : value ? (
-        <span>
-          {allowModifiers
-            ? getKeyCombinationLabel(value, keyboardLayout)
-            : getKeyLabel(value, keyboardLayout)}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">{placeholder}</span>
-      )}
-    </button>
-  );
-}
-
-// リマップ行コンポーネント
-function RemapRow({
-  remap,
-  index,
-  keyboardLayout,
-  onUpdate,
-  onDelete,
-}: {
-  remap: RemapEntry;
-  index: number;
-  keyboardLayout: string | null;
-  onUpdate: (index: number, updates: Partial<RemapEntry>) => void;
-  onDelete: (index: number) => void;
-}) {
-  const [isCapturingSource, setIsCapturingSource] = useState(false);
-  const [isCapturingTarget, setIsCapturingTarget] = useState(false);
-  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
-
-  return (
-    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
-      {/* キー変換行 */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* リマップ元（修飾キー対応） */}
-        <KeyCaptureButton
-          value={remap.sourceKey}
-          placeholder={t("meKeybindings.source")}
-          keyboardLayout={keyboardLayout}
-          isCapturing={isCapturingSource}
-          setIsCapturing={setIsCapturingSource}
-          onCapture={(key) => onUpdate(index, { sourceKey: key })}
-          allowModifiers={true}
-        />
-
-        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-
-        <Select
-          value={selectedRemapType}
-          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
-        >
-          <SelectTrigger className="w-24 h-9 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
-            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
-            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {selectedRemapType === "special" ? (
-          <Input
-            value={selectedRemapType === "special" ? (remap.targetKey ?? "") : ""}
-            onChange={(e) => onUpdate(index, { targetKey: e.target.value })}
-            placeholder={t("meKeybindings.enterCharacter")}
-            className="w-40 h-9 font-mono text-center text-sm"
-          />
-        ) : selectedRemapType === "keyboard" ? (
-          <KeyCaptureButton
-            value={remap.targetKey || ""}
-            placeholder={t("meKeybindings.target")}
-            keyboardLayout={keyboardLayout}
-            isCapturing={isCapturingTarget}
-            setIsCapturing={setIsCapturingTarget}
-            onCapture={(key) => onUpdate(index, { targetKey: key })}
-            allowModifiers={false}
-            className="w-40"
-          />
-        ) : null}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-9 w-9 p-0 text-destructive hover:text-destructive ml-auto"
-          onClick={() => onDelete(index)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-
-    </div>
-  );
-}
-
-// ダイアログ内リマップ行コンポーネント（修飾キー組み合わせ対応）
-function DialogRemapRow({
-  remap,
-  index,
-  baseKeyCode,
-  keyboardLayout,
-  onUpdate,
-  onDelete,
-}: {
-  remap: RemapEntry & { _index: number };
-  index: number;
-  baseKeyCode: string;
-  keyboardLayout: string | null;
-  onUpdate: (index: number, updates: Partial<RemapEntry>) => void;
-  onDelete: (index: number) => void;
-}) {
-  const [isCapturingTarget, setIsCapturingTarget] = useState(false);
-
-  // 現在のsourceKeyから修飾キーを抽出
-  const parsed = parseKeyCombination(remap.sourceKey);
-  const currentModifiers = parsed.modifiers;
-
-  // 修飾キーのトグル
-  const toggleModifier = (mod: "Ctrl" | "Shift" | "Alt" | "Meta") => {
-    const newModifiers = currentModifiers.includes(mod)
-      ? currentModifiers.filter((m) => m !== mod)
-      : [...currentModifiers, mod];
-
-    // 新しいsourceKeyを構築
-    const newSourceKey = newModifiers.length > 0
-      ? [...newModifiers.sort((a, b) => ["Ctrl", "Shift", "Alt", "Meta"].indexOf(a) - ["Ctrl", "Shift", "Alt", "Meta"].indexOf(b)), baseKeyCode].join("+")
-      : baseKeyCode;
-
-    onUpdate(index, { sourceKey: newSourceKey });
-  };
-
-  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
-
-  return (
-    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
-      {/* 修飾キー選択行 */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.from")}</span>
-        <div className="flex gap-1">
-          {(["Ctrl", "Shift", "Alt", "Meta"] as const).map((mod) => (
-            <Button
-              key={mod}
-              type="button"
-              variant={currentModifiers.includes(mod) ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => toggleModifier(mod)}
-            >
-              {mod === "Meta" ? "Win" : mod}
-            </Button>
-          ))}
-        </div>
-        <span className="text-muted-foreground">+</span>
-        <Badge variant="secondary" className="font-mono text-sm px-2 py-1">
-          {getKeyLabel(baseKeyCode, keyboardLayout)}
-        </Badge>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
-          onClick={() => onDelete(index)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* 出力設定行 */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.to")}</span>
-
-        {/* 出力タイプ選択 */}
-        <Select
-          value={selectedRemapType}
-          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
-        >
-          <SelectTrigger className="w-24 h-8 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
-            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
-            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {selectedRemapType === "special" ? (
-          <Input
-            value={selectedRemapType === "special" ? (remap.targetKey ?? "") : ""}
-            onChange={(e) => {
-              onUpdate(index, { targetKey: e.target.value });
-            }}
-            placeholder={t("meKeybindings.enterCharacter")}
-            className="w-40 h-8 font-mono text-center text-sm"
-          />
-        ) : selectedRemapType === "keyboard" ? (
-          <button
-            type="button"
-            onFocus={() => setIsCapturingTarget(true)}
-            onBlur={() => setIsCapturingTarget(false)}
-            onKeyDown={(e) => {
-              if (!isCapturingTarget) return;
-              e.preventDefault();
-              if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
-              onUpdate(index, { targetKey: e.code });
-              (e.target as HTMLElement).blur();
-            }}
-            className={cn(
-              "w-40 h-8 px-3 rounded-md border text-sm font-mono transition-colors",
-              "bg-secondary/50 hover:bg-secondary/70",
-              "focus:outline-none focus:ring-2 focus:ring-primary",
-              isCapturingTarget ? "border-primary" : "border-input"
-            )}
-          >
-            {isCapturingTarget ? (
-              <span className="text-muted-foreground">{t("meKeybindings.pressKey")}</span>
-            ) : remap.targetKey ? (
-              getKeyLabel(remap.targetKey, keyboardLayout)
-            ) : (
-              <span className="text-muted-foreground">{t("meKeybindings.target")}</span>
-            )}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+// キーキャプチャボタンは @/components/key-capture-button、
+// リマップ行（RemapRow / DialogRemapRow）は @/components/remap-row に抽出済み
 
 // カスタムアクション行コンポーネント（useStateを安全に使用するため分離）
 function CustomActionRow({
@@ -1184,7 +905,7 @@ export default function KeybindingsPage() {
   const [localRemaps, setLocalRemaps] = useState<RemapEntry[]>(() => dbRemapsToUiRemaps(initialRemaps));
   // 指割り当てのローカル状態
   const [localFingerAssignments, setLocalFingerAssignments] = useState<FingerAssignmentMap>(() =>
-    playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {}
+    parseFingerAssignments(playerConfig?.fingerAssignments)
   );
   // カスタムキーのローカル状態
   const [localCustomKeys, setLocalCustomKeys] = useState<CustomKeyEntry[]>(() =>
@@ -1237,7 +958,7 @@ export default function KeybindingsPage() {
 
   useEffect(() => {
     setLocalFingerAssignments(
-      playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {},
+      parseFingerAssignments(playerConfig?.fingerAssignments),
     );
   }, [playerConfig?.fingerAssignments]);
 
@@ -1283,7 +1004,7 @@ export default function KeybindingsPage() {
       setKeybindingChanges({});
       setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
       setLocalFingerAssignments(
-        playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {},
+        parseFingerAssignments(playerConfig?.fingerAssignments),
       );
       setLocalCustomActions(
         initialCustomActions.map((ca) => ({
@@ -1851,7 +1572,7 @@ export default function KeybindingsPage() {
     setKeybindingChanges({});
     setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
     setLocalFingerAssignments(
-      playerConfig?.fingerAssignments ? JSON.parse(playerConfig.fingerAssignments) : {}
+      parseFingerAssignments(playerConfig?.fingerAssignments)
     );
     setLocalCustomActions(
       initialCustomActions.map((ca) => ({

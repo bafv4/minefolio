@@ -1,6 +1,6 @@
 # ホーム画面・ライブ機能 仕様書
 
-## ホーム画面 (/home)
+## ホーム画面 (/)
 
 ### 概要
 
@@ -32,6 +32,8 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | PaceManペース | `recent_paces` | 1分 |
 | Twitchストリーム | `twitch_streams` | 30秒 |
 | ライブラン | `live_runs` | 10秒 |
+
+- PaceManペース（最近のペース）フィードは**最新20件まで**表示。セクションヘッダー右側の「すべて見る」からペース一覧画面（`/paces`）へ遷移できる
 
 ### /api/home-feed
 
@@ -77,6 +79,50 @@ interface FeedState {
 - `og:title`: `t("home.title")`
 - `og:image`: `/icon.png`
 - `twitter:card`: `summary`
+
+---
+
+## ペース一覧画面 (/paces)
+
+### 概要
+
+ホームの「最近のペース」フィードの全件表示版。DBキャッシュ（`pacemanPaces` テーブル、**過去2か月分**を保持）にあるペースを検索・無限スクロールで閲覧できる。
+
+### データ取得
+
+共通ロジックは `app/lib/paces-feed.server.ts` の `getVisiblePaceFeed()` に集約（loaderと `/api/paces` で共用）:
+
+- `getOptionalSession()` でセッションを取得（未ログインでもアクセス可能）
+- 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）の `mcidToUuid` / `mcidToDisplayName` / `mcidToSkinUrl` マップを構築
+- `getPaceFeedEntries(registeredMcids, query)`（`app/lib/paceman-cache.ts`）で取得
+  - Enter Nether を除外、保持期間（2か月）外をガード
+  - 同一 `pacemanRunId` は最も進んだ Split（rta最大）のみ採用（区間指定時はその区間の行）
+  - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 20 }` を渡して利用する
+- フィード全体は区間キー毎にインメモリキャッシュ（TTL 60秒）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
+- ログインユーザーが `showPacemanOnHome = false` の場合、自分のペースを除外（ホームと同じ挙動）
+
+### 検索
+
+URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共有可能なURL）:
+
+| パラメータ | 条件 | 備考 |
+|-----------|------|------|
+| `q` | プレイヤー | MCID・表示名の部分一致（大文字小文字無視） |
+| `split` | 区間 | `PACE_FEED_SPLITS`（`app/lib/pace-splits.ts`）のいずれか。指定時はその区間のRTAで表示・絞り込み |
+| `from` / `to` | 時期 | `YYYY-MM-DD`（JSTとして解釈、`to` はその日の終わりまで） |
+| `maxTime` | タイム上限 | `m:ss` 形式。表示される区間のRTAに対して適用 |
+
+### 遅延ロード・無限スクロール
+
+- loader（SSR）は先頭60件と総件数のみ返す
+- スクロールで `IntersectionObserver` が `/api/paces?offset=N&limit=60`（+検索条件）を呼び、順次追加
+- 追加読み込み中に一覧がずれた場合は `pacemanRunId` で重複除去
+- 検索条件の変更時は一覧の状態をリセット（`key` による再マウント）
+- 読み込み失敗時は「再試行」ボタンを表示
+
+### /api/paces
+
+ページング+検索用APIエンドポイント。`{ paces, total, hasMore }` を返す。`limit` は最大100。セッション依存のフィルタがあるためCDNキャッシュは付けない。
 
 ---
 
@@ -163,6 +209,15 @@ YouTubeライブ配信のキャッシュ。
 | `concurrentViewers` | integer | 同時視聴者数 |
 | `lastCheckedAt` | timestamp | 最終チェック日時 |
 
+### pacemanPaces
+
+PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）がPaceMan APIから直近1週間分を取得し、**蓄積型**で保存する:
+
+- 取得したランと同じ `pacemanRunId` の既存行のみ削除して挿入（取得ウィンドウ外の過去ペースは保持）
+- 削除→挿入→プルーニングは1トランザクションで実行（途中失敗による蓄積データの消失を防ぐ）
+- 保持期間は**過去2か月**。それより古い行はCron実行時に削除される
+- 読み取り側（`getPaceFeedEntries`）にも保持期間ガードがあり、Cronが止まっても期間外データは配信されない
+
 ### apiCache
 
 汎用APIキャッシュ。
@@ -180,15 +235,19 @@ YouTubeライブ配信のキャッシュ。
 
 ### ルート
 - `app/routes/home.tsx` - ホーム画面
+- `app/routes/paces.tsx` - ペース一覧画面（検索・無限スクロール）
 - `app/routes/live.tsx` - ライブ画面
 - `app/routes/api/home-feed.ts` - ホームフィード遅延読み込みAPI
+- `app/routes/api/paces.ts` - ペース一覧のページング+検索API
 
 ### ライブラリ
 - `app/lib/youtube.ts` - YouTube API連携
 - `app/lib/youtube-cache.ts` - YouTube動画・ライブキャッシュ管理
 - `app/lib/twitch.ts` - Twitch API連携（トークン取得、ストリーム取得）
 - `app/lib/paceman.ts` - PaceMan API連携（ライブラン取得）
-- `app/lib/paceman-cache.ts` - PaceManペースキャッシュ管理
+- `app/lib/paceman-cache.ts` - PaceManペースキャッシュ管理（蓄積・保持期間・フィード取得）
+- `app/lib/paces-feed.server.ts` - ペース一覧の共通ロジック（検索条件解析・表示対象の絞り込み）
+- `app/lib/pace-splits.ts` - フィード対象区間の定数
 - `app/lib/cache.ts` - 汎用インメモリキャッシュ（`getCached`, `setCached`）
 
 ### コンポーネント
@@ -196,6 +255,7 @@ YouTubeライブ配信のキャッシュ。
 - `app/components/youtube-live-card.tsx` - YouTubeライブ配信カード
 - `app/components/stream-card.tsx` - Twitchストリームカード
 - `app/components/live-pace-list.tsx` - ライブラン一覧
+- `app/components/pace-feed-card.tsx` - ペースフィードカード（ホーム・ペース一覧で共用）
 - `app/components/recent-pace-card.tsx` - PaceManペースカード
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード
 - `app/components/paceman-split-mark.tsx` - PaceManスプリットマーク

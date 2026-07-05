@@ -439,6 +439,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   pacemanPaces: many(pacemanPaces),
   customActions: many(customActions),
   guides: many(guides),
+  searchCraftTemplates: many(searchCraftTemplates),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -929,3 +930,42 @@ export const playerRankingsRelations = relations(playerRankings, ({ one }) => ({
 
 export type PlayerRanking = typeof playerRankings.$inferSelect;
 export type NewPlayerRanking = typeof playerRankings.$inferInsert;
+
+// ============================================
+// 23. search_craft_templates（サーチクラフトテンプレート）
+// ============================================
+export const searchCraftTemplates = sqliteTable("search_craft_templates", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // テンプレート情報
+  title: text("title").notNull(),
+  description: text("description"),
+
+  // 設定データ（JSON。config_presets のスナップショットと同一形式）
+  craftsData: text("crafts_data").notNull(), // JSON: PresetSearchCraftData[]
+  remapsData: text("remaps_data"), // JSON: PresetRemapData[]（公開時に含めた場合のみ）
+
+  // 公開状態・統計
+  isPublished: integer("is_published", { mode: "boolean" }).default(true).notNull(),
+  applyCount: integer("apply_count").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  // 想定するゲーム内言語（サーチ文字列は言語に依存する）。言語コード（例: "ja_jp"）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  gameLanguage: text("game_language"),
+}, (table) => [
+  index("idx_search_craft_templates_user_id").on(table.userId),
+  index("idx_search_craft_templates_published_created").on(table.isPublished, table.createdAt),
+]);
+
+export const searchCraftTemplatesRelations = relations(searchCraftTemplates, ({ one }) => ({
+  user: one(users, {
+    fields: [searchCraftTemplates.userId],
+    references: [users.id],
+  }),
+}));
+
+export type SearchCraftTemplate = typeof searchCraftTemplates.$inferSelect;
+export type NewSearchCraftTemplate = typeof searchCraftTemplates.$inferInsert;

@@ -134,6 +134,7 @@ async function searchSpeedruncomUser(mcid: string): Promise<string | null> {
     headers: {
       "User-Agent": "Minefolio/1.0 (https://minefolio.me)",
     },
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
@@ -160,6 +161,7 @@ async function fetchSpeedruncomUserPbs(
     headers: {
       "User-Agent": "Minefolio/1.0 (https://minefolio.me)",
     },
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
@@ -186,6 +188,7 @@ async function fetchSpeedruncomUserPendingRuns(
     headers: {
       "User-Agent": "Minefolio/1.0 (https://minefolio.me)",
     },
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
@@ -211,6 +214,7 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
     headers: {
       "User-Agent": "Minefolio/1.0 (https://minefolio.me)",
     },
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {

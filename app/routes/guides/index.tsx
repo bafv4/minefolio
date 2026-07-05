@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Search } from "lucide-react";
 import { t } from "@/lib/messages";
+import { GuidesContentTabs } from "@/components/content-tabs";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -114,6 +115,8 @@ export default function GuidesIndexPage() {
       <div>
         <h1 className="text-2xl font-bold">{t("guides.pageTitle")}</h1>
       </div>
+
+      <GuidesContentTabs active="guides" />
 
       {/* Search + tag filter + toggle */}
       <div className="flex flex-col gap-3">

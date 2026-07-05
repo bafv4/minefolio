@@ -52,8 +52,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     });
 
     if (user) {
-      // User exists, go to their profile
-      return redirect(`/player/${user.mcid}`);
+      // User exists, go to their profile（/player/:slug は slug で解決するため slug を使う。
+      // MCID 未設定ユーザーは mcid=null で /player/null になり 404 になるのを防ぐ）
+      return redirect(`/player/${user.slug}`);
     } else {
       // User needs to complete onboarding
       return redirect("/onboarding");
