@@ -18,6 +18,13 @@ pnpm db:migrate       # マイグレーション実行
 pnpm db:push          # スキーマを直接Tursoに反映（マイグレーションファイルなし）
 ```
 
+### git依存パッケージの更新（`@bafv4/mcitems` 等）
+
+`package.json` で `github:bafv4/mcitems` のように指定された git 依存を更新する場合:
+
+1. `pnpm update @bafv4/mcitems` で最新コミットを取得（lockfile がコミットにピン留めされる）。
+2. **更新後は必ず開発サーバーを再起動する**。Vite のプリバンドルキャッシュ（`node_modules/.vite/deps/`）が旧バージョンを保持したままだと、node/tsx では新版でもブラウザ側だけ旧挙動になる。表示が更新されない時はこのキャッシュを疑い、`node_modules/.vite` 削除または `--force` 付き起動で再バンドルさせる。
+
 ## 技術スタック
 
 - **フレームワーク**: React 19 + React Router 7（SSR、Vite）

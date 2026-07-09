@@ -1,12 +1,16 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   MinecraftItemIcon,
   formatItemName,
-  getItemNameJa,
+  getItemName,
+  loadLang,
+  isLangLoaded,
 } from "@bafv4/mcitems/1.16/react";
 import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
+import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
@@ -22,24 +26,87 @@ import { Copy } from "lucide-react";
 
 const TEXTURE_BASE_URL = "/mcitems";
 
-function getItemDisplayName(itemId: string): string {
-  return getItemNameJa(itemId) || formatItemName(itemId);
+/** サーチクラフトのゲーム内言語が未設定のときのフォールバック言語（アプリ既定=日本語）。 */
+const DEFAULT_ITEM_LANG = "ja_jp";
+
+/** アイテム名を指定言語で取得（未ロード言語・キー欠落時は en_us / 整形IDにフォールバック）。 */
+function getItemDisplayName(itemId: string, lang: string): string {
+  return getItemName(itemId, lang) ?? formatItemName(itemId);
 }
 
-const TIMING_LABELS: Record<string, string> = {
-  bastion: "Bastion",
-  fortress: "Fortress",
-  other: t("playerProfile.timingOther"),
-};
+/**
+ * 指定言語の辞書をクライアントで読み込む。バンドル済み(en_us/ja_jp)・読込済みは即 true。
+ * 非バンドル言語は SSR/初回描画では en_us にフォールバックし、loadLang 完了後に
+ * 再描画をトリガーして正しい名前へ更新する（初回描画はSSRと一致するのでhydration崩れなし）。
+ */
+function useItemLang(gameLanguage: string | null | undefined): string {
+  const lang = gameLanguage || DEFAULT_ITEM_LANG;
+  const [, setLoadedVersion] = useState(0);
+  useEffect(() => {
+    if (isLangLoaded(lang)) return;
+    let cancelled = false;
+    loadLang(lang, TEXTURE_BASE_URL)
+      .then(() => {
+        if (!cancelled) setLoadedVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // 読み込み失敗時はフォールバック表示のまま
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+  return lang;
+}
 
-const TIMING_ORDER = ["bastion", "fortress", "other"] as const;
+/**
+ * サーチ文字列を表示する。半角スペースを視認できるよう点線で囲みつつ、
+ * 中身は実際の空白文字のまま残す（テキスト選択・コピー時に半角スペースが崩れない）。
+ * 連続スペースや末尾スペースを保持するため、描画側の `<code>` に
+ * `whitespace-pre-wrap` を付けること。
+ */
+export function SearchStringText({ value }: { value: string }) {
+  // 半角スペースの連続を捕捉して分割（全角スペースは対象外）
+  const parts = value.split(/( +)/);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.length > 0 && part[0] === " " ? (
+          <span
+            key={i}
+            className="rounded-[2px] border border-dotted border-muted-foreground/60 box-decoration-clone"
+          >
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
 
-// タイミングセクションの色ドット（bastion=金 / fortress=赤 / その他=青）
-const TIMING_DOT_CLASSES: Record<string, string> = {
-  bastion: "bg-warning",
-  fortress: "bg-destructive",
-  other: "bg-info",
-};
+/**
+ * タイミングの表示メタ（この配列順が表示順）。
+ * 「指定なし」(null) はこの配列外で、常に先頭に表示する。
+ * dot はグループ見出し左の色ドット（カテゴリの識別用。意味的な良し悪しではない）。
+ */
+export const TIMING_META: { id: SearchCraftTiming; label: string; dot: string }[] = [
+  { id: "ow", label: "OW", dot: "bg-success" },
+  { id: "bastion", label: "Bastion", dot: "bg-warning" },
+  { id: "bastion_fort", label: "Bastion→Fort", dot: "bg-info" },
+  { id: "fortress", label: "Fortress", dot: "bg-destructive" },
+  { id: "blinded", label: "Blinded", dot: "bg-primary" },
+  { id: "other", label: t("playerProfile.timingOther"), dot: "bg-muted-foreground" },
+];
+
+const TIMING_LABELS: Record<string, string> = Object.fromEntries(
+  TIMING_META.map((m) => [m.id, m.label]),
+);
+const TIMING_DOT_CLASSES: Record<string, string> = Object.fromEntries(
+  TIMING_META.map((m) => [m.id, m.dot]),
+);
+const TIMING_ORDER: SearchCraftTiming[] = TIMING_META.map((m) => m.id);
 
 /** 表示用のサーチクラフト行データ（items はデコード済み） */
 export type SearchCraftRowData = {
@@ -176,11 +243,15 @@ export function SearchCraftGroupedList({
   crafts,
   remaps,
   fingerAssignments,
+  gameLanguage,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
+  gameLanguage?: string | null;
 }) {
+  const lang = useItemLang(gameLanguage);
   const hasAnyTiming = crafts.some((c) => c.timing);
 
   if (!hasAnyTiming) {
@@ -189,6 +260,7 @@ export function SearchCraftGroupedList({
         crafts={crafts}
         remaps={remaps}
         fingerAssignments={fingerAssignments}
+        lang={lang}
       />
     );
   }
@@ -201,12 +273,12 @@ export function SearchCraftGroupedList({
     grouped.get(key)!.push(craft);
   }
 
-  // ソート: bastion → fortress → other → null(指定なし)
+  // ソート: 指定なし(null) → OW → Bastion → Bastion→Fort → Fortress → Blinded → その他
   const sortedKeys: (string | null)[] = [];
+  if (grouped.has(null)) sortedKeys.push(null);
   for (const timing of TIMING_ORDER) {
     if (grouped.has(timing)) sortedKeys.push(timing);
   }
-  if (grouped.has(null)) sortedKeys.push(null);
 
   return (
     <div className="space-y-4">
@@ -218,6 +290,7 @@ export function SearchCraftGroupedList({
           crafts={grouped.get(timing)!}
           remaps={remaps}
           fingerAssignments={fingerAssignments}
+          lang={lang}
         />
       ))}
     </div>
@@ -231,12 +304,14 @@ function SearchCraftGroupCard({
   crafts,
   remaps,
   fingerAssignments,
+  lang,
 }: {
   title?: string;
   dotClass?: string;
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  lang: string;
 }) {
   return (
     <Card>
@@ -259,7 +334,7 @@ function SearchCraftGroupCard({
             SEARCH_CRAFT_GRID_COLS,
           )}
         >
-          <span className="pl-7">{t("playerProfile.colItems")}</span>
+          <span>{t("playerProfile.colItems")}</span>
           <span>{t("playerProfile.colSearchStr")}</span>
           <span>{t("playerProfile.colInputKeys")}</span>
         </div>
@@ -270,6 +345,7 @@ function SearchCraftGroupCard({
               craft={craft}
               remaps={remaps}
               fingerAssignments={fingerAssignments}
+              lang={lang}
             />
           ))}
         </div>
@@ -282,10 +358,12 @@ function SearchCraftRow({
   craft,
   remaps,
   fingerAssignments,
+  lang,
 }: {
   craft: SearchCraftRowData;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  lang: string;
 }) {
   const handleCopySearchStr = () => {
     if (!craft.searchStr || !navigator.clipboard) return;
@@ -297,11 +375,8 @@ function SearchCraftRow({
   return (
     <div className="py-3">
       <div className={cn("flex flex-col gap-2 lg:items-center", SEARCH_CRAFT_GRID_COLS)}>
-        {/* 順番 + アイテム */}
+        {/* アイテム */}
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-          <span className="w-6 shrink-0 text-xs font-mono text-muted-foreground/60 text-right pr-1">
-            {craft.sequence}
-          </span>
           {craft.items.map((itemId, idx) => (
             <div
               key={idx}
@@ -313,20 +388,20 @@ function SearchCraftRow({
                 textureBaseUrl={TEXTURE_BASE_URL}
                 className="pixelated"
               />
-              <span className="text-sm">{getItemDisplayName(itemId)}</span>
+              <span className="text-sm">{getItemDisplayName(itemId, lang)}</span>
             </div>
           ))}
         </div>
 
         {/* サーチ文字列（コピー可能） */}
-        <div className="flex items-center gap-1 min-w-0 pl-7 lg:pl-0">
+        <div className="flex items-center gap-1 min-w-0">
           <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1">
             {t("playerProfile.searchLabel")}
           </span>
           {craft.searchStr ? (
             <>
-              <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all">
-                {craft.searchStr}
+              <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
+                <SearchStringText value={craft.searchStr} />
               </code>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -348,7 +423,7 @@ function SearchCraftRow({
         </div>
 
         {/* 入力キー */}
-        <div className="flex items-start gap-1 min-w-0 pl-7 lg:pl-0">
+        <div className="flex items-start gap-1 min-w-0">
           <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1 mt-1.5">
             {t("playerProfile.inputKeysLabel")}
           </span>
@@ -366,7 +441,7 @@ function SearchCraftRow({
 
       {/* コメント */}
       {craft.comment && (
-        <p className="mt-1.5 pl-7 text-sm text-muted-foreground">{craft.comment}</p>
+        <p className="mt-1.5 text-sm text-muted-foreground">{craft.comment}</p>
       )}
     </div>
   );

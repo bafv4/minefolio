@@ -659,6 +659,7 @@ export default function TemplateViewPage() {
             sequence: idx + 1,
           }))}
           remaps={remaps}
+          gameLanguage={template.gameLanguage}
         />
       </section>
     </div>

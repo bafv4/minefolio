@@ -23,18 +23,34 @@ export const MAX_TEMPLATES_PER_USER = 20;
 export const MAX_TEMPLATE_CRAFTS = 100;
 
 /** 表示・編集用にデコードしたサーチクラフトエントリ */
+/** サーチクラフトのタイミング区分（表示順に定義） */
+export type SearchCraftTiming =
+  | "ow"
+  | "bastion"
+  | "bastion_fort"
+  | "fortress"
+  | "blinded"
+  | "other";
+
+export const SEARCH_CRAFT_TIMINGS = [
+  "ow",
+  "bastion",
+  "bastion_fort",
+  "fortress",
+  "blinded",
+  "other",
+] as const;
+
 export type TemplateCraft = {
   items: string[];
   searchStr: string | null;
   comment: string | null;
-  timing: "bastion" | "fortress" | "other" | null;
+  timing: SearchCraftTiming | null;
 };
 
-const TIMINGS = ["bastion", "fortress", "other"] as const;
-
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
-  return TIMINGS.includes(value as (typeof TIMINGS)[number])
-    ? (value as TemplateCraft["timing"])
+  return SEARCH_CRAFT_TIMINGS.includes(value as SearchCraftTiming)
+    ? (value as SearchCraftTiming)
     : null;
 }
 
@@ -206,10 +222,9 @@ export function parseEditorSubmission(formData: FormData): EditorSubmission | { 
       items,
       searchStr,
       comment: typeof raw.comment === "string" && raw.comment.trim() ? raw.comment : null,
-      timing:
-        raw.timing === "bastion" || raw.timing === "fortress" || raw.timing === "other"
-          ? raw.timing
-          : null,
+      timing: SEARCH_CRAFT_TIMINGS.includes(raw.timing as SearchCraftTiming)
+        ? (raw.timing as SearchCraftTiming)
+        : null,
     });
   }
 

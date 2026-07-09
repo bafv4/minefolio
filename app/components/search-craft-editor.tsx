@@ -63,8 +63,9 @@ import {
   ITEM_CATEGORIES,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
-import { ActualKeyBadges } from "@/components/search-craft-template-view";
+import { ActualKeyBadges, TIMING_META } from "@/components/search-craft-template-view";
 import type { RemapInfo } from "@/lib/remap-utils";
+import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
@@ -82,7 +83,7 @@ export type SearchCraftDraft = {
   items: string[];
   searchStr: string | null;
   comment: string | null;
-  timing: "bastion" | "fortress" | "other" | null;
+  timing: SearchCraftTiming | null;
 };
 
 // アイテム選択ダイアログ
@@ -102,7 +103,7 @@ function ItemSelectDialog({
 
   // mcitemsからクラフト可能なアイテムを取得
   const filteredItems = search
-    ? searchItems(search).filter(id => getCraftableItems().includes(id))
+    ? searchItems(search).filter((id) => getCraftableItems().includes(id))
     : getCraftableItemsByCategory(selectedCategory);
 
   const toggleItem = (itemId: string) => {
@@ -343,9 +344,11 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">{t("meSearchCraft.timingNone")}</SelectItem>
-                  <SelectItem value="bastion">Bastion</SelectItem>
-                  <SelectItem value="fortress">Fortress</SelectItem>
-                  <SelectItem value="other">{t("meSearchCraft.timingOther")}</SelectItem>
+                  {TIMING_META.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
