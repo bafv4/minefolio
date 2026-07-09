@@ -1397,6 +1397,7 @@ export default function PlayerProfilePage() {
                 }))}
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
+                gameLanguage={player.playerConfig?.gameLanguage}
               />
             </>
           ) : (

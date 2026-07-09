@@ -9,6 +9,7 @@ import {
 import type { FingerType } from "@/lib/keybindings";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
+import { SearchStringText } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
 
 const TEXTURE_BASE_URL = "/mcitems";
@@ -292,7 +293,9 @@ export function SearchCraftEmbedView({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <div className="flex items-baseline gap-2">
                   <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono">{craft.searchStr}</code>
+                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
+                    <SearchStringText value={craft.searchStr} />
+                  </code>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>

@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@bafv4/mcitems':
         specifier: github:bafv4/mcitems
-        version: https://codeload.github.com/bafv4/mcitems/tar.gz/e971f26891a792ab10bef0b5bd588dc40de8f2c1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@better-auth/drizzle-adapter':
         specifier: 1.5.3
         version: 1.5.3(@better-auth/core@1.5.3(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.2))(jose@6.2.3)(kysely@0.28.16)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(kysely@0.28.16))
@@ -445,9 +445,9 @@ packages:
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
-  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/e971f26891a792ab10bef0b5bd588dc40de8f2c1':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/bafv4/mcitems/tar.gz/e971f26891a792ab10bef0b5bd588dc40de8f2c1}
-    version: 2.0.0
+  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b':
+    resolution: {gitHosted: true, integrity: sha512-6s3+waVO/Ya342IG6GuzLNQAO2ghijhlfmc09E3ht3bn8JSg1Z7wE+0SW24S3uYAnKVPo1jB5MP8H9xsCCXBFQ==, tarball: https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b}
+    version: 2.1.0
     peerDependencies:
       react: '>=17.0.0'
       react-dom: '>=17.0.0'
@@ -1198,8 +1198,8 @@ packages:
   '@mjackson/node-fetch-server@0.2.0':
     resolution: {integrity: sha512-EMlH1e30yzmTpGLQjlFmaDAjyOeZhng1/XCd7DExR8PNAnG/G1tyruZxEoUe11ClnwGhGrtsdnyyUx1frSzjng==}
 
-  '@mongodb-js/saslprep@1.4.10':
-    resolution: {integrity: sha512-DDb3OAw8ezai9p2i1F7R5wMVmyrMIuT8ixjV56R4Hl4cazCo2tOMTDyPR5rrCUcHiMbWHzCXOdife5OD6H1C8w==}
+  '@mongodb-js/saslprep@1.4.12':
+    resolution: {integrity: sha512-QAfAMwNgnYxZ2C6D1HgeP7Gc4i/uvJRim415PCIL9ptRxWMNbWeLBYb2/9R4pGKny/s1FVu2JA2cxCUBUOggrA==}
 
   '@neon-rs/load@0.0.4':
     resolution: {integrity: sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw==}
@@ -2573,6 +2573,9 @@ packages:
   '@types/node@22.19.17':
     resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
 
+  '@types/node@22.20.0':
+    resolution: {integrity: sha512-QWlFW2wf3nTjC13/DqRnBpR4ZO36VJH/JVBkA/vcnmbTBNQIlnObqyqZE1tUR7+Ni23Lda8R1BxMfbXRpCUx5g==}
+
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
@@ -2853,8 +2856,8 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
-  bson@7.2.0:
-    resolution: {integrity: sha512-YCEo7KjMlbNlyHhz7zAZNDpIpQbd+wOEHJYezv0nMYTn4x31eIUM2yomNNubclAt63dObUzKHWsBLJ9QcZNSnQ==}
+  bson@7.3.1:
+    resolution: {integrity: sha512-h/C0qe6857pQhcSJHLfsR1uYGj98Ge3wKAD3Ed9KqH3wcVh+BM4Jq4xISD7vs9OPuT07n+q3QQVjslJ286j6ag==}
     engines: {node: '>=20.19.0'}
 
   buffer-from@1.1.2:
@@ -4818,6 +4821,9 @@ packages:
   zod@4.4.2:
     resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -5034,7 +5040,7 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/e971f26891a792ab10bef0b5bd588dc40de8f2c1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     optionalDependencies:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
@@ -5050,7 +5056,7 @@ snapshots:
       jose: 6.2.3
       kysely: 0.28.16
       nanostores: 1.3.0
-      zod: 4.4.2
+      zod: 4.4.3
 
   '@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.2))(jose@6.2.3)(kysely@0.28.16)(nanostores@1.3.0)':
     dependencies:
@@ -5520,7 +5526,7 @@ snapshots:
 
   '@mjackson/node-fetch-server@0.2.0': {}
 
-  '@mongodb-js/saslprep@1.4.10':
+  '@mongodb-js/saslprep@1.4.12':
     dependencies:
       sparse-bitfield: 3.0.3
     optional: true
@@ -6868,6 +6874,10 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/node@22.20.0':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
       '@types/react': 19.2.14
@@ -6909,7 +6919,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 22.20.0
 
   '@ungap/structured-clone@1.3.0': {}
 
@@ -7138,14 +7148,14 @@ snapshots:
       node-releases: 2.0.38
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
-  bson@7.2.0:
+  bson@7.3.1:
     optional: true
 
   buffer-from@1.1.2: {}
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 22.20.0
 
   bytes@3.1.2: {}
 
@@ -7639,7 +7649,7 @@ snapshots:
 
   happy-dom@20.10.2:
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 22.20.0
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
@@ -8317,8 +8327,8 @@ snapshots:
 
   mongodb@7.1.0:
     dependencies:
-      '@mongodb-js/saslprep': 1.4.10
-      bson: 7.2.0
+      '@mongodb-js/saslprep': 1.4.12
+      bson: 7.3.1
       mongodb-connection-string-url: 7.0.1
     optional: true
 
@@ -9304,5 +9314,7 @@ snapshots:
   yoga-layout@3.2.1: {}
 
   zod@4.4.2: {}
+
+  zod@4.4.3: {}
 
   zwitch@2.0.4: {}
