@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-export default defineConfig(({ isSsrBuild }) => ({
+export default defineConfig(({ isSsrBuild, command }) => ({
   plugins: [
     reactRouter(),
     tailwindcss(),
@@ -11,6 +11,15 @@ export default defineConfig(({ isSsrBuild }) => ({
   ],
   resolve: {
     dedupe: ["react", "react-dom"],
+  },
+  ssr: {
+    // sanitize-html は CJS で htmlparser2（dual package）を require するが、
+    // Vercel の Node ランタイムローダーが require 条件の解決に失敗して ESM ビルドを
+    // require し ERR_REQUIRE_ESM でクラッシュする。本番ビルドではサーバーバンドルへ
+    // 取り込み、実行時のパッケージ解決自体を無くす。
+    // dev では対象外にする（Vite dev の SSR は CJS を inline 評価できず
+    // "require is not defined" になる。ローカル Node は解決に問題がない）。
+    noExternal: command === "build" ? ["sanitize-html", "htmlparser2"] : [],
   },
   build: {
     rollupOptions: isSsrBuild
