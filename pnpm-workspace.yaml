@@ -1,2 +1,18 @@
 allowBuilds:
   esbuild: true
+
+# @tailwindcss/typography の peer 範囲 ">=3.0.0 || >=4.0.0 || insiders" に含まれる
+# 非 semver タグ "insiders" を pnpm が解釈できず誤検知するため、v4 を明示的に許可する
+# （インストール済みの tailwindcss 4.x は実際には範囲を満たしている）
+peerDependencyRules:
+  allowedVersions:
+    "@tailwindcss/typography>tailwindcss": "4"
+
+# 上流の対応待ちで解決できない非推奨の推移的依存を「把握済み」として警告を抑制する。
+# バージョンを固定しているため、新たな非推奨依存が入った場合は引き続き警告される。
+allowedDeprecatedVersions:
+  "@esbuild-kit/core-utils": 3.3.2 # drizzle-kit が使用（tsx への統合待ち）
+  "@esbuild-kit/esm-loader": 2.6.5 # 同上
+  glob: 10.5.0 # @vitest/coverage-v8 → test-exclude が使用（dev のみ）
+  node-domexception: 1.0.0 # @libsql/client → node-fetch が使用
+  tsconfck: 3.1.6 # vite-tsconfig-paths が使用（3.x 系の最終版）
