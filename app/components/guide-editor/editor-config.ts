@@ -3,7 +3,6 @@
 // 旧 index.tsx useEditor.extensions を逐語移植し、外出しした各拡張を import で合成する。
 import type { Extensions } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
-import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { Link as Link2 } from "@tiptap/extension-link";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -11,7 +10,7 @@ import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Highlight } from "@tiptap/extension-highlight";
 import { CustomCodeBlock } from "./extensions/code-block";
-import { CustomTableCell, CustomTableHeader } from "./extensions/table";
+import { CustomTable, CustomTableCell, CustomTableHeader } from "./extensions/table";
 import { CustomImage } from "./extensions/image";
 import { CustomYoutube } from "./extensions/youtube";
 import { CalloutExtension } from "./extensions/callout";
@@ -31,7 +30,7 @@ export function buildExtensions(placeholder = ""): Extensions {
     // （旧実装の "Duplicate extension names: link" 警告を解消。出力は不変）。
     StarterKit.configure({ codeBlock: false, link: false }),
     CustomCodeBlock,
-    Table.configure({ resizable: true }),
+    CustomTable.configure({ resizable: true }),
     TableRow,
     CustomTableCell,
     CustomTableHeader,

@@ -53,7 +53,13 @@ export async function action({ context, request }: ActionFunctionArgs) {
           "image/gif",
           "image/webp",
         ],
-        maximumSizeInBytes: 5 * 1024 * 1024,
+        // クライアント側で縮小・webp/jpeg 再エンコード済みだが、GIF 素通しや
+        // 例外時の余裕として上限を確保する（use-image-upload の MAX_UPLOAD_BYTES と一致）。
+        maximumSizeInBytes: 15 * 1024 * 1024,
+        // カバー画像は固定パス（.../cover.<ext>）のため、同名 blob への再アップロードは
+        // 既定（addRandomSuffix:false / allowOverwrite:false）だと「既に存在する」で失敗する。
+        // ランダムサフィックスを付けて毎回一意パスにし、再試行の失敗と URL キャッシュを防ぐ。
+        addRandomSuffix: true,
       };
     },
     onUploadCompleted: async ({ blob }) => {

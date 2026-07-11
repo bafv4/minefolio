@@ -144,6 +144,16 @@ export function MetadataFields({
             }}
           />
         </div>
+        {/* アップロードエラー（カバー画像セクション内に表示） */}
+        {uploadError && (
+          <div
+            className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2"
+            role="alert"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {uploadError}
+          </div>
+        )}
       </div>
 
       {/* タグ */}
@@ -184,14 +194,6 @@ export function MetadataFields({
           )}
         </div>
       </div>
-
-      {/* アップロードエラー */}
-      {uploadError && (
-        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2" role="alert">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {uploadError}
-        </div>
-      )}
     </div>
   );
 }

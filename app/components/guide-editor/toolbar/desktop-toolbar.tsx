@@ -50,6 +50,7 @@ import {
   Combine,
   PanelTop,
   PanelLeft,
+  AlignHorizontalDistributeCenter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -61,7 +62,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
-import { InlineColorPicker, CellColorPicker } from "../panels/color-picker";
+import { InlineColorPicker, TableStylePicker } from "../panels/color-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import {
   setBlockType,
@@ -71,6 +72,7 @@ import {
   insertCallout,
   insertToggle,
   applyTableOp,
+  unifyColumnWidths,
   type BlockType,
   type CalloutType,
 } from "../lib/block-commands";
@@ -437,6 +439,9 @@ export function DesktopToolbar({
                 <ToolbarButton label="列を削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteCol")}>
                   <Trash2 className="h-4 w-4" />
                 </ToolbarButton>
+                <ToolbarButton label="列幅を統一" disabled={!inTable} onClick={() => unifyColumnWidths(editor)}>
+                  <AlignHorizontalDistributeCenter className="h-4 w-4" />
+                </ToolbarButton>
                 <ToolbarSeparator />
                 <ToolbarButton label="セルを結合 / 分割" disabled={!inTable} onClick={() => applyTableOp(editor, "mergeOrSplit")}>
                   <Combine className="h-4 w-4" />
@@ -447,7 +452,7 @@ export function DesktopToolbar({
                 <ToolbarButton label="見出し列を切替" disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderColumn")}>
                   <PanelLeft className="h-4 w-4" />
                 </ToolbarButton>
-                {inTable && <CellColorPicker editor={editor} />}
+                {inTable && <TableStylePicker editor={editor} />}
                 <ToolbarSeparator />
                 <ToolbarButton label="テーブルを削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteTable")}>
                   <Table2 className="h-4 w-4" />

@@ -13,10 +13,12 @@ import sanitizeHtml from "sanitize-html";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
+import { Eye, ArrowLeft, Calendar, Pencil, List, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
 import {
   extractEmbedRefs,
   getUniqueEmbedSlugs,
@@ -147,6 +149,7 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
       "*": {
         color: [/.*/],
         "background-color": [/.*/],
+        "text-align": [/^(left|center|right|justify)$/],
         "min-width": [/.*/],
         width: [/.*/],
       },
@@ -160,8 +163,11 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
     '<div class="table-scroll-wrapper"><table$1'
   ).replace(/<\/table>/g, '</table></div>');
 
+  // 見出し(h1〜h3)に id を付与し、目次データを生成する
+  const { html: contentWithIds, toc } = buildTableOfContents(wrappedContent);
+
   // Extract embed references and fetch user data
-  const embedRefs = extractEmbedRefs(wrappedContent);
+  const embedRefs = extractEmbedRefs(contentWithIds);
   const embedSlugs = getUniqueEmbedSlugs(embedRefs);
   const embedUsers: Record<string, EmbedUserData> = {};
 
@@ -248,13 +254,14 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
       summary: viewSummary,
       coverImageUrl: viewCover,
       tags: viewTags,
-      sanitizedContent: wrappedContent,
+      sanitizedContent: contentWithIds,
     },
     author,
     appUrl,
     embedUsers,
     isOwner,
     previewingDraft,
+    toc,
   };
 }
 
@@ -265,7 +272,7 @@ const MinecraftAvatarLazy = lazy(() =>
 );
 
 export default function GuideViewPage() {
-  const { guide, author, embedUsers, isOwner, previewingDraft } = useLoaderData<typeof loader>();
+  const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
     tags = JSON.parse(guide.tags) as string[];
@@ -397,6 +404,9 @@ export default function GuideViewPage() {
         </span>
       </div>
 
+      {/* 目次 */}
+      <TableOfContents items={toc} />
+
       {/* Content */}
       <GuideContent
         contentRef={contentRef}
@@ -431,6 +441,58 @@ export default function GuideViewPage() {
         </Link>
       </div>
     </article>
+  );
+}
+
+/** ガイドの目次（折りたたみ式）。見出しが2つ以上あるときのみ表示する。 */
+function TableOfContents({ items }: { items: TocItem[] | undefined }) {
+  const [open, setOpen] = useState(true);
+
+  // items は通常 loader から必ず配列で渡るが、HMR や古いローダーデータで
+  // 一時的に undefined になっても描画が壊れないようにガードする。
+  if (!items || items.length < 2) return null;
+
+  const handleJump = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    history.replaceState(null, "", `#${id}`);
+  };
+
+  return (
+    <nav aria-label="目次" className="mb-10 rounded-lg border bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold"
+      >
+        <span className="flex items-center gap-2">
+          <List className="h-4 w-4 text-muted-foreground" />
+          目次
+        </span>
+        <ChevronDown
+          className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <ul className="px-2 pb-3">
+          {items.map((item) => (
+            <li key={item.id}>
+              <a
+                href={`#${item.id}`}
+                onClick={(e) => handleJump(e, item.id)}
+                className="block truncate rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                style={{ paddingLeft: `${(item.level - 1) * 1 + 0.5}rem` }}
+              >
+                {item.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </nav>
   );
 }
 

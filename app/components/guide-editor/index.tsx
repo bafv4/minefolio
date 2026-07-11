@@ -26,6 +26,8 @@ import {
   useImageUpload,
   buildInlineImagePath,
   buildCoverImagePath,
+  COVER_IMAGE_PREPARE,
+  INLINE_IMAGE_PREPARE,
 } from "./hooks/use-image-upload";
 import { useUnsavedWarning } from "./hooks/use-unsaved-warning";
 import { insertEmbed, insertGuideLink } from "./lib/block-commands";
@@ -36,6 +38,7 @@ import { DesktopToolbar } from "./toolbar/desktop-toolbar";
 import { EditorBubbleMenu } from "./toolbar/bubble-menu";
 import { MobileToolbar } from "./toolbar/mobile-toolbar";
 import { BlockHandle } from "./toolbar/block-handle";
+import { TableHandles } from "./toolbar/table-handles";
 
 export function GuideEditor({
   guideId,
@@ -151,9 +154,9 @@ export function GuideEditor({
     async (file: File) => {
       if (!editor) return;
       const url = await imageUpload.uploadTo(
-        buildInlineImagePath(userId, guideId, file),
+        buildInlineImagePath(userId, guideId),
         file,
-        "画像のアップロードに失敗しました",
+        { ...INLINE_IMAGE_PREPARE, errorMessage: "画像のアップロードに失敗しました" },
       );
       if (url) {
         editor
@@ -261,7 +264,9 @@ export function GuideEditor({
             {editor && !isTouch && (
               <EditorBubbleMenu editor={editor} onLink={handleLinkInsert} enabled={!isTouch} />
             )}
-            {editor && <BlockHandle editor={editor} touch={isTouch} />}
+            {/* デスクトップ: テーブル上はブロックハンドルの代わりに行・列ハンドルを出す */}
+            {editor && <BlockHandle editor={editor} touch={isTouch} suppressInTable={!isTouch} />}
+            {editor && !isTouch && <TableHandles editor={editor} />}
             <EditorContent editor={editor} />
           </div>
         </div>
@@ -288,9 +293,9 @@ export function GuideEditor({
         initialValues={{ title, summary, tags, coverImageUrl, isPublished }}
         uploadCover={(file) =>
           coverUpload.uploadTo(
-            buildCoverImagePath(userId, guideId, file),
+            buildCoverImagePath(userId, guideId),
             file,
-            "サムネイルのアップロードに失敗しました",
+            { ...COVER_IMAGE_PREPARE, errorMessage: "カバー画像のアップロードに失敗しました" },
           )
         }
         isUploadingCover={coverUpload.isUploading}

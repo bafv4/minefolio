@@ -60,6 +60,9 @@ export const AUTO_SAVE_DEBOUNCE_MS = 2000;
  * 旧実装の z-40 / z-200 / z-9999 のばらつきを 1 箇所に集約。
  */
 export const EDITOR_Z = {
+  // テーブル行・列ハンドルはツールバーより下 = スクロールでテーブル上端が
+  // ツールバー裏に隠れたとき、ハンドルも一緒に隠れる（ツールバー上に浮かない）。
+  tableHandle: 29,
   toolbar: 30,
   handle: 40,
   bubble: 50,

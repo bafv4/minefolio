@@ -55,7 +55,8 @@
   - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・タグ・公開設定を集約（ツールバーの「設定」から開く）。
   - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）
   - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）
-  - **ブロックハンドル**でブロック種別変更 / 削除 / テーブル行列操作 — `toolbar/block-handle.tsx`
+  - **ブロックハンドル**でブロック種別変更 / 削除 — `toolbar/block-handle.tsx`。デスクトップではテーブル上に表示せず行・列ハンドルへ委譲（タッチはテーブル行列操作メニューを含む従来動作）
+  - **テーブル行・列ハンドル**（Notion 風、デスクトップのみ）— `toolbar/table-handles.tsx`。ホバー中の行の左端 / 列の上端にピル型ハンドルを表示。クリックで行・列全体を CellSelection で選択（`.selectedCell` ハイライト）し、メニューから行・列の追加・削除、スタイル一括適用（背景色 / 文字色 / 文字揃え）、テーブル削除ができる
 - モバイル/タッチ完全対応: `(hover:none)` で分岐し、バブルの代わりに下部固定ツールバー（`toolbar/mobile-toolbar.tsx`）。ブロックハンドルはタッチ時 `selectionUpdate` ベースで追従。
 - アクセシビリティ: `role`/`aria-label`、保存状態の `aria-live`、本文の `role=textbox`。
 - 自動保存（`hooks/use-auto-save.ts`、debounce 2000ms、最終保存時刻表示）と未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
@@ -69,7 +70,7 @@
 | `extensions/` | カスタム拡張（callout / toggle-list / guide-link / keybind-embed / searchcraft-embed / columns / table / image / code-block / youtube / slash-command） |
 | `node-views/` | React NodeView（表示 + 属性編集） |
 | `slash-command/` | items / menu / renderer |
-| `toolbar/` | desktop / mobile / bubble / block-handle / 共通ボタン |
+| `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
 | `panels/` | metadata-fields / color-picker / embed-dialog / guide-link-search |
 | `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
@@ -102,6 +103,11 @@
 - `resizable: true` 設定で列幅のドラッグ変更が可能
 - セル単位での色変更に対応
 - 列単位での色変更に対応
+- **行・列ハンドル**（デスクトップ）: セルにホバーすると行の左端 / 列の上端にハンドルが表示され、クリックで行・列を選択してメニューを開く
+  - 行・列の追加（前後）・削除、テーブル削除
+  - 行・列単位のスタイル一括適用: 背景色 / 文字色 / 文字揃え（`lib/block-commands.ts` の `selectTableLine` + `setTableCellsStyle`）
+  - メニューを閉じると CellSelection をテキスト選択へ畳む。メニュー表示中のキー入力も先にメニューを閉じて畳んでから処理する（キー入力による行・列全体の上書き事故を防止）
+  - バブルメニューは CellSelection では表示しない（行・列メニューとの同時出現を防止）
 
 ### 画像アップロード
 
