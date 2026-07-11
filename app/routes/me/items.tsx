@@ -51,7 +51,6 @@ import {
   Plus,
   Trash2,
   Edit,
-  Layers,
   AlertCircle,
   Settings,
   Copy,

@@ -23,3 +23,11 @@ local.db-wal
 
 # Test coverage
 /coverage/
+
+# Claude Code のエージェント作業用 worktree（コミットすると submodule 扱いになり
+# Vercel クローン時に "Failed to fetch git submodules" 警告が出る）
+/.claude/worktrees/
+
+# ビルドログ等の一時ファイル
+/log.txt
+

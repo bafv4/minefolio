@@ -11,8 +11,8 @@ import { users, guides } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { BookOpen, ArrowLeft } from "lucide-react";
-import { lazy, Suspense } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -88,11 +88,6 @@ export async function loader({ context, params }: LoaderFunctionArgs) {
   return { author, guides: authorGuides, appUrl };
 }
 
-const MinecraftAvatarLazy = lazy(() =>
-  import("@/components/minecraft-avatar").then((mod) => ({
-    default: mod.MinecraftAvatar,
-  }))
-);
 
 export default function UserGuidesPage() {
   const { author, guides: authorGuides } = useLoaderData<typeof loader>();
@@ -116,14 +111,12 @@ export default function UserGuidesPage() {
       {/* Author header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Suspense fallback={<div className="w-12 h-12 rounded-full bg-muted shrink-0" />}>
-            <MinecraftAvatarLazy
-              uuid={author.uuid ?? undefined}
-              skinUrl={author.customSkinUrl}
-              size={48}
-              className="rounded-full shrink-0"
-            />
-          </Suspense>
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={48}
+            className="rounded-full shrink-0"
+          />
           <div>
             <Link
               to={`/player/${author.slug}`}

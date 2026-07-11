@@ -22,15 +22,23 @@ export default defineConfig(({ isSsrBuild, command }) => ({
     noExternal: command === "build" ? ["sanitize-html", "htmlparser2"] : [],
   },
   build: {
-    rollupOptions: isSsrBuild
-      ? {}
-      : {
-          output: {
-            manualChunks: {
-              vendor: ["react", "react-dom", "react-router"],
+    rollupOptions: {
+      // API 専用ルート（loader/action のみ）は空のクライアントチャンクを生成するが
+      // 仕様どおりのため、ビルドログを汚す EMPTY_BUNDLE 警告のみ抑制する
+      onwarn(warning, warn) {
+        if (warning.code === "EMPTY_BUNDLE") return;
+        warn(warning);
+      },
+      ...(isSsrBuild
+        ? {}
+        : {
+            output: {
+              manualChunks: {
+                vendor: ["react", "react-dom", "react-router"],
+              },
             },
-          },
-        },
+          }),
+    },
     sourcemap: false,
     minify: "esbuild",
   },
