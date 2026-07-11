@@ -33,6 +33,7 @@ const FIXTURES: Record<string, string> = {
   columns2: `<div data-columns="2"><div data-column=""><p>左</p></div><div data-column=""><p>右</p></div></div>`,
   columns3: `<div data-columns="3"><div data-column=""><p>1</p></div><div data-column=""><p>2</p></div><div data-column=""><p>3</p></div></div>`,
   coloredTable: `<table><tbody><tr><th style="background-color: #F1F1EF">見出し</th><td style="background-color: #FDEBEC; color: #D44C47">セル</td></tr></tbody></table>`,
+  alignedTable: `<table><tbody><tr><th style="text-align: center">中央</th><td style="background-color: #FDEBEC; text-align: right">右</td></tr></tbody></table>`,
   widthImage: `<img src="https://example.com/i.png" alt="代替テキスト" width="320">`,
 };
 
@@ -90,6 +91,13 @@ describe("guide editor round-trip", () => {
     expect(out).toContain("background-color: #F1F1EF");
     expect(out).toContain("background-color: #FDEBEC");
     expect(out).toContain("color: #D44C47");
+  });
+
+  it("セルの text-align は保持され、背景色と併存する", () => {
+    const out = roundTrip(FIXTURES.alignedTable);
+    expect(out).toContain("text-align: center");
+    expect(out).toContain("text-align: right");
+    expect(out).toContain("background-color: #FDEBEC");
   });
 
   it("画像は width と alt を保持する", () => {

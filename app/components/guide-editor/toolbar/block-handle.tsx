@@ -23,7 +23,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { setBlockType, applyTableOp, setCellBackground, type BlockType } from "../lib/block-commands";
 import { CELL_COLORS } from "../constants";
 import { EDITOR_Z } from "../constants";
-import { cn } from "@/lib/utils";
+import { MenuItem } from "./menu-item";
 
 const BLOCK_TYPES: { type: BlockType; label: string; icon: LucideIcon }[] = [
   { type: "paragraph", label: "テキスト", icon: AlignLeft },
@@ -47,7 +47,21 @@ interface HandleState {
   inTable: boolean;
 }
 
-export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean }) {
+export function BlockHandle({
+  editor,
+  touch,
+  suppressInTable = false,
+}: {
+  editor: Editor;
+  touch: boolean;
+  /**
+   * テーブルブロック上ではハンドルを出さない（デスクトップで指定）。
+   * テーブル操作は行・列ハンドル（table-handles.tsx）へ委譲する。
+   * 旧メニューは選択をテーブル先頭セルへ移すため、常に 1 行目 / 1 列目にしか
+   * 作用しなかった — ホバー中の行・列に作用する新ハンドルが正確な代替。
+   */
+  suppressInTable?: boolean;
+}) {
   const [state, setState] = useState<HandleState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -124,7 +138,8 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
         raf = null;
         const res = editor.view.posAtCoords({ left: x, top: y });
         if (!res) return;
-        applyState(computeAt(res.pos));
+        const next = computeAt(res.pos);
+        applyState(suppressInTable && next?.inTable ? null : next);
       });
     };
     dom.addEventListener("mousemove", onMove);
@@ -135,7 +150,7 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
       if (raf != null) cancelAnimationFrame(raf);
       cancelHide();
     };
-  }, [editor, touch, computeAt, cancelHide, scheduleHide, applyState]);
+  }, [editor, touch, suppressInTable, computeAt, cancelHide, scheduleHide, applyState]);
 
   // タッチ: 選択変更でアクティブブロックを追従
   useEffect(() => {
@@ -278,35 +293,5 @@ export function BlockHandle({ editor, touch }: { editor: Editor; touch: boolean 
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-function MenuItem({
-  label,
-  icon: Icon,
-  danger,
-  onClick,
-}: {
-  label: string;
-  icon?: LucideIcon;
-  danger?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
-      className={cn(
-        "w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
-        danger ? "text-destructive hover:bg-destructive/10" : "hover:bg-muted",
-      )}
-    >
-      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
-      {label}
-    </button>
   );
 }

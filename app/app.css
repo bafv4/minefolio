@@ -383,6 +383,18 @@ body {
     cursor: col-resize;
   }
 
+  /* 行・列選択（CellSelection）のハイライト。行・列ハンドルの選択フィードバック。
+     半透明の色被せだけだとダークテーマ × パステル背景色付きセルで知覚できないため、
+     テーマ追従する inset リングを併用する */
+  .ProseMirror .selectedCell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: color-mix(in oklab, var(--primary) 14%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--ring);
+  }
+
   .ProseMirror .tableWrapper {
     overflow-x: auto;
     margin: 1em 0;
@@ -780,6 +792,17 @@ body {
 .guide-content.prose :where(p) {
   margin-top: 0.4em;
   margin-bottom: 0.4em;
+}
+
+/* typographyプラグインの既定は strong に固定色を当てるため、文字色マークと
+   組み合わせた際に太字部分だけ色が戻ってしまう。継承させて両立させる。 */
+.guide-content.prose :where(strong) {
+  color: inherit;
+}
+
+/* 目次アンカーで移動した際、見出しが固定ヘッダーに隠れないよう余白を確保する */
+.guide-content.prose :where(h1, h2, h3) {
+  scroll-margin-top: 5rem;
 }
 
 .guide-content.prose :where(h1) {
