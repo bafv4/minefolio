@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { lazy, Suspense, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -25,7 +25,8 @@ import {
   formatItemName,
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
-import type { PoseName } from "@/components/minecraft-fullbody";
+import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -34,15 +35,6 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
-
-// クライアントサイドのみでレンダリング
-const MinecraftFullBody = lazy(() =>
-  import("@/components/minecraft-fullbody").then((mod) => ({ default: mod.MinecraftFullBody }))
-);
-
-const MinecraftAvatar = lazy(() =>
-  import("@/components/minecraft-avatar").then((mod) => ({ default: mod.MinecraftAvatar }))
-);
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -715,15 +707,13 @@ export default function PlayerProfilePage() {
       >
         <div className="flex items-center gap-3">
           {player.uuid ? (
-            <Suspense fallback={<div className="w-8 h-8 bg-muted rounded animate-pulse" />}>
-              <MinecraftAvatar
-                uuid={player.uuid}
-                skinUrl={player.customSkinUrl}
-                mcid={player.mcid}
-                size={32}
-                className="rounded"
-              />
-            </Suspense>
+            <MinecraftAvatar
+              uuid={player.uuid}
+              skinUrl={player.customSkinUrl}
+              mcid={player.mcid}
+              size={32}
+              className="rounded"
+            />
           ) : player.discordAvatar ? (
             <img
               src={player.discordAvatar}
@@ -777,15 +767,13 @@ export default function PlayerProfilePage() {
               className="w-full justify-start gap-3 px-3 py-3 h-auto data-[state=active]:bg-secondary"
             >
               {player.uuid ? (
-                <Suspense fallback={<div className="w-10 h-10 bg-muted rounded animate-pulse" />}>
-                  <MinecraftAvatar
-                    uuid={player.uuid}
-                    skinUrl={player.customSkinUrl}
-                    mcid={player.mcid}
-                    size={40}
-                    className="rounded shrink-0"
-                  />
-                </Suspense>
+                <MinecraftAvatar
+                  uuid={player.uuid}
+                  skinUrl={player.customSkinUrl}
+                  mcid={player.mcid}
+                  size={40}
+                  className="rounded shrink-0"
+                />
               ) : player.discordAvatar ? (
                 <img
                   src={player.discordAvatar}
@@ -926,22 +914,13 @@ export default function PlayerProfilePage() {
                             aria-label="スキンを 3D で表示"
                             className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
-                            <Suspense
-                              fallback={
-                                <SkinSkeleton
-                                  width={skinViewSize.width}
-                                  height={skinViewSize.height}
-                                />
-                              }
-                            >
-                              {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                              <MinecraftFullBody
-                                {...skinProps}
-                                width={skinViewSize.width}
-                                height={skinViewSize.height}
-                                asImage
-                              />
-                            </Suspense>
+                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                            <MinecraftFullBody
+                              {...skinProps}
+                              width={skinViewSize.width}
+                              height={skinViewSize.height}
+                              asImage
+                            />
                             <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
                               <Maximize2
                                 className="h-8 w-8 text-foreground drop-shadow"
@@ -959,14 +938,12 @@ export default function PlayerProfilePage() {
                           {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
                           {skin3dOpen && (
                             <div className="flex justify-center">
-                              <Suspense fallback={<SkinSkeleton {...modalSize} />}>
-                                <MinecraftFullBody
-                                  {...skinProps}
-                                  {...modalSize}
-                                  interactive
-                                  showInteractiveHint
-                                />
-                              </Suspense>
+                              <MinecraftFullBody
+                                {...skinProps}
+                                {...modalSize}
+                                interactive
+                                showInteractiveHint
+                              />
                             </div>
                           )}
                         </DialogContent>
@@ -2144,23 +2121,6 @@ function getYouTubeEmbedUrl(url: string): string {
     // Invalid URL, return as-is
   }
   return url;
-}
-
-function SkinSkeleton({ width, height }: { width: number; height: number }) {
-  return (
-    <div
-      style={{ width, height }}
-      className="flex items-center justify-center"
-    >
-      <div
-        style={{
-          width: width * 0.3,
-          height: height * 0.7,
-        }}
-        className="bg-muted rounded-lg animate-pulse"
-      />
-    </div>
-  );
 }
 
 // Stats タブのコンテナ（クライアント側でデータ取得）

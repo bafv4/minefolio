@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, RefreshCw, Bug, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { RemapRow, DialogRemapRow } from "@/components/remap-row";
@@ -1802,7 +1802,6 @@ export default function KeybindingsPage() {
               size="sm"
               onClick={handleDebugLog}
             >
-              <Bug className="mr-1 h-4 w-4" />
               Debug
             </Button>
             <Button
@@ -1812,7 +1811,6 @@ export default function KeybindingsPage() {
               onClick={handleRevalidate}
               disabled={revalidator.state === "loading"}
             >
-              <RefreshCw className={cn("mr-1 h-4 w-4", revalidator.state === "loading" && "animate-spin")} />
               Reload
             </Button>
             <Button

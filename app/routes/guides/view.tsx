@@ -16,8 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Eye, ArrowLeft, Calendar, Pencil, List, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
 import {
   extractEmbedRefs,
@@ -265,11 +266,6 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
   };
 }
 
-const MinecraftAvatarLazy = lazy(() =>
-  import("@/components/minecraft-avatar").then((mod) => ({
-    default: mod.MinecraftAvatar,
-  }))
-);
 
 export default function GuideViewPage() {
   const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
@@ -382,16 +378,12 @@ export default function GuideViewPage() {
           to={`/player/${author.slug}`}
           className="flex items-center gap-2 hover:text-foreground transition-colors"
         >
-          <Suspense
-            fallback={<div className="w-5 h-5 rounded-full bg-muted shrink-0" />}
-          >
-            <MinecraftAvatarLazy
-              uuid={author.uuid ?? undefined}
-              skinUrl={author.customSkinUrl}
-              size={20}
-              className="rounded-full shrink-0"
-            />
-          </Suspense>
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={20}
+            className="rounded-full shrink-0"
+          />
           <span className="font-medium">{authorName}</span>
         </Link>
         <span className="flex items-center gap-1">
@@ -420,16 +412,12 @@ export default function GuideViewPage() {
           to={`/player/${author.slug}`}
           className="flex items-center gap-3 group"
         >
-          <Suspense
-            fallback={<div className="w-10 h-10 rounded-full bg-muted" />}
-          >
-            <MinecraftAvatarLazy
-              uuid={author.uuid ?? undefined}
-              skinUrl={author.customSkinUrl}
-              size={40}
-              className="rounded-full"
-            />
-          </Suspense>
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={40}
+            className="rounded-full"
+          />
           <div>
             <p className="font-medium group-hover:text-primary transition-colors">
               {authorName}

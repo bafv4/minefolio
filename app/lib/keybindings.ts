@@ -119,7 +119,7 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   GamepadStart: "Start",
   GamepadSelect: "Select",
   // 特殊キー
-  Space: "スペース",
+  Space: "Space",
   ControlLeft: "左Ctrl",
   ControlRight: "右Ctrl",
   ShiftLeft: "左Shift",
@@ -371,7 +371,7 @@ export function normalizeKeyCode(keyCode: string): string {
   if (modifierMatch) {
     const [, modifier, side] = modifierMatch;
     return modifier.charAt(0).toUpperCase() + modifier.slice(1) +
-           side.charAt(0).toUpperCase() + side.slice(1);
+      side.charAt(0).toUpperCase() + side.slice(1);
   }
 
   // mouseX → MouseX
