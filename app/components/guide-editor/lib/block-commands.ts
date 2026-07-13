@@ -4,8 +4,10 @@
 //  タッチ環境での不安定さを排除する）。
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { DOMSerializer } from "@tiptap/pm/model";
 import {
   CellSelection,
+  TableMap,
   cellAround,
   isInTable,
   selectionCell,
@@ -241,6 +243,60 @@ export function setCellBackground(editor: Editor, color: string | null): void {
 /** 現在のセルに文字色を適用する（null で解除） */
 export function setCellTextColor(editor: Editor, color: string | null): void {
   setTableCellsStyle(editor, "cell", "textColor", color);
+}
+
+/**
+ * カーソル位置のテーブル全体をクリップボードへコピーする。
+ * text/html はスキーマの toDOM 直列化（エディタへの貼り付けで属性込みの完全復元が可能）、
+ * text/plain は TSV（表計算ソフトやテキストへの貼り付け用）。
+ * テーブル外・クリップボード不可の場合は false を返す。
+ */
+export async function copyTableToClipboard(editor: Editor): Promise<boolean> {
+  const { state } = editor;
+  if (!isInTable(state)) return false;
+  const $cell = selectionCell(state);
+  const table = $cell.node(-1);
+
+  const dom = DOMSerializer.fromSchema(state.schema).serializeNode(table) as HTMLElement;
+  const html = dom.outerHTML;
+
+  // TSV は TableMap で展開したグリッドから作る（colspan/rowspan の結合セルでも
+  // 列位置がずれない）。結合セルの本文は左上のグリッド位置にだけ出し、被覆位置は空欄。
+  // セル内の段落境界はスペースで区切る（タブ・改行だと TSV 構造が壊れる）。
+  const map = TableMap.get(table);
+  const lines: string[] = [];
+  for (let r = 0; r < map.height; r++) {
+    const cols: string[] = [];
+    for (let c = 0; c < map.width; c++) {
+      const pos = map.map[r * map.width + c];
+      const cell = table.nodeAt(pos);
+      const isOrigin =
+        (c === 0 || map.map[r * map.width + c - 1] !== pos) &&
+        (r === 0 || map.map[(r - 1) * map.width + c] !== pos);
+      cols.push(cell && isOrigin ? cell.textBetween(0, cell.content.size, " ") : "");
+    }
+    lines.push(cols.join("\t"));
+  }
+  const text = lines.join("\n");
+
+  try {
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /**

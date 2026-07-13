@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 
 type SwatchKind = "text" | "bg";
 
-/** Popover トリガー兼ツールバーボタン（Radix の ref 転送のため素の button を使う） */
-function PickerTrigger({
+/** Popover トリガー兼ツールバーボタン（Radix の ref 転送のため素の button を使う）。
+ * バブルメニュー / ツールバー / セル選択バブルで共用 */
+export function PickerTrigger({
   label,
   children,
   showLabel,

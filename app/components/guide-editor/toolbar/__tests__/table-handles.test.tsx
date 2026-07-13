@@ -3,13 +3,14 @@
 // ホバー → ピル表示 → クリックで行・列選択 → メニュー操作の一連の流れを検証する。
 // jsdom では getBoundingClientRect が常に 0 のため、位置ではなく表示・選択・
 // ドキュメント変更を検証する。
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Editor } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
 import { buildExtensions } from "../../editor-config";
 import { TableHandles } from "../table-handles";
+import { isTableHandleMenuOpen } from "../../lib/table-ui-state";
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -239,5 +240,99 @@ describe("TableHandles", () => {
     // 再ホバーでハンドルが復帰する（openAxis 残留による恒久無効化がないこと）
     await hoverCell(2);
     expect(rowPill()).toBeTruthy();
+  });
+
+  it("ダブルクリック（素早い2連クリック）でもメニューは開いたまま（開→即閉の回帰）", async () => {
+    await hoverCell(2);
+    await clickPill(rowPill()!);
+    await clickPill(rowPill()!); // 2連目の閉トグルは開直後のため無視される
+    expect(
+      Array.from(document.querySelectorAll('[role="menuitem"]')).some(
+        (el) => el.textContent?.trim() === "上に行を追加",
+      ),
+    ).toBe(true);
+  });
+
+  it("時間を置いたピル再クリックはトグルとして閉じる", async () => {
+    await hoverCell(2);
+    await clickPill(rowPill()!);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 350)); // 開直後ガード（300ms）を超える
+    });
+    await clickPill(rowPill()!);
+    expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
+  });
+
+  it("ポインタがピル付近にある間は猶予切れでもピルが消えない（外側から接近するレースの回帰）", async () => {
+    await hoverCell(2);
+    const pill = rowPill()!;
+    // jsdom の rect は常に 0 のため、ピルに実サイズを与えてポインタを付近に置く
+    pill.getBoundingClientRect = () =>
+      ({ left: 100, top: 100, right: 116, bottom: 136, width: 16, height: 36 }) as DOMRect;
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 90, bubbles: true }));
+      editor.view.dom.dispatchEvent(new MouseEvent("mouseleave"));
+      await new Promise((r) => setTimeout(r, 550));
+    });
+    expect(rowPill(), "ピル付近にポインタがある間は消えない").toBeTruthy();
+    // ポインタが離れたら次の再判定で消える
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent("mousemove", { clientX: 500, clientY: 500, bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(rowPill()).toBeNull();
+  });
+
+  it("「テーブルをコピー」で TSV がクリップボードへ書かれ、メニューが閉じる", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await hoverCell(2);
+    await clickPill(rowPill()!);
+    await clickMenuItem("テーブルをコピー");
+    expect(writeText).toHaveBeenCalledWith("h1\th2\na1\ta2\nb1\tb2");
+    expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
+  });
+
+  it("修飾キー単独・Ctrl+C ではメニューを閉じず行・列の選択も維持する（キーボードコピー）", async () => {
+    await hoverCell(2);
+    await clickPill(rowPill()!);
+    await act(async () => {
+      editor.view.dom.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Control", ctrlKey: true, bubbles: true }),
+      );
+      editor.view.dom.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }),
+      );
+    });
+    expect(document.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(0);
+    expect(editor.state.selection).toBeInstanceOf(CellSelection);
+  });
+
+  it("開直後（300ms以内）でも外側クリックでメニューは閉じる", async () => {
+    await hoverCell(2);
+    await clickPill(rowPill()!);
+    expect(document.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(0);
+    // Radix DismissableLayer は setTimeout(0) で pointerdown リスナーを張るため 1 tick 待つ
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      const far = cells()[5];
+      far.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      far.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
+    expect(isTableHandleMenuOpen(editor)).toBe(false);
+  });
+
+  it("メニュー表示中はハンドルメニューフラグが立ち、閉じると降りる（セルバブル抑制用）", async () => {
+    await hoverCell(2);
+    expect(isTableHandleMenuOpen(editor)).toBe(false);
+    await clickPill(rowPill()!);
+    expect(isTableHandleMenuOpen(editor)).toBe(true);
+    await act(async () => {
+      editor.view.dom.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    });
+    expect(isTableHandleMenuOpen(editor)).toBe(false);
   });
 });

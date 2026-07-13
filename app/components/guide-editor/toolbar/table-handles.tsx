@@ -12,17 +12,21 @@ import {
   ArrowDownToLine,
   ArrowLeftToLine,
   ArrowRightToLine,
+  Copy,
   Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   applyTableOp,
   selectTableLine,
   collapseCellSelection,
   setTableCellsStyle,
+  copyTableToClipboard,
   type TableOp,
   type TableLineAxis,
   type TableCellStyleAttr,
 } from "../lib/block-commands";
+import { setTableHandleMenuOpen } from "../lib/table-ui-state";
 import { ColorSwatchGrid, TableAlignRow } from "../panels/color-picker";
 import { MenuItem } from "./menu-item";
 import { CELL_COLORS, TEXT_COLORS, EDITOR_Z } from "../constants";
@@ -71,15 +75,19 @@ const LINE_MENUS: Record<
   },
 };
 
-/** 行 / 列メニューの中身（追加・削除 + スタイル一括適用） */
+/** 行 / 列メニューの中身（追加・削除 + スタイル一括適用 + コピー） */
 function LineMenuContent({
   axis,
   runOp,
   applyStyle,
+  onCopyTable,
+  onInteractOutside,
 }: {
   axis: TableLineAxis;
   runOp: (op: TableOp) => void;
   applyStyle: (attr: TableCellStyleAttr, value: string | null) => void;
+  onCopyTable: () => void;
+  onInteractOutside: (target: Node | null) => void;
 }) {
   const { addOps, deleteOp, deleteLabel } = LINE_MENUS[axis];
   return (
@@ -91,6 +99,10 @@ function LineMenuContent({
       onMouseDown={(e) => e.preventDefault()}
       // 開いてもフォーカスをエディタから奪わない（行 / 列の CellSelection を保持する）
       onOpenAutoFocus={(e) => e.preventDefault()}
+      // 閉じるときも fixed 配置のピル（アンマウントされうる）へフォーカスを移さない
+      onCloseAutoFocus={(e) => e.preventDefault()}
+      // 外側クリックは開直後ガード（ダブルクリック対策）を通さず即閉じる
+      onInteractOutside={(e) => onInteractOutside(e.target as Node | null)}
     >
       {addOps.map(({ op, label, icon }) => (
         <MenuItem key={op} label={label} icon={icon} onClick={() => runOp(op)} />
@@ -112,11 +124,19 @@ function LineMenuContent({
         />
       </div>
       <div className="border-t my-1" />
+      <MenuItem label="テーブルをコピー" icon={Copy} onClick={onCopyTable} />
+      <div className="border-t my-1" />
       <MenuItem label={deleteLabel} danger icon={Trash2} onClick={() => runOp(deleteOp)} />
       <MenuItem label="テーブルを削除" danger icon={Trash2} onClick={() => runOp("deleteTable")} />
     </PopoverContent>
   );
 }
+
+/** 開いた直後の閉トグルを無視する猶予（ms）。ダブルクリックで「開→即閉」になるのを防ぐ */
+const REOPEN_GUARD_MS = 300;
+
+/** ピル消滅タイマーの発火時、ポインタがピルからこの距離（px）以内なら消さない */
+const PILL_NEAR_MARGIN = 24;
 
 export function TableHandles({ editor }: { editor: Editor }) {
   const [hover, setHover] = useState<HoverTarget | null>(null);
@@ -129,6 +149,13 @@ export function TableHandles({ editor }: { editor: Editor }) {
   const openRef = useRef(openAxis);
   openRef.current = openAxis;
 
+  // メニューを開いた時刻。ダブルクリック（開いた直後の閉トグル）を無視するために使う
+  const openedAtRef = useRef(0);
+  // ピルの DOM 参照と最後のポインタ座標（消滅タイマーの「ピルに接近中」判定に使う）
+  const rowPillRef = useRef<HTMLButtonElement | null>(null);
+  const colPillRef = useRef<HTMLButtonElement | null>(null);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+
   // ハンドルはテーブルの外（行の左 / 列の上）に出るため、セルを離れた瞬間に
   // 消すとハンドルへ到達できない。遅延して消し、ハンドル上では取り消す。
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,15 +165,46 @@ export function TableHandles({ editor }: { editor: Editor }) {
       hideTimer.current = null;
     }
   }, []);
+
+  // ポインタがピルの近く（マージン込み）にあるか。エディタ外からピルへ接近する経路では
+  // ピルの mouseenter が間に合わないことがあるため、タイマー発火時にこれで消滅を延期する
+  const isPointerNearPills = useCallback(() => {
+    const p = pointerRef.current;
+    if (!p) return false;
+    for (const ref of [rowPillRef, colPillRef]) {
+      const el = ref.current;
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      // レイアウト前などサイズ 0 の rect は判定できないため対象外
+      if (r.width === 0 && r.height === 0) continue;
+      if (
+        p.x >= r.left - PILL_NEAR_MARGIN &&
+        p.x <= r.right + PILL_NEAR_MARGIN &&
+        p.y >= r.top - PILL_NEAR_MARGIN &&
+        p.y <= r.bottom + PILL_NEAR_MARGIN
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
   const scheduleHide = useCallback(() => {
     // 猶予中は張り直さない。セル外の mousemove ごとにリセットするとデバウンスに
     // なり、マウスが動き続ける限り離脱済みテーブルのピルが消えなくなる。
     if (hideTimer.current != null) return;
-    hideTimer.current = setTimeout(() => {
+    const fire = () => {
       hideTimer.current = null;
-      if (!openRef.current) setHover(null);
-    }, 400);
-  }, []);
+      if (openRef.current) return;
+      // ポインタがピル付近にいる間は消さず、短い間隔で再判定する
+      if (isPointerNearPills()) {
+        hideTimer.current = setTimeout(fire, 200);
+        return;
+      }
+      setHover(null);
+    };
+    hideTimer.current = setTimeout(fire, 400);
+  }, [isPointerNearPills]);
 
   // マウス移動でホバー中のセルを追従
   useEffect(() => {
@@ -173,11 +231,17 @@ export function TableHandles({ editor }: { editor: Editor }) {
       );
     };
     const onLeave = () => scheduleHide();
+    // 消滅タイマーの接近判定用に、ドキュメント全体でポインタ座標を追跡する
+    const onDocMove = (e: MouseEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY };
+    };
     dom.addEventListener("mousemove", onMove);
     dom.addEventListener("mouseleave", onLeave);
+    document.addEventListener("mousemove", onDocMove);
     return () => {
       dom.removeEventListener("mousemove", onMove);
       dom.removeEventListener("mouseleave", onLeave);
+      document.removeEventListener("mousemove", onDocMove);
       cancelHide();
     };
   }, [editor, cancelHide, scheduleHide]);
@@ -206,6 +270,7 @@ export function TableHandles({ editor }: { editor: Editor }) {
       if (!resolveCell(current)) {
         setHover(null);
         setOpenAxis(null);
+        setTableHandleMenuOpen(editor, false);
       } else {
         setTick((t) => t + 1);
       }
@@ -213,6 +278,7 @@ export function TableHandles({ editor }: { editor: Editor }) {
     editor.on("transaction", onTransaction);
     return () => {
       editor.off("transaction", onTransaction);
+      setTableHandleMenuOpen(editor, false);
     };
   }, [editor]);
 
@@ -220,10 +286,17 @@ export function TableHandles({ editor }: { editor: Editor }) {
     (axis: TableLineAxis) => {
       const current = hoverRef.current;
       const cell = current ? resolveCell(current) : null;
-      if (!cell) return;
-      const pos = editor.view.posAtDOM(cell, 0);
-      if (pos < 0) return;
-      if (!selectTableLine(editor, pos, axis)) return;
+      const pos = cell ? editor.view.posAtDOM(cell, 0) : -1;
+      // セル選択バブルメニューと重ならないよう、行 / 列選択のディスパッチ前にフラグを立てる
+      setTableHandleMenuOpen(editor, true);
+      if (pos < 0 || !selectTableLine(editor, pos, axis)) {
+        // 解決できないピルを残すとクリックが無反応になる。正直に消して再ホバーさせる
+        setTableHandleMenuOpen(editor, false);
+        setHover(null);
+        setOpenAxis(null);
+        return;
+      }
+      openedAtRef.current = Date.now();
       setOpenAxis(axis);
     },
     [editor],
@@ -231,9 +304,38 @@ export function TableHandles({ editor }: { editor: Editor }) {
 
   const closeMenu = useCallback(() => {
     setOpenAxis(null);
+    setTableHandleMenuOpen(editor, false);
     // CellSelection のまま放置すると次のキー入力で行 / 列全体が上書きされるため畳む
     collapseCellSelection(editor);
   }, [editor]);
+
+  // Radix のトグルは開いた直後の閉も拾う。ダブルクリック癖で「開→即閉」になり
+  // 「クリックしてもメニューが出ない」ように見えるため、開直後の閉トグルは無視する
+  const onOpenChange = useCallback(
+    (axis: TableLineAxis) => (open: boolean) => {
+      if (open) {
+        openMenu(axis);
+      } else if (Date.now() - openedAtRef.current > REOPEN_GUARD_MS) {
+        closeMenu();
+      }
+    },
+    [openMenu, closeMenu],
+  );
+
+  // 外側クリックによる正当な dismiss は開直後ガードを通さず即閉じる。
+  // ただしピル上のクリックは除外（ダブルクリック2打目・ピル切替はトグル側の管轄）
+  const handleInteractOutside = useCallback(
+    (target: Node | null) => {
+      if (
+        target &&
+        (rowPillRef.current?.contains(target) || colPillRef.current?.contains(target))
+      ) {
+        return;
+      }
+      closeMenu();
+    },
+    [closeMenu],
+  );
 
   // メニュー表示中もフォーカスはエディタに残る（onOpenAutoFocus を止めている）ため、
   // 行・列の CellSelection がキー入力のターゲットになり、1 キーで行・列の全セルが
@@ -242,7 +344,14 @@ export function TableHandles({ editor }: { editor: Editor }) {
   useEffect(() => {
     if (!openAxis) return;
     const dom = editor.view.dom as HTMLElement;
-    const onKeyDown = () => closeMenu();
+    const onKeyDown = (e: KeyboardEvent) => {
+      // 修飾キー単独では閉じない（Ctrl+C の1打鍵目で行・列の選択を失わないように）
+      if (e.key === "Control" || e.key === "Meta" || e.key === "Shift" || e.key === "Alt") return;
+      // コピーは CellSelection のネイティブコピーに任せ、選択とメニューを維持する
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") return;
+      if (e.ctrlKey && e.key === "Insert") return;
+      closeMenu();
+    };
     dom.addEventListener("keydown", onKeyDown, true);
     return () => {
       dom.removeEventListener("keydown", onKeyDown, true);
@@ -256,9 +365,19 @@ export function TableHandles({ editor }: { editor: Editor }) {
       collapseCellSelection(editor);
       setOpenAxis(null);
       setHover(null);
+      setTableHandleMenuOpen(editor, false);
     },
     [editor],
   );
+
+  // テーブル全体をクリップボードへコピー（HTML + TSV）。メニューは閉じる
+  const handleCopyTable = useCallback(() => {
+    void copyTableToClipboard(editor).then((ok) => {
+      if (ok) toast.success("テーブルをコピーしました");
+      else toast.error("テーブルをコピーできませんでした");
+    });
+    closeMenu();
+  }, [editor, closeMenu]);
 
   // スタイル適用。選択（= 行 / 列のハイライト）とメニューは維持して連続適用できるようにする
   const applyStyle = useCallback(
@@ -295,13 +414,15 @@ export function TableHandles({ editor }: { editor: Editor }) {
   return (
     <>
       {/* 行ハンドル: 行の左端中央（テーブル左罫線をまたぐ） */}
-      <Popover open={openAxis === "row"} onOpenChange={(o) => (o ? openMenu("row") : closeMenu())}>
+      <Popover open={openAxis === "row"} onOpenChange={onOpenChange("row")}>
         <PopoverTrigger asChild>
           <button
+            ref={rowPillRef}
             type="button"
             aria-label="行を選択"
             aria-haspopup="menu"
             onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={cancelHide}
             onMouseEnter={cancelHide}
             onMouseLeave={scheduleHide}
             style={{
@@ -316,20 +437,19 @@ export function TableHandles({ editor }: { editor: Editor }) {
             <span className={cn("h-6 w-1.5", pillClass(openAxis === "row"))} />
           </button>
         </PopoverTrigger>
-        <LineMenuContent axis="row" runOp={runOp} applyStyle={applyStyle} />
+        <LineMenuContent axis="row" runOp={runOp} applyStyle={applyStyle} onCopyTable={handleCopyTable} onInteractOutside={handleInteractOutside} />
       </Popover>
 
       {/* 列ハンドル: 列の上端中央（テーブル上罫線をまたぐ） */}
-      <Popover
-        open={openAxis === "column"}
-        onOpenChange={(o) => (o ? openMenu("column") : closeMenu())}
-      >
+      <Popover open={openAxis === "column"} onOpenChange={onOpenChange("column")}>
         <PopoverTrigger asChild>
           <button
+            ref={colPillRef}
             type="button"
             aria-label="列を選択"
             aria-haspopup="menu"
             onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={cancelHide}
             onMouseEnter={cancelHide}
             onMouseLeave={scheduleHide}
             style={{
@@ -344,7 +464,7 @@ export function TableHandles({ editor }: { editor: Editor }) {
             <span className={cn("h-1.5 w-6", pillClass(openAxis === "column"))} />
           </button>
         </PopoverTrigger>
-        <LineMenuContent axis="column" runOp={runOp} applyStyle={applyStyle} />
+        <LineMenuContent axis="column" runOp={runOp} applyStyle={applyStyle} onCopyTable={handleCopyTable} onInteractOutside={handleInteractOutside} />
       </Popover>
     </>
   );
