@@ -875,6 +875,8 @@ body {
   border-radius: 0.25em;
   font-size: 0.875em;
   font-weight: normal;
+  /* エディタ（.ProseMirror は pre-wrap）と同様に code 内の先頭末尾・連続スペースを可視化する */
+  white-space: pre-wrap;
 }
 
 :is(.dark, .ultra-dark) .guide-content.prose :where(code):not(pre code) {

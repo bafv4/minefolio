@@ -469,7 +469,8 @@ export default function PlaygroundPage() {
       .filter((c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim())
       .map((c) => ({
         items: c.items,
-        searchStr: c.searchStr?.trim() || null,
+        // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+        searchStr: c.searchStr?.trim() ? c.searchStr : null,
         comment: c.comment,
         timing: c.timing,
       }));

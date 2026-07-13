@@ -116,7 +116,11 @@ export function GuideEditor({
     if (!editor) return;
     // setContent は onUpdate→setDirty(true) を発火するが、同一ハンドラ内の
     // 後続 setDirty(false) が最終値になる（React のバッチ処理）。
-    editor.commands.setContent(publishedSnapshot.content);
+    // setContent はエディタの parseOptions を継承しないため、useGuideEditor と同じ
+    // preserveWhitespace を明示（インライン code 内スペースの消失防止）
+    editor.commands.setContent(publishedSnapshot.content, {
+      parseOptions: { preserveWhitespace: "full" },
+    });
     setTitle(publishedSnapshot.title);
     setSummary(publishedSnapshot.summary);
     setTags(publishedSnapshot.tags);

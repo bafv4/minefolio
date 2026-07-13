@@ -10,9 +10,12 @@ import { buildExtensions } from "../../editor-config";
 
 const extensions = buildExtensions();
 
-/** HTML → JSON → HTML の 1 往復 */
+/** HTML → JSON → HTML の 1 往復（エディタ実体 useGuideEditor と同じ parseOptions を使う） */
 function roundTrip(html: string): string {
-  return generateHTML(generateJSON(html, extensions), extensions);
+  return generateHTML(
+    generateJSON(html, extensions, { preserveWhitespace: "full" }),
+    extensions,
+  );
 }
 
 /**
@@ -104,5 +107,29 @@ describe("guide editor round-trip", () => {
     const out = roundTrip(FIXTURES.widthImage);
     expect(out).toContain('width="320"');
     expect(out).toContain('alt="代替テキスト"');
+  });
+
+  // 再編集ロード（HTML → doc パース）での空白消失の回帰テスト。
+  // roundTrip(html) === html（不動点より強い恒等）で「無編集再保存しても空白が消えない」ことを保証する
+  it("インライン code の先頭・末尾・連続スペースは再編集ロードで失われない", () => {
+    const cases = [
+      `<p>前 <code> spaced </code> 後</p>`,
+      `<p><code> lead</code></p>`,
+      `<p><code>trail </code></p>`,
+      `<p><code>mid  dle</code></p>`,
+    ];
+    for (const html of cases) {
+      expect(roundTrip(html)).toBe(html);
+    }
+  });
+
+  it("コードブロックのインデント・末尾スペース・改行は失われない", () => {
+    const html = `<pre><code>  indented\n  code  </code></pre>`;
+    expect(roundTrip(html)).toBe(html);
+  });
+
+  it("通常テキストの連続スペースも失われない", () => {
+    const html = `<p>a  b</p>`;
+    expect(roundTrip(html)).toBe(html);
   });
 });

@@ -211,11 +211,12 @@ export function parseEditorSubmission(formData: FormData): EditorSubmission | { 
     const items = Array.isArray(raw.items)
       ? raw.items.filter((i): i is string => typeof i === "string")
       : [];
-    const searchStr = typeof raw.searchStr === "string" ? raw.searchStr.trim() : "";
+    // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+    const searchStr = typeof raw.searchStr === "string" ? raw.searchStr : "";
     if (items.length === 0) {
       return { error: t("meSearchCraft.selectAtLeastOneItem") };
     }
-    if (!searchStr) {
+    if (!searchStr.trim()) {
       return { error: t("meSearchCraft.craftStringRequired") };
     }
     crafts.push({
