@@ -53,7 +53,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 | **react** / **react-dom** | UI ライブラリ |
 | **react-router** / **@react-router/node** / **@react-router/serve** / **@react-router/dev** | フレームワーク本体（SSR・ルーティング・loader/action） |
 | **typescript** | 型システム |
-| **vite** / **vite-tsconfig-paths** | ビルドツール・dev サーバ、`@/` パスエイリアス解決 |
+| **vite** | ビルドツール・dev サーバ。`@/` パスエイリアスは Vite 8 ネイティブの `resolve.tsconfigPaths` で解決 |
 | **isbot** | ボット判定 |
 
 ### データベース・ORM

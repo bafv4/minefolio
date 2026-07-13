@@ -1,16 +1,17 @@
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig(({ isSsrBuild, command }) => ({
   plugins: [
     reactRouter(),
     tailwindcss(),
-    tsconfigPaths(),
   ],
   resolve: {
     dedupe: ["react", "react-dom"],
+    // tsconfig の paths（@/* → app/*）を Vite 8 のネイティブ解決で処理する
+    // （vite-tsconfig-paths プラグインの後継。プラグイン検出 WARNING の解消）
+    tsconfigPaths: true,
   },
   ssr: {
     // sanitize-html は CJS で htmlparser2（dual package）を require するが、
