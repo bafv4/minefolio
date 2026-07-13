@@ -46,7 +46,7 @@ export function meta({
   ];
 }
 
-export async function loader({ context, params }: LoaderFunctionArgs) {
+export async function loader({ params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
 

@@ -210,7 +210,7 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 ### アクセス方法
 
 - サーバーサイド: `app/lib/env.server.ts` の `getEnv()` で `process.env` から取得
-- バリデーション: `app/lib/env.ts` の `validateEnv()` で Zod スキーマによる検証
+- 型定義: `app/env.d.ts` の `Env` インターフェース（実行時バリデーションは行わず、必須変数は `getEnv()` 内の非 null アサーションで前提とする）
 
 ---
 
@@ -236,7 +236,7 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 
 ### その他
 - `app/lib/env.server.ts` - サーバーサイド環境変数アクセス
-- `app/lib/env.ts` - 環境変数バリデーション（Zod）
+- `app/env.d.ts` - 環境変数の型定義（`Env`）
 - `app/lib/email.server.ts` - メール送信（Resend）
 - `app/lib/import-parser.ts` - レガシーインポートパーサー
 - `app/lib/legacy-import.ts` - レガシーインポートロジック

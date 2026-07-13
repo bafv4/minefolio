@@ -18,7 +18,7 @@ export function meta({ loaderData }: { loaderData: { guide: { title: string } } 
   return [{ title: `${loaderData.guide.title} - 編集 | Minefolio` }];
 }
 
-export async function loader({ context, request, params }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -68,7 +68,7 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
   return { guide: { ...guide, ...resolved }, user, hasDraft, published };
 }
 
-export async function action({ context, request, params }: ActionFunctionArgs) {
+export async function action({ request, params }: ActionFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

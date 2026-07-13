@@ -27,8 +27,8 @@
 
 ## Loader / Action パターン
 ```typescript
-// Loader
-const env = context.env ?? getEnv();
+// Loader（環境変数は getEnv()＝process.env 経由。React Router 8 の context は使わない）
+const env = getEnv();
 const db = createDb();
 const auth = createAuth(db, env);
 const session = await getOptionalSession(request, auth);

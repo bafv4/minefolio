@@ -54,7 +54,7 @@ export function meta({
   ];
 }
 
-export async function loader({ context, request, params }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

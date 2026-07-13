@@ -12,7 +12,7 @@ import {
   cleanupOldLiveCache,
 } from "@/lib/youtube-cache";
 
-export async function loader({ request, context }: { request: Request; context: any }) {
+export async function loader({ request }: { request: Request }) {
   const env = getEnv();
 
   // Vercel Cron認証。CRON_SECRET は getEnv() の返却に含まれないため

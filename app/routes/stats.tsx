@@ -139,7 +139,7 @@ function normalizeKeyCodeForStats(keyCode: string): string {
   return keyCode;
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader() {
   const env = getEnv();
   const db = createDb();
 

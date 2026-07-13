@@ -237,7 +237,7 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 // メイン処理
 // ============================================
 
-export async function loader({ context, request }: { request: Request; context: { env?: Record<string, string> } }) {
+export async function loader({ request }: { request: Request }) {
   // セキュリティ: Vercel Cron認証
   const authHeader = request.headers.get("authorization");
   const expectedToken = process.env.CRON_SECRET;

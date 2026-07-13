@@ -26,7 +26,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   ];
 };
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader() {
   const env = getEnv();
   const db = createDb();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";

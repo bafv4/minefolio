@@ -220,7 +220,7 @@ export function shouldRevalidate({
   return defaultShouldRevalidate;
 }
 
-export async function loader({ context, request, params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

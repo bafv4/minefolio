@@ -60,7 +60,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 
 // 走者カードのスケルトン用カウントは UI 個別に管理（loader 側ページサイズは browse-query.server に集約）
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

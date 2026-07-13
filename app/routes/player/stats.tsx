@@ -67,7 +67,7 @@ export const meta: Route.MetaFunction = ({ params, loaderData }) => {
   ];
 };
 
-export async function loader({ params, context, request }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
   const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const { slug } = params;

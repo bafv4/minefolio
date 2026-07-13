@@ -3,7 +3,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 
-export async function loader({ context, request }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -11,7 +11,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   return auth.handler(request);
 }
 
-export async function action({ context, request }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

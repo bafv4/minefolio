@@ -10,7 +10,7 @@ import { fetchRecentRunsForUsers } from "@/lib/paceman";
 import { cachePacemanPaces } from "@/lib/paceman-cache";
 import { excludeViewersCondition } from "@/lib/users-filter";
 
-export async function loader({ context, request }: { request: Request; context: any }) {
+export async function loader({ request }: { request: Request }) {
   // セキュリティ: Vercel Cron認証
   // Vercel Cronは自動的にAuthorizationヘッダーを設定する
   // 環境変数CRON_SECRETと一致する必要がある

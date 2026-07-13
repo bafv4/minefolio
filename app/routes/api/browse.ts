@@ -11,7 +11,7 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 
-export async function loader({ context, request }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

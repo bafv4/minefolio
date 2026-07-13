@@ -34,7 +34,7 @@ interface AvailableUser {
   displayName: string | null;
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader() {
   const env = getEnv();
   const db = createDb();
 

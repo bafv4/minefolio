@@ -49,7 +49,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();

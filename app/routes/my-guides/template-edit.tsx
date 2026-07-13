@@ -24,7 +24,7 @@ export const meta: Route.MetaFunction = () => {
   return [{ title: t("meTemplates.editorEditTitle") + " - Minefolio" }];
 };
 
-export async function loader({ context, request, params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -72,7 +72,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ context, request, params }: Route.ActionArgs) {
+export async function action({ request, params }: Route.ActionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

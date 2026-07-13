@@ -1,5 +1,6 @@
 /**
- * アプリケーション環境変数の型定義
+ * アプリケーション環境変数の型定義。
+ * サーバーでは app/lib/env.server.ts の getEnv() が process.env から組み立てて返す。
  */
 export interface Env {
   TURSO_DATABASE_URL: string;
@@ -18,11 +19,3 @@ export interface Env {
   RESEND_API_KEY?: string;
 }
 
-/**
- * React Router コンテキストの型定義
- */
-declare module "react-router" {
-  interface AppLoadContext {
-    env: Env;
-  }
-}

@@ -20,7 +20,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { t } from "@/lib/messages";
 
-export async function loader({ request, context }: { request: Request; context: any }) {
+export async function loader({ request }: { request: Request }) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -33,7 +33,7 @@ export async function loader({ request, context }: { request: Request; context: 
   return { user: session.user };
 }
 
-export async function action({ request, context }: { request: Request; context: any }) {
+export async function action({ request }: { request: Request }) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

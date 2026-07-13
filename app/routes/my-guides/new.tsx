@@ -37,7 +37,7 @@ function titleToSlug(title: string): string {
 
 export const meta = () => [{ title: t("meGuides.newTitle") }];
 
-export async function loader({ context, request }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -45,7 +45,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   return null;
 }
 
-export async function action({ context, request }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

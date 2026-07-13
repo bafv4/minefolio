@@ -23,7 +23,7 @@ export const meta: Route.MetaFunction = () => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -52,7 +52,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
+export async function action({ request }: Route.ActionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

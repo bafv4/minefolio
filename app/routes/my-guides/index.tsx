@@ -24,7 +24,7 @@ import { t } from "@/lib/messages";
 
 export const meta = () => [{ title: t("meGuides.title") }];
 
-export async function loader({ context, request }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -43,7 +43,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   return { guides: userGuides, user };
 }
 
-export async function action({ context, request }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
