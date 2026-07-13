@@ -964,6 +964,10 @@ body {
   padding: 0.35em 0.75em;
 }
 
+/* 列潰れ対策はサーバ側の normalizeGuideTables()（app/lib/guide-tables.ts）が
+   表の min-width を「固定列合計 + 未指定列 × 160px」に再計算することで行う。
+   収まらない分は .table-scroll-wrapper の横スクロールに逃げる。 */
+
 .guide-content.prose :where(th) {
   font-weight: 600;
   background: color-mix(in oklch, var(--muted) 60%, transparent);

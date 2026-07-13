@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
+import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
   extractEmbedRefs,
   getUniqueEmbedSlugs,
@@ -158,8 +159,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     allowedIframeHostnames: ["www.youtube.com", "www.youtube-nocookie.com"],
   });
 
+  // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
+  const normalizedContent = normalizeGuideTables(sanitizedContent);
+
   // Wrap <table> in a scrollable container so wide tables scroll on mobile
-  const wrappedContent = sanitizedContent.replace(
+  const wrappedContent = normalizedContent.replace(
     /<table(\s|>)/g,
     '<div class="table-scroll-wrapper"><table$1'
   ).replace(/<\/table>/g, '</table></div>');
