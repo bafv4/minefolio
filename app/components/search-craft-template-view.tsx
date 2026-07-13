@@ -60,29 +60,26 @@ function useItemLang(gameLanguage: string | null | undefined): string {
 }
 
 /**
- * サーチ文字列を表示する。半角スペースを視認できるよう点線で囲みつつ、
- * 中身は実際の空白文字のまま残す（テキスト選択・コピー時に半角スペースが崩れない）。
- * 連続スペースや末尾スペースを保持するため、描画側の `<code>` に
- * `whitespace-pre-wrap` を付けること。
+ * サーチ文字列を表示する。半角スペースは視認できるよう「␣」（U+2423）に置き換えて
+ * 描画する（全角スペースは対象外）。描画テキストは実データと異なるため、
+ * コピー機能は必ず元の searchStr 文字列を使うこと（DOM のテキストから取らない）。
+ * スクリーンリーダーには aria-label で元の文字列を提供する。
  */
 export function SearchStringText({ value }: { value: string }) {
-  // 半角スペースの連続を捕捉して分割（全角スペースは対象外）
+  // 半角スペースの連続を捕捉して分割
   const parts = value.split(/( +)/);
   return (
-    <>
+    <span aria-label={value}>
       {parts.map((part, i) =>
         part.length > 0 && part[0] === " " ? (
-          <span
-            key={i}
-            className="rounded-[2px] border border-dotted border-muted-foreground/60 box-decoration-clone"
-          >
-            {part}
+          <span key={i} aria-hidden="true" className="text-muted-foreground/70">
+            {"␣".repeat(part.length)}
           </span>
         ) : (
           part
         ),
       )}
-    </>
+    </span>
   );
 }
 
