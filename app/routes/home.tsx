@@ -33,8 +33,8 @@ import {
   Shuffle,
 } from "lucide-react";
 
-export const meta: Route.MetaFunction = ({ data }) => {
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const title = t("home.title");
   const ogImageUrl = `${appUrl}/icon.png`;
 
@@ -55,8 +55,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

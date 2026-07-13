@@ -36,6 +36,7 @@ import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
 import { EditorBubbleMenu } from "./toolbar/bubble-menu";
+import { TableCellBubbleMenu } from "./toolbar/table-cell-bubble-menu";
 import { MobileToolbar } from "./toolbar/mobile-toolbar";
 import { BlockHandle } from "./toolbar/block-handle";
 import { TableHandles } from "./toolbar/table-handles";
@@ -116,7 +117,11 @@ export function GuideEditor({
     if (!editor) return;
     // setContent は onUpdate→setDirty(true) を発火するが、同一ハンドラ内の
     // 後続 setDirty(false) が最終値になる（React のバッチ処理）。
-    editor.commands.setContent(publishedSnapshot.content);
+    // setContent はエディタの parseOptions を継承しないため、useGuideEditor と同じ
+    // preserveWhitespace を明示（インライン code 内スペースの消失防止）
+    editor.commands.setContent(publishedSnapshot.content, {
+      parseOptions: { preserveWhitespace: "full" },
+    });
     setTitle(publishedSnapshot.title);
     setSummary(publishedSnapshot.summary);
     setTags(publishedSnapshot.tags);
@@ -264,6 +269,8 @@ export function GuideEditor({
             {editor && !isTouch && (
               <EditorBubbleMenu editor={editor} onLink={handleLinkInsert} enabled={!isTouch} />
             )}
+            {/* セル跨ぎ選択（CellSelection）にはテーブル編集用のバブルを出す */}
+            {editor && !isTouch && <TableCellBubbleMenu editor={editor} enabled={!isTouch} />}
             {/* デスクトップ: テーブル上はブロックハンドルの代わりに行・列ハンドルを出す */}
             {editor && <BlockHandle editor={editor} touch={isTouch} suppressInTable={!isTouch} />}
             {editor && !isTouch && <TableHandles editor={editor} />}

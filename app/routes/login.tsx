@@ -19,10 +19,10 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("login.title");
   const description = t("login.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -38,8 +38,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

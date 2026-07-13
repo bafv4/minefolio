@@ -30,6 +30,10 @@ export function useGuideEditor({
     extensions: [...buildExtensions(t("guideEditor.contentPlaceholder")), SlashCommand],
     immediatelyRender: false,
     content: initialContent,
+    // 保存済み HTML の再ロード時に ProseMirror の空白正規化でインライン code 内の
+    // 先頭末尾・連続スペースが消え、次回保存で DB に焼き付くのを防ぐ。
+    // 保存 HTML は editor.getHTML() の出力（整形空白なし）なので副作用はない。
+    parseOptions: { preserveWhitespace: "full" },
     onUpdate: () => {
       onUpdate();
     },

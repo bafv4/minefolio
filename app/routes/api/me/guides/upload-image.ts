@@ -6,8 +6,8 @@ import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
-export async function action({ context, request }: ActionFunctionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: ActionFunctionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

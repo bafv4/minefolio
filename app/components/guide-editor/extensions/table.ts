@@ -6,6 +6,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TextSelection } from "@tiptap/pm/state";
 import { isInTable, selectionCell } from "@tiptap/pm/tables";
+import { columnSnapPlugin } from "./column-snap";
 
 type StyleAttrs = Record<string, string | null>;
 
@@ -69,5 +70,13 @@ export const CustomTable = Table.extend({
       // Ctrl/Cmd+A: テーブル内では現在のセル内の文字だけを選択する。
       "Mod-a": ({ editor }) => selectCellTextOnly(editor),
     };
+  },
+  addProseMirrorPlugins() {
+    const parent = this.parent?.() ?? [];
+    // 列幅スナップは columnResizing が有効なとき（= リサイズ可能な編集時）のみ意味を持つ
+    if (this.options.resizable && this.editor.isEditable) {
+      return [...parent, columnSnapPlugin()];
+    }
+    return parent;
   },
 });

@@ -9,10 +9,10 @@ import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("keybindingsStats.metaTitle");
   const description = t("keybindingsStats.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -28,8 +28,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader() {
+  const env = getEnv();
   const db = createDb();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const stats = await loadKeybindingsStats(db);

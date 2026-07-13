@@ -73,10 +73,10 @@ import {
 // 選択肢として見せるための擬似プリセットID（実際のconfigPresetsの行ではない）
 const LIVE_PRESET_ID = "__live__";
 
-export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("playground.title");
   const description = t("playground.pageDesc");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image?title=${encodeURIComponent(t("playground.pageTitle"))}`;
   return [
     { title },
@@ -103,8 +103,8 @@ type MyPresetOption = PlaygroundData & {
   isActive: boolean;
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -185,8 +185,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: Route.ActionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -469,7 +469,8 @@ export default function PlaygroundPage() {
       .filter((c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim())
       .map((c) => ({
         items: c.items,
-        searchStr: c.searchStr?.trim() || null,
+        // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+        searchStr: c.searchStr?.trim() ? c.searchStr : null,
         comment: c.comment,
         timing: c.timing,
       }));

@@ -875,6 +875,8 @@ body {
   border-radius: 0.25em;
   font-size: 0.875em;
   font-weight: normal;
+  /* エディタ（.ProseMirror は pre-wrap）と同様に code 内の先頭末尾・連続スペースを可視化する */
+  white-space: pre-wrap;
 }
 
 :is(.dark, .ultra-dark) .guide-content.prose :where(code):not(pre code) {
@@ -961,6 +963,10 @@ body {
 .guide-content.prose :where(th) {
   padding: 0.35em 0.75em;
 }
+
+/* 列潰れ対策はサーバ側の normalizeGuideTables()（app/lib/guide-tables.ts）が
+   表の min-width を「固定列合計 + 未指定列 × 160px」に再計算することで行う。
+   収まらない分は .table-scroll-wrapper の横スクロールに逃げる。 */
 
 .guide-content.prose :where(th) {
   font-weight: 600;

@@ -173,8 +173,8 @@ function jsonResponse(data: unknown, cdnMaxAge: number): Response {
   });
 }
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
 
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");

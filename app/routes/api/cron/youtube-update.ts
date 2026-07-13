@@ -12,13 +12,13 @@ import {
   cleanupOldLiveCache,
 } from "@/lib/youtube-cache";
 
-export async function loader({ request, context }: { request: Request; context: any }) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: { request: Request }) {
+  const env = getEnv();
 
   // Vercel Cron認証。CRON_SECRET は getEnv() の返却に含まれないため
-  // paceman/rankings と同様に context.env / process.env から直接参照する。
+  // paceman/rankings と同様に process.env から直接参照する。
   const authHeader = request.headers.get("Authorization");
-  const expectedToken = context.env?.CRON_SECRET || process.env.CRON_SECRET;
+  const expectedToken = process.env.CRON_SECRET;
 
   // 認証チェック（CRON_SECRETが設定されている場合）
   if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {

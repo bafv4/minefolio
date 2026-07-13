@@ -166,10 +166,17 @@ function shiftedChar(keyCode: string, baseChar: string): string {
 }
 
 function charToKeyCode(char: string): string {
+  if (char === " ") return "Space";
   const upper = char.toUpperCase();
   if (/^[A-Z]$/.test(upper)) return `Key${upper}`;
   if (/^[0-9]$/.test(char)) return `Digit${char}`;
   return char;
+}
+
+/** キーコードのバッジ表示ラベル: 可視1文字はその文字（大文字）、それ以外（Space 等）は getKeyLabel() のラベル */
+function keyCodeToBadgeLabel(keyCode: string): string {
+  const char = keyCodeToChar(keyCode);
+  return char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(keyCode);
 }
 
 export type ActualKeyInfo = {
@@ -230,10 +237,9 @@ export function getActualKeyInfos(searchStr: string, remaps: RemapInfo[]): Actua
           .slice(0, -1)
           .map(modifierToMark)
           .join("");
-        const baseKey = keyCodeToChar(parts[parts.length - 1]);
-        displayLabel = `${mods}+${baseKey}`;
+        displayLabel = `${mods}+${keyCodeToBadgeLabel(parts[parts.length - 1])}`;
       } else {
-        displayLabel = keyCodeToChar(sourceKey);
+        displayLabel = keyCodeToBadgeLabel(sourceKey);
       }
 
       result.push({
@@ -241,13 +247,15 @@ export function getActualKeyInfos(searchStr: string, remaps: RemapInfo[]): Actua
         keyCode: sourceKey,
         isRemapped: true,
         needsShift: hasModifiers && sourceKey.includes("Shift"),
-        displayLabel: displayLabel.toUpperCase(),
+        displayLabel,
       });
       continue;
     }
 
     const baseKeyCode = charToKeyCode(char.toLowerCase());
-    const displayLabel = isUpperCase ? `⇧+${char.toUpperCase()}` : char.toUpperCase();
+    // スペースなど不可視文字はバッジが空になるためキーラベル（Space 等）を表示する
+    const baseLabel = char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(baseKeyCode);
+    const displayLabel = isUpperCase ? `⇧+${baseLabel}` : baseLabel;
     result.push({
       char: char.toLowerCase(),
       keyCode: isUpperCase ? `Shift+${baseKeyCode}` : baseKeyCode,

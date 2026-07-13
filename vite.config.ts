@@ -1,16 +1,17 @@
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig(({ isSsrBuild, command }) => ({
   plugins: [
     reactRouter(),
     tailwindcss(),
-    tsconfigPaths(),
   ],
   resolve: {
     dedupe: ["react", "react-dom"],
+    // tsconfig の paths（@/* → app/*）を Vite 8 のネイティブ解決で処理する
+    // （vite-tsconfig-paths プラグインの後継。プラグイン検出 WARNING の解消）
+    tsconfigPaths: true,
   },
   ssr: {
     // sanitize-html は CJS で htmlparser2（dual package）を require するが、
@@ -33,8 +34,12 @@ export default defineConfig(({ isSsrBuild, command }) => ({
         ? {}
         : {
             output: {
-              manualChunks: {
-                vendor: ["react", "react-dom", "react-router"],
+              // Vite 8（Rolldown）は manualChunks のオブジェクト形式を受け付けないため関数形式で指定。
+              // react / react-dom / react-router を安定した vendor チャンクにまとめる。
+              manualChunks(id) {
+                if (/[\\/]node_modules[\\/](?:react|react-dom|react-router)[\\/]/.test(id)) {
+                  return "vendor";
+                }
               },
             },
           }),

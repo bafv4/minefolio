@@ -88,7 +88,7 @@ Minefolio は、Minecraft スピードランナーが自分のプロフィール
 
 ## 技術スタック
 
-- React 19 + React Router 7
+- React 19 + React Router 8
 - TypeScript
 - Tailwind CSS 4
 - Drizzle ORM

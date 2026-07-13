@@ -10,8 +10,8 @@ import { getVisiblePaceFeed, parsePaceSearchParams } from "@/lib/paces-feed.serv
 const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 100;
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

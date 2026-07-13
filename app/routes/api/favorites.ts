@@ -23,8 +23,8 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-async function getCurrentUser(request: Request, context: Route.LoaderArgs["context"]) {
-  const env = context.env ?? getEnv();
+async function getCurrentUser(request: Request) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -41,8 +41,8 @@ async function getCurrentUser(request: Request, context: Route.LoaderArgs["conte
  * - 認証済み: DB から slug 一覧を取得
  * - 未認証: 空配列を返す
  */
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const { db, user } = await getCurrentUser(request, context);
+export async function loader({ request }: Route.LoaderArgs) {
+  const { db, user } = await getCurrentUser(request);
   if (!user) {
     return jsonResponse({ favorites: [] });
   }
@@ -57,8 +57,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
  * PUT /api/favorites { slugs: string[] }
  *   → 認証必須、localStorage→DBの一括同期（重複は無視）
  */
-export async function action({ context, request }: Route.ActionArgs) {
-  const { db, user } = await getCurrentUser(request, context);
+export async function action({ request }: Route.ActionArgs) {
+  const { db, user } = await getCurrentUser(request);
   if (!user) {
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }

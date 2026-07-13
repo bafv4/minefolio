@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/changelog";
+import { getEnv } from "@/lib/env.server";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -7,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, History } from "lucide-react";
 import changelogMd from "@/content/changelog.md?raw";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "更新履歴 - Developers - Minefolio";
   const description = "Minefolio のリリースノート";
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -22,8 +23,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env;
+export async function loader() {
+  const env = getEnv();
   return { appUrl: env?.APP_URL ?? "https://minefolio.pages.dev" };
 }
 

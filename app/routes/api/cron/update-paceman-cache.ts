@@ -10,12 +10,12 @@ import { fetchRecentRunsForUsers } from "@/lib/paceman";
 import { cachePacemanPaces } from "@/lib/paceman-cache";
 import { excludeViewersCondition } from "@/lib/users-filter";
 
-export async function loader({ context, request }: { request: Request; context: any }) {
+export async function loader({ request }: { request: Request }) {
   // セキュリティ: Vercel Cron認証
   // Vercel Cronは自動的にAuthorizationヘッダーを設定する
   // 環境変数CRON_SECRETと一致する必要がある
   const authHeader = request.headers.get("authorization");
-  const expectedToken = context.env?.CRON_SECRET || process.env.CRON_SECRET;
+  const expectedToken = process.env.CRON_SECRET;
 
   // 本番環境ではトークン認証を必須にする
   if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {

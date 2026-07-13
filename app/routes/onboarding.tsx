@@ -26,10 +26,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle2, AlertCircle, Info, SkipForward } from "lucide-react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("onboarding.title");
   const description = t("onboarding.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -45,8 +45,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -73,8 +73,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: Route.ActionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

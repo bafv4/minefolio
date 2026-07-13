@@ -60,8 +60,8 @@ function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | 
   return targetKey;
 }
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -98,8 +98,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return { userId: user.id, presets, history };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: Route.ActionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

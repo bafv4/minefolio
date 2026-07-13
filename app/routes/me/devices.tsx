@@ -67,8 +67,8 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
   return false;
 }
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -160,8 +160,8 @@ export function HydrateFallback() {
   );
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: Route.ActionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

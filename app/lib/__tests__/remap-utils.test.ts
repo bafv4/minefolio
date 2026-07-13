@@ -70,8 +70,8 @@ describe("simulateRemapOutput", () => {
   it("スペースキーは空白を出力する", () => {
     const result = simulateRemapOutput("Space", REMAPS);
     expect(result.output).toBe(" ");
-    // 可視1文字でないキーは getKeyLabel() のラベル（Space は「スペース」）
-    expect(result.pressedLabel).toBe("スペース");
+    // 可視1文字でないキーは getKeyLabel() のラベル
+    expect(result.pressedLabel).toBe("Space");
   });
 
   it("記号キーは文字を出力する（keyCode名ではなく）", () => {
@@ -104,9 +104,38 @@ describe("simulateRemapOutput", () => {
   });
 });
 
+describe("getActualKeyInfos のスペース処理", () => {
+  it("スペース文字は Space キーとして解決し、バッジラベルも Space になる（空バッジにならない）", () => {
+    const infos = getActualKeyInfos(" s ", REMAPS);
+    expect(infos).toHaveLength(3);
+    expect(infos[0].keyCode).toBe("Space");
+    expect(infos[0].displayLabel).toBe("Space");
+    expect(infos[1].displayLabel).toBe("S");
+    expect(infos[2].keyCode).toBe("Space");
+    expect(infos[2].displayLabel).toBe("Space");
+  });
+
+  it("Space が変換元のリマップも Space ラベルで表示する", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "Space", targetKey: "KeyB" }];
+    const infos = getActualKeyInfos("b", remaps);
+    expect(infos[0].isRemapped).toBe(true);
+    expect(infos[0].keyCode).toBe("Space");
+    expect(infos[0].displayLabel).toBe("Space");
+  });
+});
+
 describe("simulateRemapOutput と getActualKeyInfos の整合性", () => {
   it("逆引きで得たキーを順方向に適用すると元の文字に戻る", () => {
     const searchStr = "sea";
+    const keyInfos = getActualKeyInfos(searchStr, REMAPS);
+    const roundTrip = keyInfos
+      .map((info) => simulateRemapOutput(info.keyCode, REMAPS).output)
+      .join("");
+    expect(roundTrip).toBe(searchStr);
+  });
+
+  it("先頭・末尾スペースを含む文字列も逆引き→順方向で元に戻る", () => {
+    const searchStr = " sea ";
     const keyInfos = getActualKeyInfos(searchStr, REMAPS);
     const roundTrip = keyInfos
       .map((info) => simulateRemapOutput(info.keyCode, REMAPS).output)

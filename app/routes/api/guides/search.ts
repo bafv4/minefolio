@@ -4,8 +4,8 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
-export async function loader({ context, request }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: LoaderFunctionArgs) {
+  const env = getEnv();
   const db = createDb();
 
   const url = new URL(request.url);

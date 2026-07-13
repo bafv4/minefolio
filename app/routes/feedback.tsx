@@ -32,10 +32,10 @@ import { toast } from "sonner";
 import { Loader2, MessageSquare, Send, CheckCircle2 } from "lucide-react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("feedback.title");
   const description = "Minefolioへのフィードバックをお寄せください";
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -51,8 +51,8 @@ export const meta: Route.MetaFunction = ({ data }) => {
   ];
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -69,8 +69,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return { user, appUrl: env.APP_URL || "https://minefolio.pages.dev" };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+export async function action({ request }: Route.ActionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

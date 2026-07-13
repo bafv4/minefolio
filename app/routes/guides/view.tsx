@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
+import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
   extractEmbedRefs,
   getUniqueEmbedSlugs,
@@ -30,16 +31,16 @@ import {
 } from "@/components/guide-embeds";
 
 export function meta({
-  data,
+  loaderData,
 }: {
-  data: Awaited<ReturnType<typeof loader>> | undefined;
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
 }) {
-  if (!data?.guide) {
+  if (!loaderData?.guide) {
     return [{ title: "ガイドが見つかりません - Minefolio" }];
   }
-  const title = `${data.guide.title} - Minefolio`;
-  const description = data.guide.summary || `${data.author.displayName || data.author.mcid}のガイド`;
-  const ogImage = data.guide.coverImageUrl || `${data.appUrl}/og-image`;
+  const title = `${loaderData.guide.title} - Minefolio`;
+  const description = loaderData.guide.summary || `${loaderData.author.displayName || loaderData.author.mcid}のガイド`;
+  const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
     { name: "description", content: description },
@@ -47,15 +48,15 @@ export function meta({
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:image", content: ogImage },
-    { name: "twitter:card", content: data.guide.coverImageUrl ? "summary_large_image" : "summary" },
+    { name: "twitter:card", content: loaderData.guide.coverImageUrl ? "summary_large_image" : "summary" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: ogImage },
   ];
 }
 
-export async function loader({ context, request, params }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -158,8 +159,11 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
     allowedIframeHostnames: ["www.youtube.com", "www.youtube-nocookie.com"],
   });
 
+  // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
+  const normalizedContent = normalizeGuideTables(sanitizedContent);
+
   // Wrap <table> in a scrollable container so wide tables scroll on mobile
-  const wrappedContent = sanitizedContent.replace(
+  const wrappedContent = normalizedContent.replace(
     /<table(\s|>)/g,
     '<div class="table-scroll-wrapper"><table$1'
   ).replace(/<\/table>/g, '</table></div>');

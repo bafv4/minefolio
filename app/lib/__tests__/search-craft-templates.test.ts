@@ -163,6 +163,34 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect(remaps[1].targetKey).toBeNull();
   });
 
+  it("サーチ文字列の先頭・末尾スペースを保存値に保持する（trim は空判定のみ）", () => {
+    const result = parseEditorSubmission(
+      buildForm({
+        title: "a",
+        crafts: JSON.stringify([
+          { items: ["minecraft:chest"], searchStr: " che ", comment: null, timing: null },
+        ]),
+        remaps: "[]",
+      }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    const crafts = parseTemplateCrafts(result.craftsData);
+    expect(crafts[0].searchStr).toBe(" che ");
+  });
+
+  it("スペースのみのサーチ文字列は拒否する", () => {
+    expect(
+      parseEditorSubmission(
+        buildForm({
+          title: "a",
+          crafts: JSON.stringify([{ items: ["minecraft:chest"], searchStr: "   " }]),
+          remaps: "[]",
+        }),
+      ),
+    ).toHaveProperty("error");
+  });
+
   it("タイトル未入力・クラフト0件・アイテムなし・サーチ文字列なしを拒否する", () => {
     expect(
       parseEditorSubmission(buildForm({ title: "", crafts: validCrafts, remaps: "[]" })),

@@ -27,7 +27,7 @@ pnpm db:push          # スキーマを直接Tursoに反映（マイグレーシ
 
 ## 技術スタック
 
-- **フレームワーク**: React 19 + React Router 7（SSR、Vite）
+- **フレームワーク**: React 19 + React Router 8（SSR、Vite）
 - **スタイリング**: Tailwind CSS 4、shadcn/ui（Radix UI）
 - **データベース**: Drizzle ORM + libSQL（Turso）、SQLite方言
 - **認証**: better-auth + Discord OAuth
@@ -53,14 +53,17 @@ pnpm db:push          # スキーマを直接Tursoに反映（マイグレーシ
 ### 標準的なLoaderパターン
 
 ```typescript
-export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+export async function loader({ request }: Route.LoaderArgs) {
+  const env = getEnv(); // app/lib/env.server.ts（process.env から取得）
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth); // 認証必須の場合は getSession()
   // ...Drizzle ORMでクエリ
 }
 ```
+
+React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベース）。本プロジェクトでは
+`getLoadContext` を使っておらず、環境変数は常に `getEnv()`（process.env）経由で取得する。
 
 ### データベース
 
