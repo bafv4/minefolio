@@ -21,17 +21,17 @@ import {
 } from "@/components/guide-list-views";
 
 export function meta({
-  data,
+  loaderData,
 }: {
-  data: Awaited<ReturnType<typeof loader>> | undefined;
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
 }) {
-  if (!data?.author) {
+  if (!loaderData?.author) {
     return [{ title: "ユーザーが見つかりません - Minefolio" }];
   }
-  const name = data.author.displayName || data.author.mcid || data.author.slug;
+  const name = loaderData.author.displayName || loaderData.author.mcid || loaderData.author.slug;
   const title = `${name}のガイド - Minefolio`;
   const description = `${name}が公開しているガイド一覧`;
-  const ogImage = `${data.appUrl}/og-image?slug=${encodeURIComponent(data.author.slug)}`;
+  const ogImage = `${loaderData.appUrl}/og-image?slug=${encodeURIComponent(loaderData.author.slug)}`;
   return [
     { title },
     { name: "description", content: description },
@@ -47,7 +47,7 @@ export function meta({
 }
 
 export async function loader({ context, params }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
 
   const { authorSlug } = params as { authorSlug: string };

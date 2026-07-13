@@ -21,7 +21,7 @@ import { getEnv } from "@/lib/env.server";
 import { t } from "@/lib/messages";
 
 export async function loader({ request, context }: { request: Request; context: any }) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -34,7 +34,7 @@ export async function loader({ request, context }: { request: Request; context: 
 }
 
 export async function action({ request, context }: { request: Request; context: any }) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

@@ -12,7 +12,7 @@ import {
 } from "@/lib/browse-query.server";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

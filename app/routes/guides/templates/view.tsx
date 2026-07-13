@@ -70,15 +70,15 @@ import { ja } from "date-fns/locale";
 type KeyboardLayoutOption = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 const LAYOUT_OPTIONS: KeyboardLayoutOption[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
 
-export const meta: Route.MetaFunction = ({ data }) => {
-  if (!data) {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  if (!loaderData) {
     return [{ title: t("templates.title") }];
   }
-  const title = `${data.template.title} - ${t("templates.pageTitle")} | Minefolio`;
+  const title = `${loaderData.template.title} - ${t("templates.pageTitle")} | Minefolio`;
   const description =
-    data.template.description ||
-    t("templates.metaDescription", { name: data.author.name });
-  const ogImage = `${data.appUrl}/og-image?title=${encodeURIComponent(data.template.title)}&description=${encodeURIComponent(t("templates.pageTitle"))}`;
+    loaderData.template.description ||
+    t("templates.metaDescription", { name: loaderData.author.name });
+  const ogImage = `${loaderData.appUrl}/og-image?title=${encodeURIComponent(loaderData.template.title)}&description=${encodeURIComponent(t("templates.pageTitle"))}`;
   return [
     { title },
     { name: "description", content: description },
@@ -94,7 +94,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -157,7 +157,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request, params }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

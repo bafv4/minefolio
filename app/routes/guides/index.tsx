@@ -18,10 +18,10 @@ import {
   type GuideItem,
 } from "@/components/guide-list-views";
 
-export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("guides.title");
   const description = t("guides.pageDesc");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -38,7 +38,7 @@ export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> | unde
 };
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
 
   const url = new URL(request.url);

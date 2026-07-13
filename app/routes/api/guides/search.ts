@@ -5,7 +5,7 @@ import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
 
   const url = new URL(request.url);

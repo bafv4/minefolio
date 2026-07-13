@@ -22,7 +22,7 @@ import { ShareButton } from "@/components/share-button";
 import { t } from "@/lib/messages";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

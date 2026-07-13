@@ -45,13 +45,13 @@ function getRelativeTime(dateStr: string): string {
   return t("playerStats.daysAgo", { count: diffDays });
 }
 
-export const meta: Route.MetaFunction = ({ params, data }) => {
-  const displayName = data?.mcid || params.slug;
+export const meta: Route.MetaFunction = ({ params, loaderData }) => {
+  const displayName = loaderData?.mcid || params.slug;
   const title = t("playerStats.metaTitle", { name: displayName });
   const description = t("playerStats.metaDescription", { name: displayName });
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = data?.mcid
-    ? `${appUrl}/og-image?mcid=${encodeURIComponent(data.mcid)}`
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
+  const ogImage = loaderData?.mcid
+    ? `${appUrl}/og-image?mcid=${encodeURIComponent(loaderData.mcid)}`
     : `${appUrl}/og-image?slug=${encodeURIComponent(params.slug || "")}`;
   return [
     { title },
@@ -68,7 +68,7 @@ export const meta: Route.MetaFunction = ({ params, data }) => {
 };
 
 export async function loader({ params, context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const { slug } = params;
   const db = createDb();

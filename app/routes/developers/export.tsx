@@ -13,10 +13,10 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Download, Keyboard, ArrowLeftRight, Wand2, Mouse, FileSpreadsheet, Search, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "データエクスポート - Developers - Minefolio";
   const description = "全ユーザーまたは指定ユーザーのキー配置・リマップ・カスタムアクション・マウス設定をCSV形式でダウンロード";
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -35,7 +35,7 @@ interface AvailableUser {
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
 
   // 設定（キー配置・リマップ・カスタムアクションのいずれか）が登録されている公開ユーザーを取得

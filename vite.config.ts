@@ -33,8 +33,12 @@ export default defineConfig(({ isSsrBuild, command }) => ({
         ? {}
         : {
             output: {
-              manualChunks: {
-                vendor: ["react", "react-dom", "react-router"],
+              // Vite 8（Rolldown）は manualChunks のオブジェクト形式を受け付けないため関数形式で指定。
+              // react / react-dom / react-router を安定した vendor チャンクにまとめる。
+              manualChunks(id) {
+                if (/[\\/]node_modules[\\/](?:react|react-dom|react-router)[\\/]/.test(id)) {
+                  return "vendor";
+                }
               },
             },
           }),

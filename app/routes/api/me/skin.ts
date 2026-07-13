@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 // POST /api/me/skin - カスタムスキンURLを保存
 // DELETE /api/me/skin - カスタムスキンを削除
 export async function action({ context, request }: ActionFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

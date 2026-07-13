@@ -24,7 +24,7 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 }
 
 async function getCurrentUser(request: Request, context: Route.LoaderArgs["context"]) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

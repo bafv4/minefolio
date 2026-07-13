@@ -240,7 +240,7 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 export async function loader({ context, request }: { request: Request; context: { env?: Record<string, string> } }) {
   // セキュリティ: Vercel Cron認証
   const authHeader = request.headers.get("authorization");
-  const expectedToken = context.env?.CRON_SECRET || process.env.CRON_SECRET;
+  const expectedToken = process.env.CRON_SECRET;
 
   if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
     console.warn("Unauthorized cron request attempt");

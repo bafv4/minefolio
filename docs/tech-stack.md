@@ -157,7 +157,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 [ブラウザ]
    ↓ HTTPS
 [Vercel Edge / Serverless]
-   ├─ React Router 7 SSR (loader/action)
+   ├─ React Router 8 SSR (loader/action)
    ├─ @vercel/og (OGP 生成)
    ├─ Cron Triggers (PaceMan / Rankings / YouTube 同期)
    └─ better-auth (Discord OAuth)

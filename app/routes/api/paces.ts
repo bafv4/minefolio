@@ -11,7 +11,7 @@ const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 100;
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

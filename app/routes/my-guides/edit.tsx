@@ -13,13 +13,13 @@ import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { t } from "@/lib/messages";
 
-export function meta({ data }: { data: { guide: { title: string } } | undefined }) {
-  if (!data?.guide) return [{ title: t("meGuides.editTitle") }];
-  return [{ title: `${data.guide.title} - 編集 | Minefolio` }];
+export function meta({ loaderData }: { loaderData: { guide: { title: string } } | undefined }) {
+  if (!loaderData?.guide) return [{ title: t("meGuides.editTitle") }];
+  return [{ title: `${loaderData.guide.title} - 編集 | Minefolio` }];
 }
 
 export async function loader({ context, request, params }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);
@@ -69,7 +69,7 @@ export async function loader({ context, request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ context, request, params }: ActionFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);

@@ -61,7 +61,7 @@ function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | 
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -99,7 +99,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

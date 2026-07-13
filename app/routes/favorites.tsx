@@ -27,10 +27,10 @@ type FavoritePlayer = {
   updatedAt: Date;
 };
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("favorites.metaTitle");
   const description = t("favorites.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -47,7 +47,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
   const auth = createAuth(db, env);

@@ -27,7 +27,7 @@ pnpm db:push          # スキーマを直接Tursoに反映（マイグレーシ
 
 ## 技術スタック
 
-- **フレームワーク**: React 19 + React Router 7（SSR、Vite）
+- **フレームワーク**: React 19 + React Router 8（SSR、Vite）
 - **スタイリング**: Tailwind CSS 4、shadcn/ui（Radix UI）
 - **データベース**: Drizzle ORM + libSQL（Turso）、SQLite方言
 - **認証**: better-auth + Discord OAuth

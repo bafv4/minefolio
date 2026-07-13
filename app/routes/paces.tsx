@@ -30,10 +30,10 @@ const PAGE_SIZE = 60;
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("paces.metaTitle");
   const description = t("paces.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -50,7 +50,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
   const auth = createAuth(db, env);

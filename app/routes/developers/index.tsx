@@ -1,13 +1,14 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/index";
+import { getEnv } from "@/lib/env.server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Code, FileText, History, Download, Github, MessageSquare, ChevronRight } from "lucide-react";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "Developers - Minefolio";
   const description = "Minefolio の開発者向け情報・APIドキュメント・更新履歴・データエクスポート";
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -20,7 +21,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env;
+  const env = getEnv();
   return { appUrl: env?.APP_URL ?? "https://minefolio.pages.dev" };
 }
 

@@ -7,10 +7,10 @@ import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { KeybindingsListLayout } from "@/components/keybindings/keybindings-list-layout";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("keybindings.metaTitle");
   const description = t("keybindings.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -27,7 +27,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const players = await loadKeybindingsListPlayers(db);

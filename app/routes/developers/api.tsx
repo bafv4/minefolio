@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/api";
+import { getEnv } from "@/lib/env.server";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -7,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText } from "lucide-react";
 import apiMd from "@/content/api.md?raw";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "API ドキュメント - Developers - Minefolio";
   const description = "Minefolio が提供する公開 API の仕様";
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -23,7 +24,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const env = context.env;
+  const env = getEnv();
   return { appUrl: env?.APP_URL ?? "https://minefolio.pages.dev" };
 }
 

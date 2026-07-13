@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 // POST /api/me/skin/upload-token
 // Client Uploadのためのトークンを発行
 export async function action({ context, request }: ActionFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

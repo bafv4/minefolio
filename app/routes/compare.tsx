@@ -23,10 +23,10 @@ import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-re
 import { useState, useMemo } from "react";
 import { t } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = `${t("compare.title")} - Minefolio`;
   const description = t("compare.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -84,7 +84,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.pages.dev";
   const db = createDb();
   const url = new URL(request.url);

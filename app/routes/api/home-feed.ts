@@ -174,7 +174,7 @@ function jsonResponse(data: unknown, cdnMaxAge: number): Response {
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
 
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");

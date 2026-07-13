@@ -41,21 +41,21 @@ const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
 const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
-export function meta({ data, params }: Route.MetaArgs) {
-  if (!data?.player) {
+export function meta({ loaderData, params }: Route.MetaArgs) {
+  if (!loaderData?.player) {
     return [
       { title: "Player Not Found - Minefolio" },
       { name: "description", content: "Player profile not found" },
     ];
   }
 
-  const { player } = data;
+  const { player } = loaderData;
   const displayName = player.displayName || player.mcid || player.slug;
   const description = player.shortBio || player.bio || `${displayName}'s Minecraft speedrunning profile`;
   // OGP画像: MCIDがある場合のみMCIDパラメータを付与
   const ogImageUrl = player.mcid
-    ? `${data.appUrl}/og-image?mcid=${encodeURIComponent(player.mcid)}`
-    : `${data.appUrl}/og-image?slug=${encodeURIComponent(player.slug)}`;
+    ? `${loaderData.appUrl}/og-image?mcid=${encodeURIComponent(player.mcid)}`
+    : `${loaderData.appUrl}/og-image?slug=${encodeURIComponent(player.slug)}`;
   const mentionDisplay = player.mcid ? `@${player.mcid}` : player.slug;
 
   return [
@@ -70,7 +70,7 @@ export function meta({ data, params }: Route.MetaArgs) {
     { property: "og:image:type", content: "image/png" },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
-    { property: "og:url", content: `${data.appUrl}/player/${player.slug}` },
+    { property: "og:url", content: `${loaderData.appUrl}/player/${player.slug}` },
 
     // Twitter Card
     { name: "twitter:card", content: "summary_large_image" },
@@ -221,7 +221,7 @@ export function shouldRevalidate({
 }
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

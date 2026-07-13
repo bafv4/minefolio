@@ -73,10 +73,10 @@ import {
 // 選択肢として見せるための擬似プリセットID（実際のconfigPresetsの行ではない）
 const LIVE_PRESET_ID = "__live__";
 
-export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("playground.title");
   const description = t("playground.pageDesc");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image?title=${encodeURIComponent(t("playground.pageTitle"))}`;
   return [
     { title },
@@ -104,7 +104,7 @@ type MyPresetOption = PlaygroundData & {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
@@ -186,7 +186,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 

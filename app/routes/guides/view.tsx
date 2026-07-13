@@ -30,16 +30,16 @@ import {
 } from "@/components/guide-embeds";
 
 export function meta({
-  data,
+  loaderData,
 }: {
-  data: Awaited<ReturnType<typeof loader>> | undefined;
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
 }) {
-  if (!data?.guide) {
+  if (!loaderData?.guide) {
     return [{ title: "ガイドが見つかりません - Minefolio" }];
   }
-  const title = `${data.guide.title} - Minefolio`;
-  const description = data.guide.summary || `${data.author.displayName || data.author.mcid}のガイド`;
-  const ogImage = data.guide.coverImageUrl || `${data.appUrl}/og-image`;
+  const title = `${loaderData.guide.title} - Minefolio`;
+  const description = loaderData.guide.summary || `${loaderData.author.displayName || loaderData.author.mcid}のガイド`;
+  const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
     { name: "description", content: description },
@@ -47,7 +47,7 @@ export function meta({
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:image", content: ogImage },
-    { name: "twitter:card", content: data.guide.coverImageUrl ? "summary_large_image" : "summary" },
+    { name: "twitter:card", content: loaderData.guide.coverImageUrl ? "summary_large_image" : "summary" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: ogImage },
@@ -55,7 +55,7 @@ export function meta({
 }
 
 export async function loader({ context, request, params }: LoaderFunctionArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);

@@ -29,10 +29,10 @@ function StickyHeaderShell({ children }: { children: ReactNode }) {
   );
 }
 
-export const meta: Route.MetaFunction = ({ data }) => {
+export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("rankings.title");
   const description = t("rankings.description");
-  const appUrl = data?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
   const ogImage = `${appUrl}/og-image`;
   return [
     { title },
@@ -49,7 +49,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 };
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const env = context.env ?? getEnv();
+  const env = getEnv();
   const db = createDb();
   const url = new URL(request.url);
   const args = parseRankingsParams(url.searchParams);
