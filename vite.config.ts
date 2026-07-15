@@ -12,14 +12,13 @@ export default defineConfig(({ isSsrBuild, command }) => ({
     // tsconfig の paths（@/* → app/*）を Vite 8 のネイティブ解決で処理する
     // （vite-tsconfig-paths プラグインの後継。プラグイン検出 WARNING の解消）
     tsconfigPaths: true,
-  },
-  ssr: {
-    // sanitize-html は CJS で htmlparser2（dual package）を require するが、
-    // Vercel の Node ランタイムローダーが require 条件の解決に失敗して ESM ビルドを
-    // require し ERR_REQUIRE_ESM でクラッシュする。本番ビルドではサーバーバンドルへ
-    // 取り込み、実行時のパッケージ解決自体を無くす。
-    // dev では対象外にする（Vite dev の SSR は CJS を inline 評価できず
-    // "require is not defined" になる。ローカル Node は解決に問題がない）。
+    // sanitize-html は CJS で htmlparser2（純ESM）を require するが、Vercel の Node
+    // ランタイムは require(esm) を許可せず ERR_REQUIRE_ESM でクラッシュする。ビルド時は
+    // サーバーバンドルへ取り込み（Vite が require を import に変換する）実行時の解決を無くす。
+    // トップレベル resolve.noExternal は全環境共通の既定なので、Vercelプリセットが
+    // serverBundles で作る runtime 別環境（nodejs_<hash>）にも適用される
+    // （ssr.noExternal は "ssr" 環境限定で当該環境に伝播しない）。
+    // dev では対象外（Vite dev の SSR は CJS を inline 評価できず "require is not defined"）。
     noExternal: command === "build" ? ["sanitize-html", "htmlparser2"] : [],
   },
   build: {
