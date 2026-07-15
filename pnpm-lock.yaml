@@ -176,6 +176,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@libsql/client@0.15.15)(kysely@0.29.3)
+      escape-string-regexp:
+        specifier: ^5.0.0
+        version: 5.0.0
       html-to-image:
         specifier: ^1.11.13
         version: 1.11.13
