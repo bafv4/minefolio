@@ -225,6 +225,9 @@ export const searchCrafts = sqliteTable("search_crafts", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  // Shiftを押しながらクラフトするか（入力キーはシフト後の文字を優先して逆引きする）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  withShift: integer("with_shift", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   uniqueIndex("idx_search_crafts_user_sequence").on(table.userId, table.sequence),
 ]);
@@ -971,3 +974,16 @@ export const searchCraftTemplatesRelations = relations(searchCraftTemplates, ({ 
 
 export type SearchCraftTemplate = typeof searchCraftTemplates.$inferSelect;
 export type NewSearchCraftTemplate = typeof searchCraftTemplates.$inferInsert;
+
+// ============================================
+// 24. app_meta（アプリケーション全体のkey-valueメタデータ）
+// ============================================
+// 例: リリース通知の最終通知バージョン（release_notify:last_version）
+export const appMeta = sqliteTable("app_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type AppMeta = typeof appMeta.$inferSelect;
+export type NewAppMeta = typeof appMeta.$inferInsert;

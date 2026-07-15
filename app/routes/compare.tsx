@@ -26,8 +26,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = `${t("compare.title")} - Minefolio`;
   const description = t("compare.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -85,7 +85,7 @@ const categoryLabels: Record<string, string> = {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   const db = createDb();
   const url = new URL(request.url);
 

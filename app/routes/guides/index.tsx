@@ -21,8 +21,8 @@ import {
 export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("guides.title");
   const description = t("guides.pageDesc");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -87,7 +87,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .slice(0, 20)
     .map(([name]) => name);
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   return { guides: filtered, allTags, tag, q, appUrl };
 }
 

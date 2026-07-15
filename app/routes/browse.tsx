@@ -42,8 +42,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("browse.metaTitle");
   const description = t("browse.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -94,7 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       inputMethods: args.inputMethods,
       platforms: args.platforms,
     },
-    appUrl: env.APP_URL || "https://minefolio.pages.dev",
+    appUrl: env.APP_URL || "https://minefolio.app",
   };
 }
 

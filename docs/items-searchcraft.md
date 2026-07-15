@@ -100,8 +100,10 @@ import {
 | keys | text (JSON配列) | サーチ入力キー配列 |
 | searchStr | text (nullable) | サーチ文字列 |
 | comment | text (nullable) | コメント |
+| timing | text (nullable) | クラフトタイミング（ow / bastion / bastion_fort / fortress / blinded / other、null=区分なし） |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時 |
+| withShift | integer (boolean) | Shiftを押しながらクラフトするか（デフォルト false） |
 
 - ユニーク制約: `(userId, sequence)` の組み合わせ
 
@@ -121,6 +123,22 @@ import {
 サーチ文字列の各文字は、ユーザーのキーリマップ設定を考慮して実際に押すべきキーに変換される。`app/lib/remap-utils.ts` の `getActualKeyInfos()` 関数がこの変換を担当する。
 
 例: ユーザーが `Shift+KeyW → KeyA` のリマップを設定している場合、サーチ文字列中の `a` を入力するには `Shift+W` を押す必要がある。
+
+逆引きの優先順位: 同じ文字を複数のリマップが出力できる場合、**修飾キーなしのソースを優先**する（例: `E→h` と `Shift+S→h` があるとき `h` は `E` に解決する）。同クラス内で複数候補がある場合は、通常マップは後勝ち、shiftHeld マップは先勝ち（`dedupeRemaps` と同じ規則）。
+
+### Shiftを押しながらクラフト（withShift）
+
+スタック単位のクラフト（Shift+クリック）のために Shift を押しっぱなしでサーチ入力するエントリは、`withShift: true` を設定できる。
+
+- 編集UI（/me/search-craft・テンプレートエディタ・Playground）の各行に「Shiftを押しながら」チェックボックスがある
+- 表示行の入力キー列の先頭に琥珀色の「⇧ Shift」バッジが付く（凡例にも表示）
+- 入力キーの逆引きは `getActualKeyInfos(searchStr, remaps, { shiftHeld: true })` となり、**Shift 押下中の出力文字で**解決する:
+  - 単一キーソースのリマップは target キーのシフト後文字（例: target が `Semicolon` なら `:`）で逆引きする
+  - `Shift+X` ソースの完全一致リマップは X 単独のバッジになる（Shift は押しっぱなしのため ⇧ プレフィックスなし）
+  - 同じ基底キーに `Shift+X` リマップがある場合はそちらが優先され、基底キーのシフト文字化はしない（`simulateRemapOutput()` の解決順と対）
+  - **通常（Shiftなし）の逆引きマップにはフォールバックしない**。Shift 押下中、通常マップのソースキーは別の文字を出力する（完全一致リマップの発動・シフト文字化）ため、参照すると必ず誤った案内になる
+  - 非リマップの記号は `SHIFT_CHAR_MAP` の逆引きで物理キーに解決する（例: `_` → `Minus`）。ただしそのキー自体がリマップで奪われている（単一キーソース or `Shift+同キー` ソースがある）場合は使わない。英字は大文字が出力されるが Minecraft の検索は大文字小文字を区別しないため基底キーをそのまま押す
+  - 上記で解決できない文字（Shift 押下中に出せない数字等）は文字そのままの基底キーにフォールバックする
 
 ### 編集UI
 

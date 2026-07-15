@@ -12,9 +12,19 @@ export interface GuideSaveValues {
   tags: string[];
   isPublished: boolean;
   coverImageUrl: string | null;
+  slug: string;
 }
 
 export type SaveMode = "draft" | "publish" | "discard";
+
+/** 保存アクションのレスポンス（edit.tsx の action が素の object で返す） */
+export interface GuideSaveResult {
+  success?: boolean;
+  mode?: SaveMode;
+  /** 保存後の実効スラッグ（変更時はこれへ編集URLを差し替える） */
+  slug?: string;
+  error?: string;
+}
 
 function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
   const fd = new FormData();
@@ -25,6 +35,7 @@ function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
   fd.append("tags", JSON.stringify(v.tags));
   fd.append("isPublished", String(v.isPublished));
   fd.append("coverImageUrl", v.coverImageUrl ?? "");
+  fd.append("slug", v.slug);
   return fd;
 }
 
@@ -35,10 +46,12 @@ export interface UseGuideSaveResult {
   saving: boolean;
   /** 直近の保存結果 */
   lastSaved: { mode: SaveMode; at: Date } | null;
+  /** action のレスポンス（エラー通知・スラッグ変更後のURL差し替えに使う） */
+  data: GuideSaveResult | undefined;
 }
 
 export function useGuideSave(): UseGuideSaveResult {
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<GuideSaveResult>();
   const [lastSaved, setLastSaved] = useState<{ mode: SaveMode; at: Date } | null>(null);
   const pendingMode = useRef<SaveMode | null>(null);
 
@@ -60,5 +73,5 @@ export function useGuideSave(): UseGuideSaveResult {
     }
   }, [fetcher.state]);
 
-  return { submit, saving, lastSaved };
+  return { submit, saving, lastSaved, data: fetcher.data };
 }

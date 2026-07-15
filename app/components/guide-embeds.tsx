@@ -9,7 +9,7 @@ import {
 import type { FingerType } from "@/lib/keybindings";
 import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
-import { SearchStringText } from "@/components/search-craft-template-view";
+import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
 
 const TEXTURE_BASE_URL = "/mcitems";
@@ -49,6 +49,8 @@ export type EmbedUserData = {
     searchStr: string | null;
     comment: string | null;
     timing: string | null;
+    /** Shiftを押しながらクラフトするか（プリセットJSON由来の場合は存在しないことがある） */
+    withShift?: boolean;
   }>;
 };
 
@@ -231,13 +233,13 @@ function getItemDisplayName(itemId: string): string {
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
-const TIMING_LABELS: Record<string, string> = {
-  bastion: "Bastion",
-  fortress: "Fortress",
-  other: t("playerProfile.timingOther"),
-};
+// タイミングの表示順・ラベルは共通定義 TIMING_META（全6種）から導出する
+// （独自定義だと新タイミング追加時に該当クラフトが黙って非表示になる）
+const TIMING_LABELS: Record<string, string> = Object.fromEntries(
+  TIMING_META.map((m) => [m.id, m.label]),
+);
 
-const TIMING_ORDER = ["bastion", "fortress", "other"] as const;
+const TIMING_ORDER = TIMING_META.map((m) => m.id);
 
 export function SearchCraftEmbedView({
   userData,
@@ -275,7 +277,10 @@ export function SearchCraftEmbedView({
 
   const renderCraft = (craft: typeof crafts[0]) => {
     const items = typeof craft.items === "string" ? JSON.parse(craft.items) as string[] : craft.items as unknown as string[];
-    const keyInfos = craft.searchStr ? getActualKeyInfos(craft.searchStr, remaps) : [];
+    const withShift = craft.withShift === true;
+    const keyInfos = craft.searchStr
+      ? getActualKeyInfos(craft.searchStr, remaps, { shiftHeld: withShift })
+      : [];
 
     return (
       <Card key={craft.id}>
@@ -300,6 +305,14 @@ export function SearchCraftEmbedView({
                 <div className="flex items-start gap-2">
                   <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
                   <div className="flex flex-wrap items-center gap-1">
+                    {withShift && (
+                      <kbd
+                        className="px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
+                        title={t("playerProfile.withShiftTooltip")}
+                      >
+                        ⇧ Shift
+                      </kbd>
+                    )}
                     {keyInfos.map((info, idx) => (
                       <kbd key={idx} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
                         {info.displayLabel}

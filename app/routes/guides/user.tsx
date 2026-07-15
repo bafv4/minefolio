@@ -31,7 +31,7 @@ export function meta({
   const name = loaderData.author.displayName || loaderData.author.mcid || loaderData.author.slug;
   const title = `${name}のガイド - Minefolio`;
   const description = `${name}が公開しているガイド一覧`;
-  const ogImage = `${loaderData.appUrl}/og-image?slug=${encodeURIComponent(loaderData.author.slug)}`;
+  const ogImage = `${loaderData.appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -39,7 +39,7 @@ export function meta({
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:image", content: ogImage },
-    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:card", content: "summary" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: ogImage },
@@ -84,7 +84,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
     },
   });
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   return { author, guides: authorGuides, appUrl };
 }
 

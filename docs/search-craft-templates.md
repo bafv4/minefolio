@@ -29,7 +29,7 @@
 
 | 関数 | 説明 |
 |---|---|
-| `parseTemplateCrafts(craftsData)` | `PresetSearchCraftData[]` JSON → 表示用 `TemplateCraft[]`（items の二重エンコードを解決、sequence順ソート、timing正規化。不正データは空配列） |
+| `parseTemplateCrafts(craftsData)` | `PresetSearchCraftData[]` JSON → 表示用 `TemplateCraft[]`（items の二重エンコードを解決、sequence順ソート、timing正規化、withShift は boolean に正規化。不正データは空配列） |
 | `parseTemplateRemapData(remapsData)` | `PresetRemapData[]` JSON をパース（不正データは空配列） |
 | `parseTemplateRemaps(remapsData)` | 表示・シミュレーション用 `UiRemapInfo[]` に変換（`outputMode: "character"` は `outputCharacter` を出力先として扱う） |
 | `serializeTemplateCrafts()` / `serializeTemplateRemaps()` | 上記の逆変換。編集状態や Playground の一時データをDB保存用JSONにする |
@@ -40,8 +40,8 @@
 
 - `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `toggle-publish` / `delete` のみ。
 - **作成 `/my-guides/templates/new`**（`app/routes/my-guides/template-new.tsx`）・**編集 `/my-guides/templates/:templateId/edit`**（`app/routes/my-guides/template-edit.tsx`）: テンプレートエディタでテンプレートの内容そのものを直接編集する。**プリセットや現在の設定を経由せずゼロから作成できる**。
-  - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（キーリマップ編集 → バーチャルキーボード → タイピングテスト → サーチクラフト編集。詳細は後述「Playground > セクション構成」参照）。
-  - サーチクラフト編集部の `SearchCraftListEditor` は行形式（ドラッグハンドル + 順番 + アイテムチップ + サーチ文字列 + タイミング + コメント常時表示）。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。
+  - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（バーチャルキーボード → キーリマップ編集 → サーチクラフト編集。タイピングテストはバーチャルキーボードカード右上のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
+  - サーチクラフト編集部の `SearchCraftListEditor` は行形式（ドラッグハンドル + 順番 + アイテムチップ + サーチ文字列 + タイミング + 「Shiftを押しながら」チェックボックス + コメント常時表示）。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
   - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。作成時は `isPublished: true` で公開される。
 - `/me/search-craft` の「テンプレートとして公開」ボタンから `/my-guides/templates` へ遷移できる。
@@ -51,7 +51,7 @@
 - **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` のテンプレートを新着順に最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム内言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
   - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム内言語（`?lang=`、SQLで完全一致）で絞り込める。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。絞り込み結果が0件の場合はリセットリンク付きの専用メッセージを表示。
 - **詳細 `/guides/templates/:templateId`**（`app/routes/guides/templates/view.tsx`）: テンプレートの内容（リマップ・サーチクラフト一覧）を表示。ゲーム内言語はバッジではなくヘッダー部に大きく表示する（サーチ文字列の前提となる最重要情報のため）。
-  - 実入力キーはテンプレートに含まれるリマップを前提に `getActualKeyInfos()` で導出して表示する。
+  - 実入力キーはテンプレートに含まれるリマップを前提に `getActualKeyInfos()` で導出して表示する。withShift のエントリは `{ shiftHeld: true }` で導出し「⇧ Shift」バッジ付きで表示する（詳細は docs/items-searchcraft.md の「Shiftを押しながらクラフト」参照）。
   - 非公開テンプレートは作成者本人のみ閲覧可能（他者には404）。
   - OGP: `/og-image?title=...` を使用。`ShareButton` で共有可能。
 
@@ -114,10 +114,11 @@
 
 編集セクションは共有コンポーネント **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）に集約されており、**Playground とテンプレートエディタ（作成・編集）で同一構成**を共有する。crafts / remaps / layout の状態は親が持ち、ワークベンチは制御コンポーネントとして動作する（`WorkbenchRemap` 型・`effectiveRemapsFrom()`・`normalizeLayout()` / `LAYOUT_OPTIONS` もここから export）。
 
-1. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
-2. **バーチャルキーボード**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。**キーをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキーを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。
-3. **タイピングテスト**: フォーカスしてキーを押すと、リマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()`（順方向シミュレーション）を使用。
-4. **サーチクラフト編集**: `SearchCraftListEditor` によるアイテムごとの登録・編集（アイテム選択ダイアログ・タイミング・コメント・並べ替え・削除）。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。
+1. **バーチャルキーボード**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。**キーをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキーを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
+2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
+3. **サーチクラフト編集**: `SearchCraftListEditor` によるアイテムごとの登録・編集（アイテム選択ダイアログ・タイミング・コメント・並べ替え・削除）。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。
+
+このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
 
 ### simulateRemapOutput()（`app/lib/remap-utils.ts`）
 

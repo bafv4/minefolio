@@ -8,8 +8,8 @@ import { Code, FileText, History, Download, Github, MessageSquare, ChevronRight 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "Developers - Minefolio";
   const description = "Minefolio の開発者向け情報・APIドキュメント・更新履歴・データエクスポート";
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -22,7 +22,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 
 export async function loader() {
   const env = getEnv();
-  return { appUrl: env?.APP_URL ?? "https://minefolio.pages.dev" };
+  return { appUrl: env?.APP_URL ?? "https://minefolio.app" };
 }
 
 const sections = [

@@ -34,6 +34,7 @@ import { t } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import type { PresetSearchCraftData } from "@/lib/preset-utils";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
@@ -385,14 +386,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
       // プリセットのサーチクラフトを適用
       if (selectedPreset.searchCraftsData) {
-        const presetSearchCrafts = JSON.parse(selectedPreset.searchCraftsData) as Array<{
-          sequence: number;
-          items: string;
-          keys: string;
-          searchStr: string | null;
-          comment: string | null;
-          timing?: "bastion" | "fortress" | "other" | null;
-        }>;
+        const presetSearchCrafts = JSON.parse(
+          selectedPreset.searchCraftsData,
+        ) as PresetSearchCraftData[];
         displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
           id: `preset-craft-${idx}`,
           userId: player.id,
@@ -402,6 +398,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           searchStr: craft.searchStr,
           comment: craft.comment,
           timing: craft.timing ?? null,
+          withShift: craft.withShift === true,
           createdAt: new Date(),
           updatedAt: new Date(),
         }));
@@ -504,7 +501,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
-    appUrl: env.APP_URL || "https://minefolio.pages.dev",
+    appUrl: env.APP_URL || "https://minefolio.app",
     player: {
       ...player,
       keybindings: displayKeybindings,

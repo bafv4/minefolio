@@ -11,8 +11,8 @@ import changelogMd from "@/content/changelog.md?raw";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "更新履歴 - Developers - Minefolio";
   const description = "Minefolio のリリースノート";
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -25,7 +25,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 
 export async function loader() {
   const env = getEnv();
-  return { appUrl: env?.APP_URL ?? "https://minefolio.pages.dev" };
+  return { appUrl: env?.APP_URL ?? "https://minefolio.app" };
 }
 
 export default function ChangelogPage() {

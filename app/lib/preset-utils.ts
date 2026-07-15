@@ -90,6 +90,8 @@ export interface PresetSearchCraftData {
   searchStr: string | null;
   comment: string | null;
   timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+  /** Shiftを押しながらクラフトするか（古いスナップショットには存在しない） */
+  withShift?: boolean;
 }
 
 /**
@@ -213,6 +215,7 @@ export function serializeSearchCrafts(crafts: SearchCraft[]): string {
     searchStr: c.searchStr,
     comment: c.comment,
     timing: c.timing,
+    withShift: c.withShift,
   }));
   return JSON.stringify(data);
 }

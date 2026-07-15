@@ -14,7 +14,7 @@
 |--------|------|------|
 | id | string (PK) | ガイドID |
 | authorId | string (FK) | 著者のユーザーID |
-| slug | string | URLスラッグ |
+| slug | string | URLスラッグ。作成時はタイトルから自動生成され、以降は編集画面の設定モーダルの「URL」欄でユーザーが変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化） |
 | title | string | タイトル |
 | summary | string | 概要・要約 |
 | content | text (HTML) | 本文（TipTapエディタが生成するHTML） |
@@ -52,7 +52,7 @@
 - v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
 - 操作モデルは複数の導線を併用:
   - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: Undo/Redo・保存状態・仮保存/保存・設定・プレビュー。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。
-  - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・タグ・公開設定を集約（ツールバーの「設定」から開く）。
+  - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・**URL（スラッグ）**・タグ・公開設定を集約（ツールバーの「設定」から開く）。「URL」欄は入力を正規化しつつ `/guides/{authorSlug}/{slug}` のプレビューを表示する。
   - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）
   - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）
   - **ブロックハンドル**でブロック種別変更 / 削除 — `toolbar/block-handle.tsx`。デスクトップではテーブル上に表示せず行・列ハンドルへ委譲（タッチはテーブル行列操作メニューを含む従来動作）
@@ -184,6 +184,11 @@
 - **独立レイアウト**: `me/_layout` のサイドバーに依存しないフルスクリーン編集画面
 - タイトル/本文/サマリー/タグ inputs はブラウザ標準の綴りバリデーション（`spellcheck`）を無効化
 - スティッキーヘッダーとツールバーは背景透明（`backdrop-blur-sm` のみ）
+- **URL（スラッグ）の編集**: 設定モーダルの「URL」欄で変更できる。仮保存・保存いずれの保存でも即反映される（`slug` はライブ列）。
+  - 保存時、`normalizeSlug()` で正規化した値が現在と異なれば、同一著者内での重複を確認する。重複時は `meGuides.errorSlugTaken` を返し、その保存自体を中止（トースト表示、他フィールドも保存されない）。正規化結果が空なら `meGuides.errorSlugRequired`。
+  - スラッグ変更に成功すると、action は新しい `slug` を返し、クライアントは `/my-guides/{新slug}/edit` へ `navigate(replace)` する（同一ルートのためエディタは再マウントされず、編集中の本文・状態は保持される）。
+  - 旧スラッグからのリダイレクトは行わない（旧URLは404になる）。
+  - action の戻り値は素の object（`{ success, mode, slug }` / `{ error }`）。`hooks/use-guide-save.ts` が `fetcher.data` として受け取り、宿主（`index.tsx`）がトースト表示とURL差し替えを行う。
 
 ### 公開ガイド表示時の編集導線
 

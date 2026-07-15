@@ -187,6 +187,16 @@ export type ActualKeyInfo = {
   displayLabel: string;
 };
 
+export type ActualKeyOptions = {
+  /**
+   * Shift を押しながらクラフトする前提で逆引きする。
+   * Shift 押下中の各キーの出力文字（リマップ target のシフト後文字、
+   * "Shift+X" 完全一致リマップの出力、非リマップキーのシフト後文字）を優先して解決し、
+   * 個々のバッジには ⇧ を付けない（Shift は行全体で押しっぱなしのため）。
+   */
+  shiftHeld?: boolean;
+};
+
 function modifierToMark(modifier: string): string {
   switch (modifier) {
     case "Ctrl":
@@ -202,25 +212,163 @@ function modifierToMark(modifier: string): string {
   }
 }
 
-export function getActualKeyInfos(searchStr: string, remaps: RemapInfo[]): ActualKeyInfo[] {
-  const reverseRemapMap = new Map<string, { sourceKey: string }>();
+// SHIFT_CHAR_MAP の逆引き（シフト後文字 → 物理キー）
+const REVERSE_SHIFT_CHAR_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(SHIFT_CHAR_MAP)
+    // IntlRo("_") など重複する文字は先勝ち（US配列基準の Minus を優先）
+    .filter(([, char], index, entries) => entries.findIndex(([, c]) => c === char) === index)
+    .map(([keyCode, char]) => [char, keyCode]),
+);
+
+/** ソースキーが「Shift のみを修飾キーに持つ組み合わせ」かどうか */
+function isShiftOnlyCombo(sourceKey: string): boolean {
+  if (!sourceKey.includes("+")) return false;
+  const parsed = parseKeyCombination(sourceKey);
+  return parsed.modifiers.length > 0 && parsed.modifiers.every((m) => m === "Shift");
+}
+
+/**
+ * Shift 押下中の「出力文字 → 押すキー」の逆引きマップを構築する。
+ * simulateRemapOutput() の Shift 押下時の解決順序（完全一致 → 基底キー+シフト文字化）と対になる:
+ * - "Shift+X" ソースのリマップ: Shift 押下中に X を押すと完全一致で発動し、target の文字を出力
+ * - 単一キーソースのリマップ: target キーのシフト後文字を出力
+ *   （同じ基底キーに "Shift+X" リマップがある場合はそちらが優先されるため除外）
+ */
+function buildShiftHeldReverseMap(remaps: RemapInfo[]): Map<string, { sourceKey: string }> {
+  const map = new Map<string, { sourceKey: string }>();
+
+  const shiftComboBases = new Set(
+    remaps
+      .filter((r) => isShiftOnlyCombo(r.sourceKey))
+      .map((r) => normalizeKeyCode(parseKeyCombination(r.sourceKey).keyCode)),
+  );
+
+  // 完全一致（Shift+X ソース）を先に登録し、同じ文字では基底キーより優先させる。
+  // 同じ文字を出せる Shift+X ソースが複数ある場合は先勝ち（dedupeRemaps 等と同じ規則）
+  for (const remap of remaps) {
+    if (remap.targetKey === null || !isShiftOnlyCombo(remap.sourceKey)) continue;
+    const pressKey = normalizeKeyCode(parseKeyCombination(remap.sourceKey).keyCode);
+    const key = isSpecialRemapTarget(remap.targetKey)
+      ? remap.targetKey
+      : keyCodeToChar(normalizeKeyCode(remap.targetKey)).toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, { sourceKey: pressKey });
+    }
+  }
 
   for (const remap of remaps) {
-    if (remap.targetKey === null) continue;
+    if (remap.targetKey === null || remap.sourceKey.includes("+")) continue;
+    // Shift+同キーの完全一致リマップがある場合、Shift 押下中はそちらが発動する
+    if (shiftComboBases.has(normalizeKeyCode(remap.sourceKey))) continue;
+
+    if (isSpecialRemapTarget(remap.targetKey)) {
+      // 文字出力ターゲットは Shift の影響を受けずそのまま出力される
+      if (!map.has(remap.targetKey)) {
+        map.set(remap.targetKey, { sourceKey: remap.sourceKey });
+      }
+      continue;
+    }
+
+    const target = normalizeKeyCode(remap.targetKey);
+    const char = shiftedChar(target, keyCodeToChar(target));
+    const key = SHIFT_CHAR_MAP[target] ? char : char.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, { sourceKey: remap.sourceKey });
+    }
+  }
+
+  return map;
+}
+
+export function getActualKeyInfos(
+  searchStr: string,
+  remaps: RemapInfo[],
+  options?: ActualKeyOptions,
+): ActualKeyInfo[] {
+  const shiftHeld = options?.shiftHeld ?? false;
+  const reverseRemapMap = new Map<string, { sourceKey: string }>();
+
+  const registerReverse = (remap: RemapInfo) => {
+    if (remap.targetKey === null) return;
 
     if (isSpecialRemapTarget(remap.targetKey)) {
       reverseRemapMap.set(remap.targetKey, { sourceKey: remap.sourceKey });
-      continue;
+      return;
     }
 
     const targetChar = keyCodeToChar(remap.targetKey);
     reverseRemapMap.set(targetChar.toLowerCase(), { sourceKey: remap.sourceKey });
+  };
+
+  // 同じ文字を複数のリマップが出力できる場合は修飾キーなしのソースを優先する
+  // （例: "E→h" と "Shift+S→h" があるとき、Shift 不要の E を入力キーとして表示する）。
+  // 修飾キー付きを先に登録し、修飾キーなしで上書きする。
+  // shiftHeld 時は通常マップを使わない: Shift 押下中、通常マップのソースキーは
+  // 別の文字を出力する（完全一致リマップの発動・シフト文字化）ため、参照すると必ず誤る
+  if (!shiftHeld) {
+    for (const remap of remaps) {
+      if (remap.sourceKey.includes("+")) registerReverse(remap);
+    }
+    for (const remap of remaps) {
+      if (!remap.sourceKey.includes("+")) registerReverse(remap);
+    }
+  }
+
+  const shiftHeldMap = shiftHeld ? buildShiftHeldReverseMap(remaps) : null;
+
+  // Shift 押下中の出力がリマップに奪われている基底キー（単一キーソース or Shift+同キーソース）。
+  // これらのキーはシフト後文字の逆引き先（REVERSE_SHIFT_CHAR_MAP）として使えない
+  const shiftOverriddenBases = new Set<string>();
+  if (shiftHeld) {
+    for (const remap of remaps) {
+      if (!remap.sourceKey.includes("+")) {
+        shiftOverriddenBases.add(normalizeKeyCode(remap.sourceKey));
+      } else if (isShiftOnlyCombo(remap.sourceKey)) {
+        shiftOverriddenBases.add(normalizeKeyCode(parseKeyCombination(remap.sourceKey).keyCode));
+      }
+    }
   }
 
   const result: ActualKeyInfo[] = [];
 
   for (const char of searchStr) {
     const isUpperCase = char === char.toUpperCase() && char !== char.toLowerCase();
+
+    // Shift 押下中の出力文字での逆引き（⇧ は行全体で押しっぱなしのため付けない）。
+    // shiftHeldMap にない文字は非リマップキーのフォールバックへ直行する
+    // （通常マップは参照しない — Shift 押下中はそのキーが別の文字を出すため）
+    if (shiftHeldMap) {
+      const shiftInfo = shiftHeldMap.get(char) ?? shiftHeldMap.get(char.toLowerCase());
+      if (shiftInfo) {
+        result.push({
+          char: char.toLowerCase(),
+          keyCode: shiftInfo.sourceKey,
+          isRemapped: true,
+          needsShift: false,
+          displayLabel: keyCodeToBadgeLabel(shiftInfo.sourceKey),
+        });
+        continue;
+      }
+
+      // 非リマップキーの解決: シフト後文字（記号）から物理キーを逆引きする。
+      // ただしそのキー自体がリマップで奪われている場合は使えない（別の文字が出る）。
+      // 英字は大文字が出力される前提（Minecraft の検索は大文字小文字を区別しない）で
+      // 基底キーをそのまま押す
+      const reverseShiftKey = REVERSE_SHIFT_CHAR_MAP[char];
+      const keyCode =
+        reverseShiftKey && !shiftOverriddenBases.has(reverseShiftKey)
+          ? reverseShiftKey
+          : charToKeyCode(char.toLowerCase());
+      result.push({
+        char: char.toLowerCase(),
+        keyCode,
+        isRemapped: false,
+        needsShift: false,
+        displayLabel: keyCodeToBadgeLabel(keyCode),
+      });
+      continue;
+    }
+
     let remapInfo = reverseRemapMap.get(char);
     if (!remapInfo && isUpperCase) {
       remapInfo = reverseRemapMap.get(char.toLowerCase());
@@ -274,6 +422,14 @@ export type SimulatedKeyOutput = {
   /** リマップ適用後の出力文字。null は出力なし（無効化 or 文字を持たないキー） */
   output: string | null;
   isRemapped: boolean;
+  /**
+   * 入力/リマップが解決した先のキーコード。
+   * - リマップのキー出力ターゲット → そのキーコード（例: "Backspace"）
+   * - リマップなしの物理キー → 押したキー自体
+   * - 文字出力ターゲット・無効化・修飾キー込みの未定義組み合わせ → null
+   * Backspace 等の制御キーへのリマップを呼び出し側が検知するために使う。
+   */
+  outputKeyCode: string | null;
 };
 
 /**
@@ -302,10 +458,19 @@ export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): Simulat
     return shiftApplies ? shiftedChar(normalizedTarget, char) : char;
   };
 
+  // キー出力ターゲットのキーコード（文字出力・無効化は null）
+  const resolveTargetKeyCode = (targetKey: string | null): string | null =>
+    targetKey === null || isSpecialRemapTarget(targetKey) ? null : normalizeKeyCode(targetKey);
+
   // 完全一致（修飾キー込み・修飾キー単独も含む）
   const exact = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalized);
   if (exact) {
-    return { pressedLabel, output: resolveTarget(exact.targetKey, false), isRemapped: true };
+    return {
+      pressedLabel,
+      output: resolveTarget(exact.targetKey, false),
+      isRemapped: true,
+      outputKeyCode: resolveTargetKeyCode(exact.targetKey),
+    };
   }
 
   // 基底キーのみ一致（Shift のみの組み合わせはシフト後の文字として扱う）
@@ -313,22 +478,30 @@ export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): Simulat
   if (parsed.modifiers.length === 0 || onlyShift) {
     const base = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalizeKeyCode(parsed.keyCode));
     if (base) {
-      return { pressedLabel, output: resolveTarget(base.targetKey, onlyShift), isRemapped: true };
+      return {
+        pressedLabel,
+        output: resolveTarget(base.targetKey, onlyShift),
+        isRemapped: true,
+        outputKeyCode: resolveTargetKeyCode(base.targetKey),
+      };
     }
-    // リマップなし: 印字可能キーのみ文字を出力
+    // リマップなし: 印字可能キーのみ文字を出力（キーコード自体は返して制御キー検知に使う）
     // 印字可能キー: 英字/数字、または記号マップに載っているキー（CODE_CHAR_MAP と二重管理しない）
     const isPrintable =
       /^(Key[A-Z]|Digit[0-9])$/.test(parsed.keyCode) || parsed.keyCode in CODE_CHAR_MAP;
-    if (!isPrintable) return { pressedLabel, output: null, isRemapped: false };
+    if (!isPrintable) {
+      return { pressedLabel, output: null, isRemapped: false, outputKeyCode: parsed.keyCode };
+    }
     return {
       pressedLabel,
       output: onlyShift ? shiftedChar(parsed.keyCode, baseChar) : baseChar,
       isRemapped: false,
+      outputKeyCode: parsed.keyCode,
     };
   }
 
   // Ctrl/Alt/Meta を含む未定義の組み合わせは文字出力なし
-  return { pressedLabel, output: null, isRemapped: false };
+  return { pressedLabel, output: null, isRemapped: false, outputKeyCode: null };
 }
 
 export function matchesRemapSourceKey(remapSourceKey: string, keyCode: string): boolean {

@@ -34,23 +34,29 @@ import {
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const title = t("home.title");
-  const ogImageUrl = `${appUrl}/icon.png`;
+  const description = t("home.heroDescription");
+  const ogImageUrl = `${appUrl}/og-image?type=home`;
 
   return [
     { title },
+    { name: "description", content: description },
 
     // Open Graph
     { property: "og:type", content: "website" },
     { property: "og:title", content: title },
+    { property: "og:description", content: description },
     { property: "og:image", content: ogImageUrl },
     { property: "og:image:type", content: "image/png" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { property: "og:url", content: appUrl },
 
     // Twitter Card
-    { name: "twitter:card", content: "summary" },
+    { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
     { name: "twitter:image", content: ogImageUrl },
   ];
 };
@@ -166,7 +172,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const activePublicProfiles = activePublicProfilesResult[0]?.count ?? 0;
 
   return {
-    appUrl: env.APP_URL || "https://minefolio.pages.dev",
+    appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
     currentUser,
     mcidToUuid,

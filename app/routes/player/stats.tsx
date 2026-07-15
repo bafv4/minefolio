@@ -49,7 +49,7 @@ export const meta: Route.MetaFunction = ({ params, loaderData }) => {
   const displayName = loaderData?.mcid || params.slug;
   const title = t("playerStats.metaTitle", { name: displayName });
   const description = t("playerStats.metaDescription", { name: displayName });
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = loaderData?.mcid
     ? `${appUrl}/og-image?mcid=${encodeURIComponent(loaderData.mcid)}`
     : `${appUrl}/og-image?slug=${encodeURIComponent(params.slug || "")}`;
@@ -69,7 +69,7 @@ export const meta: Route.MetaFunction = ({ params, loaderData }) => {
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const env = getEnv();
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   const { slug } = params;
   const db = createDb();
   const auth = createAuth(db, env);

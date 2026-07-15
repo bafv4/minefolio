@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = "データエクスポート - Developers - Minefolio";
   const description = "全ユーザーまたは指定ユーザーのキー配置・リマップ・カスタムアクション・マウス設定をCSV形式でダウンロード";
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -63,7 +63,7 @@ export async function loader() {
     });
 
   return {
-    appUrl: env.APP_URL ?? "https://minefolio.pages.dev",
+    appUrl: env.APP_URL ?? "https://minefolio.app",
     availableUsers,
   };
 }

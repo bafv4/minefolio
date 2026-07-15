@@ -11,9 +11,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
+import { normalizeSlug } from "@/lib/guide-slug";
 import { t } from "@/lib/messages";
 
 export interface GuideSettingsValues {
@@ -22,6 +24,7 @@ export interface GuideSettingsValues {
   tags: string[];
   coverImageUrl: string | null;
   isPublished: boolean;
+  slug: string;
 }
 
 interface SettingsDialogProps {
@@ -29,6 +32,8 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   /** モーダルを開いたときの初期値（親 State のスナップショット） */
   initialValues: GuideSettingsValues;
+  /** URLプレビュー用の著者スラッグ（/guides/{authorSlug}/{slug}） */
+  authorSlug: string;
   /** カバー画像を Blob へアップロードし URL を返す（即時アップロード） */
   uploadCover: (file: File) => Promise<string | null>;
   isUploadingCover: boolean;
@@ -37,10 +42,22 @@ interface SettingsDialogProps {
   onApply: (values: GuideSettingsValues) => void;
 }
 
+/**
+ * 入力欄用の「ゆるい」正規化（タイプ中に文字が消えないよう、ハイフンの圧縮・前後trimは行わない）。
+ * 確定値は反映時に normalizeSlug() で厳密化する。
+ */
+function softNormalizeSlug(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
   initialValues,
+  authorSlug,
   uploadCover,
   isUploadingCover,
   uploadError,
@@ -52,6 +69,7 @@ export function SettingsDialog({
   const [tags, setTags] = useState<string[]>(initialValues.tags);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialValues.coverImageUrl);
   const [isPublished, setIsPublished] = useState(initialValues.isPublished);
+  const [slug, setSlug] = useState(initialValues.slug);
 
   // 開くたびに親の現在値で再初期化（前回のキャンセル分を引きずらない）
   useEffect(() => {
@@ -61,6 +79,7 @@ export function SettingsDialog({
       setTags(initialValues.tags);
       setCoverImageUrl(initialValues.coverImageUrl);
       setIsPublished(initialValues.isPublished);
+      setSlug(initialValues.slug);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -70,8 +89,11 @@ export function SettingsDialog({
     if (url) setCoverImageUrl(url);
   };
 
+  // 確定スラッグ（厳密正規化）。空になる入力は現在のスラッグを維持する。
+  const resolvedSlug = normalizeSlug(slug) || initialValues.slug;
+
   const apply = () => {
-    onApply({ title, summary, tags, coverImageUrl, isPublished });
+    onApply({ title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug });
     onOpenChange(false);
   };
 
@@ -99,6 +121,25 @@ export function SettingsDialog({
           isUploadingCover={isUploadingCover}
           uploadError={uploadError}
         />
+
+        {/* URL（スラッグ） */}
+        <div className="space-y-1.5">
+          <Label htmlFor="guide-slug">{t("guideEditor.slugLabel")}</Label>
+          <Input
+            id="guide-slug"
+            value={slug}
+            onChange={(e) => setSlug(softNormalizeSlug(e.target.value))}
+            placeholder={t("guideEditor.slugPlaceholder")}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+          <p className="text-xs text-muted-foreground break-all">
+            /guides/{authorSlug}/
+            <span className="text-foreground font-medium">{resolvedSlug}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">{t("guideEditor.slugHint")}</p>
+        </div>
 
         {/* 公開設定（トグル） */}
         <div className="flex items-center justify-between rounded-lg border p-3 mt-1">

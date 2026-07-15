@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
@@ -84,6 +85,8 @@ export type SearchCraftDraft = {
   searchStr: string | null;
   comment: string | null;
   timing: SearchCraftTiming | null;
+  /** Shiftを押しながらクラフトするか */
+  withShift: boolean;
 };
 
 // アイテム選択ダイアログ
@@ -234,6 +237,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   onDelete: () => void;
 }) {
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
+  const withShiftCheckboxId = useId();
 
   const {
     attributes,
@@ -352,13 +356,33 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                 </SelectContent>
               </Select>
             </div>
+            {/* Shiftを押しながらクラフトするか */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id={withShiftCheckboxId}
+                checked={craft.withShift}
+                onCheckedChange={(checked) =>
+                  onUpdate({ ...craft, withShift: checked === true })
+                }
+              />
+              <Label
+                htmlFor={withShiftCheckboxId}
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                {t("meSearchCraft.withShift")}
+              </Label>
+            </div>
             {/* 入力キーのライブプレビュー（リマップ考慮） */}
             {remaps && craft.searchStr && (
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground shrink-0">
                   {t("meSearchCraft.keyPreviewLabel")}
                 </Label>
-                <ActualKeyBadges searchStr={craft.searchStr} remaps={remaps} />
+                <ActualKeyBadges
+                  searchStr={craft.searchStr}
+                  remaps={remaps}
+                  shiftHeld={craft.withShift}
+                />
               </div>
             )}
           </div>

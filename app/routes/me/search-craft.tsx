@@ -33,6 +33,7 @@ import {
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftListEditor, arrayMove } from "@/components/search-craft-editor";
 import { toUiRemaps } from "@/lib/remap-utils";
+import { parseTemplateCrafts } from "@/lib/search-craft-templates";
 import { t } from "@/lib/messages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -65,6 +66,7 @@ type SearchCraftItem = {
   searchStr: string | null;
   comment: string | null;
   timing: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+  withShift: boolean;
 };
 
 
@@ -98,6 +100,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     searchStr: craft.searchStr,
     comment: craft.comment,
     timing: craft.timing ?? null,
+    withShift: craft.withShift,
   }));
 
   // 全プリセットを取得（コピー機能用）
@@ -230,6 +233,7 @@ export async function action({ request }: Route.ActionArgs) {
             searchStr: craft.searchStr || null,
             comment: craft.comment || null,
             timing: craft.timing || null,
+            withShift: craft.withShift === true,
             createdAt: now,
             updatedAt: now,
           });
@@ -314,6 +318,7 @@ export default function SearchCraftPage() {
       searchStr: null,
       comment: null,
       timing: null,
+      withShift: false,
     };
     setCrafts((prev) => [...prev, newCraft]);
   }, [crafts.length]);
@@ -357,17 +362,24 @@ export default function SearchCraftPage() {
       return;
     }
 
-    try {
-      const searchCraftsDataParsed = JSON.parse(preset.searchCraftsData) as SearchCraftItem[];
-      setCrafts(searchCraftsDataParsed.map((craft, idx) => ({
-        ...craft,
-        id: `new-${Date.now()}-${idx}`,
-      })));
-      toast.success(t("meSearchCraft.copiedFromPreset", { name: preset.name }));
-    } catch (e) {
-      console.error("Failed to parse search crafts data:", e);
-      toast.error(t("meSearchCraft.parseFailed"));
+    // スナップショットは PresetSearchCraftData[]（items は二重エンコードされたJSON文字列）。
+    // items のデコード・withShift の正規化を含め parseTemplateCrafts() に委ねる
+    const parsedCrafts = parseTemplateCrafts(preset.searchCraftsData);
+    if (parsedCrafts.length === 0) {
+      toast.error(t("meSearchCraft.copyNoData"));
+      return;
     }
+    setCrafts(parsedCrafts.map((craft, idx) => ({
+      id: `new-${Date.now()}-${idx}`,
+      sequence: idx + 1,
+      items: craft.items,
+      keys: [],
+      searchStr: craft.searchStr,
+      comment: craft.comment,
+      timing: craft.timing,
+      withShift: craft.withShift,
+    })));
+    toast.success(t("meSearchCraft.copiedFromPreset", { name: preset.name }));
 
     setCopyDialogOpen(false);
   }, [presets]);
@@ -387,10 +399,6 @@ export default function SearchCraftPage() {
               <Share2 className="mr-2 h-4 w-4" />
               {t("meSearchCraft.publishAsTemplate")}
             </Link>
-          </Button>
-          <Button onClick={handleAddCraft} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
-            <Plus className="mr-2 h-4 w-4" />
-            {t("meSearchCraft.add")}
           </Button>
         </div>
       </div>
@@ -414,6 +422,10 @@ export default function SearchCraftPage() {
               onDelete={handleDeleteCraft}
               onReorder={handleReorder}
             />
+            <Button variant="outline" size="sm" className="my-3" onClick={handleAddCraft}>
+              <Plus className="mr-2 h-4 w-4" />
+              {t("meSearchCraft.add")}
+            </Button>
           </CardContent>
         </Card>
       ) : (

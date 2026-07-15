@@ -5,6 +5,12 @@ import type { LoaderFunctionArgs } from "react-router";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { createDb } from "@/lib/db";
+import { fetchSkinFaceDataUrl } from "@/lib/skin-face.server";
+
+// OGP画像に入るブランド文字列（全画像で表記を統一する）
+const OG_BRAND = "Minefolio";
+const OG_TAGLINE = "Minecraft Speedrunning + Portfolio";
+const OG_SITE = "minefolio.app";
 
 /**
  * ArrayBufferをBase64文字列に変換（Edge Runtime対応）
@@ -40,51 +46,61 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
 }
 
 /**
- * DiscordアバターURLを生成
+ * Google Fonts から指定ウェイト・指定文字だけのサブセット TTF を取得する。
+ * text= でサブセット化することで CJK フォント（Zen Kaku Gothic New）も軽量に読み込める。
+ * UA を指定しない（woff2 非対応とみなされ ttf が返る）Next.js 公式の手法。
+ * 失敗時は null（呼び出し側は @vercel/og のバンドル既定フォントにフォールバック）。
  */
-function getDiscordAvatarUrl(
-  discordId: string,
-  discordAvatar: string,
-  size: number = 256
-): string {
-  return `https://cdn.discordapp.com/avatars/${discordId}/${discordAvatar}.png?size=${size}`;
+async function fetchGoogleFont(
+  family: string,
+  weight: number,
+  text: string,
+): Promise<ArrayBuffer | null> {
+  try {
+    const cssUrl = `https://fonts.googleapis.com/css2?family=${family}:wght@${weight}&text=${encodeURIComponent(text)}`;
+    const cssRes = await fetch(cssUrl);
+    if (!cssRes.ok) return null;
+    const css = await cssRes.text();
+    const match = css.match(/src:\s*url\(([^)]+)\)\s*format\(['"]?(?:truetype|opentype)['"]?\)/);
+    if (!match) return null;
+    const fontRes = await fetch(match[1]);
+    if (!fontRes.ok) return null;
+    return await fontRes.arrayBuffer();
+  } catch {
+    return null;
+  }
 }
 
+type OgFont = { name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" };
+
 /**
- * アバター画像をBase64データURLとして取得
- * 優先順位: Discord → Crafatar → mc-heads.net → minotar
+ * OGP画像に使うアプリのフォント（Zen Kaku Gothic New）を、描画テキストのサブセットで読み込む。
+ * アプリ本体と同じフォントで、ラテン・日本語の両方をカバーする。
+ * 取得できたウェイトのみ返す（空配列ならバンドル既定フォントを使用）。
  */
-async function fetchAvatarDataUrl(options: {
-  discordId?: string | null;
-  discordAvatar?: string | null;
-  uuid?: string | null;
-  size?: number;
-}): Promise<string | null> {
-  const { discordId, discordAvatar, uuid, size = 180 } = options;
+async function loadAppFonts(text: string): Promise<OgFont[]> {
+  const weights: Array<400 | 700> = [400, 700];
+  const loaded = await Promise.all(
+    weights.map(async (weight) => {
+      const data = await fetchGoogleFont("Zen+Kaku+Gothic+New", weight, text);
+      return data
+        ? ({ name: "Zen Kaku Gothic New", data, weight, style: "normal" } as OgFont)
+        : null;
+    }),
+  );
+  return loaded.filter((f): f is OgFont => f !== null);
+}
 
-  // 1. Discordアバターを優先
-  if (discordId && discordAvatar) {
-    const discordUrl = getDiscordAvatarUrl(discordId, discordAvatar, size);
-    const dataUrl = await fetchImageAsDataUrl(discordUrl);
-    if (dataUrl) return dataUrl;
-  }
-
-  // 2. Minecraftアバターサービスにフォールバック
-  if (uuid) {
-    const uuidClean = uuid.replace(/-/g, "");
-    const services = [
-      `https://crafatar.com/avatars/${uuidClean}?size=${size}&overlay=true`,
-      `https://mc-heads.net/avatar/${uuidClean}/${size}`,
-      `https://minotar.net/avatar/${uuidClean}/${size}`,
-    ];
-
-    for (const url of services) {
-      const dataUrl = await fetchImageAsDataUrl(url);
-      if (dataUrl) return dataUrl;
-    }
-  }
-
-  return null;
+/** 全OGP共通の ImageResponse オプション（1200x630 + 1日キャッシュ + アプリフォント） */
+function ogResponseOptions(fonts: OgFont[]) {
+  return {
+    width: 1200,
+    height: 630,
+    ...(fonts.length > 0 ? { fonts } : {}),
+    headers: {
+      "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+    },
+  };
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -93,14 +109,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const slug = url.searchParams.get("slug");
   const title = url.searchParams.get("title");
   const description = url.searchParams.get("description");
+  const type = url.searchParams.get("type");
+
+  // トップページ用のブランドOGP画像（summary_large_image 向けの横長バナー）
+  if (type === "home") {
+    const origin = new URL(request.url).origin;
+    const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
+    return generateHomeOgp({ iconDataUrl });
+  }
 
   // mcidもslugもない場合はデフォルトのOGP画像を生成
   if (!mcid && !slug) {
     const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
-      title: title || "Minefolio",
-      description: description || "Minecraft Speedrunning Portfolio Platform",
+      title: title || OG_BRAND,
+      description: description || OG_TAGLINE,
       iconDataUrl,
     });
   }
@@ -121,19 +145,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
-      title: "Minefolio",
-      description: "Minecraft Speedrunning Portfolio Platform",
+      title: OG_BRAND,
+      description: OG_TAGLINE,
       iconDataUrl,
     });
   }
 
-  // アバター画像を事前にフェッチ（Discord優先、Minecraftアバターにフォールバック）
-  const avatarDataUrl = await fetchAvatarDataUrl({
-    discordId: user.discordId,
-    discordAvatar: user.discordAvatar,
-    uuid: user.uuid,
-    size: 180,
-  });
+  // アプリの一覧と同じく、スキンPNGから顔（正面 + 帽子レイヤー）を合成する。
+  // /api/skin がカスタムスキン > Mojang > Steve の順で解決するため、カスタムスキンも反映される。
+  const origin = new URL(request.url).origin;
+  const avatarDataUrl = await fetchSkinFaceDataUrl(origin, user.id, 180);
 
   return generatePlayerOgp({
     displayName: user.displayName || user.mcid || user.slug,
@@ -160,11 +181,12 @@ interface OgpData {
  * デフォルトのOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generateDefaultOgp(data: {
+async function generateDefaultOgp(data: {
   title: string;
   description: string;
   iconDataUrl: string | null;
 }) {
+  const fonts = await loadAppFonts(`${data.title} ${data.description}`);
   return new ImageResponse(
     (
       <div
@@ -247,13 +269,131 @@ function generateDefaultOgp(data: {
         </div>
       </div>
     ),
-    {
-      width: 1200,
-      height: 630,
-      headers: {
-        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
-      },
-    }
+    ogResponseOptions(fonts)
+  );
+}
+
+/**
+ * トップページ用のブランドOGP画像を生成（summary_large_image 向けの横長バナー）
+ * 1200x630px (Twitter/OGP標準サイズ)
+ */
+async function generateHomeOgp(data: { iconDataUrl: string | null }) {
+  const fonts = await loadAppFonts(`${OG_BRAND} ${OG_TAGLINE} ${OG_SITE}`);
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        {/* グリッドパターン背景 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
+
+        {/* 青のアクセントグロー */}
+        <div
+          style={{
+            position: "absolute",
+            top: "-160px",
+            left: "300px",
+            width: "600px",
+            height: "600px",
+            display: "flex",
+            backgroundImage:
+              "radial-gradient(circle, rgba(59,130,246,0.20) 0%, rgba(59,130,246,0) 70%)",
+          }}
+        />
+
+        {/* アイコン + ワードマーク */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: "36px",
+          }}
+        >
+          {data.iconDataUrl ? (
+            <img
+              src={data.iconDataUrl}
+              width={148}
+              height={148}
+              style={{ borderRadius: "30px" }}
+            />
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                width: "148px",
+                height: "148px",
+                background: "#334155",
+                borderRadius: "30px",
+              }}
+            />
+          )}
+          <div
+            style={{
+              display: "flex",
+              fontSize: "112px",
+              fontWeight: "700",
+              color: "#f8fafc",
+              letterSpacing: "-2px",
+            }}
+          >
+            {OG_BRAND}
+          </div>
+        </div>
+
+        {/* タグライン */}
+        <div
+          style={{
+            display: "flex",
+            marginTop: "36px",
+            padding: "12px 28px",
+            borderRadius: "9999px",
+            background: "rgba(59, 130, 246, 0.15)",
+            border: "1px solid rgba(59, 130, 246, 0.4)",
+            fontSize: "34px",
+            fontWeight: "600",
+            color: "#93c5fd",
+          }}
+        >
+          {OG_TAGLINE}
+        </div>
+
+        {/* フッター URL */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "44px",
+            display: "flex",
+            fontSize: "24px",
+            fontWeight: "600",
+            color: "#64748b",
+          }}
+        >
+          {OG_SITE}
+        </div>
+      </div>
+    ),
+    ogResponseOptions(fonts)
   );
 }
 
@@ -261,7 +401,7 @@ function generateDefaultOgp(data: {
  * 走者用のOGP画像を生成
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-function generatePlayerOgp(data: OgpData) {
+async function generatePlayerOgp(data: OgpData) {
   const roleLabel = data.role === "runner" ? "Speedrunner" : "Viewer";
   const editionLabel =
     data.mainEdition === "java"
@@ -269,6 +409,10 @@ function generatePlayerOgp(data: OgpData) {
       : data.mainEdition === "bedrock"
         ? "Bedrock Edition"
         : "";
+
+  const fonts = await loadAppFonts(
+    `${data.displayName} @${data.mcid} ${data.bio} ${roleLabel} ${editionLabel} ${OG_BRAND} ${OG_TAGLINE}`,
+  );
 
   return new ImageResponse(
     (
@@ -458,7 +602,7 @@ function generatePlayerOgp(data: OgpData) {
               color: "#64748b",
             }}
           >
-            MINEFOLIO
+            {OG_BRAND}
           </div>
           <div
             style={{
@@ -467,17 +611,11 @@ function generatePlayerOgp(data: OgpData) {
               color: "#64748b",
             }}
           >
-            Minecraft Speedrunning Portfolio
+            {OG_TAGLINE}
           </div>
         </div>
       </div>
     ),
-    {
-      width: 1200,
-      height: 630,
-      headers: {
-        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
-      },
-    }
+    ogResponseOptions(fonts)
   );
 }

@@ -31,12 +31,13 @@ import {
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
 import { t } from "@/lib/messages";
-import { Eraser, Plus } from "lucide-react";
+import { Eraser, Keyboard, Plus } from "lucide-react";
 
 /**
  * サーチクラフト×キーリマップの編集ワークベンチ。
  * /playground とテンプレートエディタ（作成・編集）で同一構成を共有する:
- * キーリマップ編集 → バーチャルキーボード（キークリックでリマップ登録）→ タイピングテスト → サーチクラフト編集
+ * バーチャルキーボード（キークリックでリマップ登録）→ キーリマップ編集 → サーチクラフト編集。
+ * タイピングテストはバーチャルキーボードカードのヘッダーにあるボタンから開くモーダル
  */
 
 export type WorkbenchRemap = {
@@ -78,6 +79,16 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
   const [entries, setEntries] = useState<SimulatedKeyOutput[]>([]);
   const [isFocused, setIsFocused] = useState(false);
 
+  // 解決結果を反映する。Backspace（物理キー・またはBackspaceにリマップされたキー）は
+  // 直前の入力を1つ削除する。それ以外は履歴に追加する
+  const applyResult = useCallback((result: SimulatedKeyOutput) => {
+    if (result.outputKeyCode === "Backspace") {
+      setEntries((prev) => prev.slice(0, -1));
+    } else {
+      setEntries((prev) => [...prev, result]);
+    }
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) {
@@ -85,7 +96,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
         const result = simulateRemapOutput(e.code, remaps);
         if (result.isRemapped) {
           e.preventDefault();
-          setEntries((prev) => [...prev, result]);
+          applyResult(result);
         }
         return;
       }
@@ -94,10 +105,6 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
         return;
       }
       e.preventDefault();
-      if (e.code === "Backspace") {
-        setEntries((prev) => prev.slice(0, -1));
-        return;
-      }
 
       const modifiers: string[] = [];
       if (e.ctrlKey) modifiers.push("Ctrl");
@@ -106,9 +113,9 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
       if (e.metaKey) modifiers.push("Meta");
       const combo = modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code;
 
-      setEntries((prev) => [...prev, simulateRemapOutput(combo, remaps)]);
+      applyResult(simulateRemapOutput(combo, remaps));
     },
-    [remaps],
+    [remaps, applyResult],
   );
 
   const outputText = entries.map((entry) => entry.output ?? "").join("");
@@ -213,6 +220,9 @@ export function SearchCraftWorkbench({
   // バーチャルキーボードのキークリック → リマップ登録モーダル
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
 
+  // タイピングテストモーダル
+  const [typingTestOpen, setTypingTestOpen] = useState(false);
+
   const selectedKeyRemaps = useMemo(() => {
     if (!editingKeyCode) return [];
     return remaps
@@ -222,6 +232,46 @@ export function SearchCraftWorkbench({
 
   return (
     <>
+      {/* バーチャルキーボード */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-lg">{t("playground.keyboardSection")}</CardTitle>
+              <CardDescription>{t("playground.keyboardSectionDescription")}</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setTypingTestOpen(true)}>
+                <Keyboard className="mr-2 h-4 w-4" />
+                {t("playground.typingTestSection")}
+              </Button>
+              <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAYOUT_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option.replace("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <VirtualKeyboard
+            layout={layout}
+            keybindings={{}}
+            remaps={effectiveRemaps}
+            onKeyClick={setEditingKeyCode}
+            showRemaps
+            hideNumpad
+          />
+        </CardContent>
+      </Card>
+
       {/* リマップエディタ */}
       <Card>
         <CardHeader>
@@ -261,40 +311,6 @@ export function SearchCraftWorkbench({
             <Plus className="mr-2 h-4 w-4" />
             {t("playground.addRemap")}
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* バーチャルキーボード */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-lg">{t("playground.keyboardSection")}</CardTitle>
-              <CardDescription>{t("playground.keyboardSectionDescription")}</CardDescription>
-            </div>
-            <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LAYOUT_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option.replace("_", " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <VirtualKeyboard
-            layout={layout}
-            keybindings={{}}
-            remaps={effectiveRemaps}
-            onKeyClick={setEditingKeyCode}
-            showRemaps
-            hideNumpad
-          />
         </CardContent>
       </Card>
 
@@ -355,16 +371,16 @@ export function SearchCraftWorkbench({
         </DialogContent>
       </Dialog>
 
-      {/* タイピングテスト */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{t("playground.typingTestSection")}</CardTitle>
-          <CardDescription>{t("playground.typingTestSectionDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* タイピングテストモーダル（バーチャルキーボードカードのボタンから開く） */}
+      <Dialog open={typingTestOpen} onOpenChange={setTypingTestOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("playground.typingTestSection")}</DialogTitle>
+            <DialogDescription>{t("playground.typingTestSectionDescription")}</DialogDescription>
+          </DialogHeader>
           <TypingTestArea remaps={effectiveRemaps} />
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* サーチクラフト編集 */}
       <Card>
@@ -397,7 +413,7 @@ export function SearchCraftWorkbench({
             onClick={() =>
               onCraftsChange([
                 ...crafts,
-                { id: draftId("craft"), items: [], searchStr: null, comment: null, timing: null },
+                { id: draftId("craft"), items: [], searchStr: null, comment: null, timing: null, withShift: false },
               ])
             }
           >
