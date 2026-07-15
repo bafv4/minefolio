@@ -41,6 +41,8 @@ export default defineConfig(({ isSsrBuild, command }) => ({
             "picocolors",
             "source-map-js",
             "nanoid",
+            "launder",
+            "dayjs",
           ]
         : [],
   },
