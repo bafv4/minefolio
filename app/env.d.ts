@@ -17,5 +17,8 @@ export interface Env {
   // Feedback
   FEEDBACK_EMAIL?: string;
   RESEND_API_KEY?: string;
+  // Release notification (Vercel Webhook → Discord)
+  VERCEL_WEBHOOK_SECRET?: string;
+  DISCORD_RELEASE_WEBHOOK_URL?: string;
 }
 

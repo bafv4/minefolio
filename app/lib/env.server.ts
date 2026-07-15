@@ -18,5 +18,7 @@ export function getEnv(): Env {
     YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY,
     FEEDBACK_EMAIL: process.env.FEEDBACK_EMAIL,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
+    VERCEL_WEBHOOK_SECRET: process.env.VERCEL_WEBHOOK_SECRET,
+    DISCORD_RELEASE_WEBHOOK_URL: process.env.DISCORD_RELEASE_WEBHOOK_URL,
   };
 }

@@ -971,3 +971,16 @@ export const searchCraftTemplatesRelations = relations(searchCraftTemplates, ({ 
 
 export type SearchCraftTemplate = typeof searchCraftTemplates.$inferSelect;
 export type NewSearchCraftTemplate = typeof searchCraftTemplates.$inferInsert;
+
+// ============================================
+// 24. app_meta（アプリケーション全体のkey-valueメタデータ）
+// ============================================
+// 例: リリース通知の最終通知バージョン（release_notify:last_version）
+export const appMeta = sqliteTable("app_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type AppMeta = typeof appMeta.$inferSelect;
+export type NewAppMeta = typeof appMeta.$inferInsert;

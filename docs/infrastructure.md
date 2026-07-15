@@ -206,11 +206,40 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 | `RESEND_API_KEY` | Resend メール送信APIキー |
 | `FEEDBACK_EMAIL` | フィードバック送信先メールアドレス |
 | `LEGACY_API_URL` | レガシーAPI（MCSRer Hotkeys）のURL |
+| `VERCEL_WEBHOOK_SECRET` | Vercel Webhook の署名検証シークレット（リリース通知） |
+| `DISCORD_RELEASE_WEBHOOK_URL` | リリース通知先の Discord Webhook URL |
 
 ### アクセス方法
 
 - サーバーサイド: `app/lib/env.server.ts` の `getEnv()` で `process.env` から取得
 - 型定義: `app/env.d.ts` の `Env` インターフェース（実行時バリデーションは行わず、必須変数は `getEnv()` 内の非 null アサーションで前提とする）
+
+---
+
+## リリース通知（Discord）
+
+`POST /api/webhooks/vercel`（`app/routes/api/webhooks/vercel.ts`）で、本番デプロイ時のリリース通知を自動化している。
+
+### 仕組み
+
+1. Vercel ダッシュボードで登録した Webhook（`deployment.succeeded` イベント）がこのエンドポイントに届く
+2. `x-vercel-signature` ヘッダーで署名検証する（リクエストボディの HMAC-SHA1、シークレットは Webhook 作成時に発行される）
+3. **`payload.target === "production"` のデプロイのみ**処理する（プレビュー・dev環境はスキップ）
+4. バンドルされた `package.json` のバージョンと、`app_meta` テーブルの最終通知バージョン（key: `release_notify:last_version`）を比較し、**バージョンが上がった場合のみ** Discord Webhook に通知する
+   - バージョンを上げないデプロイや同一コミットの再デプロイでは通知されない
+5. 通知内容は `app/content/changelog.md` の該当バージョンのセクション（`parseChangelog()` で抽出、`###` 見出しは太字に変換、embed 上限に切り詰め）
+
+### エイリアス切替レース対策
+
+通知内容にはリクエストを処理するデプロイ自身にバンドルされたファイルを使うため、処理するのは**通知対象のデプロイ自身**である必要がある。Webhook ペイロードのコミットSHA と自身の `VERCEL_GIT_COMMIT_SHA` が一致しない場合（本番ドメインの切替が完了する前に旧デプロイに届いた場合）は 503 を返し、Vercel のリトライで新デプロイに処理させる。
+
+### 設定
+
+- Vercel ダッシュボード → Team Settings → Webhooks で作成: イベント `deployment.succeeded`、プロジェクト `minefolio`、URL `https://minefolio.me/api/webhooks/vercel`
+- 環境変数（Vercel の Production 環境に設定）:
+  - `VERCEL_WEBHOOK_SECRET` — Webhook 作成時に表示されるシークレット
+  - `DISCORD_RELEASE_WEBHOOK_URL` — Discord のチャンネル設定 → 連携サービス → ウェブフックで発行した素のURL（`/github` サフィックスなし）
+- `VERCEL_WEBHOOK_SECRET` 未設定時は 503、`DISCORD_RELEASE_WEBHOOK_URL` 未設定時は通知をスキップする
 
 ---
 
@@ -233,6 +262,11 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 
 ### OGP
 - `app/routes/og-image.tsx` - 動的OGP画像生成
+
+### リリース通知
+- `app/routes/api/webhooks/vercel.ts` - Vercel Webhook 受信エンドポイント
+- `app/lib/app-meta.server.ts` - app_meta テーブルの読み書きユーティリティ
+- `app/lib/changelog.ts` - changelog.md パースユーティリティ（What's New と共用）
 
 ### その他
 - `app/lib/env.server.ts` - サーバーサイド環境変数アクセス
