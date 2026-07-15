@@ -11,6 +11,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
+import { normalizeSlug } from "@/lib/guide-slug";
 import { t } from "@/lib/messages";
 
 export function meta({ loaderData }: { loaderData: { guide: { title: string } } | undefined }) {
@@ -78,10 +79,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     where: eq(users.discordId, session.user.id),
   });
   if (!user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    return { error: "Unauthorized" };
   }
 
   const guide = await db.query.guides.findFirst({
@@ -91,16 +89,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
     ),
   });
   if (!guide) {
-    return new Response(JSON.stringify({ error: "Not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return { error: "Not found" };
   }
 
   const formData = await request.formData();
   const action = formData.get("_action");
 
   // "discard" = ドラフトを破棄し公開版へロールバック（ドラフト列を null に戻す）。
+  // スラッグはドラフト対象外のライブ列のため discard では変更しない。
   if (action === "discard") {
     await db
       .update(guides)
@@ -113,9 +109,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         draftUpdatedAt: null,
       })
       .where(eq(guides.id, guide.id));
-    return new Response(JSON.stringify({ success: true, mode: "discard" }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return { success: true, mode: "discard", slug: guide.slug };
   }
 
   // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
@@ -130,12 +124,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
     ? (formData.get("coverImageUrl") as string) || null
     : guide.coverImageUrl;
 
-  // tags の検証: JSON 配列であること、最大 10 件、各タグは 50 文字以内
-  const jsonError = (key: "errorTagsInvalid" | "errorTagsTooMany" | "errorTagTooLong") =>
-    new Response(JSON.stringify({ error: t(`meGuides.${key}`) }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
+  // スラッグの正規化・検証（draft / publish 共通。ライブ列なのでどちらの保存でも反映する）
+  const submittedSlug = normalizeSlug((formData.get("slug") as string) ?? "");
+  if (!submittedSlug) {
+    return { error: t("meGuides.errorSlugRequired") };
+  }
+  let nextSlug = guide.slug;
+  if (submittedSlug !== guide.slug) {
+    const dup = await db.query.guides.findFirst({
+      where: and(eq(guides.authorId, user.id), eq(guides.slug, submittedSlug)),
+      columns: { id: true },
     });
+    if (dup && dup.id !== guide.id) {
+      return { error: t("meGuides.errorSlugTaken") };
+    }
+    nextSlug = submittedSlug;
+  }
+
+  // tags の検証: JSON 配列であること、最大 10 件、各タグは 50 文字以内
+  const jsonError = (key: "errorTagsInvalid" | "errorTagsTooMany" | "errorTagTooLong") => ({
+    error: t(`meGuides.${key}`),
+  });
 
   let validatedTags: string[];
   try {
@@ -167,9 +176,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (saveMode === "draft") {
     // 仮保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
+    // スラッグはライブ列なので仮保存でも反映する。
     await db
       .update(guides)
       .set({
+        slug: nextSlug,
         draftTitle: title,
         draftSummary: summary,
         draftContent: content,
@@ -183,6 +194,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     await db
       .update(guides)
       .set({
+        slug: nextSlug,
         title,
         content,
         summary,
@@ -200,9 +212,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .where(eq(guides.id, guide.id));
   }
 
-  return new Response(JSON.stringify({ success: true, mode: saveMode }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return { success: true, mode: saveMode, slug: nextSlug };
 }
 
 /** tags は JSON 文字列だが、データ不整合があってもクラッシュしないよう防御的に解析する */

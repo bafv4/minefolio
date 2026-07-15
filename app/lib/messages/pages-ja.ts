@@ -1145,6 +1145,8 @@ export const PAGES_JA = {
     errorTagsInvalid: "タグの形式が不正です",
     errorTagsTooMany: "タグは10件までです",
     errorTagTooLong: "タグは50文字以内で入力してください",
+    errorSlugRequired: "URLを入力してください（半角英小文字・数字・ハイフン・アンダースコア）",
+    errorSlugTaken: "このURLは既に使われています。別の値を指定してください",
   },
   guideEditor: {
     save: "保存",
@@ -1154,6 +1156,9 @@ export const PAGES_JA = {
     published: "公開中",
     draft: "下書き",
     summaryPlaceholder: "概要（省略可）",
+    slugLabel: "URL",
+    slugPlaceholder: "例: fastest-any-rsg",
+    slugHint: "ガイドの公開URLになります。半角英小文字・数字・「-」「_」が使えます。変更すると以前のURLは無効になります。",
     tagPlaceholder: "タグを追加 (Enter)",
     contentPlaceholder: "Markdownで記述してください...\n\n# 見出し\n\n本文をここに書きます。",
     preview: "プレビュー",

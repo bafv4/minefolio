@@ -12,6 +12,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import { normalizeSlug } from "@/lib/guide-slug";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,14 +26,7 @@ import {
 import { t } from "@/lib/messages";
 
 function titleToSlug(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .trim()
-    .slice(0, 100);
-  return slug || `guide-${createId().slice(0, 6)}`;
+  return normalizeSlug(title) || `guide-${createId().slice(0, 6)}`;
 }
 
 export const meta = () => [{ title: t("meGuides.newTitle") }];

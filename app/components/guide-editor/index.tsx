@@ -2,8 +2,9 @@
 // 旧 2993 行の単一実装を責務分割し、extensions/ node-views/ slash-command/ panels/
 // toolbar/ hooks/ へ移譲した結果のコンポジション層。
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { EditorContent } from "@tiptap/react";
+import { toast } from "sonner";
 import { ArrowLeft, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,8 @@ export function GuideEditor({
   const [tags, setTags] = useState<string[]>(initialTags);
   const [isPublished, setIsPublished] = useState(initialIsPublished);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
+  // 編集中のURLスラッグ（初期値は現在のコミット済みスラッグ）。
+  const [slug, setSlug] = useState(guideSlug);
   // 未保存変更フラグ。同値 setState は React がバイパスするため毎キー再レンダリングしない。
   const [dirty, setDirty] = useState(false);
   // DB にコミット済みドラフトが存在するか（仮保存で true、保存/破棄で false）。
@@ -89,7 +92,9 @@ export function GuideEditor({
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ── 手動保存（自動セーブ廃止） ──────────────
-  const { submit, saving, lastSaved } = useGuideSave();
+  const { submit, saving, lastSaved, data: saveResult } = useGuideSave();
+  const navigate = useNavigate();
+  const prevResultRef = useRef<typeof saveResult>(undefined);
 
   // メタ情報はラベル付きハンドラ側でダーティを立てる（ロールバック時の一括リセットと
   // 衝突しないよう、effect ではなく明示的にマークする）。本文は editor.onUpdate が立てる。
@@ -105,12 +110,27 @@ export function GuideEditor({
         tags,
         isPublished,
         coverImageUrl,
+        slug,
       });
       setDirty(false);
       setDraftActive(mode === "draft");
     },
-    [editor, submit, title, summary, tags, isPublished, coverImageUrl],
+    [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug],
   );
+
+  // 保存結果の監視: エラーはトースト、スラッグ変更時は新しい編集URLへ差し替える。
+  // 同一ルートなのでエディタは再マウントされず、本文・メタ状態は保持される。
+  useEffect(() => {
+    if (!saveResult || saveResult === prevResultRef.current) return;
+    prevResultRef.current = saveResult;
+    if (saveResult.error) {
+      toast.error(saveResult.error);
+      return;
+    }
+    if (saveResult.slug && saveResult.slug !== guideSlug) {
+      navigate(`/my-guides/${saveResult.slug}/edit`, { replace: true });
+    }
+  }, [saveResult, guideSlug, navigate]);
 
   // ドラフトを破棄して公開版へロールバック（エディタ・メタを公開版へ戻し、ドラフト列を null に）
   const handleRollback = useCallback(() => {
@@ -127,6 +147,8 @@ export function GuideEditor({
     setTags(publishedSnapshot.tags);
     setCoverImageUrl(publishedSnapshot.coverImageUrl);
     setIsPublished(publishedSnapshot.isPublished);
+    // スラッグはドラフト対象外（ライブ列）。編集中の未保存スラッグはコミット済み値へ戻す。
+    setSlug(guideSlug);
     submit("discard", {
       title: publishedSnapshot.title,
       content: publishedSnapshot.content,
@@ -134,10 +156,11 @@ export function GuideEditor({
       tags: publishedSnapshot.tags,
       isPublished: publishedSnapshot.isPublished,
       coverImageUrl: publishedSnapshot.coverImageUrl,
+      slug: guideSlug,
     });
     setDirty(false);
     setDraftActive(false);
-  }, [editor, publishedSnapshot, submit]);
+  }, [editor, publishedSnapshot, submit, guideSlug]);
 
   // 未保存離脱警告
   const blocker = useUnsavedWarning(dirty);
@@ -297,7 +320,8 @@ export function GuideEditor({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        initialValues={{ title, summary, tags, coverImageUrl, isPublished }}
+        initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug }}
+        authorSlug={authorSlug}
         uploadCover={(file) =>
           coverUpload.uploadTo(
             buildCoverImagePath(userId, guideId),
@@ -314,6 +338,7 @@ export function GuideEditor({
           setTags(v.tags);
           setCoverImageUrl(v.coverImageUrl);
           setIsPublished(v.isPublished);
+          setSlug(v.slug);
           markDirty();
         }}
       />
