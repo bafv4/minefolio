@@ -78,7 +78,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const description =
     loaderData.template.description ||
     t("templates.metaDescription", { name: loaderData.author.name });
-  const ogImage = `${loaderData.appUrl}/og-image?title=${encodeURIComponent(loaderData.template.title)}&description=${encodeURIComponent(t("templates.pageTitle"))}`;
+  const ogImage = `${loaderData.appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -130,7 +130,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     myPresets = me?.configPresets ?? [];
   }
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
 
   return {
     template: {

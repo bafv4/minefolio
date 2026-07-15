@@ -275,6 +275,7 @@ export async function action({ request }: Route.ActionArgs) {
               searchStr: craft.searchStr,
               comment: craft.comment,
               timing: craft.timing ?? null,
+              withShift: craft.withShift === true,
               createdAt: now,
               updatedAt: now,
             });
@@ -400,6 +401,7 @@ export async function action({ request }: Route.ActionArgs) {
             searchStr: craft.searchStr,
             comment: craft.comment,
             timing: craft.timing,
+            withShift: craft.withShift,
             createdAt: now,
             updatedAt: now,
           });
@@ -693,6 +695,7 @@ export async function action({ request }: Route.ActionArgs) {
             searchStr: craftData.searchStr,
             comment: craftData.comment,
             timing: craftData.timing ?? null,
+            withShift: craftData.withShift === true,
             createdAt: now,
             updatedAt: now,
           });

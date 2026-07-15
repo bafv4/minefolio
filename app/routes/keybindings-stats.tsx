@@ -12,8 +12,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("keybindingsStats.metaTitle");
   const description = t("keybindingsStats.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -31,7 +31,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 export async function loader() {
   const env = getEnv();
   const db = createDb();
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   const stats = await loadKeybindingsStats(db);
   return { stats, appUrl };
 }

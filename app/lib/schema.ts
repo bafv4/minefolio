@@ -225,6 +225,9 @@ export const searchCrafts = sqliteTable("search_crafts", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  // Shiftを押しながらクラフトするか（入力キーはシフト後の文字を優先して逆引きする）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  withShift: integer("with_shift", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   uniqueIndex("idx_search_crafts_user_sequence").on(table.userId, table.sequence),
 ]);

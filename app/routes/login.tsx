@@ -22,8 +22,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("login.title");
   const description = t("login.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -61,7 +61,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  return { appUrl: env.APP_URL || "https://minefolio.pages.dev" };
+  return { appUrl: env.APP_URL || "https://minefolio.app" };
 }
 
 export default function LoginPage() {

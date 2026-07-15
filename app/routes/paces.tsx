@@ -33,8 +33,8 @@ const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("paces.metaTitle");
   const description = t("paces.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -51,7 +51,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   const db = createDb();
   const auth = createAuth(db, env);
 

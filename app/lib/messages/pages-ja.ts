@@ -296,6 +296,8 @@ export const PAGES_JA = {
     searchCraftCount: "全{count}件",
     legendRemapped: "リマップ済み",
     legendShift: "Shift同時押し",
+    legendWithShift: "Shiftを押しながらクラフト",
+    withShiftTooltip: "Shiftを押しながらクラフトする",
     colItems: "アイテム",
     colSearchStr: "サーチ文字列",
     colInputKeys: "入力キー",
@@ -901,6 +903,7 @@ export const PAGES_JA = {
     timing: "タイミング",
     timingNone: "指定なし",
     timingOther: "その他",
+    withShift: "Shiftを押しながら",
   },
   mePresets: {
     title: "設定プリセット - Minefolio",

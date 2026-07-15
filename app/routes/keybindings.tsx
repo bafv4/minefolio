@@ -10,8 +10,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("keybindings.metaTitle");
   const description = t("keybindings.description");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -29,7 +29,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 export async function loader() {
   const env = getEnv();
   const db = createDb();
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
   const players = await loadKeybindingsListPlayers(db);
   return { players, appUrl };
 }

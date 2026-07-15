@@ -53,6 +53,7 @@ async function replaceLiveTables(
         searchStr: craft.searchStr,
         comment: craft.comment,
         timing: craft.timing,
+        withShift: craft.withShift,
         createdAt: now,
         updatedAt: now,
       });

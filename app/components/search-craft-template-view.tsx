@@ -113,6 +113,8 @@ export type SearchCraftRowData = {
   searchStr: string | null;
   comment: string | null;
   timing: string | null;
+  /** Shiftを押しながらクラフトするか（古いデータには存在しない） */
+  withShift?: boolean;
 };
 
 // ============================================
@@ -168,17 +170,34 @@ export function KeyBadge({
   );
 }
 
+/** 「Shiftを押しながらクラフト」を示すバッジ（入力キー列の先頭に表示） */
+export function ShiftCraftBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          ⇧ Shift
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** サーチ文字列から導出した実入力キーのバッジ列 */
 export function ActualKeyBadges({
   searchStr,
   remaps,
   fingerAssignments,
+  shiftHeld,
 }: {
   searchStr: string;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** Shiftを押しながらクラフトする前提で逆引きし、先頭に ⇧ Shift バッジを表示する */
+  shiftHeld?: boolean;
 }) {
-  const keyInfos = getActualKeyInfos(searchStr, remaps);
+  const keyInfos = getActualKeyInfos(searchStr, remaps, { shiftHeld });
 
   // キーコードから指割り当てを取得
   const getFingerForKey = (keyCode: string): FingerType | undefined => {
@@ -189,6 +208,7 @@ export function ActualKeyBadges({
 
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {shiftHeld && <ShiftCraftBadge />}
       {keyInfos.map((info, idx) => {
         // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
         const baseKeyCode = info.keyCode.includes("+")
@@ -217,6 +237,14 @@ export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean 
         <span className="inline-block h-3.5 w-3.5 rounded border-2 bg-secondary/50 border-border/50 ring-1 ring-primary ring-offset-1 ring-offset-background" />
         <span className="text-[11px] text-muted-foreground">
           {t("playerProfile.legendRemapped")}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-amber-500/50 bg-amber-500/10 px-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
+          ⇧
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          {t("playerProfile.legendWithShift")}
         </span>
       </div>
       {showFingers && <FingerLegend />}
@@ -429,7 +457,10 @@ function SearchCraftRow({
               searchStr={craft.searchStr}
               remaps={remaps}
               fingerAssignments={fingerAssignments}
+              shiftHeld={craft.withShift === true}
             />
+          ) : craft.withShift ? (
+            <ShiftCraftBadge />
           ) : (
             <span className="text-sm text-muted-foreground">—</span>
           )}

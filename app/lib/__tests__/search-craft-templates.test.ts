@@ -98,8 +98,8 @@ describe("parseTemplateRemapData / parseTemplateRemaps", () => {
 describe("serializeTemplateCrafts / serializeTemplateRemaps（Playground保存用の逆変換）", () => {
   it("serializeTemplateCrafts → parseTemplateCrafts で内容が往復する", () => {
     const crafts: TemplateCraft[] = [
-      { items: ["minecraft:crafting_table", "minecraft:chest"], searchStr: "cra", comment: "最初に作る", timing: null },
-      { items: ["minecraft:golden_carrot"], searchStr: "go_c", comment: null, timing: "bastion" },
+      { items: ["minecraft:crafting_table", "minecraft:chest"], searchStr: "cra", comment: "最初に作る", timing: null, withShift: false },
+      { items: ["minecraft:golden_carrot"], searchStr: "go_c", comment: null, timing: "bastion", withShift: true },
     ];
     const roundTripped = parseTemplateCrafts(serializeTemplateCrafts(crafts));
     expect(roundTripped).toEqual(crafts);
@@ -107,11 +107,18 @@ describe("serializeTemplateCrafts / serializeTemplateRemaps（Playground保存�
 
   it("serializeTemplateCrafts は sequence を配列順（1始まり）で振り直す", () => {
     const json = serializeTemplateCrafts([
-      { items: [], searchStr: "a", comment: null, timing: null },
-      { items: [], searchStr: "b", comment: null, timing: null },
+      { items: [], searchStr: "a", comment: null, timing: null, withShift: false },
+      { items: [], searchStr: "b", comment: null, timing: null, withShift: false },
     ]);
     const raw = JSON.parse(json);
     expect(raw.map((r: { sequence: number }) => r.sequence)).toEqual([1, 2]);
+  });
+
+  it("withShift の指定なし（旧データ）は false として往復する", () => {
+    const json = JSON.stringify([
+      { sequence: 1, items: "[]", keys: "[]", searchStr: "a", comment: null, timing: null },
+    ]);
+    expect(parseTemplateCrafts(json)[0].withShift).toBe(false);
   });
 
   it("serializeTemplateRemaps → parseTemplateRemaps で内容が往復する（key出力）", () => {
@@ -161,6 +168,24 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     const remaps = parseTemplateRemaps(result.remapsData);
     expect(remaps).toHaveLength(2);
     expect(remaps[1].targetKey).toBeNull();
+  });
+
+  it("withShift を検証して保持する（未指定・不正値は false）", () => {
+    const result = parseEditorSubmission(
+      buildForm({
+        title: "テスト",
+        crafts: JSON.stringify([
+          { items: ["minecraft:chest"], searchStr: "che", comment: null, timing: null, withShift: true },
+          { items: ["minecraft:chest"], searchStr: "che", comment: null, timing: null },
+          { items: ["minecraft:chest"], searchStr: "che", comment: null, timing: null, withShift: "yes" },
+        ]),
+        remaps: "[]",
+      }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    const crafts = parseTemplateCrafts(result.craftsData);
+    expect(crafts.map((c) => c.withShift)).toEqual([true, false, false]);
   });
 
   it("サーチ文字列の先頭・末尾スペースを保存値に保持する（trim は空判定のみ）", () => {

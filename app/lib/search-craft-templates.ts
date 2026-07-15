@@ -46,6 +46,8 @@ export type TemplateCraft = {
   searchStr: string | null;
   comment: string | null;
   timing: SearchCraftTiming | null;
+  /** Shiftを押しながらクラフトするか */
+  withShift: boolean;
 };
 
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
@@ -75,6 +77,7 @@ export function parseTemplateCrafts(craftsData: string | null): TemplateCraft[] 
           searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
           comment: typeof c.comment === "string" ? c.comment : null,
           timing: normalizeTiming(c.timing),
+          withShift: c.withShift === true,
         };
       });
   } catch {
@@ -124,6 +127,7 @@ export function serializeTemplateCrafts(crafts: TemplateCraft[]): string {
     searchStr: c.searchStr,
     comment: c.comment,
     timing: c.timing,
+    withShift: c.withShift,
   }));
   return JSON.stringify(data);
 }
@@ -226,6 +230,7 @@ export function parseEditorSubmission(formData: FormData): EditorSubmission | { 
       timing: SEARCH_CRAFT_TIMINGS.includes(raw.timing as SearchCraftTiming)
         ? (raw.timing as SearchCraftTiming)
         : null,
+      withShift: raw.withShift === true,
     });
   }
 

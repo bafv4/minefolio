@@ -36,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return redirect("/onboarding");
   }
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
 
   return { user, appUrl };
 }

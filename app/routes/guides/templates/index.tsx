@@ -18,8 +18,8 @@ import { ja } from "date-fns/locale";
 export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("templates.title");
   const description = t("templates.pageDesc");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image?title=${encodeURIComponent(t("templates.pageTitle"))}`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -90,7 +90,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     );
   }
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
 
   return { templates, q, lang, appUrl };
 }

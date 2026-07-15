@@ -94,7 +94,8 @@
   keys: string;
   searchStr: string | null;
   comment: string | null;
-  timing?: "bastion" | "fortress" | "other" | null;
+  timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+  withShift?: boolean; // Shiftを押しながらクラフトするか（古いスナップショットには存在しない）
 }
 ```
 

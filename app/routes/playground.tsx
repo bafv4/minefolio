@@ -76,8 +76,8 @@ const LIVE_PRESET_ID = "__live__";
 export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("playground.title");
   const description = t("playground.pageDesc");
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image?title=${encodeURIComponent(t("playground.pageTitle"))}`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -174,7 +174,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  const appUrl = env.APP_URL || "https://minefolio.pages.dev";
+  const appUrl = env.APP_URL || "https://minefolio.app";
 
   return {
     templateData,
@@ -215,6 +215,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (!Array.isArray(crafts) || !Array.isArray(remaps) || crafts.length > MAX_TEMPLATE_CRAFTS) {
     return { error: t("playground.saveFailed") };
   }
+  // クライアント由来のJSONのため withShift は boolean に正規化する
+  crafts = crafts.map((c) => ({ ...c, withShift: c.withShift === true }));
 
   const now = new Date();
   // リマップ: includeRemaps=false のときは変更しない（null）
@@ -313,6 +315,7 @@ function toPlaygroundCrafts(crafts: TemplateCraft[]): SearchCraftDraft[] {
     searchStr: c.searchStr,
     comment: c.comment,
     timing: c.timing,
+    withShift: c.withShift,
   }));
 }
 
@@ -394,7 +397,8 @@ export default function PlaygroundPage() {
     const draft = loadDraftFromStorage();
     if (draft) {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
-      setCrafts(draft.crafts.map((c) => ({ ...c, id: draftId("craft") })));
+      // 旧形式の下書きには withShift がないため boolean に正規化する
+      setCrafts(draft.crafts.map((c) => ({ ...c, withShift: c.withShift === true, id: draftId("craft") })));
       setLayout(draft.layout);
       setLoadedLabel(t("playground.loadedDraft"));
     }
@@ -473,6 +477,7 @@ export default function PlaygroundPage() {
         searchStr: c.searchStr?.trim() ? c.searchStr : null,
         comment: c.comment,
         timing: c.timing,
+        withShift: c.withShift === true,
       }));
 
     const formData = new FormData();

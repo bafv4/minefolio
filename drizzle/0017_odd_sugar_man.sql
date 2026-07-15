@@ -1,0 +1,1 @@
+ALTER TABLE `search_crafts` ADD `with_shift` integer DEFAULT false NOT NULL;

@@ -120,6 +120,13 @@
       "when": 1784117376787,
       "tag": "0016_public_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1784118965582,
+      "tag": "0017_odd_sugar_man",
+      "breakpoints": true
     }
   ]
 }

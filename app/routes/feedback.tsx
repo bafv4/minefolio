@@ -35,8 +35,8 @@ import { t } from "@/lib/messages";
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = t("feedback.title");
   const description = "Minefolioへのフィードバックをお寄せください";
-  const appUrl = loaderData?.appUrl || "https://minefolio.pages.dev";
-  const ogImage = `${appUrl}/og-image`;
+  const appUrl = loaderData?.appUrl || "https://minefolio.app";
+  const ogImage = `${appUrl}/icon.png`;
   return [
     { title },
     { name: "description", content: description },
@@ -66,7 +66,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("feedback.userNotFound"), { status: 404 });
   }
 
-  return { user, appUrl: env.APP_URL || "https://minefolio.pages.dev" };
+  return { user, appUrl: env.APP_URL || "https://minefolio.app" };
 }
 
 export async function action({ request }: Route.ActionArgs) {
