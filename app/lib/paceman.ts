@@ -90,6 +90,25 @@ export function getSplitLabelEnglish(eventId: string): string {
 }
 
 /**
+ * スプリットIDを PaceManSplitMark（アイコン+名称チップ）等で使う共通タイムライン名に変換する。
+ * getSplitLabelEnglish の口語表記（"Blind" 等）ではなく、SPLIT_MARK_ITEM や
+ * pacemanPaces.timeline と同じ語彙（"First Portal" 等）に揃える。
+ */
+export function getSplitTimeline(eventId: string): string {
+  const timelines: Record<string, string> = {
+    "rsg.enter_nether": "Enter Nether",
+    "rsg.enter_bastion": "Bastion",
+    "rsg.enter_fortress": "Fortress",
+    "rsg.first_portal": "First Portal",
+    "rsg.second_portal": "Second Portal",
+    "rsg.enter_stronghold": "Enter Stronghold",
+    "rsg.enter_end": "Enter End",
+    "rsg.credits": "Finish",
+  };
+  return timelines[eventId] || getSplitLabelEnglish(eventId);
+}
+
+/**
  * スプリットIDの進行順序を取得（ソート用）
  */
 export function getSplitOrder(eventId: string): number {

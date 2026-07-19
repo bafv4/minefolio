@@ -96,6 +96,8 @@ Minecraftスキン画像を返す。
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `type` | string | ○ | フィード種別 |
+| `mcid` | string | `type=pace-timeline`時のみ○ | 対象プレイヤーのMCID |
+| `runId` | string | `type=pace-timeline`時のみ○ | PaceManのラン ID（`pacemanRunId`） |
 
 **種別一覧:**
 
@@ -103,6 +105,7 @@ Minecraftスキン画像を返す。
 |---|---|---|---|
 | `live-runs` | PaceManライブラン | 10秒 | 10秒 |
 | `recent-paces` | 最近のペース記録 | 60秒 | 5分 |
+| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 60秒 | 5分 |
 | `twitch-streams` | Twitchライブ配信 | 30秒 | 60秒 |
 | `youtube-videos` | YouTube動画 | 5分 | DB依存 |
 | `youtube-live` | YouTubeライブ（現在無効） | 60秒 | — |

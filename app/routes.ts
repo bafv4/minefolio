@@ -18,8 +18,8 @@ export default [
     // ローカル開発専用の簡易ログイン（DEV_AUTH=1 のときのみ有効。それ以外は404）
     route("dev/login", "routes/dev-login.tsx"),
 
-    // Live
-    route("live", "routes/live.tsx"),
+    // Live（廃止。ライブペースはホームのペースフィードへ統合。旧URLはホームへリダイレクト）
+    route("live", "routes/live-redirect.ts"),
 
     // Paces (最近のペース全件一覧)
     route("paces", "routes/paces.tsx"),

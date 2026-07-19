@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useNavigate } from "react-router";
-import { useEffect, useReducer, memo, useMemo } from "react";
+import { useEffect, useReducer, memo, useMemo, useCallback, useState } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -10,6 +10,9 @@ import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
+import type { PaceManLiveRun } from "@/lib/paceman";
+import { LivePaceList } from "@/components/live-pace-list";
+import { cn } from "@/lib/utils";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
@@ -27,10 +30,11 @@ import {
   History,
   Sparkles,
   Users,
-  Activity,
   Youtube,
   BookOpen,
   Shuffle,
+  Timer,
+  RefreshCw,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
@@ -90,14 +94,28 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用）
+  // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
   const allUserMcids = await db.query.users.findMany({
-    columns: { mcid: true, uuid: true, customSkinUrl: true },
+    where: excludeViewersCondition,
+    columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
   });
+  const registeredMcids = allUserMcids
+    .filter((u) => u.mcid !== null)
+    .map((u) => u.mcid!.toLowerCase());
   const mcidToUuid = Object.fromEntries(
     allUserMcids
       .filter((u) => u.mcid !== null)
       .map((u) => [u.mcid!.toLowerCase(), u.uuid])
+  );
+  const mcidToSlug = Object.fromEntries(
+    allUserMcids
+      .filter((u) => u.mcid !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.slug])
+  );
+  const mcidToDisplayName = Object.fromEntries(
+    allUserMcids
+      .filter((u) => u.mcid !== null)
+      .map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
   );
   const mcidToSkinUrl = Object.fromEntries(
     allUserMcids
@@ -175,7 +193,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
     currentUser,
+    registeredMcids,
     mcidToUuid,
+    mcidToSlug,
+    mcidToDisplayName,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
@@ -195,39 +216,54 @@ interface RecentPacesResponse {
   mcidToDisplayName: Record<string, string>;
 }
 
+interface LiveRunsResponse {
+  liveRuns: PaceManLiveRun[];
+  mcidToUuid: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
+}
+
 // Feed状態管理用のReducer
 interface FeedState {
   recentVideos: CachedYouTubeVideo[];
   recentPaces: CachedPace[];
+  liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
   loading: {
     videos: boolean;
     paces: boolean;
+    liveRuns: boolean;
   };
   errors: {
     videos: boolean;
     paces: boolean;
+    liveRuns: boolean;
   };
 }
 
 type FeedAction =
   | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
   | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
+  | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
 
 const initialFeedState: FeedState = {
   recentVideos: [],
   recentPaces: [],
+  liveRuns: [],
   mcidToUuid: {},
   mcidToDisplayName: {},
+  mcidToSkinUrl: {},
   loading: {
     videos: true,
     paces: true,
+    liveRuns: true,
   },
   errors: {
     videos: false,
     paces: false,
+    liveRuns: false,
   },
 };
 
@@ -250,6 +286,18 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
           ? { ...state.mcidToDisplayName, ...action.payload.mcidToDisplayName }
           : state.mcidToDisplayName,
         loading: { ...state.loading, paces: false },
+      };
+    case "SET_LIVE_RUNS":
+      return {
+        ...state,
+        liveRuns: action.payload.liveRuns,
+        mcidToUuid: action.payload.mcidToUuid
+          ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
+          : state.mcidToUuid,
+        mcidToSkinUrl: action.payload.mcidToSkinUrl
+          ? { ...state.mcidToSkinUrl, ...action.payload.mcidToSkinUrl }
+          : state.mcidToSkinUrl,
+        loading: { ...state.loading, liveRuns: false },
       };
     case "SET_ERROR":
       return {
@@ -350,7 +398,10 @@ export default function HomePage() {
   const {
     isRegistered,
     currentUser,
+    registeredMcids,
     mcidToUuid,
+    mcidToSlug,
+    mcidToDisplayName,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
@@ -360,7 +411,37 @@ export default function HomePage() {
     useLoaderData<typeof loader>();
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
+  const [isRefreshingLiveRuns, setIsRefreshingLiveRuns] = useState(false);
   const navigate = useNavigate();
+
+  const registeredMcidSet = useMemo(() => new Set(registeredMcids), [registeredMcids]);
+
+  // ライブペースを取得する関数（初回・15秒間隔の自動更新・手動の更新ボタンで共用）
+  const fetchLiveRuns = useCallback(() => {
+    return fetch("/api/home-feed?type=live-runs")
+      .then((res) => res.json() as Promise<LiveRunsResponse>)
+      .then((data) => {
+        dispatch({
+          type: "SET_LIVE_RUNS",
+          payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid, mcidToSkinUrl: data.mcidToSkinUrl },
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to fetch live runs:", err);
+        dispatch({ type: "SET_ERROR", payload: "liveRuns" });
+      });
+  }, []);
+
+  const handleRefreshLiveRuns = useCallback(() => {
+    setIsRefreshingLiveRuns(true);
+    fetchLiveRuns().finally(() => setIsRefreshingLiveRuns(false));
+  }, [fetchLiveRuns]);
+
+  // ライブペースの自動更新（15秒間隔）
+  useEffect(() => {
+    const interval = setInterval(fetchLiveRuns, 15000);
+    return () => clearInterval(interval);
+  }, [fetchLiveRuns]);
 
   // 「ランダムで見る」をAlt(Option)キー押下中にクリックすると隠しページへ。
   // Shift(新規ウィンドウ)/Ctrl・Cmd(新規タブ)やテキスト選択と競合しないAltを使用。
@@ -377,6 +458,13 @@ export default function HomePage() {
       ? feed.recentPaces.filter(run => run.mcid.toLowerCase() !== currentUser.mcid!.toLowerCase())
       : feed.recentPaces,
     [feed.recentPaces, currentUser?.showPacemanOnHome, currentUser?.mcid]
+  );
+
+  const filteredLiveRuns = useMemo(() =>
+    currentUser?.showPacemanOnHome === false && currentUser?.mcid
+      ? feed.liveRuns.filter(run => run.nickname.toLowerCase() !== currentUser.mcid!.toLowerCase())
+      : feed.liveRuns,
+    [feed.liveRuns, currentUser?.showPacemanOnHome, currentUser?.mcid]
   );
 
   const filteredRecentVideos = useMemo(() =>
@@ -422,8 +510,11 @@ export default function HomePage() {
           console.error("Failed to fetch recent paces:", err);
           dispatch({ type: "SET_ERROR", payload: "paces" });
         }),
+
+      // ライブペース
+      fetchLiveRuns(),
     ]);
-  }, []);
+  }, [fetchLiveRuns]);
 
   // mcidToUuidをマージ
   const mergedMcidToUuid = { ...mcidToUuid, ...pacesMcidToUuid };
@@ -547,9 +638,9 @@ export default function HomePage() {
         </section>
       )}
 
-      {feed.loading.paces ? (
+      {feed.loading.paces || feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
-      ) : filteredRecentPaces.length > 0 ? (
+      ) : filteredLiveRuns.length > 0 || filteredRecentPaces.length > 0 ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -559,30 +650,65 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.paceFeedLabel")}</p>
               <h2 className="text-xl font-bold">{t("home.sectionPaces")}</h2>
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <span className="hidden items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
-                <Activity className="h-3.5 w-3.5" />
-                {filteredRecentPaces.length}
-              </span>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/paces">
-                  {t("home.viewAll")}
-                  <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                </Link>
+          </div>
+
+          {/* ライブペース（旧 /live から移設。15秒自動更新 + 手動更新ボタン） */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Timer className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold">{t("home.livePacesTitle")}</h3>
+              <span className="text-sm text-muted-foreground">({filteredLiveRuns.length})</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={handleRefreshLiveRuns}
+                disabled={isRefreshingLiveRuns}
+              >
+                <RefreshCw className={cn("mr-1 h-3.5 w-3.5", isRefreshingLiveRuns && "animate-spin")} />
+                {t("home.refreshLivePaces")}
               </Button>
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {filteredRecentPaces.map((run) => (
-              <PaceFeedCard
-                key={`${run.mcid}-${run.time}-${run.timeline}`}
-                run={run}
-                uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-                displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
-                skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
+            {filteredLiveRuns.length > 0 ? (
+              <LivePaceList
+                runs={filteredLiveRuns}
+                registeredMcidSet={registeredMcidSet}
+                mcidToSlug={mcidToSlug}
+                mcidToUuid={mergedMcidToUuid}
+                mcidToDisplayName={mcidToDisplayName}
+                mcidToSkinUrl={{ ...mcidToSkinUrl, ...feed.mcidToSkinUrl }}
               />
-            ))}
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("home.noLivePaces")}</p>
+            )}
           </div>
+
+          {/* 過去のペース（最新12件） */}
+          {filteredRecentPaces.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold">{t("home.pastPacesTitle")}</h3>
+                <Button variant="ghost" size="sm" className="ml-auto" asChild>
+                  <Link to="/paces">
+                    {t("home.viewAll")}
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {filteredRecentPaces.map((run) => (
+                  <PaceFeedCard
+                    key={`${run.mcid}-${run.time}-${run.timeline}`}
+                    run={run}
+                    uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
+                    displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
+                    skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       ) : null}
 

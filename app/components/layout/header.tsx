@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, User, LogOut, Settings, Heart, Radio, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen, FlaskConical } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen, FlaskConical } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,6 @@ interface HeaderProps {
 }
 
 const navigation = [
-  { name: "ライブ", href: "/live", icon: Radio },
   { name: "探す", href: "/browse", icon: Search },
   { name: "操作設定", href: "/keybindings", icon: Keyboard },
   { name: "ランキング", href: "/rankings", icon: Trophy },

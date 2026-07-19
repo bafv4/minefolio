@@ -2,12 +2,15 @@ import { Link } from "react-router";
 import {
   type PaceManLiveRun,
   getSplitLabelEnglish,
+  getSplitTimeline,
   getSplitOrder,
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { Badge } from "@/components/ui/badge";
+import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import {
   Tooltip,
   TooltipTrigger,
@@ -35,7 +38,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
           <tr className="border-b">
             <th className="text-left py-2 px-3 font-medium">走者</th>
             <th className="text-left py-2 px-3 font-medium">バージョン</th>
-            <th className="text-left py-2 px-3 font-medium">最新区間</th>
+            <th className="text-left py-2 px-3 font-medium">区間</th>
             <th className="text-right py-2 px-3 font-medium">タイム</th>
             <th className="text-center py-2 px-3 font-medium">配信</th>
           </tr>
@@ -81,9 +84,9 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                 </td>
                 <td className="py-2 px-3">
                   {latestSplit && (
-                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                      {getSplitLabelEnglish(latestSplit.eventId)}
-                    </span>
+                    <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+                      <PaceManSplitMark timeline={getSplitTimeline(latestSplit.eventId)} size={13} />
+                    </Badge>
                   )}
                 </td>
                 <td className="py-2 px-3 text-right font-mono font-semibold">
