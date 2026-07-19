@@ -6,7 +6,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
-import { eq, asc, and, or } from "drizzle-orm";
+import { eq, asc, and, or, inArray } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, FINGER_LABELS, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,7 @@ import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
-import { isKeyRemapTarget, sanitizeRemapTargetKey } from "@/lib/remap-utils";
+import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, type KeyRemapType, type RemapConflict } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { PresetSelector } from "@/components/preset-selector";
 
@@ -175,6 +175,8 @@ type RemapMutationInput = {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+  // クライアント値は信用せず normalizeKeyRemapType で正規化する
+  remapType?: string;
   _delete?: boolean;
 };
 
@@ -184,9 +186,10 @@ type PersistedRemapPayload = {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+  remapType: KeyRemapType;
 };
 
-// RemapType / getRemapTypeFromTargetKey / useRemapType は @/components/remap-row、
+// RemapOutputType / getRemapOutputTypeFromTargetKey / useRemapOutputType は @/components/remap-row、
 // sanitizeRemapTargetKey は @/lib/remap-utils に抽出済み
 
 type CustomActionMutationInput = {
@@ -207,71 +210,121 @@ type CustomKeyMutationInput = {
   _delete?: boolean;
 };
 
+/** UNIQUE 制約違反かどうかをエラーメッセージ（cause チェーン含む）から判定する */
+function isUniqueConstraintError(e: unknown): boolean {
+  let current: unknown = e;
+  while (current instanceof Error) {
+    if (
+      current.message.includes("UNIQUE constraint failed") ||
+      current.message.includes("SQLITE_CONSTRAINT")
+    ) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
+}
+
+/** findRemapConflict の違反をユーザー向けメッセージへ変換する（サーバー/クライアント共用） */
+function remapConflictErrorMessage(conflict: RemapConflict, keyboardLayout?: string | null): string {
+  const key = getRemapSourceLabel(conflict.sourceKey, keyboardLayout);
+  return conflict.kind === "duplicate"
+    ? t("meKeybindings.remapDuplicateError", { key, type: t(`remapType.${conflict.remapType}`) })
+    : t("meKeybindings.remapAllConflictError", { key });
+}
+
 async function persistRemaps(
   db: ReturnType<typeof createDb>,
   userId: string,
   remapsData: RemapMutationInput[],
   now: Date
-) {
-  for (const remap of remapsData) {
-    if (remap._delete && remap.id) {
-      await db
-        .delete(keyRemaps)
-        .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
-    }
+): Promise<{ error: string } | null> {
+  // 保存前バリデーション: 同一 (sourceKey, 種別) の完全重複 / All 行と他行の共存を拒否
+  const conflict = findRemapConflict(remapsData.filter((r) => !r._delete && r.sourceKey));
+  if (conflict) {
+    return { error: remapConflictErrorMessage(conflict) };
   }
 
-  for (const remap of remapsData) {
-    if (remap._delete) continue;
-    if (!remap.sourceKey) continue;
+  try {
+    await db.transaction(async (tx) => {
+      for (const remap of remapsData) {
+        if (remap._delete && remap.id) {
+          await tx
+            .delete(keyRemaps)
+            .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
+        }
+      }
 
-    const sourceKeyNormalized = normalizeKeyCombination(remap.sourceKey);
-    const sourceKeyUpper = remap.sourceKey.toUpperCase();
-    const targetKey = sanitizeRemapTargetKey(remap.targetKey);
-    const targetKeyNormalized = targetKey
-      ? (isKeyRemapTarget(targetKey) ? normalizeKeyCode(targetKey) : targetKey)
-      : null;
-    const payload: PersistedRemapPayload = {
-      sourceKey: sourceKeyNormalized,
-      targetKey: targetKeyNormalized,
-      software: remap.software || null,
-      notes: remap.notes || null,
-    };
+      // 各行を既存行（あれば）へ解決してから「一括削除→挿入」で書き戻す。
+      // 逐次 update だと同一 sourceKey の2行で種別を入れ替えた際に
+      // 一時的な UNIQUE 衝突が起き、正当な最終状態でも保存できなくなるため
+      const resolved: Array<{ id: string; createdAt: Date; payload: PersistedRemapPayload }> = [];
+      for (const remap of remapsData) {
+        if (remap._delete) continue;
+        if (!remap.sourceKey) continue;
 
-    if (remap.id) {
-      await db
-        .update(keyRemaps)
-        .set({ ...payload, updatedAt: now })
-        .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
-      continue;
-    }
+        const sourceKeyNormalized = normalizeKeyCombination(remap.sourceKey);
+        const sourceKeyUpper = remap.sourceKey.toUpperCase();
+        const targetKey = sanitizeRemapTargetKey(remap.targetKey);
+        const targetKeyNormalized = targetKey
+          ? (isKeyRemapTarget(targetKey) ? normalizeKeyCode(targetKey) : targetKey)
+          : null;
+        const payload: PersistedRemapPayload = {
+          sourceKey: sourceKeyNormalized,
+          targetKey: targetKeyNormalized,
+          software: remap.software || null,
+          notes: remap.notes || null,
+          remapType: normalizeKeyRemapType(remap.remapType),
+        };
 
-    const existing = await db.query.keyRemaps.findFirst({
-      where: and(
-        eq(keyRemaps.userId, userId),
-        or(
-          eq(keyRemaps.sourceKey, sourceKeyNormalized),
-          eq(keyRemaps.sourceKey, sourceKeyUpper)
-        )
-      ),
+        const existing = await tx.query.keyRemaps.findFirst({
+          where: remap.id
+            ? and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId))
+            : and(
+                eq(keyRemaps.userId, userId),
+                eq(keyRemaps.remapType, payload.remapType),
+                or(
+                  eq(keyRemaps.sourceKey, sourceKeyNormalized),
+                  eq(keyRemaps.sourceKey, sourceKeyUpper)
+                )
+              ),
+        });
+
+        resolved.push({
+          id: existing?.id ?? createId(),
+          createdAt: existing?.createdAt ?? now,
+          payload,
+        });
+      }
+
+      if (resolved.length > 0) {
+        await tx.delete(keyRemaps).where(
+          and(
+            eq(keyRemaps.userId, userId),
+            inArray(keyRemaps.id, resolved.map((r) => r.id))
+          )
+        );
+        for (const row of resolved) {
+          await tx.insert(keyRemaps).values({
+            id: row.id,
+            userId,
+            ...row.payload,
+            createdAt: row.createdAt,
+            updatedAt: now,
+          });
+        }
+      }
     });
-
-    if (existing) {
-      await db
-        .update(keyRemaps)
-        .set({ ...payload, updatedAt: now })
-        .where(and(eq(keyRemaps.id, existing.id), eq(keyRemaps.userId, userId)));
-      continue;
+  } catch (e) {
+    // UNIQUE 違反の catch はトランザクションの外側で行う
+    // （内側で正常リターンすると削除だけが commit されるため）
+    if (isUniqueConstraintError(e)) {
+      return { error: t("meKeybindings.remapConflictError") };
     }
-
-    await db.insert(keyRemaps).values({
-      id: createId(),
-      userId,
-      ...payload,
-      createdAt: now,
-      updatedAt: now,
-    });
+    throw e;
   }
+
+  return null;
 }
 
 async function persistKeybindingUpdates(
@@ -462,7 +515,8 @@ export async function action({ request }: Route.ActionArgs) {
     if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
-    await persistRemaps(db, user.id, remapsData, now);
+    const remapError = await persistRemaps(db, user.id, remapsData, now);
+    if (remapError) return { error: remapError.error };
     await syncActivePresetSnapshot(db, user.id, ["remaps"]);
 
     return { success: true, message: t("meKeybindings.saveRemaps") };
@@ -489,6 +543,15 @@ export async function action({ request }: Route.ActionArgs) {
 
     const now = new Date();
 
+    // リマップ（persistRemaps はエラーを返しうるため、他セクションの書き込みより先に実行する。
+    // 後に置くと、エラー時にキーバインド等だけが書き込まれた部分適用状態になる）
+    if (remapsJson) {
+      const remapsData = parseJsonArray<RemapMutationInput>(remapsJson);
+      if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
+      const remapError = await persistRemaps(db, user.id, remapsData, now);
+      if (remapError) return { error: remapError.error };
+    }
+
     // キーバインド
     if (keybindingsJson) {
       const updates = parseJsonArray<KeybindingUpdateInput>(keybindingsJson);
@@ -496,13 +559,6 @@ export async function action({ request }: Route.ActionArgs) {
       await persistKeybindingUpdates(db, user.id, updates, now, {
         normalizeEmptyToUnbound: false,
       });
-    }
-
-    // リマップ
-    if (remapsJson) {
-      const remapsData = parseJsonArray<RemapMutationInput>(remapsJson);
-      if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
-      await persistRemaps(db, user.id, remapsData, now);
     }
 
     // 指割り当て
@@ -697,6 +753,7 @@ type RemapEntry = {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+  remapType: KeyRemapType;
   _delete?: boolean;
   _isNew?: boolean;
 };
@@ -708,6 +765,7 @@ type DbRemapData = {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+  remapType?: string | null;
 };
 
 // =====================================
@@ -723,6 +781,8 @@ function dbRemapToUiRemap(db: DbRemapData): RemapEntry {
     targetKey,
     software: db.software ?? null,
     notes: db.notes ?? null,
+    // remapType 欠落の旧JSON（プリセットコピー等）は unset に正規化
+    remapType: normalizeKeyRemapType(db.remapType),
   };
 }
 
@@ -731,6 +791,17 @@ function dbRemapsToUiRemaps(remaps: DbRemapData[], markAsNew = false): RemapEntr
     const uiRemap = dbRemapToUiRemap(remap);
     return markAsNew ? { ...uiRemap, _isNew: true } : uiRemap;
   });
+}
+
+/** 同一 sourceKey ごとの非削除行数。2行以上あるキーは種別 All を選択不可にする */
+function countRemapSourceKeys(remaps: RemapEntry[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const remap of remaps) {
+    if (remap._delete || !remap.sourceKey) continue;
+    const key = remapSourceMatchKey(remap.sourceKey);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
 }
 
 // =====================================
@@ -1089,7 +1160,8 @@ export default function KeybindingsPage() {
         original.sourceKey !== remap.sourceKey ||
         original.targetKey !== remap.targetKey ||
         original.software !== remap.software ||
-        original.notes !== remap.notes
+        original.notes !== remap.notes ||
+        original.remapType !== remap.remapType
       ) {
         return true;
       }
@@ -1219,6 +1291,19 @@ export default function KeybindingsPage() {
   const modalRemaps = modalDraftRemaps ?? localRemaps;
   const modalFingerAssignments = modalDraftFingerAssignments ?? localFingerAssignments;
   const modalCustomActions = modalDraftCustomActions ?? localCustomActions;
+
+  // 種別 All の選択可否判定用: 同一 sourceKey の行数（タブは localRemaps、ダイアログは modalRemaps 全体で判定）
+  const remapSourceKeyCounts = useMemo(() => countRemapSourceKeys(localRemaps), [localRemaps]);
+  const modalRemapSourceKeyCounts = useMemo(() => countRemapSourceKeys(modalRemaps), [modalRemaps]);
+
+  // キーボードプレビューへ渡すリマップ（編集中はどの種別も全表示。remapType はツールチップのバッジ表示用）
+  const keyboardRemaps = useMemo(
+    () =>
+      localRemaps
+        .filter((r) => !r._delete)
+        .map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey, remapType: r.remapType })),
+    [localRemaps],
+  );
 
   const modalKeybindingsWithLocalChanges = useMemo(() =>
     validKeybindings.map((kb) => ({
@@ -1376,6 +1461,7 @@ export default function KeybindingsPage() {
         targetKey: null,
         software: null,
         notes: null,
+        remapType: "unset" as const,
         _isNew: true,
       },
     ]);
@@ -1465,6 +1551,7 @@ export default function KeybindingsPage() {
           targetKey: "",
           software: null,
           notes: null,
+          remapType: "unset" as const,
           _isNew: true,
         },
       ];
@@ -1588,6 +1675,13 @@ export default function KeybindingsPage() {
 
   // 保存
   const handleSave = useCallback(() => {
+    // 保存前バリデーション（サーバーと同じ判定・メッセージ）: 重複・All共存はここで止める
+    const conflict = findRemapConflict(localRemaps.filter((r) => !r._delete && r.sourceKey));
+    if (conflict) {
+      toast.error(remapConflictErrorMessage(conflict, keyboardLayout));
+      return;
+    }
+
     const formData = new FormData();
     formData.set("intent", "save-all");
     if (activePreset) {
@@ -1613,7 +1707,7 @@ export default function KeybindingsPage() {
     formData.set("customActions", JSON.stringify(localCustomActions));
 
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset]);
+  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset, keyboardLayout]);
 
   // デバッグ: 現在のデータを表示
   const handleDebugLog = useCallback(() => {
@@ -1937,12 +2031,7 @@ export default function KeybindingsPage() {
                   layout={keyboardLayout}
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps
-                    .filter((r) => !r._delete)
-                    .map((r) => ({
-                      sourceKey: r.sourceKey,
-                      targetKey: r.targetKey,
-                    }))}
+                  remaps={keyboardRemaps}
                   customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
                   onKeyClick={handleKeyClick}
                   showActionLabels
@@ -1956,12 +2045,7 @@ export default function KeybindingsPage() {
                 <VirtualNumpad
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps
-                    .filter((r) => !r._delete)
-                    .map((r) => ({
-                      sourceKey: r.sourceKey,
-                      targetKey: r.targetKey,
-                    }))}
+                  remaps={keyboardRemaps}
                   onKeyClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments
@@ -1970,12 +2054,7 @@ export default function KeybindingsPage() {
                 <VirtualMouse
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
                   fingerAssignments={localFingerAssignments}
-                  remaps={localRemaps
-                    .filter((r) => !r._delete)
-                    .map((r) => ({
-                      sourceKey: r.sourceKey,
-                      targetKey: r.targetKey,
-                    }))}
+                  remaps={keyboardRemaps}
                   customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
                   onButtonClick={handleKeyClick}
                   showActionLabels
@@ -2117,6 +2196,7 @@ export default function KeybindingsPage() {
                 AutoHotkeyやKarabinerなどで設定しているキーの変換を記録します。
                 変更元は修飾キー（Ctrl, Shift, Alt）との組み合わせに対応しています。
                 変更先は「キー」（単一キー）または「文字」（大文字/小文字区別）を選択できます。
+                種別で Trigger（ゲーム入力）と Chat（チャット・サーチクラフト）を区別できます（未設定/All は全用途で有効）。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -2124,6 +2204,10 @@ export default function KeybindingsPage() {
                 <div className="space-y-3">
                   {localRemaps.map((remap, index) => {
                     if (remap._delete) return null;
+                    // 同一 sourceKey の行が他にある場合は All を選択不可にする（All共存禁止）
+                    const hasSameSourceSibling =
+                      !!remap.sourceKey &&
+                      (remapSourceKeyCounts.get(remapSourceMatchKey(remap.sourceKey)) ?? 0) > 1;
                     return (
                       <RemapRow
                         key={remap.id || `new-${index}`}
@@ -2132,6 +2216,8 @@ export default function KeybindingsPage() {
                         keyboardLayout={playerConfig?.keyboardLayout ?? null}
                         onUpdate={updateRemap}
                         onDelete={deleteRemap}
+                        showRemapType
+                        disabledRemapTypes={hasSameSourceSibling ? ["all"] : undefined}
                       />
                     );
                   })}
@@ -2400,17 +2486,25 @@ export default function KeybindingsPage() {
 
               {modalSelectedKeyRemaps.length > 0 ? (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {modalSelectedKeyRemaps.map((remap) => (
-                    <DialogRemapRow
-                      key={remap.id || `new-${remap._index}`}
-                      remap={remap}
-                      index={remap._index}
-                      baseKeyCode={editingKeyCode}
-                      keyboardLayout={playerConfig?.keyboardLayout ?? null}
-                      onUpdate={modalUpdateRemap}
-                      onDelete={modalDeleteRemap}
-                    />
-                  ))}
+                  {modalSelectedKeyRemaps.map((remap) => {
+                    // 同一 sourceKey の行が他にある場合は All を選択不可にする（リマップ全体で判定）
+                    const hasSameSourceSibling =
+                      !!remap.sourceKey &&
+                      (modalRemapSourceKeyCounts.get(remapSourceMatchKey(remap.sourceKey)) ?? 0) > 1;
+                    return (
+                      <DialogRemapRow
+                        key={remap.id || `new-${remap._index}`}
+                        remap={remap}
+                        index={remap._index}
+                        baseKeyCode={editingKeyCode}
+                        keyboardLayout={playerConfig?.keyboardLayout ?? null}
+                        onUpdate={modalUpdateRemap}
+                        onDelete={modalDeleteRemap}
+                        showRemapType
+                        disabledRemapTypes={hasSameSourceSibling ? ["all"] : undefined}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">

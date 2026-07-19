@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { PresetRemapData, PresetSearchCraftData } from "./preset-utils";
-import { toUiRemaps, type UiRemapInfo } from "./remap-utils";
+import { normalizeKeyRemapType, toUiRemaps, type UiRemapInfo } from "./remap-utils";
 import { t } from "./messages";
 
 /**
@@ -91,7 +91,9 @@ export function parseTemplateRemapData(remapsData: string | null): PresetRemapDa
   try {
     const raw = JSON.parse(remapsData) as PresetRemapData[];
     if (!Array.isArray(raw)) return [];
-    return raw.filter((r) => typeof r?.sourceKey === "string");
+    return raw
+      .filter((r) => typeof r?.sourceKey === "string")
+      .map((r) => ({ ...r, remapType: normalizeKeyRemapType(r.remapType) }));
   } catch {
     return [];
   }
@@ -111,6 +113,7 @@ export function parseTemplateRemaps(remapsData: string | null): UiRemapInfo[] {
           : r.targetKey,
       software: r.software ?? null,
       notes: r.notes ?? null,
+      remapType: r.remapType,
     })),
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { isKeyRemapTarget } from "@/lib/remap-utils";
+import { isKeyRemapTarget, KEY_REMAP_TYPES, type KeyRemapType } from "@/lib/remap-utils";
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,51 +22,81 @@ import { t } from "@/lib/messages";
  * 変更先: 「キー」（単一キーキャプチャ）/「文字」（テキスト入力）/「無効」の3タイプ。
  */
 
-export type RemapType = "none" | "keyboard" | "special" | "disabled";
+// 変更先の出力タイプ（種別 KeyRemapType とは別概念）
+export type RemapOutputType = "none" | "keyboard" | "special" | "disabled";
 
 /** リマップ行が編集に必要とする最小のエントリ形状 */
 export type RemapRowEntry = {
   sourceKey: string;
   targetKey: string | null;
+  remapType?: KeyRemapType;
 };
 
-function getRemapTypeFromTargetKey(targetKey: string | null | undefined): RemapType {
+function getRemapOutputTypeFromTargetKey(targetKey: string | null | undefined): RemapOutputType {
   if (targetKey == null || targetKey === "") return "disabled";
   return isKeyRemapTarget(targetKey) ? "keyboard" : "special";
 }
 
-export function useRemapType(
+export function useRemapOutputType(
   targetKey: string | null,
   index: number,
   onUpdate: (index: number, updates: Partial<RemapRowEntry>) => void,
 ) {
-  const remapType = getRemapTypeFromTargetKey(targetKey);
-  const [selectedRemapType, setSelectedRemapType] = useState<RemapType>(remapType);
+  const outputType = getRemapOutputTypeFromTargetKey(targetKey);
+  const [selectedOutputType, setSelectedOutputType] = useState<RemapOutputType>(outputType);
 
   useEffect(() => {
-    if ((selectedRemapType === "special" || selectedRemapType === "keyboard") &&
+    if ((selectedOutputType === "special" || selectedOutputType === "keyboard") &&
         (targetKey === "" || targetKey === null)) {
       return;
     }
-    setSelectedRemapType(remapType);
-  }, [remapType, selectedRemapType, targetKey]);
+    setSelectedOutputType(outputType);
+  }, [outputType, selectedOutputType, targetKey]);
 
-  const handleRemapTypeChange = useCallback((newType: RemapType) => {
-    setSelectedRemapType(newType);
+  const handleOutputTypeChange = useCallback((newType: RemapOutputType) => {
+    setSelectedOutputType(newType);
     switch (newType) {
       case "disabled":
         onUpdate(index, { targetKey: null });
         break;
       case "special":
-        onUpdate(index, { targetKey: remapType === "special" ? targetKey : "" });
+        onUpdate(index, { targetKey: outputType === "special" ? targetKey : "" });
         break;
       case "keyboard":
-        onUpdate(index, { targetKey: remapType === "keyboard" && targetKey ? targetKey : "" });
+        onUpdate(index, { targetKey: outputType === "keyboard" && targetKey ? targetKey : "" });
         break;
     }
-  }, [index, onUpdate, remapType, targetKey]);
+  }, [index, onUpdate, outputType, targetKey]);
 
-  return { remapType, selectedRemapType, handleRemapTypeChange };
+  return { outputType, selectedOutputType, handleOutputTypeChange };
+}
+
+/** リマップ種別（未設定/All/Trigger/Chat）の選択Select */
+function RemapTypeSelect({
+  value,
+  onChange,
+  heightClass = "h-9",
+  disabledTypes,
+}: {
+  value: KeyRemapType;
+  onChange: (value: KeyRemapType) => void;
+  heightClass?: "h-9" | "h-8";
+  disabledTypes?: KeyRemapType[];
+}) {
+  return (
+    <Select value={value} onValueChange={(v: KeyRemapType) => onChange(v)}>
+      <SelectTrigger className={cn("w-28 text-sm", heightClass)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {KEY_REMAP_TYPES.map((type) => (
+          <SelectItem key={type} value={type} disabled={disabledTypes?.includes(type)}>
+            {t(`remapType.${type}`)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function RemapRow({
@@ -74,14 +105,18 @@ export function RemapRow({
   keyboardLayout,
   onUpdate,
   onDelete,
+  showRemapType = false,
+  disabledRemapTypes,
 }: {
   remap: RemapRowEntry;
   index: number;
   keyboardLayout: string | null;
   onUpdate: (index: number, updates: Partial<RemapRowEntry>) => void;
   onDelete: (index: number) => void;
+  showRemapType?: boolean;
+  disabledRemapTypes?: KeyRemapType[];
 }) {
-  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
+  const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
@@ -99,8 +134,8 @@ export function RemapRow({
         <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
 
         <Select
-          value={selectedRemapType}
-          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
+          value={selectedOutputType}
+          onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
           <SelectTrigger className="w-24 h-9 text-sm">
             <SelectValue />
@@ -112,14 +147,14 @@ export function RemapRow({
           </SelectContent>
         </Select>
 
-        {selectedRemapType === "special" ? (
+        {selectedOutputType === "special" ? (
           <Input
             value={remap.targetKey ?? ""}
             onChange={(e) => onUpdate(index, { targetKey: e.target.value })}
             placeholder={t("meKeybindings.enterCharacter")}
             className="w-40 h-9 font-mono text-center text-sm"
           />
-        ) : selectedRemapType === "keyboard" ? (
+        ) : selectedOutputType === "keyboard" ? (
           <KeyCaptureButton
             value={remap.targetKey || ""}
             placeholder={t("meKeybindings.target")}
@@ -129,6 +164,14 @@ export function RemapRow({
             className="w-40"
           />
         ) : null}
+
+        {showRemapType && (
+          <RemapTypeSelect
+            value={remap.remapType ?? "unset"}
+            onChange={(value) => onUpdate(index, { remapType: value })}
+            disabledTypes={disabledRemapTypes}
+          />
+        )}
 
         <Button
           type="button"
@@ -157,6 +200,8 @@ export function DialogRemapRow({
   keyboardLayout,
   onUpdate,
   onDelete,
+  showRemapType = false,
+  disabledRemapTypes,
 }: {
   remap: RemapRowEntry;
   index: number;
@@ -164,6 +209,8 @@ export function DialogRemapRow({
   keyboardLayout: string | null;
   onUpdate: (index: number, updates: Partial<RemapRowEntry>) => void;
   onDelete: (index: number) => void;
+  showRemapType?: boolean;
+  disabledRemapTypes?: KeyRemapType[];
 }) {
   // 現在のsourceKeyから修飾キーを抽出
   const parsed = parseKeyCombination(remap.sourceKey);
@@ -183,7 +230,7 @@ export function DialogRemapRow({
     onUpdate(index, { sourceKey: newSourceKey });
   };
 
-  const { selectedRemapType, handleRemapTypeChange } = useRemapType(remap.targetKey, index, onUpdate);
+  const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
@@ -225,8 +272,8 @@ export function DialogRemapRow({
 
         {/* 出力タイプ選択 */}
         <Select
-          value={selectedRemapType}
-          onValueChange={(value: RemapType) => handleRemapTypeChange(value)}
+          value={selectedOutputType}
+          onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
           <SelectTrigger className="w-24 h-8 text-sm">
             <SelectValue />
@@ -238,7 +285,7 @@ export function DialogRemapRow({
           </SelectContent>
         </Select>
 
-        {selectedRemapType === "special" ? (
+        {selectedOutputType === "special" ? (
           <Input
             value={remap.targetKey ?? ""}
             onChange={(e) => {
@@ -247,7 +294,7 @@ export function DialogRemapRow({
             placeholder={t("meKeybindings.enterCharacter")}
             className="w-40 h-8 font-mono text-center text-sm"
           />
-        ) : selectedRemapType === "keyboard" ? (
+        ) : selectedOutputType === "keyboard" ? (
           <KeyCaptureButton
             value={remap.targetKey || ""}
             placeholder={t("meKeybindings.target")}
@@ -258,6 +305,19 @@ export function DialogRemapRow({
           />
         ) : null}
       </div>
+
+      {/* 種別選択行 */}
+      {showRemapType && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground shrink-0">{t("remapType.label")}</span>
+          <RemapTypeSelect
+            value={remap.remapType ?? "unset"}
+            onChange={(value) => onUpdate(index, { remapType: value })}
+            heightClass="h-8"
+            disabledTypes={disabledRemapTypes}
+          />
+        </div>
+      )}
     </div>
   );
 }

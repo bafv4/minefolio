@@ -127,6 +127,13 @@
       "when": 1784118965582,
       "tag": "0017_odd_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1784384471654,
+      "tag": "0018_loud_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

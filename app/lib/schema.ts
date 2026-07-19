@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
+import { KEY_REMAP_TYPES } from "./remap-utils";
 
 // ============================================
 // 1. users（ユーザー）
@@ -169,8 +170,13 @@ export const keyRemaps = sqliteTable("key_remaps", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+
+  // リマップ種別: unset(未設定)/all/trigger(ゲーム入力)/chat(チャット・サーチクラフト)。
+  // SQLite のユニークインデックスは NULL を別値扱いするため NOT NULL 必須。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  remapType: text("remap_type", { enum: KEY_REMAP_TYPES }).notNull().default("unset"),
 }, (table) => [
-  uniqueIndex("idx_key_remaps_user_source").on(table.userId, table.sourceKey),
+  uniqueIndex("idx_key_remaps_user_source_type").on(table.userId, table.sourceKey, table.remapType),
 ]);
 
 // ============================================

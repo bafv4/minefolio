@@ -6,11 +6,22 @@ import {
   MODIFIER_LABELS,
 } from "./keybindings";
 
+// リマップ種別: unset(未設定)/all/trigger(ゲーム入力)/chat(チャット・サーチクラフト)。
+// unset と all は全用途で有効（all はユーザーが明示的に選ぶ値）
+export const KEY_REMAP_TYPES = ["unset", "all", "trigger", "chat"] as const;
+export type KeyRemapType = (typeof KEY_REMAP_TYPES)[number];
+
+/** 不明・欠落値（旧スナップショット等）は "unset" に正規化する */
+export function normalizeKeyRemapType(value: unknown): KeyRemapType {
+  return KEY_REMAP_TYPES.includes(value as KeyRemapType) ? (value as KeyRemapType) : "unset";
+}
+
 export type RemapInfo = {
   sourceKey: string;
   targetKey: string | null;
   software?: string | null;
   notes?: string | null;
+  remapType?: KeyRemapType | null;
 };
 
 export type UiRemapInfo = {
@@ -18,6 +29,7 @@ export type UiRemapInfo = {
   targetKey: string | null;
   software: string | null;
   notes: string | null;
+  remapType: KeyRemapType;
 };
 
 export type PersistedRemapPayload = {
@@ -53,11 +65,103 @@ export function toUiRemap(remap: RemapInfo): UiRemapInfo {
     targetKey,
     software: remap.software ?? null,
     notes: remap.notes ?? null,
+    remapType: normalizeKeyRemapType(remap.remapType),
   };
 }
 
 export function toUiRemaps(remaps: RemapInfo[]): UiRemapInfo[] {
   return remaps.map(toUiRemap);
+}
+
+export type RemapContext = "chat" | "trigger";
+
+/**
+ * sourceKey の照合キー。大文字レガシー表記（旧データ）を同一視する。
+ * 「同じ変更元キーか」の判定はすべてこの関数を通すこと（フィルタ・保存時検証・適用時マージで共通）。
+ */
+export function remapSourceMatchKey(sourceKey: string): string {
+  return normalizeKeyCombination(sourceKey).toUpperCase();
+}
+
+/** 文脈内の優先度: 文脈一致=2 > all=1 > unset=0。文脈外は null（除外） */
+function remapTypePriority(type: KeyRemapType, context: RemapContext): number | null {
+  if (type === context) return 2;
+  if (type === "all") return 1;
+  if (type === "unset") return 0;
+  return null;
+}
+
+/**
+ * 文脈（chat/trigger）に該当するリマップのみに絞り、同一 sourceKey は
+ * 優先度（文脈一致 > all > unset、同順位は先勝ち）で1行に解決する。
+ * 出力順は入力の初出順を維持し、冪等。
+ */
+export function filterRemapsForContext<T extends { sourceKey: string; remapType?: string | null }>(
+  remaps: readonly T[],
+  context: RemapContext,
+): T[] {
+  const bySource = new Map<string, { remap: T; priority: number }>();
+  const order: string[] = [];
+  for (const remap of remaps) {
+    const priority = remapTypePriority(normalizeKeyRemapType(remap.remapType), context);
+    if (priority === null) continue;
+    const key = remapSourceMatchKey(remap.sourceKey);
+    const existing = bySource.get(key);
+    if (!existing) {
+      bySource.set(key, { remap, priority });
+      order.push(key);
+    } else if (priority > existing.priority) {
+      bySource.set(key, { remap, priority });
+    }
+  }
+  return order.map((key) => bySource.get(key)!.remap);
+}
+
+export function filterRemapsForChat<T extends { sourceKey: string; remapType?: string | null }>(
+  remaps: readonly T[],
+): T[] {
+  return filterRemapsForContext(remaps, "chat");
+}
+
+export function filterRemapsForTrigger<T extends { sourceKey: string; remapType?: string | null }>(
+  remaps: readonly T[],
+): T[] {
+  return filterRemapsForContext(remaps, "trigger");
+}
+
+export type RemapConflict = {
+  kind: "duplicate" | "allConflict";
+  sourceKey: string;
+  remapType: KeyRemapType;
+};
+
+/**
+ * 保存前バリデーション（サーバー/クライアント共用）。最初の違反を返す:
+ * - "duplicate": 同一 (sourceKey, remapType) の完全重複
+ * - "allConflict": 同一 sourceKey で all 行と他の行（種別問わず）の共存
+ * sourceKey は正規化＋大文字化で照合（修飾キーの有無は別キー扱い）。
+ */
+export function findRemapConflict(
+  remaps: readonly { sourceKey: string; remapType?: string | null }[],
+): RemapConflict | null {
+  const seen = new Map<string, Set<KeyRemapType>>();
+  for (const remap of remaps) {
+    const key = remapSourceMatchKey(remap.sourceKey);
+    const type = normalizeKeyRemapType(remap.remapType);
+    const types = seen.get(key);
+    if (!types) {
+      seen.set(key, new Set([type]));
+      continue;
+    }
+    if (types.has(type)) {
+      return { kind: "duplicate", sourceKey: remap.sourceKey, remapType: type };
+    }
+    if (type === "all" || types.has("all")) {
+      return { kind: "allConflict", sourceKey: remap.sourceKey, remapType: type };
+    }
+    types.add(type);
+  }
+  return null;
 }
 
 export function toPersistedRemapPayload(remap: RemapInfo): PersistedRemapPayload {
@@ -280,11 +384,17 @@ function buildShiftHeldReverseMap(remaps: RemapInfo[]): Map<string, { sourceKey:
   return map;
 }
 
+/**
+ * サーチ文字列の各文字から「実際に押すキー」を逆引きする（chat 文脈専用）。
+ * trigger 種別のリマップは内部で除外され、同一 sourceKey の複数行は
+ * chat > all > unset の優先度で1行に解決される（filterRemapsForChat）。
+ */
 export function getActualKeyInfos(
   searchStr: string,
   remaps: RemapInfo[],
   options?: ActualKeyOptions,
 ): ActualKeyInfo[] {
+  const chatRemaps = filterRemapsForChat(remaps);
   const shiftHeld = options?.shiftHeld ?? false;
   const reverseRemapMap = new Map<string, { sourceKey: string }>();
 
@@ -306,21 +416,21 @@ export function getActualKeyInfos(
   // shiftHeld 時は通常マップを使わない: Shift 押下中、通常マップのソースキーは
   // 別の文字を出力する（完全一致リマップの発動・シフト文字化）ため、参照すると必ず誤る
   if (!shiftHeld) {
-    for (const remap of remaps) {
+    for (const remap of chatRemaps) {
       if (remap.sourceKey.includes("+")) registerReverse(remap);
     }
-    for (const remap of remaps) {
+    for (const remap of chatRemaps) {
       if (!remap.sourceKey.includes("+")) registerReverse(remap);
     }
   }
 
-  const shiftHeldMap = shiftHeld ? buildShiftHeldReverseMap(remaps) : null;
+  const shiftHeldMap = shiftHeld ? buildShiftHeldReverseMap(chatRemaps) : null;
 
   // Shift 押下中の出力がリマップに奪われている基底キー（単一キーソース or Shift+同キーソース）。
   // これらのキーはシフト後文字の逆引き先（REVERSE_SHIFT_CHAR_MAP）として使えない
   const shiftOverriddenBases = new Set<string>();
   if (shiftHeld) {
-    for (const remap of remaps) {
+    for (const remap of chatRemaps) {
       if (!remap.sourceKey.includes("+")) {
         shiftOverriddenBases.add(normalizeKeyCode(remap.sourceKey));
       } else if (isShiftOnlyCombo(remap.sourceKey)) {
@@ -433,11 +543,14 @@ export type SimulatedKeyOutput = {
 };
 
 /**
- * 物理キー入力（修飾キー組み合わせ）にリマップを順方向に適用し、出力文字を求める。
+ * 物理キー入力（修飾キー組み合わせ）にリマップを順方向に適用し、出力文字を求める（chat 文脈専用）。
+ * trigger 種別のリマップは内部で除外され、同一 sourceKey の複数行は
+ * chat > all > unset の優先度で1行に解決される（filterRemapsForChat）。
  * getActualKeyInfos()（文字→押すキーの逆引き）の対になる簡易シミュレーション。
  * 完全一致（修飾キー込み）→ 基底キー一致（Shift は大文字化として扱う）の順で解決する。
  */
 export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): SimulatedKeyOutput {
+  const chatRemaps = filterRemapsForChat(remaps);
   const normalized = normalizeKeyCombination(combo);
   const parsed = parseKeyCombination(normalized);
   const modifierMarks = parsed.modifiers.map(modifierToMark).join("");
@@ -463,7 +576,7 @@ export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): Simulat
     targetKey === null || isSpecialRemapTarget(targetKey) ? null : normalizeKeyCode(targetKey);
 
   // 完全一致（修飾キー込み・修飾キー単独も含む）
-  const exact = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalized);
+  const exact = chatRemaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalized);
   if (exact) {
     return {
       pressedLabel,
@@ -476,7 +589,7 @@ export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): Simulat
   // 基底キーのみ一致（Shift のみの組み合わせはシフト後の文字として扱う）
   const onlyShift = parsed.modifiers.length > 0 && parsed.modifiers.every((m) => m === "Shift");
   if (parsed.modifiers.length === 0 || onlyShift) {
-    const base = remaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalizeKeyCode(parsed.keyCode));
+    const base = chatRemaps.find((r) => normalizeKeyCombination(r.sourceKey) === normalizeKeyCode(parsed.keyCode));
     if (base) {
       return {
         pressedLabel,

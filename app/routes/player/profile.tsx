@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -33,9 +33,11 @@ import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { toUiRemaps, filterRemapsForContext, normalizeKeyRemapType, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
 import type { PresetSearchCraftData } from "@/lib/preset-utils";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
+import { RemapTypeBadge } from "@/components/remap-type-badge";
+import { RemapViewToggle } from "@/components/remap-view-toggle";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -347,6 +349,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           targetKey: string | null;
           software: string | null;
           notes: string | null;
+          outputMode?: "key" | "character" | null;
+          outputCharacter?: string | null;
+          remapType?: string | null;
         }>;
         displayKeyRemaps = presetRemaps.map((r, idx) => ({
           id: `preset-remap-${idx}`,
@@ -355,10 +360,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           targetKey: r.targetKey,
           software: r.software,
           notes: r.notes,
-          outputMode: null,
-          outputCharacter: null,
+          outputMode: r.outputMode ?? "key",
+          outputCharacter: r.outputCharacter ?? null,
           createdAt: new Date(),
           updatedAt: new Date(),
+          remapType: normalizeKeyRemapType(r.remapType),
         }));
       }
 
@@ -635,8 +641,23 @@ export default function PlayerProfilePage() {
     }
   })();
 
-  // リマップを表示用形式に変換（disabled/characterの扱いを統一）
-  const remapsForKeyboard = toUiRemaps(player.keyRemaps);
+  // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
+  // （all/unset のみなら両文脈で表示が同一のため "trigger" 固定でよい）
+  const [remapView, setRemapView] = useState<RemapContext>("trigger");
+  // 別プレイヤーへ遷移してもルートコンポーネントは再利用されるため、表示を Trigger に戻す
+  useEffect(() => {
+    setRemapView("trigger");
+  }, [player.id]);
+  const hasTypedRemaps = useMemo(
+    () => player.keyRemaps.some((r) => r.remapType === "trigger" || r.remapType === "chat"),
+    [player.keyRemaps],
+  );
+
+  // リマップを表示文脈で絞り込み、表示用形式に変換（disabled/characterの扱いを統一）
+  const remapsForKeyboard = useMemo(
+    () => toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
+    [player.keyRemaps, remapView],
+  );
 
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -1098,6 +1119,10 @@ export default function PlayerProfilePage() {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
                     <div className="flex flex-wrap items-center gap-3">
+                      {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
+                      {hasTypedRemaps && (
+                        <RemapViewToggle value={remapView} onChange={setRemapView} />
+                      )}
                       <FingerLegend />
                       <KeyboardExportDialog
                         layout={keyboardLayout}
@@ -1293,7 +1318,10 @@ export default function PlayerProfilePage() {
                               key={remap.id}
                               className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5"
                             >
-                              {renderChipGroup(sourceChips, "start")}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <RemapTypeBadge remapType={remap.remapType} />
+                                {renderChipGroup(sourceChips, "start")}
+                              </div>
                               <span className="text-muted-foreground text-sm">→</span>
                               {renderChipGroup(targetChips, "end")}
                             </div>

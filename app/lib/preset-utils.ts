@@ -22,6 +22,7 @@ import type {
   CustomKey,
   CustomAction,
 } from "./schema";
+import type { KeyRemapType } from "./remap-utils";
 
 /**
  * プリセットに保存するキーバインドデータの型
@@ -67,6 +68,8 @@ export interface PresetRemapData {
   notes: string | null;
   outputMode?: "key" | "character" | null;
   outputCharacter?: string | null;
+  /** リマップ種別（古いスナップショットには存在しない → unset扱いで読む） */
+  remapType?: KeyRemapType | null;
 }
 
 /**
@@ -186,6 +189,7 @@ export function serializeRemaps(remaps: KeyRemap[]): string {
     notes: r.notes,
     outputMode: r.outputMode,
     outputCharacter: r.outputCharacter,
+    remapType: r.remapType,
   }));
   return JSON.stringify(data);
 }

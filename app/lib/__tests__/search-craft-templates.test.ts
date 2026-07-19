@@ -124,7 +124,10 @@ describe("serializeTemplateCrafts / serializeTemplateRemaps（Playground保存�
   it("serializeTemplateRemaps → parseTemplateRemaps で内容が往復する（key出力）", () => {
     const remaps = [{ sourceKey: "Semicolon", targetKey: "KeyE", software: null, notes: null }];
     const roundTripped = parseTemplateRemaps(serializeTemplateRemaps(remaps));
-    expect(roundTripped).toEqual([{ sourceKey: "Semicolon", targetKey: "KeyE", software: null, notes: null }]);
+    // remapType はテンプレートに保存されないため unset に正規化される
+    expect(roundTripped).toEqual([
+      { sourceKey: "Semicolon", targetKey: "KeyE", software: null, notes: null, remapType: "unset" },
+    ]);
   });
 
   it("serializeTemplateRemaps は無効化（targetKey: null）を保持する", () => {

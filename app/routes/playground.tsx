@@ -13,7 +13,7 @@ import {
 } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { type UiRemapInfo } from "@/lib/remap-utils";
+import { filterRemapsForChat, type UiRemapInfo } from "@/lib/remap-utils";
 import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
 import {
   applyCraftsToExistingPreset,
@@ -133,18 +133,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (me) {
       myKeyboardLayout = me.playerConfig?.keyboardLayout ?? null;
 
+      // ワークベンチは chat 用途のため、trigger 専用リマップは取り込まない
       if (me.configPresets.length > 0) {
         myPresets = me.configPresets.map((p) => ({
           id: p.id,
           name: p.name,
           isActive: p.isActive,
           crafts: parseTemplateCrafts(p.searchCraftsData),
-          remaps: parseTemplateRemaps(p.remapsData),
+          remaps: filterRemapsForChat(parseTemplateRemaps(p.remapsData)),
         }));
       } else {
         // プリセット未作成ユーザー向けフォールバック：ライブテーブルの内容をそのまま選択肢にする
         const crafts = parseTemplateCrafts(serializeSearchCrafts(me.searchCrafts));
-        const remaps = parseTemplateRemaps(serializeRemaps(me.keyRemaps));
+        const remaps = filterRemapsForChat(parseTemplateRemaps(serializeRemaps(me.keyRemaps)));
         if (crafts.length > 0 || remaps.length > 0) {
           myPresets = [
             { id: LIVE_PRESET_ID, name: t("playground.currentSettingsLabel"), isActive: true, crafts, remaps },

@@ -8,6 +8,7 @@ import { users, configPresets, configHistory, keybindings, playerConfigs, keyRem
 import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | 
   if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
   return targetKey;
 }
+
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -242,6 +244,7 @@ export async function action({ request }: Route.ActionArgs) {
               notes: remap.notes,
               outputMode: remap.outputMode ?? "key",
               outputCharacter: remap.outputCharacter ?? null,
+              remapType: normalizeKeyRemapType(remap.remapType),
               createdAt: now,
               updatedAt: now,
             });
@@ -374,6 +377,7 @@ export async function action({ request }: Route.ActionArgs) {
             notes: remap.notes,
             outputMode: remap.outputMode ?? "key",
             outputCharacter: remap.outputCharacter ?? null,
+            remapType: remap.remapType,
             createdAt: now,
             updatedAt: now,
           });
@@ -658,6 +662,7 @@ export async function action({ request }: Route.ActionArgs) {
             notes: remapData.notes,
             outputMode: remapData.outputMode ?? "key",
             outputCharacter: remapData.outputCharacter ?? null,
+            remapType: normalizeKeyRemapType(remapData.remapType),
             createdAt: now,
             updatedAt: now,
           });
