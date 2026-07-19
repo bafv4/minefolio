@@ -20,5 +20,14 @@ export function getEnv(): Env {
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     VERCEL_WEBHOOK_SECRET: process.env.VERCEL_WEBHOOK_SECRET,
     DISCORD_RELEASE_WEBHOOK_URL: process.env.DISCORD_RELEASE_WEBHOOK_URL,
+    DEV_AUTH: process.env.DEV_AUTH,
   };
+}
+
+/**
+ * ローカル開発専用の簡易ログイン（/dev/login）が有効かどうか。
+ * 本番混入を防ぐため二重ゲート: NODE_ENV が production では DEV_AUTH の値に関わらず常に無効。
+ */
+export function isDevAuthEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.DEV_AUTH === "1";
 }

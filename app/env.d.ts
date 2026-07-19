@@ -20,5 +20,7 @@ export interface Env {
   // Release notification (Vercel Webhook → Discord)
   VERCEL_WEBHOOK_SECRET?: string;
   DISCORD_RELEASE_WEBHOOK_URL?: string;
+  // ローカル開発専用: "1" で /dev/login の簡易ログインを有効化（本番では NODE_ENV ガードにより常に無効）
+  DEV_AUTH?: string;
 }
 

@@ -89,7 +89,7 @@ const SECTIONS: SectionDef[] = [
     label: "キーリマップ",
     icon: ArrowLeftRight,
     description: "外部ソフトウェア等で行うキーリマップ設定（ソースキー → ターゲットキー）。",
-    columns: ["ソースキー", "ターゲットキー", "出力モード", "ソフトウェア", "メモ"],
+    columns: ["ソースキー", "ターゲットキー", "出力モード", "ソフトウェア", "メモ", "種別"],
   },
   {
     id: "custom-actions",

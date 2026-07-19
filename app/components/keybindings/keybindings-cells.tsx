@@ -15,6 +15,7 @@ import {
 import {
   getRemapSourceLabel,
   getRemapOutputLabel,
+  type KeyRemapType,
 } from "@/lib/remap-utils";
 import {
   calculateCm360,
@@ -231,6 +232,7 @@ export type RemapItem = {
   targetKey: string | null;
   software?: string | null;
   notes?: string | null;
+  remapType?: KeyRemapType | null;
 };
 
 export function RemapCell({

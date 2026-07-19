@@ -1,7 +1,7 @@
 // /keybindings の「ビジュアル」カードビュー（view=grid）。
 // 各ランナーをカードで一覧し、読み取り専用のコンパクトな VirtualKeyboard で
 // キー配置を視覚的にスキャンできるようにする。発見・参考用途が主目的。
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, WandSparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,8 @@ import {
   keybindingsToMap,
   type FingerAssignment,
 } from "@/components/virtual-keyboard";
-import { toUiRemaps } from "@/lib/remap-utils";
+import { RemapViewToggle } from "@/components/remap-view-toggle";
+import { filterRemapsForContext, toUiRemaps, type RemapContext } from "@/lib/remap-utils";
 import {
   DpiCell,
   SensitivityCell,
@@ -32,6 +33,17 @@ function parseFingers(json: string | null | undefined): FingerAssignment {
 }
 
 export function CardView({ players }: { players: KeybindingsRow[] }) {
+  // Trigger/Chat 表示切替は全カード共通（プロフィールページと同じセグメント）。
+  // 種別付き（trigger/chat）リマップを持つプレイヤーが1人もいなければ両表示が同一のため出さない
+  const [remapView, setRemapView] = useState<RemapContext>("trigger");
+  const hasTypedRemaps = useMemo(
+    () =>
+      players.some((p) =>
+        p.keyRemaps.some((r) => r.remapType === "trigger" || r.remapType === "chat"),
+      ),
+    [players],
+  );
+
   if (players.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground rounded-lg border bg-card">
@@ -44,8 +56,13 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
   // カードは 1 カラムで縦に積む（プロフィール画面と同じ表示方針）。
   return (
     <div className="flex flex-col gap-4">
+      {hasTypedRemaps && (
+        <div className="flex justify-end">
+          <RemapViewToggle value={remapView} onChange={setRemapView} />
+        </div>
+      )}
       {players.map((player) => (
-        <RunnerKeyboardCard key={player.id} player={player} />
+        <RunnerKeyboardCard key={player.id} player={player} remapView={remapView} />
       ))}
     </div>
   );
@@ -54,8 +71,10 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
 // メモ化 + content-visibility:auto で、多人数時に画面外カードの描画コストを抑える。
 const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   player,
+  remapView,
 }: {
   player: KeybindingsRow;
+  remapView: RemapContext;
 }) {
   const layout = (player.playerConfig?.keyboardLayout || "US") as
     | "US"
@@ -68,7 +87,8 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
     useMemo(
       () => ({
         fingerAssignments: parseFingers(player.playerConfig?.fingerAssignments),
-        remaps: toUiRemaps(player.keyRemaps),
+        // 一覧カードのキーボードは選択中の表示文脈（Trigger/Chat）のリマップに絞る
+        remaps: toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
         keybindingsMap: keybindingsToMap(player.keybindings),
         customKeyboardKeys: (player.customKeys ?? [])
           .filter((ck) => ck.category === "keyboard")
@@ -79,7 +99,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
           category: ck.category as "mouse" | "keyboard",
         })),
       }),
-      [player.playerConfig?.fingerAssignments, player.keyRemaps, player.keybindings, player.customKeys],
+      [player.playerConfig?.fingerAssignments, player.keyRemaps, player.keybindings, player.customKeys, remapView],
     );
 
   const remapCount = player.keyRemaps.length;

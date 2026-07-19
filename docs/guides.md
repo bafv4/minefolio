@@ -26,6 +26,7 @@
 | viewCount | integer | 閲覧数 |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時（保存=公開版更新時のみ） |
+| isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭・拡大表示）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
 
 #### 保存モデル（仮保存 / 保存）
 
@@ -77,7 +78,7 @@
 
 #### HTML 互換性
 
-- 本文は `editor.getHTML()` の HTML 文字列として保存され、表示側 `routes/guides/view.tsx` が同じ HTML を `sanitize-html` で描画する。
+- 本文は `editor.getHTML()` の HTML 文字列として保存され、表示側 `routes/guides/view.tsx` が同じ HTML を `xss` でサニタイズして描画する。
 - 拡張の `parseHTML`/`renderHTML` は旧実装からバイト等価で移植。`extensions/__tests__/round-trip.test.ts` が parse→render の不動点性（既存ガイドを無編集再保存しても差分ゼロ）を担保する。
 
 ### 対応フォーマット
@@ -131,12 +132,14 @@
 
 ### HTMLサニタイゼーション
 
-`sanitize-html` ライブラリを使用してHTMLをサニタイズ。
+`xss` ライブラリ（+ `cssfilter`）を使用してサーバーサイドでHTMLをサニタイズ。
+設定は `app/lib/guide-sanitize.server.ts` に集約されている。
 
 - **許可タグ**: 必要最小限のHTMLタグのみ許可
-- **許可属性**: 各タグに対して安全な属性のみ許可
-- **許可スタイル**: インラインスタイルは制限付きで許可
+- **許可属性**: 各タグに対して安全な属性のみ許可（`class` は全タグ共通で許可）
+- **許可スタイル**: インラインスタイルは許可プロパティ（color / background-color / text-align / min-width / width）のみ通す
 - **colgroup/colタグ**: テーブルの列幅指定用に許可
+- **iframe**: YouTube 埋め込みホスト（www.youtube.com / www.youtube-nocookie.com）のみ src を許可
 
 ### スタイリング
 

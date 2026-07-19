@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { simulateRemapOutput, getActualKeyInfos, type RemapInfo } from "../remap-utils";
+import {
+  simulateRemapOutput,
+  getActualKeyInfos,
+  filterRemapsForChat,
+  filterRemapsForTrigger,
+  findRemapConflict,
+  type RemapInfo,
+} from "../remap-utils";
 
 const REMAPS: RemapInfo[] = [
   // 単一キーのリマップ
@@ -311,5 +318,216 @@ describe("simulateRemapOutput と getActualKeyInfos の整合性", () => {
       .map((info) => simulateRemapOutput(info.keyCode, REMAPS).output)
       .join("");
     expect(roundTrip).toBe(searchStr);
+  });
+});
+
+describe("filterRemapsForChat / filterRemapsForTrigger（種別による絞り込み）", () => {
+  const TYPED_REMAPS: RemapInfo[] = [
+    { sourceKey: "KeyE", targetKey: "KeyO", remapType: "trigger" },
+    { sourceKey: "KeyA", targetKey: "KeyB", remapType: "chat" },
+    { sourceKey: "KeyC", targetKey: "KeyD", remapType: "all" },
+    { sourceKey: "KeyF", targetKey: "KeyG", remapType: "unset" },
+  ];
+
+  it("chat 文脈では trigger 種別の行を除外する", () => {
+    const result = filterRemapsForChat(TYPED_REMAPS);
+    expect(result.map((r) => r.sourceKey)).toEqual(["KeyA", "KeyC", "KeyF"]);
+  });
+
+  it("trigger 文脈では chat 種別の行を除外する", () => {
+    const result = filterRemapsForTrigger(TYPED_REMAPS);
+    expect(result.map((r) => r.sourceKey)).toEqual(["KeyE", "KeyC", "KeyF"]);
+  });
+
+  it("同一 sourceKey は 文脈一致 > all > unset の優先度で1行に解決する", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyU", remapType: "unset" },
+      { sourceKey: "KeyE", targetKey: "KeyA", remapType: "all" },
+      { sourceKey: "KeyE", targetKey: "KeyC", remapType: "chat" },
+    ];
+    const chat = filterRemapsForChat(remaps);
+    expect(chat).toHaveLength(1);
+    expect(chat[0].targetKey).toBe("KeyC");
+    // trigger 文脈では chat 行が除外され、all が unset に勝つ
+    const trigger = filterRemapsForTrigger(remaps);
+    expect(trigger).toHaveLength(1);
+    expect(trigger[0].targetKey).toBe("KeyA");
+  });
+
+  it("同順位の行は先勝ち", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyA", remapType: "chat" },
+      { sourceKey: "KeyE", targetKey: "KeyB", remapType: "chat" },
+    ];
+    const result = filterRemapsForChat(remaps);
+    expect(result).toHaveLength(1);
+    expect(result[0].targetKey).toBe("KeyA");
+  });
+
+  it("大文字レガシー表記の sourceKey は同一キーとして統合する", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KEYE", targetKey: "KeyA", remapType: "unset" },
+      { sourceKey: "KeyE", targetKey: "KeyB", remapType: "chat" },
+    ];
+    const result = filterRemapsForChat(remaps);
+    expect(result).toHaveLength(1);
+    expect(result[0].targetKey).toBe("KeyB");
+  });
+
+  it("出力順は入力の初出順を維持する（優先度で置き換わっても位置は初出のまま）", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyA", targetKey: "KeyX", remapType: "unset" },
+      { sourceKey: "KeyB", targetKey: "KeyY", remapType: "chat" },
+      { sourceKey: "KeyA", targetKey: "KeyZ", remapType: "chat" },
+    ];
+    const result = filterRemapsForChat(remaps);
+    expect(result.map((r) => r.sourceKey)).toEqual(["KeyA", "KeyB"]);
+    expect(result[0].targetKey).toBe("KeyZ");
+  });
+
+  it("冪等: 2回適用しても結果が変わらない", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyU" },
+      { sourceKey: "KeyE", targetKey: "KeyC", remapType: "chat" },
+      { sourceKey: "KeyT", targetKey: "KeyX", remapType: "trigger" },
+      { sourceKey: "KeyA", targetKey: "KeyY", remapType: "all" },
+    ];
+    const chatOnce = filterRemapsForChat(remaps);
+    expect(filterRemapsForChat(chatOnce)).toEqual(chatOnce);
+    const triggerOnce = filterRemapsForTrigger(remaps);
+    expect(filterRemapsForTrigger(triggerOnce)).toEqual(triggerOnce);
+  });
+
+  it("remapType 欠落の行（旧データ）は unset として扱う", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyA" },
+      { sourceKey: "KeyE", targetKey: "KeyB", remapType: "chat" },
+      { sourceKey: "KeyF", targetKey: "KeyG" },
+    ];
+    const chat = filterRemapsForChat(remaps);
+    expect(chat.map((r) => r.targetKey)).toEqual(["KeyB", "KeyG"]);
+    // trigger 文脈では chat 行が除外され、欠落行が unset として有効
+    const trigger = filterRemapsForTrigger(remaps);
+    expect(trigger.map((r) => r.targetKey)).toEqual(["KeyA", "KeyG"]);
+  });
+});
+
+describe("getActualKeyInfos の種別フィルタ（chat 文脈）", () => {
+  it("trigger 行は逆引きに使われず、同一 sourceKey の chat 行が優先される", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyO", remapType: "trigger" },
+      { sourceKey: "KeyE", targetKey: "KeyH", remapType: "chat" },
+    ];
+    const infos = getActualKeyInfos("ho", remaps);
+    // "h" は chat 行（E→h）で KeyE に逆引きされる
+    expect(infos[0].keyCode).toBe("KeyE");
+    expect(infos[0].isRemapped).toBe(true);
+    // "o" を出す trigger 行は chat 文脈で無効なので KeyO 直押し
+    expect(infos[1].keyCode).toBe("KeyO");
+    expect(infos[1].isRemapped).toBe(false);
+  });
+
+  it("shiftHeld: trigger 種別の単一キー行が混在してもシフト記号の逆引きを汚染しない", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "Minus", targetKey: "KeyR", remapType: "trigger" },
+      { sourceKey: "KeyA", targetKey: "KeyB", remapType: "chat" },
+    ];
+    // trigger 行は chat 文脈で除外されるため、Minus は非リマップキーとして "_" に解決できる
+    const infos = getActualKeyInfos("_", remaps, { shiftHeld: true });
+    expect(infos[0].keyCode).toBe("Minus");
+    expect(infos[0].isRemapped).toBe(false);
+    expect(infos[0].needsShift).toBe(false);
+  });
+});
+
+describe("simulateRemapOutput の種別フィルタ（chat 文脈）", () => {
+  it("trigger 行が配列先頭にあっても同一 sourceKey の chat 行の出力を選ぶ", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyE", targetKey: "KeyO", remapType: "trigger" },
+      { sourceKey: "KeyE", targetKey: "KeyH", remapType: "chat" },
+    ];
+    const result = simulateRemapOutput("KeyE", remaps);
+    expect(result.output).toBe("h");
+    expect(result.isRemapped).toBe(true);
+  });
+});
+
+describe("findRemapConflict（保存前バリデーション）", () => {
+  it("同一 (sourceKey, 種別) の完全重複を検出する", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE", remapType: "chat" },
+        { sourceKey: "KeyE", remapType: "chat" },
+      ]),
+    ).toEqual({ kind: "duplicate", sourceKey: "KeyE", remapType: "chat" });
+    // remapType 欠落同士も unset の重複として検出する
+    expect(findRemapConflict([{ sourceKey: "KeyA" }, { sourceKey: "KeyA" }])).toEqual({
+      kind: "duplicate",
+      sourceKey: "KeyA",
+      remapType: "unset",
+    });
+  });
+
+  it("all 行と trigger 行の同一キー共存を検出する（両方向）", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE", remapType: "all" },
+        { sourceKey: "KeyE", remapType: "trigger" },
+      ]),
+    ).toEqual({ kind: "allConflict", sourceKey: "KeyE", remapType: "trigger" });
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE", remapType: "trigger" },
+        { sourceKey: "KeyE", remapType: "all" },
+      ]),
+    ).toEqual({ kind: "allConflict", sourceKey: "KeyE", remapType: "all" });
+  });
+
+  it("all 行と unset 行（remapType 欠落含む）の同一キー共存を検出する（両方向）", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE", remapType: "all" },
+        { sourceKey: "KeyE" },
+      ]),
+    ).toEqual({ kind: "allConflict", sourceKey: "KeyE", remapType: "unset" });
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE" },
+        { sourceKey: "KeyE", remapType: "all" },
+      ]),
+    ).toEqual({ kind: "allConflict", sourceKey: "KeyE", remapType: "all" });
+  });
+
+  it("修飾キー付きは別キー扱い（Shift+KeyW と KeyW は非衝突）", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "Shift+KeyW", remapType: "all" },
+        { sourceKey: "KeyW", remapType: "all" },
+      ]),
+    ).toBeNull();
+  });
+
+  it("大文字小文字違いの sourceKey は同一キーとして衝突する", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "KEYE", remapType: "chat" },
+        { sourceKey: "KeyE", remapType: "chat" },
+      ]),
+    ).toEqual({ kind: "duplicate", sourceKey: "KeyE", remapType: "chat" });
+  });
+
+  it("all を含まない異種別の共存は衝突しない", () => {
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE", remapType: "trigger" },
+        { sourceKey: "KeyE", remapType: "chat" },
+      ]),
+    ).toBeNull();
+    expect(
+      findRemapConflict([
+        { sourceKey: "KeyE" },
+        { sourceKey: "KeyE", remapType: "chat" },
+      ]),
+    ).toBeNull();
   });
 });

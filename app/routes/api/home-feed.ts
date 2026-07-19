@@ -9,7 +9,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
-import { getPaceFeedEntries } from "@/lib/paceman-cache";
+import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getFavoritesFromDb } from "@/lib/favorites";
 import { excludeViewersCondition } from "@/lib/users-filter";
@@ -241,11 +241,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     case "recent-paces": {
       const userData = await getUserData();
 
-      // DBキャッシュからペースを取得（新しい順、フィードは最新20件まで）
+      // DBキャッシュからペースを取得（新しい順、フィードは最新12件まで）
       // Enter Nether以外の全Split（Bastion, Fortress, First Portal, 2nd Structure以降）を含む
       // 視聴者ロールのペースは除外（userData.registeredMcidsはviewer除外済み）
       const registeredMcidSet = new Set(userData.registeredMcids);
-      const uniquePaces = await getPaceFeedEntries(registeredMcidSet, { limit: 20 });
+      const uniquePaces = await getPaceFeedEntries(registeredMcidSet, { limit: 12 });
 
       // お気に入りソート用にtime（Unix秒）を追加
       const pacesWithTime = uniquePaces.map((p) => ({
@@ -264,6 +264,26 @@ export async function loader({ request }: Route.LoaderArgs) {
         },
         CDN_CACHE.PACES
       );
+    }
+
+    case "pace-timeline": {
+      // 過去のペースカードのタイムラインモーダル用: 特定ラン（mcid + pacemanRunId）の全スプリットを返す
+      const mcid = url.searchParams.get("mcid");
+      const runIdParam = url.searchParams.get("runId");
+      const runId = runIdParam ? Number.parseInt(runIdParam, 10) : NaN;
+      if (!mcid || !Number.isFinite(runId)) {
+        return Response.json({ error: "mcid and runId are required" }, { status: 400 });
+      }
+
+      const cacheKey = `home-feed:pace-timeline:${mcid.toLowerCase()}:${runId}`;
+      const cached = await getCached<PaceTimelineEntry[]>(cacheKey);
+      if (cached) {
+        return jsonResponse({ timeline: cached }, CDN_CACHE.PACES);
+      }
+
+      const timeline = await getRunTimeline(mcid, runId);
+      await setCached(cacheKey, timeline, CACHE_TTL.PACES);
+      return jsonResponse({ timeline }, CDN_CACHE.PACES);
     }
 
     case "twitch-streams": {

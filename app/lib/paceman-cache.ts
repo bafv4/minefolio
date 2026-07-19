@@ -261,6 +261,37 @@ export interface PaceFeedEntry {
   pacemanRunId: number;
 }
 
+// 1ランの全スプリット（タイムラインモーダル用）
+export interface PaceTimelineEntry {
+  timeline: string;
+  rta: number;
+  igt: number | null;
+}
+
+/**
+ * 特定ラン（pacemanRunId）の全スプリットを進行順で取得する。
+ * mcid も併せて絞り込むことで、他プレイヤーのランと衝突しないようにする
+ * （mcid にインデックスがあるため、この絞り込みでクエリも効率化される）。
+ * Enter Nether を含む、そのランで記録された全スプリットを返す。
+ */
+export async function getRunTimeline(mcid: string, pacemanRunId: number): Promise<PaceTimelineEntry[]> {
+  const db = createDb();
+
+  const paces = await db.query.pacemanPaces.findMany({
+    where: and(
+      sql`lower(${pacemanPaces.mcid}) = ${mcid.toLowerCase()}`,
+      eq(pacemanPaces.pacemanRunId, pacemanRunId)
+    ),
+    columns: {
+      timeline: true,
+      rta: true,
+      igt: true,
+    },
+  });
+
+  return paces.sort((a, b) => (SPLIT_ORDER[a.timeline] ?? 0) - (SPLIT_ORDER[b.timeline] ?? 0));
+}
+
 // フィード用ペース一覧の取得条件
 export interface PaceFeedQuery {
   limit?: number; // 取得件数（未指定で全件）

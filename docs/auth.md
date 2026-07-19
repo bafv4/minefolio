@@ -194,6 +194,22 @@ const { session, user } = await getCurrentUser(request, auth, db);
 
 ---
 
+## ローカル開発の簡易ログイン（/dev/login）
+
+ローカル開発では Discord OAuth を用意しなくても、簡易ログインで認証済みセッションを作れる
+（詳細な手順は `docs/local-development.md`）。
+
+- **有効化条件（二重ゲート）**: `DEV_AUTH=1` かつ `NODE_ENV !== "production"`
+  （`isDevAuthEnabled()` in `app/lib/env.server.ts`）。満たさない場合 `/dev/login` は404、
+  better-auth の `emailAndPassword` も無効のまま
+- 仕組み: ローカル限定で better-auth の email/password 認証を有効化し、ユーザー名から
+  `{username}@dev.local` + 固定パスワードでサインアップ/サインインする。以降のフロー
+  （セッション・`/onboarding` での `users` 行作成）は Discord ログインと完全に共通
+- Discord OAuth 未設定（`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` なし）でも起動できるよう、
+  `createAuth()` は未設定時に Discord プロバイダを登録しない
+
+---
+
 ## 関連ファイル
 
 | ファイル | 役割 |
@@ -203,5 +219,6 @@ const { session, user } = await getCurrentUser(request, auth, db);
 | `app/lib/session.ts` | セッション取得ヘルパー群 |
 | `app/routes/login.tsx` | ログインページ (Discord OAuthトリガー) |
 | `app/routes/onboarding.tsx` | オンボーディング (MCID登録、ユーザー作成) |
+| `app/routes/dev-login.tsx` | ローカル開発専用の簡易ログイン（`DEV_AUTH=1` 時のみ） |
 | `app/routes/_layout.tsx` | ルートレイアウト (Discordアバター同期) |
 | `app/routes/api/auth/splat.tsx` | better-auth APIハンドラ (`/api/auth/*`) |

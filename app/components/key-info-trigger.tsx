@@ -35,6 +35,7 @@ import {
   isSpecialRemapTarget,
   type RemapInfo,
 } from "@/lib/remap-utils";
+import { RemapTypeBadge } from "@/components/remap-type-badge";
 
 // 修飾キーの lucide アイコン（VirtualKeyboard 本体と同一マップ）
 const MODIFIER_ICON_MAP: Record<string, LucideIcon> = {
@@ -166,6 +167,7 @@ function RemapRow({
         ) : remap.targetKey ? (
           <KeyComboChips combo={remap.targetKey} layout={layout} />
         ) : null}
+        <RemapTypeBadge remapType={remap.remapType} className="ml-1" />
       </div>
       {(remap.software || remap.notes) && (
         <div className="ml-1 space-y-0.5">

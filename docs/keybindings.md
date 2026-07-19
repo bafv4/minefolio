@@ -116,10 +116,11 @@ export const UNBOUND_KEY = "_UNBOUND";
 | notes | text (nullable) | メモ |
 | outputMode | text (enum) | `key`（キー出力）/ `character`（文字出力）。デフォルト: `key` |
 | outputCharacter | text (nullable) | 文字出力モード時の出力文字（例: `"a"`, `"@"`） |
+| remapType | text (enum, NOT NULL) | リマップ種別: `unset`（未設定）/ `all` / `trigger` / `chat`。デフォルト: `unset` |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時 |
 
-- ユニーク制約: `(userId, sourceKey)` の組み合わせ
+- ユニーク制約: `(userId, sourceKey, remapType)` の組み合わせ（同一sourceKeyでも種別が異なれば複数登録可能）
 - sourceKeyは修飾キー組み合わせを許可（例: `Ctrl+KeyA`, `Shift+KeyW`）
 - targetKeyは単一キーのみ（修飾キー組み合わせ不可）
 
@@ -130,6 +131,42 @@ export const UNBOUND_KEY = "_UNBOUND";
 | `Shift+KeyW` | `KeyA` | key | Shift+W を A に変換 |
 | `KeyZ` | null | key | Z キーを無効化 |
 | `KeyZ` | - | character | Z キーで文字 `"a"` を出力（outputCharacter: `"a"`） |
+
+### リマップ種別と適用文脈
+
+`remapType` はリマップの用途を表す。既存データ・旧スナップショットJSON（`remapType` フィールド欠落）は `unset` として読み、`unset` / `all` は全用途で有効。
+
+| remapType | ラベル | 用途 |
+|---|---|---|
+| `unset` | 未設定 | 全用途（既存データのデフォルト） |
+| `all` | All | 全用途 |
+| `trigger` | Trigger | ゲーム入力（移動・攻撃等） |
+| `chat` | Chat | チャット・サーチクラフトの文字入力 |
+
+#### 適用文脈（RemapContext）
+
+`app/lib/remap-utils.ts` の `filterRemapsForContext(remaps, context)`（ショートカット: `filterRemapsForTrigger()` / `filterRemapsForChat()`）で文脈外の種別を除外する。
+
+| 文脈 | 有効な種別 | 適用箇所 |
+|---|---|---|
+| `trigger` | `trigger` / `all` / `unset` | バーチャルキーボード表示、画像エクスポート |
+| `chat` | `chat` / `all` / `unset` | サーチクラフト逆引き（`getActualKeyInfos()`）、タイピングテスト（`simulateRemapOutput()`）。両関数とも内部で `filterRemapsForChat()` を適用するため、呼び出し側でのフィルタは不要 |
+
+- 同一sourceKey（`normalizeKeyCombination()` + 大文字化で照合）に複数種別の行がある場合、**文脈一致 > all > unset** の優先度で1行に解決する（同順位は先勝ち、初出順維持）
+- ガイドのリマップ埋め込み（`KeybindEmbedView`）は文脈フィルタではなく **trigger 種別のみ除外**（chat / all / unset を優先解決なしで全表示）。チャット・サーチクラフト用途の紹介という位置づけのため
+
+#### All共存禁止・重複検証
+
+- 同一sourceKeyで `all` は他種別と共存できない。保存時に `findRemapConflict()` で検証し、同一 `(sourceKey, remapType)` の完全重複（`duplicate`）と、`all` 行と他行の同一キー共存（`allConflict`）を拒否する
+- 修飾キーの有無が異なるキー（例: `KeyW` と `Shift+KeyW`）は別キー扱い
+
+#### 表示
+
+- プロフィールのバーチャルキーボードは **Trigger / Chat の表示切替**を持つ（`trigger` / `chat` の行が1件もなければ切替UIは非表示）。切替セグメントは `RemapViewToggle`（`app/components/remap-view-toggle.tsx`）として共通化
+- `/keybindings` のビジュアルカードビューにも同じ **Trigger / Chat 表示切替**がある。切替は全カード共通（切替UIはリスト上部に1つ。種別付きリマップを持つプレイヤーが1人もいなければ非表示）
+- プロフィールのリマップ一覧は全種別を表示し、`RemapTypeBadge`（`app/components/remap-type-badge.tsx`）で種別バッジを付ける（`unset` はバッジなし）
+- `/keybindings` 一覧（表ビュー）のリマップ列は全種別を区別なく表示する（v1仕様）
+- CSVエクスポート（`remaps` セクション）には Type 列が末尾に追加される（小文字の種別、`unset` は空文字）
 
 ### ターゲットキー判定
 
@@ -383,7 +420,9 @@ type ControllerSettings = {
 |---|---|
 | `app/components/keybindings/keyboard-export-dialog.tsx` | キーボードビューの画像出力モーダル（範囲・記載内容・テーマ選択 + `html-to-image` 出力） |
 | `app/lib/keybindings.ts` | 定数定義、キーコード正規化、ラベル変換、修飾キー組み合わせ処理、指割り当て、コントローラー設定 |
-| `app/lib/remap-utils.ts` | リマップのUI変換、永続化ペイロード生成、出力ラベル、サーチクラフト連携 |
+| `app/lib/remap-utils.ts` | リマップのUI変換、永続化ペイロード生成、出力ラベル、種別フィルタ（`filterRemapsForContext` 等）・重複検証（`findRemapConflict`）、サーチクラフト連携 |
+| `app/components/remap-row.tsx` | リマップ編集行（種別Select対応、Playground と共通） |
+| `app/components/remap-type-badge.tsx` | リマップ種別バッジ（Trigger / Chat / All、未設定は非表示） |
 | `app/lib/schema.ts` | DBスキーマ定義（keybindings, keyRemaps, customKeys, customActions, playerConfigs） |
 | `app/routes/keybindings.tsx` | 一覧（表ビュー）ルート |
 | `app/routes/keybindings-visual.tsx` | 一覧（ビジュアルビュー）ルート |

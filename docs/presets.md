@@ -76,8 +76,11 @@
   notes: string | null;
   outputMode?: "key" | "character" | null;
   outputCharacter?: string | null;
+  remapType?: "unset" | "all" | "trigger" | "chat" | null; // リマップ種別（古いスナップショットには存在しない → unset として読む）
 }
 ```
+
+`serializeRemaps()` は `remapType` を常に出力する。プリセットの適用・作成時も `remapType` はそのまま保持される。
 
 #### PresetItemLayoutData
 

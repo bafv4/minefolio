@@ -8,6 +8,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, searchCrafts, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
+import { filterRemapsForChat } from "@/lib/remap-utils";
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
@@ -66,7 +67,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
     currentSettings: {
       crafts: toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts))),
-      remaps: toEditorRemaps(parseTemplateRemaps(serializeRemaps(user.keyRemaps))),
+      // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
+      remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
     },
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
   };

@@ -79,6 +79,12 @@
 
 `input.remaps` が `null` の場合はリマップに触れない（既存値 / ベースの値を維持）。`sourceKey` 重複は先勝ちで除外し、`sanitizeRemapTargetKey` でサニタイズする。
 
+リマップ種別（`remapType`、詳細は [`docs/keybindings.md`](keybindings.md) の「リマップ種別と適用文脈」参照）の扱い:
+
+- ワークベンチ（Playground・テンプレートエディタ）のリマップは種別を持たず、保存・適用時に `chat` として扱われる（挿入行は `remapType: "chat"`）
+- ライブテーブルへの反映時は `chat` / `unset` の行のみ削除し、`trigger` / `all` の行は保持する
+- テンプレート行と同一 sourceKey の `all` 行は `trigger` に変換する（All は他種別と共存できないため）
+
 ---
 
 ## Playground（/playground）
@@ -115,7 +121,7 @@
 編集セクションは共有コンポーネント **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）に集約されており、**Playground とテンプレートエディタ（作成・編集）で同一構成**を共有する。crafts / remaps / layout の状態は親が持ち、ワークベンチは制御コンポーネントとして動作する（`WorkbenchRemap` 型・`effectiveRemapsFrom()`・`normalizeLayout()` / `LAYOUT_OPTIONS` もここから export）。
 
 1. **バーチャルキーボード**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。**キーをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキーを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
-2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
+2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapOutputType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
 3. **サーチクラフト編集**: `SearchCraftListEditor` によるアイテムごとの登録・編集（アイテム選択ダイアログ・タイミング・コメント・並べ替え・削除）。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。
 
 このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
@@ -163,5 +169,5 @@
 | `app/routes/guides/templates/view.tsx` | テンプレート詳細・適用action |
 | `app/routes/playground.tsx` | Playground |
 | `app/components/search-craft-template-view.tsx` | 共有表示コンポーネント |
-| `app/components/remap-row.tsx` | リマップ編集行 + `useRemapType`（me/keybindings と共通） |
+| `app/components/remap-row.tsx` | リマップ編集行 + `useRemapOutputType`（me/keybindings と共通） |
 | `app/components/key-capture-button.tsx` | キーキャプチャボタン（me/keybindings と共通） |

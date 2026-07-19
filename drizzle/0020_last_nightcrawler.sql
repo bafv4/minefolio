@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `pinned_speedrun_records` text;

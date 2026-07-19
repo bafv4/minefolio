@@ -1,7 +1,7 @@
 // 操作設定の統計を集計するサーバー側ロジック。
 // 旧 /keybindings/stats の loader を関数として切り出したもの。
 // /keybindings?view=stats からも呼び出される。
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
@@ -220,7 +220,7 @@ export async function loadKeybindingsStats(
     });
   }
 
-  // F3 入力キー統計
+  // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
   const f3InputRemaps = await db
     .select({
       userId: keyRemaps.userId,
@@ -233,7 +233,7 @@ export async function loadKeybindingsStats(
     })
     .from(keyRemaps)
     .innerJoin(users, eq(keyRemaps.userId, users.id))
-    .where(and(publicCondition, eq(keyRemaps.targetKey, "F3")));
+    .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat")));
 
   const remappedToF3UserIds = new Set(f3InputRemaps.map((r) => r.userId));
   const usersWithKeybindingsData = await db

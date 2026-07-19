@@ -33,7 +33,15 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | Twitchストリーム | `twitch_streams` | 30秒 |
 | ライブラン | `live_runs` | 10秒 |
 
-- PaceManペース（最近のペース）フィードは**最新20件まで**表示。セクションヘッダー右側の「すべて見る」からペース一覧画面（`/paces`）へ遷移できる
+- 「ペース」セクションは「**ライブ**」と「**過去のペース**」の2段構成:
+  - **ライブ**（旧 `/live` から移設）: `/api/home-feed?type=live-runs` を初回取得＋**15秒間隔で自動更新**。手動の**更新ボタン**（`RefreshCw`、更新中はスピン表示）でも再取得できる。`LivePaceList` で表形式表示。0件時は「現在ペース中の走者はいません」を表示
+  - **過去のペース**: **最新12件まで**表示。件数バッジは表示しない。サブ見出し右側の「すべて見る」からペース一覧画面（`/paces`）へ遷移できる（過去のペースが0件のときはこのサブセクション自体を表示しない）
+- セクション自体は、ライブ・過去のペースがどちらも0件のとき非表示
+- **過去のペースカードのタイムラインモーダル**: `PaceFeedCard`（`app/components/pace-feed-card.tsx`、ホームの過去のペース・`/paces`一覧の両方で共用）のカードをクリックすると、そのランの全スプリット（Enter Netherを含む進行順）を表示するモーダルが開く
+  - データ取得: `/api/home-feed?type=pace-timeline&mcid=...&runId=...`（`app/lib/paceman-cache.ts` の `getRunTimeline()`）。モーダルを開いたタイミングで遅延取得し、開くたびに再取得する
+  - 各スプリット行はキーリマップ種別チップ等と同じ `PaceManSplitMark`（アイコン+名称）で表示
+  - モーダル下部に外部リンク「PaceMan.gg で見る」を配置。**カード全体を覆っていた外部リンク（`<a>`）はこのモーダルを開くボタンに置き換わった**ため、PaceMan.ggへの遷移は必ずモーダル経由になる（従来はカードクリック即外部遷移だった）
+  - アバター・走者名（`z-10`）はカード全体のクリックハンドラ（`z-0`）より前面にあるため、そちらをクリックした場合は従来通りプレイヤープロフィールへ遷移し、モーダルは開かない
 
 ### /api/home-feed
 
@@ -126,50 +134,12 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 ---
 
-## ライブ画面 (/live)
+## 旧ライブ画面 (/live) — 廃止済み
 
-### 概要
-
-リアルタイムのMinecraftスピードラン状況を表示する画面。ライブラン（PaceMan API）、Twitchストリーム、YouTubeライブ配信を統合表示する。
-
-### データ取得
-
-#### loader
-
-- セッションチェック（オプション）でユーザーの表示設定を取得
-- 全登録ユーザーのMCID・UUID・slug・displayName・customSkinUrlを取得
-- `mcidToUuid`, `mcidToSkinUrl`, `mcidToSlug`, `mcidToDisplayName` マップを構築
-- `registeredMcids` リストを作成（PaceManデータと登録ユーザーの照合用）
-
-#### クライアントサイドポーリング
-
-- `/api/home-feed?type=live_runs`: ライブランデータ（10秒間隔）
-- `/api/home-feed?type=twitch`: Twitchストリームデータ
-- `/api/home-feed?type=youtube_live`: YouTubeライブ配信データ
-- 定期的なポーリングで自動更新
-
-### 表示コンポーネント
-
-| コンポーネント | 説明 |
-|---------------|------|
-| `LivePaceList` | PaceMan APIからのライブラン一覧。スプリットタイムライン表示 |
-| `StreamCard` | Twitchストリームカード。サムネイル、配信者名、視聴者数 |
-| `YouTubeLiveCard` | YouTubeライブ配信カード。サムネイル、タイトル、同時視聴者数 |
-
-### 型定義
-
-```
-PaceManLiveRun  // PaceMan APIのライブランデータ
-TwitchStream    // Twitchストリームデータ
-CachedYouTubeLive // YouTubeライブ配信キャッシュデータ
-```
-
-### メタタグ
-
-- `og:title`: `t("live.metaTitle")`
-- `og:description`: "リアルタイムのMinecraftスピードラン状況"
-- `og:image`: `/og-image`（動的OGP画像）
-- `twitter:card`: `summary`
+- v1.9.0 で `/live` ルートは廃止。**ライブペースはホームのペースフィード内へ移設**した（上記「ホームフィードの構成」参照）
+- 旧URLへのアクセスは `app/routes/live-redirect.ts` がホーム（`/`）へリダイレクトする（ブックマーク・外部リンク対策）
+- 旧画面にあった配信中セクション（Twitch / YouTube Live）の表示面は廃止。`/api/home-feed` の `twitch-streams` / `youtube-live` エンドポイント自体は公開APIとして残存
+- `StreamCard` / `YouTubeLiveCard` コンポーネントは未使用となったため削除済み（必要になればgit履歴から復元可能）
 
 ---
 
@@ -236,7 +206,7 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 ### ルート
 - `app/routes/home.tsx` - ホーム画面
 - `app/routes/paces.tsx` - ペース一覧画面（検索・無限スクロール）
-- `app/routes/live.tsx` - ライブ画面
+- `app/routes/live-redirect.ts` - 旧 `/live` のホームへのリダイレクト
 - `app/routes/api/home-feed.ts` - ホームフィード遅延読み込みAPI
 - `app/routes/api/paces.ts` - ペース一覧のページング+検索API
 
@@ -252,9 +222,7 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 
 ### コンポーネント
 - `app/components/video-card.tsx` - YouTube動画カード
-- `app/components/youtube-live-card.tsx` - YouTubeライブ配信カード
-- `app/components/stream-card.tsx` - Twitchストリームカード
-- `app/components/live-pace-list.tsx` - ライブラン一覧
+- `app/components/live-pace-list.tsx` - ライブラン一覧（ホームのペースフィード内で使用）
 - `app/components/pace-feed-card.tsx` - ペースフィードカード（ホーム・ペース一覧で共用）
 - `app/components/recent-pace-card.tsx` - PaceManペースカード
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード

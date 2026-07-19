@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, Keyboard, Settings, Info } from "lucide-react";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import type { ParsedRemap } from "@/lib/import-parser";
+import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { createPresetFromImport, syncActivePresetSnapshot } from "@/lib/preset-utils";
 import { t } from "@/lib/messages";
 
@@ -70,11 +71,13 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent") as string;
 
   if (intent === "import-remaps") {
-    let remaps: ParsedRemap[];
+    // 旧形式バックアップは remapType フィールド欠落 → unset 扱い
+    type ImportRemap = ParsedRemap & { remapType?: string | null };
+    let remaps: ImportRemap[];
     try {
       const parsed = JSON.parse((formData.get("remaps") as string) ?? "");
       if (!Array.isArray(parsed)) throw new Error("not an array");
-      remaps = parsed as ParsedRemap[];
+      remaps = parsed as ImportRemap[];
     } catch {
       return { success: false, error: t("meImport.invalidData") };
     }
@@ -82,7 +85,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: false, error: t("meImport.tooManyItems") };
     }
 
-    // 一意インデックス (userId, sourceKey) に対する upsert なので、
+    // 一意インデックス (userId, sourceKey, remapType) に対する upsert なので、
     // ループ内の冗長な findFirst は不要。onConflictDoUpdate に一本化する。
     for (const remap of remaps) {
       await db
@@ -93,11 +96,13 @@ export async function action({ request }: Route.ActionArgs) {
           targetKey: remap.targetKey,
           software: remap.software,
           notes: remap.notes,
+          remapType: normalizeKeyRemapType(remap.remapType),
           createdAt: new Date(),
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: [keyRemaps.userId, keyRemaps.sourceKey],
+          target: [keyRemaps.userId, keyRemaps.sourceKey, keyRemaps.remapType],
+          // remapType は conflict target に含まれるため set 不要（衝突行と常に同値）
           set: {
             targetKey: remap.targetKey,
             software: remap.software,

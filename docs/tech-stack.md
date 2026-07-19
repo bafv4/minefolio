@@ -102,7 +102,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 |---|---|
 | **@tiptap/core** / **@tiptap/react** / **@tiptap/pm** / **@tiptap/starter-kit** | リッチテキストエディタ本体（ProseMirror ベース） |
 | **@tiptap/extension-bubble-menu** ほか各種拡張 | コードブロック・カラー・ハイライト・画像・リンク・プレースホルダー・テーブル・YouTube 等 |
-| **sanitize-html** | サーバ側で保存時に HTML をサニタイズ |
+| **xss** | サーバ側で表示時に HTML をサニタイズ（`app/lib/guide-sanitize.server.ts`） |
 | **react-markdown** + **remark-gfm** + **rehype-sanitize** | `/developers/api` `/developers/changelog` で `app/content/*.md` をレンダリング |
 
 ### ドラッグ&ドロップ
@@ -140,7 +140,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 | **vitest** / **@vitest/coverage-v8** / **@vitest/ui** | テストランナー（`pnpm test` / `test:ui` / `test:coverage`） |
 | **tsx** | TypeScript スクリプトの直接実行 |
 | **dotenv** | `.env` ローダー（drizzle-kit やスクリプト用） |
-| **@types/node** / **@types/react** / **@types/react-dom** / **@types/sanitize-html** | 型定義 |
+| **@types/node** / **@types/react** / **@types/react-dom** | 型定義 |
 
 ### 国際化（i18n）
 

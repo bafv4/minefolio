@@ -124,6 +124,8 @@ import {
 
 例: ユーザーが `Shift+KeyW → KeyA` のリマップを設定している場合、サーチ文字列中の `a` を入力するには `Shift+W` を押す必要がある。
 
+`getActualKeyInfos()`（逆引き）と `simulateRemapOutput()`（順方向シミュレーション）は **chat 文脈専用**。内部で `filterRemapsForChat()` を適用して `trigger` 種別の行を除外し、同一 sourceKey に複数種別の行がある場合は chat > all > unset の優先度で解決する（呼び出し側でのフィルタは不要）。種別の詳細は [`docs/keybindings.md`](keybindings.md) の「リマップ種別と適用文脈」を参照。
+
 逆引きの優先順位: 同じ文字を複数のリマップが出力できる場合、**修飾キーなしのソースを優先**する（例: `E→h` と `Shift+S→h` があるとき `h` は `E` に解決する）。同クラス内で複数候補がある場合は、通常マップは後勝ち、shiftHeld マップは先勝ち（`dedupeRemaps` と同じ規則）。
 
 ### Shiftを押しながらクラフト（withShift）

@@ -96,6 +96,8 @@ Minecraftスキン画像を返す。
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `type` | string | ○ | フィード種別 |
+| `mcid` | string | `type=pace-timeline`時のみ○ | 対象プレイヤーのMCID |
+| `runId` | string | `type=pace-timeline`時のみ○ | PaceManのラン ID（`pacemanRunId`） |
 
 **種別一覧:**
 
@@ -103,6 +105,7 @@ Minecraftスキン画像を返す。
 |---|---|---|---|
 | `live-runs` | PaceManライブラン | 10秒 | 10秒 |
 | `recent-paces` | 最近のペース記録 | 60秒 | 5分 |
+| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 60秒 | 5分 |
 | `twitch-streams` | Twitchライブ配信 | 30秒 | 60秒 |
 | `youtube-videos` | YouTube動画 | 5分 | DB依存 |
 | `youtube-live` | YouTubeライブ（現在無効） | 60秒 | — |
@@ -137,10 +140,11 @@ Minecraftスキン画像を返す。
 | 値 | CSV列 |
 |---|---|
 | `actions` | Player, 前進, 後退, 左移動, ... (19アクション) |
-| `remaps` | Player, Source Key, Target Key |
+| `remaps` | Player, Source Key, Target Key, Type |
 | `custom-actions` | Player, Trigger Key, Action Name |
 | `mouse` | Player, DPI, Sensitivity (%), cm/360, Win Sens Multiplier, Cursor Speed, Raw Input, Mouse Accel |
 
+- `remaps` の Type 列はリマップ種別（小文字: `all` / `trigger` / `chat`、`unset` は空文字）。末尾列として追加
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
 - 公開プロフィールのみ対象

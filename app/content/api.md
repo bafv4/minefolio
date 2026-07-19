@@ -168,7 +168,9 @@ Minecraft スキン画像を返す。
 
 | 名前   | 型     | 必須 | 説明                                                               |
 | ------ | ------ | ---- | ------------------------------------------------------------------ |
-| `type` | string | ○    | `live-runs` / `recent-paces` / `twitch-streams` / `youtube-videos` |
+| `type` | string | ○    | `live-runs` / `recent-paces` / `pace-timeline` / `twitch-streams` / `youtube-videos` |
+| `mcid` | string | `type=pace-timeline`時のみ○ | 対象プレイヤーのMCID |
+| `runId` | string | `type=pace-timeline`時のみ○ | PaceManのラン ID |
 
 **レスポンス例（`type=live-runs`）:**
 
@@ -197,7 +199,7 @@ CDN キャッシュ付き（種別ごとに 10秒〜5分）。視聴者ロール
 
 **レスポンス:** `text/csv`（ブラウザがダウンロード、UTF-8 BOM 付き）
 
-選択したセクションごとに CSV を生成し、空行を挟んで結合する。
+選択したセクションごとに CSV を生成し、空行を挟んで結合する。`remaps` セクションの末尾には Type 列（リマップ種別: `all` / `trigger` / `chat`、未設定は空欄）が含まれる。
 
 ---
 

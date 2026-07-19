@@ -102,6 +102,8 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`
 
+ローカル開発は `TURSO_DATABASE_URL=file:local.db`（ローカルSQLite）+ `DEV_AUTH=1`（`/dev/login` の簡易ログイン、本番では常に無効）で Turso / Discord OAuth なしに動かせる。詳細: `docs/local-development.md`
+
 サーバー専用の環境変数は `app/lib/env.server.ts` の `getEnv()` 経由でアクセス。
 
 ### 外部連携

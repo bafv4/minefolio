@@ -98,7 +98,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (sections.includes("remaps")) {
     if (csvBlocks.length > 0) csvBlocks.push(""); // separator
-    csvBlocks.push(["Player", "Source Key", "Target Key"].map(escapeCsv).join(","));
+    csvBlocks.push(["Player", "Source Key", "Target Key", "Type"].map(escapeCsv).join(","));
     for (const player of players) {
       const layout = player.playerConfig?.keyboardLayout;
       for (const remap of player.keyRemaps) {
@@ -108,7 +108,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
             ? getKeyCombinationLabel(remap.targetKey, layout)
             : getKeyLabel(remap.targetKey, layout))
           : "(disabled)";
-        csvBlocks.push([playerName(player), source, target].map(escapeCsv).join(","));
+        // 未設定は空欄、それ以外は小文字enum値のまま出力
+        const type = remap.remapType === "unset" ? "" : remap.remapType;
+        csvBlocks.push([playerName(player), source, target, type].map(escapeCsv).join(","));
       }
     }
   }

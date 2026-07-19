@@ -7,7 +7,7 @@ import {
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
 import type { FingerType } from "@/lib/keybindings";
-import { getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
@@ -37,6 +37,8 @@ export type EmbedUserData = {
     software: string | null;
     outputMode: string | null;
     outputCharacter: string | null;
+    /** リマップ種別（旧データ・プリセットJSON由来では欠落することがある） */
+    remapType?: string | null;
   }>;
   playerConfig: {
     keyboardLayout: string | null;
@@ -171,7 +173,13 @@ export function KeybindEmbedView({
     }
   }
 
-  const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
+  // リマップ埋め込みはチャット・サーチクラフト用途の紹介なので、Trigger 種別は表示しない
+  // （Chat / All / 未設定をそのまま一覧表示する。文脈シミュレーションではないため優先解決はしない）
+  const remaps = toUiRemaps(
+    (remapsRaw as Parameters<typeof toUiRemaps>[0]).filter(
+      (r) => normalizeKeyRemapType(r.remapType) !== "trigger",
+    ),
+  );
   const keyboardLayout = (layout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
 
   // 指割り当てを取得
