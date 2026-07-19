@@ -63,6 +63,11 @@ export const users = sqliteTable("users", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+
+  // Speedrun.com記録のピン留め（軽量案）。category_records に行を作らず、
+  // run ID の配列だけを保持する。JSON配列: ピン留めする記録のrun ID
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  pinnedSpeedrunRecords: text("pinned_speedrun_records"),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
@@ -258,6 +263,24 @@ export const socialLinks = sqliteTable("social_links", {
 ]);
 
 // ============================================
+// 9b. profile_videos（プロフィールの動画欄）
+// ============================================
+export const profileVideos = sqliteTable("profile_videos", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  url: text("url").notNull(), // YouTube動画URL
+  title: text("title"), // 任意の表示タイトル
+  // ピン留め（ピン留め動画は先頭・拡大表示）
+  isPinned: integer("is_pinned", { mode: "boolean" }).default(false).notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_profile_videos_user_id").on(table.userId),
+]);
+
+// ============================================
 // 10. category_records（記録・目標統合）
 // ============================================
 export const categoryRecords = sqliteTable("category_records", {
@@ -295,6 +318,10 @@ export const categoryRecords = sqliteTable("category_records", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+
+  // プロフィールでのピン留め（ピン留めカードは先頭・拡大表示）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  isPinned: integer("is_pinned", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   uniqueIndex("idx_category_records_user_category_type").on(table.userId, table.category, table.recordType),
   index("idx_category_records_user_id").on(table.userId),
@@ -410,6 +437,8 @@ export const guides = sqliteTable("guides", {
   draftCoverImageUrl: text("draft_cover_image_url"),
   draftTags: text("draft_tags"),
   draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
+  // プロフィールのガイドタブでのピン留め（ピン留めカードは先頭・拡大表示）
+  isPinned: integer("is_pinned", { mode: "boolean" }).default(false).notNull(),
 }, (t) => [
   uniqueIndex("guides_author_slug_uniq").on(t.authorId, t.slug),
   index("guides_feed_idx").on(t.isPublished, t.updatedAt),
@@ -441,6 +470,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   itemLayouts: many(itemLayouts),
   searchCrafts: many(searchCrafts),
   socialLinks: many(socialLinks),
+  profileVideos: many(profileVideos),
   categoryRecords: many(categoryRecords),
   customFields: many(customFields),
   externalStats: many(externalStats),
@@ -509,6 +539,13 @@ export const socialLinksRelations = relations(socialLinks, ({ one }) => ({
   }),
 }));
 
+export const profileVideosRelations = relations(profileVideos, ({ one }) => ({
+  user: one(users, {
+    fields: [profileVideos.userId],
+    references: [users.id],
+  }),
+}));
+
 export const categoryRecordsRelations = relations(categoryRecords, ({ one }) => ({
   user: one(users, {
     fields: [categoryRecords.userId],
@@ -545,6 +582,7 @@ export type ExternalTool = typeof externalTools.$inferSelect;
 export type ItemLayout = typeof itemLayouts.$inferSelect;
 export type SearchCraft = typeof searchCrafts.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
+export type ProfileVideo = typeof profileVideos.$inferSelect;
 export type CategoryRecord = typeof categoryRecords.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
 export type ExternalStat = typeof externalStats.$inferSelect;

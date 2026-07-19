@@ -11,13 +11,14 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
   fetchMCSRRankedStats,
   checkPaceManPlayer,
   fetchSpeedrunComStats,
+  getSpeedrunComVideoEmbedUrl,
   type MCSRRankedMatch,
 } from "@/lib/external-stats";
 import {
@@ -38,6 +39,7 @@ import type { PresetSearchCraftData } from "@/lib/preset-utils";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
+import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -185,6 +187,7 @@ import {
   Eye,
   Maximize2,
   Languages,
+  Pin,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -246,10 +249,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       },
       categoryRecords: {
         where: eq(categoryRecords.isVisible, true),
-        orderBy: [asc(categoryRecords.displayOrder)],
+        // ピン留めを先頭に表示
+        orderBy: [desc(categoryRecords.isPinned), asc(categoryRecords.displayOrder)],
       },
       socialLinks: {
         orderBy: [asc(socialLinks.displayOrder)],
+      },
+      profileVideos: {
+        // ピン留めを先頭に表示
+        orderBy: [desc(profileVideos.isPinned), asc(profileVideos.displayOrder)],
       },
       itemLayouts: {
         orderBy: [asc(itemLayouts.displayOrder)],
@@ -470,7 +478,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // プレイヤーの公開ガイドを取得
   const playerGuides = await db.query.guides.findMany({
     where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
-    orderBy: [desc(guides.updatedAt)],
+    // ピン留めを先頭に表示
+    orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
     columns: {
       id: true,
       slug: true,
@@ -480,12 +489,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       coverImageUrl: true,
       viewCount: true,
       updatedAt: true,
+      isPinned: true,
     },
   });
 
   // 非表示記録IDをパース
   const hiddenSpeedrunRecords: string[] = player.hiddenSpeedrunRecords
     ? JSON.parse(player.hiddenSpeedrunRecords)
+    : [];
+
+  // ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
+  const pinnedSpeedrunRecords: string[] = player.pinnedSpeedrunRecords
+    ? JSON.parse(player.pinnedSpeedrunRecords)
     : [];
 
   // PaceManの統計情報を取得（MCIDがある場合のみ）
@@ -520,6 +535,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
     isOwner,
     hiddenSpeedrunRecords,
+    pinnedSpeedrunRecords,
     pacemanStats,
     presets: presets.map((p) => ({
       id: p.id,
@@ -535,7 +551,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const navigation = useNavigation();
@@ -658,6 +674,19 @@ export default function PlayerProfilePage() {
     () => toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
     [player.keyRemaps, remapView],
   );
+
+  // 動画欄: profileVideos があればそれを、無ければ旧 featuredVideoUrl を1件として表示（後方互換）
+  const displayVideos: DisplayVideo[] =
+    player.profileVideos.length > 0
+      ? player.profileVideos.map((v) => ({
+          id: v.id,
+          url: v.url,
+          title: v.title,
+          isPinned: v.isPinned,
+        }))
+      : player.featuredVideoUrl
+        ? [{ id: "legacy-featured", url: player.featuredVideoUrl, title: null, isPinned: false }]
+        : [];
 
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -1085,25 +1114,35 @@ export default function PlayerProfilePage() {
             </Card>
           )}
 
-          {/* Featured Video */}
-          {player.featuredVideoUrl && (
+          {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
+          {displayVideos.length > 0 && (
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Video className="h-4 w-4" />
-                  {t("playerProfile.featuredVideo")}
+                  {t("playerProfile.videos")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 pb-4">
-                <div className="aspect-video rounded-lg overflow-hidden bg-secondary max-w-2xl">
-                  <iframe
-                    className="w-full h-full"
-                    src={getYouTubeEmbedUrl(player.featuredVideoUrl)}
-                    title="Featured Video"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
+              <CardContent className="pt-0 pb-4 space-y-4">
+                {displayVideos.length === 1 ? (
+                  // 1件のみは従来どおり大きく表示
+                  <VideoEmbed video={displayVideos[0]} size="large" />
+                ) : (
+                  <>
+                    {/* ピン留め動画は大きく単独表示 */}
+                    {displayVideos.filter((v) => v.isPinned).map((video) => (
+                      <VideoEmbed key={video.id} video={video} size="large" />
+                    ))}
+                    {/* その他の動画は2カラムグリッドで表示 */}
+                    {displayVideos.some((v) => !v.isPinned) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl">
+                        {displayVideos.filter((v) => !v.isPinned).map((video) => (
+                          <VideoEmbed key={video.id} video={video} size="small" />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1347,6 +1386,7 @@ export default function PlayerProfilePage() {
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+            pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             pacemanStats={pacemanStats}
           />
         </TabsContent>
@@ -1960,14 +2000,17 @@ function RecordCard({
     achieved: boolean;
     pbVideoUrl: string | null;
     pbNotes: string | null;
+    isPinned?: boolean;
   };
 }) {
   return (
-    <Card>
+    // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
+    <Card className={cn(record.isPinned && "md:col-span-2 border-primary/40")}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-lg">
+            <CardTitle className="text-lg flex items-center gap-1.5">
+              {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
               {record.categoryDisplayName}
             </CardTitle>
             {record.subcategory && (
@@ -1979,7 +2022,7 @@ function RecordCard({
       <CardContent className="space-y-2">
         {record.personalBest && (
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-mono font-bold">
+            <span className={cn("font-mono font-bold", record.isPinned ? "text-3xl" : "text-2xl")}>
               {formatTime(record.personalBest)}
             </span>
             <span className="text-sm text-muted-foreground">{t("playerProfile.pb")}</span>
@@ -2128,34 +2171,70 @@ function getCategoryColorClass(category: string): string {
   }
 }
 
-function getYouTubeEmbedUrl(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    let videoId: string | null = null;
+/** プロフィール動画の表示用エントリ（profileVideos 行 or 旧 featuredVideoUrl フォールバック） */
+type DisplayVideo = {
+  id: string;
+  url: string;
+  title: string | null;
+  isPinned: boolean;
+};
 
-    if (urlObj.hostname.includes("youtube.com")) {
-      videoId = urlObj.searchParams.get("v");
-    } else if (urlObj.hostname.includes("youtu.be")) {
-      videoId = urlObj.pathname.slice(1);
-    }
+/**
+ * 動画の埋め込み表示。埋め込みURLへ変換できないURL（チャンネル・プレイリスト等）は
+ * iframe に渡さず外部リンクとして表示する（X-Frame-Options ブロックの防止）。
+ */
+function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "small" }) {
+  const embedUrl = getYouTubeEmbedUrl(video.url);
+  const containerClass = size === "large" ? "max-w-2xl" : "";
 
-    if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}`;
-    }
-  } catch {
-    // Invalid URL, return as-is
+  if (!embedUrl) {
+    return (
+      <div className={cn("rounded-lg border bg-secondary/30 p-3", containerClass)}>
+        <a
+          href={video.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
+        >
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          {video.title || video.url}
+        </a>
+      </div>
+    );
   }
-  return url;
+
+  return (
+    <div className={containerClass}>
+      {(video.isPinned || video.title) && (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {video.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+          {video.title && <span className="text-sm font-medium truncate">{video.title}</span>}
+        </div>
+      )}
+      <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
+        <iframe
+          className="w-full h-full"
+          src={embedUrl}
+          title={video.title || "Video"}
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    </div>
+  );
 }
 
 // Stats タブのコンテナ（クライアント側でデータ取得）
 function StatsTabContent({
   player,
   hiddenSpeedrunRecords,
+  pinnedSpeedrunRecords,
   pacemanStats,
 }: {
   player: any;
   hiddenSpeedrunRecords: string[];
+  pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
@@ -2231,6 +2310,7 @@ function StatsTabContent({
       externalStats={externalStats}
       player={player}
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+      pinnedSpeedrunRecords={pinnedSpeedrunRecords}
       pacemanStats={pacemanStats}
       loadState={loadState}
     />
@@ -2312,12 +2392,14 @@ function StatsContent({
   externalStats,
   player,
   hiddenSpeedrunRecords,
+  pinnedSpeedrunRecords,
   pacemanStats,
   loadState,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   player: any;
   hiddenSpeedrunRecords: string[];
+  pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
   loadState: {
     ranked: "loading" | "done" | "error";
@@ -2607,44 +2689,71 @@ function StatsContent({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {externalStats.speedruncom.personalBests
                 .filter((pb) => !hiddenSpeedrunRecords.includes(pb.run.id))
+                // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
+                .sort((a, b) =>
+                  Number(pinnedSpeedrunRecords.includes(b.run.id)) -
+                  Number(pinnedSpeedrunRecords.includes(a.run.id))
+                )
                 .slice(0, 6)
-                .map((pb) => (
-                  <div
-                    key={pb.run.id}
-                    className="p-3 bg-secondary/50 rounded-lg space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm truncate">
-                        {pb.category?.data?.name ?? t("common.unknown")}
-                      </span>
-                      <Badge variant="outline" className="shrink-0">
-                        #{pb.place}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {pb.game?.data?.names?.international ?? t("common.unknownGame")}
-                    </p>
-                    {(pb.platformName || pb.versionName) && (
-                      <p className="text-xs text-muted-foreground">
-                        {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                .map((pb) => {
+                  const isPinned = pinnedSpeedrunRecords.includes(pb.run.id);
+                  return (
+                    <div
+                      key={pb.run.id}
+                      className={cn(
+                        "p-3 bg-secondary/50 rounded-lg space-y-1",
+                        isPinned && "md:col-span-2 border border-primary/40"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm truncate flex items-center gap-1.5">
+                          {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                          {pb.category?.data?.name ?? t("common.unknown")}
+                        </span>
+                        <Badge variant="outline" className="shrink-0">
+                          #{pb.place}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {pb.game?.data?.names?.international ?? t("common.unknownGame")}
                       </p>
-                    )}
-                    <p className="text-xl font-mono font-bold">
-                      {formatTime(pb.run.times.primary_t * 1000)}
-                    </p>
-                    {pb.run.weblink && (
-                      <a
-                        href={pb.run.weblink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline flex items-center gap-1"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        {t("playerProfile.viewRecord")}
-                      </a>
-                    )}
-                  </div>
-                ))}
+                      {(pb.platformName || pb.versionName) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                        </p>
+                      )}
+                      <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
+                        {formatTime(pb.run.times.primary_t * 1000)}
+                      </p>
+                      {(() => {
+                        const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
+                        return videoEmbedUrl ? (
+                          <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
+                            <iframe
+                              className="w-full h-full"
+                              src={videoEmbedUrl}
+                              title={pb.category?.data?.name ?? "Speedrun video"}
+                              loading="lazy"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : null;
+                      })()}
+                      {pb.run.weblink && (
+                        <a
+                          href={pb.run.weblink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {t("playerProfile.viewRecord")}
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           </CardContent>
         </Card>

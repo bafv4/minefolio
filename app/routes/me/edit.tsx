@@ -6,8 +6,9 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks, authUsers, authSessions, authAccounts } from "@/lib/schema";
+import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
+import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
@@ -55,6 +56,9 @@ import {
   AlertTriangle,
   Download,
   ImageIcon,
+  Pin,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
@@ -85,6 +89,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       socialLinks: {
         orderBy: [asc(socialLinks.displayOrder)],
       },
+      profileVideos: {
+        orderBy: [asc(profileVideos.displayOrder)],
+      },
       keybindings: true,
       playerConfig: true,
       itemLayouts: true,
@@ -108,7 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
 
-  return { user, links: user.socialLinks, legacyApiUrl, hasExistingData };
+  return { user, links: user.socialLinks, videos: user.profileVideos, legacyApiUrl, hasExistingData };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -432,6 +439,85 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true, action: "link" };
   }
 
+  // 動画欄の操作
+  if (actionType === "create_video" || actionType === "update_video") {
+    const id = formData.get("id") as string | null;
+    const url = (formData.get("url") as string)?.trim();
+    const title = (formData.get("title") as string)?.trim() || null;
+    const isPinned = formData.get("isPinned") === "true";
+
+    if (!url) {
+      return { error: t("meEdit.videoUrlRequired") };
+    }
+    // 動画IDを解決できないURLは登録不可（埋め込み時の X-Frame-Options ブロック防止）
+    if (!getYouTubeVideoId(url)) {
+      return { error: t("meEdit.videoUrlInvalid") };
+    }
+    if (title && title.length > 100) {
+      return { error: t("meEdit.videoTitleMaxLength") };
+    }
+
+    if (actionType === "create_video") {
+      const existing = await db.query.profileVideos.findMany({
+        where: eq(profileVideos.userId, user.id),
+      });
+      if (existing.length >= 10) {
+        return { error: t("meEdit.videoMaxCount") };
+      }
+      const maxOrder = existing.reduce((max, v) => Math.max(max, v.displayOrder), 0);
+      await db.insert(profileVideos).values({
+        id: createId(),
+        userId: user.id,
+        url,
+        title,
+        isPinned,
+        displayOrder: maxOrder + 1,
+      });
+    } else if (id) {
+      await db
+        .update(profileVideos)
+        .set({ url, title, isPinned, updatedAt: new Date() })
+        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
+    }
+    return { success: true, action: "video" };
+  }
+
+  if (actionType === "delete_video") {
+    const id = formData.get("id") as string;
+    if (id) {
+      await db
+        .delete(profileVideos)
+        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
+    }
+    return { success: true, action: "video" };
+  }
+
+  if (actionType === "move_video") {
+    const id = formData.get("id") as string;
+    const direction = formData.get("direction") as string;
+    const videos = await db.query.profileVideos.findMany({
+      where: eq(profileVideos.userId, user.id),
+      orderBy: [asc(profileVideos.displayOrder)],
+    });
+    const index = videos.findIndex((v) => v.id === id);
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (index !== -1 && targetIndex >= 0 && targetIndex < videos.length) {
+      const reordered = [...videos];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(targetIndex, 0, moved);
+      // displayOrder の重複があっても正しく並ぶよう、インデックスで振り直す
+      for (let i = 0; i < reordered.length; i++) {
+        if (reordered[i].displayOrder !== i) {
+          await db
+            .update(profileVideos)
+            .set({ displayOrder: i, updatedAt: new Date() })
+            .where(and(eq(profileVideos.id, reordered[i].id), eq(profileVideos.userId, user.id)));
+        }
+      }
+    }
+    return { success: true, action: "video" };
+  }
+
   // アカウント削除
   if (actionType === "delete_account") {
     const confirmText = (formData.get("confirmText") as string)?.trim();
@@ -692,18 +778,88 @@ function SocialLinkDialog({
   );
 }
 
+function VideoDialog({
+  editingVideo,
+  videoFetcher,
+  isSubmitting,
+  defaultUrl,
+}: {
+  editingVideo: { id: string; url: string; title: string | null; isPinned: boolean } | null;
+  videoFetcher: ReturnType<typeof useFetcher<typeof action>>;
+  isSubmitting: boolean;
+  defaultUrl?: string;
+}) {
+  return (
+    <videoFetcher.Form method="post">
+      <input type="hidden" name="_action" value={editingVideo ? "update_video" : "create_video"} />
+      {editingVideo && <input type="hidden" name="id" value={editingVideo.id} />}
+      <DialogHeader>
+        <DialogTitle>
+          {editingVideo ? t("meEdit.videoDialogEditTitle") : t("meEdit.videoDialogAddTitle")}
+        </DialogTitle>
+        <DialogDescription>{t("meEdit.videoDialogDesc")}</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <Label htmlFor="video-url">YouTube URL</Label>
+          <Input
+            id="video-url"
+            name="url"
+            type="url"
+            defaultValue={editingVideo?.url ?? defaultUrl ?? ""}
+            placeholder="https://www.youtube.com/watch?v=..."
+            required
+          />
+          <p className="text-xs text-muted-foreground">{t("meEdit.videoUrlHint")}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="video-title">{t("meEdit.videoTitleField")}</Label>
+          <Input
+            id="video-title"
+            name="title"
+            defaultValue={editingVideo?.title ?? ""}
+            placeholder={t("meEdit.videoTitlePlaceholder")}
+            maxLength={100}
+          />
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="video-pinned"
+              name="isPinned"
+              value="true"
+              defaultChecked={editingVideo?.isPinned ?? false}
+            />
+            <Label htmlFor="video-pinned">{t("meEdit.videoPinned")}</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("meEdit.videoPinnedHint")}</p>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {editingVideo ? t("meEdit.videoUpdate") : t("meEdit.videoAdd")}
+        </Button>
+      </DialogFooter>
+    </videoFetcher.Form>
+  );
+}
+
 export default function EditProfilePage() {
-  const { user, links, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
+  const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
+  const videoFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const mcidFetcher = useFetcher<typeof action>();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMcidDialogOpen, setIsMcidDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<typeof links[0] | null>(null);
+  const [editingVideo, setEditingVideo] = useState<typeof videos[0] | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [newMcid, setNewMcid] = useState("");
   const [selectedPose, setSelectedPose] = useState<PoseName>(
@@ -816,17 +972,20 @@ export default function EditProfilePage() {
 
   const isSubmitting = fetcher.state === "submitting";
   const isLinkSubmitting = linkFetcher.state === "submitting";
+  const isVideoSubmitting = videoFetcher.state === "submitting";
   const isDeleting = deleteFetcher.state === "submitting";
   const isImporting = importFetcher.state === "submitting";
   const isMcidSubmitting = mcidFetcher.state === "submitting";
   const data = fetcher.data;
   const linkData = linkFetcher.data;
+  const videoData = videoFetcher.data;
   const deleteData = deleteFetcher.data;
   const importData = importFetcher.data;
   const mcidData = mcidFetcher.data;
 
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const prevLinkDataRef = useRef<typeof linkFetcher.data>(undefined);
+  const prevVideoDataRef = useRef<typeof videoFetcher.data>(undefined);
   const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
   const prevMcidDataRef = useRef<typeof mcidFetcher.data>(undefined);
 
@@ -861,6 +1020,19 @@ export default function EditProfilePage() {
       toast.error(linkData.error);
     }
   }, [linkData]);
+
+  // 動画更新のトースト
+  useEffect(() => {
+    if (!videoData || videoData === prevVideoDataRef.current) return;
+    prevVideoDataRef.current = videoData;
+
+    if ("success" in videoData && videoData.action === "video") {
+      toast.success(t("meEdit.videosUpdated"));
+      setIsVideoDialogOpen(false);
+    } else if ("error" in videoData) {
+      toast.error(videoData.error);
+    }
+  }, [videoData]);
 
   // インポート結果のトースト
   useEffect(() => {
@@ -919,6 +1091,16 @@ export default function EditProfilePage() {
   const handleOpenEdit = (link: typeof links[0]) => {
     setEditingLink(link);
     setIsDialogOpen(true);
+  };
+
+  const handleOpenVideoCreate = () => {
+    setEditingVideo(null);
+    setIsVideoDialogOpen(true);
+  };
+
+  const handleOpenVideoEdit = (video: typeof videos[0]) => {
+    setEditingVideo(video);
+    setIsVideoDialogOpen(true);
   };
 
   return (
@@ -1415,31 +1597,123 @@ export default function EditProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Featured Video */}
+        {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継） */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Video className="h-5 w-5" />
-              {t("meEdit.featuredVideo")}
-            </CardTitle>
-            <CardDescription>
-              {t("meEdit.featuredVideoDesc")}
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Video className="h-5 w-5" />
+                  {t("meEdit.videos")}
+                </CardTitle>
+                <CardDescription>
+                  {t("meEdit.videosDesc")}
+                </CardDescription>
+              </div>
+              <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handleOpenVideoCreate}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t("meEdit.add")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <VideoDialog
+                    // 開くたびに再マウントし、非制御入力（defaultValue/defaultChecked）の
+                    // 前回状態が持ち越されないようにする
+                    key={`${isVideoDialogOpen}-${editingVideo?.id ?? "new"}`}
+                    editingVideo={editingVideo}
+                    videoFetcher={videoFetcher}
+                    isSubmitting={isVideoSubmitting}
+                    // 旧「おすすめ動画」からの移行を助けるため、初回追加時はレガシーURLをプリフィル
+                    defaultUrl={videos.length === 0 ? formValues.featuredVideoUrl : ""}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="featuredVideoUrl">YouTube URL</Label>
-              <Input
-                id="featuredVideoUrl"
-                type="url"
-                value={formValues.featuredVideoUrl}
-                onChange={(e) => handleInputChange("featuredVideoUrl", e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.featuredVideoHint")}
-              </p>
-            </div>
+            {videos.length > 0 ? (
+              <div className="space-y-2">
+                {videos.map((video, index) => {
+                  const thumbnail = getYouTubeThumbnailUrl(video.url);
+                  return (
+                    <div key={video.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                      {thumbnail ? (
+                        <img
+                          src={thumbnail}
+                          alt=""
+                          className="w-24 h-14 object-cover rounded-md shrink-0"
+                        />
+                      ) : (
+                        <div className="w-24 h-14 bg-muted rounded-md shrink-0 flex items-center justify-center">
+                          <Video className="h-5 w-5 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {video.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                          <p className="font-medium text-sm truncate">
+                            {video.title || t("meEdit.videoNoTitle")}
+                          </p>
+                        </div>
+                        <a
+                          href={video.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground hover:underline truncate block"
+                        >
+                          {video.url}
+                        </a>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <videoFetcher.Form method="post">
+                          <input type="hidden" name="_action" value="move_video" />
+                          <input type="hidden" name="id" value={video.id} />
+                          <input type="hidden" name="direction" value="up" />
+                          <Button variant="ghost" size="icon" type="submit" disabled={index === 0}>
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                        </videoFetcher.Form>
+                        <videoFetcher.Form method="post">
+                          <input type="hidden" name="_action" value="move_video" />
+                          <input type="hidden" name="id" value={video.id} />
+                          <input type="hidden" name="direction" value="down" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            type="submit"
+                            disabled={index === videos.length - 1}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                        </videoFetcher.Form>
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenVideoEdit(video)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <videoFetcher.Form method="post">
+                          <input type="hidden" name="_action" value="delete_video" />
+                          <input type="hidden" name="id" value={video.id} />
+                          <Button variant="ghost" size="icon" type="submit">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </videoFetcher.Form>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Video className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">{t("meEdit.noVideos")}</p>
+                <p className="text-xs mt-1">
+                  {formValues.featuredVideoUrl
+                    ? t("meEdit.noVideosLegacyHint")
+                    : t("meEdit.noVideosHint")}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

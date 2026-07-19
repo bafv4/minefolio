@@ -99,11 +99,16 @@ export default function GuidesIndexPage() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
   // Transform loader data to GuideItem[]
-  const guideItems: GuideItem[] = allGuides.map(({ guide, authorSlug, authorDisplayName, authorMcid }) => ({
-    ...guide,
-    authorName: authorDisplayName || authorMcid || authorSlug,
-    _authorSlug: authorSlug,
-  })) as (GuideItem & { _authorSlug: string })[];
+  // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
+  // （guide: guides で全カラムを取得しているため、GuideItem に残すとカード拡大表示が漏れてしまう）
+  const guideItems: GuideItem[] = allGuides.map(({ guide, authorSlug, authorDisplayName, authorMcid }) => {
+    const { isPinned: _isPinned, ...guideWithoutPin } = guide;
+    return {
+      ...guideWithoutPin,
+      authorName: authorDisplayName || authorMcid || authorSlug,
+      _authorSlug: authorSlug,
+    };
+  }) as (GuideItem & { _authorSlug: string })[];
 
   const linkFn = (guide: GuideItem) => {
     const item = guide as GuideItem & { _authorSlug: string };

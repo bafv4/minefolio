@@ -28,7 +28,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `location` | text | 所在地 |
 | `pronouns` | text | 代名詞 |
 | `defaultProfileTab` | enum | デフォルト表示タブ |
-| `featuredVideoUrl` | text | 注目動画URL |
+| `featuredVideoUrl` | text | 注目動画URL（レガシー。`profile_videos` が1件でもあればそちらを優先表示し、この値は無視される） |
 | `mainEdition` | enum | `java` / `bedrock` |
 | `mainPlatform` | enum | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
 | `role` | enum | `viewer` / `runner` |
@@ -237,6 +237,61 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 | `twitch` | ユーザー名 | `https://www.twitch.tv/{identifier}` |
 | `twitter` | ユーザー名 | `https://x.com/{identifier}` |
 | `custom` | 任意 | `customUrl` を直接使用、`customLabel` が必要 |
+
+---
+
+## 動画欄（複数動画）
+
+### `profile_videos` テーブル
+
+| カラム | 型 | 説明 |
+|---|---|---|
+| `id` | text (PK) | CUID2 |
+| `userId` | text (FK) | ユーザーID（cascade削除） |
+| `url` | text | YouTube動画URL |
+| `title` | text | 任意の表示タイトル |
+| `isPinned` | boolean | ピン留め（デフォルト: false） |
+| `displayOrder` | integer | 表示順（デフォルト: 0） |
+
+### 表示（プロフィールタブの「動画」カード）
+
+- 表示順: ピン留め → `displayOrder` 昇順（loaderの `orderBy`）
+- **ピン留め動画は大きく単独表示**（`aspect-video max-w-2xl`）、その他は2カラムグリッドで小さく表示。動画が1件のみの場合は常に大きく表示
+- **後方互換**: `profile_videos` が0件のユーザーは旧 `users.featuredVideoUrl` を1件の動画として表示する。1件でも登録するとレガシー値は無視される
+
+### URL変換（`app/lib/youtube-url.ts`）
+
+- `getYouTubeVideoId()` / `getYouTubeEmbedUrl()` / `getYouTubeThumbnailUrl()` を共通利用
+- `watch?v=` / `youtu.be` / `live/` / `shorts/` / `embed/` 形式に対応
+- **埋め込みURLへ変換できないURLは iframe に渡さず外部リンク表示にする**（YouTube視聴ページの `X-Frame-Options: SAMEORIGIN` によりブラウザが埋め込みをブロックするため。旧実装は変換不能時に生URLを埋め込みFirefoxで「このページを開けません」が出ていた）
+- 登録時（`/me/edit` の `create_video` / `update_video`）も `getYouTubeVideoId()` で解決できないURLを拒否する
+
+### 編集（`/me/edit` の「動画」カード）
+
+- ソーシャルリンクと同じ「Dialog + `_action`」パターン: `create_video` / `update_video` / `delete_video` / `move_video`（上下入替、displayOrderをインデックスで振り直し）
+- 最大10件。タイトルは100文字まで。ピン留めはダイアログ内のSwitch
+- 動画0件かつレガシー `featuredVideoUrl` があるとき、追加ダイアログにそのURLをプリフィルして移行を促す
+
+---
+
+## ピン留め（Folio強調表示）
+
+プロフィール上で「これを見てほしい」コンテンツを強調する仕組み。対象は **ガイド**（`guides.isPinned`）・**カスタム記録**（`category_records.isPinned`）・**動画**（`profile_videos.isPinned`）・**Speedrun.com記録**（`users.pinnedSpeedrunRecords`）。
+
+- 表示: ピン留め項目は各リストの**先頭**に並び、カード表示では**拡大表示**される
+  - ガイド: グリッド2列分（`sm:col-span-2`）+ カバー画像拡大 + ピンアイコン（`GuideCardGrid` / `GuideListView`、プロフィールのガイドタブのみ。グローバル `/guides` には影響しない）
+  - 記録: グリッド2列分（`md:col-span-2`）+ タイム拡大 + 枠線強調（`RecordCard`）
+  - 動画: 上記「動画欄」参照
+  - Speedrun.com記録: 下記「Speedrun.com記録のピン留め」参照
+- 切替UI: ガイド=`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）、記録=`/me/records` の編集ダイアログのSwitch、動画=`/me/edit` の動画ダイアログのSwitch、Speedrun.com記録=`/me/records` のピンアイコンボタン
+
+### Speedrun.com記録のピン留め（軽量実装）
+
+Speedrun.comのPBはDBにキャッシュされず、プロフィール表示のたびにSpeedrun.com APIから直接取得される（`category_records` に行を持たない）ため、他のピン留めと違い `category_records.isPinned` を使えない。代わりに `users.pinnedSpeedrunRecords`（JSON配列、ピン留めするrun IDの一覧。`hiddenSpeedrunRecords` と同じ形式）で管理する。
+
+- 管理: `/me/records` の「Speedrun.com 記録」セクションで、各カードの右上にピン留め（`Pin`アイコン）と表示/非表示（`Eye`/`EyeOff`アイコン）の2つのトグルボタンが並ぶ。`_action: "toggleSpeedrunRecordPin"` でトグル
+- 表示: プロフィールの活動・記録タブで、非表示記録を除外した後、ピン留めを先頭に安定ソートしてから最大6件表示（`StatsContent` 内）。ピン留めカードは `md:col-span-2` + 枠線強調 + タイム拡大（`text-3xl`）+ ピンアイコン
+- 非表示（`hiddenSpeedrunRecords`）と独立して管理されるため、非表示にした記録をピン留めすることも技術的には可能だが、非表示である以上プロフィールには表示されない
 
 ---
 

@@ -9,7 +9,7 @@ import { users, categoryRecords } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
-import { fetchSpeedrunComStats } from "@/lib/external-stats";
+import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Pin,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -90,11 +91,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     ? JSON.parse(user.hiddenSpeedrunRecords)
     : [];
 
+  // ピン留め記録IDをパース
+  const pinnedSpeedrunRecords: string[] = user.pinnedSpeedrunRecords
+    ? JSON.parse(user.pinnedSpeedrunRecords)
+    : [];
+
   return {
     user,
     records: user.categoryRecords,
     speedruncomRecords,
     hiddenSpeedrunRecords,
+    pinnedSpeedrunRecords,
     speedruncomUsername: user.speedruncomUsername,
   };
 }
@@ -159,6 +166,7 @@ export async function action({ request }: Route.ActionArgs) {
     const personalBestStr = (formData.get("personalBest") as string)?.trim();
     const pbVideoUrl = (formData.get("pbVideoUrl") as string)?.trim() || null;
     const isVisible = formData.get("isVisible") === "true";
+    const isPinned = formData.get("isPinned") === "true";
 
     if (!category || !categoryDisplayName) {
       return { error: t("meRecords.categoryRequired") };
@@ -179,6 +187,7 @@ export async function action({ request }: Route.ActionArgs) {
         personalBest,
         pbVideoUrl,
         isVisible,
+        isPinned,
       });
     } else if (id) {
       await db
@@ -189,6 +198,7 @@ export async function action({ request }: Route.ActionArgs) {
           personalBest,
           pbVideoUrl,
           isVisible,
+          isPinned,
           updatedAt: new Date(),
         })
         .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
@@ -239,15 +249,54 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true, hiddenRecords: newHidden };
   }
 
+  // Speedrun.com記録のピン留めトグル
+  if (action === "toggleSpeedrunRecordPin") {
+    const runId = formData.get("runId") as string;
+    if (!runId) {
+      return { error: t("meRecords.recordIdRequired") };
+    }
+
+    // 現在のピン留めリストを取得
+    const currentPinned: string[] = user.pinnedSpeedrunRecords
+      ? JSON.parse(user.pinnedSpeedrunRecords)
+      : [];
+
+    // トグル処理
+    let newPinned: string[];
+    if (currentPinned.includes(runId)) {
+      newPinned = currentPinned.filter((id) => id !== runId);
+    } else {
+      newPinned = [...currentPinned, runId];
+    }
+
+    // データベースを更新
+    await db
+      .update(users)
+      .set({
+        pinnedSpeedrunRecords: JSON.stringify(newPinned),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+
+    return { success: true, pinnedRecords: newPinned };
+  }
+
   return { error: t("meRecords.invalidAction") };
 }
 
 export default function RecordsPage() {
-  const { records, speedruncomRecords, hiddenSpeedrunRecords: initialHidden, speedruncomUsername } = useLoaderData<typeof loader>();
+  const {
+    records,
+    speedruncomRecords,
+    hiddenSpeedrunRecords: initialHidden,
+    pinnedSpeedrunRecords: initialPinned,
+    speedruncomUsername,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<typeof records[0] | null>(null);
   const [hiddenSpeedrunRecords, setHiddenSpeedrunRecords] = useState<string[]>(initialHidden);
+  const [pinnedSpeedrunRecords, setPinnedSpeedrunRecords] = useState<string[]>(initialPinned);
 
   const isSubmitting = fetcher.state === "submitting";
   const data = fetcher.data;
@@ -256,6 +305,9 @@ export default function RecordsPage() {
   useEffect(() => {
     if (fetcher.data && "hiddenRecords" in fetcher.data && fetcher.data.hiddenRecords) {
       setHiddenSpeedrunRecords(fetcher.data.hiddenRecords);
+    }
+    if (fetcher.data && "pinnedRecords" in fetcher.data && fetcher.data.pinnedRecords) {
+      setPinnedSpeedrunRecords(fetcher.data.pinnedRecords);
     }
   }, [fetcher.data]);
 
@@ -267,6 +319,18 @@ export default function RecordsPage() {
     );
     // 楽観的更新
     setHiddenSpeedrunRecords((prev) =>
+      prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
+    );
+  };
+
+  // Speedrun.com記録のピン留めをトグル
+  const toggleSpeedrunRecordPin = (runId: string) => {
+    fetcher.submit(
+      { _action: "toggleSpeedrunRecordPin", runId },
+      { method: "post" }
+    );
+    // 楽観的更新
+    setPinnedSpeedrunRecords((prev) =>
       prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
     );
   };
@@ -298,7 +362,12 @@ export default function RecordsPage() {
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <fetcher.Form method="post" onSubmit={() => setIsDialogOpen(false)}>
+            {/* 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする */}
+            <fetcher.Form
+              key={`${isDialogOpen}-${editingRecord?.id ?? "new"}`}
+              method="post"
+              onSubmit={() => setIsDialogOpen(false)}
+            >
               <input type="hidden" name="_action" value={editingRecord ? "update" : "create"} />
               {editingRecord && <input type="hidden" name="id" value={editingRecord.id} />}
               <DialogHeader>
@@ -356,6 +425,18 @@ export default function RecordsPage() {
                   />
                   <Label htmlFor="isVisible">{t("meRecords.visible")}</Label>
                 </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="isPinned"
+                      name="isPinned"
+                      value="true"
+                      defaultChecked={editingRecord?.isPinned ?? false}
+                    />
+                    <Label htmlFor="isPinned">{t("meRecords.pinned")}</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("meRecords.pinnedHint")}</p>
+                </div>
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={isSubmitting}>
@@ -394,6 +475,7 @@ export default function RecordsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {speedruncomRecords.personalBests.map((pb) => {
                   const isHidden = hiddenSpeedrunRecords.includes(pb.run.id);
+                  const isPinned = pinnedSpeedrunRecords.includes(pb.run.id);
                   return (
                     <div
                       key={pb.run.id}
@@ -402,25 +484,45 @@ export default function RecordsPage() {
                         isHidden && "opacity-50"
                       )}
                     >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
-                            className="absolute top-2 right-2 p-1.5 rounded hover:bg-secondary transition-colors"
-                          >
-                            {isHidden ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isHidden ? t("meRecords.show") : t("meRecords.hide")}
-                        </TooltipContent>
-                      </Tooltip>
-                      <div className="flex items-center justify-between pr-8">
+                      <div className="absolute top-2 right-2 flex items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => toggleSpeedrunRecordPin(pb.run.id)}
+                              className="p-1.5 rounded hover:bg-secondary transition-colors"
+                            >
+                              {isPinned ? (
+                                <Pin className="h-4 w-4 text-primary" />
+                              ) : (
+                                <Pin className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {isPinned ? t("meRecords.unpin") : t("meRecords.pin")}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
+                              className="p-1.5 rounded hover:bg-secondary transition-colors"
+                            >
+                              {isHidden ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {isHidden ? t("meRecords.show") : t("meRecords.hide")}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center justify-between pr-16">
                         <span className="font-medium text-sm truncate">
                           {pb.category?.data?.name ?? "Unknown"}
                         </span>
@@ -439,7 +541,28 @@ export default function RecordsPage() {
                       <p className="text-lg font-mono font-bold">
                         {formatTime(pb.run.times.primary_t * 1000)}
                       </p>
+                      {(() => {
+                        const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
+                        return videoEmbedUrl ? (
+                          <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
+                            <iframe
+                              className="w-full h-full"
+                              src={videoEmbedUrl}
+                              title={pb.category?.data?.name ?? "Speedrun video"}
+                              loading="lazy"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : null;
+                      })()}
                       <div className="flex items-center gap-2 flex-wrap">
+                        {isPinned && (
+                          <Badge variant="outline" className="text-xs border-primary/40 text-primary">
+                            <Pin className="h-3 w-3 mr-1" />
+                            {t("meRecords.pinned")}
+                          </Badge>
+                        )}
                         {isHidden && (
                           <Badge variant="secondary" className="text-xs">{t("meRecords.hidden")}</Badge>
                         )}
@@ -505,6 +628,12 @@ export default function RecordsPage() {
                   )}
                   <div className="flex gap-2 mt-2">
                     {!record.isVisible && <Badge variant="secondary">{t("meRecords.private")}</Badge>}
+                    {record.isPinned && (
+                      <Badge variant="outline" className="border-primary/40 text-primary">
+                        <Pin className="h-3 w-3 mr-1" />
+                        {t("meRecords.pinned")}
+                      </Badge>
+                    )}
                     {record.pbVideoUrl && (
                       <Button variant="outline" size="sm" asChild>
                         <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">

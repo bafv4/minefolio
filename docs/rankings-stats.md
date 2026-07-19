@@ -112,8 +112,13 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 |------|------|
 | `fetchAllExternalStats` | 全外部統計を一括取得 |
 | `fetchMCSRRankedStats` | MCSR Rankedの統計取得 |
-| `fetchSpeedrunComStats` | Speedrun.comの統計取得 |
+| `fetchSpeedrunComStats` | Speedrun.comの統計取得（`personal-bests` APIに動画リンク`run.videos.links`が同梱されるため追加のAPI呼び出しは不要） |
+| `getSpeedrunComVideoEmbedUrl` | Speedrun.com記録の動画リンクのうちYouTube埋め込みに変換できる最初のURLを返す（`youtube-url.ts`の`getYouTubeEmbedUrl`を利用）。Twitch等YouTube以外や動画リンク自体が無い場合はnullを返し、呼び出し側は外部リンク表示にフォールバックする |
 | `checkPaceManPlayer` | PaceManプレイヤーの存在確認 |
+
+### Speedrun.com記録の動画埋め込み
+
+`/me/records`（自分の記録管理）と `/player/:slug` プロフィールの活動・記録タブの両方で、各PBカードに `getSpeedrunComVideoEmbedUrl()` の結果を `aspect-video` の `iframe`（`loading="lazy"`）として埋め込む。YouTube以外の動画リンクや動画リンクが無い記録は、従来通り「記録を見る」外部リンク（Speedrun.comのラン詳細ページ）のみを表示する。
 
 ---
 

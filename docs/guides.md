@@ -26,6 +26,7 @@
 | viewCount | integer | 閲覧数 |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時（保存=公開版更新時のみ） |
+| isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭・拡大表示）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
 
 #### 保存モデル（仮保存 / 保存）
 

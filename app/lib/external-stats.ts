@@ -1,5 +1,7 @@
 // 外部サービス（Speedrun.com, PaceMan, MCSR Ranked）からの統計情報取得
 
+import { getYouTubeEmbedUrl } from "./youtube-url";
+
 // ============================================
 // 型定義
 // ============================================
@@ -213,6 +215,21 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
     console.error("Speedrun.com API error:", error);
     return { user: null, personalBests: [], error: "APIエラーが発生しました" };
   }
+}
+
+/**
+ * ランの動画リンク（`run.videos.links`、personal-bests取得時に同梱済み）のうち、
+ * YouTube埋め込みに変換できる最初のURLを返す。Twitch等YouTube以外のリンクや
+ * 動画リンク自体が無い場合はnull（呼び出し側は外部リンク表示にフォールバックする）。
+ */
+export function getSpeedrunComVideoEmbedUrl(pb: SpeedrunComPersonalBest): string | null {
+  const links = pb.run.videos?.links;
+  if (!links) return null;
+  for (const link of links) {
+    const embedUrl = getYouTubeEmbedUrl(link.uri);
+    if (embedUrl) return embedUrl;
+  }
+  return null;
 }
 
 // ============================================

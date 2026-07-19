@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -7,7 +8,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Eye, FileText, LayoutGrid, List } from "lucide-react";
+import { Eye, FileText, LayoutGrid, List, Pin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -23,6 +24,8 @@ export type GuideItem = {
   updatedAt: string | Date;
   /** Per-guide author display name (for multi-author listings) */
   authorName?: string;
+  /** プロフィールのガイドタブでのピン留め（カード表示で先頭・拡大） */
+  isPinned?: boolean;
 };
 
 type ViewMode = "card" | "list";
@@ -71,21 +74,38 @@ export function GuideCardGrid({
       {guides.map((guide) => {
         const tags = JSON.parse(guide.tags) as string[];
         return (
-          <Link key={guide.id} to={linkFn(guide)} prefetch="intent" className="group">
-            <Card className="h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40 group-hover:-translate-y-0.5">
+          <Link
+            key={guide.id}
+            to={linkFn(guide)}
+            prefetch="intent"
+            // ピン留めカードはグリッド2列分に拡大して強調する
+            className={cn("group", guide.isPinned && "sm:col-span-2")}
+          >
+            <Card
+              className={cn(
+                "h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40 group-hover:-translate-y-0.5",
+                guide.isPinned && "border-primary/40",
+              )}
+            >
               {guide.coverImageUrl ? (
                 <img
                   src={guide.coverImageUrl}
                   alt={guide.title}
-                  className="w-full h-36 object-cover"
+                  className={cn("w-full object-cover", guide.isPinned ? "h-48" : "h-36")}
                 />
               ) : (
-                <div className="w-full h-36 bg-muted/50 flex items-center justify-center">
+                <div
+                  className={cn(
+                    "w-full bg-muted/50 flex items-center justify-center",
+                    guide.isPinned ? "h-48" : "h-36",
+                  )}
+                >
                   <FileText className="h-8 w-8 text-muted-foreground/30" />
                 </div>
               )}
               <CardHeader className="pb-3">
-                <CardTitle className="text-base line-clamp-2 group-hover:text-primary transition-colors">
+                <CardTitle className="text-base line-clamp-2 group-hover:text-primary transition-colors flex items-start gap-1.5">
+                  {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
                   {guide.title}
                 </CardTitle>
                 {guide.summary && (
@@ -153,7 +173,8 @@ export function GuideListView({
               />
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1">
+              <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1 flex items-center gap-1.5">
+                {guide.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
                 {guide.title}
               </h3>
               {guide.summary && (

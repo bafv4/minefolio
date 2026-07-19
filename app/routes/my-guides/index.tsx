@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { MyContentTabs } from "@/components/content-tabs";
-import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
@@ -69,6 +69,20 @@ export async function action({ request }: ActionFunctionArgs) {
         } catch {}
       }
       await db.delete(guides).where(eq(guides.id, guideId));
+    }
+  }
+
+  // プロフィールのガイドタブでのピン留め切替
+  if (_action === "togglePin") {
+    const guideId = formData.get("guideId") as string;
+    const guide = await db.query.guides.findFirst({
+      where: and(eq(guides.id, guideId), eq(guides.authorId, user.id)),
+    });
+    if (guide) {
+      await db
+        .update(guides)
+        .set({ isPinned: !guide.isPinned })
+        .where(eq(guides.id, guideId));
     }
   }
 
@@ -129,6 +143,12 @@ export default function MyGuidesPage() {
                           {t("meGuides.statusDraft")}
                         </Badge>
                       )}
+                      {guide.isPinned && (
+                        <Badge variant="outline" className="shrink-0 text-xs border-primary/40 text-primary">
+                          <Pin className="h-3 w-3 mr-1" />
+                          {t("meGuides.pinned")}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       <span>
@@ -159,6 +179,22 @@ export default function MyGuidesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <fetcher.Form method="post">
+                      <input type="hidden" name="_action" value="togglePin" />
+                      <input type="hidden" name="guideId" value={guide.id} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="submit"
+                        title={guide.isPinned ? t("meGuides.unpin") : t("meGuides.pin")}
+                      >
+                        {guide.isPinned ? (
+                          <PinOff className="h-4 w-4" />
+                        ) : (
+                          <Pin className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </fetcher.Form>
                     {guide.isPublished && (
                       <Button variant="ghost" size="sm" asChild>
                         <Link
