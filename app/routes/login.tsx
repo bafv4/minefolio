@@ -3,7 +3,7 @@ import type { Route } from "./+types/login";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
-import { getEnv } from "@/lib/env.server";
+import { getEnv, isDevAuthEnabled } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { authClient } from "@/lib/auth-client";
@@ -61,10 +61,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  return { appUrl: env.APP_URL || "https://minefolio.app" };
+  return {
+    appUrl: env.APP_URL || "https://minefolio.app",
+    devAuthEnabled: isDevAuthEnabled(),
+  };
 }
 
-export default function LoginPage() {
+export default function LoginPage({ loaderData }: Route.ComponentProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDiscordLogin = async () => {
@@ -98,6 +101,11 @@ export default function LoginPage() {
             )}
             {t("login.signInWithDiscord")}
           </Button>
+          {loaderData.devAuthEnabled && (
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/dev/login">{t("devLogin.title")}</Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

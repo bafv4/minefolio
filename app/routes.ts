@@ -15,6 +15,8 @@ export default [
     // Auth
     route("login", "routes/login.tsx"),
     route("onboarding", "routes/onboarding.tsx"),
+    // ローカル開発専用の簡易ログイン（DEV_AUTH=1 のときのみ有効。それ以外は404）
+    route("dev/login", "routes/dev-login.tsx"),
 
     // Live
     route("live", "routes/live.tsx"),

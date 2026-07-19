@@ -577,6 +577,17 @@ export const PAGES_JA = {
     cardDescription: "プロフィールを管理するにはサインインしてください",
     signInWithDiscord: "Discordでログイン",
   },
+  // ローカル開発専用の簡易ログイン（/dev/login。DEV_AUTH=1 のときのみ表示）
+  devLogin: {
+    title: "開発用ログイン",
+    description: "ローカル開発専用の簡易ログインです。ユーザー名だけでログインできます（本番環境では無効）。",
+    usernameLabel: "ユーザー名",
+    usernamePlaceholder: "dev",
+    usernameHint: "半角英小文字・数字・ハイフン（1〜20文字）。同じ名前で同じアカウントに再ログインできます。",
+    submit: "ログイン",
+    invalidUsername: "ユーザー名は半角英小文字・数字・ハイフン1〜20文字で入力してください",
+    failed: "ログインに失敗しました",
+  },
   onboarding: {
     title: "ようこそ - Minefolio",
     description: "Minefolioプロフィールを設定",
