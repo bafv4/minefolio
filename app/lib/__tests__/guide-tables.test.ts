@@ -24,7 +24,7 @@ describe("normalizeGuideTables", () => {
     expect(out).toContain(`colwidth="59"`);
   });
 
-  it("sanitize-html 出力形式（空白・末尾セミコロンなし）も同様に処理する", () => {
+  it("サニタイザ（xss/cssfilter）出力形式（空白・末尾セミコロンなし）も同様に処理する", () => {
     const html =
       `<table style="min-width:601px"><colgroup>` +
       `<col style="width:59px" /><col style="width:299px" /><col style="width:218px" /><col style="min-width:25px" />` +

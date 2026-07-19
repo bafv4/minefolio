@@ -12,8 +12,8 @@
  * .table-scroll-wrapper の横スクロールに逃げる。
  * 全列をドラッグ指定した表（style="width: ..."）は作者の指定を尊重して触らない。
  *
- * sanitize-html の出力（style="min-width:601px" 形式）と、エディタの生出力
- * （style="min-width: 601px;" 形式）の両方を受け付ける。
+ * サニタイザ（xss/cssfilter）の出力（style="min-width:601px" 形式）と、
+ * エディタの生出力（style="min-width: 601px;" 形式）の両方を受け付ける。
  */
 
 /** 列幅未指定の列に確保する最小幅（px）。0.9em フォントで日本語 約11文字/行 */

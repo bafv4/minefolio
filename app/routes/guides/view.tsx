@@ -9,7 +9,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
-import sanitizeHtml from "sanitize-html";
+import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,41 +123,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       .catch(() => {});
   }
 
-  // Sanitize HTML on the server
-  const sanitizedContent = sanitizeHtml(viewContent, {
-    allowedTags: [
-      ...sanitizeHtml.defaults.allowedTags,
-      "h1", "h2", "h3", "h4", "h5", "h6",
-      "img", "iframe", "div", "figure", "figcaption",
-      "details", "summary", "span", "mark",
-      "colgroup", "col",
-    ],
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      "*": ["class"],
-      img: ["src", "alt", "title", "width", "height"],
-      a: ["href", "name", "target", "rel"],
-      iframe: ["src", "width", "height", "frameborder", "allowfullscreen", "allow"],
-      div: ["data-youtube-video", "data-callout", "data-callout-type", "data-guide-link", "data-columns", "data-column", "data-keybind-embed", "data-searchcraft-embed", "data-user-slug", "data-preset-name", "class"],
-      table: ["style"],
-      col: ["style"],
-      colgroup: [],
-      td: ["colspan", "rowspan", "style"],
-      th: ["colspan", "rowspan", "style"],
-      span: ["style"],
-      mark: ["data-color", "style"],
-    },
-    allowedStyles: {
-      "*": {
-        color: [/.*/],
-        "background-color": [/.*/],
-        "text-align": [/^(left|center|right|justify)$/],
-        "min-width": [/.*/],
-        width: [/.*/],
-      },
-    },
-    allowedIframeHostnames: ["www.youtube.com", "www.youtube-nocookie.com"],
-  });
+  // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
+  const sanitizedContent = sanitizeGuideHtml(viewContent);
 
   // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
   const normalizedContent = normalizeGuideTables(sanitizedContent);
