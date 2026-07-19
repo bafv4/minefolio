@@ -506,14 +506,17 @@ export async function action({ request }: Route.ActionArgs) {
       const [moved] = reordered.splice(index, 1);
       reordered.splice(targetIndex, 0, moved);
       // displayOrder の重複があっても正しく並ぶよう、インデックスで振り直す
-      for (let i = 0; i < reordered.length; i++) {
-        if (reordered[i].displayOrder !== i) {
-          await db
-            .update(profileVideos)
-            .set({ displayOrder: i, updatedAt: new Date() })
-            .where(and(eq(profileVideos.id, reordered[i].id), eq(profileVideos.userId, user.id)));
-        }
-      }
+      await Promise.all(
+        reordered
+          .map((video, i) => ({ video, i }))
+          .filter(({ video, i }) => video.displayOrder !== i)
+          .map(({ video, i }) =>
+            db
+              .update(profileVideos)
+              .set({ displayOrder: i, updatedAt: new Date() })
+              .where(and(eq(profileVideos.id, video.id), eq(profileVideos.userId, user.id)))
+          )
+      );
     }
     return { success: true, action: "video" };
   }
@@ -548,7 +551,6 @@ export async function action({ request }: Route.ActionArgs) {
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
   const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "keybindings" | "devices" | "items" | "searchcraft";
-  const featuredVideoUrl = (formData.get("featuredVideoUrl") as string)?.trim() || null;
   const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
@@ -575,26 +577,6 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.locationMax") };
   }
 
-  if (featuredVideoUrl) {
-    try {
-      const videoUrl = new URL(featuredVideoUrl);
-
-      // プロトコルチェック: http/https のみ許可
-      if (!videoUrl.protocol.startsWith('http')) {
-        return { error: t("meEdit.invalidVideoUrl") };
-      }
-
-      // 許可されたYouTubeホスト名のリスト
-      const allowedYouTubeHosts = ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'];
-
-      if (!allowedYouTubeHosts.includes(videoUrl.hostname)) {
-        return { error: t("meEdit.youtubeOnly") };
-      }
-    } catch {
-      return { error: t("meEdit.invalidVideoUrl") };
-    }
-  }
-
   if (shortBio && shortBio.length > 50) {
     return { error: t("meEdit.shortBioMax") };
   }
@@ -614,7 +596,6 @@ export async function action({ request }: Route.ActionArgs) {
       profilePose,
       slimSkin,
       defaultProfileTab,
-      featuredVideoUrl,
       mainEdition,
       mainPlatform,
       role,
@@ -877,7 +858,6 @@ export default function EditProfilePage() {
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    featuredVideoUrl: user.featuredVideoUrl ?? "",
     mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
@@ -901,7 +881,6 @@ export default function EditProfilePage() {
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    featuredVideoUrl: user.featuredVideoUrl ?? "",
     mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
@@ -949,7 +928,6 @@ export default function EditProfilePage() {
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("defaultProfileTab", formValues.defaultProfileTab);
-    formData.set("featuredVideoUrl", formValues.featuredVideoUrl);
     formData.set("mainEdition", formValues.mainEdition);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
@@ -1626,7 +1604,7 @@ export default function EditProfilePage() {
                     videoFetcher={videoFetcher}
                     isSubmitting={isVideoSubmitting}
                     // 旧「おすすめ動画」からの移行を助けるため、初回追加時はレガシーURLをプリフィル
-                    defaultUrl={videos.length === 0 ? formValues.featuredVideoUrl : ""}
+                    defaultUrl={videos.length === 0 ? user.featuredVideoUrl ?? "" : ""}
                   />
                 </DialogContent>
               </Dialog>
@@ -1708,7 +1686,7 @@ export default function EditProfilePage() {
                 <Video className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">{t("meEdit.noVideos")}</p>
                 <p className="text-xs mt-1">
-                  {formValues.featuredVideoUrl
+                  {user.featuredVideoUrl
                     ? t("meEdit.noVideosLegacyHint")
                     : t("meEdit.noVideosHint")}
                 </p>

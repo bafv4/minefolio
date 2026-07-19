@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
-import { createDb } from "@/lib/db";
+import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -209,21 +209,6 @@ type CustomKeyMutationInput = {
   category: "mouse" | "keyboard";
   _delete?: boolean;
 };
-
-/** UNIQUE 制約違反かどうかをエラーメッセージ（cause チェーン含む）から判定する */
-function isUniqueConstraintError(e: unknown): boolean {
-  let current: unknown = e;
-  while (current instanceof Error) {
-    if (
-      current.message.includes("UNIQUE constraint failed") ||
-      current.message.includes("SQLITE_CONSTRAINT")
-    ) {
-      return true;
-    }
-    current = current.cause;
-  }
-  return false;
-}
 
 /** findRemapConflict の違反をユーザー向けメッセージへ変換する（サーバー/クライアント共用） */
 function remapConflictErrorMessage(conflict: RemapConflict, keyboardLayout?: string | null): string {
@@ -2192,12 +2177,7 @@ export default function KeybindingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</CardTitle>
-              <CardDescription>
-                AutoHotkeyやKarabinerなどで設定しているキーの変換を記録します。
-                変更元は修飾キー（Ctrl, Shift, Alt）との組み合わせに対応しています。
-                変更先は「キー」（単一キー）または「文字」（大文字/小文字区別）を選択できます。
-                種別で Trigger（ゲーム入力）と Chat（チャット・サーチクラフト）を区別できます（未設定/All は全用途で有効）。
-              </CardDescription>
+              <CardDescription>{t("meKeybindings.remapsDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {localRemaps.filter((r) => !r._delete).length > 0 ? (

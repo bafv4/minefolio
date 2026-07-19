@@ -13,6 +13,8 @@ import {
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { type CachedPace } from "@/components/recent-pace-card";
+// type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
+import type { PaceTimelineEntry } from "@/lib/paceman-cache";
 import { Clock3, ExternalLink, Loader2 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
@@ -20,15 +22,6 @@ export type PaceFeedRun = Pick<
   CachedPace,
   "mcid" | "nickname" | "timeline" | "rta" | "time" | "pacemanRunId"
 >;
-
-// 1ランの全スプリット（タイムラインモーダル用。app/lib/paceman-cache.ts の
-// PaceTimelineEntry と同形だが、サーバー専用モジュールをクライアントへ
-// 引き込まないようここでは独立して定義する）
-type PaceTimelineEntry = {
-  timeline: string;
-  rta: number;
-  igt: number | null;
-};
 
 interface PaceTimelineResponse {
   timeline: PaceTimelineEntry[];

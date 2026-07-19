@@ -72,21 +72,29 @@ export function getSplitLabel(eventId: string): string {
   return labels[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
 }
 
+// スプリットIDの正規タイムライン名（SPLIT_MARK_ITEM / pacemanPaces.timeline と同じ語彙）
+const SPLIT_TIMELINES: Record<string, string> = {
+  "rsg.enter_nether": "Enter Nether",
+  "rsg.enter_bastion": "Bastion",
+  "rsg.enter_fortress": "Fortress",
+  "rsg.first_portal": "First Portal",
+  "rsg.second_portal": "Second Portal",
+  "rsg.enter_stronghold": "Enter Stronghold",
+  "rsg.enter_end": "Enter End",
+  "rsg.credits": "Finish",
+};
+
+// 英語表示ラベル（正規タイムライン名との差分は First Portal の口語表記 "Blind" のみ）
+const SPLIT_LABELS_EN: Record<string, string> = {
+  ...SPLIT_TIMELINES,
+  "rsg.first_portal": "Blind",
+};
+
 /**
  * スプリットIDを英語ラベルに変換
  */
 export function getSplitLabelEnglish(eventId: string): string {
-  const labels: Record<string, string> = {
-    "rsg.enter_nether": "Enter Nether",
-    "rsg.enter_bastion": "Bastion",
-    "rsg.enter_fortress": "Fortress",
-    "rsg.first_portal": "Blind",
-    "rsg.second_portal": "Second Portal",
-    "rsg.enter_stronghold": "Enter Stronghold",
-    "rsg.enter_end": "Enter End",
-    "rsg.credits": "Finish",
-  };
-  return labels[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
+  return SPLIT_LABELS_EN[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
 }
 
 /**
@@ -95,17 +103,7 @@ export function getSplitLabelEnglish(eventId: string): string {
  * pacemanPaces.timeline と同じ語彙（"First Portal" 等）に揃える。
  */
 export function getSplitTimeline(eventId: string): string {
-  const timelines: Record<string, string> = {
-    "rsg.enter_nether": "Enter Nether",
-    "rsg.enter_bastion": "Bastion",
-    "rsg.enter_fortress": "Fortress",
-    "rsg.first_portal": "First Portal",
-    "rsg.second_portal": "Second Portal",
-    "rsg.enter_stronghold": "Enter Stronghold",
-    "rsg.enter_end": "Enter End",
-    "rsg.credits": "Finish",
-  };
-  return timelines[eventId] || getSplitLabelEnglish(eventId);
+  return SPLIT_TIMELINES[eventId] || getSplitLabelEnglish(eventId);
 }
 
 /**

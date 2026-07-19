@@ -7,6 +7,7 @@ import {
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
+import { t } from "@/lib/messages";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,11 +37,11 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-3 font-medium">走者</th>
-            <th className="text-left py-2 px-3 font-medium">バージョン</th>
-            <th className="text-left py-2 px-3 font-medium">区間</th>
-            <th className="text-right py-2 px-3 font-medium">タイム</th>
-            <th className="text-center py-2 px-3 font-medium">配信</th>
+            <th className="text-left py-2 px-3 font-medium">{t("home.paceListRunner")}</th>
+            <th className="text-left py-2 px-3 font-medium">{t("home.paceListVersion")}</th>
+            <th className="text-left py-2 px-3 font-medium">{t("home.paceListSplit")}</th>
+            <th className="text-right py-2 px-3 font-medium">{t("home.paceListTime")}</th>
+            <th className="text-center py-2 px-3 font-medium">{t("home.paceListStream")}</th>
           </tr>
         </thead>
         <tbody>
@@ -125,7 +126,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                       className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
                     >
                       <ExternalLink className="h-3 w-3" />
-                      配信
+                      {t("home.paceListStream")}
                     </a>
                   ) : (
                     <span className="text-muted-foreground text-xs">-</span>

@@ -99,28 +99,23 @@ export async function loader({ request }: Route.LoaderArgs) {
     where: excludeViewersCondition,
     columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
   });
-  const registeredMcids = allUserMcids
-    .filter((u) => u.mcid !== null)
-    .map((u) => u.mcid!.toLowerCase());
+  const usersWithMcid = allUserMcids.filter(
+    (u): u is typeof u & { mcid: string } => u.mcid !== null
+  );
+  const registeredMcids = usersWithMcid.map((u) => u.mcid.toLowerCase());
   const mcidToUuid = Object.fromEntries(
-    allUserMcids
-      .filter((u) => u.mcid !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.uuid])
+    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.uuid])
   );
   const mcidToSlug = Object.fromEntries(
-    allUserMcids
-      .filter((u) => u.mcid !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.slug])
+    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.slug])
   );
   const mcidToDisplayName = Object.fromEntries(
-    allUserMcids
-      .filter((u) => u.mcid !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
+    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.displayName || u.mcid])
   );
   const mcidToSkinUrl = Object.fromEntries(
-    allUserMcids
-      .filter((u) => u.mcid !== null && u.customSkinUrl !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
+    usersWithMcid
+      .filter((u) => u.customSkinUrl !== null)
+      .map((u) => [u.mcid.toLowerCase(), u.customSkinUrl!])
   );
 
   // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
@@ -516,8 +511,15 @@ export default function HomePage() {
     ]);
   }, [fetchLiveRuns]);
 
-  // mcidToUuidをマージ
-  const mergedMcidToUuid = { ...mcidToUuid, ...pacesMcidToUuid };
+  // ローダー由来のマップにフィード由来の情報をマージ（毎レンダーの再生成を避ける）
+  const mergedMcidToUuid = useMemo(
+    () => ({ ...mcidToUuid, ...pacesMcidToUuid }),
+    [mcidToUuid, pacesMcidToUuid]
+  );
+  const mergedMcidToSkinUrl = useMemo(
+    () => ({ ...mcidToSkinUrl, ...feed.mcidToSkinUrl }),
+    [mcidToSkinUrl, feed.mcidToSkinUrl]
+  );
 
   return (
     <div className="relative flex-1 space-y-7 sm:space-y-8">
@@ -676,7 +678,7 @@ export default function HomePage() {
                 mcidToSlug={mcidToSlug}
                 mcidToUuid={mergedMcidToUuid}
                 mcidToDisplayName={mcidToDisplayName}
-                mcidToSkinUrl={{ ...mcidToSkinUrl, ...feed.mcidToSkinUrl }}
+                mcidToSkinUrl={mergedMcidToSkinUrl}
               />
             ) : (
               <p className="text-sm text-muted-foreground">{t("home.noLivePaces")}</p>

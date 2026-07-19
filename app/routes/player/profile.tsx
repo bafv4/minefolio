@@ -40,6 +40,8 @@ import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craf
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
+import { parseRunIdList } from "@/lib/run-id-list";
+import { YouTubeEmbed } from "@/components/youtube-embed";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -493,15 +495,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
-  // 非表示記録IDをパース
-  const hiddenSpeedrunRecords: string[] = player.hiddenSpeedrunRecords
-    ? JSON.parse(player.hiddenSpeedrunRecords)
-    : [];
-
-  // ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
-  const pinnedSpeedrunRecords: string[] = player.pinnedSpeedrunRecords
-    ? JSON.parse(player.pinnedSpeedrunRecords)
-    : [];
+  // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
+  const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
+  const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
   // PaceManの統計情報を取得（MCIDがある場合のみ）
   let pacemanStats = null;
@@ -2211,16 +2207,7 @@ function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "sma
           {video.title && <span className="text-sm font-medium truncate">{video.title}</span>}
         </div>
       )}
-      <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
-        <iframe
-          className="w-full h-full"
-          src={embedUrl}
-          title={video.title || "Video"}
-          loading="lazy"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
+      <YouTubeEmbed embedUrl={embedUrl} title={video.title || "Video"} />
     </div>
   );
 }
@@ -2411,6 +2398,9 @@ function StatsContent({
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
     && loadState.speedruncom !== "loading";
+  // Speedrun.com PBの絞り込み・並び替え用（sort比較関数内でのArray.includes連発を避ける）
+  const hiddenSet = new Set(hiddenSpeedrunRecords);
+  const pinnedSet = new Set(pinnedSpeedrunRecords);
 
   return (
     <>
@@ -2688,15 +2678,13 @@ function StatsContent({
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {externalStats.speedruncom.personalBests
-                .filter((pb) => !hiddenSpeedrunRecords.includes(pb.run.id))
+                .filter((pb) => !hiddenSet.has(pb.run.id))
                 // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
-                .sort((a, b) =>
-                  Number(pinnedSpeedrunRecords.includes(b.run.id)) -
-                  Number(pinnedSpeedrunRecords.includes(a.run.id))
-                )
+                .sort((a, b) => Number(pinnedSet.has(b.run.id)) - Number(pinnedSet.has(a.run.id)))
                 .slice(0, 6)
                 .map((pb) => {
-                  const isPinned = pinnedSpeedrunRecords.includes(pb.run.id);
+                  const isPinned = pinnedSet.has(pb.run.id);
+                  const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
                   return (
                     <div
                       key={pb.run.id}
@@ -2725,21 +2713,12 @@ function StatsContent({
                       <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
                         {formatTime(pb.run.times.primary_t * 1000)}
                       </p>
-                      {(() => {
-                        const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
-                        return videoEmbedUrl ? (
-                          <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
-                            <iframe
-                              className="w-full h-full"
-                              src={videoEmbedUrl}
-                              title={pb.category?.data?.name ?? "Speedrun video"}
-                              loading="lazy"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
-                        ) : null;
-                      })()}
+                      {videoEmbedUrl && (
+                        <YouTubeEmbed
+                          embedUrl={videoEmbedUrl}
+                          title={pb.category?.data?.name ?? "Speedrun video"}
+                        />
+                      )}
                       {pb.run.weblink && (
                         <a
                           href={pb.run.weblink}

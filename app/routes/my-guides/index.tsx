@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { MyContentTabs } from "@/components/content-tabs";
+import { PinnedBadge } from "@/components/pinned-badge";
 import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -143,12 +144,7 @@ export default function MyGuidesPage() {
                           {t("meGuides.statusDraft")}
                         </Badge>
                       )}
-                      {guide.isPinned && (
-                        <Badge variant="outline" className="shrink-0 text-xs border-primary/40 text-primary">
-                          <Pin className="h-3 w-3 mr-1" />
-                          {t("meGuides.pinned")}
-                        </Badge>
-                      )}
+                      {guide.isPinned && <PinnedBadge className="shrink-0" />}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       <span>

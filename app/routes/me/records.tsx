@@ -10,6 +10,9 @@ import { eq, and, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
+import { parseRunIdList, toggleRunId } from "@/lib/run-id-list";
+import { YouTubeEmbed } from "@/components/youtube-embed";
+import { PinnedBadge } from "@/components/pinned-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -86,15 +89,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // 非表示記録IDをパース
-  const hiddenSpeedrunRecords: string[] = user.hiddenSpeedrunRecords
-    ? JSON.parse(user.hiddenSpeedrunRecords)
-    : [];
-
-  // ピン留め記録IDをパース
-  const pinnedSpeedrunRecords: string[] = user.pinnedSpeedrunRecords
-    ? JSON.parse(user.pinnedSpeedrunRecords)
-    : [];
+  // 非表示・ピン留め記録IDをパース
+  const hiddenSpeedrunRecords = parseRunIdList(user.hiddenSpeedrunRecords);
+  const pinnedSpeedrunRecords = parseRunIdList(user.pinnedSpeedrunRecords);
 
   return {
     user,
@@ -224,20 +221,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meRecords.recordIdRequired") };
     }
 
-    // 現在の非表示リストを取得
-    const currentHidden: string[] = user.hiddenSpeedrunRecords
-      ? JSON.parse(user.hiddenSpeedrunRecords)
-      : [];
-
-    // トグル処理
-    let newHidden: string[];
-    if (currentHidden.includes(runId)) {
-      newHidden = currentHidden.filter((id) => id !== runId);
-    } else {
-      newHidden = [...currentHidden, runId];
-    }
-
-    // データベースを更新
+    const newHidden = toggleRunId(parseRunIdList(user.hiddenSpeedrunRecords), runId);
     await db
       .update(users)
       .set({
@@ -256,20 +240,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meRecords.recordIdRequired") };
     }
 
-    // 現在のピン留めリストを取得
-    const currentPinned: string[] = user.pinnedSpeedrunRecords
-      ? JSON.parse(user.pinnedSpeedrunRecords)
-      : [];
-
-    // トグル処理
-    let newPinned: string[];
-    if (currentPinned.includes(runId)) {
-      newPinned = currentPinned.filter((id) => id !== runId);
-    } else {
-      newPinned = [...currentPinned, runId];
-    }
-
-    // データベースを更新
+    const newPinned = toggleRunId(parseRunIdList(user.pinnedSpeedrunRecords), runId);
     await db
       .update(users)
       .set({
@@ -311,29 +282,21 @@ export default function RecordsPage() {
     }
   }, [fetcher.data]);
 
-  // Speedrun.com記録の表示/非表示をトグル
-  const toggleSpeedrunRecordVisibility = (runId: string) => {
-    fetcher.submit(
-      { _action: "toggleSpeedrunRecord", runId },
-      { method: "post" }
-    );
-    // 楽観的更新
-    setHiddenSpeedrunRecords((prev) =>
-      prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
-    );
+  // Speedrun.com記録のフラグ（非表示/ピン留め）を、サーバー送信 + 楽観的更新でトグルする
+  const toggleSpeedrunRecordFlag = (
+    action: "toggleSpeedrunRecord" | "toggleSpeedrunRecordPin",
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    runId: string,
+  ) => {
+    fetcher.submit({ _action: action, runId }, { method: "post" });
+    setter((prev) => toggleRunId(prev, runId));
   };
 
-  // Speedrun.com記録のピン留めをトグル
-  const toggleSpeedrunRecordPin = (runId: string) => {
-    fetcher.submit(
-      { _action: "toggleSpeedrunRecordPin", runId },
-      { method: "post" }
-    );
-    // 楽観的更新
-    setPinnedSpeedrunRecords((prev) =>
-      prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
-    );
-  };
+  const toggleSpeedrunRecordVisibility = (runId: string) =>
+    toggleSpeedrunRecordFlag("toggleSpeedrunRecord", setHiddenSpeedrunRecords, runId);
+
+  const toggleSpeedrunRecordPin = (runId: string) =>
+    toggleSpeedrunRecordFlag("toggleSpeedrunRecordPin", setPinnedSpeedrunRecords, runId);
 
   const handleOpenCreate = () => {
     setEditingRecord(null);
@@ -476,6 +439,7 @@ export default function RecordsPage() {
                 {speedruncomRecords.personalBests.map((pb) => {
                   const isHidden = hiddenSpeedrunRecords.includes(pb.run.id);
                   const isPinned = pinnedSpeedrunRecords.includes(pb.run.id);
+                  const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
                   return (
                     <div
                       key={pb.run.id}
@@ -541,28 +505,14 @@ export default function RecordsPage() {
                       <p className="text-lg font-mono font-bold">
                         {formatTime(pb.run.times.primary_t * 1000)}
                       </p>
-                      {(() => {
-                        const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
-                        return videoEmbedUrl ? (
-                          <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
-                            <iframe
-                              className="w-full h-full"
-                              src={videoEmbedUrl}
-                              title={pb.category?.data?.name ?? "Speedrun video"}
-                              loading="lazy"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
-                        ) : null;
-                      })()}
+                      {videoEmbedUrl && (
+                        <YouTubeEmbed
+                          embedUrl={videoEmbedUrl}
+                          title={pb.category?.data?.name ?? "Speedrun video"}
+                        />
+                      )}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {isPinned && (
-                          <Badge variant="outline" className="text-xs border-primary/40 text-primary">
-                            <Pin className="h-3 w-3 mr-1" />
-                            {t("meRecords.pinned")}
-                          </Badge>
-                        )}
+                        {isPinned && <PinnedBadge />}
                         {isHidden && (
                           <Badge variant="secondary" className="text-xs">{t("meRecords.hidden")}</Badge>
                         )}
@@ -628,12 +578,7 @@ export default function RecordsPage() {
                   )}
                   <div className="flex gap-2 mt-2">
                     {!record.isVisible && <Badge variant="secondary">{t("meRecords.private")}</Badge>}
-                    {record.isPinned && (
-                      <Badge variant="outline" className="border-primary/40 text-primary">
-                        <Pin className="h-3 w-3 mr-1" />
-                        {t("meRecords.pinned")}
-                      </Badge>
-                    )}
+                    {record.isPinned && <PinnedBadge />}
                     {record.pbVideoUrl && (
                       <Button variant="outline" size="sm" asChild>
                         <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">
