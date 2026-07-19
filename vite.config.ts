@@ -12,12 +12,12 @@ export default defineConfig(({ isSsrBuild }) => ({
     // tsconfig の paths（@/* → app/*）を Vite 8 のネイティブ解決で処理する
     // （vite-tsconfig-paths プラグインの後継。プラグイン検出 WARNING の解消）
     tsconfigPaths: true,
-    // xss(CJS) は外部参照のまま（sanitize-html と違い純ESM依存を持たず ERR_REQUIRE_ESM は
-    // 起きない。`import { FilterXSS } from "xss"` も静的な名前付きエクスポートで interop 可）。
-    // 推移的依存 cssfilter の実行時解決は Vercel のファイルトレース(@vercel/nft)に委ねる。
-    // ※ プレビューデプロイで解決漏れ(Cannot find module)が出たら、この配列に
-    //   ["xss", "cssfilter"] を戻してインライン化する。
-    noExternal: [],
+    // xss(CJS)/cssfilter は外部参照のままにする（sanitize-html のような noExternal 不要）。
+    // 理由: xss/cssfilter は純CJSで純ESMの推移的依存を持たず ERR_REQUIRE_ESM を起こさない。
+    // 推移的依存 cssfilter の実行時解決は Vercel のファイルトレース(@vercel/nft)に委ねられ、
+    // Vercel プレビューデプロイでガイド表示が正常動作することを確認済み（2026-07-19）。
+    // もし将来 Cannot find module 等が出たら resolve.noExternal に ["xss","cssfilter"] を
+    // 追加して build 時のみインライン化する（command === "build" 限定。dev は不可）。
   },
   build: {
     rollupOptions: {
