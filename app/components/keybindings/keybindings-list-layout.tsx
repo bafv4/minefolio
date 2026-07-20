@@ -115,19 +115,17 @@ export function KeybindingsListLayout({
             onValueChange={(v) => filters.setTab(v as Tab)}
             className="w-full"
           >
-            <div className="overflow-x-auto pb-1 -mx-1 px-1">
-              <TabsList className="w-max">
-                {TAB_ITEMS.map(({ value, label, icon: Icon, color }) => (
-                  <TabsTrigger key={value} value={value} className="gap-1.5">
-                    <Icon
-                      className="h-4 w-4"
-                      style={color ? { color } : undefined}
-                    />
-                    {label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+            <TabsList>
+              {TAB_ITEMS.map(({ value, label, icon: Icon, color }) => (
+                <TabsTrigger key={value} value={value} className="gap-1.5">
+                  <Icon
+                    className="h-4 w-4"
+                    style={color ? { color } : undefined}
+                  />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
             {TAB_ITEMS.map(({ value }) => (
               <TabsContent key={value} value={value}>
