@@ -177,6 +177,15 @@ export default function MyTemplatesPage() {
 
   return (
     <div className="space-y-6">
+      <MyContentTabs active="templates" />
+
+      {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
+          先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="list" />
+      ) : (
+      <>
+      {/* タイトル・説明・作成ボタンはタブの内側（コンテンツ側）に置く */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meTemplates.pageTitle")}</h1>
@@ -192,8 +201,6 @@ export default function MyTemplatesPage() {
         </Button>
       </div>
 
-      <MyContentTabs active="templates" />
-
       <div className="rounded-lg border border-dashed bg-secondary/30 p-4 text-sm text-muted-foreground">
         {t("meTemplates.hint")}{" "}
         <Link to="/guides/templates" className="text-primary hover:underline inline-flex items-center gap-1">
@@ -202,9 +209,7 @@ export default function MyTemplatesPage() {
         </Link>
       </div>
 
-      {isTabSwitching ? (
-        <TabContentSkeleton variant="list" />
-      ) : templates.length > 0 ? (
+      {templates.length > 0 ? (
         <div className="space-y-3">
           {templates.map((template) => (
             <Card key={template.id}>
@@ -340,6 +345,8 @@ export default function MyTemplatesPage() {
             </Button>
           </CardContent>
         </Card>
+      )}
+      </>
       )}
     </div>
   );

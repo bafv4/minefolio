@@ -100,6 +100,15 @@ export default function MyGuidesPage() {
 
   return (
     <div className="space-y-6">
+      <MyContentTabs active="guides" />
+
+      {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
+          先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="list" />
+      ) : (
+      <>
+      {/* タイトル・説明・新規ボタンはタブの内側（コンテンツ側）に置く */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meGuides.pageTitle")}</h1>
@@ -113,11 +122,7 @@ export default function MyGuidesPage() {
         </Button>
       </div>
 
-      <MyContentTabs active="guides" />
-
-      {isTabSwitching ? (
-        <TabContentSkeleton variant="list" />
-      ) : userGuides.length === 0 ? (
+      {userGuides.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground mb-4">{t("meGuides.noGuides")}</p>
@@ -238,6 +243,8 @@ export default function MyGuidesPage() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );
