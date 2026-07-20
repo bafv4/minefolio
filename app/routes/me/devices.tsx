@@ -7,7 +7,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, playerConfigs, configPresets } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -56,13 +56,18 @@ export const meta: Route.MetaFunction = () => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
   // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
   if (formAction === "/me/presets") {
     return true;
+  }
+  // PresetSelector の focus 再検証（別タブでのプリセット切替検知）を通すため、
+  // revalidator 起点（アクション無し・URL 不変）の再検証は既定の判断に任せる
+  if (!formAction && currentUrl.href === nextUrl.href) {
+    return defaultShouldRevalidate;
   }
   return false;
 }
@@ -177,6 +182,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  const actionType = formData.get("_action") as string | null;
   const presetId = (formData.get("presetId") as string | null) || null;
 
   try {
@@ -188,7 +194,23 @@ export async function action({ request }: Route.ActionArgs) {
     throw e;
   }
 
-  // 入力方法の更新
+  // playerConfig はプリセットのスナップショットに含まれるデータのため、
+  // アクティブなプリセットが無い状態では保存できない（UIのグレーアウトだけでなくサーバー側でも拒否）。
+  // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
+  // どのプリセットにも属さないデータになってしまう。
+  // 入力方法のみの保存（saveInputMethod）は users.inputMethod（プリセット非依存）だけを
+  // 更新するため、プリセットが無くても許可する。
+  if (actionType !== "saveInputMethod") {
+    const activePresetRow = await db.query.configPresets.findFirst({
+      where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+      columns: { id: true },
+    });
+    if (!activePresetRow) {
+      return { error: t("meDevices.presetRequired") };
+    }
+  }
+
+  // 入力方法の更新（users.inputMethod はプリセット非依存）
   const inputMethodValue = formData.get("inputMethod") as string | null;
   if (inputMethodValue !== null) {
     const validInputMethods = ["keyboard_mouse", "controller", "touch", ""] as const;
@@ -199,6 +221,11 @@ export async function action({ request }: Route.ActionArgs) {
         .set({ inputMethod: typedInputMethod })
         .where(eq(users.id, user.id));
     }
+  }
+
+  // 入力方法のみの保存はここで完了（playerConfig 系は書き込まない）
+  if (actionType === "saveInputMethod") {
+    return { success: true };
   }
 
   const keyboardLayout = (formData.get("keyboardLayout") as string) || null;
@@ -250,11 +277,20 @@ export async function action({ request }: Route.ActionArgs) {
     updatedAt: new Date(),
   };
 
+  // upsert: ライブの playerConfig 行が無い場合は insert する
+  // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
   if (user.playerConfig) {
     await db
       .update(playerConfigs)
       .set(configData)
       .where(eq(playerConfigs.id, user.playerConfig.id));
+  } else {
+    await db.insert(playerConfigs).values({
+      id: createId(),
+      userId: user.id,
+      ...configData,
+      createdAt: new Date(),
+    });
   }
 
   // アクティブプリセットスナップショット同期
@@ -286,6 +322,24 @@ function parseControllerSettings(json: string | null | undefined): ControllerSet
   } catch {
     return DEFAULT_CONTROLLER_SETTINGS;
   }
+}
+
+/**
+ * プリセット未作成時に、デバイス・ゲーム内設定が編集できない旨を案内する。
+ * 入力方法（users.inputMethod・プリセット非依存）はプリセットが無くても変更・保存できる。
+ */
+function PresetRequiredNotice() {
+  return (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="flex flex-wrap items-center gap-1">
+        <span>{t("meDevices.presetRequiredNotice")}</span>
+        <Link to="/me/presets" className="underline underline-offset-2">
+          {t("meDevices.presetRequiredLink")}
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 export default function DevicesPage() {
@@ -379,6 +433,15 @@ export default function DevicesPage() {
   // 保存処理
   const handleSave = useCallback(() => {
     const formData = new FormData();
+
+    // プリセット未作成時は入力方法（プリセット非依存）のみ保存できる
+    if (!hasPresets) {
+      formData.set("_action", "saveInputMethod");
+      formData.set("inputMethod", formValues.inputMethod);
+      fetcher.submit(formData, { method: "post" });
+      return;
+    }
+
     if (activePreset) {
       formData.set("presetId", activePreset.id);
     }
@@ -407,7 +470,7 @@ export default function DevicesPage() {
       vibration: formValues.vibration,
     }));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, activePreset]);
+  }, [fetcher, formValues, activePreset, hasPresets]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -534,6 +597,9 @@ export default function DevicesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
+      {!hasPresets && <PresetRequiredNotice />}
 
       <div className="space-y-6" style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
         {/* コントローラー設定（inputMethod === "controller" の場合） */}
@@ -840,15 +906,15 @@ export default function DevicesPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Floating Save Bar */}
-        <FloatingSaveBar
-          hasChanges={hasChanges}
-          isSubmitting={isSubmitting}
-          onSave={handleSave}
-          onReset={handleReset}
-        />
       </div>
+
+      {/* Floating Save Bar（プリセット未作成時でも入力方法の保存/取消ができるようゲート外に置く） */}
+      <FloatingSaveBar
+        hasChanges={hasChanges}
+        isSubmitting={isSubmitting}
+        onSave={handleSave}
+        onReset={handleReset}
+      />
 
       {/* プリセットからコピーダイアログ */}
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
