@@ -7,17 +7,17 @@
 //   3. インデックス idx_config_presets_is_main を作成
 //
 // 実行:
-//   pnpm exec tsx scripts/add-main-preset-column.ts          # dry-run（現状の確認のみ）
-//   pnpm exec tsx scripts/add-main-preset-column.ts --apply  # 実際に適用
-// （dotenv が .env の TURSO_DATABASE_URL / TURSO_AUTH_TOKEN を読み込む）
-import "dotenv/config";
+//   pnpm exec tsx scripts/add-main-preset-column.ts                   # ローカル（.env）に dry-run
+//   pnpm exec tsx scripts/add-main-preset-column.ts --apply           # ローカルに適用
+//   pnpm exec tsx scripts/add-main-preset-column.ts --remote          # リモート（.env.remote）に dry-run
+//   pnpm exec tsx scripts/add-main-preset-column.ts --remote --apply  # リモートに適用
 import { createClient } from "@libsql/client";
+import { loadDbEnv } from "./lib/db-env";
 
-const url = process.env.TURSO_DATABASE_URL;
-if (!url) throw new Error("TURSO_DATABASE_URL が未設定です（.env を確認）");
+const { url, authToken } = loadDbEnv();
 
 const apply = process.argv.includes("--apply");
-const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+const client = createClient({ url, authToken });
 
 console.log(`モード: ${apply ? "APPLY（実際に適用します）" : "DRY-RUN（表示のみ・変更なし）"}`);
 

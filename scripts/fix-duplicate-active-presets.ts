@@ -4,17 +4,17 @@
 // 重複が発生しうる。updated_at が最新の1件だけを active に残し、他を false にする。
 //
 // 実行:
-//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts          # dry-run（対象の表示のみ）
-//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts --apply  # 実際に修復
-// （dotenv が .env の TURSO_DATABASE_URL / TURSO_AUTH_TOKEN を読み込む）
-import "dotenv/config";
+//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts                   # ローカル（.env）に dry-run
+//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts --apply           # ローカルに修復適用
+//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts --remote          # リモート（.env.remote）に dry-run
+//   pnpm exec tsx scripts/fix-duplicate-active-presets.ts --remote --apply  # リモートに修復適用
 import { createClient } from "@libsql/client";
+import { loadDbEnv } from "./lib/db-env";
 
-const url = process.env.TURSO_DATABASE_URL;
-if (!url) throw new Error("TURSO_DATABASE_URL が未設定です（.env を確認）");
+const { url, authToken } = loadDbEnv();
 
 const apply = process.argv.includes("--apply");
-const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+const client = createClient({ url, authToken });
 
 // is_active=true が2件以上のユーザーを抽出
 const dupUsers = await client.execute(`

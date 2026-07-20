@@ -15,7 +15,8 @@ pnpm typecheck        # React Router typegen + tsc --noEmit
 pnpm test             # Vitest実行
 pnpm db:generate      # スキーマ変更からDrizzleマイグレーション生成
 pnpm db:migrate       # マイグレーション実行
-pnpm db:push          # スキーマを直接Tursoに反映（マイグレーションファイルなし）
+pnpm db:push          # スキーマをローカルDB（.env = file:local.db）に直接反映
+pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直接反映
 ```
 
 ### git依存パッケージの更新（`@bafv4/mcitems` 等）
@@ -70,7 +71,18 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 - スキーマ: `app/lib/schema.ts`（Drizzle ORM、SQLite/Turso方言）
 - マイグレーション: `drizzle/` ディレクトリ、`pnpm db:generate` + `pnpm db:migrate` で管理
 - ID生成: `@paralleldrive/cuid2` によるCUID2
-- 設定: `drizzle.config.ts`（Turso URLがない場合は `file:local.db` にフォールバック）
+- 設定: `drizzle.config.ts` = ローカル用（`.env` を読み込み。リモートURLならエラーで中断）、
+  `drizzle.remote.config.ts` = リモート用（`.env.remote` を読み込み。`pnpm db:push:remote` で使用）
+
+#### 接続先の分離運用（重要）
+
+- **`.env` は常に `file:local.db` 固定**。リモートTursoの接続情報は `.env.remote`（gitignore済み）に分離する
+- `.env` を一時的にリモートURLへ書き換える運用は**禁止**（起動中のdevサーバーや別スクリプトが巻き添えでリモートDBに接続する事故のもと）
+- リモートへの反映: `pnpm db:push:remote`、または `scripts/` の一回限りスクリプトに `--remote` フラグ
+  （共通ローダー `scripts/lib/db-env.ts` が `.env.remote` を読み込み、URLスキームを検証して取り違えを中断する）
+- `pnpm db:push` はfalsyデフォルトの新規NOT NULL列で**TRUNCATE（データ損失）を提案する**ことがある。
+  その場合はpushせず、`scripts/` に dry-run既定 + `--apply` フラグの一回限りtsxスクリプトを作って手動DDLで適用する
+- ガード: `.env` にリモートURLが入ると `drizzle.config.ts`・各スクリプト・`/dev/login`（`isDevAuthEnabled()`）がすべて拒否する
 
 ### i18n（国際化）
 
@@ -102,7 +114,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`
 
-ローカル開発は `TURSO_DATABASE_URL=file:local.db`（ローカルSQLite）+ `DEV_AUTH=1`（`/dev/login` の簡易ログイン、本番では常に無効）で Turso / Discord OAuth なしに動かせる。詳細: `docs/local-development.md`
+ローカル開発は `TURSO_DATABASE_URL=file:local.db`（ローカルSQLite）+ `DEV_AUTH=1`（`/dev/login` の簡易ログイン、本番・リモートDB接続時は常に無効）で Turso / Discord OAuth なしに動かせる。リモートTursoの接続情報は `.env` ではなく `.env.remote` に置く（上記「接続先の分離運用」参照）。詳細: `docs/local-development.md`
 
 サーバー専用の環境変数は `app/lib/env.server.ts` の `getEnv()` 経由でアクセス。
 
