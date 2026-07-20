@@ -76,6 +76,24 @@ TURSO_AUTH_TOKEN=...
 - **ガード**: `.env` にリモート URL を書くと `drizzle.config.ts`・各スクリプトが
   エラーで中断し、`/dev/login` も自動的に無効になる（下記）
 
+### リモートDB に接続して dev サーバーを起動（`pnpm dev:remote`）
+
+```bash
+pnpm dev:remote   # react-router dev --mode remote
+```
+
+`.env` を書き換えずにリモート DB へ繋いだ dev サーバーを起動する。仕組みは Vite の
+モード別 env ファイル: React Router の dev サーバーは `vite.loadEnv(mode, ...)` で
+env を読み込むため、`--mode remote` を渡すと **`.env.remote` が `.env` の上に重なる**
+（`TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` だけがリモート値で上書きされ、その他の
+変数は `.env` のまま）。通常の `pnpm dev`（mode=development）は `.env.remote` を
+読まないので、ローカルと同時に立ち上げても互いに巻き添えにならない。
+
+- `.env.remote` が必要（未設定なら DB 接続で失敗する）。上記のリモート接続情報を記載しておく
+- 接続先がリモート（`libsql://`）になるため `/dev/login` は自動的に無効。実データを扱うため
+  破壊的な操作に注意する
+- `NODE_ENV` は development のまま（Vite のモードと NODE_ENV は別物）
+
 ## 簡易ログイン（/dev/login）
 
 - **有効化条件（三重ゲート）**: `DEV_AUTH=1` **かつ** `NODE_ENV !== "production"`
@@ -101,4 +119,5 @@ TURSO_AUTH_TOKEN=...
 | `app/lib/auth.ts` | `emailAndPassword` のローカル限定有効化・Discord プロバイダの条件付き登録 |
 | `app/lib/seed-categories.ts` | カテゴリシード（`npx tsx` で実行） |
 | `scripts/lib/db-env.ts` | 一回限りスクリプト共通の環境ローダー（`--remote` で `.env.remote`） |
+| `package.json` (`dev:remote`) | `react-router dev --mode remote`。Vite のモード別 env で `.env.remote` を重ねてリモート DB に接続 |
 | `drizzle.remote.config.ts` | `pnpm db:push:remote` 用のリモート drizzle 設定 |

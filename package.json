@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
+    "dev:remote": "react-router dev --mode remote",
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
