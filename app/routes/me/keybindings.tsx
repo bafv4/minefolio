@@ -42,7 +42,7 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, type KeyRemapType, type RemapConflict } from "@/lib/remap-utils";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetSyncKind } from "@/lib/preset-utils";
 import { PresetSelector } from "@/components/preset-selector";
 
 export const meta: Route.MetaFunction = () => {
@@ -50,7 +50,7 @@ export const meta: Route.MetaFunction = () => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
   // 自ルートのアクション結果がある場合はデフォルトの動作に従う
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
@@ -58,6 +58,11 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
   // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
   if (formAction === "/me/presets") {
     return true;
+  }
+  // フォーム送信を伴わない同一 URL の再検証（useRevalidator 起点）はデフォルトに従う。
+  // PresetSelector の focus 再検証（別タブでのプリセット切替検知）や Reload ボタンを通すため
+  if (!formAction && currentUrl.href === nextUrl.href) {
+    return defaultShouldRevalidate;
   }
   // それ以外（ナビゲーションなど）では再検証しない
   return false;
@@ -218,8 +223,17 @@ function remapConflictErrorMessage(conflict: RemapConflict, keyboardLayout?: str
     : t("meKeybindings.remapAllConflictError", { key });
 }
 
+type Db = ReturnType<typeof createDb>;
+/** db.transaction のコールバックに渡るトランザクション型 */
+type DbTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/** persist 系ヘルパーが受け取る DB クライアント（トップレベル / トランザクション内のどちらでも可） */
+type DbClient = Db | DbTransaction;
+
+/** save-all のトランザクションをユーザー向けエラーメッセージ付きで中断するための例外 */
+class SaveAllAbortError extends Error {}
+
 async function persistRemaps(
-  db: ReturnType<typeof createDb>,
+  db: DbClient,
   userId: string,
   remapsData: RemapMutationInput[],
   now: Date
@@ -313,7 +327,7 @@ async function persistRemaps(
 }
 
 async function persistKeybindingUpdates(
-  db: ReturnType<typeof createDb>,
+  db: DbClient,
   userId: string,
   updates: KeybindingUpdateInput[],
   now: Date,
@@ -338,7 +352,7 @@ async function persistKeybindingUpdates(
 }
 
 async function upsertFingerAssignments(
-  db: ReturnType<typeof createDb>,
+  db: DbClient,
   userId: string,
   fingerAssignmentsJson: string,
   now: Date
@@ -365,7 +379,7 @@ async function upsertFingerAssignments(
 }
 
 async function persistCustomActions(
-  db: ReturnType<typeof createDb>,
+  db: DbClient,
   userId: string,
   actionsData: CustomActionMutationInput[],
   now: Date
@@ -526,7 +540,9 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const now = new Date();
     await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
-    await syncActivePresetSnapshot(db, user.id, ["fingers"]);
+    // upsertFingerAssignments はライブ playerConfig 行を新規作成しうるため playerConfig も同期する
+    // （fingers のみだと fingerAssignmentsData だけ非 null の非対称スナップショットになる）
+    await syncActivePresetSnapshot(db, user.id, ["fingers", "playerConfig"]);
 
     return { success: true, message: t("meKeybindings.saveFingers") };
   }
@@ -546,65 +562,87 @@ export async function action({ request }: Route.ActionArgs) {
 
     const now = new Date();
 
-    // リマップ（persistRemaps はエラーを返しうるため、他セクションの書き込みより先に実行する。
-    // 後に置くと、エラー時にキーバインド等だけが書き込まれた部分適用状態になる）
-    if (remapsJson) {
-      const remapsData = parseJsonArray<RemapMutationInput>(remapsJson);
-      if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
-      const remapError = await persistRemaps(db, user.id, remapsData, now);
-      if (remapError) return { error: remapError.error };
+    // 事前パース・バリデーション（書き込みを始める前に不正 payload をすべて弾く）
+    const remapsData = remapsJson ? parseJsonArray<RemapMutationInput>(remapsJson) : null;
+    if (remapsJson && !remapsData) return { error: t("meKeybindings.invalidPayload") };
+
+    const keybindingUpdates = keybindingsJson
+      ? parseJsonArray<KeybindingUpdateInput>(keybindingsJson)
+      : null;
+    if (keybindingsJson && !keybindingUpdates) return { error: t("meKeybindings.invalidPayload") };
+
+    if (fingerAssignmentsJson && !isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
+      return { error: t("meKeybindings.invalidPayload") };
     }
 
-    // キーバインド
-    if (keybindingsJson) {
-      const updates = parseJsonArray<KeybindingUpdateInput>(keybindingsJson);
-      if (!updates) return { error: t("meKeybindings.invalidPayload") };
-      await persistKeybindingUpdates(db, user.id, updates, now, {
-        normalizeEmptyToUnbound: false,
-      });
-    }
+    const customActionsData = customActionsJson
+      ? parseJsonArray<CustomActionMutationInput>(customActionsJson)
+      : null;
+    if (customActionsJson && !customActionsData) return { error: t("meKeybindings.invalidPayload") };
 
-    // 指割り当て
-    if (fingerAssignmentsJson) {
-      if (!isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
-        return { error: t("meKeybindings.invalidPayload") };
-      }
-      await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
-    }
-
-    // カスタムアクション
-    if (customActionsJson) {
-      const customActionsData = parseJsonArray<CustomActionMutationInput>(customActionsJson);
-      if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
-      await persistCustomActions(db, user.id, customActionsData, now);
-    }
-
-    // アクティブプリセットスナップショット同期
-    const syncKinds: Array<"keybindings" | "remaps" | "fingers" | "customActions"> = [];
-    if (keybindingsJson) syncKinds.push("keybindings");
-    if (remapsJson) syncKinds.push("remaps");
-    if (fingerAssignmentsJson) syncKinds.push("fingers");
-    if (customActionsJson) syncKinds.push("customActions");
-    if (syncKinds.length > 0) {
-      await syncActivePresetSnapshot(db, user.id, syncKinds);
-    }
-
-    // 変更履歴を記録
+    // 変更履歴の内容
     const changes: string[] = [];
     if (keybindingsJson) changes.push(t("meKeybindings.tabActions"));
     if (remapsJson) changes.push(t("meKeybindings.tabRemaps"));
     if (fingerAssignmentsJson) changes.push(t("meKeybindings.tabFingers"));
     if (customActionsJson) changes.push(t("meKeybindings.tabCustomActions"));
 
-    if (changes.length > 0) {
-      await db.insert(configHistory).values({
-        id: createId(),
-        userId: user.id,
-        changeType: "keybinding",
-        changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join("・") }),
-        newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
-        createdAt: now,
+    // persist 系すべて + 変更履歴の挿入を単一トランザクションで実行し、
+    // 途中で失敗（UNIQUE 制約違反等）した場合に部分適用状態にならないようにする
+    try {
+      await db.transaction(async (tx) => {
+        // リマップ（persistRemaps はエラーを返しうるため先に実行する。
+        // エラー時は throw でトランザクション全体をロールバックする）
+        if (remapsData) {
+          const remapError = await persistRemaps(tx, user.id, remapsData, now);
+          if (remapError) throw new SaveAllAbortError(remapError.error);
+        }
+
+        // キーバインド
+        if (keybindingUpdates) {
+          await persistKeybindingUpdates(tx, user.id, keybindingUpdates, now, {
+            normalizeEmptyToUnbound: false,
+          });
+        }
+
+        // 指割り当て
+        if (fingerAssignmentsJson) {
+          await upsertFingerAssignments(tx, user.id, fingerAssignmentsJson, now);
+        }
+
+        // カスタムアクション
+        if (customActionsData) {
+          await persistCustomActions(tx, user.id, customActionsData, now);
+        }
+
+        // 変更履歴を記録
+        if (changes.length > 0) {
+          await tx.insert(configHistory).values({
+            id: createId(),
+            userId: user.id,
+            changeType: "keybinding",
+            changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join("・") }),
+            newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
+            createdAt: now,
+          });
+        }
       });
+    } catch (e) {
+      if (e instanceof SaveAllAbortError) {
+        return { error: e.message };
+      }
+      throw e;
+    }
+
+    // アクティブプリセットスナップショット同期（ライブテーブルのコミット後に実行）
+    const syncKinds: PresetSyncKind[] = [];
+    if (keybindingsJson) syncKinds.push("keybindings");
+    if (remapsJson) syncKinds.push("remaps");
+    // upsertFingerAssignments はライブ playerConfig 行を新規作成しうるため playerConfig も同期する
+    if (fingerAssignmentsJson) syncKinds.push("fingers", "playerConfig");
+    if (customActionsJson) syncKinds.push("customActions");
+    if (syncKinds.length > 0) {
+      await syncActivePresetSnapshot(db, user.id, syncKinds);
     }
 
     return { success: true, message: t("meKeybindings.saveSettings") };
@@ -625,12 +663,17 @@ export async function action({ request }: Route.ActionArgs) {
 
     const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
+      // importFromLegacy が書き込みうるライブテーブルをすべて同期する
+      // （itemLayouts / searchCrafts を欠くとスナップショットが古いままになる）
       await syncActivePresetSnapshot(db, user.id, [
         "keybindings",
         "remaps",
         "fingers",
         "customKeys",
         "playerConfig",
+        "itemLayouts",
+        "searchCrafts",
+        "customActions",
       ]);
       return {
         success: true,
