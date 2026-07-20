@@ -191,8 +191,9 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
         </DialogHeader>
 
         {step === "select" && (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "remap" | "minecraft")}>
-            <TabsList>
+          // Dialog 内デグレード: カード化・タブ帯の面は打ち消し、ベースラインのみ残す
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "remap" | "minecraft")} className="overflow-visible rounded-none border-0 bg-transparent">
+            <TabsList className="bg-transparent p-0">
               <TabsTrigger value="remap" className="gap-2 data-[state=active]:bg-background">
                 <Keyboard className="h-4 w-4" />
                 リマップ

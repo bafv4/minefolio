@@ -131,7 +131,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
       <CardContent className="pt-0 pb-4 flex flex-col gap-3">
         {/* キーボード + マウス（カスタムボタン含む）。広い画面では横並び。読み取り専用。 */}
         <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-          <div className="overflow-x-auto pb-1 min-w-0 lg:flex-1">
+          <div className="custom-scrollbar overflow-x-auto pb-1 min-w-0 lg:flex-1">
             <VirtualKeyboard
               layout={layout}
               keybindings={keybindingsMap}
@@ -145,7 +145,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
               hideNumpad
             />
           </div>
-          <div className="overflow-x-auto pb-1 shrink-0">
+          <div className="custom-scrollbar overflow-x-auto pb-1 shrink-0">
             <VirtualMouse
               keybindings={keybindingsMap}
               fingerAssignments={fingerAssignments}

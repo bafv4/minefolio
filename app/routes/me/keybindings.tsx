@@ -722,6 +722,34 @@ const categoryColors: Record<string, string> = {
   ui: "text-category-ui",
 };
 
+// 操作割り当てタブの表示グループ。公開プロフィール
+// （app/routes/player/profile.tsx の keybindingDisplayGroups）と同一の
+// グルーピング・並び順にする（DB カテゴリではなく意味順の手書き分類）
+const KEYBINDING_DISPLAY_GROUPS = [
+  {
+    key: "movement",
+    labelKey: "playerProfile.movement",
+    color: "text-category-movement",
+    actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
+  },
+  {
+    key: "inventory",
+    labelKey: "playerProfile.inventory",
+    color: "text-category-inventory",
+    actions: [
+      "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
+      "hotbar6", "hotbar7", "hotbar8", "hotbar9",
+      "swapHands", "inventory", "pickBlock", "drop",
+    ],
+  },
+  {
+    key: "combat-ui",
+    labelKey: "playerProfile.combatAndUi",
+    color: "text-category-combat",
+    actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
+  },
+] as const;
+
 const FINGER_OPTIONS: FingerType[] = [
   "left-pinky",
   "left-ring",
@@ -1165,6 +1193,30 @@ export default function KeybindingsPage() {
   );
 
   const categoryOrder = ["movement", "combat", "inventory", "ui"];
+
+  // 操作割り当てタブの表示グループ:
+  // キーボード/マウスはプロフィールと同一の3グループ（移動 / インベントリ / 戦闘・UI）・意味順、
+  // コントローラーは従来どおり DB カテゴリ準拠
+  const displayGroups = useMemo(() => {
+    if (isControllerMode) {
+      return categoryOrder.map((category) => ({
+        key: category,
+        label: categoryLabels[category],
+        color: categoryColors[category],
+        bindings: byCategory[category] ?? [],
+      }));
+    }
+    const byAction = new Map(keybindingsWithLocalChanges.map((kb) => [kb.action, kb]));
+    return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
+      key: group.key,
+      label: t(group.labelKey),
+      color: group.color,
+      bindings: group.actions
+        .map((action) => byAction.get(action))
+        .filter((kb): kb is (typeof keybindingsWithLocalChanges)[number] => kb !== undefined),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isControllerMode, byCategory, keybindingsWithLocalChanges]);
 
   // キーボードレイアウト
   const keyboardLayout = (playerConfig?.keyboardLayout as "US" | "JIS") || "US";
@@ -2061,7 +2113,7 @@ export default function KeybindingsPage() {
           <CardContent>
             <div className="flex flex-col items-start gap-4">
               {/* メインキーボード */}
-              <div className="overflow-x-auto pb-2 w-full">
+              <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                 <VirtualKeyboard
                   layout={keyboardLayout}
                   keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
@@ -2117,11 +2169,11 @@ export default function KeybindingsPage() {
               <TabsTrigger value="remaps">
                 {t("meKeybindings.tabRemaps")}
               </TabsTrigger>
-              <TabsTrigger value="custom-keys">
-                {t("meKeybindings.tabCustomKeys")}
-              </TabsTrigger>
               <TabsTrigger value="custom-actions">
                 {t("meKeybindings.tabCustomActions")}
+              </TabsTrigger>
+              <TabsTrigger value="custom-keys">
+                {t("meKeybindings.tabCustomKeys")}
               </TabsTrigger>
             </>
           )}
@@ -2130,15 +2182,15 @@ export default function KeybindingsPage() {
         {/* 操作割り当てタブ */}
         <TabsContent value="keybindings" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {categoryOrder.map((category) => {
-              const bindings = byCategory[category];
+            {displayGroups.map((group) => {
+              const bindings = group.bindings;
               if (!bindings || bindings.length === 0) return null;
 
               return (
-                <Card key={category}>
+                <Card key={group.key}>
                   <CardHeader className="pb-2">
-                    <CardTitle className={`text-base font-semibold ${categoryColors[category]}`}>
-                      {categoryLabels[category]}
+                    <CardTitle className={`text-base font-semibold ${group.color}`}>
+                      {group.label}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">

@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Search } from "lucide-react";
 import { t } from "@/lib/messages";
 import { GuidesContentTabs } from "@/components/content-tabs";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -96,6 +98,7 @@ export default function GuidesIndexPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
+  const { isTabSwitching } = useTabNavigation();
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
   // Transform loader data to GuideItem[]
@@ -117,11 +120,18 @@ export default function GuidesIndexPage() {
 
   return (
     <div className="space-y-6">
+      <GuidesContentTabs active="guides" />
+
+      {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
+          先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="cards" />
+      ) : (
+      <>
+      {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
       <div>
         <h1 className="text-2xl font-bold">{t("guides.pageTitle")}</h1>
       </div>
-
-      <GuidesContentTabs active="guides" />
 
       {/* Search + tag filter + toggle */}
       <div className="flex flex-col gap-3">
@@ -212,6 +222,8 @@ export default function GuidesIndexPage() {
         <GuideCardGrid guides={guideItems} linkFn={linkFn} />
       ) : (
         <GuideListView guides={guideItems} linkFn={linkFn} />
+      )}
+      </>
       )}
     </div>
   );

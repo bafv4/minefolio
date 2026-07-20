@@ -1,6 +1,7 @@
 import { useNavigation, useLocation } from "react-router";
 import { useMemo, useRef } from "react";
 import { Loader2, Lightbulb } from "lucide-react";
+import { inSameTabGroup } from "@/lib/tab-nav-groups";
 
 // ランダムに表示するTips
 const TIPS = [
@@ -31,12 +32,19 @@ export function NavigationProgress() {
     navigation.location &&
     navigation.location.pathname === location.pathname;
 
+  // タブ型ルート間の切替（/keybindings ⇄ /visual 等）はページ側がタブ内スケルトンを
+  // 表示するため、フルスクリーンローディングは出さない
+  const isTabGroupNavigation =
+    isNavigating &&
+    !!navigation.location &&
+    inSameTabGroup(location.pathname, navigation.location.pathname);
+
   // ランダムなTipを選択（ナビゲーション開始時に固定）
   const tip = useMemo(() => {
     return TIPS[Math.floor(Math.random() * TIPS.length)];
   }, [isNavigating]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isNavigating || isSamePageNavigation) return null;
+  if (!isNavigating || isSamePageNavigation || isTabGroupNavigation) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">

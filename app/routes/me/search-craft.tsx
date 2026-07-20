@@ -424,7 +424,7 @@ export default function SearchCraftPage() {
             />
             <Button variant="outline" size="sm" className="my-3" onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.add")}
+              {t("meSearchCraft.addCraft")}
             </Button>
           </CardContent>
         </Card>
@@ -438,7 +438,7 @@ export default function SearchCraftPage() {
             </p>
             <Button onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.add")}
+              {t("meSearchCraft.addCraft")}
             </Button>
           </CardContent>
         </Card>

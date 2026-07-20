@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { MyContentTabs } from "@/components/content-tabs";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -93,6 +95,8 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function MyGuidesPage() {
   const { guides: userGuides, user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  // タブ切替（→ /my-guides/templates）中は一覧をスケルトンに差し替える
+  const { isTabSwitching } = useTabNavigation();
 
   return (
     <div className="space-y-6">
@@ -111,7 +115,9 @@ export default function MyGuidesPage() {
 
       <MyContentTabs active="guides" />
 
-      {userGuides.length === 0 ? (
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="list" />
+      ) : userGuides.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground mb-4">{t("meGuides.noGuides")}</p>

@@ -633,7 +633,7 @@ export default function TemplateViewPage() {
             </Select>
           </div>
           <Card>
-            <CardContent className="p-4 overflow-x-auto">
+            <CardContent className="custom-scrollbar p-4 overflow-x-auto">
               <VirtualKeyboard
                 layout={keyboardLayout}
                 keybindings={{}}

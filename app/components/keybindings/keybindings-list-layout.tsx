@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { ViewSwitcher } from "./view-switcher";
 import { FilterDialog } from "./filter-dialog";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { KeybindingsTable } from "./keybindings-table";
 import { CardView } from "./card-view";
 import { UserFilterChips } from "./user-filter";
@@ -46,6 +48,8 @@ export function KeybindingsListLayout({
 }) {
   const filters = useKeybindingsFilters();
   const tab = filters.params.tab;
+  // ビュー切替（/keybindings ⇄ /visual ⇄ /stats）中は本体をスケルトンに差し替える
+  const { isTabSwitching, targetPathname } = useTabNavigation();
 
   // フィルタ適用（数値範囲・ユーザー絞り込みはクライアント側）
   const filteredPlayers = useMemo(
@@ -88,26 +92,31 @@ export function KeybindingsListLayout({
     <div className="flex-1 flex flex-col space-y-5">
       <KeybindingsPageTitle />
 
-      {/* ツールバー: ビュー切替 / 件数 / フィルター */}
+      {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <ViewSwitcher />
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground tabular-nums">
-              {t("keybindings.countText", {
-                count: filteredPlayers.length,
-                suffix: t("keybindings.countSuffix"),
-              })}
-            </span>
-            <FilterDialog players={players} />
-          </div>
-        </div>
+        <ViewSwitcher
+          actions={
+            <>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                {t("keybindings.countText", {
+                  count: filteredPlayers.length,
+                  suffix: t("keybindings.countSuffix"),
+                })}
+              </span>
+              <FilterDialog players={players} />
+            </>
+          }
+        />
         <UserFilterChips players={players} />
       </div>
 
       {/* 本体 */}
       <div>
-        {mode === "visual" ? (
+        {isTabSwitching ? (
+          <TabContentSkeleton
+            variant={targetPathname === "/keybindings" ? "table" : "cards"}
+          />
+        ) : mode === "visual" ? (
           <CardView players={filteredPlayers} />
         ) : (
           <Tabs

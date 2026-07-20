@@ -25,6 +25,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { MyContentTabs } from "@/components/content-tabs";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { toast } from "sonner";
 import {
   Plus,
@@ -140,6 +142,8 @@ export default function MyTemplatesPage() {
   const { templates } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
+  // タブ切替（→ /my-guides）中は一覧をスケルトンに差し替える
+  const { isTabSwitching } = useTabNavigation();
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -198,7 +202,9 @@ export default function MyTemplatesPage() {
         </Link>
       </div>
 
-      {templates.length > 0 ? (
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="list" />
+      ) : templates.length > 0 ? (
         <div className="space-y-3">
           {templates.map((template) => (
             <Card key={template.id}>
