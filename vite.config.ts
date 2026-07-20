@@ -19,6 +19,19 @@ export default defineConfig(({ isSsrBuild }) => ({
     // もし将来 Cannot find module 等が出たら resolve.noExternal に ["xss","cssfilter"] を
     // 追加して build 時のみインライン化する（command === "build" 限定。dev は不可）。
   },
+  ssr: {
+    // nuqs は SSR でインライン化する（dev の 500 対策）。
+    // 外部参照のままだと nuqs の react-router import が Node ESM ローダーで
+    // dist/production 版に解決され、Vite 側（development 条件）で解決される
+    // アプリ本体の react-router と二重インスタンス化する。React コンテキストが
+    // 一致せず useNavigate() が「<Router> の外」invariant で落ちる（/keybindings 系）。
+    // noExternal で nuqs を Vite のモジュールグラフに入れると、react-router の
+    // 解決経路がアプリ本体と同一になり単一インスタンスに戻る。
+    // resolve.dedupe では直らない: 物理コピーは1つで、分岐はローダー（Node vs Vite）
+    // の exports 条件差によるため。本番ビルドは両者とも外部参照で Node 解決に
+    // 揃うため元々影響なし（noExternal 追加後も nuqs 同梱＋react-router 外部で問題なし）。
+    noExternal: ["nuqs"],
+  },
   build: {
     rollupOptions: {
       // API 専用ルート（loader/action のみ）は空のクライアントチャンクを生成するが
