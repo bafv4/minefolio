@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
-import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts } from "./schema";
+import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, customActions } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
 import { createPresetFromOnboarding } from "./preset-utils";
@@ -542,14 +542,33 @@ export async function importFromLegacy(
     const userKeyRemaps = await db.query.keyRemaps.findMany({
       where: eq(keyRemaps.userId, userId),
     });
+    const userItemLayouts = await db.query.itemLayouts.findMany({
+      where: eq(itemLayouts.userId, userId),
+    });
+    const userSearchCrafts = await db.query.searchCrafts.findMany({
+      where: eq(searchCrafts.userId, userId),
+    });
+    const userCustomKeys = await db.query.customKeys.findMany({
+      where: eq(customKeys.userId, userId),
+    });
+    // カスタムアクションはレガシーAPIに存在しないが、ライブテーブルに既存データが
+    // 残っている場合はスナップショットへ含める（アクティブプリセット=ライブテーブルの不変条件）
+    const userCustomActions = await db.query.customActions.findMany({
+      where: eq(customActions.userId, userId),
+    });
 
     // 初期プリセットを作成（レガシーインポートもオンボーディングの一種として扱う）
+    // ライブテーブルへ書き込んだ全データをスナップショットに含める
     await createPresetFromOnboarding(
       db,
       userId,
       userKeybindings,
       userPlayerConfig ?? null,
-      userKeyRemaps
+      userKeyRemaps,
+      userItemLayouts,
+      userSearchCrafts,
+      userCustomKeys,
+      userCustomActions
     );
 
     return {
