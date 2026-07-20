@@ -70,6 +70,20 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
+  // プリセットの状態を書き込み前に確認する。
+  // 「プリセットは存在するがアクティブが1件も無い」状態では、インポート後の
+  // syncActivePresetSnapshot が無言で no-op になり、インポート内容がどの
+  // スナップショットにも属さなくなるため、先にエラーを返す。
+  // （プリセット0件時は createPresetFromImport で新規作成するため対象外）
+  const existingPresets = await db.query.configPresets.findMany({
+    where: eq(configPresets.userId, user.id),
+    columns: { id: true, isActive: true },
+  });
+  const hasPresets = existingPresets.length > 0;
+  if (hasPresets && !existingPresets.some((p) => p.isActive)) {
+    return { success: false, error: t("mePresets.staleSession") };
+  }
+
   if (intent === "import-remaps") {
     // 旧形式バックアップは remapType フィールド欠落 → unset 扱い
     type ImportRemap = ParsedRemap & { remapType?: string | null };
@@ -87,30 +101,33 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 一意インデックス (userId, sourceKey, remapType) に対する upsert なので、
     // ループ内の冗長な findFirst は不要。onConflictDoUpdate に一本化する。
-    for (const remap of remaps) {
-      await db
-        .insert(keyRemaps)
-        .values({
-          userId: user.id,
-          sourceKey: remap.sourceKey,
-          targetKey: remap.targetKey,
-          software: remap.software,
-          notes: remap.notes,
-          remapType: normalizeKeyRemapType(remap.remapType),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [keyRemaps.userId, keyRemaps.sourceKey, keyRemaps.remapType],
-          // remapType は conflict target に含まれるため set 不要（衝突行と常に同値）
-          set: {
+    // 途中失敗で部分適用にならないよう、インポート単位をトランザクションで原子化する。
+    await db.transaction(async (tx) => {
+      for (const remap of remaps) {
+        await tx
+          .insert(keyRemaps)
+          .values({
+            userId: user.id,
+            sourceKey: remap.sourceKey,
             targetKey: remap.targetKey,
             software: remap.software,
             notes: remap.notes,
+            remapType: normalizeKeyRemapType(remap.remapType),
+            createdAt: new Date(),
             updatedAt: new Date(),
-          },
-        });
-    }
+          })
+          .onConflictDoUpdate({
+            target: [keyRemaps.userId, keyRemaps.sourceKey, keyRemaps.remapType],
+            // remapType は conflict target に含まれるため set 不要（衝突行と常に同値）
+            set: {
+              targetKey: remap.targetKey,
+              software: remap.software,
+              notes: remap.notes,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    });
 
     // インポート後にプリセットを自動作成
     // 更新されたデータを取得
@@ -137,11 +154,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
-    const existingPresets = await db.query.configPresets.findMany({
-      where: eq(configPresets.userId, user.id),
-    });
-
-    if (existingPresets.length === 0) {
+    if (!hasPresets) {
       await createPresetFromImport(
         db,
         user.id,
@@ -155,6 +168,7 @@ export async function action({ request }: Route.ActionArgs) {
       );
     } else {
       // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
+      // （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）
       await syncActivePresetSnapshot(db, user.id, [
         "keybindings",
         "playerConfig",
@@ -167,7 +181,7 @@ export async function action({ request }: Route.ActionArgs) {
       ]);
     }
 
-    return { success: true, type: "remaps", count: remaps.length, presetCreated: existingPresets.length === 0 };
+    return { success: true, type: "remaps", count: remaps.length, presetCreated: !hasPresets };
   }
 
   if (intent === "import-minecraft") {
@@ -200,73 +214,77 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: false, error: t("meImport.tooManyItems") };
     }
 
-    // キーバインドをインポート
-    for (const kb of keybindingsList) {
-      await db
-        .insert(keybindings)
-        .values({
-          userId: user.id,
-          action: kb.action,
-          keyCode: kb.keyCode,
-          category: kb.category,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [keybindings.userId, keybindings.action],
-          set: {
+    // キーバインドとゲーム設定のインポートを1トランザクションで原子化する
+    // （途中失敗による部分適用を防ぐ）
+    await db.transaction(async (tx) => {
+      // キーバインドをインポート
+      for (const kb of keybindingsList) {
+        await tx
+          .insert(keybindings)
+          .values({
+            userId: user.id,
+            action: kb.action,
             keyCode: kb.keyCode,
             category: kb.category,
+            createdAt: new Date(),
             updatedAt: new Date(),
-          },
+          })
+          .onConflictDoUpdate({
+            target: [keybindings.userId, keybindings.action],
+            set: {
+              keyCode: kb.keyCode,
+              category: kb.category,
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      // ゲーム設定をインポート
+      if (Object.keys(gameSettings).length > 0) {
+        const existingConfig = await tx.query.playerConfigs.findFirst({
+          where: eq(playerConfigs.userId, user.id),
         });
-    }
 
-    // ゲーム設定をインポート
-    if (Object.keys(gameSettings).length > 0) {
-      const existingConfig = await db.query.playerConfigs.findFirst({
-        where: eq(playerConfigs.userId, user.id),
-      });
+        const configData: Partial<typeof playerConfigs.$inferInsert> = {
+          updatedAt: new Date(),
+        };
 
-      const configData: Partial<typeof playerConfigs.$inferInsert> = {
-        updatedAt: new Date(),
-      };
+        if (gameSettings.toggleSprint !== undefined) {
+          configData.toggleSprint = gameSettings.toggleSprint;
+        }
+        if (gameSettings.toggleSneak !== undefined) {
+          configData.toggleSneak = gameSettings.toggleSneak;
+        }
+        if (gameSettings.autoJump !== undefined) {
+          configData.autoJump = gameSettings.autoJump;
+        }
+        if (gameSettings.fov !== undefined) {
+          configData.fov = gameSettings.fov;
+        }
+        if (gameSettings.guiScale !== undefined) {
+          configData.guiScale = gameSettings.guiScale;
+        }
+        if (gameSettings.rawInput !== undefined) {
+          configData.rawInput = gameSettings.rawInput;
+        }
+        if (gameSettings.gameLanguage !== undefined) {
+          configData.gameLanguage = gameSettings.gameLanguage;
+        }
 
-      if (gameSettings.toggleSprint !== undefined) {
-        configData.toggleSprint = gameSettings.toggleSprint;
+        if (existingConfig) {
+          await tx
+            .update(playerConfigs)
+            .set(configData)
+            .where(eq(playerConfigs.userId, user.id));
+        } else {
+          await tx.insert(playerConfigs).values({
+            userId: user.id,
+            ...configData,
+            createdAt: new Date(),
+          });
+        }
       }
-      if (gameSettings.toggleSneak !== undefined) {
-        configData.toggleSneak = gameSettings.toggleSneak;
-      }
-      if (gameSettings.autoJump !== undefined) {
-        configData.autoJump = gameSettings.autoJump;
-      }
-      if (gameSettings.fov !== undefined) {
-        configData.fov = gameSettings.fov;
-      }
-      if (gameSettings.guiScale !== undefined) {
-        configData.guiScale = gameSettings.guiScale;
-      }
-      if (gameSettings.rawInput !== undefined) {
-        configData.rawInput = gameSettings.rawInput;
-      }
-      if (gameSettings.gameLanguage !== undefined) {
-        configData.gameLanguage = gameSettings.gameLanguage;
-      }
-
-      if (existingConfig) {
-        await db
-          .update(playerConfigs)
-          .set(configData)
-          .where(eq(playerConfigs.userId, user.id));
-      } else {
-        await db.insert(playerConfigs).values({
-          userId: user.id,
-          ...configData,
-          createdAt: new Date(),
-        });
-      }
-    }
+    });
 
     // インポート後にプリセットを自動作成
     // 更新されたデータを取得
@@ -293,11 +311,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
-    const existingPresets = await db.query.configPresets.findMany({
-      where: eq(configPresets.userId, user.id),
-    });
-
-    if (existingPresets.length === 0) {
+    if (!hasPresets) {
       await createPresetFromImport(
         db,
         user.id,
@@ -311,6 +325,7 @@ export async function action({ request }: Route.ActionArgs) {
       );
     } else {
       // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
+      // （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）
       await syncActivePresetSnapshot(db, user.id, [
         "keybindings",
         "playerConfig",
@@ -328,7 +343,7 @@ export async function action({ request }: Route.ActionArgs) {
       type: "minecraft",
       keybindingsCount: keybindingsList.length,
       gameSettingsCount: Object.keys(gameSettings).length,
-      presetCreated: existingPresets.length === 0,
+      presetCreated: !hasPresets,
     };
   }
 
