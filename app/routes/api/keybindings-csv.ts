@@ -1,7 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
-import { users, keybindings, keyRemaps, customActions } from "@/lib/schema";
+import { users, keybindings, keyRemaps, customActions, configPresets } from "@/lib/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
+import { decodePresetConfig } from "@/lib/preset-read";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
 import { calculateCm360, getWindowsMultiplier } from "@/lib/mouse-settings";
@@ -65,10 +66,48 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       },
       customActions: { orderBy: [asc(customActions.displayOrder), asc(customActions.actionName)] },
+      configPresets: {
+        where: eq(configPresets.isMain, true),
+        columns: {
+          id: true,
+          keybindingsData: true,
+          playerConfigData: true,
+          remapsData: true,
+          fingerAssignmentsData: true,
+          customActionsData: true,
+        },
+      },
     },
   });
 
-  const players = allPlayers.filter(
+  // 公開CSVはメイン（公開用）プリセットのスナップショットを優先する。
+  // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
+  const mergedPlayers = allPlayers.map((p) => {
+    const { configPresets: userPresets, ...rest } = p;
+    const mainPreset = userPresets[0];
+    if (!mainPreset) return rest;
+    const decoded = decodePresetConfig(mainPreset, p.id);
+    const cfg = decoded.playerConfig;
+    return {
+      ...rest,
+      keybindings: decoded.keybindings,
+      keyRemaps: decoded.keyRemaps,
+      customActions: decoded.customActions,
+      playerConfig: cfg
+        ? {
+            keyboardLayout: (cfg.keyboardLayout as string | null) ?? null,
+            mouseDpi: (cfg.mouseDpi as number | null) ?? null,
+            gameSensitivity: (cfg.gameSensitivity as number | null) ?? null,
+            windowsSpeed: (cfg.windowsSpeed as number | null) ?? null,
+            windowsSpeedMultiplier: (cfg.windowsSpeedMultiplier as number | null) ?? null,
+            rawInput: (cfg.rawInput as boolean | null) ?? null,
+            mouseAcceleration: (cfg.mouseAcceleration as boolean | null) ?? null,
+          }
+        : null,
+    };
+  });
+
+  const players = mergedPlayers.filter(
     (p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0
   );
 

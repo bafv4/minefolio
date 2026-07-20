@@ -289,15 +289,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得
+  // プリセット一覧を取得（メインを先頭に）
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, player.id),
-    orderBy: [desc(configPresets.isActive), desc(configPresets.updatedAt)],
+    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
     columns: {
       id: true,
       name: true,
       description: true,
       isActive: true,
+      isMain: true,
       keybindingsData: true,
       playerConfigData: true,
       remapsData: true,
@@ -310,12 +311,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   });
 
   // 表示プリセットの解決: `?preset=` が有効ならそのプリセット、
-  // 無指定・不正・削除済みの場合はアクティブプリセットへフォールバック
+  // 無指定・不正・削除済みの場合はメイン（公開用）プリセットへフォールバック。
+  // メインが無い場合（移行前データ等）は編集中プリセットへさらにフォールバック
   const requestedPreset = presetId
     ? presets.find((p) => p.id === presetId)
     : undefined;
   const selectedPreset =
-    requestedPreset ?? presets.find((p) => p.isActive) ?? null;
+    requestedPreset ??
+    presets.find((p) => p.isMain) ??
+    presets.find((p) => p.isActive) ??
+    null;
 
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
@@ -541,6 +546,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       name: p.name,
       description: p.description,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasItemLayouts: !!p.itemLayoutsData,
       hasSearchCrafts: !!p.searchCraftsData,
     })),
@@ -558,17 +564,17 @@ export default function PlayerProfilePage() {
   // プリセット切替中のローディング状態（`?preset=` 変更によるナビゲーション中）
   const isSwitchingPreset = navigation.state === "loading";
 
-  // プリセット選択ハンドラー。アクティブプリセット選択時は `?preset=` を外して
-  // 既定表示（ライブ設定と同内容）に戻す。loader の再実行は setSearchParams による
+  // プリセット選択ハンドラー。メイン（公開用）プリセット選択時は `?preset=` を外して
+  // 既定表示に戻す。loader の再実行は setSearchParams による
   // ナビゲーションの既定の再検証に任せる（明示的な revalidate は loader の二重実行になる）
   const handlePresetChange = (nextPresetId: string) => {
-    const isActivePreset = presets.some(
-      (p) => p.id === nextPresetId && p.isActive,
+    const isMainPreset = presets.some(
+      (p) => p.id === nextPresetId && p.isMain,
     );
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (isActivePreset) {
+        if (isMainPreset) {
           next.delete("preset");
         } else {
           next.set("preset", nextPresetId);
@@ -744,10 +750,10 @@ export default function PlayerProfilePage() {
   const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
 
-  // 非アクティブプリセットのスナップショットを表示中か（「プリセット表示中」バッジ用）。
-  // アクティブプリセットはライブ設定と同内容のため、選択中でもバッジは出さない。
+  // メイン以外のプリセットを表示中か（「プリセット表示中」バッジ用)。
+  // メインプリセットは既定表示そのものなのでバッジは出さない。
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
-  const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isActive;
+  const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isMain;
 
   return (
     <>
@@ -879,7 +885,7 @@ export default function PlayerProfilePage() {
                   {presets.map((preset) => (
                     <SelectItem key={preset.id} value={preset.id}>
                       {preset.name}
-                      {preset.isActive && t("playerProfile.presetAppliedSuffix")}
+                      {preset.isMain && t("playerProfile.presetMainSuffix")}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -928,7 +934,7 @@ export default function PlayerProfilePage() {
                 {presets.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.name}
-                    {preset.isActive && t("playerProfile.presetAppliedSuffix")}
+                    {preset.isMain && t("playerProfile.presetMainSuffix")}
                   </SelectItem>
                 ))}
               </SelectContent>

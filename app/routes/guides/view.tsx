@@ -9,6 +9,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { decodePresetConfig } from "@/lib/preset-read";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
@@ -144,8 +145,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const embedUsers: Record<string, EmbedUserData> = {};
 
   if (embedSlugs.length > 0) {
+    // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
+    // （限定公開 unlisted は名指し参照のため許可）
     const embedUserRows = await db.query.users.findMany({
-      where: inArray(users.slug, embedSlugs),
+      where: and(
+        inArray(users.slug, embedSlugs),
+        inArray(users.profileVisibility, ["public", "unlisted"]),
+      ),
       columns: {
         id: true,
         slug: true,
@@ -161,9 +167,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           columns: {
             name: true,
             isActive: true,
+            isMain: true,
             keybindingsData: true,
             remapsData: true,
             playerConfigData: true,
+            fingerAssignmentsData: true,
             searchCraftsData: true,
           },
         },
@@ -175,7 +183,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
     if (unmatchedSlugs.length > 0) {
       const byMcid = await db.query.users.findMany({
-        where: inArray(users.mcid, unmatchedSlugs),
+        where: and(
+          inArray(users.mcid, unmatchedSlugs),
+          inArray(users.profileVisibility, ["public", "unlisted"]),
+        ),
         columns: {
           id: true,
           slug: true,
@@ -191,9 +202,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             columns: {
               name: true,
               isActive: true,
+              isMain: true,
               keybindingsData: true,
               remapsData: true,
               playerConfigData: true,
+              fingerAssignmentsData: true,
               searchCraftsData: true,
             },
           },
@@ -203,15 +216,27 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
 
     for (const u of embedUserRows) {
+      // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
+      // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
+      const mainPreset = u.configPresets.find((p) => p.isMain);
+      const decoded = mainPreset ? decodePresetConfig(mainPreset, u.id) : null;
       const data: EmbedUserData = {
         slug: u.slug,
         displayName: u.displayName,
         mcid: u.mcid,
         presets: u.configPresets,
-        keybindings: u.keybindings,
-        keyRemaps: u.keyRemaps,
-        playerConfig: u.playerConfig,
-        searchCrafts: u.searchCrafts,
+        keybindings: decoded ? decoded.keybindings : u.keybindings,
+        keyRemaps: decoded ? decoded.keyRemaps : u.keyRemaps,
+        playerConfig: decoded
+          ? decoded.playerConfig
+            ? {
+                keyboardLayout:
+                  (decoded.playerConfig.keyboardLayout as string | null) ?? null,
+                fingerAssignments: decoded.fingerAssignments,
+              }
+            : null
+          : u.playerConfig,
+        searchCrafts: decoded ? decoded.searchCrafts : u.searchCrafts,
       };
       embedUsers[u.slug] = data;
       if (u.mcid) embedUsers[u.mcid] = data;

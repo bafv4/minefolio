@@ -595,7 +595,11 @@ export const configPresets = sqliteTable("config_presets", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
+  // 編集中フラグ: ライブテーブルと同期される「編集対象」のプリセット（ユーザーごとに高々1件）
   isActive: integer("is_active", { mode: "boolean" }).default(false).notNull(),
+  // メインフラグ: 公開面（プロフィール等）に表示される「公開用」のプリセット（ユーザーごとに高々1件）。
+  // isActive とは独立に管理される（編集対象を切り替えても公開表示は変わらない）
+  isMain: integer("is_main", { mode: "boolean" }).default(false).notNull(),
 
   // 設定データ（JSON）
   keybindingsData: text("keybindings_data"), // JSON: キーバインドのスナップショット
@@ -612,6 +616,7 @@ export const configPresets = sqliteTable("config_presets", {
 }, (table) => [
   index("idx_config_presets_user_id").on(table.userId),
   index("idx_config_presets_is_active").on(table.isActive),
+  index("idx_config_presets_is_main").on(table.isMain),
 ]);
 
 // ============================================

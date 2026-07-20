@@ -103,6 +103,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: true,
       name: true,
       isActive: true,
+      isMain: true,
       keybindingsData: true,
       remapsData: true,
       fingerAssignmentsData: true,
@@ -128,6 +129,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: p.id,
       name: p.name,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasKeybindings: !!p.keybindingsData,
       hasRemaps: !!p.remapsData,
       hasFingerAssignments: !!p.fingerAssignmentsData,
@@ -504,6 +506,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // キーバインド保存
   if (intent === "save-keybindings") {
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const updates = parseJsonArray<KeybindingUpdateInput>(
       formData.get("keybindings") as string,
     );
@@ -534,6 +537,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // 指割り当て保存
   if (intent === "save-fingers") {
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     if (!fingerAssignmentsJson || !isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
       return { error: t("meKeybindings.invalidPayload") };
@@ -554,9 +558,9 @@ export async function action({ request }: Route.ActionArgs) {
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     const customActionsJson = formData.get("customActions") as string;
 
-    // プリセットが無い場合、リマップ・カスタムアクションは書き込まない
-    // （キーバインド・指割り当ては初期状態でも編集できる）
-    if (!hasActivePreset && (remapsJson || customActionsJson)) {
+    // キー割り当て・指割り当てを含む全設定がプリセットのスナップショット対象のため、
+    // アクティブなプリセットが無い状態では保存できない（他の編集ページと同じ扱い）
+    if (!hasActivePreset) {
       return { error: t("meKeybindings.presetRequired") };
     }
 
@@ -1804,11 +1808,16 @@ export default function KeybindingsPage() {
       return;
     }
 
+    // 全設定がプリセットのスナップショット対象のため、プリセットが無い間は保存不可
+    // （UI 側も編集を無効化しているが、防御的にここでも弾く）
+    if (!activePreset) {
+      toast.error(t("meKeybindings.presetRequired"));
+      return;
+    }
+
     const formData = new FormData();
     formData.set("intent", "save-all");
-    if (activePreset) {
-      formData.set("presetId", activePreset.id);
-    }
+    formData.set("presetId", activePreset.id);
 
     // キーバインド変更をJSON化
     const keybindingUpdates = Object.entries(keybindingChanges).map(([id, keyCode]) => ({
@@ -1819,14 +1828,11 @@ export default function KeybindingsPage() {
       formData.set("keybindings", JSON.stringify(keybindingUpdates));
     }
 
-    // リマップ・カスタムアクションはプリセットが無いと登録できないため送信しない
-    if (activePreset) {
-      // リマップをJSON化
-      formData.set("remaps", JSON.stringify(localRemaps));
+    // リマップをJSON化
+    formData.set("remaps", JSON.stringify(localRemaps));
 
-      // カスタムアクションをJSON化
-      formData.set("customActions", JSON.stringify(localCustomActions));
-    }
+    // カスタムアクションをJSON化
+    formData.set("customActions", JSON.stringify(localCustomActions));
 
     // 指割り当てをJSON化
     formData.set("fingerAssignments", JSON.stringify(localFingerAssignments));
@@ -2053,7 +2059,7 @@ export default function KeybindingsPage() {
 
       {/* プリセットセレクター */}
       <PresetSelector
-        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasUnsavedChanges}
         onCopyFromOther={presets.length > 1 ? () => {
@@ -2224,7 +2230,8 @@ export default function KeybindingsPage() {
 
         {/* 操作割り当てタブ */}
         <TabsContent value="keybindings" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {!canEditPresetData && <PresetRequiredNotice />}
+          <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-4", !canEditPresetData && "pointer-events-none opacity-50")}>
             {displayGroups.map((group) => {
               const bindings = group.bindings;
               if (!bindings || bindings.length === 0) return null;
@@ -2560,10 +2567,12 @@ export default function KeybindingsPage() {
           <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="space-y-6">
             {/* 操作割り当て（複数選択可能） */}
-            <div className="space-y-2">
+            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
               <Label>{t("meKeybindings.actionAssignment")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                複数の操作を割り当てられます。他のキーに割当済の操作を選択すると、元のキーから削除されます。
+                {canEditPresetData
+                  ? "複数の操作を割り当てられます。他のキーに割当済の操作を選択すると、元のキーから削除されます。"
+                  : t("meKeybindings.presetRequired")}
               </p>
               <div className="max-h-64 overflow-y-auto border rounded-md p-2">
                 {categoryOrder.map((category) => {
@@ -2670,7 +2679,7 @@ export default function KeybindingsPage() {
 
             {/* 指割り当て（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className="space-y-2">
+            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
               <Label>{t("meKeybindings.fingerAssignment")}</Label>
               <Select
                 value={(editingKeyCode ? modalFingerAssignments[editingKeyCode]?.[0] : undefined) || "none"}
@@ -2751,7 +2760,7 @@ export default function KeybindingsPage() {
               <X className="mr-2 h-4 w-4" />
               {t("meKeybindings.cancel")}
             </Button>
-            <Button onClick={saveKeyModalChanges}>
+            <Button onClick={saveKeyModalChanges} disabled={!canEditPresetData}>
               <Save className="mr-2 h-4 w-4" />
               保存
             </Button>

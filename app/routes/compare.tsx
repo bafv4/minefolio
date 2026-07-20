@@ -2,8 +2,9 @@ import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, keyRemaps } from "@/lib/schema";
+import { users, keybindings, playerConfigs, keyRemaps, configPresets } from "@/lib/schema";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
+import { decodePresetConfig, decodePresetKeybindings } from "@/lib/preset-read";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,54 @@ const categoryLabels: Record<string, string> = {
   ui: "UI",
 };
 
+// 比較用に取得するメイン（公開用）プリセットのスナップショット列
+const MAIN_PRESET_COLUMNS = {
+  id: true,
+  keybindingsData: true,
+  playerConfigData: true,
+  remapsData: true,
+  fingerAssignmentsData: true,
+} as const;
+
+type ComparePresetSnapshot = {
+  id: string;
+  keybindingsData: string | null;
+  playerConfigData: string | null;
+  remapsData: string | null;
+  fingerAssignmentsData: string | null;
+};
+
+// 公開比較はメイン（公開用）プリセットのスナップショットを優先する。
+// メインが無いユーザーのみライブ（従来挙動）へフォールバック。
+// メインがある場合、null の種別は「空」であり編集中のライブデータを混ぜない。
+// デコード行はライブ行と構造互換のためキャストで型を維持する。
+function applyMainPreset<
+  P extends {
+    id: string;
+    keybindings: unknown;
+    keyRemaps: unknown;
+    playerConfig: unknown;
+    configPresets: ComparePresetSnapshot[];
+  },
+>(player: P): Omit<P, "configPresets"> {
+  const { configPresets: userPresets, ...rest } = player;
+  const main = userPresets[0];
+  if (!main) return rest;
+  const decoded = decodePresetConfig(main, player.id);
+  return {
+    ...rest,
+    keybindings: decoded.keybindings,
+    keyRemaps: decoded.keyRemaps,
+    playerConfig: decoded.playerConfig
+      ? {
+          ...(player.playerConfig ?? {}),
+          ...decoded.playerConfig,
+          fingerAssignments: decoded.fingerAssignments,
+        }
+      : null,
+  } as unknown as Omit<P, "configPresets">;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.app";
@@ -108,7 +157,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // p1のみ指定の場合、類似走者を検索（slugで検索）
   if (p1 && !p2) {
-    const player1Data = await db.query.users.findFirst({
+    const player1Raw = await db.query.users.findFirst({
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(
         eq(users.slug, p1),
@@ -118,12 +167,17 @@ export async function loader({ request }: Route.LoaderArgs) {
         keybindings: true,
         playerConfig: true,
         keyRemaps: true,
+        configPresets: {
+          where: eq(configPresets.isMain, true),
+          columns: MAIN_PRESET_COLUMNS,
+        },
       },
     });
 
-    if (!player1Data) {
+    if (!player1Raw) {
       return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
     }
+    const player1Data = applyMainPreset(player1Raw);
 
     // p1のキーバインドをマップ化
     const p1KeyMap: Record<string, string> = {};
@@ -132,6 +186,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
 
     // 全ユーザーのキーバインドを取得して類似度を計算
+    // （メインプリセットのスナップショットを優先。無いユーザーのみライブ）
     const allUsersWithKeybindings = await db.query.users.findMany({
       where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
       columns: {
@@ -144,14 +199,22 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       with: {
         keybindings: true,
+        configPresets: {
+          where: eq(configPresets.isMain, true),
+          columns: { id: true, keybindingsData: true },
+        },
       },
       limit: 50,
     });
 
     const similarPlayers = allUsersWithKeybindings
       .map((user) => {
+        const mainPreset = user.configPresets[0];
+        const userKeybindings = mainPreset
+          ? (decodePresetKeybindings(mainPreset.keybindingsData, user.id) ?? [])
+          : user.keybindings;
         const userKeyMap: Record<string, string> = {};
-        for (const kb of user.keybindings) {
+        for (const kb of userKeybindings) {
           userKeyMap[kb.action] = kb.keyCode;
         }
 
@@ -199,8 +262,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
   }
 
-  // 両走者のデータを取得（slugで検索）
-  const [player1Data, player2Data] = await Promise.all([
+  // 両走者のデータを取得（slugで検索・メインプリセットのスナップショット優先）
+  const [player1Raw, player2Raw] = await Promise.all([
     db.query.users.findFirst({
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(
@@ -211,6 +274,10 @@ export async function loader({ request }: Route.LoaderArgs) {
         keybindings: true,
         playerConfig: true,
         keyRemaps: true,
+        configPresets: {
+          where: eq(configPresets.isMain, true),
+          columns: MAIN_PRESET_COLUMNS,
+        },
       },
     }),
     db.query.users.findFirst({
@@ -222,9 +289,15 @@ export async function loader({ request }: Route.LoaderArgs) {
         keybindings: true,
         playerConfig: true,
         keyRemaps: true,
+        configPresets: {
+          where: eq(configPresets.isMain, true),
+          columns: MAIN_PRESET_COLUMNS,
+        },
       },
     }),
   ]);
+  const player1Data = player1Raw ? applyMainPreset(player1Raw) : undefined;
+  const player2Data = player2Raw ? applyMainPreset(player2Raw) : undefined;
 
   return {
     allPlayers,

@@ -24,6 +24,8 @@ export interface PresetSelectorPreset {
   id: string;
   name: string;
   isActive: boolean;
+  /** メイン（公開用）プリセットか。ドロップダウンに「（メイン）」を表示する */
+  isMain?: boolean;
 }
 
 interface PresetSelectorProps {
@@ -149,6 +151,11 @@ export function PresetSelector({
                         <SelectItem key={preset.id} value={preset.id}>
                           <div className="flex items-center gap-2">
                             <span className="truncate">{preset.name}</span>
+                            {preset.isMain && (
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {t("mePresets.mainSuffix")}
+                              </span>
+                            )}
                             {preset.isActive && (
                               <Check className="h-3 w-3 text-primary shrink-0" />
                             )}

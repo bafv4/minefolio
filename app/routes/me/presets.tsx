@@ -7,7 +7,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { createPreset, setMainPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
@@ -46,7 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search } from "lucide-react";
+import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
@@ -167,10 +167,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("mePresets.userNotFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得
+  // プリセット一覧を取得（メイン → 編集中 → 更新日時の順で表示）
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, user.id),
-    orderBy: [desc(configPresets.isActive), desc(configPresets.updatedAt)],
+    orderBy: [
+      desc(configPresets.isMain),
+      desc(configPresets.isActive),
+      desc(configPresets.updatedAt),
+    ],
   });
 
   // 変更履歴を取得（最新20件）
@@ -245,6 +249,15 @@ export async function action({ request }: Route.ActionArgs) {
 
     // ライブテーブル削除＋新データ挿入＋プリセット行作成を単一トランザクションで実行
     await db.transaction(async (tx) => {
+      // メイン（公開用）が未設定のユーザーには新規プリセットを自動でメインにする
+      // （初回プリセット作成をカバー）。既にメインがある場合は変更しない —
+      // 新規作成は「編集対象になるだけ」で公開の見え方を変えない
+      const existingMain = await tx.query.configPresets.findFirst({
+        where: and(eq(configPresets.userId, user.id), eq(configPresets.isMain, true)),
+        columns: { id: true },
+      });
+      const isMain = !existingMain;
+
       // 既存プリセット非アクティブ化、ライブテーブル全クリア
       await tx
         .update(configPresets)
@@ -548,13 +561,14 @@ export async function action({ request }: Route.ActionArgs) {
         playerConfigData = JSON.stringify(defaultConfigData);
       }
 
-      // プリセット行を作成（アクティブ状態）
+      // プリセット行を作成（編集対象として。メイン未設定ユーザーのみメインにもなる）
       await tx.insert(configPresets).values({
         id: presetId,
         userId: user.id,
         name: trimmedName,
         description: trimmedDescription,
         isActive: true,
+        isMain,
         keybindingsData,
         playerConfigData,
         remapsData,
@@ -596,19 +610,27 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
 
-    // アクティブなプリセットを削除すると「アクティブなし + ライブテーブルにデータ残留」の
-    // 不整合状態になる。他のプリセットが残る場合は削除を拒否し、先に切り替えてもらう。
-    // 唯一のアクティブプリセットの場合は削除を許可し、「アクティブプリセット = ライブテーブル」の
-    // 不変条件を保つため、同一トランザクションでライブテーブルも全ワイプする。
-    if (preset.isActive) {
-      const others = await db.query.configPresets.findMany({
-        where: and(eq(configPresets.userId, user.id), ne(configPresets.id, presetId)),
-        columns: { id: true },
-      });
-      if (others.length > 0) {
+    const others = await db.query.configPresets.findMany({
+      where: and(eq(configPresets.userId, user.id), ne(configPresets.id, presetId)),
+      columns: { id: true },
+    });
+
+    // 他のプリセットが残る場合:
+    // - メイン（公開用）は削除を拒否し、先に別のプリセットをメインに設定してもらう
+    // - 編集中（アクティブ）は削除を拒否し、先に編集対象を切り替えてもらう
+    //   （削除すると「アクティブなし + ライブテーブルにデータ残留」の不整合になるため）
+    if (others.length > 0) {
+      if (preset.isMain) {
+        return { error: t("mePresets.cannotDeleteMain") };
+      }
+      if (preset.isActive) {
         return { error: t("mePresets.cannotDeleteActive") };
       }
+    }
 
+    // 唯一のプリセットの削除は許可し、「アクティブプリセット = ライブテーブル」の
+    // 不変条件を保つため、同一トランザクションでライブテーブルも全ワイプする。
+    if (others.length === 0) {
       await db.transaction(async (tx) => {
         await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
         await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
@@ -646,6 +668,37 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     return { success: true, message: t("mePresets.presetDeleted") };
+  }
+
+  // メイン（公開用）プリセットの設定。
+  // is_main フラグを排他的に付け替えるだけで、ライブテーブル・編集対象（isActive）には一切触れない。
+  // 公開面はメインプリセットのスナップショットを表示するため、即座に反映される。
+  if (intent === "set-main") {
+    const presetId = formData.get("presetId") as string;
+
+    const preset = await db.query.configPresets.findFirst({
+      where: and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)),
+      columns: { id: true, name: true, isMain: true },
+    });
+    if (!preset) {
+      return { error: t("mePresets.presetNotFound") };
+    }
+    if (preset.isMain) {
+      return { success: true, message: t("mePresets.mainPresetSet") };
+    }
+
+    await setMainPreset(db, user.id, presetId);
+
+    await db.insert(configHistory).values({
+      id: createId(),
+      userId: user.id,
+      changeType: "preset_switch",
+      changeDescription: t("mePresets.setMainHistoryDescription", { name: preset.name }),
+      presetId,
+      createdAt: now,
+    });
+
+    return { success: true, message: t("mePresets.mainPresetSet") };
   }
 
   // プリセット適用
@@ -1041,10 +1094,16 @@ export default function PresetsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium truncate">{preset.name}</p>
-                          {preset.isActive && (
+                          {preset.isMain && (
                             <Badge variant="default" className="shrink-0">
-                              <Check className="h-3 w-3 mr-1" />
-                              {t("mePresets.active")}
+                              <Star className="h-3 w-3 mr-1" />
+                              {t("mePresets.mainBadge")}
+                            </Badge>
+                          )}
+                          {preset.isActive && (
+                            <Badge variant="secondary" className="shrink-0">
+                              <Pencil className="h-3 w-3 mr-1" />
+                              {t("mePresets.editingBadge")}
                             </Badge>
                           )}
                         </div>
@@ -1092,8 +1151,18 @@ export default function PresetsPage() {
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
                             <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
-                              <ArrowRight className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">{t("mePresets.apply")}</span>
+                              <Pencil className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">{t("mePresets.edit")}</span>
+                            </Button>
+                          </fetcher.Form>
+                        )}
+                        {!preset.isMain && (
+                          <fetcher.Form method="post">
+                            <input type="hidden" name="intent" value="set-main" />
+                            <input type="hidden" name="presetId" value={preset.id} />
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                              <Star className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">{t("mePresets.setMain")}</span>
                             </Button>
                           </fetcher.Form>
                         )}
@@ -1108,7 +1177,7 @@ export default function PresetsPage() {
                               <AlertDialogTitle>{t("mePresets.deletePresetTitle")}</AlertDialogTitle>
                               <AlertDialogDescription>
                                 {t("mePresets.deletePresetDescription", { name: preset.name })}
-                                {preset.isActive && presets.length === 1 && (
+                                {presets.length === 1 && (
                                   <span className="mt-2 block font-medium text-destructive">
                                     {t("mePresets.lastPresetDeleteWarning")}
                                   </span>

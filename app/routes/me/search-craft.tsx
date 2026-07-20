@@ -115,6 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: true,
       name: true,
       isActive: true,
+      isMain: true,
       searchCraftsData: true,
     },
   });
@@ -133,6 +134,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: p.id,
       name: p.name,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasSearchCrafts: !!p.searchCraftsData,
       searchCraftsData: p.searchCraftsData,
     })),
@@ -440,7 +442,7 @@ export default function SearchCraftPage() {
 
       {/* プリセットセレクター */}
       <PresetSelector
-        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}

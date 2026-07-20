@@ -381,6 +381,38 @@ export class PresetMismatchError extends Error {
 }
 
 /**
+ * 指定プリセットをメイン（公開用）に設定する。
+ * is_main フラグを排他的に付け替えるだけで、ライブテーブル・isActive（編集対象）には一切触れない。
+ * 公開面（プロフィール等）はメインプリセットのスナップショットを表示するため、即座に反映される。
+ * 対象がユーザーのものでない/存在しない場合は false を返す。
+ */
+export async function setMainPreset(
+  db: Database,
+  userId: string,
+  presetId: string,
+): Promise<boolean> {
+  const target = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.id, presetId), eq(configPresets.userId, userId)),
+    columns: { id: true, isMain: true },
+  });
+  if (!target) return false;
+  if (target.isMain) return true; // 既にメイン
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(configPresets)
+      .set({ isMain: false, updatedAt: now })
+      .where(and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)));
+    await tx
+      .update(configPresets)
+      .set({ isMain: true, updatedAt: now })
+      .where(eq(configPresets.id, presetId));
+  });
+  return true;
+}
+
+/**
  * プリセットを作成する共通関数
  */
 export async function createPreset(
@@ -423,6 +455,7 @@ export async function createPreset(
   };
 
   // 非アクティブ化＋挿入＋履歴記録を単一トランザクションで実行
+  let isMain = false;
   await db.transaction(async (tx) => {
     // アクティブとして作成する場合、既存のアクティブプリセットを先に非アクティブ化する
     // （「アクティブプリセットはユーザーごとに高々1件」の不変条件を維持）
@@ -433,6 +466,15 @@ export async function createPreset(
         .where(and(eq(configPresets.userId, userId), eq(configPresets.isActive, true)));
     }
 
+    // メイン（公開用）プリセットが未設定のユーザーには、このプリセットを自動でメインにする
+    // （初回プリセット・オンボーディング・インポート経由をカバー）。
+    // 既にメインがある場合は変更しない — 新規作成は「編集対象になるだけ」で公開の見え方を変えない
+    const existingMain = await tx.query.configPresets.findFirst({
+      where: and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)),
+      columns: { id: true },
+    });
+    isMain = !existingMain;
+
     // プリセットを挿入
     await tx.insert(configPresets).values({
       id: presetId,
@@ -440,6 +482,7 @@ export async function createPreset(
       name,
       description,
       isActive,
+      isMain,
       keybindingsData,
       playerConfigData,
       remapsData,
@@ -469,6 +512,7 @@ export async function createPreset(
     name,
     description,
     isActive,
+    isMain,
     keybindingsData,
     playerConfigData,
     remapsData,

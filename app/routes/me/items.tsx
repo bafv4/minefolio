@@ -156,6 +156,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: true,
       name: true,
       isActive: true,
+      isMain: true,
       itemLayoutsData: true,
     },
   });
@@ -172,6 +173,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: p.id,
       name: p.name,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasItemLayouts: !!p.itemLayoutsData,
       itemLayoutsData: p.itemLayoutsData,
     })),
@@ -821,7 +823,7 @@ export default function ItemLayoutsPage() {
 
       {/* プリセットセレクター */}
       <PresetSelector
-        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
