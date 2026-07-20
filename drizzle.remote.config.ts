@@ -4,27 +4,11 @@
 // .env を一時的にリモート URL へ書き換える運用は、同時に動いている dev サーバー等が
 // 巻き添えでリモート DB に接続してしまう事故のもとなので行わない（この設定ファイルが
 // その代替）。push は対話プロンプトの内容（特に TRUNCATE 提案の有無）を必ず確認すること。
-import { existsSync } from "node:fs";
-import { config } from "dotenv";
+// 読み込みとガード（.env.remote 必須・リモート URL 検証）は scripts/lib/db-env.ts に集約。
 import type { Config } from "drizzle-kit";
+import { loadDbEnv } from "./scripts/lib/db-env";
 
-if (!existsSync(".env.remote")) {
-  throw new Error(
-    ".env.remote がありません。リモートの TURSO_DATABASE_URL / TURSO_AUTH_TOKEN を .env.remote に記載してください。",
-  );
-}
-
-// override: 事前に .env 等から読み込まれた値より .env.remote を優先する
-config({ path: ".env.remote", override: true, quiet: true });
-
-const url = process.env.TURSO_DATABASE_URL;
-if (!url || url.startsWith("file:")) {
-  throw new Error(
-    ".env.remote の TURSO_DATABASE_URL がリモート URL（libsql://...）ではありません。",
-  );
-}
-
-console.warn(`⚠️  リモート DB に接続します: ${url}`);
+const { url, authToken } = loadDbEnv({ remote: true });
 
 export default {
   schema: "./app/lib/schema.ts",
@@ -32,6 +16,6 @@ export default {
   dialect: "turso",
   dbCredentials: {
     url,
-    authToken: process.env.TURSO_AUTH_TOKEN,
+    authToken,
   },
 } satisfies Config;

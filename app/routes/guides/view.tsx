@@ -10,6 +10,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import { decodePresetConfig } from "@/lib/preset-read";
+import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
@@ -146,12 +147,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (embedSlugs.length > 0) {
     // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
-    // （限定公開 unlisted は名指し参照のため許可）
     const embedUserRows = await db.query.users.findMany({
-      where: and(
-        inArray(users.slug, embedSlugs),
-        inArray(users.profileVisibility, ["public", "unlisted"]),
-      ),
+      where: and(inArray(users.slug, embedSlugs), publiclyReferencableCondition),
       columns: {
         id: true,
         slug: true,
@@ -183,10 +180,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
     if (unmatchedSlugs.length > 0) {
       const byMcid = await db.query.users.findMany({
-        where: and(
-          inArray(users.mcid, unmatchedSlugs),
-          inArray(users.profileVisibility, ["public", "unlisted"]),
-        ),
+        where: and(inArray(users.mcid, unmatchedSlugs), publiclyReferencableCondition),
         columns: {
           id: true,
           slug: true,
@@ -219,24 +213,46 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
       // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
       const mainPreset = u.configPresets.find((p) => p.isMain);
-      const decoded = mainPreset ? decodePresetConfig(mainPreset, u.id) : null;
+      let display: Pick<
+        EmbedUserData,
+        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
+      >;
+      if (mainPreset) {
+        const decoded = decodePresetConfig(mainPreset, u.id);
+        display = {
+          keybindings: decoded.keybindings,
+          keyRemaps: decoded.keyRemaps,
+          playerConfig: decoded.playerConfig
+            ? {
+                keyboardLayout: decoded.playerConfig.keyboardLayout ?? null,
+                fingerAssignments: decoded.fingerAssignments,
+              }
+            : null,
+          searchCrafts: decoded.searchCrafts,
+        };
+      } else {
+        display = {
+          keybindings: u.keybindings,
+          keyRemaps: u.keyRemaps,
+          playerConfig: u.playerConfig,
+          searchCrafts: u.searchCrafts,
+        };
+      }
       const data: EmbedUserData = {
         slug: u.slug,
         displayName: u.displayName,
         mcid: u.mcid,
-        presets: u.configPresets,
-        keybindings: decoded ? decoded.keybindings : u.keybindings,
-        keyRemaps: decoded ? decoded.keyRemaps : u.keyRemaps,
-        playerConfig: decoded
-          ? decoded.playerConfig
-            ? {
-                keyboardLayout:
-                  (decoded.playerConfig.keyboardLayout as string | null) ?? null,
-                fingerAssignments: decoded.fingerAssignments,
-              }
-            : null
-          : u.playerConfig,
-        searchCrafts: decoded ? decoded.searchCrafts : u.searchCrafts,
+        // クライアント（guide-embeds）が使うフィールドのみ渡す
+        // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
+        presets: u.configPresets.map((p) => ({
+          name: p.name,
+          isActive: p.isActive,
+          keybindingsData: p.keybindingsData,
+          remapsData: p.remapsData,
+          playerConfigData: p.playerConfigData,
+          searchCraftsData: p.searchCraftsData,
+        })),
+        ...display,
       };
       embedUsers[u.slug] = data;
       if (u.mcid) embedUsers[u.mcid] = data;

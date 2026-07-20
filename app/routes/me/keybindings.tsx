@@ -494,19 +494,21 @@ export async function action({ request }: Route.ActionArgs) {
     throw e;
   }
 
-  // リマップ・カスタムキー・カスタムアクションはプリセットのスナップショットに含まれるデータのため、
-  // アクティブなプリセットが無い状態では登録・更新できない（既存データの読み込みは可能）。
-  // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
-  // 後からプリセットを作るまでどのプリセットにも属さないデータになってしまう。
+  // このアクションの全 intent はライブ設定への書き込み＝アクティブプリセットの
+  // スナップショット更新を伴うため、アクティブなプリセットが無い状態では一律で弾く
+  // （既存データの読み込みは可能）。プリセットが無いまま書き込むと
+  // syncActivePresetSnapshot が無言でスキップされ、後からプリセットを作るまで
+  // どのプリセットにも属さないデータになってしまう。
   const activePresetRow = await db.query.configPresets.findFirst({
     where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
     columns: { id: true },
   });
-  const hasActivePreset = !!activePresetRow;
+  if (!activePresetRow) {
+    return { error: t("meKeybindings.presetRequired") };
+  }
 
   // キーバインド保存
   if (intent === "save-keybindings") {
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const updates = parseJsonArray<KeybindingUpdateInput>(
       formData.get("keybindings") as string,
     );
@@ -521,7 +523,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   // リマップ保存
   if (intent === "save-remaps") {
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const remapsData = parseJsonArray<RemapMutationInput>(
       formData.get("remaps") as string,
     );
@@ -537,7 +538,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   // 指割り当て保存
   if (intent === "save-fingers") {
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     if (!fingerAssignmentsJson || !isValidFingerAssignmentsJson(fingerAssignmentsJson)) {
       return { error: t("meKeybindings.invalidPayload") };
@@ -557,13 +557,6 @@ export async function action({ request }: Route.ActionArgs) {
     const remapsJson = formData.get("remaps") as string;
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     const customActionsJson = formData.get("customActions") as string;
-
-    // キー割り当て・指割り当てを含む全設定がプリセットのスナップショット対象のため、
-    // アクティブなプリセットが無い状態では保存できない（他の編集ページと同じ扱い）
-    if (!hasActivePreset) {
-      return { error: t("meKeybindings.presetRequired") };
-    }
-
     const now = new Date();
 
     // 事前パース・バリデーション（書き込みを始める前に不正 payload をすべて弾く）
@@ -655,7 +648,6 @@ export async function action({ request }: Route.ActionArgs) {
   // レガシーインポート
   if (intent === "import-legacy") {
     // リマップ・カスタムキーを取り込むため、プリセットが必要
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const legacyApiUrl = env.LEGACY_API_URL;
     if (!legacyApiUrl) {
       return { error: t("meKeybindings.legacyApiNotConfigured") };
@@ -697,7 +689,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   // カスタムキー保存
   if (intent === "save-custom-keys") {
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const customKeysData = parseJsonArray<CustomKeyMutationInput>(
       formData.get("customKeys") as string,
     );
@@ -739,7 +730,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   // カスタムアクション保存
   if (intent === "save-custom-actions") {
-    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const customActionsData = parseJsonArray<CustomActionMutationInput>(
       formData.get("customActions") as string,
     );

@@ -2,9 +2,10 @@ import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, keyRemaps, configPresets } from "@/lib/schema";
-import { eq, asc, and, inArray, sql } from "drizzle-orm";
-import { decodePresetConfig, decodePresetKeybindings } from "@/lib/preset-read";
+import { users, configPresets } from "@/lib/schema";
+import { eq, asc, and, sql } from "drizzle-orm";
+import { decodePresetConfig, decodePresetKeybindings, type PresetSnapshot } from "@/lib/preset-read";
+import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,14 +94,6 @@ const MAIN_PRESET_COLUMNS = {
   fingerAssignmentsData: true,
 } as const;
 
-type ComparePresetSnapshot = {
-  id: string;
-  keybindingsData: string | null;
-  playerConfigData: string | null;
-  remapsData: string | null;
-  fingerAssignmentsData: string | null;
-};
-
 // 公開比較はメイン（公開用）プリセットのスナップショットを優先する。
 // メインが無いユーザーのみライブ（従来挙動）へフォールバック。
 // メインがある場合、null の種別は「空」であり編集中のライブデータを混ぜない。
@@ -111,7 +104,7 @@ function applyMainPreset<
     keybindings: unknown;
     keyRemaps: unknown;
     playerConfig: unknown;
-    configPresets: ComparePresetSnapshot[];
+    configPresets: (PresetSnapshot & { id: string })[];
   },
 >(player: P): Omit<P, "configPresets"> {
   const { configPresets: userPresets, ...rest } = player;
@@ -161,7 +154,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(
         eq(users.slug, p1),
-        inArray(users.profileVisibility, ["public", "unlisted"])
+        publiclyReferencableCondition,
       ),
       with: {
         keybindings: true,
@@ -198,7 +191,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         customSkinUrl: true,
       },
       with: {
-        keybindings: true,
+        // 類似度計算に使うのは action / keyCode のみ（メイン持ちユーザーでは未使用のため最小限に）
+        keybindings: { columns: { action: true, keyCode: true } },
         configPresets: {
           where: eq(configPresets.isMain, true),
           columns: { id: true, keybindingsData: true },
@@ -268,7 +262,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(
         eq(users.slug, p1),
-        inArray(users.profileVisibility, ["public", "unlisted"])
+        publiclyReferencableCondition,
       ),
       with: {
         keybindings: true,
@@ -283,7 +277,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     db.query.users.findFirst({
       where: and(
         eq(users.slug, p2),
-        inArray(users.profileVisibility, ["public", "unlisted"])
+        publiclyReferencableCondition,
       ),
       with: {
         keybindings: true,

@@ -2,7 +2,8 @@
 // 利用箇所:
 // - エディタのカラーピッカー（app/components/guide-editor/constants.ts が re-export）
 // - ペースト時の非パレット色の除去（app/components/guide-editor/hooks/use-guide-editor.ts）
-// - 表示時サニタイズの色ホワイトリスト（app/lib/guide-sanitize.server.ts）
+// - 表示時サニタイズの色ホワイトリスト（app/lib/guide-sanitize.server.ts が
+//   isPaletteTextColor / isPaletteBgColor を cssfilter の判定関数として使用）
 //
 // 背景: 外部リッチテキストのペーストでは、コピー元の算出スタイル（閲覧テーマの
 // 文字色 = rgb(...) 形式や #000000 等）がそのままインライン style として取り込まれ、
@@ -82,16 +83,6 @@ export function isPaletteBgColor(value: string): boolean {
   return allowedBgColors.has(normalizeColorValue(value));
 }
 
-function buildWhitelistRegex(colors: ReadonlyArray<{ value: string }>): RegExp {
-  const parts: string[] = [];
-  for (const { value } of colors) {
-    if (!value) continue;
-    const { r, g, b } = parseHex(value);
-    parts.push(value, `rgb\\(\\s*${r}\\s*,\\s*${g}\\s*,\\s*${b}\\s*\\)`);
-  }
-  return new RegExp(`^(${parts.join("|")})$`, "i");
-}
-
 /**
  * ペースト HTML からパレット外の color / background-color を除去する。
  * ガイドエディタの transformPastedHTML から呼ばれる（DOM 環境前提）。
@@ -112,12 +103,3 @@ export function stripNonPaletteColorsFromHtml(html: string): string {
   }
   return doc.body.innerHTML;
 }
-
-/** サニタイズ用: 文字色として許可する値（パレットの hex / rgb のみ） */
-export const guideTextColorWhitelist = buildWhitelistRegex(GUIDE_TEXT_COLORS);
-
-/** サニタイズ用: 背景色として許可する値（パレット + レガシー色の hex / rgb のみ） */
-export const guideBgColorWhitelist = buildWhitelistRegex([
-  ...GUIDE_BG_COLORS,
-  ...LEGACY_BG_COLORS,
-]);

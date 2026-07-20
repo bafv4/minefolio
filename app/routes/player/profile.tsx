@@ -34,8 +34,8 @@ import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { toUiRemaps, filterRemapsForContext, normalizeKeyRemapType, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
-import type { PresetSearchCraftData } from "@/lib/preset-utils";
+import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
+import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
@@ -331,149 +331,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let displayCustomActions = player.customActions;
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
-  // 非アクティブなプリセットを選択した場合のみスナップショットを適用する
+  // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
+  // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
+  // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
   if (selectedPreset && !selectedPreset.isActive) {
-    // プリセットのキーバインドを適用
-    if (selectedPreset.keybindingsData) {
-      const presetKeybindings = JSON.parse(selectedPreset.keybindingsData) as Array<{
-        action: string;
-        keyCode: string;
-        category: string;
-      }>;
-      displayKeybindings = presetKeybindings.map((kb, idx) => ({
-        id: `preset-${idx}`,
-        userId: player.id,
-        action: kb.action,
-        keyCode: kb.keyCode,
-        category: kb.category as "movement" | "combat" | "inventory" | "ui",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-
-    // プリセットの走者設定を適用
-    if (selectedPreset.playerConfigData) {
-      const presetConfig = JSON.parse(selectedPreset.playerConfigData);
-      displayPlayerConfig = {
-        ...player.playerConfig,
-        ...presetConfig,
-        fingerAssignments: selectedPreset.fingerAssignmentsData ?? player.playerConfig?.fingerAssignments,
-      } as typeof player.playerConfig;
-    }
-
-    // プリセットのリマップを適用
-    if (selectedPreset.remapsData) {
-      const presetRemaps = JSON.parse(selectedPreset.remapsData) as Array<{
-        sourceKey: string;
-        targetKey: string | null;
-        software: string | null;
-        notes: string | null;
-        outputMode?: "key" | "character" | null;
-        outputCharacter?: string | null;
-        remapType?: string | null;
-      }>;
-      displayKeyRemaps = presetRemaps.map((r, idx) => ({
-        id: `preset-remap-${idx}`,
-        userId: player.id,
-        sourceKey: r.sourceKey,
-        targetKey: r.targetKey,
-        software: r.software,
-        notes: r.notes,
-        outputMode: r.outputMode ?? "key",
-        outputCharacter: r.outputCharacter ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        remapType: normalizeKeyRemapType(r.remapType),
-      }));
-    }
-
-    // プリセットのアイテム配置を適用
-    if (selectedPreset.itemLayoutsData) {
-      const presetItemLayouts = JSON.parse(selectedPreset.itemLayoutsData) as Array<{
-        segment: string;
-        slots: string;
-        offhand: string | null;
-        notes: string | null;
-        displayOrder: number;
-      }>;
-      displayItemLayouts = presetItemLayouts.map((layout, idx) => ({
-        id: `preset-layout-${idx}`,
-        userId: player.id,
-        segment: layout.segment,
-        slots: layout.slots,
-        offhand: layout.offhand,
-        notes: layout.notes,
-        displayOrder: layout.displayOrder,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-
-    // プリセットのサーチクラフトを適用
-    if (selectedPreset.searchCraftsData) {
-      const presetSearchCrafts = JSON.parse(
-        selectedPreset.searchCraftsData,
-      ) as PresetSearchCraftData[];
-      displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
-        id: `preset-craft-${idx}`,
-        userId: player.id,
-        sequence: craft.sequence,
-        items: craft.items,
-        keys: craft.keys,
-        searchStr: craft.searchStr,
-        comment: craft.comment,
-        timing: craft.timing ?? null,
-        withShift: craft.withShift === true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-
-    // プリセットのカスタムキー定義を適用
-    if (selectedPreset.customKeysData) {
-      const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
-        keyCode: string;
-        keyName: string;
-        category: "mouse" | "keyboard" | "controller";
-        position: string | null;
-        size: string | null;
-        notes: string | null;
-      }>;
-      displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
-        id: `preset-customkey-${idx}`,
-        userId: player.id,
-        keyCode: ck.keyCode,
-        keyName: ck.keyName,
-        category: ck.category,
-        position: ck.position,
-        size: ck.size,
-        notes: ck.notes,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-
-    // プリセットのカスタムアクションを適用
-    if (selectedPreset.customActionsData) {
-      const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
-        actionName: string;
-        description: string | null;
-        category: "other" | "macro" | "tool";
-        triggerKey: string;
-        displayOrder: number;
-      }>;
-      displayCustomActions = presetCustomActions.map((ca, idx) => ({
-        id: `preset-customaction-${idx}`,
-        userId: player.id,
-        actionName: ca.actionName,
-        description: ca.description,
-        category: ca.category,
-        triggerKey: ca.triggerKey,
-        displayOrder: ca.displayOrder,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
+    const decoded = decodePresetConfig(selectedPreset, player.id);
+    displayKeybindings = decoded.keybindings;
+    displayKeyRemaps = decoded.keyRemaps;
+    displayItemLayouts = decoded.itemLayouts;
+    displaySearchCrafts = decoded.searchCrafts;
+    displayCustomKeys = decoded.customKeys;
+    displayCustomActions = decoded.customActions;
+    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
+    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
+    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
+    displayPlayerConfig = (decoded.playerConfig
+      ? {
+          ...decoded.playerConfig,
+          fingerAssignments: decoded.fingerAssignments,
+        }
+      : null) as typeof player.playerConfig;
   }
 
   // Check if current user is viewing their own profile

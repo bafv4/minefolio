@@ -1,4 +1,4 @@
-import { or, isNull, ne } from "drizzle-orm";
+import { or, isNull, ne, inArray } from "drizzle-orm";
 import { users } from "./schema";
 
 /**
@@ -14,3 +14,15 @@ export const excludeViewersCondition = or(
   isNull(users.role),
   ne(users.role, "viewer"),
 );
+
+/**
+ * 名指し参照（URL 指定・ガイド埋め込み等）で表示してよいプロフィールの WHERE 条件。
+ * 非公開（private）のみ除外する。限定公開（unlisted）は一覧には出さないが、
+ * 名指しで参照された場合は表示してよい。
+ *
+ * 比較ページ（?p1= / ?p2=）・ガイド埋め込みで使用。
+ */
+export const publiclyReferencableCondition = inArray(users.profileVisibility, [
+  "public",
+  "unlisted",
+]);

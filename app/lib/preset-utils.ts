@@ -380,36 +380,47 @@ export class PresetMismatchError extends Error {
   }
 }
 
+/** drizzle のトランザクション内外どちらでも使える最小インターフェース */
+type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
+
 /**
  * 指定プリセットをメイン（公開用）に設定する。
  * is_main フラグを排他的に付け替えるだけで、ライブテーブル・isActive（編集対象）には一切触れない。
  * 公開面（プロフィール等）はメインプリセットのスナップショットを表示するため、即座に反映される。
- * 対象がユーザーのものでない/存在しない場合は false を返す。
+ * 所有権・存在の検証は呼び出し側で済ませたプリセット行を渡すこと（ここでは再照会しない）。
  */
 export async function setMainPreset(
   db: Database,
-  userId: string,
-  presetId: string,
-): Promise<boolean> {
-  const target = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.id, presetId), eq(configPresets.userId, userId)),
-    columns: { id: true, isMain: true },
-  });
-  if (!target) return false;
-  if (target.isMain) return true; // 既にメイン
-
+  preset: { id: string; userId: string },
+): Promise<void> {
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx
       .update(configPresets)
       .set({ isMain: false, updatedAt: now })
-      .where(and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)));
+      .where(and(eq(configPresets.userId, preset.userId), eq(configPresets.isMain, true)));
     await tx
       .update(configPresets)
       .set({ isMain: true, updatedAt: now })
-      .where(eq(configPresets.id, presetId));
+      .where(eq(configPresets.id, preset.id));
   });
-  return true;
+}
+
+/**
+ * 新規プリセットを自動でメイン（公開用）にすべきか。
+ * メイン未設定のユーザーの最初の1件だけ true — 初回プリセット・オンボーディング・インポート・
+ * Playground / テンプレート経由のすべての作成経路が共有する単一の判定点。
+ * 既にメインがある場合は false（新規作成は「編集対象になるだけ」で公開の見え方を変えない）。
+ */
+export async function resolveIsMainForNewPreset(
+  db: DatabaseOrTransaction,
+  userId: string,
+): Promise<boolean> {
+  const existingMain = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)),
+    columns: { id: true },
+  });
+  return !existingMain;
 }
 
 /**
@@ -467,13 +478,7 @@ export async function createPreset(
     }
 
     // メイン（公開用）プリセットが未設定のユーザーには、このプリセットを自動でメインにする
-    // （初回プリセット・オンボーディング・インポート経由をカバー）。
-    // 既にメインがある場合は変更しない — 新規作成は「編集対象になるだけ」で公開の見え方を変えない
-    const existingMain = await tx.query.configPresets.findFirst({
-      where: and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)),
-      columns: { id: true },
-    });
-    isMain = !existingMain;
+    isMain = await resolveIsMainForNewPreset(tx, userId);
 
     // プリセットを挿入
     await tx.insert(configPresets).values({

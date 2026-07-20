@@ -7,7 +7,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, setMainPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
@@ -250,13 +250,7 @@ export async function action({ request }: Route.ActionArgs) {
     // ライブテーブル削除＋新データ挿入＋プリセット行作成を単一トランザクションで実行
     await db.transaction(async (tx) => {
       // メイン（公開用）が未設定のユーザーには新規プリセットを自動でメインにする
-      // （初回プリセット作成をカバー）。既にメインがある場合は変更しない —
-      // 新規作成は「編集対象になるだけ」で公開の見え方を変えない
-      const existingMain = await tx.query.configPresets.findFirst({
-        where: and(eq(configPresets.userId, user.id), eq(configPresets.isMain, true)),
-        columns: { id: true },
-      });
-      const isMain = !existingMain;
+      const isMain = await resolveIsMainForNewPreset(tx, user.id);
 
       // 既存プリセット非アクティブ化、ライブテーブル全クリア
       await tx
@@ -687,7 +681,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: true, message: t("mePresets.mainPresetSet") };
     }
 
-    await setMainPreset(db, user.id, presetId);
+    await setMainPreset(db, { id: preset.id, userId: user.id });
 
     await db.insert(configHistory).values({
       id: createId(),

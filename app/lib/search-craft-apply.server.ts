@@ -3,7 +3,11 @@ import { eq, and, inArray } from "drizzle-orm";
 import type { Database } from "./db";
 import { searchCrafts, keyRemaps, configPresets, type ConfigPreset } from "./schema";
 import { sanitizeRemapTargetKey, remapSourceMatchKey } from "./remap-utils";
-import { syncActivePresetSnapshot, type PresetRemapData } from "./preset-utils";
+import {
+  syncActivePresetSnapshot,
+  resolveIsMainForNewPreset,
+  type PresetRemapData,
+} from "./preset-utils";
 import { serializeTemplateCrafts, parseTemplateRemapData, type TemplateCraft } from "./search-craft-templates";
 
 /**
@@ -207,7 +211,8 @@ export type CreatePresetResult =
   | { ok: false; error: "base_preset_not_found" };
 
 /**
- * 新規プリセットを作成してサーチクラフト（＋リマップ）を保存する。**常に非アクティブで作成する**。
+ * 新規プリセットを作成してサーチクラフト（＋リマップ）を保存する。**常に非アクティブで作成する**
+ * （メイン未設定のユーザーの場合のみ、他の作成経路と同じくメイン＝公開用に自動設定される）。
  * basePresetId 指定時は、その全設定データ（キーバインド・デバイス設定等）をコピーした上で
  * サーチクラフトを上書きし、リマップはチャット側のみ置換してマージする
  * （mergeChatRemapsIntoSnapshot）。remaps が null の場合、リマップはベースの値を引き継ぐ。
@@ -230,6 +235,7 @@ export async function createPresetWithCrafts(
 
   const now = new Date();
   const presetId = createId();
+  const isMain = await resolveIsMainForNewPreset(db, userId);
 
   await db.insert(configPresets).values({
     id: presetId,
@@ -237,6 +243,7 @@ export async function createPresetWithCrafts(
     name: options.name,
     description: options.description,
     isActive: false,
+    isMain,
     keybindingsData: base?.keybindingsData ?? null,
     playerConfigData: base?.playerConfigData ?? null,
     fingerAssignmentsData: base?.fingerAssignmentsData ?? null,

@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { isLocalDbUrl } from "./db-url";
 
 /**
  * サーバーサイドで環境変数を取得するヘルパー関数
@@ -32,10 +33,9 @@ export function getEnv(): Env {
  * URL 未設定時は createDb() が file:local.db にフォールバックするためローカル扱い）。
  */
 export function isDevAuthEnabled(): boolean {
-  const dbUrl = process.env.TURSO_DATABASE_URL ?? "file:local.db";
   return (
     process.env.NODE_ENV !== "production" &&
     process.env.DEV_AUTH === "1" &&
-    dbUrl.startsWith("file:")
+    isLocalDbUrl(process.env.TURSO_DATABASE_URL ?? "file:local.db")
   );
 }
