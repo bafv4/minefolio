@@ -37,7 +37,8 @@ import { toast } from "sonner";
 import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { RemapRow, DialogRemapRow } from "@/components/remap-row";
+import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
+import { KeyCaptureButton } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
@@ -910,7 +911,7 @@ type CustomKeyEntry = {
 // キーキャプチャボタンは @/components/key-capture-button、
 // リマップ行（RemapRow / DialogRemapRow）は @/components/remap-row に抽出済み
 
-// カスタムアクション行コンポーネント（useStateを安全に使用するため分離）
+// カスタムアクション行コンポーネント
 function CustomActionRow({
   action,
   index,
@@ -924,8 +925,6 @@ function CustomActionRow({
   onUpdate: (index: number, updates: Partial<CustomActionEntry>) => void;
   onDelete: (index: number) => void;
 }) {
-  const [isCapturingTrigger, setIsCapturingTrigger] = useState(false);
-
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -962,60 +961,15 @@ function CustomActionRow({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Label className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.triggerKey")}</Label>
-        <button
-          type="button"
-          onFocus={() => setIsCapturingTrigger(true)}
-          onBlur={() => setIsCapturingTrigger(false)}
-          onKeyDown={(e) => {
-            if (!isCapturingTrigger) return;
-            e.preventDefault();
-
-            // 修飾キー単独の場合（ShiftLeft, ControlRight など）
-            const modifierKeyMap: Record<string, string> = {
-              ShiftLeft: "ShiftLeft",
-              ShiftRight: "ShiftRight",
-              ControlLeft: "ControlLeft",
-              ControlRight: "ControlRight",
-              AltLeft: "AltLeft",
-              AltRight: "AltRight",
-              MetaLeft: "MetaLeft",
-              MetaRight: "MetaRight",
-            };
-
-            if (modifierKeyMap[e.code]) {
-              // 修飾キー単独で登録
-              onUpdate(index, { triggerKey: e.code });
-              (e.target as HTMLElement).blur();
-              return;
-            }
-
-            // 修飾キー組み合わせを構築
-            const modifiers: string[] = [];
-            if (e.ctrlKey) modifiers.push("Ctrl");
-            if (e.shiftKey) modifiers.push("Shift");
-            if (e.altKey) modifiers.push("Alt");
-            if (e.metaKey) modifiers.push("Meta");
-            const combo = modifiers.length > 0
-              ? [...modifiers, e.code].join("+")
-              : e.code;
-            onUpdate(index, { triggerKey: combo });
-            (e.target as HTMLElement).blur();
-          }}
-          className={cn(
-            "min-w-40 h-8 px-3 rounded-md border text-sm transition-colors",
-            "bg-secondary/50 hover:bg-secondary/70",
-            "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-            isCapturingTrigger ? "border-primary" : "border-input"
-          )}
-        >
-          {isCapturingTrigger ? (
-            <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyWithModifiers")}</span>
-          ) : action.triggerKey ? (
-            <span className="font-medium font-mono">{getKeyCombinationLabel(action.triggerKey, keyboardLayout)}</span>
-          ) : (
-            <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
-          )}
-        </button>
+        {/* 共通キャプチャ: 修飾キーは押しっぱなしで組み合わせ待ち、離すと単独で確定 */}
+        <KeyCaptureButton
+          value={action.triggerKey}
+          placeholder={t("meKeybindings.unassigned")}
+          keyboardLayout={keyboardLayout}
+          onCapture={(keyCode) => onUpdate(index, { triggerKey: keyCode })}
+          allowModifiers={true}
+          className="min-w-40 h-8"
+        />
       </div>
       <div>
         <Input
@@ -1025,6 +979,82 @@ function CustomActionRow({
           className="text-sm"
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * ダイアログ内カスタムアクション行。キー編集ダイアログ（クリックしたキーが起点）用で、
+ * トリガーはキーキャプチャではなく、リマップ行と同じ修飾キートグル + ベースキーで編集する。
+ */
+function DialogCustomActionRow({
+  action,
+  index,
+  baseKeyCode,
+  keyboardLayout,
+  onUpdate,
+  onDelete,
+}: {
+  action: CustomActionEntry;
+  index: number;
+  baseKeyCode: string;
+  keyboardLayout: string;
+  onUpdate: (index: number, updates: Partial<CustomActionEntry>) => void;
+  onDelete: (index: number) => void;
+}) {
+  return (
+    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+      {/* トリガー行（修飾キートグル + ベースキー + 削除） */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.triggerKey")}</span>
+        <ModifierToggleGroup
+          comboKey={action.triggerKey}
+          baseKeyCode={baseKeyCode}
+          keyboardLayout={keyboardLayout}
+          onChange={(newTriggerKey) => onUpdate(index, { triggerKey: newTriggerKey })}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+          onClick={() => onDelete(index)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* 名前・カテゴリ行 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <Input
+            value={action.actionName}
+            onChange={(e) => onUpdate(index, { actionName: e.target.value })}
+            placeholder={t("meKeybindings.actionNamePlaceholder")}
+            className="text-sm h-8"
+          />
+        </div>
+        <Select
+          value={action.category}
+          onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
+        >
+          <SelectTrigger className="w-28 h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
+            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
+            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Input
+        value={action.description || ""}
+        onChange={(e) => onUpdate(index, { description: e.target.value || null })}
+        placeholder={t("meKeybindings.descriptionOptional")}
+        className="text-sm h-8"
+      />
     </div>
   );
 }
@@ -2725,10 +2755,11 @@ export default function KeybindingsPage() {
               {modalSelectedKeyCustomActions.length > 0 ? (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {modalSelectedKeyCustomActions.map((action) => (
-                    <CustomActionRow
+                    <DialogCustomActionRow
                       key={action.id || `new-${action._index}`}
                       action={action}
                       index={action._index}
+                      baseKeyCode={editingKeyCode}
                       keyboardLayout={keyboardLayout}
                       onUpdate={modalUpdateCustomAction}
                       onDelete={modalDeleteCustomAction}
