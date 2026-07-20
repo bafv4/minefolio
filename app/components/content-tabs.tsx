@@ -10,27 +10,29 @@ export type ContentTab = {
   icon: LucideIcon;
 };
 
-/** ページ間を行き来するタブ型ナビゲーション（セグメント切替調） */
+/** ページ間を行き来するタブ型ナビゲーション（フォルダタブ調） */
 export function ContentTabs({ tabs, active }: { tabs: ContentTab[]; active: string }) {
   return (
-    <div className="flex rounded-lg border bg-card p-0.5 gap-0.5 w-fit">
+    <nav className="flex w-full items-end gap-1 border-b border-border">
       {tabs.map(({ key, to, label, icon: Icon }) => (
         <Link
           key={key}
           to={to}
           aria-current={active === key ? "page" : undefined}
           className={cn(
-            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "relative -mb-px inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-t-lg border border-transparent px-3.5 text-sm font-medium transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+            "before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-0.5 before:rounded-full",
             active === key
-              ? "bg-secondary text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              ? "border-border border-b-transparent bg-background text-foreground before:bg-brand"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
           )}
         >
           <Icon className="h-4 w-4 shrink-0" />
           {label}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }
 
