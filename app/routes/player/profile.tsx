@@ -798,16 +798,16 @@ export default function PlayerProfilePage() {
       )}
     </div>
 
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
+    <Tabs value={activeTab} onValueChange={handleTabChange} orientation="vertical" className="flex flex-col lg:flex-row gap-6">
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-56 shrink-0">
         <div className="sticky top-20 space-y-4">
-          <TabsList className="flex flex-col h-auto w-full bg-transparent gap-1">
+          <TabsList className="mb-0 w-full flex-col items-stretch gap-1 overflow-visible">
             {/* Profile Tab with Avatar */}
             <TabsTrigger
               value="profile"
-              className="w-full justify-start gap-3 px-3 py-3 h-auto data-[state=active]:bg-secondary"
+              className="h-auto w-full justify-start gap-3 rounded-md px-3 py-3 data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
             >
               {player.uuid ? (
                 <MinecraftAvatar
@@ -842,7 +842,7 @@ export default function PlayerProfilePage() {
               <TabsTrigger
                 key={item.value}
                 value={item.value}
-                className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
+                className="h-auto w-full justify-start gap-3 rounded-md px-3 py-2 data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
@@ -928,7 +928,7 @@ export default function PlayerProfilePage() {
         )}
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-4">
+        <TabsContent value="profile" className="rounded-xl space-y-4">
           {/* Header: Skin + Basic Info */}
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -1145,7 +1145,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="space-y-4">
+        <TabsContent value="keybindings" className="rounded-xl space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
@@ -1378,7 +1378,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="space-y-4">
+        <TabsContent value="stats" className="rounded-xl space-y-4">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1388,7 +1388,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="space-y-4">
+        <TabsContent value="items" className="rounded-xl space-y-4">
           {player.itemLayouts.length > 0 ? (
             <div className="space-y-4">
               {player.itemLayouts.map((layout) => (
@@ -1405,7 +1405,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="space-y-4">
+        <TabsContent value="searchcraft" className="rounded-xl space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1448,7 +1448,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="space-y-4">
+        <TabsContent value="devices" className="rounded-xl space-y-4">
           {player.playerConfig ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1659,7 +1659,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="space-y-4">
+        <TabsContent value="guides" className="rounded-xl space-y-4">
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">
