@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "./db";
 import {
   configPresets,
@@ -415,39 +415,52 @@ export async function createPreset(
   const customKeysData = customKeys.length > 0 ? serializeCustomKeys(customKeys) : null;
   const customActionsData = customActions.length > 0 ? serializeCustomActions(customActions) : null;
 
-  // プリセットを挿入
-  await db.insert(configPresets).values({
-    id: presetId,
-    userId,
-    name,
-    description,
-    isActive,
-    keybindingsData,
-    playerConfigData,
-    remapsData,
-    fingerAssignmentsData,
-    itemLayoutsData,
-    searchCraftsData,
-    customKeysData,
-    customActionsData,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  // 変更履歴に記録
+  // 変更履歴の説明文
   const changeDescriptions: Record<string, string> = {
     manual: `プリセット「${name}」を作成`,
     import: `プリセット「${name}」をインポートから作成`,
     onboarding: `プリセット「${name}」を初期設定として作成`,
   };
 
-  await db.insert(configHistory).values({
-    id: createId(),
-    userId,
-    changeType: "preset_switch",
-    changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
-    presetId,
-    createdAt: now,
+  // 非アクティブ化＋挿入＋履歴記録を単一トランザクションで実行
+  await db.transaction(async (tx) => {
+    // アクティブとして作成する場合、既存のアクティブプリセットを先に非アクティブ化する
+    // （「アクティブプリセットはユーザーごとに高々1件」の不変条件を維持）
+    if (isActive) {
+      await tx
+        .update(configPresets)
+        .set({ isActive: false, updatedAt: now })
+        .where(and(eq(configPresets.userId, userId), eq(configPresets.isActive, true)));
+    }
+
+    // プリセットを挿入
+    await tx.insert(configPresets).values({
+      id: presetId,
+      userId,
+      name,
+      description,
+      isActive,
+      keybindingsData,
+      playerConfigData,
+      remapsData,
+      fingerAssignmentsData,
+      itemLayoutsData,
+      searchCraftsData,
+      customKeysData,
+      customActionsData,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 変更履歴に記録
+    await tx.insert(configHistory).values({
+      id: createId(),
+      userId,
+      changeType: "preset_switch",
+      changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
+      presetId,
+      createdAt: now,
+    });
   });
 
   return {
