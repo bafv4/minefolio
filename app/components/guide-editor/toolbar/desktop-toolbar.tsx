@@ -236,8 +236,12 @@ export function DesktopToolbar({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setTab(key)}
                   className={cn(
-                    "h-7 px-3 rounded-md text-sm transition-colors",
-                    tab === key ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60",
+                    "relative h-7 px-3 rounded-t-md text-sm transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    "after:pointer-events-none after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full",
+                    tab === key
+                      ? "bg-muted/60 font-medium text-foreground after:bg-brand"
+                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                   )}
                 >
                   {label}
