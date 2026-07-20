@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
   ViewToggle,
@@ -34,8 +34,8 @@ import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { toUiRemaps, filterRemapsForContext, normalizeKeyRemapType, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
-import type { PresetSearchCraftData } from "@/lib/preset-utils";
+import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
+import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
@@ -289,15 +289,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得
+  // プリセット一覧を取得（メインを先頭に）
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, player.id),
-    orderBy: [desc(configPresets.isActive), desc(configPresets.updatedAt)],
+    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
     columns: {
       id: true,
       name: true,
       description: true,
       isActive: true,
+      isMain: true,
       keybindingsData: true,
       playerConfigData: true,
       remapsData: true,
@@ -309,8 +310,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
-  // 選択されたプリセットのデータを適用
-  let activePresetId: string | null = null;
+  // 表示プリセットの解決: `?preset=` が有効ならそのプリセット、
+  // 無指定・不正・削除済みの場合はメイン（公開用）プリセットへフォールバック。
+  // メインが無い場合（移行前データ等）は編集中プリセットへさらにフォールバック
+  const requestedPreset = presetId
+    ? presets.find((p) => p.id === presetId)
+    : undefined;
+  const selectedPreset =
+    requestedPreset ??
+    presets.find((p) => p.isMain) ??
+    presets.find((p) => p.isActive) ??
+    null;
+
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
   let displayKeyRemaps = player.keyRemaps;
@@ -319,153 +330,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let displayCustomKeys = player.customKeys;
   let displayCustomActions = player.customActions;
 
-  if (presetId && presets.length > 0) {
-    const selectedPreset = presets.find((p) => p.id === presetId);
-    if (selectedPreset) {
-      activePresetId = selectedPreset.id;
-
-      // プリセットのキーバインドを適用
-      if (selectedPreset.keybindingsData) {
-        const presetKeybindings = JSON.parse(selectedPreset.keybindingsData) as Array<{
-          action: string;
-          keyCode: string;
-          category: string;
-        }>;
-        displayKeybindings = presetKeybindings.map((kb, idx) => ({
-          id: `preset-${idx}`,
-          userId: player.id,
-          action: kb.action,
-          keyCode: kb.keyCode,
-          category: kb.category as "movement" | "combat" | "inventory" | "ui",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-
-      // プリセットの走者設定を適用
-      if (selectedPreset.playerConfigData) {
-        const presetConfig = JSON.parse(selectedPreset.playerConfigData);
-        displayPlayerConfig = {
-          ...player.playerConfig,
-          ...presetConfig,
-          fingerAssignments: selectedPreset.fingerAssignmentsData ?? player.playerConfig?.fingerAssignments,
-        } as typeof player.playerConfig;
-      }
-
-      // プリセットのリマップを適用
-      if (selectedPreset.remapsData) {
-        const presetRemaps = JSON.parse(selectedPreset.remapsData) as Array<{
-          sourceKey: string;
-          targetKey: string | null;
-          software: string | null;
-          notes: string | null;
-          outputMode?: "key" | "character" | null;
-          outputCharacter?: string | null;
-          remapType?: string | null;
-        }>;
-        displayKeyRemaps = presetRemaps.map((r, idx) => ({
-          id: `preset-remap-${idx}`,
-          userId: player.id,
-          sourceKey: r.sourceKey,
-          targetKey: r.targetKey,
-          software: r.software,
-          notes: r.notes,
-          outputMode: r.outputMode ?? "key",
-          outputCharacter: r.outputCharacter ?? null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          remapType: normalizeKeyRemapType(r.remapType),
-        }));
-      }
-
-      // プリセットのアイテム配置を適用
-      if (selectedPreset.itemLayoutsData) {
-        const presetItemLayouts = JSON.parse(selectedPreset.itemLayoutsData) as Array<{
-          segment: string;
-          slots: string;
-          offhand: string | null;
-          notes: string | null;
-          displayOrder: number;
-        }>;
-        displayItemLayouts = presetItemLayouts.map((layout, idx) => ({
-          id: `preset-layout-${idx}`,
-          userId: player.id,
-          segment: layout.segment,
-          slots: layout.slots,
-          offhand: layout.offhand,
-          notes: layout.notes,
-          displayOrder: layout.displayOrder,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-
-      // プリセットのサーチクラフトを適用
-      if (selectedPreset.searchCraftsData) {
-        const presetSearchCrafts = JSON.parse(
-          selectedPreset.searchCraftsData,
-        ) as PresetSearchCraftData[];
-        displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
-          id: `preset-craft-${idx}`,
-          userId: player.id,
-          sequence: craft.sequence,
-          items: craft.items,
-          keys: craft.keys,
-          searchStr: craft.searchStr,
-          comment: craft.comment,
-          timing: craft.timing ?? null,
-          withShift: craft.withShift === true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-
-      // プリセットのカスタムキー定義を適用
-      if (selectedPreset.customKeysData) {
-        const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
-          keyCode: string;
-          keyName: string;
-          category: "mouse" | "keyboard" | "controller";
-          position: string | null;
-          size: string | null;
-          notes: string | null;
-        }>;
-        displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
-          id: `preset-customkey-${idx}`,
-          userId: player.id,
-          keyCode: ck.keyCode,
-          keyName: ck.keyName,
-          category: ck.category,
-          position: ck.position,
-          size: ck.size,
-          notes: ck.notes,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-
-      // プリセットのカスタムアクションを適用
-      if (selectedPreset.customActionsData) {
-        const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
-          actionName: string;
-          description: string | null;
-          category: "other" | "macro" | "tool";
-          triggerKey: string;
-          displayOrder: number;
-        }>;
-        displayCustomActions = presetCustomActions.map((ca, idx) => ({
-          id: `preset-customaction-${idx}`,
-          userId: player.id,
-          actionName: ca.actionName,
-          description: ca.description,
-          category: ca.category,
-          triggerKey: ca.triggerKey,
-          displayOrder: ca.displayOrder,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-    }
+  // アクティブプリセットはライブ設定と同内容（不変条件）のため、
+  // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
+  // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
+  // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
+  if (selectedPreset && !selectedPreset.isActive) {
+    const decoded = decodePresetConfig(selectedPreset, player.id);
+    displayKeybindings = decoded.keybindings;
+    displayKeyRemaps = decoded.keyRemaps;
+    displayItemLayouts = decoded.itemLayouts;
+    displaySearchCrafts = decoded.searchCrafts;
+    displayCustomKeys = decoded.customKeys;
+    displayCustomActions = decoded.customActions;
+    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
+    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
+    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
+    displayPlayerConfig = (decoded.playerConfig
+      ? {
+          ...decoded.playerConfig,
+          fingerAssignments: decoded.fingerAssignments,
+        }
+      : null) as typeof player.playerConfig;
   }
 
   // Check if current user is viewing their own profile
@@ -538,40 +423,43 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       name: p.name,
       description: p.description,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasItemLayouts: !!p.itemLayoutsData,
       hasSearchCrafts: !!p.searchCraftsData,
     })),
-    activePresetId,
+    selectedPresetId: selectedPreset?.id ?? null,
     playerGuides,
   };
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const revalidator = useRevalidator();
   const navigation = useNavigation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
 
-  // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
-  const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
+  // プリセット切替中のローディング状態（`?preset=` 変更によるナビゲーション中）
+  const isSwitchingPreset = navigation.state === "loading";
 
-  // プリセット選択ハンドラー
-  const handlePresetChange = (presetId: string) => {
+  // プリセット選択ハンドラー。メイン（公開用）プリセット選択時は `?preset=` を外して
+  // 既定表示に戻す。loader の再実行は setSearchParams による
+  // ナビゲーションの既定の再検証に任せる（明示的な revalidate は loader の二重実行になる）
+  const handlePresetChange = (nextPresetId: string) => {
+    const isMainPreset = presets.some(
+      (p) => p.id === nextPresetId && p.isMain,
+    );
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (presetId === "current") {
+        if (isMainPreset) {
           next.delete("preset");
         } else {
-          next.set("preset", presetId);
+          next.set("preset", nextPresetId);
         }
         return next;
       },
       { preventScrollReset: true, replace: true },
     );
-    // 明示的に loader を再実行（クエリ変更だけでは再検証されないケースの保険）
-    revalidator.revalidate();
   };
 
   // 廃止されたアクションを除外
@@ -735,9 +623,14 @@ export default function PlayerProfilePage() {
     );
   };
 
-  // プリセット選択を表示するタブ
+  // プリセット選択を表示するタブ（プリセットが1件も無い場合はセレクタ自体を出さない）
   const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
+
+  // メイン以外のプリセットを表示中か（「プリセット表示中」バッジ用)。
+  // メインプリセットは既定表示そのものなのでバッジは出さない。
+  const selectedPreset = presets.find((p) => p.id === selectedPresetId);
+  const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isMain;
 
   return (
     <>
@@ -798,16 +691,17 @@ export default function PlayerProfilePage() {
       )}
     </div>
 
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col lg:flex-row gap-6">
+    {/* 縦サイドバー構成のためルートのカード化は打ち消す（パネル側が個別にカードになる） */}
+    <Tabs value={activeTab} onValueChange={handleTabChange} orientation="vertical" className="flex flex-col lg:flex-row gap-6 overflow-visible rounded-none border-0 bg-transparent">
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-56 shrink-0">
         <div className="sticky top-20 space-y-4">
-          <TabsList className="flex flex-col h-auto w-full bg-transparent gap-1">
+          <TabsList className="m-0 w-full flex-col items-stretch gap-1 overflow-visible bg-transparent p-0">
             {/* Profile Tab with Avatar */}
             <TabsTrigger
               value="profile"
-              className="w-full justify-start gap-3 px-3 py-3 h-auto data-[state=active]:bg-secondary"
+              className="h-auto w-full justify-start gap-3 rounded-md px-3 py-3 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
             >
               {player.uuid ? (
                 <MinecraftAvatar
@@ -842,7 +736,7 @@ export default function PlayerProfilePage() {
               <TabsTrigger
                 key={item.value}
                 value={item.value}
-                className="w-full justify-start gap-3 px-3 py-2 data-[state=active]:bg-secondary"
+                className="h-auto w-full justify-start gap-3 rounded-md px-3 py-2 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
@@ -858,23 +752,22 @@ export default function PlayerProfilePage() {
                 <span>{t("playerProfile.preset")}</span>
               </div>
               <Select
-                value={activePresetId ?? "current"}
+                value={selectedPresetId ?? ""}
                 onValueChange={handlePresetChange}
               >
                 <SelectTrigger className="w-full text-sm">
                   <SelectValue placeholder={t("playerProfile.currentSetting")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                   {presets.map((preset) => (
                     <SelectItem key={preset.id} value={preset.id}>
                       {preset.name}
-                      {preset.isActive && t("playerProfile.presetAppliedSuffix")}
+                      {preset.isMain && t("playerProfile.presetMainSuffix")}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {activePresetId && (
+              {isViewingPresetSnapshot && (
                 <Badge variant="secondary" className="text-xs w-full justify-center">
                   {t("playerProfile.presetViewing")}
                 </Badge>
@@ -908,18 +801,17 @@ export default function PlayerProfilePage() {
               <span>{t("playerProfile.presetWithColon")}</span>
             </div>
             <Select
-              value={activePresetId ?? "current"}
+              value={selectedPresetId ?? ""}
               onValueChange={handlePresetChange}
             >
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder={t("playerProfile.currentSetting")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                 {presets.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.name}
-                    {preset.isActive && t("playerProfile.presetAppliedSuffix")}
+                    {preset.isMain && t("playerProfile.presetMainSuffix")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -928,7 +820,7 @@ export default function PlayerProfilePage() {
         )}
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-4">
+        <TabsContent value="profile" className="rounded-xl border space-y-4">
           {/* Header: Skin + Basic Info */}
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -1145,7 +1037,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="space-y-4">
+        <TabsContent value="keybindings" className="rounded-xl border space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
@@ -1187,7 +1079,7 @@ export default function PlayerProfilePage() {
                 <CardContent className="pt-0 pb-4">
                   <div className="flex flex-col items-start gap-4">
                     {/* メインキーボード */}
-                    <div className="overflow-x-auto pb-2 w-full">
+                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                       <VirtualKeyboard
                         layout={keyboardLayout}
                         keybindings={keybindingsToMap(player.keybindings)}
@@ -1204,7 +1096,7 @@ export default function PlayerProfilePage() {
                       />
                     </div>
                     {/* テンキーとマウスを横並び */}
-                    <div className="overflow-x-auto pb-2 w-full">
+                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                       <div className="flex items-start gap-6">
                         {!isTKL && (
                           <VirtualNumpad
@@ -1378,7 +1270,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="space-y-4">
+        <TabsContent value="stats" className="rounded-xl border space-y-4">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1388,7 +1280,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="space-y-4">
+        <TabsContent value="items" className="rounded-xl border space-y-4">
           {player.itemLayouts.length > 0 ? (
             <div className="space-y-4">
               {player.itemLayouts.map((layout) => (
@@ -1405,7 +1297,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="space-y-4">
+        <TabsContent value="searchcraft" className="rounded-xl border space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1448,7 +1340,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="space-y-4">
+        <TabsContent value="devices" className="rounded-xl border space-y-4">
           {player.playerConfig ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1659,7 +1551,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="space-y-4">
+        <TabsContent value="guides" className="rounded-xl border space-y-4">
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">
@@ -1860,7 +1752,7 @@ function ItemLayoutCard({
       <CardContent>
         <div className="space-y-4">
           {/* ホットバー */}
-          <div className="overflow-x-auto pb-2">
+          <div className="custom-scrollbar overflow-x-auto pb-2">
             <div className="flex items-center gap-2 w-fit">
               <div className="flex gap-1.5">
               {Array.from({ length: 9 }, (_, i) => {

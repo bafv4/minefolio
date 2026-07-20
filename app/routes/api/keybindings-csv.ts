@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
-import { users, keybindings, keyRemaps, customActions } from "@/lib/schema";
-import { eq, asc, desc, and, inArray } from "drizzle-orm";
+import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
 import { calculateCm360, getWindowsMultiplier } from "@/lib/mouse-settings";
@@ -37,40 +36,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const db = createDb();
 
-  const whereCondition = userSlugs && userSlugs.length > 0
-    ? and(eq(users.profileVisibility, "public"), inArray(users.slug, userSlugs))
-    : eq(users.profileVisibility, "public");
-
-  const allPlayers = await db.query.users.findMany({
-    where: whereCondition,
-    orderBy: [desc(users.createdAt)],
-    columns: {
-      id: true,
-      mcid: true,
-      slug: true,
-      displayName: true,
-    },
-    with: {
-      keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
-      keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
-      playerConfig: {
-        columns: {
-          keyboardLayout: true,
-          mouseDpi: true,
-          gameSensitivity: true,
-          windowsSpeed: true,
-          windowsSpeedMultiplier: true,
-          rawInput: true,
-          mouseAcceleration: true,
-        },
-      },
-      customActions: { orderBy: [asc(customActions.displayOrder), asc(customActions.actionName)] },
-    },
+  // 一覧ページと同じ共有ローダーを使う（メインプリセットのスナップショット優先・
+  // 視聴者ロール除外・空ユーザー除外まで一覧と同一の絞り込み）
+  const players = await loadKeybindingsListPlayers(db, {
+    slugs: userSlugs ?? undefined,
   });
-
-  const players = allPlayers.filter(
-    (p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0
-  );
 
   const playerName = (p: typeof players[0]) => p.displayName ?? p.mcid ?? p.slug;
 

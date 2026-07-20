@@ -1,10 +1,11 @@
 {
   "name": "minefolio",
   "private": false,
-  "version": "v1.8.0",
+  "version": "v1.8.1",
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
+    "dev:remote": "react-router dev --mode remote",
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
@@ -14,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "db:push:remote": "drizzle-kit push --config drizzle.remote.config.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

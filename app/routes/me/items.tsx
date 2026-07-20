@@ -75,13 +75,18 @@ export const meta: Route.MetaFunction = () => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
   // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
   if (formAction === "/me/presets") {
     return true;
+  }
+  // PresetSelector の focus 再検証（別タブでのプリセット切替検知）を通すため、
+  // revalidator 起点（アクション無し・URL 不変）の再検証は既定の判断に任せる
+  if (!formAction && currentUrl.href === nextUrl.href) {
+    return defaultShouldRevalidate;
   }
   return false;
 }
@@ -151,6 +156,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: true,
       name: true,
       isActive: true,
+      isMain: true,
       itemLayoutsData: true,
     },
   });
@@ -167,6 +173,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: p.id,
       name: p.name,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasItemLayouts: !!p.itemLayoutsData,
       itemLayoutsData: p.itemLayoutsData,
     })),
@@ -237,6 +244,18 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.staleSession") };
     }
     throw e;
+  }
+
+  // アイテム配置はプリセットのスナップショットに含まれるデータのため、
+  // アクティブなプリセットが無い状態では保存できない（UIのグレーアウトだけでなくサーバー側でも拒否）。
+  // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
+  // どのプリセットにも属さないデータになってしまう。
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  if (!activePresetRow) {
+    return { error: t("meItems.presetRequired") };
   }
 
   if (actionType === "saveAll") {
@@ -659,6 +678,24 @@ function EditableLayoutCard({
   );
 }
 
+/**
+ * プリセット未作成時に、アイテム配置が編集できない旨を案内する。
+ * 既存データは読み取り専用で表示される。
+ */
+function PresetRequiredNotice() {
+  return (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="flex flex-wrap items-center gap-1">
+        <span>{t("meItems.presetRequiredNotice")}</span>
+        <Link to="/me/presets" className="underline underline-offset-2">
+          {t("meItems.presetRequiredLink")}
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 export default function ItemLayoutsPage() {
   const { layouts: initialLayouts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
@@ -786,11 +823,14 @@ export default function ItemLayoutsPage() {
 
       {/* プリセットセレクター */}
       <PresetSelector
-        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
+
+      {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
+      {!hasPresets && <PresetRequiredNotice />}
 
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {layouts.length > 0 ? (

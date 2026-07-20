@@ -4,6 +4,7 @@ import { useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { buildExtensions } from "../editor-config";
 import { SlashCommand } from "../extensions/slash-command";
+import { stripNonPaletteColorsFromHtml } from "@/lib/guide-colors";
 import { t } from "@/lib/messages";
 
 interface UseGuideEditorOptions {
@@ -44,6 +45,12 @@ export function useGuideEditor({
         autocorrect: "off",
         autocapitalize: "off",
       },
+      // 外部リッチテキストのペーストでは、コピー元の算出スタイル
+      // （閲覧テーマの文字色 = rgb(...) や Word/Docs の #000000 等）がインライン
+      // style として取り込まれ、保存 HTML に焼き付いてテーマ非追従になる。
+      // カラーピッカーのパレットに無い color / background-color をここで除去する
+      // （パレット色は保持 — エディタ内コピーや他ガイドからのコピーを保全）。
+      transformPastedHTML: stripNonPaletteColorsFromHtml,
       handlePaste: (_view, event) => {
         const items = event.clipboardData?.items;
         if (!items) return false;

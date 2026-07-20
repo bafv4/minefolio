@@ -44,13 +44,18 @@ export const meta: Route.MetaFunction = () => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction }: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
   // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
   if (formAction === "/me/presets") {
     return true;
+  }
+  // PresetSelector の focus 再検証（別タブでのプリセット切替検知）を通すため、
+  // revalidator 起点（アクション無し・URL 不変）の再検証は既定の判断に任せる
+  if (!formAction && currentUrl.href === nextUrl.href) {
+    return defaultShouldRevalidate;
   }
   return false;
 }
@@ -110,6 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: true,
       name: true,
       isActive: true,
+      isMain: true,
       searchCraftsData: true,
     },
   });
@@ -128,6 +134,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       id: p.id,
       name: p.name,
       isActive: p.isActive,
+      isMain: p.isMain,
       hasSearchCrafts: !!p.searchCraftsData,
       searchCraftsData: p.searchCraftsData,
     })),
@@ -210,6 +217,18 @@ export async function action({ request }: Route.ActionArgs) {
     throw e;
   }
 
+  // サーチクラフトはプリセットのスナップショットに含まれるデータのため、
+  // アクティブなプリセットが無い状態では保存できない（UIのグレーアウトだけでなくサーバー側でも拒否）。
+  // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
+  // どのプリセットにも属さないデータになってしまう。
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  if (!activePresetRow) {
+    return { error: t("meSearchCraft.presetRequired") };
+  }
+
   if (actionType === "saveAll") {
     const craftsJson = formData.get("crafts") as string;
 
@@ -263,6 +282,24 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 // ItemSelectDialog / EditableSearchCraftCard は @/components/search-craft-editor に抽出済み
+
+/**
+ * プリセット未作成時に、サーチクラフトが編集できない旨を案内する。
+ * 既存データは読み取り専用で表示される。
+ */
+function PresetRequiredNotice() {
+  return (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="flex flex-wrap items-center gap-1">
+        <span>{t("meSearchCraft.presetRequiredNotice")}</span>
+        <Link to="/me/presets" className="underline underline-offset-2">
+          {t("meSearchCraft.presetRequiredLink")}
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 export default function SearchCraftPage() {
   const { crafts: initialCrafts, remaps, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
@@ -405,11 +442,14 @@ export default function SearchCraftPage() {
 
       {/* プリセットセレクター */}
       <PresetSelector
-        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
+        presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
+
+      {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
+      {!hasPresets && <PresetRequiredNotice />}
 
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {crafts.length > 0 ? (
@@ -424,7 +464,7 @@ export default function SearchCraftPage() {
             />
             <Button variant="outline" size="sm" className="my-3" onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.add")}
+              {t("meSearchCraft.addCraft")}
             </Button>
           </CardContent>
         </Card>
@@ -438,7 +478,7 @@ export default function SearchCraftPage() {
             </p>
             <Button onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.add")}
+              {t("meSearchCraft.addCraft")}
             </Button>
           </CardContent>
         </Card>

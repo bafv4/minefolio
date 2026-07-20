@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { isKeyRemapTarget, KEY_REMAP_TYPES, type KeyRemapType } from "@/lib/remap-utils";
-import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
+import {
+  getKeyLabel,
+  parseKeyCombination,
+  MODIFIER_ORDER,
+  MODIFIER_LABELS,
+  type Modifier,
+} from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,6 +195,64 @@ export function RemapRow({
 }
 
 /**
+ * 修飾キートグル + ベースキー表示。ダイアログ内の行（リマップ / カスタムアクション）で
+ * 共通の「クリックしたキーを起点に、修飾キーの組み合わせを選ぶ」UI。
+ * flex 行の中に直接並べて使う（このコンポーネント自体はラッパー要素を持たない）。
+ */
+export function ModifierToggleGroup({
+  comboKey,
+  baseKeyCode,
+  keyboardLayout,
+  onChange,
+}: {
+  /** 現在の組み合わせキー（例: "Ctrl+KeyX"。修飾キーなしならベースキーのみ） */
+  comboKey: string;
+  baseKeyCode: string;
+  keyboardLayout: string | null;
+  onChange: (newComboKey: string) => void;
+}) {
+  const currentModifiers = parseKeyCombination(comboKey).modifiers;
+
+  const toggleModifier = (mod: Modifier) => {
+    const newModifiers = currentModifiers.includes(mod)
+      ? currentModifiers.filter((m) => m !== mod)
+      : [...currentModifiers, mod];
+
+    const newComboKey = newModifiers.length > 0
+      ? [
+          ...newModifiers.sort((a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b)),
+          baseKeyCode,
+        ].join("+")
+      : baseKeyCode;
+
+    onChange(newComboKey);
+  };
+
+  return (
+    <>
+      <div className="flex gap-1">
+        {MODIFIER_ORDER.map((mod) => (
+          <Button
+            key={mod}
+            type="button"
+            variant={currentModifiers.includes(mod) ? "default" : "outline"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => toggleModifier(mod)}
+          >
+            {MODIFIER_LABELS[mod]}
+          </Button>
+        ))}
+      </div>
+      <span className="text-muted-foreground">+</span>
+      <Badge variant="secondary" className="font-mono text-sm px-2 py-1">
+        {getKeyLabel(baseKeyCode, keyboardLayout)}
+      </Badge>
+    </>
+  );
+}
+
+/**
  * ダイアログ内リマップ行（キー1つを起点に、修飾キー組み合わせ・出力タイプを編集する）。
  * バーチャルキーボードのキーをクリックして開くモーダル（/me/keybindings のキー編集ダイアログ、
  * /playground のリマップ登録モーダル）で共通して使用する。
@@ -212,24 +276,6 @@ export function DialogRemapRow({
   showRemapType?: boolean;
   disabledRemapTypes?: KeyRemapType[];
 }) {
-  // 現在のsourceKeyから修飾キーを抽出
-  const parsed = parseKeyCombination(remap.sourceKey);
-  const currentModifiers = parsed.modifiers;
-
-  // 修飾キーのトグル
-  const toggleModifier = (mod: "Ctrl" | "Shift" | "Alt" | "Meta") => {
-    const newModifiers = currentModifiers.includes(mod)
-      ? currentModifiers.filter((m) => m !== mod)
-      : [...currentModifiers, mod];
-
-    // 新しいsourceKeyを構築
-    const newSourceKey = newModifiers.length > 0
-      ? [...newModifiers.sort((a, b) => ["Ctrl", "Shift", "Alt", "Meta"].indexOf(a) - ["Ctrl", "Shift", "Alt", "Meta"].indexOf(b)), baseKeyCode].join("+")
-      : baseKeyCode;
-
-    onUpdate(index, { sourceKey: newSourceKey });
-  };
-
   const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (
@@ -237,24 +283,12 @@ export function DialogRemapRow({
       {/* 修飾キー選択行 */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground shrink-0">{t("meKeybindings.from")}</span>
-        <div className="flex gap-1">
-          {(["Ctrl", "Shift", "Alt", "Meta"] as const).map((mod) => (
-            <Button
-              key={mod}
-              type="button"
-              variant={currentModifiers.includes(mod) ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => toggleModifier(mod)}
-            >
-              {mod === "Meta" ? "Win" : mod}
-            </Button>
-          ))}
-        </div>
-        <span className="text-muted-foreground">+</span>
-        <Badge variant="secondary" className="font-mono text-sm px-2 py-1">
-          {getKeyLabel(baseKeyCode, keyboardLayout)}
-        </Badge>
+        <ModifierToggleGroup
+          comboKey={remap.sourceKey}
+          baseKeyCode={baseKeyCode}
+          keyboardLayout={keyboardLayout}
+          onChange={(newSourceKey) => onUpdate(index, { sourceKey: newSourceKey })}
+        />
         <Button
           type="button"
           variant="ghost"

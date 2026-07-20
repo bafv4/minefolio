@@ -7,6 +7,8 @@ import { loadKeybindingsStats } from "@/lib/keybindings-stats.server";
 import { StatsView } from "@/components/keybindings/stats-view";
 import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
@@ -38,13 +40,19 @@ export async function loader() {
 
 export default function KeybindingsStatsPage() {
   const { stats } = useLoaderData<typeof loader>();
+  // ビュー切替（→ /keybindings, /keybindings/visual）中は本体をスケルトンに差し替える
+  const { isTabSwitching, targetPathname } = useTabNavigation();
   return (
     <div className="flex-1 flex flex-col space-y-5">
       <KeybindingsPageTitle />
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <ViewSwitcher />
-      </div>
-      <StatsView data={stats} />
+      <ViewSwitcher />
+      {isTabSwitching ? (
+        <TabContentSkeleton
+          variant={targetPathname === "/keybindings" ? "table" : "cards"}
+        />
+      ) : (
+        <StatsView data={stats} />
+      )}
     </div>
   );
 }

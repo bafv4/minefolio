@@ -216,7 +216,7 @@ export function KeybindEmbedView({
             {t("playerProfile.viewProfile")}
           </Link>
         </div>
-        <div className="p-4 overflow-x-auto">
+        <div className="custom-scrollbar p-4 overflow-x-auto">
           <VirtualKeyboard
             layout={keyboardLayout}
             keybindings={keybindingsToMap(keybindingsRaw)}

@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages } from "lucide-react";
 import { GuidesContentTabs } from "@/components/content-tabs";
+import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { getGameLanguageName, GAME_LANGUAGE_OPTIONS } from "@/lib/game-languages";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -99,6 +101,8 @@ export default function TemplatesIndexPage() {
   const { templates, q, lang } = useLoaderData<typeof loader>();
   const [langValue, setLangValue] = useState(lang || "__all");
   const hasFilters = !!q || !!lang;
+  // タブ切替（→ /guides）中は一覧をスケルトンに差し替える
+  const { isTabSwitching } = useTabNavigation();
 
   // 戻る/進むナビゲーション時にローダーの値へ同期する
   useEffect(() => {
@@ -112,6 +116,14 @@ export default function TemplatesIndexPage() {
 
   return (
     <div className="space-y-6">
+      <GuidesContentTabs active="templates" />
+
+      {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに */}
+      {isTabSwitching ? (
+        <TabContentSkeleton variant="cards" />
+      ) : (
+      <>
+      {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("templates.pageTitle")}</h1>
@@ -124,8 +136,6 @@ export default function TemplatesIndexPage() {
           </Link>
         </Button>
       </div>
-
-      <GuidesContentTabs active="templates" />
 
       {/* 検索バー（検索ボタン押下でGET送信 → 画面更新） */}
       <Form method="get" className="flex flex-col sm:flex-row gap-2">
@@ -234,6 +244,8 @@ export default function TemplatesIndexPage() {
             </p>
           </CardContent>
         </Card>
+      )}
+      </>
       )}
     </div>
   );

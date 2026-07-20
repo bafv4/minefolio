@@ -131,7 +131,7 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
     <div
       ref={scrollRef}
       role="grid"
-      className="relative rounded-lg border overflow-auto max-h-[70vh] [overscroll-behavior:contain] bg-card"
+      className="custom-scrollbar relative rounded-lg border overflow-auto max-h-[70vh] [overscroll-behavior:contain] bg-card"
     >
       {/* ヘッダ行（仮想化外、sticky top） */}
       {/* w-max min-w-full: 横スクロール時にヘッダ全体が描画されるよう、

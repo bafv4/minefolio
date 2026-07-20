@@ -1,30 +1,11 @@
 // ガイドエディタの共有定数。旧 index.tsx から逐語移植（互換性のため値を変更しない）。
+import { GUIDE_TEXT_COLORS, GUIDE_BG_COLORS } from "@/lib/guide-colors";
 
-/** 文字色パレット（Notion 準拠） */
-export const TEXT_COLORS = [
-  { name: "デフォルト", value: "" },
-  { name: "グレー", value: "#787774" },
-  { name: "赤", value: "#D44C47" },
-  { name: "オレンジ", value: "#CB7B2C" },
-  { name: "黄", value: "#998A2B" },
-  { name: "緑", value: "#448361" },
-  { name: "青", value: "#337EA9" },
-  { name: "紫", value: "#9065B0" },
-  { name: "ピンク", value: "#C14C8A" },
-] as const;
+/** 文字色パレット（Notion 準拠）。単一情報源は app/lib/guide-colors.ts */
+export const TEXT_COLORS = GUIDE_TEXT_COLORS;
 
-/** 背景色パレット */
-export const BG_COLORS = [
-  { name: "なし", value: "" },
-  { name: "グレー", value: "#F1F1EF" },
-  { name: "赤", value: "#FDEBEC" },
-  { name: "オレンジ", value: "#FBF3DB" },
-  { name: "黄", value: "#FBF3DB" },
-  { name: "緑", value: "#EDF3EC" },
-  { name: "青", value: "#E7F3F8" },
-  { name: "紫", value: "#F6F3F9" },
-  { name: "ピンク", value: "#F9F0F5" },
-] as const;
+/** 背景色パレット。単一情報源は app/lib/guide-colors.ts */
+export const BG_COLORS = GUIDE_BG_COLORS;
 
 /** テーブルセルの背景色（BG_COLORS を流用） */
 export const CELL_COLORS = BG_COLORS;

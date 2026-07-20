@@ -9,17 +9,19 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { decodePresetConfig } from "@/lib/preset-read";
+import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, ArrowLeft, Calendar, Pencil, List, ChevronDown } from "lucide-react";
+import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
+import { buildTableOfContents } from "@/lib/guide-toc";
+import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
   extractEmbedRefs,
@@ -144,8 +146,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const embedUsers: Record<string, EmbedUserData> = {};
 
   if (embedSlugs.length > 0) {
+    // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
     const embedUserRows = await db.query.users.findMany({
-      where: inArray(users.slug, embedSlugs),
+      where: and(inArray(users.slug, embedSlugs), publiclyReferencableCondition),
       columns: {
         id: true,
         slug: true,
@@ -161,9 +164,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           columns: {
             name: true,
             isActive: true,
+            isMain: true,
             keybindingsData: true,
             remapsData: true,
             playerConfigData: true,
+            fingerAssignmentsData: true,
             searchCraftsData: true,
           },
         },
@@ -175,7 +180,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
     if (unmatchedSlugs.length > 0) {
       const byMcid = await db.query.users.findMany({
-        where: inArray(users.mcid, unmatchedSlugs),
+        where: and(inArray(users.mcid, unmatchedSlugs), publiclyReferencableCondition),
         columns: {
           id: true,
           slug: true,
@@ -191,9 +196,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             columns: {
               name: true,
               isActive: true,
+              isMain: true,
               keybindingsData: true,
               remapsData: true,
               playerConfigData: true,
+              fingerAssignmentsData: true,
               searchCraftsData: true,
             },
           },
@@ -203,15 +210,49 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
 
     for (const u of embedUserRows) {
+      // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
+      // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
+      const mainPreset = u.configPresets.find((p) => p.isMain);
+      let display: Pick<
+        EmbedUserData,
+        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
+      >;
+      if (mainPreset) {
+        const decoded = decodePresetConfig(mainPreset, u.id);
+        display = {
+          keybindings: decoded.keybindings,
+          keyRemaps: decoded.keyRemaps,
+          playerConfig: decoded.playerConfig
+            ? {
+                keyboardLayout: decoded.playerConfig.keyboardLayout ?? null,
+                fingerAssignments: decoded.fingerAssignments,
+              }
+            : null,
+          searchCrafts: decoded.searchCrafts,
+        };
+      } else {
+        display = {
+          keybindings: u.keybindings,
+          keyRemaps: u.keyRemaps,
+          playerConfig: u.playerConfig,
+          searchCrafts: u.searchCrafts,
+        };
+      }
       const data: EmbedUserData = {
         slug: u.slug,
         displayName: u.displayName,
         mcid: u.mcid,
-        presets: u.configPresets,
-        keybindings: u.keybindings,
-        keyRemaps: u.keyRemaps,
-        playerConfig: u.playerConfig,
-        searchCrafts: u.searchCrafts,
+        // クライアント（guide-embeds）が使うフィールドのみ渡す
+        // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
+        presets: u.configPresets.map((p) => ({
+          name: p.name,
+          isActive: p.isActive,
+          keybindingsData: p.keybindingsData,
+          remapsData: p.remapsData,
+          playerConfigData: p.playerConfigData,
+          searchCraftsData: p.searchCraftsData,
+        })),
+        ...display,
       };
       embedUsers[u.slug] = data;
       if (u.mcid) embedUsers[u.mcid] = data;
@@ -287,7 +328,15 @@ export default function GuideViewPage() {
   }, []);
 
   return (
-    <article className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* デスクトップ目次: 本文幅は削らず、中央寄せ本文の左余白（ガター）に固定表示する。
+          左端はヘッダーのロゴ始点（コンテナ左端）と揃える。2xl ではガター幅が w-56 と一致し、
+          right-full（右端＝本文パディング左端）と合わせて左端がコンテナ左端になる。
+          2xl 未満は下部の上部バー + ドロワーを使う。 */}
+      <div className="hidden 2xl:block absolute inset-y-0 right-full w-56">
+        <GuideTocSidebar items={toc} />
+      </div>
+
       {previewingDraft && (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
@@ -344,7 +393,7 @@ export default function GuideViewPage() {
       )}
 
       {/* Meta */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-10">
+      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-6">
         <Link
           to={`/player/${author.slug}`}
           className="flex items-center gap-2 hover:text-foreground transition-colors"
@@ -367,8 +416,10 @@ export default function GuideViewPage() {
         </span>
       </div>
 
-      {/* 目次 */}
-      <TableOfContents items={toc} />
+      {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。
+          2xl:hidden と sticky はコンポーネント側のバー本体に付く（ラッパーで包むと
+          sticky の可動域が無くなるため、ここでは素で描画する） */}
+      <GuideTocMobile items={toc} />
 
       {/* Content */}
       <GuideContent
@@ -400,58 +451,6 @@ export default function GuideViewPage() {
         </Link>
       </div>
     </article>
-  );
-}
-
-/** ガイドの目次（折りたたみ式）。見出しが2つ以上あるときのみ表示する。 */
-function TableOfContents({ items }: { items: TocItem[] | undefined }) {
-  const [open, setOpen] = useState(true);
-
-  // items は通常 loader から必ず配列で渡るが、HMR や古いローダーデータで
-  // 一時的に undefined になっても描画が壊れないようにガードする。
-  if (!items || items.length < 2) return null;
-
-  const handleJump = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    history.replaceState(null, "", `#${id}`);
-  };
-
-  return (
-    <nav aria-label="目次" className="mb-10 rounded-lg border bg-muted/30">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold"
-      >
-        <span className="flex items-center gap-2">
-          <List className="h-4 w-4 text-muted-foreground" />
-          目次
-        </span>
-        <ChevronDown
-          className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open && (
-        <ul className="px-2 pb-3">
-          {items.map((item) => (
-            <li key={item.id}>
-              <a
-                href={`#${item.id}`}
-                onClick={(e) => handleJump(e, item.id)}
-                className="block truncate rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                style={{ paddingLeft: `${(item.level - 1) * 1 + 0.5}rem` }}
-              >
-                {item.text}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </nav>
   );
 }
 

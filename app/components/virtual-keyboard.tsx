@@ -466,6 +466,9 @@ function JisEnterKey({
 // メインキーボードの行の合計幅を計算（USレイアウト Row2基準: 15ユニット）
 const MAIN_KEYBOARD_UNITS = 15;
 
+// ナビゲーションクラスタ（Insert 等6キーの島 + 矢印キー）の幅: 3ユニット
+const NAV_CLUSTER_UNITS = 3;
+
 function VirtualKeyboardComponent({
   layout = "US",
   keybindings = {},
@@ -985,15 +988,54 @@ function VirtualKeyboardComponent({
     );
   };
 
+  // ナビゲーションクラスタ（Insert/Delete/Home/End/PageUp/PageDown の6キーの島）+ 矢印キー。
+  // 実機の配列に合わせてメインキーボード右側に縦位置を揃えて描画する:
+  // 行1(F行)は空き、行2-3にナビ6キー、行4は空き、行5-6に逆T字の矢印キー。
+  // renderKey を使うため、クリック・ツールチップ・指色・リマップ表示は他のキーと同様に機能する
+  const renderNavCluster = (baseSize: number, gap: number) => (
+    <div className="flex flex-col" style={{ gap: `${gap}px` }}>
+      <div style={{ height: `${baseSize}px` }} />
+      <div className="flex" style={{ gap: `${gap}px` }}>
+        {renderKey({ code: "Insert" }, 100, 0, baseSize, gap)}
+        {renderKey({ code: "Home" }, 100, 1, baseSize, gap)}
+        {renderKey({ code: "PageUp" }, 100, 2, baseSize, gap)}
+      </div>
+      <div className="flex" style={{ gap: `${gap}px` }}>
+        {renderKey({ code: "Delete" }, 101, 0, baseSize, gap)}
+        {renderKey({ code: "End" }, 101, 1, baseSize, gap)}
+        {renderKey({ code: "PageDown" }, 101, 2, baseSize, gap)}
+      </div>
+      <div style={{ height: `${baseSize}px` }} />
+      <div className="flex" style={{ gap: `${gap}px` }}>
+        {renderKey({ code: "_spacer_arrow_l" }, 102, 0, baseSize, gap)}
+        {renderKey({ code: "ArrowUp" }, 102, 1, baseSize, gap)}
+        {renderKey({ code: "_spacer_arrow_r" }, 102, 2, baseSize, gap)}
+      </div>
+      <div className="flex" style={{ gap: `${gap}px` }}>
+        {renderKey({ code: "ArrowLeft" }, 103, 0, baseSize, gap)}
+        {renderKey({ code: "ArrowDown" }, 103, 1, baseSize, gap)}
+        {renderKey({ code: "ArrowRight" }, 103, 2, baseSize, gap)}
+      </div>
+    </div>
+  );
+
   // メインキーボードの最小幅を計算（15ユニット + ギャップ）
   const mainKeyboardMinWidth = MAIN_KEYBOARD_UNITS * baseSize + (MAIN_KEYBOARD_UNITS - 1) * gap;
+  // ナビクラスタ（3ユニット）と島間の余白を含めた全体最小幅
+  const navClusterWidth = NAV_CLUSTER_UNITS * baseSize + (NAV_CLUSTER_UNITS - 1) * gap;
+  const totalMinWidth = mainKeyboardMinWidth + gap * 4 + navClusterWidth;
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className={cn("shrink-0", className)} style={{ minWidth: mainKeyboardMinWidth }}>
-        {/* メインキーボード */}
-        <div className="shrink-0">
-          {renderKeyboardSection(mainLayout, baseSize, gap)}
+      <div className={cn("shrink-0", className)} style={{ minWidth: totalMinWidth }}>
+        {/* メインキーボード + ナビゲーションクラスタ・矢印キー */}
+        <div className="flex shrink-0 items-start" style={{ gap: `${gap * 4}px` }}>
+          <div className="shrink-0">
+            {renderKeyboardSection(mainLayout, baseSize, gap)}
+          </div>
+          <div className="shrink-0">
+            {renderNavCluster(baseSize, gap)}
+          </div>
         </div>
 
         {/* カスタムキーボードキー */}

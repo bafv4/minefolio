@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
 import {
   Dialog,
@@ -142,11 +142,23 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
     }
   }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, fetcher]);
 
-  // fetcher完了時の処理
-  if (fetcher.state === "idle" && fetcher.data && step === "preview") {
-    setStep("done");
-    onSuccess?.();
-  }
+  // fetcher完了時の処理。サーバーがエラーを返した場合（プリセット未作成・
+  // 別タブでの切替検知等）は完了画面に遷移せず、エラーをダイアログ内に表示する
+  const prevFetcherDataRef = useRef<typeof fetcher.data>(undefined);
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (fetcher.data === prevFetcherDataRef.current) return;
+    prevFetcherDataRef.current = fetcher.data;
+    if (step !== "preview") return;
+    const data = fetcher.data as { error?: string };
+    if (data.error) {
+      setError(data.error);
+    } else {
+      setError(null);
+      setStep("done");
+      onSuccess?.();
+    }
+  }, [fetcher.state, fetcher.data, step, onSuccess]);
 
   const toggleRemapSelection = (index: number) => {
     setSelectedRemaps((prev) => {
@@ -191,19 +203,20 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
         </DialogHeader>
 
         {step === "select" && (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "remap" | "minecraft")}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="remap" className="flex items-center gap-2">
+          // Dialog 内デグレード: カード化・タブ帯の面は打ち消し、ベースラインのみ残す
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "remap" | "minecraft")} className="overflow-visible rounded-none border-0 bg-transparent">
+            <TabsList className="bg-transparent p-0">
+              <TabsTrigger value="remap" className="gap-2 data-[state=active]:bg-background">
                 <Keyboard className="h-4 w-4" />
                 リマップ
               </TabsTrigger>
-              <TabsTrigger value="minecraft" className="flex items-center gap-2">
+              <TabsTrigger value="minecraft" className="gap-2 data-[state=active]:bg-background">
                 <Settings className="h-4 w-4" />
                 Minecraft設定
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="remap" className="space-y-4">
+            <TabsContent value="remap" className="rounded-none border-0 border-t bg-transparent p-0 pt-4 sm:p-0 sm:pt-4 space-y-4">
               <div className="rounded-lg border p-4 space-y-3">
                 <h4 className="font-medium">AutoHotkeyスクリプト</h4>
                 <p className="text-sm text-muted-foreground">
@@ -229,7 +242,7 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
               </div>
             </TabsContent>
 
-            <TabsContent value="minecraft" className="space-y-4">
+            <TabsContent value="minecraft" className="rounded-none border-0 border-t bg-transparent p-0 pt-4 sm:p-0 sm:pt-4 space-y-4">
               <div className="rounded-lg border p-4 space-y-3">
                 <h4 className="font-medium">Minecraft設定ファイル</h4>
                 <p className="text-sm text-muted-foreground">

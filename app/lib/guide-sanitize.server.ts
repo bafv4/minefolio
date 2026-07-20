@@ -1,4 +1,5 @@
 import { FilterXSS } from "xss";
+import { isPaletteTextColor, isPaletteBgColor } from "./guide-colors";
 
 /**
  * ガイド本文（TipTap の getHTML() 出力）のサーバーサイドサニタイズ。
@@ -57,10 +58,17 @@ const TAG_ATTRS: Record<string, string[]> = {
   mark: ["data-color", "style"],
 };
 
-/** style 属性で許可する CSS プロパティ（true=任意の安全な値 / RegExp=一致する値のみ） */
-const CSS_WHITELIST: Record<string, boolean | RegExp> = {
-  color: true,
-  "background-color": true,
+/** style 属性で許可する CSS プロパティ
+ * （true=任意の安全な値 / RegExp=一致する値のみ / 関数=true を返した値のみ）
+ *
+ * color / background-color はエディタのカラーパレット（hex / rgb 形式）のみ許可する。
+ * 判定はペースト時の除去と同じ isPalette*Color（guide-colors.ts）を共有し、
+ * 入口と出口で許可ルールがズレないようにする。外部ペースト由来で焼き付いた
+ * 算出スタイル（閲覧テーマの色）は表示時にここで除去され、テーマ追従の
+ * デフォルト色に戻る（保存データのマイグレーション不要）。 */
+const CSS_WHITELIST: Record<string, boolean | RegExp | ((value: string) => boolean)> = {
+  color: isPaletteTextColor,
+  "background-color": isPaletteBgColor,
   "text-align": /^(left|center|right|justify)$/,
   "min-width": true,
   width: true,

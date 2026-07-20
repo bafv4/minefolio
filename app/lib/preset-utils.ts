@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "./db";
 import {
   configPresets,
@@ -380,6 +380,49 @@ export class PresetMismatchError extends Error {
   }
 }
 
+/** drizzle のトランザクション内外どちらでも使える最小インターフェース */
+type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * 指定プリセットをメイン（公開用）に設定する。
+ * is_main フラグを排他的に付け替えるだけで、ライブテーブル・isActive（編集対象）には一切触れない。
+ * 公開面（プロフィール等）はメインプリセットのスナップショットを表示するため、即座に反映される。
+ * 所有権・存在の検証は呼び出し側で済ませたプリセット行を渡すこと（ここでは再照会しない）。
+ */
+export async function setMainPreset(
+  db: Database,
+  preset: { id: string; userId: string },
+): Promise<void> {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(configPresets)
+      .set({ isMain: false, updatedAt: now })
+      .where(and(eq(configPresets.userId, preset.userId), eq(configPresets.isMain, true)));
+    await tx
+      .update(configPresets)
+      .set({ isMain: true, updatedAt: now })
+      .where(eq(configPresets.id, preset.id));
+  });
+}
+
+/**
+ * 新規プリセットを自動でメイン（公開用）にすべきか。
+ * メイン未設定のユーザーの最初の1件だけ true — 初回プリセット・オンボーディング・インポート・
+ * Playground / テンプレート経由のすべての作成経路が共有する単一の判定点。
+ * 既にメインがある場合は false（新規作成は「編集対象になるだけ」で公開の見え方を変えない）。
+ */
+export async function resolveIsMainForNewPreset(
+  db: DatabaseOrTransaction,
+  userId: string,
+): Promise<boolean> {
+  const existingMain = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, userId), eq(configPresets.isMain, true)),
+    columns: { id: true },
+  });
+  return !existingMain;
+}
+
 /**
  * プリセットを作成する共通関数
  */
@@ -415,39 +458,57 @@ export async function createPreset(
   const customKeysData = customKeys.length > 0 ? serializeCustomKeys(customKeys) : null;
   const customActionsData = customActions.length > 0 ? serializeCustomActions(customActions) : null;
 
-  // プリセットを挿入
-  await db.insert(configPresets).values({
-    id: presetId,
-    userId,
-    name,
-    description,
-    isActive,
-    keybindingsData,
-    playerConfigData,
-    remapsData,
-    fingerAssignmentsData,
-    itemLayoutsData,
-    searchCraftsData,
-    customKeysData,
-    customActionsData,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  // 変更履歴に記録
+  // 変更履歴の説明文
   const changeDescriptions: Record<string, string> = {
     manual: `プリセット「${name}」を作成`,
     import: `プリセット「${name}」をインポートから作成`,
     onboarding: `プリセット「${name}」を初期設定として作成`,
   };
 
-  await db.insert(configHistory).values({
-    id: createId(),
-    userId,
-    changeType: "preset_switch",
-    changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
-    presetId,
-    createdAt: now,
+  // 非アクティブ化＋挿入＋履歴記録を単一トランザクションで実行
+  let isMain = false;
+  await db.transaction(async (tx) => {
+    // アクティブとして作成する場合、既存のアクティブプリセットを先に非アクティブ化する
+    // （「アクティブプリセットはユーザーごとに高々1件」の不変条件を維持）
+    if (isActive) {
+      await tx
+        .update(configPresets)
+        .set({ isActive: false, updatedAt: now })
+        .where(and(eq(configPresets.userId, userId), eq(configPresets.isActive, true)));
+    }
+
+    // メイン（公開用）プリセットが未設定のユーザーには、このプリセットを自動でメインにする
+    isMain = await resolveIsMainForNewPreset(tx, userId);
+
+    // プリセットを挿入
+    await tx.insert(configPresets).values({
+      id: presetId,
+      userId,
+      name,
+      description,
+      isActive,
+      isMain,
+      keybindingsData,
+      playerConfigData,
+      remapsData,
+      fingerAssignmentsData,
+      itemLayoutsData,
+      searchCraftsData,
+      customKeysData,
+      customActionsData,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 変更履歴に記録
+    await tx.insert(configHistory).values({
+      id: createId(),
+      userId,
+      changeType: "preset_switch",
+      changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
+      presetId,
+      createdAt: now,
+    });
   });
 
   return {
@@ -456,6 +517,7 @@ export async function createPreset(
     name,
     description,
     isActive,
+    isMain,
     keybindingsData,
     playerConfigData,
     remapsData,

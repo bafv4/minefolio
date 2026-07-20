@@ -547,8 +547,8 @@ export default function StatsPage() {
         </span>
       </div>
 
-      <Tabs defaultValue="action-to-key" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="action-to-key" className="w-full">
+        <TabsList>
           <TabsTrigger value="action-to-key" className="gap-2">
             <span className="hidden sm:inline">{t("stats.action")}</span>
             <ArrowRight className="h-4 w-4" />

@@ -181,7 +181,7 @@ export function WhatsNew() {
         </div>
 
         {displayEntries.length > 0 ? (
-          <div ref={bodyRef} className="max-h-[min(55vh,320px)] overflow-y-auto px-4 py-3">
+          <div ref={bodyRef} className="max-h-[min(55vh,320px)] overflow-y-auto overscroll-contain px-4 py-3">
             <Suspense
               fallback={
                 <div className="space-y-2 py-1">
