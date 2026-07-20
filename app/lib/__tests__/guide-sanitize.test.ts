@@ -93,11 +93,29 @@ describe("sanitizeGuideHtml", () => {
   describe("style フィルタ", () => {
     it("許可プロパティ（color / background-color / text-align）のみ通す", () => {
       const out = sanitizeGuideHtml(
-        `<span style="color: red; position: fixed; background-color: blue;">x</span>`,
+        `<span style="color: #D44C47; position: fixed; background-color: #FDEBEC;">x</span>`,
       );
-      expect(out).toContain("color:red");
-      expect(out).toContain("background-color:blue");
+      expect(out).toContain("color:#D44C47");
+      expect(out).toContain("background-color:#FDEBEC");
       expect(out).not.toContain("position");
+    });
+
+    it("color / background-color はパレット色のみ許可する（焼き付いたテーマ色を除去）", () => {
+      // 外部ペースト由来で焼き付く算出スタイル（閲覧テーマの文字色・named color 等）は除去
+      const baked = sanitizeGuideHtml(
+        `<span style="color: rgb(226, 232, 240);">x</span><span style="color: #000000;">y</span><span style="color: red;">z</span>`,
+      );
+      expect(baked).not.toContain("color");
+      // パレット色は rgb 形式（公開ページからのコピーでブラウザが正規化した形）でも保持
+      const paletteRgb = sanitizeGuideHtml(
+        `<span style="color: rgb(212, 76, 71);">x</span>`,
+      );
+      expect(paletteRgb).toContain("rgb(212, 76, 71)");
+      // パレット外の背景色も除去
+      const bakedBg = sanitizeGuideHtml(
+        `<span style="background-color: rgb(30, 41, 59);">x</span>`,
+      );
+      expect(bakedBg).not.toContain("background-color");
     });
 
     it("text-align は left/center/right/justify のみ許可する", () => {
