@@ -15,13 +15,13 @@ import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, ArrowLeft, Calendar, Pencil, List, ChevronDown } from "lucide-react";
+import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { buildTableOfContents, type TocItem } from "@/lib/guide-toc";
+import { buildTableOfContents } from "@/lib/guide-toc";
+import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
   extractEmbedRefs,
@@ -328,7 +328,7 @@ export default function GuideViewPage() {
   }, []);
 
   return (
-    <article className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       {previewingDraft && (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
@@ -352,147 +352,108 @@ export default function GuideViewPage() {
         )}
       </div>
 
-      {/* Cover image */}
-      {guide.coverImageUrl && (
-        <img
-          src={guide.coverImageUrl}
-          alt={guide.title}
-          className="w-full rounded-xl object-cover aspect-2/1 mb-8"
-        />
-      )}
+      {/* GitBook 風 2 カラム: 広い画面は左に目次サイドバー、狭い画面は上部バー + ドロワー */}
+      <div className="xl:grid xl:grid-cols-[15rem_minmax(0,1fr)] xl:gap-10">
+        {/* 目次サイドバー（xl 以上） */}
+        <aside className="hidden xl:block">
+          <GuideTocSidebar items={toc} />
+        </aside>
 
-      {/* Title + summary */}
-      <div className="mb-5">
-        <h1 className="text-4xl font-bold leading-tight tracking-tight mb-3">
-          {guide.title}
-        </h1>
-        {guide.summary && (
-          <p className="text-lg text-muted-foreground leading-relaxed">
-            {guide.summary}
-          </p>
-        )}
-      </div>
+        {/* 本文カラム */}
+        <div className="min-w-0">
+          {/* Cover image */}
+          {guide.coverImageUrl && (
+            <img
+              src={guide.coverImageUrl}
+              alt={guide.title}
+              className="w-full rounded-xl object-cover aspect-2/1 mb-8"
+            />
+          )}
 
-      {/* Tags */}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {tags.map((tag) => (
-            <Badge key={tag} variant="secondary">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {/* Meta */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-10">
-        <Link
-          to={`/player/${author.slug}`}
-          className="flex items-center gap-2 hover:text-foreground transition-colors"
-        >
-          <MinecraftAvatar
-            uuid={author.uuid ?? undefined}
-            skinUrl={author.customSkinUrl}
-            size={20}
-            className="rounded-full shrink-0"
-          />
-          <span className="font-medium">{authorName}</span>
-        </Link>
-        <span className="flex items-center gap-1">
-          <Calendar className="h-3.5 w-3.5" />
-          {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
-        </span>
-        <span className="flex items-center gap-1">
-          <Eye className="h-3.5 w-3.5" />
-          {guide.viewCount}
-        </span>
-      </div>
-
-      {/* 目次 */}
-      <TableOfContents items={toc} />
-
-      {/* Content */}
-      <GuideContent
-        contentRef={contentRef}
-        html={guide.sanitizedContent}
-        embedUsers={embedUsers}
-      />
-
-      {/* Author card at bottom */}
-      <div className="border-t mt-12 pt-8">
-        <Link
-          to={`/player/${author.slug}`}
-          className="flex items-center gap-3 group"
-        >
-          <MinecraftAvatar
-            uuid={author.uuid ?? undefined}
-            skinUrl={author.customSkinUrl}
-            size={40}
-            className="rounded-full"
-          />
-          <div>
-            <p className="font-medium group-hover:text-primary transition-colors">
-              {authorName}
-            </p>
-            {author.mcid && (
-              <p className="text-sm text-muted-foreground">@{author.mcid}</p>
+          {/* Title + summary */}
+          <div className="mb-5">
+            <h1 className="text-4xl font-bold leading-tight tracking-tight mb-3">
+              {guide.title}
+            </h1>
+            {guide.summary && (
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                {guide.summary}
+              </p>
             )}
           </div>
-        </Link>
+
+          {/* Tags */}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {tags.map((tag) => (
+                <Badge key={tag} variant="secondary">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* Meta */}
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-6">
+            <Link
+              to={`/player/${author.slug}`}
+              className="flex items-center gap-2 hover:text-foreground transition-colors"
+            >
+              <MinecraftAvatar
+                uuid={author.uuid ?? undefined}
+                skinUrl={author.customSkinUrl}
+                size={20}
+                className="rounded-full shrink-0"
+              />
+              <span className="font-medium">{authorName}</span>
+            </Link>
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" />
+              {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
+            </span>
+            <span className="flex items-center gap-1">
+              <Eye className="h-3.5 w-3.5" />
+              {guide.viewCount}
+            </span>
+          </div>
+
+          {/* 目次（狭い画面のみ: 上部固定バー + 左ドロワー） */}
+          <div className="xl:hidden">
+            <GuideTocMobile items={toc} />
+          </div>
+
+          {/* Content */}
+          <GuideContent
+            contentRef={contentRef}
+            html={guide.sanitizedContent}
+            embedUsers={embedUsers}
+          />
+
+          {/* Author card at bottom */}
+          <div className="border-t mt-12 pt-8">
+            <Link
+              to={`/player/${author.slug}`}
+              className="flex items-center gap-3 group"
+            >
+              <MinecraftAvatar
+                uuid={author.uuid ?? undefined}
+                skinUrl={author.customSkinUrl}
+                size={40}
+                className="rounded-full"
+              />
+              <div>
+                <p className="font-medium group-hover:text-primary transition-colors">
+                  {authorName}
+                </p>
+                {author.mcid && (
+                  <p className="text-sm text-muted-foreground">@{author.mcid}</p>
+                )}
+              </div>
+            </Link>
+          </div>
+        </div>
       </div>
     </article>
-  );
-}
-
-/** ガイドの目次（折りたたみ式）。見出しが2つ以上あるときのみ表示する。 */
-function TableOfContents({ items }: { items: TocItem[] | undefined }) {
-  const [open, setOpen] = useState(true);
-
-  // items は通常 loader から必ず配列で渡るが、HMR や古いローダーデータで
-  // 一時的に undefined になっても描画が壊れないようにガードする。
-  if (!items || items.length < 2) return null;
-
-  const handleJump = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    history.replaceState(null, "", `#${id}`);
-  };
-
-  return (
-    <nav aria-label="目次" className="mb-10 rounded-lg border bg-muted/30">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold"
-      >
-        <span className="flex items-center gap-2">
-          <List className="h-4 w-4 text-muted-foreground" />
-          目次
-        </span>
-        <ChevronDown
-          className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open && (
-        <ul className="px-2 pb-3">
-          {items.map((item) => (
-            <li key={item.id}>
-              <a
-                href={`#${item.id}`}
-                onClick={(e) => handleJump(e, item.id)}
-                className="block truncate rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                style={{ paddingLeft: `${(item.level - 1) * 1 + 0.5}rem` }}
-              >
-                {item.text}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </nav>
   );
 }
 
