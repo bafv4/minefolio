@@ -328,7 +328,15 @@ export default function GuideViewPage() {
   }, []);
 
   return (
-    <article className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* デスクトップ目次: 本文幅は削らず、中央寄せ本文の左余白（ガター）に固定表示する。
+          左端はヘッダーのロゴ始点（コンテナ左端）と揃える。2xl ではガター幅が w-56 と一致し、
+          right-full（右端＝本文パディング左端）と合わせて左端がコンテナ左端になる。
+          2xl 未満は下部の上部バー + ドロワーを使う。 */}
+      <div className="hidden 2xl:block absolute inset-y-0 right-full w-56">
+        <GuideTocSidebar items={toc} />
+      </div>
+
       {previewingDraft && (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
@@ -352,106 +360,95 @@ export default function GuideViewPage() {
         )}
       </div>
 
-      {/* GitBook 風 2 カラム: 広い画面は左に目次サイドバー、狭い画面は上部バー + ドロワー */}
-      <div className="xl:grid xl:grid-cols-[15rem_minmax(0,1fr)] xl:gap-10">
-        {/* 目次サイドバー（xl 以上） */}
-        <aside className="hidden xl:block">
-          <GuideTocSidebar items={toc} />
-        </aside>
+      {/* Cover image */}
+      {guide.coverImageUrl && (
+        <img
+          src={guide.coverImageUrl}
+          alt={guide.title}
+          className="w-full rounded-xl object-cover aspect-2/1 mb-8"
+        />
+      )}
 
-        {/* 本文カラム */}
-        <div className="min-w-0">
-          {/* Cover image */}
-          {guide.coverImageUrl && (
-            <img
-              src={guide.coverImageUrl}
-              alt={guide.title}
-              className="w-full rounded-xl object-cover aspect-2/1 mb-8"
-            />
-          )}
+      {/* Title + summary */}
+      <div className="mb-5">
+        <h1 className="text-4xl font-bold leading-tight tracking-tight mb-3">
+          {guide.title}
+        </h1>
+        {guide.summary && (
+          <p className="text-lg text-muted-foreground leading-relaxed">
+            {guide.summary}
+          </p>
+        )}
+      </div>
 
-          {/* Title + summary */}
-          <div className="mb-5">
-            <h1 className="text-4xl font-bold leading-tight tracking-tight mb-3">
-              {guide.title}
-            </h1>
-            {guide.summary && (
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                {guide.summary}
-              </p>
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {tags.map((tag) => (
+            <Badge key={tag} variant="secondary">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Meta */}
+      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-6">
+        <Link
+          to={`/player/${author.slug}`}
+          className="flex items-center gap-2 hover:text-foreground transition-colors"
+        >
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={20}
+            className="rounded-full shrink-0"
+          />
+          <span className="font-medium">{authorName}</span>
+        </Link>
+        <span className="flex items-center gap-1">
+          <Calendar className="h-3.5 w-3.5" />
+          {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
+        </span>
+        <span className="flex items-center gap-1">
+          <Eye className="h-3.5 w-3.5" />
+          {guide.viewCount}
+        </span>
+      </div>
+
+      {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。
+          2xl:hidden と sticky はコンポーネント側のバー本体に付く（ラッパーで包むと
+          sticky の可動域が無くなるため、ここでは素で描画する） */}
+      <GuideTocMobile items={toc} />
+
+      {/* Content */}
+      <GuideContent
+        contentRef={contentRef}
+        html={guide.sanitizedContent}
+        embedUsers={embedUsers}
+      />
+
+      {/* Author card at bottom */}
+      <div className="border-t mt-12 pt-8">
+        <Link
+          to={`/player/${author.slug}`}
+          className="flex items-center gap-3 group"
+        >
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={40}
+            className="rounded-full"
+          />
+          <div>
+            <p className="font-medium group-hover:text-primary transition-colors">
+              {authorName}
+            </p>
+            {author.mcid && (
+              <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}
           </div>
-
-          {/* Tags */}
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* Meta */}
-          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-6">
-            <Link
-              to={`/player/${author.slug}`}
-              className="flex items-center gap-2 hover:text-foreground transition-colors"
-            >
-              <MinecraftAvatar
-                uuid={author.uuid ?? undefined}
-                skinUrl={author.customSkinUrl}
-                size={20}
-                className="rounded-full shrink-0"
-              />
-              <span className="font-medium">{authorName}</span>
-            </Link>
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" />
-              {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
-            </span>
-            <span className="flex items-center gap-1">
-              <Eye className="h-3.5 w-3.5" />
-              {guide.viewCount}
-            </span>
-          </div>
-
-          {/* 目次（狭い画面のみ: 上部固定バー + 左ドロワー） */}
-          <div className="xl:hidden">
-            <GuideTocMobile items={toc} />
-          </div>
-
-          {/* Content */}
-          <GuideContent
-            contentRef={contentRef}
-            html={guide.sanitizedContent}
-            embedUsers={embedUsers}
-          />
-
-          {/* Author card at bottom */}
-          <div className="border-t mt-12 pt-8">
-            <Link
-              to={`/player/${author.slug}`}
-              className="flex items-center gap-3 group"
-            >
-              <MinecraftAvatar
-                uuid={author.uuid ?? undefined}
-                skinUrl={author.customSkinUrl}
-                size={40}
-                className="rounded-full"
-              />
-              <div>
-                <p className="font-medium group-hover:text-primary transition-colors">
-                  {authorName}
-                </p>
-                {author.mcid && (
-                  <p className="text-sm text-muted-foreground">@{author.mcid}</p>
-                )}
-              </div>
-            </Link>
-          </div>
-        </div>
+        </Link>
       </div>
     </article>
   );

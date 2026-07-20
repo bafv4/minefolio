@@ -822,9 +822,17 @@ body {
   color: inherit;
 }
 
-/* 目次アンカーで移動した際、見出しが固定ヘッダーに隠れないよう余白を確保する */
+/* 目次アンカーで移動した際、見出しが固定ヘッダーに隠れないよう余白を確保する。
+   狭い画面では固定ヘッダーに加えて目次バーもあるため、その分を余分に確保する
+   （2xl 以上はサイドバー表示でバーが無いので控えめにする） */
 .guide-content.prose :where(h1, h2, h3) {
-  scroll-margin-top: 5rem;
+  scroll-margin-top: 7.5rem;
+}
+
+@media (min-width: 1536px) {
+  .guide-content.prose :where(h1, h2, h3) {
+    scroll-margin-top: 5rem;
+  }
 }
 
 .guide-content.prose :where(h1) {
