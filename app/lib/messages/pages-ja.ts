@@ -972,6 +972,7 @@ export const PAGES_JA = {
     sourcePresetNotFound: "コピー元のプリセットが見つかりません",
     presetNotFound: "プリセットが見つかりません",
     presetDeleted: "プリセットを削除しました",
+    lastPresetDeleteWarning: "このプリセットは最後の1件です。削除すると現在の設定（キー配置・デバイス設定・アイテム配置・サーチクラフト等）もすべて削除されます。",
     cannotDeleteActive: "適用中のプリセットは削除できません。別のプリセットに切り替えてから削除してください。",
     unknownAction: "不明な操作です",
     keybindings: "キー配置",

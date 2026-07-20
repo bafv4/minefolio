@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
 import {
   Dialog,
@@ -142,11 +142,23 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
     }
   }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, fetcher]);
 
-  // fetcher完了時の処理
-  if (fetcher.state === "idle" && fetcher.data && step === "preview") {
-    setStep("done");
-    onSuccess?.();
-  }
+  // fetcher完了時の処理。サーバーがエラーを返した場合（プリセット未作成・
+  // 別タブでの切替検知等）は完了画面に遷移せず、エラーをダイアログ内に表示する
+  const prevFetcherDataRef = useRef<typeof fetcher.data>(undefined);
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (fetcher.data === prevFetcherDataRef.current) return;
+    prevFetcherDataRef.current = fetcher.data;
+    if (step !== "preview") return;
+    const data = fetcher.data as { error?: string };
+    if (data.error) {
+      setError(data.error);
+    } else {
+      setError(null);
+      setStep("done");
+      onSuccess?.();
+    }
+  }, [fetcher.state, fetcher.data, step, onSuccess]);
 
   const toggleRemapSelection = (index: number) => {
     setSelectedRemaps((prev) => {

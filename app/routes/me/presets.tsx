@@ -61,10 +61,6 @@ function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | 
   return targetKey;
 }
 
-// TODO(i18n): pages-ja.ts の mePresets へ移動（例: lastPresetDeleteWarning）
-const LAST_PRESET_DELETE_WARNING =
-  "このプリセットは最後の1件です。削除すると現在の設定（キー配置・デバイス設定・アイテム配置・サーチクラフト等）もすべて削除されます。";
-
 type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /**
@@ -1114,7 +1110,7 @@ export default function PresetsPage() {
                                 {t("mePresets.deletePresetDescription", { name: preset.name })}
                                 {preset.isActive && presets.length === 1 && (
                                   <span className="mt-2 block font-medium text-destructive">
-                                    {LAST_PRESET_DELETE_WARNING}
+                                    {t("mePresets.lastPresetDeleteWarning")}
                                   </span>
                                 )}
                               </AlertDialogDescription>
