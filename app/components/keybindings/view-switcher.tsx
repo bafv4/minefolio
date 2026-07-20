@@ -32,7 +32,7 @@ export function ViewSwitcher() {
     <div
       role="tablist"
       aria-label="ビュー切替"
-      className="inline-flex items-center rounded-lg border bg-card p-1 gap-0.5"
+      className="inline-flex items-end gap-1 border-b border-border"
     >
       {ITEMS.map((item) => {
         const isActive = location.pathname === item.path;
@@ -48,11 +48,12 @@ export function ViewSwitcher() {
             role="tab"
             aria-selected={isActive}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "relative -mb-px inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-t-lg border border-transparent px-3 text-sm font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+              "before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-0.5 before:rounded-full",
               isActive
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                ? "border-border border-b-transparent bg-background text-foreground before:bg-brand"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
             )}
           >
             <Icon className="h-4 w-4" aria-hidden />

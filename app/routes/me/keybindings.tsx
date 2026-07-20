@@ -2108,19 +2108,19 @@ export default function KeybindingsPage() {
         onValueChange={setActiveTab}
         className="w-full"
       >
-        <TabsList className={cn("grid w-full h-auto", isControllerMode ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4")}>
-          <TabsTrigger value="keybindings" className="text-xs sm:text-sm py-2">
+        <TabsList>
+          <TabsTrigger value="keybindings">
             {t("meKeybindings.tabActions")}
           </TabsTrigger>
           {!isControllerMode && (
             <>
-              <TabsTrigger value="remaps" className="text-xs sm:text-sm py-2">
+              <TabsTrigger value="remaps">
                 {t("meKeybindings.tabRemaps")}
               </TabsTrigger>
-              <TabsTrigger value="custom-keys" className="text-xs sm:text-sm py-2">
+              <TabsTrigger value="custom-keys">
                 {t("meKeybindings.tabCustomKeys")}
               </TabsTrigger>
-              <TabsTrigger value="custom-actions" className="text-xs sm:text-sm py-2">
+              <TabsTrigger value="custom-actions">
                 {t("meKeybindings.tabCustomActions")}
               </TabsTrigger>
             </>

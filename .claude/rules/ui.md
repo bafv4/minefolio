@@ -48,3 +48,20 @@
 ## トースト通知
 - `sonner` ライブラリ経由: `toast.success()`, `toast.error()`
 - メッセージは翻訳キーを使用
+
+## タブ
+`app/components/ui/tabs.tsx` はフォルダ型（接続パネル）デザイン。アクティブタブがコンテンツパネルと一続きの面に見えるよう、以下の構造で成立している:
+
+- **ベースライン**: タブ列下の 1px 横線は `TabsContent` の上ボーダーが担う（TabsList 自体は下線を持たない）
+- **連結**: `TabsList` が `-mb-px` でパネルに 1px 重なり、`relative z-[1]` でパネルより手前に描画される
+- **アクティブタブ**: `bg-card` + 上・左・右ボーダー（`border-border`）+ 下ボーダー透明。bg-card が透明な下ボーダー帯まで塗られ、パネル上辺のベースラインを覆って連結する
+- **アクセント**: アクティブタブ上辺内側にブランド色バー（`before:` 疑似要素 + `bg-brand`）
+- **横スクロール**: TabsList 自身が `overflow-x-auto`（スクロールバー非表示）。モバイルでは横スクロールする
+
+### 消費側の不変条件
+1. `TabsList` と `TabsContent` の間に `gap-*` / `space-y-*` を入れない（1px の重なりが壊れ、タブとパネルの間に線が見える）
+2. `TabsContent` に display ユーティリティ（`block` / `flex` / `grid` 等）を足さない（非アクティブパネルの `hidden` 属性が無効化され同時表示される）
+3. `TabsTrigger` に外側リング・`shadow`・`-mb-px` を足さない（TabsList のスクロールコンテナにクリップされる）
+4. `TabsList` を別のスクロールコンテナ（`overflow-x-auto` の div 等）で包まない（基底が対応済み。包むと 1px 重なりがクリップされる）
+5. `dark:` バリアント禁止 — テーマトークン（`bg-card` / `border` / `bg-brand` / `ring-ring`）のみで 3 テーマ（light / dark / ultra-dark）に対応する
+6. Dialog 内など枠付きパネルが過剰な場面では、`TabsContent` に `rounded-none border-0 border-t bg-transparent p-0 pt-4`、`TabsTrigger` に `data-[state=active]:bg-background` を付けるデグレード構成を使う
