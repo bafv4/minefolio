@@ -1055,7 +1055,9 @@ export default function PlayerProfilePage() {
                         layout={keyboardLayout}
                         keybindings={player.keybindings}
                         fingerAssignments={userFingerAssignments}
-                        remaps={remapsForKeyboard}
+                        remaps={player.keyRemaps}
+                        hasTypedRemaps={hasTypedRemaps}
+                        initialRemapContext={remapView}
                         customKeys={player.customKeys
                           .filter((ck) => ck.category === "keyboard")
                           .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
