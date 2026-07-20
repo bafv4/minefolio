@@ -22,10 +22,11 @@ function modifiersFromEvent(e: React.KeyboardEvent): string[] {
 
 /**
  * キーキャプチャボタン。フォーカス中にキーを押すとそのキーコードを記録する。
- * allowModifiers 有効時は修飾キー組み合わせ（例: "Ctrl+KeyA"）を構築する。
- * 修飾キーは押した時点では確定しない（押しっぱなしで組み合わせ待ちの表示になる）:
- * - 押しながら非修飾キーを押す → 組み合わせ（"Ctrl+KeyA"）として確定
- * - そのまま離す → 修飾キー単独（"ControlLeft" 等）として確定
+ * 修飾キーは押した時点では確定しない（離す＝単独 / 他キー＝別扱い を待つ）:
+ * - allowModifiers=true（トリガー・変更元）: 押しながら非修飾キー → 組み合わせ
+ *   （"Ctrl+KeyA"）、そのまま離す → 修飾キー単独（"ControlLeft" 等）
+ * - allowModifiers=false（リマップ先＝単一キーのみ）: 非修飾キー → その基底キー
+ *   （押下中の修飾キーは無視）、修飾キーをそのまま離す → 修飾キー単独
  * 何も確定せずフォーカスを外せばキャンセル（元の値を維持）。
  */
 export function KeyCaptureButton({
@@ -63,31 +64,36 @@ export function KeyCaptureButton({
         if (!isCapturing) return;
         e.preventDefault();
 
-        if (allowModifiers) {
-          if (MODIFIER_KEY_CODES.has(e.code)) {
-            // 修飾キーの押下では確定しない: 組み合わせ待ちとして保持表示のみ更新する
-            setHeldModifiers(modifiersFromEvent(e));
-            return;
-          }
+        if (MODIFIER_KEY_CODES.has(e.code)) {
+          // 修飾キーの押下では確定しない（離す＝単独 / 他キー＝別扱い を待つ）。
+          // これにより allowModifiers=false でも修飾キー単独をリマップ先に指定できる。
+          setHeldModifiers(modifiersFromEvent(e));
+          return;
+        }
 
+        if (allowModifiers) {
           // 非修飾キーの押下で（押下中の修飾キーとの）組み合わせとして確定
           const modifiers = modifiersFromEvent(e);
           finalize(e, modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code);
         } else {
-          // 修飾キーは無視（リマップ先用）
-          if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+          // リマップ先は単一キーのみ: 押下中の修飾キーは無視し基底キーだけ確定
           finalize(e, e.code);
         }
       }}
       onKeyUp={(e) => {
-        if (!isCapturing || !allowModifiers) return;
+        if (!isCapturing) return;
         if (!MODIFIER_KEY_CODES.has(e.code)) return;
         e.preventDefault();
-        // 修飾キーを離した = そのキー自身を確定（修飾キー単独のリマップ/トリガー用）。
-        // keyup 時点で自身のフラグは落ちているため、他に押しっぱなしの修飾キーが
-        // あればその組み合わせ（例: Ctrl 押下中に Shift を離す → "Ctrl+ShiftLeft"）になる
-        const modifiers = modifiersFromEvent(e);
-        finalize(e, modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code);
+        if (allowModifiers) {
+          // 修飾キーを離した = そのキー自身を確定。keyup 時点で自身のフラグは
+          // 落ちているため、他に押しっぱなしの修飾キーがあればその組み合わせ
+          // （例: Ctrl 押下中に Shift を離す → "Ctrl+ShiftLeft"）になる
+          const modifiers = modifiersFromEvent(e);
+          finalize(e, modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code);
+        } else {
+          // リマップ先は単一キーのみ: 離した修飾キー単独で確定（組み合わせにしない）
+          finalize(e, e.code);
+        }
       }}
       className={cn(
         "min-w-28 h-9 px-3 rounded-md border text-sm font-mono transition-colors",
@@ -99,7 +105,7 @@ export function KeyCaptureButton({
     >
       {isCapturing ? (
         <span className="text-muted-foreground">
-          {heldModifiers.length > 0
+          {allowModifiers && heldModifiers.length > 0
             ? `${heldModifiers.join(" + ")} + …`
             : t(allowModifiers ? "meKeybindings.pressKeyWithModifiers" : "meKeybindings.pressKey")}
         </span>

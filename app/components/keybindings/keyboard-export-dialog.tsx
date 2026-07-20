@@ -8,7 +8,12 @@ import { Check, Copy, Download, ImageDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
-import type { RemapInfo } from "@/lib/remap-utils";
+import {
+  filterRemapsForContext,
+  toUiRemaps,
+  type RemapContext,
+  type RemapInfo,
+} from "@/lib/remap-utils";
 import {
   Dialog,
   DialogClose,
@@ -42,7 +47,12 @@ interface KeyboardExportDialogProps {
   layout: KeyboardLayout;
   keybindings: Array<{ action: string; keyCode: string; category: string }>;
   fingerAssignments: FingerAssignment;
+  /** 全リマップ（種別付き・未フィルタ）。ダイアログ内で Trigger/Chat を選んで絞り込む */
   remaps: RemapInfo[];
+  /** Trigger/Chat の種別付きリマップがあるか（無ければ種別ラジオは出さない） */
+  hasTypedRemaps: boolean;
+  /** 種別ラジオの初期値（プロフィール側の現在表示に合わせる） */
+  initialRemapContext?: RemapContext;
   /** キーボードカテゴリのカスタムキー */
   customKeys: Array<{ code: string; label: string }>;
   /** 全カスタムボタン（マウス用にカテゴリで絞り込む） */
@@ -69,6 +79,8 @@ export function KeyboardExportDialog({
   keybindings,
   fingerAssignments,
   remaps,
+  hasTypedRemaps,
+  initialRemapContext = "trigger",
   customKeys,
   customButtons,
   isTKL,
@@ -104,11 +116,18 @@ export function KeyboardExportDialog({
   const [showRemaps, setShowRemaps] = useState(true);
   const [showFingers, setShowFingers] = useState(true);
   const [showActions, setShowActions] = useState(true);
+  // リマップの種別（Trigger/Chat）。種別付きリマップがある場合のみラジオで選べる
+  const [remapContext, setRemapContext] = useState<RemapContext>(initialRemapContext);
 
   // テーマ
   const [exportTheme, setExportTheme] = useState<ExportTheme>("dark");
 
   const kbMap = useMemo(() => keybindingsToMap(keybindings), [keybindings]);
+  // 選択中の種別で絞り込み、表示用形式に変換（プロフィール本体と同じ扱い）
+  const remapsForExport = useMemo(
+    () => toUiRemaps(filterRemapsForContext(remaps, remapContext)),
+    [remaps, remapContext],
+  );
 
   // TKL ではテンキーを出力対象にしない
   const numpadAvailable = !isTKL;
@@ -119,12 +138,13 @@ export function KeyboardExportDialog({
   const hasSelection = hasDeviceSelection || includePlayer;
 
   const handleOpenChange = (next: boolean) => {
-    // 開くたびに現在のアプリテーマを初期選択にする
+    // 開くたびに現在のアプリテーマ・種別表示を初期選択にする
     if (next) {
       const rt = resolvedTheme;
       if (rt === "light" || rt === "dark" || rt === "ultra-dark") {
         setExportTheme(rt);
       }
+      setRemapContext(initialRemapContext);
     }
     setOpen(next);
   };
@@ -233,6 +253,26 @@ export function KeyboardExportDialog({
                 checked={showRemaps}
                 onCheckedChange={setShowRemaps}
               />
+              {/* リマップの種別（Trigger/Chat）。種別付きリマップがあり、リマップ表示中のみ */}
+              {hasTypedRemaps && showRemaps && (
+                <div className="ml-1 space-y-1.5 border-l pl-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("playerProfile.exportRemapType")}
+                  </p>
+                  <RadioGroup
+                    value={remapContext}
+                    onValueChange={(v) => setRemapContext(v as RemapContext)}
+                    className="gap-1.5"
+                  >
+                    <RadioRow
+                      id="remap-trigger"
+                      value="trigger"
+                      label={t("remapType.trigger")}
+                    />
+                    <RadioRow id="remap-chat" value="chat" label={t("remapType.chat")} />
+                  </RadioGroup>
+                </div>
+              )}
               <SwitchRow
                 id="content-fingers"
                 label={t("playerProfile.exportContentFingers")}
@@ -319,7 +359,7 @@ export function KeyboardExportDialog({
                     layout={layout}
                     keybindings={kbMap}
                     fingerAssignments={fingerAssignments}
-                    remaps={remaps}
+                    remaps={remapsForExport}
                     customKeys={customKeys}
                     showActionLabels={showActions}
                     showFingerAssignments={showFingers}
@@ -333,7 +373,7 @@ export function KeyboardExportDialog({
                       <VirtualNumpad
                         keybindings={kbMap}
                         fingerAssignments={fingerAssignments}
-                        remaps={remaps}
+                        remaps={remapsForExport}
                         showActionLabels={showActions}
                         showFingerAssignments={showFingers}
                         showRemaps={showRemaps}
@@ -343,7 +383,7 @@ export function KeyboardExportDialog({
                       <VirtualMouse
                         keybindings={kbMap}
                         fingerAssignments={fingerAssignments}
-                        remaps={remaps}
+                        remaps={remapsForExport}
                         customButtons={customButtons}
                         showActionLabels={showActions}
                         showFingerAssignments={showFingers}

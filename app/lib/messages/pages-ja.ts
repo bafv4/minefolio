@@ -258,6 +258,7 @@ export const PAGES_JA = {
     exportContentRemaps: "リマップ",
     exportContentFingers: "指の色",
     exportContentActions: "操作内容",
+    exportRemapType: "リマップの種別",
     exportTheme: "テーマ",
     exportThemeLight: "ライト",
     exportThemeDark: "ダーク",
