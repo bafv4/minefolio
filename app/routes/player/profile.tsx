@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useRevalidator, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
   ViewToggle,
@@ -309,8 +309,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
-  // 選択されたプリセットのデータを適用
-  let activePresetId: string | null = null;
+  // 表示プリセットの解決: `?preset=` が有効ならそのプリセット、
+  // 無指定・不正・削除済みの場合はアクティブプリセットへフォールバック
+  const requestedPreset = presetId
+    ? presets.find((p) => p.id === presetId)
+    : undefined;
+  const selectedPreset =
+    requestedPreset ?? presets.find((p) => p.isActive) ?? null;
+
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
   let displayKeyRemaps = player.keyRemaps;
@@ -319,152 +325,149 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let displayCustomKeys = player.customKeys;
   let displayCustomActions = player.customActions;
 
-  if (presetId && presets.length > 0) {
-    const selectedPreset = presets.find((p) => p.id === presetId);
-    if (selectedPreset) {
-      activePresetId = selectedPreset.id;
+  // アクティブプリセットはライブ設定と同内容（不変条件）のため、
+  // 非アクティブなプリセットを選択した場合のみスナップショットを適用する
+  if (selectedPreset && !selectedPreset.isActive) {
+    // プリセットのキーバインドを適用
+    if (selectedPreset.keybindingsData) {
+      const presetKeybindings = JSON.parse(selectedPreset.keybindingsData) as Array<{
+        action: string;
+        keyCode: string;
+        category: string;
+      }>;
+      displayKeybindings = presetKeybindings.map((kb, idx) => ({
+        id: `preset-${idx}`,
+        userId: player.id,
+        action: kb.action,
+        keyCode: kb.keyCode,
+        category: kb.category as "movement" | "combat" | "inventory" | "ui",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
 
-      // プリセットのキーバインドを適用
-      if (selectedPreset.keybindingsData) {
-        const presetKeybindings = JSON.parse(selectedPreset.keybindingsData) as Array<{
-          action: string;
-          keyCode: string;
-          category: string;
-        }>;
-        displayKeybindings = presetKeybindings.map((kb, idx) => ({
-          id: `preset-${idx}`,
-          userId: player.id,
-          action: kb.action,
-          keyCode: kb.keyCode,
-          category: kb.category as "movement" | "combat" | "inventory" | "ui",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
+    // プリセットの走者設定を適用
+    if (selectedPreset.playerConfigData) {
+      const presetConfig = JSON.parse(selectedPreset.playerConfigData);
+      displayPlayerConfig = {
+        ...player.playerConfig,
+        ...presetConfig,
+        fingerAssignments: selectedPreset.fingerAssignmentsData ?? player.playerConfig?.fingerAssignments,
+      } as typeof player.playerConfig;
+    }
 
-      // プリセットの走者設定を適用
-      if (selectedPreset.playerConfigData) {
-        const presetConfig = JSON.parse(selectedPreset.playerConfigData);
-        displayPlayerConfig = {
-          ...player.playerConfig,
-          ...presetConfig,
-          fingerAssignments: selectedPreset.fingerAssignmentsData ?? player.playerConfig?.fingerAssignments,
-        } as typeof player.playerConfig;
-      }
+    // プリセットのリマップを適用
+    if (selectedPreset.remapsData) {
+      const presetRemaps = JSON.parse(selectedPreset.remapsData) as Array<{
+        sourceKey: string;
+        targetKey: string | null;
+        software: string | null;
+        notes: string | null;
+        outputMode?: "key" | "character" | null;
+        outputCharacter?: string | null;
+        remapType?: string | null;
+      }>;
+      displayKeyRemaps = presetRemaps.map((r, idx) => ({
+        id: `preset-remap-${idx}`,
+        userId: player.id,
+        sourceKey: r.sourceKey,
+        targetKey: r.targetKey,
+        software: r.software,
+        notes: r.notes,
+        outputMode: r.outputMode ?? "key",
+        outputCharacter: r.outputCharacter ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        remapType: normalizeKeyRemapType(r.remapType),
+      }));
+    }
 
-      // プリセットのリマップを適用
-      if (selectedPreset.remapsData) {
-        const presetRemaps = JSON.parse(selectedPreset.remapsData) as Array<{
-          sourceKey: string;
-          targetKey: string | null;
-          software: string | null;
-          notes: string | null;
-          outputMode?: "key" | "character" | null;
-          outputCharacter?: string | null;
-          remapType?: string | null;
-        }>;
-        displayKeyRemaps = presetRemaps.map((r, idx) => ({
-          id: `preset-remap-${idx}`,
-          userId: player.id,
-          sourceKey: r.sourceKey,
-          targetKey: r.targetKey,
-          software: r.software,
-          notes: r.notes,
-          outputMode: r.outputMode ?? "key",
-          outputCharacter: r.outputCharacter ?? null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          remapType: normalizeKeyRemapType(r.remapType),
-        }));
-      }
+    // プリセットのアイテム配置を適用
+    if (selectedPreset.itemLayoutsData) {
+      const presetItemLayouts = JSON.parse(selectedPreset.itemLayoutsData) as Array<{
+        segment: string;
+        slots: string;
+        offhand: string | null;
+        notes: string | null;
+        displayOrder: number;
+      }>;
+      displayItemLayouts = presetItemLayouts.map((layout, idx) => ({
+        id: `preset-layout-${idx}`,
+        userId: player.id,
+        segment: layout.segment,
+        slots: layout.slots,
+        offhand: layout.offhand,
+        notes: layout.notes,
+        displayOrder: layout.displayOrder,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
 
-      // プリセットのアイテム配置を適用
-      if (selectedPreset.itemLayoutsData) {
-        const presetItemLayouts = JSON.parse(selectedPreset.itemLayoutsData) as Array<{
-          segment: string;
-          slots: string;
-          offhand: string | null;
-          notes: string | null;
-          displayOrder: number;
-        }>;
-        displayItemLayouts = presetItemLayouts.map((layout, idx) => ({
-          id: `preset-layout-${idx}`,
-          userId: player.id,
-          segment: layout.segment,
-          slots: layout.slots,
-          offhand: layout.offhand,
-          notes: layout.notes,
-          displayOrder: layout.displayOrder,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
+    // プリセットのサーチクラフトを適用
+    if (selectedPreset.searchCraftsData) {
+      const presetSearchCrafts = JSON.parse(
+        selectedPreset.searchCraftsData,
+      ) as PresetSearchCraftData[];
+      displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
+        id: `preset-craft-${idx}`,
+        userId: player.id,
+        sequence: craft.sequence,
+        items: craft.items,
+        keys: craft.keys,
+        searchStr: craft.searchStr,
+        comment: craft.comment,
+        timing: craft.timing ?? null,
+        withShift: craft.withShift === true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
 
-      // プリセットのサーチクラフトを適用
-      if (selectedPreset.searchCraftsData) {
-        const presetSearchCrafts = JSON.parse(
-          selectedPreset.searchCraftsData,
-        ) as PresetSearchCraftData[];
-        displaySearchCrafts = presetSearchCrafts.map((craft, idx) => ({
-          id: `preset-craft-${idx}`,
-          userId: player.id,
-          sequence: craft.sequence,
-          items: craft.items,
-          keys: craft.keys,
-          searchStr: craft.searchStr,
-          comment: craft.comment,
-          timing: craft.timing ?? null,
-          withShift: craft.withShift === true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
+    // プリセットのカスタムキー定義を適用
+    if (selectedPreset.customKeysData) {
+      const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
+        keyCode: string;
+        keyName: string;
+        category: "mouse" | "keyboard" | "controller";
+        position: string | null;
+        size: string | null;
+        notes: string | null;
+      }>;
+      displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
+        id: `preset-customkey-${idx}`,
+        userId: player.id,
+        keyCode: ck.keyCode,
+        keyName: ck.keyName,
+        category: ck.category,
+        position: ck.position,
+        size: ck.size,
+        notes: ck.notes,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
 
-      // プリセットのカスタムキー定義を適用
-      if (selectedPreset.customKeysData) {
-        const presetCustomKeys = JSON.parse(selectedPreset.customKeysData) as Array<{
-          keyCode: string;
-          keyName: string;
-          category: "mouse" | "keyboard" | "controller";
-          position: string | null;
-          size: string | null;
-          notes: string | null;
-        }>;
-        displayCustomKeys = presetCustomKeys.map((ck, idx) => ({
-          id: `preset-customkey-${idx}`,
-          userId: player.id,
-          keyCode: ck.keyCode,
-          keyName: ck.keyName,
-          category: ck.category,
-          position: ck.position,
-          size: ck.size,
-          notes: ck.notes,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
-
-      // プリセットのカスタムアクションを適用
-      if (selectedPreset.customActionsData) {
-        const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
-          actionName: string;
-          description: string | null;
-          category: "other" | "macro" | "tool";
-          triggerKey: string;
-          displayOrder: number;
-        }>;
-        displayCustomActions = presetCustomActions.map((ca, idx) => ({
-          id: `preset-customaction-${idx}`,
-          userId: player.id,
-          actionName: ca.actionName,
-          description: ca.description,
-          category: ca.category,
-          triggerKey: ca.triggerKey,
-          displayOrder: ca.displayOrder,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-      }
+    // プリセットのカスタムアクションを適用
+    if (selectedPreset.customActionsData) {
+      const presetCustomActions = JSON.parse(selectedPreset.customActionsData) as Array<{
+        actionName: string;
+        description: string | null;
+        category: "other" | "macro" | "tool";
+        triggerKey: string;
+        displayOrder: number;
+      }>;
+      displayCustomActions = presetCustomActions.map((ca, idx) => ({
+        id: `preset-customaction-${idx}`,
+        userId: player.id,
+        actionName: ca.actionName,
+        description: ca.description,
+        category: ca.category,
+        triggerKey: ca.triggerKey,
+        displayOrder: ca.displayOrder,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
     }
   }
 
@@ -541,37 +544,39 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       hasItemLayouts: !!p.itemLayoutsData,
       hasSearchCrafts: !!p.searchCraftsData,
     })),
-    activePresetId,
+    selectedPresetId: selectedPreset?.id ?? null,
     playerGuides,
   };
 }
 
 export default function PlayerProfilePage() {
-  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, activePresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const revalidator = useRevalidator();
   const navigation = useNavigation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
 
-  // プリセット切替中のローディング状態（URL変更によるナビゲーション or 明示的な再検証）
-  const isSwitchingPreset = navigation.state === "loading" || revalidator.state === "loading";
+  // プリセット切替中のローディング状態（`?preset=` 変更によるナビゲーション中）
+  const isSwitchingPreset = navigation.state === "loading";
 
-  // プリセット選択ハンドラー
-  const handlePresetChange = (presetId: string) => {
+  // プリセット選択ハンドラー。アクティブプリセット選択時は `?preset=` を外して
+  // 既定表示（ライブ設定と同内容）に戻す。loader の再実行は setSearchParams による
+  // ナビゲーションの既定の再検証に任せる（明示的な revalidate は loader の二重実行になる）
+  const handlePresetChange = (nextPresetId: string) => {
+    const isActivePreset = presets.some(
+      (p) => p.id === nextPresetId && p.isActive,
+    );
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (presetId === "current") {
+        if (isActivePreset) {
           next.delete("preset");
         } else {
-          next.set("preset", presetId);
+          next.set("preset", nextPresetId);
         }
         return next;
       },
       { preventScrollReset: true, replace: true },
     );
-    // 明示的に loader を再実行（クエリ変更だけでは再検証されないケースの保険）
-    revalidator.revalidate();
   };
 
   // 廃止されたアクションを除外
@@ -735,9 +740,14 @@ export default function PlayerProfilePage() {
     );
   };
 
-  // プリセット選択を表示するタブ
+  // プリセット選択を表示するタブ（プリセットが1件も無い場合はセレクタ自体を出さない）
   const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
   const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
+
+  // 非アクティブプリセットのスナップショットを表示中か（「プリセット表示中」バッジ用）。
+  // アクティブプリセットはライブ設定と同内容のため、選択中でもバッジは出さない。
+  const selectedPreset = presets.find((p) => p.id === selectedPresetId);
+  const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isActive;
 
   return (
     <>
@@ -859,14 +869,13 @@ export default function PlayerProfilePage() {
                 <span>{t("playerProfile.preset")}</span>
               </div>
               <Select
-                value={activePresetId ?? "current"}
+                value={selectedPresetId ?? ""}
                 onValueChange={handlePresetChange}
               >
                 <SelectTrigger className="w-full text-sm">
                   <SelectValue placeholder={t("playerProfile.currentSetting")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                   {presets.map((preset) => (
                     <SelectItem key={preset.id} value={preset.id}>
                       {preset.name}
@@ -875,7 +884,7 @@ export default function PlayerProfilePage() {
                   ))}
                 </SelectContent>
               </Select>
-              {activePresetId && (
+              {isViewingPresetSnapshot && (
                 <Badge variant="secondary" className="text-xs w-full justify-center">
                   {t("playerProfile.presetViewing")}
                 </Badge>
@@ -909,14 +918,13 @@ export default function PlayerProfilePage() {
               <span>{t("playerProfile.presetWithColon")}</span>
             </div>
             <Select
-              value={activePresetId ?? "current"}
+              value={selectedPresetId ?? ""}
               onValueChange={handlePresetChange}
             >
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder={t("playerProfile.currentSetting")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">{t("playerProfile.currentSetting")}</SelectItem>
                 {presets.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.name}
