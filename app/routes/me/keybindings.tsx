@@ -478,6 +478,16 @@ export async function action({ request }: Route.ActionArgs) {
     throw e;
   }
 
+  // リマップ・カスタムキー・カスタムアクションはプリセットのスナップショットに含まれるデータのため、
+  // アクティブなプリセットが無い状態では登録・更新できない（既存データの読み込みは可能）。
+  // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
+  // 後からプリセットを作るまでどのプリセットにも属さないデータになってしまう。
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  const hasActivePreset = !!activePresetRow;
+
   // キーバインド保存
   if (intent === "save-keybindings") {
     const updates = parseJsonArray<KeybindingUpdateInput>(
@@ -494,6 +504,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // リマップ保存
   if (intent === "save-remaps") {
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const remapsData = parseJsonArray<RemapMutationInput>(
       formData.get("remaps") as string,
     );
@@ -525,6 +536,13 @@ export async function action({ request }: Route.ActionArgs) {
     const keybindingsJson = formData.get("keybindings") as string;
     const remapsJson = formData.get("remaps") as string;
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
+    const customActionsJson = formData.get("customActions") as string;
+
+    // プリセットが無い場合、リマップ・カスタムアクションは書き込まない
+    // （キーバインド・指割り当ては初期状態でも編集できる）
+    if (!hasActivePreset && (remapsJson || customActionsJson)) {
+      return { error: t("meKeybindings.presetRequired") };
+    }
 
     const now = new Date();
 
@@ -555,7 +573,6 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // カスタムアクション
-    const customActionsJson = formData.get("customActions") as string;
     if (customActionsJson) {
       const customActionsData = parseJsonArray<CustomActionMutationInput>(customActionsJson);
       if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
@@ -595,6 +612,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   // レガシーインポート
   if (intent === "import-legacy") {
+    // リマップ・カスタムキーを取り込むため、プリセットが必要
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const legacyApiUrl = env.LEGACY_API_URL;
     if (!legacyApiUrl) {
       return { error: t("meKeybindings.legacyApiNotConfigured") };
@@ -631,6 +650,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // カスタムキー保存
   if (intent === "save-custom-keys") {
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const customKeysData = parseJsonArray<CustomKeyMutationInput>(
       formData.get("customKeys") as string,
     );
@@ -672,6 +692,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // カスタムアクション保存
   if (intent === "save-custom-actions") {
+    if (!hasActivePreset) return { error: t("meKeybindings.presetRequired") };
     const customActionsData = parseJsonArray<CustomActionMutationInput>(
       formData.get("customActions") as string,
     );
@@ -943,12 +964,33 @@ function CustomActionRow({
   );
 }
 
+/**
+ * プリセット未作成時に、リマップ・カスタムキー・カスタムアクションが
+ * 編集できない旨を案内する。既存データは読み取り専用で表示される。
+ */
+function PresetRequiredNotice() {
+  return (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="flex flex-wrap items-center gap-1">
+        <span>{t("meKeybindings.presetRequiredNotice")}</span>
+        <Link to="/me/presets" className="underline underline-offset-2">
+          {t("meKeybindings.presetRequiredLink")}
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 export default function KeybindingsPage() {
   const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
+  // リマップ・カスタムキー・カスタムアクションはプリセットに紐づくため、
+  // アクティブなプリセットが無い間は閲覧のみ（サーバー側でも同じ判定で拒否する）
+  const canEditPresetData = !!activePreset;
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
   const prevCustomKeyDataRef = useRef<typeof customKeyFetcher.data>(undefined);
@@ -1682,14 +1724,17 @@ export default function KeybindingsPage() {
       formData.set("keybindings", JSON.stringify(keybindingUpdates));
     }
 
-    // リマップをJSON化
-    formData.set("remaps", JSON.stringify(localRemaps));
+    // リマップ・カスタムアクションはプリセットが無いと登録できないため送信しない
+    if (activePreset) {
+      // リマップをJSON化
+      formData.set("remaps", JSON.stringify(localRemaps));
+
+      // カスタムアクションをJSON化
+      formData.set("customActions", JSON.stringify(localCustomActions));
+    }
 
     // 指割り当てをJSON化
     formData.set("fingerAssignments", JSON.stringify(localFingerAssignments));
-
-    // カスタムアクションをJSON化
-    formData.set("customActions", JSON.stringify(localCustomActions));
 
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset, keyboardLayout]);
@@ -1857,11 +1902,16 @@ export default function KeybindingsPage() {
 
   // カスタムキーの保存
   const saveCustomKeys = useCallback(() => {
+    if (!activePreset) {
+      toast.error(t("meKeybindings.presetRequired"));
+      return;
+    }
     const formData = new FormData();
     formData.set("intent", "save-custom-keys");
+    formData.set("presetId", activePreset.id);
     formData.set("customKeys", JSON.stringify(localCustomKeys));
     customKeyFetcher.submit(formData, { method: "post" });
-  }, [customKeyFetcher, localCustomKeys]);
+  }, [customKeyFetcher, localCustomKeys, activePreset]);
 
   return (
     <div className="space-y-6">
@@ -1897,7 +1947,7 @@ export default function KeybindingsPage() {
               variant="default"
               size="sm"
               onClick={handleImportLegacy}
-              disabled={importFetcher.state !== "idle" || !legacyApiUrl}
+              disabled={importFetcher.state !== "idle" || !legacyApiUrl || !canEditPresetData}
             >
               <Download className={cn("mr-1 h-4 w-4", importFetcher.state !== "idle" && "animate-pulse")} />
               Import
@@ -2077,7 +2127,7 @@ export default function KeybindingsPage() {
           )}
         </TabsList>
 
-        {/* 操作の種類タブ */}
+        {/* 操作割り当てタブ */}
         <TabsContent value="keybindings" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {categoryOrder.map((category) => {
@@ -2096,8 +2146,9 @@ export default function KeybindingsPage() {
                       {bindings.map((kb) => {
                         const [isFocused, setIsFocused] = useState(false);
                         return (
-                          <div key={kb.id} className="flex items-center justify-between py-2.5">
+                          <div key={kb.id} className="flex items-center justify-between gap-2 py-2.5">
                             <span className="text-sm">{getActionLabel(kb.action)}</span>
+                            <div className="flex items-center gap-1">
                             {isControllerMode ? (
                               /* コントローラーモード: ドロップダウンでボタン選択 */
                               <Select
@@ -2160,6 +2211,22 @@ export default function KeybindingsPage() {
                                 )}
                               </button>
                             )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("meKeybindings.unassignAction")}
+                              title={t("meKeybindings.unassignAction")}
+                              onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
+                              disabled={!kb.keyCode || isUnbound(kb.keyCode)}
+                              className={cn(
+                                "h-8 w-8 shrink-0 text-destructive hover:text-destructive",
+                                (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
+                              )}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                            </div>
                           </div>
                         );
                       })}
@@ -2174,6 +2241,8 @@ export default function KeybindingsPage() {
         {/* リマップタブ（コントローラーモード以外） */}
         {!isControllerMode && (
         <TabsContent value="remaps" className="space-y-4">
+          {!canEditPresetData && <PresetRequiredNotice />}
+          <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</CardTitle>
@@ -2219,12 +2288,15 @@ export default function KeybindingsPage() {
               </Button>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
         )}
 
         {/* カスタムキータブ（コントローラーモード以外） */}
         {!isControllerMode && (
         <TabsContent value="custom-keys" className="space-y-4">
+          {!canEditPresetData && <PresetRequiredNotice />}
+          <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</CardTitle>
@@ -2307,12 +2379,15 @@ export default function KeybindingsPage() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
         )}
 
         {/* カスタムアクションタブ（コントローラーモード以外） */}
         {!isControllerMode && (
         <TabsContent value="custom-actions" className="space-y-4">
+          {!canEditPresetData && <PresetRequiredNotice />}
+          <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</CardTitle>
@@ -2349,6 +2424,7 @@ export default function KeybindingsPage() {
               </Button>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
         )}
       </Tabs>
@@ -2388,7 +2464,7 @@ export default function KeybindingsPage() {
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="space-y-6">
-            {/* 割り当て操作（複数選択可能） */}
+            {/* 操作割り当て（複数選択可能） */}
             <div className="space-y-2">
               <Label>{t("meKeybindings.actionAssignment")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
@@ -2444,13 +2520,14 @@ export default function KeybindingsPage() {
 
             {/* リマップ（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className="space-y-3">
+            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
               <div className="flex items-center justify-between">
                 <Label>{t("meKeybindings.keyRemapSetting")}</Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={!canEditPresetData}
                   onClick={() => {
                     // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
                     modalAddRemapForKey(editingKeyCode);
@@ -2461,7 +2538,9 @@ export default function KeybindingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                このキー（および修飾キーとの組み合わせ）のリマップを設定できます
+                {canEditPresetData
+                  ? "このキー（および修飾キーとの組み合わせ）のリマップを設定できます"
+                  : t("meKeybindings.presetRequired")}
               </p>
 
               {modalSelectedKeyRemaps.length > 0 ? (
@@ -2529,13 +2608,14 @@ export default function KeybindingsPage() {
 
             {/* カスタムアクション（コントローラーモード以外） */}
             {editingKeyCode && !isControllerMode && (
-            <div className="space-y-3">
+            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
               <div className="flex items-center justify-between">
                 <Label>{t("meKeybindings.customActionsTitle")}</Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={!canEditPresetData}
                   onClick={() => modalAddCustomActionForKey(editingKeyCode)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
@@ -2543,7 +2623,9 @@ export default function KeybindingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                このキーをトリガーにするカスタムアクションを追加・編集できます
+                {canEditPresetData
+                  ? "このキーをトリガーにするカスタムアクションを追加・編集できます"
+                  : t("meKeybindings.presetRequired")}
               </p>
 
               {modalSelectedKeyCustomActions.length > 0 ? (

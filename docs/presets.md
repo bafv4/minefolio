@@ -226,6 +226,15 @@
 
 保存成功後、サーバーは `syncActivePresetSnapshot` でアクティブプリセットの該当 `*Data` を更新する。
 
+### プリセット未作成時の制限
+
+アクティブなプリセットが無い状態では `syncActivePresetSnapshot` が無言でスキップされるため、書き込んだデータがどのプリセットにも属さなくなる。これを防ぐため `/me/keybindings` では以下を制限している:
+
+- **リマップ・カスタムキー・カスタムアクション**: 登録・更新不可。既存データは読み取り専用で表示され、該当タブ（およびキー編集モーダルの各セクション）は非活性化される。レガシーインポート（`import-legacy`）もリマップ・カスタムキーを取り込むため同様に不可。
+- **キーバインド・指割り当て**: プリセット未作成でも編集可能（ユーザー作成時に既定値が投入されるベース設定のため）。
+
+サーバー側は `action` 冒頭でアクティブプリセットの有無を判定し、`save-remaps` / `save-custom-keys` / `save-custom-actions` / `import-legacy` と、`remaps` / `customActions` を含む `save-all` を `meKeybindings.presetRequired` エラーで拒否する。クライアントはプリセットが無い場合、`save-all` に `remaps` / `customActions` を含めない。
+
 ---
 
 ## 関連ファイル
