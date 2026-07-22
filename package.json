@@ -16,7 +16,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:push:remote": "drizzle-kit push --config drizzle.remote.config.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:studio:remote": "drizzle-kit studio --config drizzle.remote.config.ts"
   },
   "dependencies": {
     "@bafv4/mcitems": "github:bafv4/mcitems",
