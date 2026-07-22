@@ -19,6 +19,7 @@ import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
@@ -411,6 +412,25 @@ export default function HomePage() {
 
   const registeredMcidSet = useMemo(() => new Set(registeredMcids), [registeredMcids]);
 
+  // お気に入りの並べ替えはクライアント側で適用する
+  // （/api/home-feed のレスポンスはユーザー非依存でCDNキャッシュされるため）
+  const { favorites } = useFavorites();
+  const favoriteSlugSet = useMemo(() => new Set(favorites), [favorites]);
+
+  // お気に入りのプレイヤーを先頭へ（安定ソートなので同グループ内はサーバーの時間順を維持）
+  const sortFavoritesFirst = useCallback(
+    <T,>(items: T[], getSlug: (item: T) => string | null | undefined): T[] => {
+      if (favoriteSlugSet.size === 0) return items;
+      return [...items].sort((a, b) => {
+        const aFav = favoriteSlugSet.has(getSlug(a) ?? "");
+        const bFav = favoriteSlugSet.has(getSlug(b) ?? "");
+        if (aFav === bFav) return 0;
+        return aFav ? -1 : 1;
+      });
+    },
+    [favoriteSlugSet]
+  );
+
   // ライブペースを取得する関数（初回・15秒間隔の自動更新・手動の更新ボタンで共用）
   const fetchLiveRuns = useCallback(() => {
     return fetch("/api/home-feed?type=live-runs")
@@ -469,6 +489,20 @@ export default function HomePage() {
       )
       : feed.recentVideos,
     [feed.recentVideos, currentUser?.showYoutubeOnHome, currentUser?.mcid]
+  );
+
+  // お気に入りを先頭に並べ替え（表示用）
+  const sortedRecentPaces = useMemo(
+    () => sortFavoritesFirst(filteredRecentPaces, (run) => mcidToSlug[run.mcid.toLowerCase()]),
+    [filteredRecentPaces, sortFavoritesFirst, mcidToSlug]
+  );
+  const sortedLiveRuns = useMemo(
+    () => sortFavoritesFirst(filteredLiveRuns, (run) => mcidToSlug[run.nickname.toLowerCase()]),
+    [filteredLiveRuns, sortFavoritesFirst, mcidToSlug]
+  );
+  const sortedRecentVideos = useMemo(
+    () => sortFavoritesFirst(filteredRecentVideos, (video) => video.slug),
+    [filteredRecentVideos, sortFavoritesFirst]
   );
 
   const pacesMcidToUuid = feed.mcidToUuid;
@@ -640,9 +674,11 @@ export default function HomePage() {
         </section>
       )}
 
-      {feed.loading.paces || feed.loading.liveRuns ? (
+      {/* ペースセクション: ライブ（外部API）と過去のペース（DBキャッシュ）でロードを分離し、
+          片方の遅延がもう片方の表示をブロックしないようにする */}
+      {feed.loading.paces && feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
-      ) : filteredLiveRuns.length > 0 || filteredRecentPaces.length > 0 ? (
+      ) : sortedLiveRuns.length > 0 || sortedRecentPaces.length > 0 || feed.loading.paces || feed.loading.liveRuns ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -659,21 +695,28 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <Timer className="h-4 w-4 text-primary" />
               <h3 className="font-semibold">{t("home.livePacesTitle")}</h3>
-              <span className="text-sm text-muted-foreground">({filteredLiveRuns.length})</span>
+              {!feed.loading.liveRuns && (
+                <span className="text-sm text-muted-foreground">({sortedLiveRuns.length})</span>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
                 className="ml-auto"
                 onClick={handleRefreshLiveRuns}
-                disabled={isRefreshingLiveRuns}
+                disabled={isRefreshingLiveRuns || feed.loading.liveRuns}
               >
                 <RefreshCw className={cn("mr-1 h-3.5 w-3.5", isRefreshingLiveRuns && "animate-spin")} />
                 {t("home.refreshLivePaces")}
               </Button>
             </div>
-            {filteredLiveRuns.length > 0 ? (
+            {feed.loading.liveRuns ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 rounded-xl" />
+                <Skeleton className="h-10 rounded-xl" />
+              </div>
+            ) : sortedLiveRuns.length > 0 ? (
               <LivePaceList
-                runs={filteredLiveRuns}
+                runs={sortedLiveRuns}
                 registeredMcidSet={registeredMcidSet}
                 mcidToSlug={mcidToSlug}
                 mcidToUuid={mergedMcidToUuid}
@@ -686,7 +729,19 @@ export default function HomePage() {
           </div>
 
           {/* 過去のペース（最新12件） */}
-          {filteredRecentPaces.length > 0 && (
+          {feed.loading.paces ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold">{t("home.pastPacesTitle")}</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ) : sortedRecentPaces.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />
@@ -699,7 +754,7 @@ export default function HomePage() {
                 </Button>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {filteredRecentPaces.map((run) => (
+                {sortedRecentPaces.map((run) => (
                   <PaceFeedCard
                     key={`${run.mcid}-${run.time}-${run.timeline}`}
                     run={run}
@@ -710,13 +765,13 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
         </section>
       ) : null}
 
       {feed.loading.videos ? (
         <SectionSkeleton columns={3} />
-      ) : filteredRecentVideos.length > 0 ? (
+      ) : sortedRecentVideos.length > 0 ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-red-500/10 p-2">
@@ -727,11 +782,11 @@ export default function HomePage() {
               <h2 className="text-xl font-bold">{t("home.sectionVideos")}</h2>
             </div>
             <span className="ml-auto rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-              {t("home.videosCount", { count: filteredRecentVideos.length })}
+              {t("home.videosCount", { count: sortedRecentVideos.length })}
             </span>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredRecentVideos.map((video) => (
+            {sortedRecentVideos.map((video) => (
               <HomeVideoFeedCard key={video.videoId} video={video} />
             ))}
           </div>

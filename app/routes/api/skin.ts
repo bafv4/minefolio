@@ -35,6 +35,16 @@ function toHttpsUrl(value: string | null | undefined): string | null {
   }
 }
 
+// スキン画像のキャッシュヘッダー。
+// s-maxage でCDN（Vercel Edge）にもキャッシュさせ、Mojang API 2連続fetch入りの
+// 関数呼び出しが訪問者ごとに発生しないようにする。TTL切れ後は stale 配信しつつ再検証。
+const SKIN_CACHE_CONTROL = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+
+// Mojang API 失敗時のSteveフォールバック用（短TTL・長SWRなし）。
+// 長期ヘッダーで返すと、一時的なMojang障害・レート制限による代替スキンが
+// 共有CDNにキャッシュされ、全訪問者にSteveが配信され続けてしまうため区別する
+const SKIN_FALLBACK_CACHE_CONTROL = "public, max-age=300, s-maxage=300";
+
 // スキン取得の優先順位:
 // 1. customSkinUrl（カスタムスキン）
 // 2. Mojang API（UUID連携済み）
@@ -65,7 +75,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           return new Response(skinData, {
             headers: {
               "Content-Type": "image/png",
-              "Cache-Control": "public, max-age=3600",
+              "Cache-Control": SKIN_CACHE_CONTROL,
               "Access-Control-Allow-Origin": "*",
             },
           });
@@ -99,6 +109,10 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
     const profileResponse = await fetch(
       `https://sessionserver.mojang.com/session/minecraft/profile/${cleanUuid}`
     );
+
+    // プロフィール取得に失敗（429/5xx等）した場合のSteveは一時的な代替なので短TTL。
+    // 取得成功時はテクスチャ未設定の正規Steveも含めて長期キャッシュでよい
+    const cacheControl = profileResponse.ok ? SKIN_CACHE_CONTROL : SKIN_FALLBACK_CACHE_CONTROL;
 
     let skinUrl = STEVE_SKIN_URL;
 
@@ -135,7 +149,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
       return new Response(fallbackData, {
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=3600",
+          "Cache-Control": SKIN_FALLBACK_CACHE_CONTROL,
           "Access-Control-Allow-Origin": "*",
         },
       });
@@ -146,7 +160,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
     return new Response(skinData, {
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=3600", // 1時間キャッシュ
+        "Cache-Control": cacheControl,
         "Access-Control-Allow-Origin": "*",
       },
     });

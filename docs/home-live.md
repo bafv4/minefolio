@@ -25,18 +25,23 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 #### クライアントサイドで遅延取得（/api/home-feed）
 
-| データ | キャッシュキー | CDNキャッシュ |
-|--------|---------------|--------------|
-| YouTube動画 | `youtube_videos` | 5分 |
-| YouTubeライブ配信 | `youtube_live` | 1分 |
-| PaceManペース | `recent_paces` | 1分 |
-| Twitchストリーム | `twitch_streams` | 30秒 |
-| ライブラン | `live_runs` | 10秒 |
+| データ | キャッシュキー | CDNキャッシュ (s-maxage) | stale-while-revalidate |
+|--------|---------------|--------------|------|
+| YouTube動画 | `youtube_videos` | 30分 | 1日 |
+| YouTubeライブ配信 | `youtube_live` | 1分 | 2分 |
+| PaceManペース | `recent_paces` | 5分 | 1日 |
+| Twitchストリーム | `twitch_streams` | 30秒 | 60秒 |
+| ライブラン | `live_runs` | 30秒 | 60秒 |
+
+DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がcron更新間隔（30分 / 2時間）で決まるため、
+s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）でエッジから即時配信しつつバックグラウンド再検証する
+（低トラフィック時でもコールドスタート・DBアクセスの遅延をユーザーに見せないため）。
 
 - 「ペース」セクションは「**ライブ**」と「**過去のペース**」の2段構成:
   - **ライブ**（旧 `/live` から移設）: `/api/home-feed?type=live-runs` を初回取得＋**15秒間隔で自動更新**。手動の**更新ボタン**（`RefreshCw`、更新中はスピン表示）でも再取得できる。`LivePaceList` で表形式表示。0件時は「現在ペース中の走者はいません」を表示
   - **過去のペース**: **最新12件まで**表示。件数バッジは表示しない。サブ見出し右側の「すべて見る」からペース一覧画面（`/paces`）へ遷移できる（過去のペースが0件のときはこのサブセクション自体を表示しない）
-- セクション自体は、ライブ・過去のペースがどちらも0件のとき非表示
+- **ローディングは2段で分離**: 両方読み込み中のときのみセクション全体のスケルトンを表示し、片方が先に完了したらセクションを描画して未完了側のみサブセクション単位のスケルトンにする（ライブ＝外部PaceMan API の遅延が、DBキャッシュ読みで速い過去のペースの表示をブロックしないようにするため）
+- セクション自体は、両方の読み込み完了後にライブ・過去のペースがどちらも0件のとき非表示
 - **過去のペースカードのタイムラインモーダル**: `PaceFeedCard`（`app/components/pace-feed-card.tsx`、ホームの過去のペース・`/paces`一覧の両方で共用）のカードをクリックすると、そのランの全スプリット（Enter Netherを含む進行順）を表示するモーダルが開く
   - データ取得: `/api/home-feed?type=pace-timeline&mcid=...&runId=...`（`app/lib/paceman-cache.ts` の `getRunTimeline()`）。モーダルを開いたタイミングで遅延取得し、開くたびに再取得する
   - 各スプリット行はキーリマップ種別チップ等と同じ `PaceManSplitMark`（アイコン+名称）で表示
@@ -47,9 +52,10 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 遅延読み込み対応のAPIエンドポイント。クエリパラメータ `type` で取得するデータ種別を指定する。
 
+- **レスポンスはユーザー非依存**: セッション・お気に入りを一切参照しない（お気に入りを先頭に出す並べ替えはクライアント側 `useFavorites()` で適用）。これによりレスポンスがユーザー間で完全に共有可能になり、CDNキャッシュが正しく機能する
 - **UserDataCache**: 登録ユーザーのMCID・UUID・表示名・カスタムスキンURLをインメモリキャッシュ（TTL: 1分）
 - **TwitchLinkCache**: Twitchソーシャルリンク一覧をキャッシュ（TTL: 5分）
-- **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N` を設定（Nはデータ種別により10秒〜5分）
+- **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N, stale-while-revalidate=M` を設定（上記の表を参照）
 
 ### 表示制御フラグ
 
@@ -105,7 +111,7 @@ interface FeedState {
 - `getPaceFeedEntries(registeredMcids, query)`（`app/lib/paceman-cache.ts`）で取得
   - Enter Nether を除外、保持期間（2か月）外をガード
   - 同一 `pacemanRunId` は最も進んだ Split（rta最大）のみ採用（区間指定時はその区間の行）
-  - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 20 }` を渡して利用する
+  - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 12 }` を渡して利用する
 - フィード全体は区間キー毎にインメモリキャッシュ（TTL 60秒）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
 - ログインユーザーが `showPacemanOnHome = false` の場合、自分のペースを除外（ホームと同じ挙動）
 

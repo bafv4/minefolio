@@ -1,17 +1,15 @@
 // ホームフィード用API（遅延読み込み対応）
-// 最適化: キャッシュキーをユーザー間で共有、CDNキャッシュヘッダー追加
+// レスポンスはユーザー非依存（お気に入りの並べ替えはクライアント側で適用）。
+// CDNキャッシュ（s-maxage + stale-while-revalidate）でエッジ配信し、オリジン到達を最小化する。
 
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
-import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
-import { getFavoritesFromDb } from "@/lib/favorites";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
@@ -26,13 +24,19 @@ const CACHE_TTL = {
 };
 
 // CDNキャッシュヘッダー（秒）
+// DBキャッシュ系（paces/youtube）はデータ鮮度がcron更新間隔（30分/2時間）で決まるため、
+// s-maxage を長めに取っても実質的な鮮度は変わらない
 const CDN_CACHE = {
   LIVE_RUNS: 30, // 30秒（CACHE_TTL.LIVE_RUNS と整合）
   TWITCH: 30, // 30秒
-  PACES: 60, // 1分
-  YOUTUBE: 300, // 5分
+  PACES: 300, // 5分（DBはcronが30分毎に更新）
+  YOUTUBE: 1800, // 30分（DBはcronが2時間毎に更新）
   YOUTUBE_LIVE: 60, // 1分（ライブ配信）
 };
+
+// TTL切れ後もエッジからstale配信しつつバックグラウンドで再検証する猶予（1日）。
+// 低トラフィック時でもオリジン（コールドスタート・DBアクセス）の遅延をユーザーに見せないためのもの
+const CDN_SWR_LONG = 24 * 60 * 60;
 
 // ユーザーデータのキャッシュ（DBクエリ削減）
 interface UserDataCache {
@@ -40,7 +44,6 @@ interface UserDataCache {
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
-  mcidToSlug: Record<string, string>;
 }
 
 async function getCachedUserData(): Promise<UserDataCache | null> {
@@ -54,7 +57,6 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
     .select({
       mcid: users.mcid,
       uuid: users.uuid,
-      slug: users.slug,
       displayName: users.displayName,
       customSkinUrl: users.customSkinUrl,
     })
@@ -73,9 +75,6 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       usersWithMcid
         .filter((u) => u.customSkinUrl !== null)
         .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
-    ),
-    mcidToSlug: Object.fromEntries(
-      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.slug])
     ),
   };
 
@@ -140,35 +139,11 @@ async function getTwitchLinks(): Promise<TwitchLinkCache> {
   return fetchAndCacheTwitchLinks();
 }
 
-// お気に入りソート関数（時間順を維持）
-// favoriteSlugsSet: ログイン中ユーザーのお気に入りslug集合
-// mcidToSlug: アイテムのmcidからslugへのマッピング（item.slugが既にある場合は不要）
-function sortByFavorite<T extends { mcid?: string | null; nickname?: string | null; minefolioMcid?: string | null; slug?: string | null; time?: number }>(
-  items: T[],
-  favoriteSlugsSet: Set<string>,
-  mcidToSlug: Record<string, string> = {},
-): T[] {
-  return [...items].sort((a, b) => {
-    const aSlug = a.slug || mcidToSlug[(a.mcid || a.nickname || a.minefolioMcid || "").toLowerCase()];
-    const bSlug = b.slug || mcidToSlug[(b.mcid || b.nickname || b.minefolioMcid || "").toLowerCase()];
-    const aIsFavorite = aSlug ? favoriteSlugsSet.has(aSlug) : false;
-    const bIsFavorite = bSlug ? favoriteSlugsSet.has(bSlug) : false;
-    // お気に入りを先頭に
-    if (aIsFavorite && !bIsFavorite) return -1;
-    if (!aIsFavorite && bIsFavorite) return 1;
-    // 同じお気に入り状態の場合は時間順（新しい順）
-    if (a.time !== undefined && b.time !== undefined) {
-      return b.time - a.time;
-    }
-    return 0;
-  });
-}
-
 // JSONレスポンスとCDNキャッシュヘッダーを生成
-function jsonResponse(data: unknown, cdnMaxAge: number): Response {
+function jsonResponse(data: unknown, cdnMaxAge: number, staleWhileRevalidate = cdnMaxAge * 2): Response {
   return Response.json(data, {
     headers: {
-      "Cache-Control": `public, s-maxage=${cdnMaxAge}, stale-while-revalidate=${cdnMaxAge * 2}`,
+      "Cache-Control": `public, s-maxage=${cdnMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
     },
   });
 }
@@ -179,37 +154,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const feedType = url.searchParams.get("type");
 
-  // ログイン中ユーザーのお気に入り（slug）を取得（ソートのみに使用、キャッシュキーには含めない）
-  let favoriteSlugsSet = new Set<string>();
-  try {
-    const db = createDb();
-    const auth = createAuth(db, env);
-    const session = await getOptionalSession(request, auth);
-    if (session) {
-      const me = await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      });
-      if (me) {
-        const slugs = await getFavoritesFromDb(db, me.id);
-        favoriteSlugsSet = new Set(slugs);
-      }
-    }
-  } catch {
-    // セッション取得失敗時はお気に入り無しで続行
-  }
-
   switch (feedType) {
     case "live-runs": {
-      // 共通キャッシュキー（お気に入りに依存しない）
+      // 共通キャッシュキー（ユーザーに依存しない）
       const cacheKey = "home-feed:live-runs:all";
-      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string>; mcidToSlug: Record<string, string> };
+      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
 
       const cached = await getCached<LiveRunsCache>(cacheKey);
       if (cached) {
-        // お気に入りでソートして返す
-        const sortedRuns = sortByFavorite(cached.liveRuns, favoriteSlugsSet, cached.mcidToSlug);
-        return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: cached.mcidToUuid, mcidToSkinUrl: cached.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
+        return jsonResponse({ liveRuns: cached.liveRuns, mcidToUuid: cached.mcidToUuid, mcidToSkinUrl: cached.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
       }
 
       // ユーザーデータとライブランを並列取得
@@ -227,15 +180,12 @@ export async function loader({ request }: Route.LoaderArgs) {
         liveRuns: filteredLiveRuns,
         mcidToUuid: userData.mcidToUuid,
         mcidToSkinUrl: userData.mcidToSkinUrl,
-        mcidToSlug: userData.mcidToSlug,
       };
 
       // キャッシュに保存
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
 
-      // お気に入りでソートして返す
-      const sortedRuns = sortByFavorite(result.liveRuns, favoriteSlugsSet, result.mcidToSlug);
-      return jsonResponse({ liveRuns: sortedRuns, mcidToUuid: result.mcidToUuid, mcidToSkinUrl: result.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
+      return jsonResponse({ liveRuns: result.liveRuns, mcidToUuid: result.mcidToUuid, mcidToSkinUrl: result.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
     }
 
     case "recent-paces": {
@@ -247,22 +197,22 @@ export async function loader({ request }: Route.LoaderArgs) {
       const registeredMcidSet = new Set(userData.registeredMcids);
       const uniquePaces = await getPaceFeedEntries(registeredMcidSet, { limit: 12 });
 
-      // お気に入りソート用にtime（Unix秒）を追加
-      const pacesWithTime = uniquePaces.map((p) => ({
+      // クライアント表示用に nickname / time（Unix秒）を付与（新しい順のまま返す）
+      const recentPaces = uniquePaces.map((p) => ({
         ...p,
         nickname: p.mcid,
         time: Math.floor(p.date.getTime() / 1000),
       }));
 
-      const sortedPaces = sortByFavorite(pacesWithTime, favoriteSlugsSet, userData.mcidToSlug);
       return jsonResponse(
         {
-          recentPaces: sortedPaces,
+          recentPaces,
           mcidToUuid: userData.mcidToUuid,
           mcidToDisplayName: userData.mcidToDisplayName,
           mcidToSkinUrl: userData.mcidToSkinUrl,
         },
-        CDN_CACHE.PACES
+        CDN_CACHE.PACES,
+        CDN_SWR_LONG
       );
     }
 
@@ -278,12 +228,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       const cacheKey = `home-feed:pace-timeline:${mcid.toLowerCase()}:${runId}`;
       const cached = await getCached<PaceTimelineEntry[]>(cacheKey);
       if (cached) {
-        return jsonResponse({ timeline: cached }, CDN_CACHE.PACES);
+        return jsonResponse({ timeline: cached }, CDN_CACHE.PACES, CDN_SWR_LONG);
       }
 
       const timeline = await getRunTimeline(mcid, runId);
       await setCached(cacheKey, timeline, CACHE_TTL.PACES);
-      return jsonResponse({ timeline }, CDN_CACHE.PACES);
+      return jsonResponse({ timeline }, CDN_CACHE.PACES, CDN_SWR_LONG);
     }
 
     case "twitch-streams": {
@@ -300,8 +250,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       const cached = await getCached<TwitchCache>(cacheKey);
       if (cached) {
-        const sortedStreams = sortByFavorite(cached.liveStreams, favoriteSlugsSet);
-        return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.TWITCH);
+        return jsonResponse({ liveStreams: cached.liveStreams }, CDN_CACHE.TWITCH);
       }
 
       // Twitchリンク一覧を取得（キャッシュあり）
@@ -340,20 +289,20 @@ export async function loader({ request }: Route.LoaderArgs) {
       const result: TwitchCache = { liveStreams };
       await setCached(cacheKey, result, CACHE_TTL.TWITCH);
 
-      const sortedStreams = sortByFavorite(liveStreams, favoriteSlugsSet);
-      return jsonResponse({ liveStreams: sortedStreams }, CDN_CACHE.TWITCH);
+      return jsonResponse({ liveStreams }, CDN_CACHE.TWITCH);
     }
 
     case "youtube-videos": {
-      // キャッシュから動画を取得（Cronで更新）
+      // キャッシュから動画を取得（Cronで更新、新しい順）
       const cachedVideos = await getCachedVideos();
 
-      if (cachedVideos && cachedVideos.length > 0) {
-        const sortedVideos = sortByFavorite(cachedVideos, favoriteSlugsSet);
-        return jsonResponse({ recentVideos: sortedVideos }, CDN_CACHE.YOUTUBE);
+      // null（DBエラー or 72時間以内の動画なし）や0件は、動画公開・障害復旧で即変わり得るため
+      // 短TTLで返す（長TTL+SWRだと空状態がエッジに最大1日残ってしまう）
+      if (!cachedVideos || cachedVideos.length === 0) {
+        return jsonResponse({ recentVideos: [] }, 60);
       }
 
-      return jsonResponse({ recentVideos: [] }, CDN_CACHE.YOUTUBE);
+      return jsonResponse({ recentVideos: cachedVideos }, CDN_CACHE.YOUTUBE, CDN_SWR_LONG);
     }
 
     case "youtube-live": {

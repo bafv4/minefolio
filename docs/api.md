@@ -101,14 +101,14 @@ Minecraftスキン画像を返す。
 
 **種別一覧:**
 
-| type | 内容 | CDNキャッシュ | メモリキャッシュ |
+| type | 内容 | CDNキャッシュ (s-maxage / SWR) | メモリキャッシュ |
 |---|---|---|---|
-| `live-runs` | PaceManライブラン | 10秒 | 10秒 |
-| `recent-paces` | 最近のペース記録 | 60秒 | 5分 |
-| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 60秒 | 5分 |
-| `twitch-streams` | Twitchライブ配信 | 30秒 | 60秒 |
-| `youtube-videos` | YouTube動画 | 5分 | DB依存 |
-| `youtube-live` | YouTubeライブ（現在無効） | 60秒 | — |
+| `live-runs` | PaceManライブラン | 30秒 / 60秒 | 30秒 |
+| `recent-paces` | 最近のペース記録 | 5分 / 1日 | — |
+| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 5分 / 1日 | 5分 |
+| `twitch-streams` | Twitchライブ配信 | 30秒 / 60秒 | 60秒 |
+| `youtube-videos` | YouTube動画 | 30分 / 1日 | DB依存 |
+| `youtube-live` | YouTubeライブ（現在無効） | 60秒 / 2分 | — |
 
 **レスポンス例（live-runs）:**
 ```json
@@ -119,7 +119,7 @@ Minecraftスキン画像を返す。
 }
 ```
 
-- お気に入り（Cookie）によるソートを適用
+- レスポンスはユーザー非依存（新しい順）。お気に入りを先頭に出す並べ替えはクライアント側で適用
 - 環境変数未設定のサービスはスキップ
 
 **関連ファイル:** `app/routes/api/home-feed.ts`
