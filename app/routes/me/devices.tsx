@@ -50,6 +50,7 @@ import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } f
 import { configHistory } from "@/lib/schema";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector } from "@/components/preset-selector";
+import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meDevices.title") }];
@@ -397,6 +398,8 @@ export default function DevicesPage() {
 
   // コピー元プリセット選択ダイアログ
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  // プリセット切替（apply-preset）中は入力欄をロックする
+  const [presetSwitching, setPresetSwitching] = useState(false);
 
   // 変更チェック
   const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
@@ -557,6 +560,7 @@ export default function DevicesPage() {
         presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
+        onSwitchingChange={setPresetSwitching}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
 
@@ -603,6 +607,8 @@ export default function DevicesPage() {
       {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
       {!hasPresets && <PresetRequiredNotice />}
 
+      {/* プリセット切替中はロックする */}
+      <PresetSwitchLock locked={presetSwitching}>
       <div className="space-y-6" style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
         {/* コントローラー設定（inputMethod === "controller" の場合） */}
         {formValues.inputMethod === "controller" && (
@@ -909,6 +915,7 @@ export default function DevicesPage() {
           </CardContent>
         </Card>
       </div>
+      </PresetSwitchLock>
 
       {/* Floating Save Bar（プリセット未作成時でも入力方法の保存/取消ができるようゲート外に置く） */}
       <FloatingSaveBar

@@ -125,9 +125,22 @@ export function RemapRow({
   const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (
-    <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
+    // カードではなく、区切りの横線だけが入るテーブル風の行（区切り線は親の divide-y が担う）
+    <div className="py-3">
       {/* キー変換行 */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* リマップ種別（左端）+ 区切り線 */}
+        {showRemapType && (
+          <>
+            <RemapTypeSelect
+              value={remap.remapType ?? "unset"}
+              onChange={(value) => onUpdate(index, { remapType: value })}
+              disabledTypes={disabledRemapTypes}
+            />
+            <div className="h-9 w-px shrink-0 bg-border" aria-hidden />
+          </>
+        )}
+
         {/* リマップ元（修飾キー対応） */}
         <KeyCaptureButton
           value={remap.sourceKey}
@@ -170,14 +183,6 @@ export function RemapRow({
             className="w-40"
           />
         ) : null}
-
-        {showRemapType && (
-          <RemapTypeSelect
-            value={remap.remapType ?? "unset"}
-            onChange={(value) => onUpdate(index, { remapType: value })}
-            disabledTypes={disabledRemapTypes}
-          />
-        )}
 
         <Button
           type="button"

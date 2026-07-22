@@ -1027,6 +1027,7 @@ export const PAGES_JA = {
     selectorLabel: "編集中のプリセット",
     selectorPlaceholder: "プリセットを選択",
     disabledHint: "未保存の変更があります。保存または破棄してから切り替えてください",
+    switching: "プリセットを切り替えています…",
     staleSession: "プリセットが切り替わっています。ページを再読み込みしてください",
     managePresets: "プリセット管理",
     copyFromOtherPreset: "他のプリセットからコピー",

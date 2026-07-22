@@ -280,7 +280,7 @@ export function SearchCraftWorkbench({
         </CardHeader>
         <CardContent>
           {remaps.length > 0 ? (
-            <div className="space-y-3">
+            <div className="divide-y border-y">
               {remaps.map((remap, index) => (
                 <RemapRow
                   key={remap.id}

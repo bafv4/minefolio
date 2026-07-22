@@ -38,6 +38,7 @@ import { t } from "@/lib/messages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
+import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meSearchCraft.title") }];
@@ -307,6 +308,8 @@ export default function SearchCraftPage() {
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  // プリセット切替（apply-preset）中は入力欄をロックする
+  const [presetSwitching, setPresetSwitching] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -445,12 +448,15 @@ export default function SearchCraftPage() {
         presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
+        onSwitchingChange={setPresetSwitching}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
 
       {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
       {!hasPresets && <PresetRequiredNotice />}
 
+      {/* プリセット切替中はロックする */}
+      <PresetSwitchLock locked={presetSwitching}>
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {crafts.length > 0 ? (
         <Card>
@@ -484,6 +490,7 @@ export default function SearchCraftPage() {
         </Card>
       )}
       </div>
+      </PresetSwitchLock>
 
       <FloatingSaveBar
         hasChanges={hasChanges}

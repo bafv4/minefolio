@@ -33,6 +33,8 @@ interface PresetSelectorProps {
   activePresetId: string | null;
   hasChanges: boolean;
   onCopyFromOther?: () => void;
+  /** プリセット切替（apply-preset の送信＋再検証）中かどうかを親へ通知する */
+  onSwitchingChange?: (switching: boolean) => void;
   className?: string;
 }
 
@@ -50,12 +52,19 @@ export function PresetSelector({
   activePresetId,
   hasChanges,
   onCopyFromOther,
+  onSwitchingChange,
   className,
 }: PresetSelectorProps) {
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+  // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす
   const isSwitching = fetcher.state !== "idle";
   const lastRevalidatedAt = useRef(0);
+
+  // 切替状態を親へ通知（親はキーボードビュー・入力欄をロックする）
+  useEffect(() => {
+    onSwitchingChange?.(isSwitching);
+  }, [isSwitching, onSwitchingChange]);
 
   // 別タブでプリセットが切り替えられた場合に備え、タブ復帰時に再検証する。
   // 編集中（hasChanges）はローカル状態を尊重してスキップし、
