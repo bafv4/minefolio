@@ -10,6 +10,15 @@ const MODIFIER_KEY_CODES = new Set([
   "MetaLeft", "MetaRight",
 ]);
 
+// マウスのサイドボタン（戻る/進む）を入力として受け付ける。
+// MouseEvent.button: 3=戻る(Back)、4=進む(Forward)。
+// アプリのキーコードは Mouse3=サイド1 / Mouse4=サイド2 なので、
+// 進む→サイド1(Mouse3)、戻る→サイド2(Mouse4) に対応づける。
+const MOUSE_SIDE_BUTTON_CODES: Record<number, string> = {
+  4: "Mouse3", // Forward → サイド1
+  3: "Mouse4", // Back → サイド2
+};
+
 /** イベントの修飾キー押下状態から表示順どおりの修飾キー配列を作る */
 function modifiersFromEvent(e: React.KeyboardEvent): string[] {
   const modifiers: string[] = [];
@@ -47,9 +56,9 @@ export function KeyCaptureButton({
   const [isCapturing, setIsCapturing] = useState(false);
   const [heldModifiers, setHeldModifiers] = useState<string[]>([]);
 
-  const finalize = (e: React.KeyboardEvent, keyCode: string) => {
+  const finalize = (e: React.SyntheticEvent, keyCode: string) => {
     onCapture(keyCode);
-    (e.target as HTMLElement).blur();
+    (e.currentTarget as HTMLElement).blur();
   };
 
   return (
@@ -94,6 +103,19 @@ export function KeyCaptureButton({
           // リマップ先は単一キーのみ: 離した修飾キー単独で確定（組み合わせにしない）
           finalize(e, e.code);
         }
+      }}
+      onMouseDown={(e) => {
+        // マウスのサイドボタン（戻る/進む）を入力として受け付ける（トリガー・変更元用）。
+        // 変更先（allowModifiers=false）はキーボードキー限定のため対象外。
+        if (!allowModifiers) return;
+        const code = MOUSE_SIDE_BUTTON_CODES[e.button];
+        if (!code) return; // 左/中/右クリックは通常どおり（フォーカス等）
+        e.preventDefault();
+        finalize(e, code);
+      }}
+      onAuxClick={(e) => {
+        // 戻る/進むボタンによるブラウザの履歴移動を抑止する
+        if (allowModifiers && MOUSE_SIDE_BUTTON_CODES[e.button]) e.preventDefault();
       }}
       className={cn(
         "min-w-28 h-9 px-3 rounded-md border text-sm font-mono transition-colors",
