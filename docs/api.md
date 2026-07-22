@@ -266,6 +266,7 @@ Vercel Blobへのクライアントアップロード用トークンを発行す
 - 形式: PNG のみ
 - サイズ: 最大1MB
 - パス: `skins/{userId}/` 配下のみ許可
+- `addRandomSuffix: true` で毎回一意なblobパスに保存（固定パスへの再アップロードが「既に存在する」で失敗するのを防ぐ。旧blobは `POST /api/me/skin` が削除）
 
 **関連ファイル:** `app/routes/api/me/skin/upload-token.ts`
 

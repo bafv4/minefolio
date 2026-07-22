@@ -58,6 +58,11 @@ export async function action({ request }: ActionFunctionArgs) {
         return {
           allowedContentTypes: ["image/png"],
           maximumSizeInBytes: 1 * 1024 * 1024, // 1MB
+          // スキンは固定パス（skins/<userId>/skin.png）のため、同名 blob への再アップロードは
+          // 既定（addRandomSuffix:false / allowOverwrite:false）だと「既に存在する」で失敗する。
+          // ランダムサフィックスを付けて毎回一意パスにし、差し替え失敗と URL キャッシュを防ぐ。
+          // 旧 blob は /api/me/skin の POST（旧 URL と異なる場合に del()）で削除される。
+          addRandomSuffix: true,
           tokenPayload: JSON.stringify({
             userId: user.id,
           }),
