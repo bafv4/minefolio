@@ -137,7 +137,7 @@ export function KeybindingsListLayout({
             </TabsList>
 
             {TAB_ITEMS.map(({ value }) => (
-              <TabsContent key={value} value={value}>
+              <TabsContent key={value} value={value} className="p-0 sm:p-0">
                 <KeybindingsTable
                   rows={rowsByTab[value]}
                   preset={value as PresetKey}
