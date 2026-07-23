@@ -503,7 +503,7 @@ export default function ComparePage() {
         <>
           {/* 統計サマリー */}
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="flex flex-wrap items-center justify-center gap-6">
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
@@ -592,7 +592,7 @@ export default function ComparePage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
             <Card>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
                   <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid ?? player1.slug}</div>
@@ -769,7 +769,7 @@ export function HydrateFallback() {
 
       {/* 統計サマリースケルトン */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <div className="flex flex-wrap items-center justify-center gap-6">
             <div className="flex items-center gap-2">
               <Skeleton className="w-10 h-10 rounded-lg" />
@@ -832,7 +832,7 @@ export function HydrateFallback() {
       <div className="space-y-4">
         <Skeleton className="h-6 w-48" />
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="grid grid-cols-3 gap-4">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-full" />
