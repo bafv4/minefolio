@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useParams, useSearchParams, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
   ViewToggle,
@@ -453,10 +453,17 @@ export default function PlayerProfilePage() {
   const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
+  const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
 
-  // プリセット切替中のローディング状態（`?preset=` 変更によるナビゲーション中）
-  const isSwitchingPreset = navigation.state === "loading";
+  // プリセット切替中のローディング状態（`?preset=` の実変更によるナビゲーション中のみ。
+  // タブ切替や他ページへの遷移では出さない）
+  const isSwitchingPreset =
+    navigation.state === "loading" &&
+    navigation.location != null &&
+    navigation.location.pathname === location.pathname &&
+    new URLSearchParams(navigation.location.search).get("preset") !==
+      searchParams.get("preset");
 
   // プリセット選択ハンドラー。メイン（公開用）プリセット選択時は `?preset=` を外して
   // 既定表示に戻す。loader の再実行は setSearchParams による
@@ -739,7 +746,8 @@ export default function PlayerProfilePage() {
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-56 shrink-0">
-        <div className="sticky top-20 space-y-4">
+        {/* 初期位置と一致させ、スクロール時にサイドバーが滑らないようにする（ヘッダー65px+メイン上余白32px≈96px） */}
+        <div className="sticky top-24 space-y-4">
           <TabsList className="m-0 w-full flex-col items-stretch gap-1 overflow-visible bg-transparent p-0">
             {/* Profile Tab with Avatar */}
             <TabsTrigger
@@ -789,7 +797,7 @@ export default function PlayerProfilePage() {
 
           {/* Preset Selector in Sidebar */}
           {showPresetSelector && (
-            <div className="p-3 border rounded-lg space-y-2">
+            <div className="p-3 border rounded-lg space-y-2 bg-card">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Save className="h-3 w-3" />
                 <span>{t("playerProfile.preset")}</span>
@@ -838,7 +846,7 @@ export default function PlayerProfilePage() {
 
         {/* Mobile Preset Selector */}
         {showPresetSelector && (
-          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">
+          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg bg-card">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Save className="h-4 w-4" />
               <span>{t("playerProfile.presetWithColon")}</span>
@@ -863,7 +871,7 @@ export default function PlayerProfilePage() {
         )}
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="rounded-xl border space-y-4">
+        <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -1086,7 +1094,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="rounded-xl border space-y-4">
+        <TabsContent value="keybindings" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
@@ -1309,7 +1317,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="rounded-xl border space-y-4">
+        <TabsContent value="stats" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1319,7 +1327,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="rounded-xl border space-y-4">
+        <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.itemLayouts.length > 0 ? (
             <div className="space-y-4">
               {player.itemLayouts.map((layout) => (
@@ -1336,7 +1344,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="rounded-xl border space-y-4">
+        <TabsContent value="searchcraft" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1379,7 +1387,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="rounded-xl border space-y-4">
+        <TabsContent value="devices" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.playerConfig ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1590,7 +1598,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="rounded-xl border space-y-4">
+        <TabsContent value="guides" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">
@@ -2075,8 +2083,8 @@ function EmptyState({
   description: string;
 }) {
   return (
-    <div className="text-center py-12 text-muted-foreground">
-      <div className="mx-auto mb-4 opacity-50">{icon}</div>
+    <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
+      <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <p className="text-lg font-medium">{title}</p>
       <p className="text-sm">{description}</p>
     </div>
@@ -2258,7 +2266,7 @@ function StatsServiceLoadingCard({
 
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent>
         <div className="flex items-center gap-4">
           {isLoading ? (
             <LoadingProgressRing />
