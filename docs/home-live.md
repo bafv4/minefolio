@@ -53,7 +53,7 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
 遅延読み込み対応のAPIエンドポイント。クエリパラメータ `type` で取得するデータ種別を指定する。
 
 - **レスポンスはユーザー非依存**: セッション・お気に入りを一切参照しない（お気に入りを先頭に出す並べ替えはクライアント側 `useFavorites()` で適用）。これによりレスポンスがユーザー間で完全に共有可能になり、CDNキャッシュが正しく機能する
-- **UserDataCache**: 登録ユーザーのMCID・UUID・表示名・カスタムスキンURLをインメモリキャッシュ（TTL: 1分）
+- **UserDataCache**: 登録ユーザーのMCID・UUID・表示名・カスタムスキンURLをインメモリキャッシュ（TTL: 1分）。`app/lib/home-user-data.server.ts` の `getUserData()` に共通化されており、ホームSSR loader（`home.tsx`）と `/api/home-feed` の両方が同一キャッシュを参照する（毎リクエストの全ユーザースキャンを回避）
 - **TwitchLinkCache**: Twitchソーシャルリンク一覧をキャッシュ（TTL: 5分）
 - **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N, stale-while-revalidate=M` を設定（上記の表を参照）
 
@@ -104,16 +104,18 @@ interface FeedState {
 
 ### データ取得
 
-共通ロジックは `app/lib/paces-feed.server.ts` の `getVisiblePaceFeed()` に集約（loaderと `/api/paces` で共用）:
+共通ロジックは `app/lib/paces-feed.server.ts` に集約（loaderと `/api/paces` で共用）。レスポンスをCDNキャッシュ可能にするため、セッション非依存の一覧取得と、ログインユーザー固有の表示設定取得を2関数に分離している:
 
-- `getOptionalSession()` でセッションを取得（未ログインでもアクセス可能）
-- 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）の `mcidToUuid` / `mcidToDisplayName` / `mcidToSkinUrl` マップを構築
-- `getPaceFeedEntries(registeredMcids, query)`（`app/lib/paceman-cache.ts`）で取得
-  - Enter Nether を除外、保持期間（2か月）外をガード
-  - 同一 `pacemanRunId` は最も進んだ Split（rta最大）のみ採用（区間指定時はその区間の行）
-  - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 12 }` を渡して利用する
-- フィード全体は区間キー毎にインメモリキャッシュ（TTL 60秒）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
-- ログインユーザーが `showPacemanOnHome = false` の場合、自分のペースを除外（ホームと同じ挙動）
+- **`getPublicPaceFeed(db, filters)`**（セッション非依存）
+  - 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）の `mcidToUuid` / `mcidToDisplayName` / `mcidToSkinUrl` マップを構築
+  - `getPaceFeedEntries(registeredMcids, query)`（`app/lib/paceman-cache.ts`）で取得
+    - Enter Nether を除外、保持期間（2か月）外をガード
+    - 同一 `pacemanRunId` は最も進んだ Split（rta最大）のみ採用（区間指定時はその区間の行）
+    - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 12 }` を渡して利用する
+  - フィード全体は区間キー毎にインメモリキャッシュ（TTL 60秒）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
+  - 「自分のペースを隠す」設定（`showPacemanOnHome`）はここでは適用しない（レスポンスをユーザー間で共有可能にするため）
+- **`getViewerPacePrefs(db, auth, request)`**（セッション依存）: `getOptionalSession()` でセッションを取得し、ログインユーザーの `mcid` / `showPacemanOnHome` を返す（未ログイン・未登録ユーザーはフィルタなし扱い）
+- 「自分のペースを隠す」フィルタは `getViewerPacePrefs` の結果を使い、`/paces` ページのクライアント側（`paces.tsx`）でMCID一致除外として適用する（ホームの `/api/home-feed` と同じパターン）
 
 ### 検索
 
@@ -136,7 +138,7 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 ### /api/paces
 
-ページング+検索用APIエンドポイント。`{ paces, total, hasMore }` を返す。`limit` は最大100。セッション依存のフィルタがあるためCDNキャッシュは付けない。
+ページング+検索用APIエンドポイント。`{ paces, total, hasMore }` を返す。`limit` は最大100。レスポンスは `getPublicPaceFeed()` のみを使いセッション非依存（「自分のペースを隠す」フィルタは適用しない）のため、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300` を付与しCDNキャッシュ可能にしている。
 
 ---
 
