@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
 
 // ============================================
@@ -693,6 +693,10 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   index("idx_paceman_paces_mcid").on(table.mcid),
+  // lower(mcid) 検索用の式インデックス（paceman-cache.ts の sql`lower(${pacemanPaces.mcid}) = ...`）。
+  // drizzle-kit push は式インデックスの差分検出に非対応のため db:push では反映されない。
+  // 実DBへの適用は scripts/add-paceman-mcid-lower-index.ts（手動DDL）で行う。
+  index("idx_paceman_paces_mcid_lower").on(sql`lower(${table.mcid})`),
   index("idx_paceman_paces_user_id").on(table.userId),
   index("idx_paceman_paces_date").on(table.date),
   index("idx_paceman_paces_timeline").on(table.timeline),
