@@ -7,6 +7,7 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { coerceStringArray } from "@/lib/preset-read";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
@@ -283,7 +284,9 @@ export function SearchCraftEmbedView({
   const hasAnyTiming = crafts.some((c) => c.timing);
 
   const renderCraft = (craft: typeof crafts[0]) => {
-    const items = typeof craft.items === "string" ? JSON.parse(craft.items) as string[] : craft.items as unknown as string[];
+    // craft.items は JSON 文字列（ライブ/プリセットスナップショット由来）だが、破損・非配列だと
+    // .map で SSR が落ちる。coerceStringArray で常に string[] に矯正する（不正値は空クラフト表示）。
+    const items = coerceStringArray(craft.items);
     const withShift = craft.withShift === true;
     const keyInfos = craft.searchStr
       ? getActualKeyInfos(craft.searchStr, remaps, { shiftHeld: withShift })

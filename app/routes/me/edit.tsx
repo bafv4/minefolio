@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
+import { isHttpUrl } from "@/lib/safe-url";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
@@ -305,6 +306,10 @@ export async function action({ request }: Route.ActionArgs) {
         new URL(customUrl);
       } catch {
         return { error: t("meEdit.customUrlInvalid") };
+      }
+      // javascript: / data: 等の実行可能スキームを拒否（stored XSS 対策。http/https のみ許可）
+      if (!isHttpUrl(customUrl)) {
+        return { error: t("meEdit.customUrlScheme") };
       }
     } else if (platform === "youtube") {
       // YouTubeハンドルは日本語などUnicode文字を許可

@@ -47,6 +47,19 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
+// pbVideoUrl は http/https スキームのみ許可する（javascript: 等を弾き Stored XSS を防ぐ）。
+// F6 が所有する共有ヘルパー app/lib/safe-url.ts とは独立させるため、この機能内の
+// ローカルヘルパーとして持つ（同等の実装が profile.tsx の RecordCard 側にもある）。
+export function isHttpVideoUrl(value: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === "http:" || parsed.protocol === "https:";
+}
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meRecords.title") }];
 };
@@ -172,6 +185,10 @@ export async function action({ request }: Route.ActionArgs) {
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
     if (personalBestStr && personalBest === null) {
       return { error: t("meRecords.invalidTime") };
+    }
+
+    if (pbVideoUrl && !isHttpVideoUrl(pbVideoUrl)) {
+      return { error: t("meRecords.invalidVideoUrl") };
     }
 
     if (action === "create") {

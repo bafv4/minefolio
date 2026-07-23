@@ -41,6 +41,7 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
+import { safeExternalHref } from "@/lib/safe-url";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
@@ -1922,6 +1923,19 @@ function ItemLayoutCard({
 
 // KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
 
+// pbVideoUrl は http/https のみをリンク化する。過去に保存された javascript: 等の危険な
+// スキームを href として DOM に到達させないためのレンダー時ガード（書き込み側の検証は
+// routes/me/records.tsx にもある）。F6 所有の app/lib/safe-url.ts には依存しない局所実装。
+function isHttpVideoUrl(value: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === "http:" || parsed.protocol === "https:";
+}
+
 function RecordCard({
   record,
 }: {
@@ -1972,7 +1986,7 @@ function RecordCard({
             )}
           </div>
         )}
-        {record.pbVideoUrl && (
+        {record.pbVideoUrl && isHttpVideoUrl(record.pbVideoUrl) && (
           <Button variant="outline" size="sm" asChild className="w-full mt-2">
             <a
               href={record.pbVideoUrl}
@@ -2019,7 +2033,9 @@ function getSocialUrl(platform: string, identifier: string, customUrl?: string |
     case "twitter":
       return `https://x.com/${identifier}`;
     case "custom":
-      return customUrl || "#";
+      // http/https 以外（javascript: 等）は href に流さず "#" に落とす。
+      // 過去に保存された不正スキームの行もここで無害化される。
+      return safeExternalHref(customUrl) ?? "#";
     default:
       return "#";
   }

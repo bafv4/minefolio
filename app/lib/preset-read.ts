@@ -32,7 +32,7 @@ export type PresetSnapshot = {
   customActionsData?: string | null;
 };
 
-function safeParseArray<T>(json: string | null | undefined): T[] | null {
+export function safeParseArray<T>(json: string | null | undefined): T[] | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json);
@@ -41,6 +41,21 @@ function safeParseArray<T>(json: string | null | undefined): T[] | null {
     // 破損スナップショットで公開ページを落とさない（ライブへフォールバック）
     return null;
   }
+}
+
+/**
+ * JSON 文字列（例: searchCrafts.items）または既にデコード済みの値を、安全に string[] へ矯正する。
+ * 破損 JSON・非配列（`{}` 等）・非文字列要素はすべて捨てて空配列に倒し、
+ * 公開ページの SSR を `.map` の TypeError で落とさない（safeParseArray と同じ「破損データで公開面を落とさない」方針）。
+ */
+export function coerceStringArray(value: unknown): string[] {
+  const arr =
+    typeof value === "string"
+      ? safeParseArray<unknown>(value)
+      : Array.isArray(value)
+        ? (value as unknown[])
+        : null;
+  return arr ? arr.filter((item): item is string => typeof item === "string") : [];
 }
 
 // ライブ取得時の orderBy（SQLite の BINARY 照合）と揃えるため、ロケール非依存の比較を使う
