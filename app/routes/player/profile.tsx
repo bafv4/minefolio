@@ -1,5 +1,5 @@
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -143,8 +143,6 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
-import Markdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -206,6 +204,19 @@ import {
   calculateCursorSpeed,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+
+// bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
+// チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
+// 落とさず、bio 原文のプレーンテキスト表示にフォールバックする（whats-new.tsx と同じパターン）
+const BioMarkdown = lazy(() =>
+  import("@/components/profile/bio-markdown")
+    .then((mod) => ({ default: mod.BioMarkdown }))
+    .catch(() => ({
+      default: ({ bio }: { bio: string }) => (
+        <p className="whitespace-pre-wrap text-sm text-muted-foreground">{bio}</p>
+      ),
+    })),
+);
 
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
@@ -289,7 +300,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得（メインを先頭に）
+  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
+  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, player.id),
     orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
@@ -299,14 +311,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       description: true,
       isActive: true,
       isMain: true,
-      keybindingsData: true,
-      playerConfigData: true,
-      remapsData: true,
-      fingerAssignmentsData: true,
-      itemLayoutsData: true,
-      searchCraftsData: true,
-      customKeysData: true,
-      customActionsData: true,
+    },
+    extras: {
+      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
+      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
     },
   });
 
@@ -332,10 +340,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
+  // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
   if (selectedPreset && !selectedPreset.isActive) {
-    const decoded = decodePresetConfig(selectedPreset, player.id);
+    const presetSnapshot = await db.query.configPresets.findFirst({
+      where: eq(configPresets.id, selectedPreset.id),
+      columns: {
+        keybindingsData: true,
+        playerConfigData: true,
+        remapsData: true,
+        fingerAssignmentsData: true,
+        itemLayoutsData: true,
+        searchCraftsData: true,
+        customKeysData: true,
+        customActionsData: true,
+      },
+    });
+    const decoded = decodePresetConfig(presetSnapshot ?? {}, player.id);
     displayKeybindings = decoded.keybindings;
     displayKeyRemaps = decoded.keyRemaps;
     displayItemLayouts = decoded.itemLayouts;
@@ -354,13 +376,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Check if current user is viewing their own profile
-  let isOwner = false;
-  if (session) {
-    const currentUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-    });
-    isOwner = currentUser?.id === player.id;
-  }
+  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
+  const isOwner = session?.user?.id === player.discordId;
 
   // プレイヤーの公開ガイドを取得
   const playerGuides = await db.query.guides.findMany({
@@ -424,8 +441,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       description: p.description,
       isActive: p.isActive,
       isMain: p.isMain,
-      hasItemLayouts: !!p.itemLayoutsData,
-      hasSearchCrafts: !!p.searchCraftsData,
+      hasItemLayouts: !!p.hasItemLayouts,
+      hasSearchCrafts: !!p.hasSearchCrafts,
     })),
     selectedPresetId: selectedPreset?.id ?? null,
     playerGuides,
@@ -532,14 +549,14 @@ export default function PlayerProfilePage() {
   ];
 
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
-  const userFingerAssignments = (() => {
+  const userFingerAssignments = useMemo(() => {
     if (!player.playerConfig?.fingerAssignments) return {};
     try {
       return JSON.parse(player.playerConfig.fingerAssignments);
     } catch {
       return {};
     }
-  })();
+  }, [player.playerConfig?.fingerAssignments]);
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
   // （all/unset のみなら両文脈で表示が同一のため "trigger" 固定でよい）
@@ -557,6 +574,32 @@ export default function PlayerProfilePage() {
   const remapsForKeyboard = useMemo(
     () => toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
     [player.keyRemaps, remapView],
+  );
+
+  // キーバインドの action → keyCode マップ（VirtualKeyboard/Numpad/Mouse 共通）
+  const keybindingsMap = useMemo(
+    () => keybindingsToMap(player.keybindings),
+    [player.keybindings],
+  );
+
+  // キーボードカテゴリのカスタムキー（VirtualKeyboard・エクスポートダイアログ共通）
+  const customKeyboardKeys = useMemo(
+    () =>
+      player.customKeys
+        .filter((ck) => ck.category === "keyboard")
+        .map((ck) => ({ code: ck.keyCode, label: ck.keyName })),
+    [player.customKeys],
+  );
+
+  // 全カスタムボタン（VirtualMouse・エクスポートダイアログ共通。カテゴリで絞り込みはコンポーネント側）
+  const customButtons = useMemo(
+    () =>
+      player.customKeys.map((ck) => ({
+        code: ck.keyCode,
+        label: ck.keyName,
+        category: ck.category as "mouse" | "keyboard",
+      })),
+    [player.customKeys],
   );
 
   // 動画欄: profileVideos があればそれを、無ければ旧 featuredVideoUrl を1件として表示（後方互換）
@@ -995,9 +1038,15 @@ export default function PlayerProfilePage() {
                 <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
-                  <Markdown rehypePlugins={[rehypeSanitize]}>{player.bio}</Markdown>
-                </div>
+                <Suspense
+                  fallback={
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {player.bio}
+                    </p>
+                  }
+                >
+                  <BioMarkdown bio={player.bio} />
+                </Suspense>
               </CardContent>
             </Card>
           )}
@@ -1058,14 +1107,8 @@ export default function PlayerProfilePage() {
                         remaps={player.keyRemaps}
                         hasTypedRemaps={hasTypedRemaps}
                         initialRemapContext={remapView}
-                        customKeys={player.customKeys
-                          .filter((ck) => ck.category === "keyboard")
-                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
-                        customButtons={player.customKeys.map((ck) => ({
-                          code: ck.keyCode,
-                          label: ck.keyName,
-                          category: ck.category as "mouse" | "keyboard",
-                        }))}
+                        customKeys={customKeyboardKeys}
+                        customButtons={customButtons}
                         isTKL={isTKL}
                         player={{
                           uuid: player.uuid,
@@ -1084,13 +1127,11 @@ export default function PlayerProfilePage() {
                     <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                       <VirtualKeyboard
                         layout={keyboardLayout}
-                        keybindings={keybindingsToMap(player.keybindings)}
+                        keybindings={keybindingsMap}
                         fingerAssignments={userFingerAssignments}
                         remaps={remapsForKeyboard}
                         customActions={player.customActions}
-                        customKeys={player.customKeys
-                          .filter((ck) => ck.category === "keyboard")
-                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                        customKeys={customKeyboardKeys}
                         showActionLabels
                         showFingerAssignments
                         showRemaps
@@ -1102,7 +1143,7 @@ export default function PlayerProfilePage() {
                       <div className="flex items-start gap-6">
                         {!isTKL && (
                           <VirtualNumpad
-                            keybindings={keybindingsToMap(player.keybindings)}
+                            keybindings={keybindingsMap}
                             fingerAssignments={userFingerAssignments}
                             remaps={remapsForKeyboard}
                             customActions={player.customActions}
@@ -1112,15 +1153,11 @@ export default function PlayerProfilePage() {
                           />
                         )}
                         <VirtualMouse
-                          keybindings={keybindingsToMap(player.keybindings)}
+                          keybindings={keybindingsMap}
                           fingerAssignments={userFingerAssignments}
                           remaps={remapsForKeyboard}
                           customActions={player.customActions}
-                          customButtons={player.customKeys.map((ck) => ({
-                            code: ck.keyCode,
-                            label: ck.keyName,
-                            category: ck.category as "mouse" | "keyboard",
-                          }))}
+                          customButtons={customButtons}
                           showActionLabels
                           showFingerAssignments
                           showRemaps
