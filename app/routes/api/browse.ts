@@ -29,11 +29,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
     favoriteSlugs,
   );
 
-  return Response.json({
-    items: players,
-    hasMore,
-    totalCount,
-    totalPages,
-    page: args.page,
-  });
+  // favoriteSlugs はお気に入り優先ソートに影響するためレスポンスはユーザー非依存にできない。
+  // セッションの有無で Cache-Control を出し分け、匿名分は CDN でキャッシュさせる
+  // （ログイン中は private/no-store。同一URLでのcookie変種混同を避けるため、
+  // URL 側の分離は browse.tsx コンポーネントが useInfiniteScroll の extraParams で
+  // fetcher リクエストURLにのみ auth=1 を付与する形で行う）。
+  const cacheControl = session
+    ? "private, no-store"
+    : "public, s-maxage=30, stale-while-revalidate=300";
+
+  return Response.json(
+    {
+      items: players,
+      hasMore,
+      totalCount,
+      totalPages,
+      page: args.page,
+    },
+    { headers: { "Cache-Control": cacheControl } },
+  );
 }

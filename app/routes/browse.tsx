@@ -67,6 +67,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   const url = new URL(request.url);
+
   const args = parseBrowseSearchParams(url.searchParams);
   const favoriteSlugs = await getViewerFavoriteSlugs(
     db,
@@ -137,7 +138,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export default function BrowsePage() {
-  const { players, searchQuery, isRegex, sortBy, currentPage, totalPages, totalCount, hasMore, filters } =
+  const { players, searchQuery, isRegex, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -149,12 +150,16 @@ export default function BrowsePage() {
 
   // 無限スクロール
   const filtersKey = `${searchQuery}|${isRegex ? "re" : ""}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}`;
+  // /api/browse への「もっと読み込む」フェッチ先URLにだけ auth=1 を付与する。CDN は同一URLで
+  // cookie変種を区別できないため、ログイン中クライアントのリクエストURL空間を匿名と分離する目印
+  // として使う（個人識別子は含めない）。ドキュメント側の URL（アドレスバー・共有リンク）には乗らない。
   const infinite = useInfiniteScroll<(typeof players)[number]>({
     initialItems: players,
     initialPage: currentPage,
     initialHasMore: hasMore,
     endpoint: "/api/browse",
     resetDeps: [filtersKey],
+    extraParams: isLoggedIn ? { auth: "1" } : undefined,
   });
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
