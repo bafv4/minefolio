@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@bafv4/mcitems':
         specifier: github:bafv4/mcitems
-        version: https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: https://codeload.github.com/bafv4/mcitems/tar.gz/ef35dedbb62e9d79c3c35168fe1574cff5b9f344(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -441,9 +441,9 @@ packages:
     resolution: {integrity: sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA==}
     engines: {node: '>=6.9.0'}
 
-  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b':
-    resolution: {gitHosted: true, integrity: sha512-6s3+waVO/Ya342IG6GuzLNQAO2ghijhlfmc09E3ht3bn8JSg1Z7wE+0SW24S3uYAnKVPo1jB5MP8H9xsCCXBFQ==, tarball: https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b}
-    version: 2.1.0
+  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/ef35dedbb62e9d79c3c35168fe1574cff5b9f344':
+    resolution: {gitHosted: true, integrity: sha512-5j/Qtp8uVGoIK9OfxpbgZk/kRuyUAv8oGM2dkcZrGmyzkhOpxvaa/rsfaAh4/7bs8AeVK716CGFgQbmSYyd4NQ==, tarball: https://codeload.github.com/bafv4/mcitems/tar.gz/ef35dedbb62e9d79c3c35168fe1574cff5b9f344}
+    version: 2.1.1
     peerDependencies:
       react: '>=17.0.0'
       react-dom: '>=17.0.0'
@@ -3857,8 +3857,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  mongodb-connection-string-url@7.0.1:
-    resolution: {integrity: sha512-h0AZ9A7IDVwwHyMxmdMXKy+9oNlF0zFoahHiX3vQ8e3KFcSP3VmsmfvtRSuLPxmyv2vjIDxqty8smTgie/SNRQ==}
+  mongodb-connection-string-url@7.0.2:
+    resolution: {integrity: sha512-ZoS07RoFqpKYQwAk59qmrx8+jJHNHU30UjlU96QktiGn1ltvDr+vCznLX5DiUBLEpMAHatHNWV1nM/74ul66kA==}
     engines: {node: '>=20.19.0'}
 
   mongodb@7.1.0:
@@ -4745,6 +4745,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.21.1:
+    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xdg-app-paths@5.5.1:
     resolution: {integrity: sha512-hI3flOB4PLZIy5prbtTpirobtPE2ZtZ52szO+2mM9Efp6ErM398La+C1lIpNWDfNoQk+6Lsi6nMcCwVB7pxeMQ==}
     engines: {node: '>= 6.0'}
@@ -4988,7 +5000,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/5424ebc274aa2ffc4983733bb42f7edc9d91141b(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@bafv4/mcitems@https://codeload.github.com/bafv4/mcitems/tar.gz/ef35dedbb62e9d79c3c35168fe1574cff5b9f344(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     optionalDependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -7566,7 +7578,7 @@ snapshots:
       buffer-image-size: 0.6.4
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.0
+      ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -8225,7 +8237,7 @@ snapshots:
 
   mkdirp@1.0.4: {}
 
-  mongodb-connection-string-url@7.0.1:
+  mongodb-connection-string-url@7.0.2:
     dependencies:
       '@types/whatwg-url': 13.0.0
       whatwg-url: 14.2.0
@@ -8235,7 +8247,7 @@ snapshots:
     dependencies:
       '@mongodb-js/saslprep': 1.4.12
       bson: 7.3.1
-      mongodb-connection-string-url: 7.0.1
+      mongodb-connection-string-url: 7.0.2
     optional: true
 
   morgan@1.11.0:
@@ -9143,6 +9155,8 @@ snapshots:
   wrappy@1.0.2: {}
 
   ws@8.21.0: {}
+
+  ws@8.21.1: {}
 
   xdg-app-paths@5.5.1:
     dependencies:
