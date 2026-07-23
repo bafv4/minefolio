@@ -60,7 +60,7 @@
 - **非アクティブタブ**: 常時 1px 枠（`border-border`）+ `bg-muted/50` のくぼんだ面。アクティブとの色差で選択状態を示す
 - **アクセント**: アクティブタブ上辺内側にブランド色バー（`before:` 疑似要素 + `bg-brand`）
 - **横スクロール**: TabsList 自身が `overflow-x-auto`。ネイティブスクロールバーは非表示（帯内に高さを取りタブがベースラインから浮くため）で、代わりに `useTabScrollbar`（`app/hooks/use-tab-scrollbar.tsx`）のオーバーレイ型カスタムスクロールバー（スクロール可能時のみ表示・ドラッグ可・レイアウト高さゼロ）を重ねる。Link ベースの ContentTabs / ViewSwitcher も同じフックを使用
-- **カード化の打ち消し**: Dialog 内や独自レイアウト（プロフィールの縦サイドバー等）では、ルートに `rounded-none border-0 bg-transparent overflow-visible`、`TabsList` に `bg-transparent p-0` を指定して素の構造に戻す（プロフィールはさらに `TabsContent` に `rounded-xl border` を付けてパネル単体をカード化している）
+- **カード化の打ち消し**: Dialog 内や独自レイアウト（プロフィールの縦サイドバー等）では、ルートに `rounded-none border-0 bg-transparent overflow-visible`、`TabsList` に `bg-transparent p-0` を指定して素の構造に戻す（プロフィールの縦サイドバーでは `TabsContent` も `rounded-none border-0 bg-transparent p-0 sm:p-0` で素通しにし、枠は中身の各 Card に任せる。パネル自体をカード化すると中の Card と二重枠になるため行わない）
 
 ### 消費側の不変条件
 1. `TabsList` と `TabsContent` の間に `gap-*` / `space-y-*` を入れない（1px の重なりが壊れ、タブとパネルの間に線が見える）
