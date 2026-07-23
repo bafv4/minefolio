@@ -6,13 +6,14 @@ import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
+import { getUserData } from "@/lib/home-user-data.server";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -37,56 +38,6 @@ const CDN_CACHE = {
 // TTL切れ後もエッジからstale配信しつつバックグラウンドで再検証する猶予（1日）。
 // 低トラフィック時でもオリジン（コールドスタート・DBアクセス）の遅延をユーザーに見せないためのもの
 const CDN_SWR_LONG = 24 * 60 * 60;
-
-// ユーザーデータのキャッシュ（DBクエリ削減）
-interface UserDataCache {
-  registeredMcids: string[];
-  mcidToUuid: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
-}
-
-async function getCachedUserData(): Promise<UserDataCache | null> {
-  return getCached<UserDataCache>("home-feed:user-data");
-}
-
-async function fetchAndCacheUserData(): Promise<UserDataCache> {
-  const db = createDb();
-  // DBクエリ段階でMCIDとUUIDがあるユーザーのみフィルタリング（最適化）
-  const usersWithMcid = await db
-    .select({
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(users)
-    .where(and(isNotNull(users.mcid), isNotNull(users.uuid), excludeViewersCondition));
-
-  const data: UserDataCache = {
-    registeredMcids: usersWithMcid.map((u) => u.mcid!.toLowerCase()),
-    mcidToUuid: Object.fromEntries(
-      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.uuid!])
-    ),
-    mcidToDisplayName: Object.fromEntries(
-      usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
-    ),
-    mcidToSkinUrl: Object.fromEntries(
-      usersWithMcid
-        .filter((u) => u.customSkinUrl !== null)
-        .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
-    ),
-  };
-
-  await setCached("home-feed:user-data", data, CACHE_TTL.USER_DATA);
-  return data;
-}
-
-async function getUserData(): Promise<UserDataCache> {
-  const cached = await getCachedUserData();
-  if (cached) return cached;
-  return fetchAndCacheUserData();
-}
 
 // Twitchリンク一覧のキャッシュ
 interface TwitchLinkData {

@@ -8,6 +8,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { getUserData } from "@/lib/home-user-data.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
@@ -96,28 +97,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
-  const allUserMcids = await db.query.users.findMany({
-    where: excludeViewersCondition,
-    columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
-  });
-  const usersWithMcid = allUserMcids.filter(
-    (u): u is typeof u & { mcid: string } => u.mcid !== null
-  );
-  const registeredMcids = usersWithMcid.map((u) => u.mcid.toLowerCase());
-  const mcidToUuid = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.uuid])
-  );
-  const mcidToSlug = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.slug])
-  );
-  const mcidToDisplayName = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.displayName || u.mcid])
-  );
-  const mcidToSkinUrl = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.customSkinUrl !== null)
-      .map((u) => [u.mcid.toLowerCase(), u.customSkinUrl!])
-  );
+  // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
+  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToSkinUrl } =
+    await getUserData();
 
   // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
   const recentlyUpdatedUsers = await db.query.users.findMany({
@@ -167,23 +149,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const totalPublicProfilesResult = await db
-    .select({ count: sql<number>`count(*)` })
+  const [profileCounts] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
+    })
     .from(users)
     .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition));
-  const totalPublicProfiles = totalPublicProfilesResult[0]?.count ?? 0;
-
-  const activePublicProfilesResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(
-      and(
-        eq(users.profileVisibility, "public"),
-        gte(users.updatedAt, oneWeekAgo),
-        excludeViewersCondition,
-      )
-    );
-  const activePublicProfiles = activePublicProfilesResult[0]?.count ?? 0;
+  const totalPublicProfiles = profileCounts?.total ?? 0;
+  const activePublicProfiles = profileCounts?.active ?? 0;
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
