@@ -3,7 +3,7 @@
 
 import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { and, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
 
@@ -23,7 +23,10 @@ async function getCachedUserData(): Promise<UserDataCache | null> {
 
 async function fetchAndCacheUserData(): Promise<UserDataCache> {
   const db = createDb();
-  // DBクエリ段階でMCIDとUUIDがあるユーザーのみフィルタリング（最適化）
+  // DBクエリ段階でMCIDとUUIDがあるユーザーのみフィルタリング（最適化）。
+  // このキャッシュは未認証のホーム/ペースフィード（発見・一覧面）に配信されるため、
+  // 公開プロフィール（profileVisibility === "public"）のみに限定する。
+  // unlisted/private は一覧・発見面には出さない（/browse や home.tsx の他クエリと同じ方針）。
   const usersWithMcid = await db
     .select({
       mcid: users.mcid,
@@ -33,7 +36,14 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
-    .where(and(isNotNull(users.mcid), isNotNull(users.uuid), excludeViewersCondition));
+    .where(
+      and(
+        isNotNull(users.mcid),
+        isNotNull(users.uuid),
+        eq(users.profileVisibility, "public"),
+        excludeViewersCondition,
+      ),
+    );
 
   const data: UserDataCache = {
     registeredMcids: usersWithMcid.map((u) => u.mcid!.toLowerCase()),

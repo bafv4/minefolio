@@ -142,7 +142,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
-    .where(eq(guides.isPublished, true))
+    // 非公開・限定公開の著者のガイドはホームの新着一覧（discovery）に出さない
+    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
     .orderBy(desc(guides.updatedAt))
     .limit(4);
 

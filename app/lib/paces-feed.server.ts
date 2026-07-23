@@ -97,7 +97,17 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
-    .where(and(isNotNull(users.mcid), isNotNull(users.uuid), excludeViewersCondition));
+    .where(
+      and(
+        isNotNull(users.mcid),
+        isNotNull(users.uuid),
+        excludeViewersCondition,
+        // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴・表示名・スキンを
+        // 未認証で配信される公開フィードに露出させない。/paces はディスカバリ一覧なので、
+        // 一覧系と同じ「公開のみ」ルール（browse-query.server.ts と同一）に揃える。
+        eq(users.profileVisibility, "public"),
+      ),
+    );
 
   const registeredMcidSet = new Set(usersWithMcid.map((u) => u.mcid!.toLowerCase()));
   const mcidToUuid = Object.fromEntries(

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
-    .where(eq(guides.isPublished, true))
+    // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
+    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
     .orderBy(desc(guides.updatedAt));
 
   // Filter in memory for tag/search (simple approach)
