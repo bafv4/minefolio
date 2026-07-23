@@ -1,13 +1,14 @@
 // 操作設定の統計を集計するサーバー側ロジック。
 // 旧 /keybindings/stats の loader を関数として切り出したもの。
 // /keybindings?view=stats からも呼び出される。
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { calculateCm360 } from "./mouse-settings";
 import { getActionLabel } from "./keybindings";
 import { t } from "./messages";
+import { getCached, setCached } from "./cache";
 
 // 主要なアクション（集計対象）
 export const TRACKED_ACTIONS = [
@@ -147,9 +148,15 @@ export interface KeybindingsStatsData {
   playersWithMouseSettings: number;
 }
 
+const KEYBINDINGS_STATS_CACHE_KEY = "keybindings:stats";
+const KEYBINDINGS_STATS_CACHE_TTL = 60 * 1000; // 1分
+
 export async function loadKeybindingsStats(
   db: Database,
 ): Promise<KeybindingsStatsData> {
+  const cached = await getCached<KeybindingsStatsData>(KEYBINDINGS_STATS_CACHE_KEY);
+  if (cached) return cached;
+
   const publicCondition = and(
     eq(users.profileVisibility, "public"),
     excludeViewersCondition,
@@ -178,21 +185,32 @@ export async function loadKeybindingsStats(
     .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi)));
   const playersWithMouseSettings = mouseCountResult?.count ?? 0;
 
-  // キーバインド統計
+  // キーバインド統計（TRACKED_ACTIONS 全アクション分を1クエリでまとめて取得し、JS側で集計する）
   const keybindingStats: KeybindingStats[] = [];
+  const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
+  const trackedRows = await db
+    .select({
+      action: keybindings.action,
+      keyCode: keybindings.keyCode,
+      slug: users.slug,
+      mcid: users.mcid,
+      uuid: users.uuid,
+      displayName: users.displayName,
+      customSkinUrl: users.customSkinUrl,
+    })
+    .from(keybindings)
+    .innerJoin(users, eq(keybindings.userId, users.id))
+    .where(and(publicCondition, inArray(keybindings.action, trackedActionNames)));
+
+  const rowsByAction = new Map<string, typeof trackedRows>();
+  for (const r of trackedRows) {
+    const rows = rowsByAction.get(r.action) ?? [];
+    rows.push(r);
+    rowsByAction.set(r.action, rows);
+  }
+
   for (const tracked of TRACKED_ACTIONS) {
-    const results = await db
-      .select({
-        keyCode: keybindings.keyCode,
-        slug: users.slug,
-        mcid: users.mcid,
-        uuid: users.uuid,
-        displayName: users.displayName,
-        customSkinUrl: users.customSkinUrl,
-      })
-      .from(keybindings)
-      .innerJoin(users, eq(keybindings.userId, users.id))
-      .where(and(publicCondition, eq(keybindings.action, tracked.action)));
+    const results = rowsByAction.get(tracked.action) ?? [];
 
     const keyGroups = new Map<string, PlayerInfo[]>();
     for (const r of results) {
@@ -450,7 +468,7 @@ export async function loadKeybindingsStats(
     })),
   };
 
-  return {
+  const result: KeybindingsStatsData = {
     keybindingStats,
     f3RemapStats,
     dpiStats,
@@ -461,4 +479,7 @@ export async function loadKeybindingsStats(
     playersWithKeybindings,
     playersWithMouseSettings,
   };
+
+  await setCached(KEYBINDINGS_STATS_CACHE_KEY, result, KEYBINDINGS_STATS_CACHE_TTL);
+  return result;
 }

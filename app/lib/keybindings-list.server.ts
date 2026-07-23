@@ -21,8 +21,33 @@ import {
 } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
 import { decodePresetConfig } from "./preset-read";
+import { getCached, setCached } from "./cache";
+
+const KEYBINDINGS_LIST_CACHE_KEY = "keybindings:list:all";
+const KEYBINDINGS_LIST_CACHE_TTL = 60 * 1000; // 1分
 
 export async function loadKeybindingsListPlayers(
+  db: Database,
+  options?: { slugs?: string[] },
+) {
+  const useCache = !options?.slugs || options.slugs.length === 0;
+  if (useCache) {
+    const cached = await getCached<Awaited<ReturnType<typeof fetchKeybindingsListPlayers>>>(
+      KEYBINDINGS_LIST_CACHE_KEY,
+    );
+    if (cached) return cached;
+  }
+
+  const result = await fetchKeybindingsListPlayers(db, options);
+
+  if (useCache) {
+    await setCached(KEYBINDINGS_LIST_CACHE_KEY, result, KEYBINDINGS_LIST_CACHE_TTL);
+  }
+
+  return result;
+}
+
+async function fetchKeybindingsListPlayers(
   db: Database,
   options?: { slugs?: string[] },
 ) {
