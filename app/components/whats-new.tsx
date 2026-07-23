@@ -1,14 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "@/lib/messages";
-import { parseChangelog, unreadEntries, type ChangelogEntry } from "@/lib/changelog";
+import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight, Sparkles } from "lucide-react";
-import changelogMd from "@/content/changelog.md?raw";
 
 // markdown 描画（react-markdown 一式）はポップオーバーを開いた時にだけロードする。
 // チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
@@ -29,10 +28,19 @@ const DISPLAY_LIMIT = 5;
 // ヘッダーにはデスクトップ用・モバイル用の2インスタンスがあるため、
 // 片方で既読化したらもう片方のドットも消すための同一タブ内イベント
 const READ_EVENT = "minefolio:whats-new-read";
+// requestIdleCallback 非対応環境（Safari 等）向けのフォールバック遅延
+const IDLE_FALLBACK_MS = 200;
 
-// ?raw はビルド時定数なのでモジュール読み込み時に一度だけパースする。
-// フォーマット不一致時は [] になり、アイコンは「未読なし」の通常状態に倒れる。
-const entries = parseChangelog(changelogMd);
+/** requestIdleCallback があれば使い、なければ setTimeout でフォールバックする */
+function scheduleIdle(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(callback);
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(callback, IDLE_FALLBACK_MS);
+  return () => window.clearTimeout(id);
+}
 
 function readSeenVersion(): string | null {
   if (typeof window === "undefined") return null;
@@ -59,26 +67,43 @@ function normalizeHeading(text: string): string {
 
 export function WhatsNew() {
   const [open, setOpen] = useState(false);
+  // changelog.md 全文＋パース処理を含む ./whats-new-data はアイドル時に
+  // 動的 import する（共通レイアウトの初期チャンクから分離するため）。
+  // 読み込み前は null（Skeleton表示・未読判定なし）
+  const [entries, setEntries] = useState<ChangelogEntry[] | null>(null);
   const [unreadList, setUnreadList] = useState<ChangelogEntry[]>([]);
   const [hasUnread, setHasUnread] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   // READ_EVENT ハンドラから「自分が開いて表示中か」を同期的に参照するためのref
   const openRef = useRef(false);
 
-  const latest = entries[0] ?? null;
+  const latest = entries?.[0] ?? null;
 
-  // SSRとの整合のため、未読判定は初回マウントの useEffect に閉じ込める
-  // （cookie-consent.tsx と同じ隔離パターン。初期レンダは常に「未読なし」）
+  // SSRとの整合のため、entries読み込み・未読判定は初回マウントの useEffect に
+  // 閉じ込める（cookie-consent.tsx と同じ隔離パターン。初期レンダは常に「未読なし」）
   useEffect(() => {
-    if (!latest) return;
-    const seen = readSeenVersion();
-    if (seen !== latest.version) {
-      const list = unreadEntries(entries, seen);
-      if (list.length > 0) {
-        setUnreadList(list);
-        setHasUnread(true);
-      }
-    }
+    let cancelled = false;
+    const cancelIdle = scheduleIdle(() => {
+      import("./whats-new-data")
+        .then(({ entries: loaded }) => {
+          if (cancelled) return;
+          setEntries(loaded);
+          const latestEntry = loaded[0] ?? null;
+          if (!latestEntry) return;
+          const seen = readSeenVersion();
+          if (seen !== latestEntry.version) {
+            const list = unreadEntries(loaded, seen);
+            if (list.length > 0) {
+              setUnreadList(list);
+              setHasUnread(true);
+            }
+          }
+        })
+        .catch(() => {
+          // チャンク取得失敗時は entries を null のままにし、バッジ非表示に倒す
+        });
+    });
+
     const handleRead = () => {
       setHasUnread(false);
       // 開いて表示中のインスタンスは未読スタックを維持し、
@@ -86,8 +111,12 @@ export function WhatsNew() {
       if (!openRef.current) setUnreadList([]);
     };
     window.addEventListener(READ_EVENT, handleRead);
-    return () => window.removeEventListener(READ_EVENT, handleRead);
-  }, [latest]);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+      window.removeEventListener(READ_EVENT, handleRead);
+    };
+  }, []);
 
   const handleOpenChange = (nextOpen: boolean) => {
     openRef.current = nextOpen;
@@ -122,8 +151,9 @@ export function WhatsNew() {
   };
 
   // 未読があれば未読分を積んで表示、なければ常設導線として最新1件を表示
+  // entries === null（読み込み中）の間は空のまま。本文は下でSkeletonにフォールバック
   const displayEntries =
-    unreadList.length > 0 ? unreadList.slice(0, DISPLAY_LIMIT) : entries.slice(0, 1);
+    unreadList.length > 0 ? unreadList.slice(0, DISPLAY_LIMIT) : (entries ?? []).slice(0, 1);
   const hiddenCount = Math.max(0, unreadList.length - DISPLAY_LIMIT);
   const multi = displayEntries.length > 1;
 
@@ -180,7 +210,14 @@ export function WhatsNew() {
           )}
         </div>
 
-        {displayEntries.length > 0 ? (
+        {entries === null ? (
+          // ./whats-new-data のアイドル読み込みが終わる前にポップオーバーが開かれた場合
+          <div className="space-y-2 px-4 py-3">
+            <Skeleton className="h-3 w-3/4" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ) : displayEntries.length > 0 ? (
           <div ref={bodyRef} className="max-h-[min(55vh,320px)] overflow-y-auto overscroll-contain px-4 py-3">
             <Suspense
               fallback={
