@@ -49,7 +49,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const allGuides = await db
     .select({
-      guide: guides,
+      guide: {
+        id: guides.id,
+        slug: guides.slug,
+        title: guides.title,
+        summary: guides.summary,
+        tags: guides.tags,
+        coverImageUrl: guides.coverImageUrl,
+        viewCount: guides.viewCount,
+        updatedAt: guides.updatedAt,
+      },
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
       authorMcid: users.mcid,
@@ -103,11 +112,10 @@ export default function GuidesIndexPage() {
 
   // Transform loader data to GuideItem[]
   // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
-  // （guide: guides で全カラムを取得しているため、GuideItem に残すとカード拡大表示が漏れてしまう）
+  // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   const guideItems: GuideItem[] = allGuides.map(({ guide, authorSlug, authorDisplayName, authorMcid }) => {
-    const { isPinned: _isPinned, ...guideWithoutPin } = guide;
     return {
-      ...guideWithoutPin,
+      ...guide,
       authorName: authorDisplayName || authorMcid || authorSlug,
       _authorSlug: authorSlug,
     };
