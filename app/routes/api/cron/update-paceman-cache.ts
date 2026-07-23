@@ -17,8 +17,15 @@ export async function loader({ request }: { request: Request }) {
   const authHeader = request.headers.get("authorization");
   const expectedToken = process.env.CRON_SECRET;
 
-  // 本番環境ではトークン認証を必須にする
-  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+  // fail-closed: CRON_SECRET が未設定なら認証を強制できないため、いかなる作業も
+  // 行わずに拒否する（未設定時に誰でも実行できてしまう状態を防ぐ）。
+  if (!expectedToken) {
+    console.error("CRON_SECRET is not configured; refusing cron request");
+    return new Response("Service Unavailable", { status: 503 });
+  }
+
+  // CRON_SECRET が設定されている場合は、正しい Bearer トークンを必須にする。
+  if (authHeader !== `Bearer ${expectedToken}`) {
     console.warn("Unauthorized cron request attempt");
     return new Response("Unauthorized", { status: 401 });
   }

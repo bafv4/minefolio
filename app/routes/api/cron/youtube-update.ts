@@ -20,8 +20,17 @@ export async function loader({ request }: { request: Request }) {
   const authHeader = request.headers.get("Authorization");
   const expectedToken = process.env.CRON_SECRET;
 
-  // 認証チェック（CRON_SECRETが設定されている場合）
-  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+  // CRON_SECRET が未設定なら認証不能。フェイルクローズして処理を拒否する
+  // （スキップすると未認証の呼び出しで YouTube Data API のクォータを消費できてしまう）。
+  if (!expectedToken) {
+    return Response.json(
+      { error: "Cron authentication is not configured" },
+      { status: 503 }
+    );
+  }
+
+  // CRON_SECRET が設定済みの場合は正しい Bearer トークンを必須とする
+  if (authHeader !== `Bearer ${expectedToken}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
