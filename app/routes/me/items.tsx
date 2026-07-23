@@ -134,6 +134,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       itemLayouts: {
         orderBy: [asc(itemLayouts.displayOrder)],
       },
+      configPresets: {
+        columns: {
+          id: true,
+          name: true,
+          isActive: true,
+          isMain: true,
+          itemLayoutsData: true,
+        },
+      },
     },
   });
 
@@ -151,16 +160,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }));
 
   // 全プリセットを取得（コピー機能用）
-  const allPresets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, user.id),
-    columns: {
-      id: true,
-      name: true,
-      isActive: true,
-      isMain: true,
-      itemLayoutsData: true,
-    },
-  });
+  const allPresets = user.configPresets;
 
   // アクティブなプリセットを取得
   const activePreset = allPresets.find((p) => p.isActive);
