@@ -112,7 +112,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 - 認証必須
 - リクエストボディ: `{ url: string, model?: "default" | "slim" }`
-- URLは `blob.vercel-storage.com` のものに限定
+- URLは `blob.vercel-storage.com`（完全一致 or サブドメイン）のホストに限定。`new URL()` でパースしてホスト名で許可リスト判定する（部分文字列一致は `#fragment` 等ですり抜けられ SSRF になるため使わない）。検証ロジックは `app/lib/blob-url.ts`（`isVercelBlobUrl` / `parseVercelBlobUrl`）に集約
 - 既存の古いBlobがあれば削除してから更新
 
 ### API: `DELETE /api/me/skin`
@@ -130,6 +130,8 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 パラメータ:
 - `uuid` - Minecraft UUID (直接指定)
 - `userId` - Minefolioユーザー ID (カスタムスキン優先チェック)
+
+保存済み `customSkinUrl` をサーバー side で fetch する前に、保存時と同じ許可リスト検証（`parseVercelBlobUrl`）を再適用する。信頼された Vercel Blob ホスト以外・IP リテラル・非 https は fetch せずスキップし、SSRF を防ぐ。
 
 ### スキン取得優先順位
 

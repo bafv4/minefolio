@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
+import { parseVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
@@ -22,17 +23,6 @@ interface TexturesProperty {
       url: string;
     };
   };
-}
-
-/** https の URL のみ許可（SSRF 防止）。不正・非 https は null。 */
-function toHttpsUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
 }
 
 // スキン画像のキャッシュヘッダー。
@@ -66,8 +56,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       });
 
-      // カスタムスキンがある場合はそれを返す（SSRF 防止のため https のみ許可）
-      const safeCustomSkinUrl = toHttpsUrl(user?.customSkinUrl);
+      // カスタムスキンがある場合はそれを返す。
+      // 保存時にホスト許可リストで検証済みだが、取得時にも同じ検証を再適用して
+      // 信頼された Vercel Blob ホスト以外への fetch（SSRF）を防ぐ。
+      const safeCustomSkinUrl = parseVercelBlobUrl(user?.customSkinUrl);
       if (safeCustomSkinUrl) {
         const skinResponse = await fetch(safeCustomSkinUrl);
         if (skinResponse.ok) {
