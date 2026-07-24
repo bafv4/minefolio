@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
-import { Search, Users, ArrowUpDown, Loader2, Filter, X, Regex } from "lucide-react";
+import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import {
@@ -35,8 +35,6 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
@@ -82,7 +80,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     players,
     searchQuery: args.q,
-    isRegex: args.regex,
     sortBy: args.sort,
     currentPage: args.page,
     totalPages,
@@ -138,18 +135,15 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export default function BrowsePage() {
-  const { players, searchQuery, isRegex, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
+  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
-  const [useRegex, setUseRegex] = useState(isRegex);
-  // 「検索」押下時にのみ検証する不正正規表現エラー（入力変更でクリア）
-  const [searchError, setSearchError] = useState<string | null>(null);
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
 
   // 無限スクロール
-  const filtersKey = `${searchQuery}|${isRegex ? "re" : ""}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}`;
+  const filtersKey = `${searchQuery}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}`;
   // /api/browse への「もっと読み込む」フェッチ先URLにだけ auth=1 を付与する。CDN は同一URLで
   // cookie変種を区別できないため、ログイン中クライアントのリクエストURL空間を匿名と分離する目印
   // として使う（個人識別子は含めない）。ドキュメント側の URL（アドレスバー・共有リンク）には乗らない。
@@ -184,18 +178,13 @@ export default function BrowsePage() {
     setSearchParams(newParams);
   };
 
-  // q / regex を URL に反映して検索を実行
-  const applySearch = (value: string, regexOn: boolean) => {
+  // q を URL に反映して検索を実行
+  const applySearch = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
     if (value) {
       newParams.set("q", value);
     } else {
       newParams.delete("q");
-    }
-    if (regexOn) {
-      newParams.set("regex", "1");
-    } else {
-      newParams.delete("regex");
     }
     newParams.delete("page");
     setSearchParams(newParams);
@@ -203,33 +192,7 @@ export default function BrowsePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // 不正な正規表現は「検索」押下時にのみエラー表示し、検索は実行しない
-    if (useRegex && inputValue) {
-      try {
-        new RegExp(inputValue);
-      } catch {
-        setSearchError(t("browse.regexInvalid"));
-        return;
-      }
-    }
-    setSearchError(null);
-    applySearch(inputValue, useRegex);
-  };
-
-  // 検索欄内のトグル。VSCode の検索のように即時反映する。
-  const toggleRegex = () => {
-    const next = !useRegex;
-    setUseRegex(next);
-    setSearchError(null);
-    if (!inputValue) return; // 検索語がなければ状態のみ更新（送信時に反映）
-    if (next) {
-      try {
-        new RegExp(inputValue);
-      } catch {
-        return; // 不正な正規表現は適用せず、「検索」押下でエラー表示
-      }
-    }
-    applySearch(inputValue, next);
+    applySearch(inputValue);
   };
 
   // 適用済みフィルタを直接URLから操作（フィルタチップの×ボタン用）
@@ -315,56 +278,18 @@ export default function BrowsePage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder={
-                    useRegex
-                      ? t("browse.searchPlaceholderRegex")
-                      : t("browse.searchPlaceholder")
-                  }
+                  placeholder={t("browse.searchPlaceholder")}
                   aria-label="走者を検索"
                   value={inputValue}
-                  onChange={(e) => {
-                    setInputValue(e.target.value);
-                    if (searchError) setSearchError(null);
-                  }}
-                  aria-invalid={searchError != null}
-                  className={cn(
-                    "pl-10 pr-10",
-                    useRegex && "font-mono",
-                    searchError && "border-destructive focus-visible:ring-destructive",
-                  )}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  className="pl-10"
                 />
-                {/* 正規表現トグル（VSCode の検索のように検索欄内に配置） */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={toggleRegex}
-                      aria-pressed={useRegex}
-                      aria-label={t("browse.regexLabel")}
-                      className={cn(
-                        "absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        useRegex
-                          ? "bg-primary/15 text-primary ring-1 ring-primary/40"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <Regex className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("browse.regexLabel")}</TooltipContent>
-                </Tooltip>
               </div>
               <Button type="submit">
                 <Search className="mr-2 h-4 w-4" />
                 検索
               </Button>
             </div>
-            {searchError && (
-              <p className="mt-1.5 text-xs text-destructive" role="alert">
-                {searchError}
-              </p>
-            )}
           </Form>
           <div className="flex items-center gap-2 flex-wrap">
             {/* フィルタ */}
