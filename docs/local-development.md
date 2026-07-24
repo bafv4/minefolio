@@ -94,6 +94,13 @@ env を読み込むため、`--mode remote` を渡すと **`.env.remote` が `.e
   破壊的な操作に注意する
 - `NODE_ENV` は development のまま（Vite のモードと NODE_ENV は別物）
 
+### dev サーバーの依存プリバンドル（optimizeDeps.include）
+
+`vite.config.ts` の `optimizeDeps.include` に、クライアントが使う依存を明示列挙している。
+未列挙の依存を初訪問ルートで Vite が「発見」すると、再プリバンドル→**ページ強制リロード**が走り、
+クライアントサイド遷移中だと元のページに戻されてしまう（`optimized dependencies changed. reloading`）。
+dev サーバーのログに `new dependencies optimized: X` が出たら、その `X` を `include` に追加すること。
+
 ## 簡易ログイン（/dev/login）
 
 - **有効化条件（三重ゲート）**: `DEV_AUTH=1` **かつ** `NODE_ENV !== "production"`

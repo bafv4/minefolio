@@ -238,11 +238,19 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 // ============================================
 
 export async function loader({ request }: { request: Request }) {
-  // セキュリティ: Vercel Cron認証
+  // セキュリティ: Vercel Cron認証（fail closed）。
+  // CRON_SECRET が未設定の場合はチェックを飛ばさず拒否する。飛ばすと、
+  // 全公開ユーザーを走査してレート制限付き外部APIを叩き DB 書き込みを行う
+  // この重い処理を、匿名の攻撃者が自由に起動できてしまうため。
   const authHeader = request.headers.get("authorization");
   const expectedToken = process.env.CRON_SECRET;
 
-  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+  if (!expectedToken) {
+    console.error("CRON_SECRET is not configured; refusing cron request");
+    return new Response("Service Unavailable", { status: 503 });
+  }
+
+  if (authHeader !== `Bearer ${expectedToken}`) {
     console.warn("Unauthorized cron request attempt");
     return new Response("Unauthorized", { status: 401 });
   }

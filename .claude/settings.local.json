@@ -117,7 +117,11 @@
       "Bash(@)",
       "Bash(rg -in \"slug\\\\s*=|generateSlug|@\\\\$\\\\{|`@)",
       "Bash(slug:\" | head -30)",
-      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('total', d['totalCount']\\); nullmcid=[i for i in d['items'] if not i.get\\('mcid'\\)]; print\\('items_with_null_mcid_on_page', len\\(nullmcid\\)\\); print\\('sample_names', [\\(i.get\\('mcid'\\), i.get\\('displayName'\\), i.get\\('slug'\\)\\) for i in d['items'][:8]]\\)\")"
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('total', d['totalCount']\\); nullmcid=[i for i in d['items'] if not i.get\\('mcid'\\)]; print\\('items_with_null_mcid_on_page', len\\(nullmcid\\)\\); print\\('sample_names', [\\(i.get\\('mcid'\\), i.get\\('displayName'\\), i.get\\('slug'\\)\\) for i in d['items'][:8]]\\)\")",
+      "Bash(command -v python)",
+      "Bash(command -v python3)",
+      "Bash(command -v py)",
+      "Bash(python *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\yuanq\\dev\\minefolio\\.git"

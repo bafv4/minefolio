@@ -21,9 +21,12 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
 | `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
+| `/api/videos` | GET | 不要 | 動画一覧（/videos）のページング+検索 |
+| `/api/social-stats` | GET | 不要（privateは本人のみ） | プロフィールのYouTube/Twitch統計 |
 | `/api/keybindings-csv` | GET | 不要 | キー配置CSVエクスポート |
 | `/api/set-locale` | POST | 不要 | ロケール切替（Cookie） |
 | `/api/cron/youtube-update` | GET | CRON_SECRET | YouTube動画キャッシュ更新 |
+| `/api/cron/twitch-update` | GET | CRON_SECRET | Twitch VODキャッシュ更新 |
 | `/api/cron/update-paceman-cache` | GET | CRON_SECRET | PaceManキャッシュ更新 |
 | `/api/cron/update-rankings` | GET | CRON_SECRET | ランキングデータ更新 |
 
@@ -101,14 +104,15 @@ Minecraftスキン画像を返す。
 
 **種別一覧:**
 
-| type | 内容 | CDNキャッシュ | メモリキャッシュ |
+| type | 内容 | CDNキャッシュ (s-maxage / SWR) | メモリキャッシュ |
 |---|---|---|---|
-| `live-runs` | PaceManライブラン | 10秒 | 10秒 |
-| `recent-paces` | 最近のペース記録 | 60秒 | 5分 |
-| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 60秒 | 5分 |
-| `twitch-streams` | Twitchライブ配信 | 30秒 | 60秒 |
-| `youtube-videos` | YouTube動画 | 5分 | DB依存 |
-| `youtube-live` | YouTubeライブ（現在無効） | 60秒 | — |
+| `live-runs` | PaceManライブラン | 30秒 / 60秒 | 30秒 |
+| `recent-paces` | 最近のペース記録 | 5分 / 1日 | — |
+| `pace-timeline` | 特定ラン（`mcid`+`runId`必須）の全スプリット。過去のペースカードのタイムラインモーダル用 | 5分 / 1日 | 5分 |
+| `twitch-streams` | Twitchライブ配信 | 30秒 / 60秒 | 60秒 |
+| `youtube-videos` | YouTube動画 | 30分 / 1日 | DB依存 |
+| `twitch-vods` | Twitch配信アーカイブ（VOD） | 15分 / 1日（空は60秒） | DB依存（cronが30分毎に更新） |
+| `youtube-live` | YouTubeライブ（現在無効） | 60秒 / 2分 | — |
 
 **レスポンス例（live-runs）:**
 ```json
@@ -119,10 +123,67 @@ Minecraftスキン画像を返す。
 }
 ```
 
-- お気に入り（Cookie）によるソートを適用
+- レスポンスはユーザー非依存（新しい順）。お気に入りを先頭に出す並べ替えはクライアント側で適用
 - 環境変数未設定のサービスはスキップ
+- `youtube-videos` / `twitch-vods` はどちらもキャッシュテーブル（cron蓄積: YouTube 2時間毎 /
+  Twitch 30分毎）からの読み出しで、可視性ゲート（公開プロフィールのみ・viewer除外）と
+  ユーザー紐付けを `/api/videos` と共通の `getPublicVideoFeed` に委譲し、
+  **統一形式 `FeedVideo`**（platform / videoId / title / thumbnailUrl / durationSeconds /
+  紐付けユーザー情報）で新しい順に最大10件返す
 
 **関連ファイル:** `app/routes/api/home-feed.ts`
+
+---
+
+### `GET /api/videos`
+
+動画一覧ページ（`/videos`）の遅延ロード・無限スクロール用API。
+`youtube_video_cache` と `twitch_vod_cache` を統一形式 `FeedVideo` にマージして返す（保持期間90日）。
+
+**パラメータ:**
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `page` | number | △ | 1始まりのページ番号（デフォルト: 1、24件/ページ） |
+| `q` | string | △ | プレイヤー検索（MCID・表示名・slug・チャンネル名の部分一致） |
+| `platform` | string | △ | `youtube` / `twitch` |
+| `from` / `to` | string | △ | 時期（YYYY-MM-DD、JST解釈） |
+
+**レスポンス:** `{ "items": FeedVideo[], "page": number, "total": number, "hasMore": boolean }`（`use-infinite-scroll` フックの規約）
+
+- 可視性: 公開プロフィール（viewer除外）に紐付く動画・VODのみ（/paces と同じ「公開のみ」ルール）
+- レスポンスはユーザー非依存。「自分の動画を隠す」設定はクライアント側で適用
+- CDNキャッシュ: `s-maxage=300, stale-while-revalidate=3600`
+
+**関連ファイル:** `app/routes/api/videos.ts`, `app/lib/videos-feed.server.ts`
+
+---
+
+### `GET /api/social-stats`
+
+プロフィールページ「リンク」カード用に、対象ユーザーの YouTube / Twitch チャンネル統計を返す。
+APIキーがサーバー専用のため、クライアントから任意 identifier を受けるオープンプロキシにはせず、
+slug 経由でDB保存済みのソーシャルリンクに対してのみ統計を返す。
+
+**パラメータ:**
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `slug` | string | ○ | 対象ユーザーのslug（大文字小文字は無視） |
+
+**レスポンス:**
+```json
+{
+  "youtube": { "subscriberCount": 12000, "latestVideoAt": "ISO8601 | null" },
+  "twitch": { "followerCount": 3400, "isLive": false, "lastStreamAt": "ISO8601 | null" }
+}
+```
+
+- リンク未登録・APIキー未設定・取得失敗のプラットフォームは `null`
+- YouTubeの `subscriberCount` は登録者数非公開チャンネルで `null`。`latestVideoAt` は uploads プレイリスト先頭（配信アーカイブ含む）
+- Twitchの `lastStreamAt` は配信中なら開始日時、それ以外は最新アーカイブの `created_at`（VOD無効なら `null`）
+- **可視性ゲート**: `private` プロフィールは本人のみ 200（`Cache-Control: private, no-store`）、他人は 404
+- **キャッシュ**: DBキャッシュ（`api_cache` / `cacheType: "social_stats"`）YouTube 6時間（失敗時15分）・Twitch 5分。CDN `s-maxage=300, stale-while-revalidate=3600`
+
+**関連ファイル:** `app/routes/api/social-stats.ts`, `app/lib/youtube.ts`（`getChannelStats`）, `app/lib/twitch.ts`（`getChannelStats`）
 
 ---
 
@@ -266,6 +327,7 @@ Vercel Blobへのクライアントアップロード用トークンを発行す
 - 形式: PNG のみ
 - サイズ: 最大1MB
 - パス: `skins/{userId}/` 配下のみ許可
+- `addRandomSuffix: true` で毎回一意なblobパスに保存（固定パスへの再アップロードが「既に存在する」で失敗するのを防ぐ。旧blobは `POST /api/me/skin` が削除）
 
 **関連ファイル:** `app/routes/api/me/skin/upload-token.ts`
 
@@ -335,6 +397,42 @@ YouTube動画・ライブ配信のキャッシュを更新する。
 ```
 
 **関連ファイル:** `app/routes/api/cron/youtube-update.ts`
+
+- `update` は保持期間（90日）を超えた動画キャッシュ行の削除も行う
+
+---
+
+### `GET /api/cron/twitch-update`
+
+Twitch配信アーカイブ（VOD）のキャッシュを更新する。
+
+**パラメータ:**
+| 名前 | 型 | 説明 |
+|---|---|---|
+| `action` | string | `update`（デフォルト）/ `verify` |
+
+**アクション:**
+
+| action | 実行内容 | 推奨間隔 |
+|---|---|---|
+| `update` | 公開プロフィールのTwitchリンクを対象に新着VOD取得・upsert + 保持期間（90日）超過分の削除 | 30分 |
+| `verify` | キャッシュ済みVODの存在確認（最大100件/回。Twitch VODは配信者設定により14〜60日で自動削除されるため）| 8時間 |
+
+**必須環境変数:** `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`
+
+**レスポンス例:**
+```json
+{
+  "success": true,
+  "action": "update",
+  "channels": 12,
+  "added": 3,
+  "updated": 1,
+  "cleaned": 0
+}
+```
+
+**関連ファイル:** `app/routes/api/cron/twitch-update.ts`, `app/lib/twitch-vod-cache.ts`
 
 ---
 

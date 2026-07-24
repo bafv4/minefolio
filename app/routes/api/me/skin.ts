@@ -3,6 +3,7 @@ import { del } from "@vercel/blob";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { isVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
@@ -94,8 +95,10 @@ export async function action({ request }: ActionFunctionArgs) {
         });
       }
 
-      // URLがVercel Blobのものか確認
-      if (!url.includes("blob.vercel-storage.com")) {
+      // URLがVercel Blobのものか確認。
+      // 部分文字列一致（includes）はフラグメント等ですり抜けられるため、
+      // new URL() でパースしてホスト名を許可リスト判定する（SSRF 対策）。
+      if (!isVercelBlobUrl(url)) {
         return new Response(JSON.stringify({ error: "Invalid blob URL" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },

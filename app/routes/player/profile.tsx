@@ -1,5 +1,5 @@
-import { useLoaderData, Link, useParams, useSearchParams, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -22,10 +22,10 @@ import {
   type MCSRRankedMatch,
 } from "@/lib/external-stats";
 import {
-  MinecraftItemIcon,
   formatItemName,
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
@@ -41,7 +41,10 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
+import { safeExternalHref } from "@/lib/safe-url";
 import { YouTubeEmbed } from "@/components/youtube-embed";
+import type { YouTubeChannelStats } from "@/lib/youtube";
+import type { TwitchChannelStats } from "@/lib/twitch";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -143,8 +146,6 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
-import Markdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -206,6 +207,19 @@ import {
   calculateCursorSpeed,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+
+// bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
+// チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
+// 落とさず、bio 原文のプレーンテキスト表示にフォールバックする（whats-new.tsx と同じパターン）
+const BioMarkdown = lazy(() =>
+  import("@/components/profile/bio-markdown")
+    .then((mod) => ({ default: mod.BioMarkdown }))
+    .catch(() => ({
+      default: ({ bio }: { bio: string }) => (
+        <p className="whitespace-pre-wrap text-sm text-muted-foreground">{bio}</p>
+      ),
+    })),
+);
 
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
@@ -289,7 +303,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得（メインを先頭に）
+  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
+  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, player.id),
     orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
@@ -299,14 +314,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       description: true,
       isActive: true,
       isMain: true,
-      keybindingsData: true,
-      playerConfigData: true,
-      remapsData: true,
-      fingerAssignmentsData: true,
-      itemLayoutsData: true,
-      searchCraftsData: true,
-      customKeysData: true,
-      customActionsData: true,
+    },
+    extras: {
+      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
+      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
     },
   });
 
@@ -332,10 +343,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
+  // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
   if (selectedPreset && !selectedPreset.isActive) {
-    const decoded = decodePresetConfig(selectedPreset, player.id);
+    const presetSnapshot = await db.query.configPresets.findFirst({
+      where: eq(configPresets.id, selectedPreset.id),
+      columns: {
+        keybindingsData: true,
+        playerConfigData: true,
+        remapsData: true,
+        fingerAssignmentsData: true,
+        itemLayoutsData: true,
+        searchCraftsData: true,
+        customKeysData: true,
+        customActionsData: true,
+      },
+    });
+    const decoded = decodePresetConfig(presetSnapshot ?? {}, player.id);
     displayKeybindings = decoded.keybindings;
     displayKeyRemaps = decoded.keyRemaps;
     displayItemLayouts = decoded.itemLayouts;
@@ -354,13 +379,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Check if current user is viewing their own profile
-  let isOwner = false;
-  if (session) {
-    const currentUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-    });
-    isOwner = currentUser?.id === player.id;
-  }
+  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
+  const isOwner = session?.user?.id === player.discordId;
 
   // プレイヤーの公開ガイドを取得
   const playerGuides = await db.query.guides.findMany({
@@ -424,8 +444,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       description: p.description,
       isActive: p.isActive,
       isMain: p.isMain,
-      hasItemLayouts: !!p.itemLayoutsData,
-      hasSearchCrafts: !!p.searchCraftsData,
+      hasItemLayouts: !!p.hasItemLayouts,
+      hasSearchCrafts: !!p.hasSearchCrafts,
     })),
     selectedPresetId: selectedPreset?.id ?? null,
     playerGuides,
@@ -436,10 +456,17 @@ export default function PlayerProfilePage() {
   const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
+  const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
 
-  // プリセット切替中のローディング状態（`?preset=` 変更によるナビゲーション中）
-  const isSwitchingPreset = navigation.state === "loading";
+  // プリセット切替中のローディング状態（`?preset=` の実変更によるナビゲーション中のみ。
+  // タブ切替や他ページへの遷移では出さない）
+  const isSwitchingPreset =
+    navigation.state === "loading" &&
+    navigation.location != null &&
+    navigation.location.pathname === location.pathname &&
+    new URLSearchParams(navigation.location.search).get("preset") !==
+      searchParams.get("preset");
 
   // プリセット選択ハンドラー。メイン（公開用）プリセット選択時は `?preset=` を外して
   // 既定表示に戻す。loader の再実行は setSearchParams による
@@ -532,14 +559,14 @@ export default function PlayerProfilePage() {
   ];
 
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
-  const userFingerAssignments = (() => {
+  const userFingerAssignments = useMemo(() => {
     if (!player.playerConfig?.fingerAssignments) return {};
     try {
       return JSON.parse(player.playerConfig.fingerAssignments);
     } catch {
       return {};
     }
-  })();
+  }, [player.playerConfig?.fingerAssignments]);
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
   // （all/unset のみなら両文脈で表示が同一のため "trigger" 固定でよい）
@@ -557,6 +584,32 @@ export default function PlayerProfilePage() {
   const remapsForKeyboard = useMemo(
     () => toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
     [player.keyRemaps, remapView],
+  );
+
+  // キーバインドの action → keyCode マップ（VirtualKeyboard/Numpad/Mouse 共通）
+  const keybindingsMap = useMemo(
+    () => keybindingsToMap(player.keybindings),
+    [player.keybindings],
+  );
+
+  // キーボードカテゴリのカスタムキー（VirtualKeyboard・エクスポートダイアログ共通）
+  const customKeyboardKeys = useMemo(
+    () =>
+      player.customKeys
+        .filter((ck) => ck.category === "keyboard")
+        .map((ck) => ({ code: ck.keyCode, label: ck.keyName })),
+    [player.customKeys],
+  );
+
+  // 全カスタムボタン（VirtualMouse・エクスポートダイアログ共通。カテゴリで絞り込みはコンポーネント側）
+  const customButtons = useMemo(
+    () =>
+      player.customKeys.map((ck) => ({
+        code: ck.keyCode,
+        label: ck.keyName,
+        category: ck.category as "mouse" | "keyboard",
+      })),
+    [player.customKeys],
   );
 
   // 動画欄: profileVideos があればそれを、無ければ旧 featuredVideoUrl を1件として表示（後方互換）
@@ -696,7 +749,8 @@ export default function PlayerProfilePage() {
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-56 shrink-0">
-        <div className="sticky top-20 space-y-4">
+        {/* 初期位置と一致させ、スクロール時にサイドバーが滑らないようにする（ヘッダー65px+メイン上余白32px≈96px） */}
+        <div className="sticky top-24 space-y-4">
           <TabsList className="m-0 w-full flex-col items-stretch gap-1 overflow-visible bg-transparent p-0">
             {/* Profile Tab with Avatar */}
             <TabsTrigger
@@ -746,7 +800,7 @@ export default function PlayerProfilePage() {
 
           {/* Preset Selector in Sidebar */}
           {showPresetSelector && (
-            <div className="p-3 border rounded-lg space-y-2">
+            <div className="p-3 border rounded-lg space-y-2 bg-card">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Save className="h-3 w-3" />
                 <span>{t("playerProfile.preset")}</span>
@@ -795,7 +849,7 @@ export default function PlayerProfilePage() {
 
         {/* Mobile Preset Selector */}
         {showPresetSelector && (
-          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg">
+          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg bg-card">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Save className="h-4 w-4" />
               <span>{t("playerProfile.presetWithColon")}</span>
@@ -820,10 +874,10 @@ export default function PlayerProfilePage() {
         )}
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="rounded-xl border space-y-4">
+        <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
-          <Card>
-            <CardContent className="pt-4 pb-4">
+          <Card className="py-4">
+            <CardContent className="px-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (() => {
@@ -966,52 +1020,41 @@ export default function PlayerProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Social Links */}
+          {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 pb-4">
-                <div className="flex flex-wrap gap-2">
-                  {player.socialLinks.map((link) => (
-                    <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
-                      <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
-                        <SocialIcon platform={link.platform} />
-                        <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
-                        <span className="text-muted-foreground">{link.identifier}</span>
-                      </a>
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <SocialLinksCard links={player.socialLinks} slug={player.slug} />
           )}
 
           {/* Bio */}
           {player.bio && (
-            <Card>
-              <CardHeader className="py-3">
+            <Card className="gap-2 py-4">
+              <CardHeader className="px-4">
                 <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 pb-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
-                  <Markdown rehypePlugins={[rehypeSanitize]}>{player.bio}</Markdown>
-                </div>
+              <CardContent className="px-4">
+                <Suspense
+                  fallback={
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {player.bio}
+                    </p>
+                  }
+                >
+                  <BioMarkdown bio={player.bio} />
+                </Suspense>
               </CardContent>
             </Card>
           )}
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <Card>
-              <CardHeader className="py-3">
+            <Card className="gap-2 py-4">
+              <CardHeader className="px-4">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Video className="h-4 w-4" />
                   {t("playerProfile.videos")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 pb-4 space-y-4">
+              <CardContent className="px-4 space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
                   <VideoEmbed video={displayVideos[0]} size="large" />
@@ -1037,7 +1080,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="rounded-xl border space-y-4">
+        <TabsContent value="keybindings" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
@@ -1058,14 +1101,8 @@ export default function PlayerProfilePage() {
                         remaps={player.keyRemaps}
                         hasTypedRemaps={hasTypedRemaps}
                         initialRemapContext={remapView}
-                        customKeys={player.customKeys
-                          .filter((ck) => ck.category === "keyboard")
-                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
-                        customButtons={player.customKeys.map((ck) => ({
-                          code: ck.keyCode,
-                          label: ck.keyName,
-                          category: ck.category as "mouse" | "keyboard",
-                        }))}
+                        customKeys={customKeyboardKeys}
+                        customButtons={customButtons}
                         isTKL={isTKL}
                         player={{
                           uuid: player.uuid,
@@ -1084,13 +1121,11 @@ export default function PlayerProfilePage() {
                     <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                       <VirtualKeyboard
                         layout={keyboardLayout}
-                        keybindings={keybindingsToMap(player.keybindings)}
+                        keybindings={keybindingsMap}
                         fingerAssignments={userFingerAssignments}
                         remaps={remapsForKeyboard}
                         customActions={player.customActions}
-                        customKeys={player.customKeys
-                          .filter((ck) => ck.category === "keyboard")
-                          .map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                        customKeys={customKeyboardKeys}
                         showActionLabels
                         showFingerAssignments
                         showRemaps
@@ -1102,7 +1137,7 @@ export default function PlayerProfilePage() {
                       <div className="flex items-start gap-6">
                         {!isTKL && (
                           <VirtualNumpad
-                            keybindings={keybindingsToMap(player.keybindings)}
+                            keybindings={keybindingsMap}
                             fingerAssignments={userFingerAssignments}
                             remaps={remapsForKeyboard}
                             customActions={player.customActions}
@@ -1112,15 +1147,11 @@ export default function PlayerProfilePage() {
                           />
                         )}
                         <VirtualMouse
-                          keybindings={keybindingsToMap(player.keybindings)}
+                          keybindings={keybindingsMap}
                           fingerAssignments={userFingerAssignments}
                           remaps={remapsForKeyboard}
                           customActions={player.customActions}
-                          customButtons={player.customKeys.map((ck) => ({
-                            code: ck.keyCode,
-                            label: ck.keyName,
-                            category: ck.category as "mouse" | "keyboard",
-                          }))}
+                          customButtons={customButtons}
                           showActionLabels
                           showFingerAssignments
                           showRemaps
@@ -1272,7 +1303,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="rounded-xl border space-y-4">
+        <TabsContent value="stats" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1282,7 +1313,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="rounded-xl border space-y-4">
+        <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.itemLayouts.length > 0 ? (
             <div className="space-y-4">
               {player.itemLayouts.map((layout) => (
@@ -1299,7 +1330,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="rounded-xl border space-y-4">
+        <TabsContent value="searchcraft" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1342,7 +1373,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="rounded-xl border space-y-4">
+        <TabsContent value="devices" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.playerConfig ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1553,7 +1584,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="rounded-xl border space-y-4">
+        <TabsContent value="guides" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">
@@ -1704,7 +1735,6 @@ function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
 }
 
 // mcitemsのテクスチャベースURL
-const TEXTURE_BASE_URL = "/mcitems";
 
 // アイテム名を日本語で取得するヘルパー
 function getItemDisplayName(itemId: string): string {
@@ -1766,12 +1796,7 @@ function ItemLayoutCard({
                       <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
                         {items.length > 0 ? (
                           <>
-                            <MinecraftItemIcon
-                              itemId={items[0]}
-                              size={36}
-                              textureBaseUrl={TEXTURE_BASE_URL}
-                              className="pixelated"
-                            />
+                            <ItemIcon itemId={items[0]} size={36} />
                             {items.length > 1 && (
                               <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
                                 {items.length}
@@ -1797,12 +1822,7 @@ function ItemLayoutCard({
                 <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
                   {offhand.length > 0 ? (
                     <>
-                      <MinecraftItemIcon
-                        itemId={offhand[0]}
-                        size={36}
-                        textureBaseUrl={TEXTURE_BASE_URL}
-                        className="pixelated"
-                      />
+                      <ItemIcon itemId={offhand[0]} size={36} />
                       {offhand.length > 1 && (
                         <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
                           {offhand.length}
@@ -1832,12 +1852,7 @@ function ItemLayoutCard({
                 {items.map((item, idx) => (
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <MinecraftItemIcon
-                      itemId={item}
-                      size={16}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={item} size={16} />
                     <span className="text-xs">{getItemDisplayName(item)}</span>
                   </span>
                 ))}
@@ -1852,12 +1867,7 @@ function ItemLayoutCard({
                 {offhand.map((item, idx) => (
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <MinecraftItemIcon
-                      itemId={item}
-                      size={16}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={item} size={16} />
                     <span className="text-xs">{getItemDisplayName(item)}</span>
                   </span>
                 ))}
@@ -1876,6 +1886,19 @@ function ItemLayoutCard({
 }
 
 // KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
+
+// pbVideoUrl は http/https のみをリンク化する。過去に保存された javascript: 等の危険な
+// スキームを href として DOM に到達させないためのレンダー時ガード（書き込み側の検証は
+// routes/me/records.tsx にもある）。F6 所有の app/lib/safe-url.ts には依存しない局所実装。
+function isHttpVideoUrl(value: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === "http:" || parsed.protocol === "https:";
+}
 
 function RecordCard({
   record,
@@ -1927,7 +1950,7 @@ function RecordCard({
             )}
           </div>
         )}
-        {record.pbVideoUrl && (
+        {record.pbVideoUrl && isHttpVideoUrl(record.pbVideoUrl) && (
           <Button variant="outline" size="sm" asChild className="w-full mt-2">
             <a
               href={record.pbVideoUrl}
@@ -1974,7 +1997,9 @@ function getSocialUrl(platform: string, identifier: string, customUrl?: string |
     case "twitter":
       return `https://x.com/${identifier}`;
     case "custom":
-      return customUrl || "#";
+      // http/https 以外（javascript: 等）は href に流さず "#" に落とす。
+      // 過去に保存された不正スキームの行もここで無害化される。
+      return safeExternalHref(customUrl) ?? "#";
     default:
       return "#";
   }
@@ -1995,6 +2020,169 @@ function getSocialPlatformName(platform: string, customLabel?: string | null): s
     default:
       return platform;
   }
+}
+
+// ソーシャルリンクカードで扱うリンク行（loader の socialLinks から使用する列のみ）
+type ProfileSocialLink = {
+  id: string;
+  platform: string;
+  identifier: string;
+  customLabel: string | null;
+  customUrl: string | null;
+};
+
+// /api/social-stats のレスポンス形状
+type SocialStatsData = {
+  youtube: YouTubeChannelStats | null;
+  twitch: TwitchChannelStats | null;
+};
+
+// 1万以上は「1.2万」等のコンパクト表記、それ未満は桁区切り（例: 2,170）
+function formatCompactCount(count: number): string {
+  if (count < 10000) return count.toLocaleString("ja-JP");
+  return new Intl.NumberFormat("ja-JP", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(count);
+}
+
+// ソーシャルリンクカード: YouTube/Twitch は統計（登録者数・最終活動日時）付きの
+// リッチカード、その他のプラットフォームは従来のボタン表示。
+// 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
+function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
+  const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
+  const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
+  const [stats, setStats] = useState<SocialStatsData | null>(null);
+
+  const hasRichLinks = richLinks.length > 0;
+  useEffect(() => {
+    if (!hasRichLinks) return;
+    let cancelled = false;
+    fetch(`/api/social-stats?slug=${encodeURIComponent(slug)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<SocialStatsData>) : null))
+      .then((data) => {
+        if (!cancelled && data) setStats(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch social stats:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, hasRichLinks]);
+
+  return (
+    <Card className="gap-2 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 space-y-2">
+        {hasRichLinks && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {richLinks.map((link) => (
+              <SocialLinkRichCard
+                key={link.id}
+                link={link}
+                stats={
+                  link.platform === "youtube"
+                    ? (stats?.youtube ?? null)
+                    : (stats?.twitch ?? null)
+                }
+              />
+            ))}
+          </div>
+        )}
+        {plainLinks.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {plainLinks.map((link) => (
+              <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
+                <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
+                  <SocialIcon platform={link.platform} />
+                  <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
+                  <span className="text-muted-foreground">{link.identifier}</span>
+                </a>
+              </Button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// YouTube/Twitch のリッチカード。統計未取得（ロード中・失敗・APIキー未設定）の間は
+// リンク行のみを表示し、取得後に統計行と配信中バッジを出す
+function SocialLinkRichCard({
+  link,
+  stats,
+}: {
+  link: ProfileSocialLink;
+  stats: YouTubeChannelStats | TwitchChannelStats | null;
+}) {
+  const statParts: string[] = [];
+  let isLive = false;
+
+  if (stats) {
+    if (link.platform === "youtube") {
+      const yt = stats as YouTubeChannelStats;
+      if (yt.subscriberCount != null) {
+        statParts.push(
+          t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount) }),
+        );
+      }
+      if (yt.latestVideoAt) {
+        statParts.push(
+          t("playerProfile.latestVideoAgo", {
+            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: ja }),
+          }),
+        );
+      }
+    } else {
+      const tw = stats as TwitchChannelStats;
+      isLive = tw.isLive;
+      if (tw.followerCount != null) {
+        statParts.push(
+          t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount) }),
+        );
+      }
+      if (!tw.isLive && tw.lastStreamAt) {
+        statParts.push(
+          t("playerProfile.lastStreamAgo", {
+            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: ja }),
+          }),
+        );
+      }
+    }
+  }
+
+  return (
+    <a
+      href={getSocialUrl(link.platform, link.identifier, link.customUrl)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-lg border bg-secondary/30 px-3.5 py-2.5 transition-colors hover:bg-secondary/60"
+    >
+      <SocialIcon platform={link.platform} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm font-medium">
+            {getSocialPlatformName(link.platform, link.customLabel)}
+          </span>
+          <span className="truncate text-sm text-muted-foreground">{link.identifier}</span>
+          {isLive && (
+            <Badge className="shrink-0 gap-1 border-transparent bg-red-600 px-1.5 text-white">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              {t("playerProfile.liveNow")}
+            </Badge>
+          )}
+        </div>
+        {statParts.length > 0 && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{statParts.join(" · ")}</p>
+        )}
+      </div>
+      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </a>
+  );
 }
 
 function DeviceRow({ label, value, unit }: { label: string; value: string; unit?: string }) {
@@ -2038,8 +2226,8 @@ function EmptyState({
   description: string;
 }) {
   return (
-    <div className="text-center py-12 text-muted-foreground">
-      <div className="mx-auto mb-4 opacity-50">{icon}</div>
+    <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
+      <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <p className="text-lg font-medium">{title}</p>
       <p className="text-sm">{description}</p>
     </div>
@@ -2221,7 +2409,7 @@ function StatsServiceLoadingCard({
 
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent>
         <div className="flex items-center gap-4">
           {isLoading ? (
             <LoadingProgressRing />

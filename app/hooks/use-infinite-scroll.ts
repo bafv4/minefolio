@@ -15,6 +15,12 @@ interface UseInfiniteScrollOptions<T> {
   endpoint: string;
   /** フィルタ/検索などの変化を検知し、変わったらリスト再構築する依存配列 */
   resetDeps: ReadonlyArray<unknown>;
+  /**
+   * fetcher リクエストにのみ付与する追加パラメータ（例: CDN キャッシュキーの
+   * URL空間分離用に `{ auth: "1" }` を渡す）。ドキュメント側の searchParams
+   * には反映されない＝アドレスバー・共有リンクには乗らない。
+   */
+  extraParams?: Record<string, string>;
 }
 
 interface FetchResponse<T> {
@@ -37,6 +43,7 @@ export function useInfiniteScroll<T>({
   initialHasMore,
   endpoint,
   resetDeps,
+  extraParams,
 }: UseInfiniteScrollOptions<T>) {
   const [items, setItems] = useState<T[]>(initialItems);
   const [page, setPage] = useState(initialPage);
@@ -47,6 +54,9 @@ export function useInfiniteScroll<T>({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   // 進行中の追加ロードが、どの検索条件で開始されたかを記録（陳腐化判定用）
   const loadedSigRef = useRef<string | null>(null);
+  // extraParams はオブジェクトの参照が呼び出しごとに変わりうるため、
+  // useCallback の依存には安定な文字列キーを使う（stale closure を避ける）
+  const extraParamsKey = useMemo(() => JSON.stringify(extraParams ?? {}), [extraParams]);
 
   // 検索/フィルタ/ソートが変わったらリセット
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,10 +97,14 @@ export function useInfiniteScroll<T>({
     const nextPage = page + 1;
     const params = new URLSearchParams(searchParams);
     params.set("page", String(nextPage));
+    for (const [key, value] of Object.entries(extraParams ?? {})) {
+      params.set(key, value);
+    }
     // この追加ロードが開始された時点の検索条件を記録
     loadedSigRef.current = paramsSignature(searchParams);
     fetcher.load(`${endpoint}?${params.toString()}`);
-  }, [hasMore, fetcher, page, searchParams, endpoint]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, fetcher, page, searchParams, endpoint, extraParamsKey]);
 
   // IntersectionObserver: センチネルが可視化したら loadMore
   useEffect(() => {

@@ -14,6 +14,9 @@ import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
 import { t } from "@/lib/messages";
 
+// 公開ガイド本文の最大文字数（多層防御。下書きには適用しない）
+const MAX_PUBLISHED_CONTENT_LENGTH = 500_000;
+
 export function meta({ loaderData }: { loaderData: { guide: { title: string } } | undefined }) {
   if (!loaderData?.guide) return [{ title: t("meGuides.editTitle") }];
   return [{ title: `${loaderData.guide.title} - 編集 | Minefolio` }];
@@ -173,6 +176,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const tags = JSON.stringify(validatedTags);
+
+  // 公開時のみ本文の長さ上限を適用する（下書きは work 温存のため無制限）。
+  if (saveMode !== "draft" && content.length > MAX_PUBLISHED_CONTENT_LENGTH) {
+    return { error: t("meGuides.errorContentTooLong") };
+  }
 
   if (saveMode === "draft") {
     // 仮保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。

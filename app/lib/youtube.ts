@@ -203,6 +203,85 @@ export async function resolveChannelId(
   return resolveChannelHandle(apiKey, identifier);
 }
 
+export interface YouTubeChannelStats {
+  /** 登録者数（非公開設定のチャンネルは null） */
+  subscriberCount: number | null;
+  /** 最新動画（配信アーカイブ含む）の投稿日時（ISO 8601）。動画が無い場合は null */
+  latestVideoAt: string | null;
+}
+
+/**
+ * チャンネルの統計情報（登録者数・最新動画日時）を取得
+ * クォータ: channels 1 unit + playlistItems 1 unit
+ * @param apiKey YouTube API Key
+ * @param identifier チャンネルID（UC...）またはハンドル
+ */
+export async function getChannelStats(
+  apiKey: string,
+  identifier: string
+): Promise<YouTubeChannelStats | null> {
+  try {
+    const channelId = await resolveChannelId(apiKey, identifier);
+    if (!channelId) return null;
+
+    const params = new URLSearchParams({
+      key: apiKey,
+      id: channelId,
+      part: "statistics,contentDetails",
+    });
+    const res = await fetch(`${YOUTUBE_API}/channels?${params}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.error("YouTube channels API failed:", res.status);
+      return null;
+    }
+
+    const data = (await res.json()) as {
+      items?: Array<{
+        statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean };
+        contentDetails?: { relatedPlaylists?: { uploads?: string } };
+      }>;
+    };
+    const channel = data.items?.[0];
+    if (!channel) return null;
+
+    const subscriberCount =
+      channel.statistics && !channel.statistics.hiddenSubscriberCount
+        ? Number(channel.statistics.subscriberCount ?? NaN)
+        : NaN;
+
+    // 最新動画の投稿日時: uploads プレイリストの先頭1件（配信アーカイブも含まれる）
+    let latestVideoAt: string | null = null;
+    const uploadsPlaylistId = channel.contentDetails?.relatedPlaylists?.uploads;
+    if (uploadsPlaylistId) {
+      const plParams = new URLSearchParams({
+        key: apiKey,
+        playlistId: uploadsPlaylistId,
+        part: "snippet",
+        maxResults: "1",
+      });
+      const plRes = await fetch(`${YOUTUBE_API}/playlistItems?${plParams}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (plRes.ok) {
+        const plData = (await plRes.json()) as {
+          items?: Array<{ snippet?: { publishedAt?: string } }>;
+        };
+        latestVideoAt = plData.items?.[0]?.snippet?.publishedAt ?? null;
+      }
+    }
+
+    return {
+      subscriberCount: Number.isFinite(subscriberCount) ? subscriberCount : null,
+      latestVideoAt,
+    };
+  } catch (error) {
+    console.error("YouTube channel stats error:", error);
+    return null;
+  }
+}
+
 /**
  * 動画URLを生成
  */

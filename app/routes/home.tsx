@@ -8,8 +8,8 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { getUserData } from "@/lib/home-user-data.server";
 import { type CachedPace } from "@/components/recent-pace-card";
-import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
@@ -17,8 +17,10 @@ import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { FeedVideoCard } from "@/components/feed-video-card";
+import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video";
+import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { t } from "@/lib/messages";
@@ -30,7 +32,6 @@ import {
   History,
   Sparkles,
   Users,
-  Youtube,
   BookOpen,
   Shuffle,
   Timer,
@@ -73,7 +74,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // セッションをチェックしてユーザーが登録済みか確認
   const session = await getOptionalSession(request, auth);
   let isRegistered = false;
-  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showYoutubeOnHome: boolean } | null = null;
+  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showYoutubeOnHome: boolean; showTwitchOnHome: boolean } | null = null;
   if (session) {
     const existingUser = await db.query.users.findFirst({
       where: eq(users.discordId, session.user.id),
@@ -82,6 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         mcid: true,
         showPacemanOnHome: true,
         showYoutubeOnHome: true,
+        showTwitchOnHome: true,
       },
     });
     if (existingUser) {
@@ -90,33 +92,15 @@ export async function loader({ request }: Route.LoaderArgs) {
         mcid: existingUser.mcid,
         showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
         showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+        showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
       };
     }
   }
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
-  const allUserMcids = await db.query.users.findMany({
-    where: excludeViewersCondition,
-    columns: { mcid: true, uuid: true, slug: true, displayName: true, customSkinUrl: true },
-  });
-  const usersWithMcid = allUserMcids.filter(
-    (u): u is typeof u & { mcid: string } => u.mcid !== null
-  );
-  const registeredMcids = usersWithMcid.map((u) => u.mcid.toLowerCase());
-  const mcidToUuid = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.uuid])
-  );
-  const mcidToSlug = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.slug])
-  );
-  const mcidToDisplayName = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid.toLowerCase(), u.displayName || u.mcid])
-  );
-  const mcidToSkinUrl = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.customSkinUrl !== null)
-      .map((u) => [u.mcid.toLowerCase(), u.customSkinUrl!])
-  );
+  // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
+  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToSkinUrl } =
+    await getUserData();
 
   // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
   const recentlyUpdatedUsers = await db.query.users.findMany({
@@ -159,30 +143,23 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
-    .where(eq(guides.isPublished, true))
+    // 非公開・限定公開の著者のガイドはホームの新着一覧（discovery）に出さない
+    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
     .orderBy(desc(guides.updatedAt))
     .limit(4);
 
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const totalPublicProfilesResult = await db
-    .select({ count: sql<number>`count(*)` })
+  const [profileCounts] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
+    })
     .from(users)
     .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition));
-  const totalPublicProfiles = totalPublicProfilesResult[0]?.count ?? 0;
-
-  const activePublicProfilesResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(
-      and(
-        eq(users.profileVisibility, "public"),
-        gte(users.updatedAt, oneWeekAgo),
-        excludeViewersCondition,
-      )
-    );
-  const activePublicProfiles = activePublicProfilesResult[0]?.count ?? 0;
+  const totalPublicProfiles = profileCounts?.total ?? 0;
+  const activePublicProfiles = profileCounts?.active ?? 0;
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
@@ -200,9 +177,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// APIレスポンスの型定義
+// APIレスポンスの型定義（動画系はどちらも FeedVideo 形式で返る）
 interface YouTubeVideosResponse {
-  recentVideos: CachedYouTubeVideo[];
+  recentVideos: FeedVideo[];
+}
+
+interface TwitchVodsResponse {
+  recentVods: FeedVideo[];
 }
 
 interface RecentPacesResponse {
@@ -219,7 +200,8 @@ interface LiveRunsResponse {
 
 // Feed状態管理用のReducer
 interface FeedState {
-  recentVideos: CachedYouTubeVideo[];
+  recentVideos: FeedVideo[];
+  twitchVods: FeedVideo[];
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
@@ -227,24 +209,28 @@ interface FeedState {
   mcidToSkinUrl: Record<string, string>;
   loading: {
     videos: boolean;
+    twitchVods: boolean;
     paces: boolean;
     liveRuns: boolean;
   };
   errors: {
     videos: boolean;
+    twitchVods: boolean;
     paces: boolean;
     liveRuns: boolean;
   };
 }
 
 type FeedAction =
-  | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
+  | { type: "SET_VIDEOS"; payload: FeedVideo[] }
+  | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
   | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
   | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
 
 const initialFeedState: FeedState = {
   recentVideos: [],
+  twitchVods: [],
   recentPaces: [],
   liveRuns: [],
   mcidToUuid: {},
@@ -252,11 +238,13 @@ const initialFeedState: FeedState = {
   mcidToSkinUrl: {},
   loading: {
     videos: true,
+    twitchVods: true,
     paces: true,
     liveRuns: true,
   },
   errors: {
     videos: false,
+    twitchVods: false,
     paces: false,
     liveRuns: false,
   },
@@ -269,6 +257,12 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         ...state,
         recentVideos: action.payload,
         loading: { ...state.loading, videos: false },
+      };
+    case "SET_TWITCH_VODS":
+      return {
+        ...state,
+        twitchVods: action.payload,
+        loading: { ...state.loading, twitchVods: false },
       };
     case "SET_PACES":
       return {
@@ -305,64 +299,8 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
   }
 }
 
-function formatVideoTime(date: Date): string {
-  const now = Date.now();
-  const hoursAgo = Math.floor((now - new Date(date).getTime()) / (1000 * 60 * 60));
-
-  if (hoursAgo < 1) return t("home.justWithinHour");
-  if (hoursAgo < 24) return t("playerStats.hoursAgo", { count: hoursAgo });
-  return t("playerStats.daysAgo", { count: Math.floor(hoursAgo / 24) });
-}
-
-function HomeVideoFeedCard({ video }: { video: CachedYouTubeVideo }) {
-  const thumbnailUrl = video.thumbnailUrl || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
-  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-  const showName = video.displayName || video.channelTitle || "Unknown";
-
-  return (
-    <div
-      className="group relative overflow-hidden rounded-2xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
-    >
-      <a
-        href={videoUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute inset-0 z-0 rounded-2xl"
-        aria-label={video.title}
-      />
-      <div className="relative aspect-video overflow-hidden bg-muted">
-        <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" />
-        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white">
-          <Youtube className="h-3 w-3" />
-          YouTube
-        </span>
-      </div>
-
-      <div className="space-y-3 p-4">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
-          {video.title}
-        </h3>
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          {video.slug ? (
-            <Link to={`/player/${video.slug}`} prefetch="intent" className="relative z-10 inline-flex min-w-0 items-center gap-2 hover:text-primary transition-colors">
-              {video.uuid ? (
-                <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
-              ) : video.discordAvatar ? (
-                <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
-              ) : (
-                <div className="h-5 w-5 rounded-md bg-muted" />
-              )}
-              <span className="truncate">{showName}</span>
-            </Link>
-          ) : (
-            <span className="truncate">{showName}</span>
-          )}
-          <span className="shrink-0">{formatVideoTime(video.publishedAt)}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ホームの動画フィードに表示する新着件数（全件は /videos 照会ページ）
+const HOME_VIDEO_DISPLAY_COUNT = 6;
 
 // セクション全体のローディングスケルトン（memo化）
 const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
@@ -410,6 +348,25 @@ export default function HomePage() {
   const navigate = useNavigate();
 
   const registeredMcidSet = useMemo(() => new Set(registeredMcids), [registeredMcids]);
+
+  // お気に入りの並べ替えはクライアント側で適用する
+  // （/api/home-feed のレスポンスはユーザー非依存でCDNキャッシュされるため）
+  const { favorites } = useFavorites();
+  const favoriteSlugSet = useMemo(() => new Set(favorites), [favorites]);
+
+  // お気に入りのプレイヤーを先頭へ（安定ソートなので同グループ内はサーバーの時間順を維持）
+  const sortFavoritesFirst = useCallback(
+    <T,>(items: T[], getSlug: (item: T) => string | null | undefined): T[] => {
+      if (favoriteSlugSet.size === 0) return items;
+      return [...items].sort((a, b) => {
+        const aFav = favoriteSlugSet.has(getSlug(a) ?? "");
+        const bFav = favoriteSlugSet.has(getSlug(b) ?? "");
+        if (aFav === bFav) return 0;
+        return aFav ? -1 : 1;
+      });
+    },
+    [favoriteSlugSet]
+  );
 
   // ライブペースを取得する関数（初回・15秒間隔の自動更新・手動の更新ボタンで共用）
   const fetchLiveRuns = useCallback(() => {
@@ -462,13 +419,42 @@ export default function HomePage() {
     [feed.liveRuns, currentUser?.showPacemanOnHome, currentUser?.mcid]
   );
 
-  const filteredRecentVideos = useMemo(() =>
-    currentUser?.showYoutubeOnHome === false && currentUser?.mcid
-      ? feed.recentVideos.filter(video =>
-        !video.minefolioMcid || video.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
-      )
-      : feed.recentVideos,
-    [feed.recentVideos, currentUser?.showYoutubeOnHome, currentUser?.mcid]
+  // YouTube動画とTwitch VOD（どちらも FeedVideo 形式）をマージし、新しい順にソート
+  const mergedFeedVideos = useMemo<FeedVideo[]>(
+    () =>
+      [...feed.recentVideos, ...feed.twitchVods].sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      ),
+    [feed.recentVideos, feed.twitchVods]
+  );
+
+  // 自分の動画/VODを非表示にするユーザー設定を適用（プラットフォームごとのフラグ。/videos と共通）
+  const filteredRecentVideos = useMemo(
+    () =>
+      currentUser
+        ? filterOwnVideos(mergedFeedVideos, currentUser)
+        : mergedFeedVideos,
+    [mergedFeedVideos, currentUser]
+  );
+
+  // お気に入りを先頭に並べ替え（表示用）
+  const sortedRecentPaces = useMemo(
+    () => sortFavoritesFirst(filteredRecentPaces, (run) => mcidToSlug[run.mcid.toLowerCase()]),
+    [filteredRecentPaces, sortFavoritesFirst, mcidToSlug]
+  );
+  const sortedLiveRuns = useMemo(
+    () => sortFavoritesFirst(filteredLiveRuns, (run) => mcidToSlug[run.nickname.toLowerCase()]),
+    [filteredLiveRuns, sortFavoritesFirst, mcidToSlug]
+  );
+  // ホームは新着数件のみ表示（全件は /videos 照会ページへ）。
+  // 新着順で切り出してから、その中でお気に入りを先頭に並べ替える
+  const sortedRecentVideos = useMemo(
+    () =>
+      sortFavoritesFirst(
+        filteredRecentVideos.slice(0, HOME_VIDEO_DISPLAY_COUNT),
+        (video) => video.slug
+      ),
+    [filteredRecentVideos, sortFavoritesFirst]
   );
 
   const pacesMcidToUuid = feed.mcidToUuid;
@@ -486,6 +472,17 @@ export default function HomePage() {
         .catch((err) => {
           console.error("Failed to fetch YouTube videos:", err);
           dispatch({ type: "SET_ERROR", payload: "videos" });
+        }),
+
+      // Twitch VOD
+      fetch("/api/home-feed?type=twitch-vods")
+        .then((res) => res.json() as Promise<TwitchVodsResponse>)
+        .then((data) => {
+          dispatch({ type: "SET_TWITCH_VODS", payload: data.recentVods || [] });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch Twitch VODs:", err);
+          dispatch({ type: "SET_ERROR", payload: "twitchVods" });
         }),
 
       // 最近のペース
@@ -640,9 +637,11 @@ export default function HomePage() {
         </section>
       )}
 
-      {feed.loading.paces || feed.loading.liveRuns ? (
+      {/* ペースセクション: ライブ（外部API）と過去のペース（DBキャッシュ）でロードを分離し、
+          片方の遅延がもう片方の表示をブロックしないようにする */}
+      {feed.loading.paces && feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
-      ) : filteredLiveRuns.length > 0 || filteredRecentPaces.length > 0 ? (
+      ) : sortedLiveRuns.length > 0 || sortedRecentPaces.length > 0 || feed.loading.paces || feed.loading.liveRuns ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -659,21 +658,28 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <Timer className="h-4 w-4 text-primary" />
               <h3 className="font-semibold">{t("home.livePacesTitle")}</h3>
-              <span className="text-sm text-muted-foreground">({filteredLiveRuns.length})</span>
+              {!feed.loading.liveRuns && (
+                <span className="text-sm text-muted-foreground">({sortedLiveRuns.length})</span>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
                 className="ml-auto"
                 onClick={handleRefreshLiveRuns}
-                disabled={isRefreshingLiveRuns}
+                disabled={isRefreshingLiveRuns || feed.loading.liveRuns}
               >
                 <RefreshCw className={cn("mr-1 h-3.5 w-3.5", isRefreshingLiveRuns && "animate-spin")} />
                 {t("home.refreshLivePaces")}
               </Button>
             </div>
-            {filteredLiveRuns.length > 0 ? (
+            {feed.loading.liveRuns ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 rounded-xl" />
+                <Skeleton className="h-10 rounded-xl" />
+              </div>
+            ) : sortedLiveRuns.length > 0 ? (
               <LivePaceList
-                runs={filteredLiveRuns}
+                runs={sortedLiveRuns}
                 registeredMcidSet={registeredMcidSet}
                 mcidToSlug={mcidToSlug}
                 mcidToUuid={mergedMcidToUuid}
@@ -686,7 +692,19 @@ export default function HomePage() {
           </div>
 
           {/* 過去のペース（最新12件） */}
-          {filteredRecentPaces.length > 0 && (
+          {feed.loading.paces ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold">{t("home.pastPacesTitle")}</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ) : sortedRecentPaces.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />
@@ -699,7 +717,7 @@ export default function HomePage() {
                 </Button>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {filteredRecentPaces.map((run) => (
+                {sortedRecentPaces.map((run) => (
                   <PaceFeedCard
                     key={`${run.mcid}-${run.time}-${run.timeline}`}
                     run={run}
@@ -710,13 +728,13 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
         </section>
       ) : null}
 
-      {feed.loading.videos ? (
+      {feed.loading.videos || feed.loading.twitchVods ? (
         <SectionSkeleton columns={3} />
-      ) : filteredRecentVideos.length > 0 ? (
+      ) : sortedRecentVideos.length > 0 ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-red-500/10 p-2">
@@ -726,13 +744,16 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.videoFeedLabel")}</p>
               <h2 className="text-xl font-bold">{t("home.sectionVideos")}</h2>
             </div>
-            <span className="ml-auto rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-              {t("home.videosCount", { count: filteredRecentVideos.length })}
-            </span>
+            <Button variant="ghost" size="sm" asChild className="ml-auto">
+              <Link to="/videos">
+                {t("home.viewAll")}
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredRecentVideos.map((video) => (
-              <HomeVideoFeedCard key={video.videoId} video={video} />
+            {sortedRecentVideos.map((video) => (
+              <FeedVideoCard key={feedVideoKey(video)} video={video} />
             ))}
           </div>
         </section>

@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
+import { parseVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
@@ -24,16 +25,15 @@ interface TexturesProperty {
   };
 }
 
-/** https の URL のみ許可（SSRF 防止）。不正・非 https は null。 */
-function toHttpsUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
-}
+// スキン画像のキャッシュヘッダー。
+// s-maxage でCDN（Vercel Edge）にもキャッシュさせ、Mojang API 2連続fetch入りの
+// 関数呼び出しが訪問者ごとに発生しないようにする。TTL切れ後は stale 配信しつつ再検証。
+const SKIN_CACHE_CONTROL = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+
+// Mojang API 失敗時のSteveフォールバック用（短TTL・長SWRなし）。
+// 長期ヘッダーで返すと、一時的なMojang障害・レート制限による代替スキンが
+// 共有CDNにキャッシュされ、全訪問者にSteveが配信され続けてしまうため区別する
+const SKIN_FALLBACK_CACHE_CONTROL = "public, max-age=300, s-maxage=300";
 
 // スキン取得の優先順位:
 // 1. customSkinUrl（カスタムスキン）
@@ -56,8 +56,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       });
 
-      // カスタムスキンがある場合はそれを返す（SSRF 防止のため https のみ許可）
-      const safeCustomSkinUrl = toHttpsUrl(user?.customSkinUrl);
+      // カスタムスキンがある場合はそれを返す。
+      // 保存時にホスト許可リストで検証済みだが、取得時にも同じ検証を再適用して
+      // 信頼された Vercel Blob ホスト以外への fetch（SSRF）を防ぐ。
+      const safeCustomSkinUrl = parseVercelBlobUrl(user?.customSkinUrl);
       if (safeCustomSkinUrl) {
         const skinResponse = await fetch(safeCustomSkinUrl);
         if (skinResponse.ok) {
@@ -65,7 +67,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           return new Response(skinData, {
             headers: {
               "Content-Type": "image/png",
-              "Cache-Control": "public, max-age=3600",
+              "Cache-Control": SKIN_CACHE_CONTROL,
               "Access-Control-Allow-Origin": "*",
             },
           });
@@ -99,6 +101,10 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
     const profileResponse = await fetch(
       `https://sessionserver.mojang.com/session/minecraft/profile/${cleanUuid}`
     );
+
+    // プロフィール取得に失敗（429/5xx等）した場合のSteveは一時的な代替なので短TTL。
+    // 取得成功時はテクスチャ未設定の正規Steveも含めて長期キャッシュでよい
+    const cacheControl = profileResponse.ok ? SKIN_CACHE_CONTROL : SKIN_FALLBACK_CACHE_CONTROL;
 
     let skinUrl = STEVE_SKIN_URL;
 
@@ -135,7 +141,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
       return new Response(fallbackData, {
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=3600",
+          "Cache-Control": SKIN_FALLBACK_CACHE_CONTROL,
           "Access-Control-Allow-Origin": "*",
         },
       });
@@ -146,7 +152,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
     return new Response(skinData, {
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=3600", // 1時間キャッシュ
+        "Cache-Control": cacheControl,
         "Access-Control-Allow-Origin": "*",
       },
     });

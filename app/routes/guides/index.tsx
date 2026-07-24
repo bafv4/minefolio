@@ -3,7 +3,7 @@ import { useState } from "react";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,14 +49,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const allGuides = await db
     .select({
-      guide: guides,
+      guide: {
+        id: guides.id,
+        slug: guides.slug,
+        title: guides.title,
+        summary: guides.summary,
+        tags: guides.tags,
+        coverImageUrl: guides.coverImageUrl,
+        viewCount: guides.viewCount,
+        updatedAt: guides.updatedAt,
+      },
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
       authorMcid: users.mcid,
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
-    .where(eq(guides.isPublished, true))
+    // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
+    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
     .orderBy(desc(guides.updatedAt));
 
   // Filter in memory for tag/search (simple approach)
@@ -103,11 +113,10 @@ export default function GuidesIndexPage() {
 
   // Transform loader data to GuideItem[]
   // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
-  // （guide: guides で全カラムを取得しているため、GuideItem に残すとカード拡大表示が漏れてしまう）
+  // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   const guideItems: GuideItem[] = allGuides.map(({ guide, authorSlug, authorDisplayName, authorMcid }) => {
-    const { isPinned: _isPinned, ...guideWithoutPin } = guide;
     return {
-      ...guideWithoutPin,
+      ...guide,
       authorName: authorDisplayName || authorMcid || authorSlug,
       _authorSlug: authorSlug,
     };

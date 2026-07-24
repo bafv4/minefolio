@@ -17,7 +17,7 @@
 | slug | string | URLスラッグ。作成時はタイトルから自動生成され、以降は編集画面の設定モーダルの「URL」欄でユーザーが変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化） |
 | title | string | タイトル |
 | summary | string | 概要・要約 |
-| content | text (HTML) | 本文（TipTapエディタが生成するHTML） |
+| content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。仮保存（draft）には上限を適用しない |
 | coverImageUrl | string | カバー画像URL（Vercel Blob） |
 | isPublished | boolean | 公開状態 |
 | tags | JSON配列 | タグ一覧 |

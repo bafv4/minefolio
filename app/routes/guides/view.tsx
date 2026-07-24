@@ -79,6 +79,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       discordAvatar: true,
       customSkinUrl: true,
       slimSkin: true,
+      profileVisibility: true,
     },
   });
 
@@ -96,6 +97,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     });
     isOwner = currentUser?.id === author.id;
   }
+
+  // プライベートプロフィールの著者のガイドは本人以外に404を返す（プロフィール本体と挙動を揃える）
+  if (author.profileVisibility === "private" && !isOwner) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
   const draftPreview = wantDraft && isOwner;
 
   const guideConditions = [eq(guides.authorId, author.id), eq(guides.slug, guideSlug)];

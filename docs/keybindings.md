@@ -344,7 +344,7 @@ type ControllerSettings = {
 | `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け |
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
-- 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する
+- 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる
 - ビュー切替（`ViewSwitcher`）は各ルートへの `<Link>`。表・ビジュアル間は現在の検索パラメータ（フィルタ・`tab`）を維持する。ルート遷移のため読み込み中は共通の `NavigationProgress` オーバーレイが表示される
 
 テーブルビュー（`view=table`）のサブタブ。操作系はプレイヤー画面（プロフィール）と同じ粒度（移動 / インベントリ / 戦闘・UI）で分割する:
@@ -374,7 +374,7 @@ type ControllerSettings = {
 
 ### /keybindings/stats（統計ページ）
 
-キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。
+キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。`loadKeybindingsStats`（`lib/keybindings-stats.server.ts`）の集計結果は60秒インメモリキャッシュされる（内部的には対象アクション分を `inArray` で1クエリにまとめて取得し、JS側で集計）。
 
 「登録走者数」「キーバインド設定者数」「マウス設定者数」の集計からは視聴者ロールを除外している（v1.4.0〜）。
 

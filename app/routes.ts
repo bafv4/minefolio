@@ -24,6 +24,9 @@ export default [
     // Paces (最近のペース全件一覧)
     route("paces", "routes/paces.tsx"),
 
+    // Videos (動画・VODの照会ページ)
+    route("videos", "routes/videos.tsx"),
+
     // Browse & Rankings
     route("browse", "routes/browse.tsx"),
     route("random-player", "routes/random-player.ts"),
@@ -87,7 +90,9 @@ export default [
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/social-stats", "routes/api/social-stats.ts"),
   route("api/paces", "routes/api/paces.ts"),
+  route("api/videos", "routes/api/videos.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
   route("api/browse", "routes/api/browse.ts"),
 
@@ -96,6 +101,7 @@ export default [
 
   // Cron routes (for Vercel Cron)
   route("api/cron/youtube-update", "routes/api/cron/youtube-update.ts"),
+  route("api/cron/twitch-update", "routes/api/cron/twitch-update.ts"),
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
   route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
 

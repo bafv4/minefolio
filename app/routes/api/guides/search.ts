@@ -34,6 +34,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .where(
       and(
         eq(guides.isPublished, true),
+        // 非公開・限定公開の著者のガイドは検索結果（discovery）に出さない
+        eq(users.profileVisibility, "public"),
         sql`${guides.title} LIKE ${likePattern} ESCAPE '\\'`
       )
     )

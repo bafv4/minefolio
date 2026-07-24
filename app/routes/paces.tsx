@@ -1,12 +1,14 @@
 import { useLoaderData, useSearchParams } from "react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { PACE_FEED_SPLITS } from "@/lib/pace-splits";
+import { filterOwnPaces, type OwnPacePrefs } from "@/lib/pace-visibility";
 import {
-  getVisiblePaceFeed,
+  getPublicPaceFeed,
+  getViewerPacePrefs,
   parsePaceSearchParams,
   type PaceFeedItem,
 } from "@/lib/paces-feed.server";
@@ -57,16 +59,26 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parsePaceSearchParams(url.searchParams);
-  const { items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl } =
-    await getVisiblePaceFeed(db, auth, request, filters);
+  const [{ items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }, viewerPrefs] =
+    await Promise.all([
+      getPublicPaceFeed(db, filters),
+      getViewerPacePrefs(db, auth, request),
+    ]);
+
+  // 見出しの件数バッジは実際に表示されるカード数と一致させる。
+  // 一方 total は /api/paces（ユーザー非依存・CDNキャッシュ）のoffsetページングの
+  // 基準なので、除外前の件数のまま保つ
+  const visibleTotal = filterOwnPaces(items, viewerPrefs).length;
 
   return {
     appUrl,
     paces: items.slice(0, PAGE_SIZE),
     total: items.length,
+    visibleTotal,
     mcidToUuid,
     mcidToDisplayName,
     mcidToSkinUrl,
+    viewerPrefs,
   };
 }
 
@@ -84,6 +96,7 @@ function PacesList({
   mcidToUuid,
   mcidToDisplayName,
   mcidToSkinUrl,
+  viewerPrefs,
 }: {
   initialPaces: PaceFeedItem[];
   initialTotal: number;
@@ -91,6 +104,7 @@ function PacesList({
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
+  viewerPrefs: OwnPacePrefs;
 }) {
   const [paces, setPaces] = useState(initialPaces);
   const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
@@ -144,10 +158,17 @@ function PacesList({
     return () => observer.disconnect();
   }, [loadMore, reachedEnd, loadError]);
 
+  // 「ホームに自分のペースを表示しない」設定時、自分のペースを除外（ホームと同じ挙動）
+  // レスポンス自体はユーザー非依存（CDNキャッシュ対象）のため、フィルタはクライアント側で適用する
+  const visiblePaces = useMemo(
+    () => filterOwnPaces(paces, viewerPrefs),
+    [paces, viewerPrefs]
+  );
+
   return (
     <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {paces.map((run) => (
+        {visiblePaces.map((run) => (
           <PaceFeedCard
             key={run.pacemanRunId}
             run={run}
@@ -177,7 +198,7 @@ function PacesList({
 }
 
 export default function PacesPage() {
-  const { paces, total, mcidToUuid, mcidToDisplayName, mcidToSkinUrl } =
+  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -230,7 +251,7 @@ export default function PacesPage() {
         </div>
         <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
           <Activity className="h-3.5 w-3.5" />
-          {t("paces.count", { count: total })}
+          {t("paces.count", { count: visibleTotal })}
         </span>
       </div>
       <p className="text-sm text-muted-foreground">{t("paces.description")}</p>
@@ -309,7 +330,7 @@ export default function PacesPage() {
         </div>
       </form>
 
-      {paces.length > 0 ? (
+      {visibleTotal > 0 ? (
         <PacesList
           key={filterKey}
           initialPaces={paces}
@@ -318,6 +339,7 @@ export default function PacesPage() {
           mcidToUuid={mcidToUuid}
           mcidToDisplayName={mcidToDisplayName}
           mcidToSkinUrl={mcidToSkinUrl}
+          viewerPrefs={viewerPrefs}
         />
       ) : (
         <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">

@@ -1,18 +1,16 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router";
-import { Card, CardContent } from "@/components/ui/card";
 import {
-  MinecraftItemIcon,
   formatItemName,
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
+import { coerceStringArray } from "@/lib/preset-read";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
-
-const TEXTURE_BASE_URL = "/mcitems";
 
 // ========================================
 // 共通型
@@ -284,56 +282,56 @@ export function SearchCraftEmbedView({
   const hasAnyTiming = crafts.some((c) => c.timing);
 
   const renderCraft = (craft: typeof crafts[0]) => {
-    const items = typeof craft.items === "string" ? JSON.parse(craft.items) as string[] : craft.items as unknown as string[];
+    // craft.items は JSON 文字列（ライブ/プリセットスナップショット由来）だが、破損・非配列だと
+    // .map で SSR が落ちる。coerceStringArray で常に string[] に矯正する（不正値は空クラフト表示）。
+    const items = coerceStringArray(craft.items);
     const withShift = craft.withShift === true;
     const keyInfos = craft.searchStr
       ? getActualKeyInfos(craft.searchStr, remaps, { shiftHeld: withShift })
       : [];
 
     return (
-      <Card key={craft.id}>
-        <CardContent className="px-4 py-3">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {items.map((itemId: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
-                  <MinecraftItemIcon itemId={itemId} size={28} textureBaseUrl={TEXTURE_BASE_URL} className="pixelated" />
-                  <span className="text-base">{getItemDisplayName(itemId)}</span>
-                </div>
-              ))}
-            </div>
-            {craft.searchStr && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
-                    <SearchStringText value={craft.searchStr} />
-                  </code>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {withShift && (
-                      <kbd
-                        className="px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
-                        title={t("playerProfile.withShiftTooltip")}
-                      >
-                        ⇧ Shift
-                      </kbd>
-                    )}
-                    {keyInfos.map((info, idx) => (
-                      <kbd key={idx} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-                        {info.displayLabel}
-                      </kbd>
-                    ))}
-                  </div>
+      <div key={craft.id} className="rounded-md bg-muted/30 px-4 py-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {items.map((itemId: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
+                <ItemIcon itemId={itemId} size={28} />
+                <span className="text-base">{getItemDisplayName(itemId)}</span>
+              </div>
+            ))}
+          </div>
+          {craft.searchStr && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <div className="flex items-baseline gap-2">
+                <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
+                <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
+                  <SearchStringText value={craft.searchStr} />
+                </code>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {withShift && (
+                    <kbd
+                      className="px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
+                      title={t("playerProfile.withShiftTooltip")}
+                    >
+                      ⇧ Shift
+                    </kbd>
+                  )}
+                  {keyInfos.map((info, idx) => (
+                    <kbd key={idx} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+                      {info.displayLabel}
+                    </kbd>
+                  ))}
                 </div>
               </div>
-            )}
-            {craft.comment && <p className="text-sm text-muted-foreground">{craft.comment}</p>}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          )}
+          {craft.comment && <p className="text-sm text-muted-foreground">{craft.comment}</p>}
+        </div>
+      </div>
     );
   };
 

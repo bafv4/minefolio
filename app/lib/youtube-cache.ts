@@ -1,145 +1,25 @@
 // YouTube動画キャッシュ管理
 // Cronで定期的に更新される
 
-import { eq, desc, and, lt, ne } from "drizzle-orm";
+import { eq, desc, asc, and, lt, ne, inArray } from "drizzle-orm";
 import { createDb } from "./db";
 import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
 import { createId } from "@paralleldrive/cuid2";
-import type { YouTubeVideo, YouTubeSearchResult } from "./youtube";
+import { videoRetentionCutoff } from "./feed-video";
+import type { YouTubeSearchResult } from "./youtube";
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
 // キャッシュ管理設定
+// 表示・保持する動画の最大期間は feed-video.ts の VIDEO_FEED_RETENTION_DAYS（90日）を共用
 const CACHE_CONFIG = {
   // 存在確認の間隔（12時間）
   VERIFICATION_INTERVAL: 12 * 60 * 60 * 1000,
-  // 表示する動画の最大期間（72時間）
-  MAX_AGE_HOURS: 72,
-  // 取得する最大件数
-  MAX_VIDEOS: 10,
 };
 
-export interface CachedYouTubeVideo {
-  videoId: string;
-  channelId: string;
-  minefolioMcid: string | null;
-  title: string;
-  description: string | null;
-  thumbnailUrl: string | null;
-  channelTitle: string | null;
-  publishedAt: Date;
-  isAvailable: boolean;
-  // ユーザー情報
-  uuid: string | null;
-  slug: string | null;
-  displayName: string | null;
-  discordAvatar: string | null;
-  customSkinUrl: string | null;
-}
-
-/**
- * キャッシュから最新動画を取得（ユーザー情報付き）
- * キャッシュが存在しない場合や更新が必要な場合はnullを返す
- */
-export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
-  try {
-    const db = createDb();
-    const cutoffTime = new Date(Date.now() - CACHE_CONFIG.MAX_AGE_HOURS * 60 * 60 * 1000);
-
-    const videos = await db.query.youtubeVideoCache.findMany({
-      where: and(
-        eq(youtubeVideoCache.isAvailable, true),
-        // 72時間以内の動画のみ
-      ),
-      orderBy: [desc(youtubeVideoCache.publishedAt)],
-      limit: CACHE_CONFIG.MAX_VIDEOS,
-    });
-
-    // 72時間以内の動画のみフィルタリング
-    const recentVideos = videos.filter(v => v.publishedAt >= cutoffTime);
-
-    if (recentVideos.length === 0) {
-      return null;
-    }
-
-    // MCIDからユーザー情報を取得（視聴者ロールは除外）
-    const mcids = recentVideos
-      .map(v => v.minefolioMcid)
-      .filter((mcid): mcid is string => mcid !== null);
-
-    const usersData = mcids.length > 0
-      ? await db.query.users.findMany({
-          where: excludeViewersCondition,
-          columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true, customSkinUrl: true },
-        })
-      : [];
-
-    const userMap = new Map(
-      usersData
-        .filter(u => u.mcid !== null)
-        .map(u => [u.mcid!.toLowerCase(), u])
-    );
-
-    // 視聴者ロールに紐づく動画（minefolioMcid あり かつ userMap に無し）を除外。
-    // minefolioMcid が null の動画は紐付け無しのため残す。
-    const filteredVideos = recentVideos.filter(v => {
-      if (!v.minefolioMcid) return true;
-      return userMap.has(v.minefolioMcid.toLowerCase());
-    });
-
-    return filteredVideos.map(v => {
-      const user = v.minefolioMcid ? userMap.get(v.minefolioMcid.toLowerCase()) : null;
-      return {
-        videoId: v.videoId,
-        channelId: v.channelId,
-        minefolioMcid: v.minefolioMcid,
-        title: v.title,
-        description: v.description,
-        thumbnailUrl: v.thumbnailUrl,
-        channelTitle: v.channelTitle,
-        publishedAt: v.publishedAt,
-        isAvailable: v.isAvailable,
-        uuid: user?.uuid ?? null,
-        slug: user?.slug ?? null,
-        displayName: user?.displayName ?? null,
-        discordAvatar: user?.discordAvatar ?? null,
-        customSkinUrl: user?.customSkinUrl ?? null,
-      };
-    });
-  } catch (error) {
-    console.error("Failed to get cached videos:", error);
-    return null;
-  }
-}
-
-/**
- * キャッシュされた動画をYouTubeVideo形式に変換
- */
-export function convertToYouTubeVideoFormat(cached: CachedYouTubeVideo[]): YouTubeVideo[] {
-  return cached.map(v => ({
-    kind: "youtube#searchResult",
-    etag: "",
-    id: {
-      kind: "youtube#video",
-      videoId: v.videoId,
-    },
-    snippet: {
-      publishedAt: v.publishedAt.toISOString(),
-      channelId: v.channelId,
-      title: v.title,
-      description: v.description || "",
-      thumbnails: {
-        default: { url: v.thumbnailUrl || "", width: 120, height: 90 },
-        medium: { url: v.thumbnailUrl?.replace("default", "mqdefault") || "", width: 320, height: 180 },
-        high: { url: v.thumbnailUrl?.replace("default", "hqdefault") || "", width: 480, height: 360 },
-      },
-      channelTitle: v.channelTitle || "",
-      liveBroadcastContent: "none",
-    },
-    minefolioMcid: v.minefolioMcid || undefined,
-  }));
-}
+// 読み出し（ユーザー紐付け・可視性ゲート・FeedVideo変換）は videos-feed.server.ts の
+// getPublicVideoFeed に集約されている。このモジュールは cron の書き込み経路のみを担う
 
 /**
  * 新しい動画をAPIから取得してキャッシュに保存
@@ -220,12 +100,14 @@ export async function verifyVideosExistence(apiKey: string): Promise<{ verified:
   const db = createDb();
   const verificationCutoff = new Date(Date.now() - CACHE_CONFIG.VERIFICATION_INTERVAL);
 
-  // 最後の確認から12時間以上経過した動画を取得
+  // 最後の確認から12時間以上経過した動画を、古い順に取得
+  // （90日保持で対象が積み上がるため、最も stale な行から消化する）
   const videosToVerify = await db.query.youtubeVideoCache.findMany({
     where: and(
       eq(youtubeVideoCache.isAvailable, true),
       lt(youtubeVideoCache.lastVerifiedAt, verificationCutoff)
     ),
+    orderBy: [asc(youtubeVideoCache.lastVerifiedAt)],
     limit: 50, // APIクォータ節約のため一度に50件まで
   });
 
@@ -238,39 +120,55 @@ export async function verifyVideosExistence(apiKey: string): Promise<{ verified:
   let removed = 0;
 
   try {
-    // バッチでビデオの存在確認（最大50件）
+    // バッチでビデオの存在確認（最大50件）。
+    // API障害時（null）は判定不能のため何もマークしない（フェイルオープン。
+    // 誤って isAvailable=false にすると以後の検証対象から外れ、恒久的に非表示になるため）
     const existingIds = await checkVideosExist(apiKey, videoIds);
+    if (existingIds === null) {
+      return { verified: 0, removed: 0 };
+    }
     const existingSet = new Set(existingIds);
 
-    for (const video of videosToVerify) {
-      if (existingSet.has(video.videoId)) {
-        // 存在する場合は確認日時を更新
-        await db
-          .update(youtubeVideoCache)
-          .set({
-            lastVerifiedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(youtubeVideoCache.videoId, video.videoId));
-        verified++;
-      } else {
-        // 存在しない場合は非公開としてマーク
-        await db
-          .update(youtubeVideoCache)
-          .set({
-            isAvailable: false,
-            lastVerifiedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(youtubeVideoCache.videoId, video.videoId));
-        removed++;
-      }
+    const verifiedIds = videoIds.filter((id) => existingSet.has(id));
+    const removedIds = videoIds.filter((id) => !existingSet.has(id));
+
+    if (verifiedIds.length > 0) {
+      // 存在する場合は確認日時を更新
+      await db
+        .update(youtubeVideoCache)
+        .set({ lastVerifiedAt: new Date(), updatedAt: new Date() })
+        .where(inArray(youtubeVideoCache.videoId, verifiedIds));
+      verified = verifiedIds.length;
+    }
+    if (removedIds.length > 0) {
+      // 存在しない場合は非公開としてマーク
+      await db
+        .update(youtubeVideoCache)
+        .set({ isAvailable: false, lastVerifiedAt: new Date(), updatedAt: new Date() })
+        .where(inArray(youtubeVideoCache.videoId, removedIds));
+      removed = removedIds.length;
     }
   } catch (error) {
     console.error("Failed to verify videos:", error);
   }
 
   return { verified, removed };
+}
+
+/**
+ * 保持期間（90日）を超えた動画キャッシュ行を削除（Cron: update 内で実行）
+ */
+export async function cleanupOldVideos(): Promise<number> {
+  try {
+    const db = createDb();
+    const result = await db
+      .delete(youtubeVideoCache)
+      .where(lt(youtubeVideoCache.publishedAt, videoRetentionCutoff()));
+    return result.rowsAffected;
+  } catch (error) {
+    console.error("Failed to cleanup old videos:", error);
+    return 0;
+  }
 }
 
 // ========================================
@@ -356,10 +254,11 @@ async function resolveChannelIdInternal(
   }
 }
 
+// 存在する（公開中の）動画IDを返す。API障害時は null（「全件削除された」と区別するため）
 async function checkVideosExist(
   apiKey: string,
   videoIds: string[]
-): Promise<string[]> {
+): Promise<string[] | null> {
   try {
     const params = new URLSearchParams({
       key: apiKey,
@@ -368,15 +267,19 @@ async function checkVideosExist(
     });
 
     const res = await fetch(`${YOUTUBE_API}/videos?${params}`, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error("YouTube videos verification API failed:", res.status);
+      return null;
+    }
 
     const data = await res.json();
     // 公開されている動画のIDのみ返す
     return (data.items || [])
       .filter((item: any) => item.status?.privacyStatus === "public")
       .map((item: any) => item.id);
-  } catch {
-    return [];
+  } catch (error) {
+    console.error("YouTube videos verification error:", error);
+    return null;
   }
 }
 

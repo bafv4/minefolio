@@ -42,9 +42,11 @@ import { KeyCaptureButton } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
 import { t } from "@/lib/messages";
-import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, type KeyRemapType, type RemapConflict } from "@/lib/remap-utils";
+import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetSyncKind } from "@/lib/preset-utils";
 import { PresetSelector } from "@/components/preset-selector";
+import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { RemapViewToggle } from "@/components/remap-view-toggle";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meKeybindings.title") }];
@@ -90,6 +92,17 @@ export async function loader({ request }: Route.LoaderArgs) {
       customActions: {
         orderBy: [asc(customActions.displayOrder)],
       },
+      configPresets: {
+        columns: {
+          id: true,
+          name: true,
+          isActive: true,
+          isMain: true,
+          keybindingsData: true,
+          remapsData: true,
+          fingerAssignmentsData: true,
+        },
+      },
     },
   });
 
@@ -98,18 +111,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   // 全プリセットを取得（コピー機能用）
-  const allPresets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, user.id),
-    columns: {
-      id: true,
-      name: true,
-      isActive: true,
-      isMain: true,
-      keybindingsData: true,
-      remapsData: true,
-      fingerAssignmentsData: true,
-    },
-  });
+  const allPresets = user.configPresets;
 
   // アクティブなプリセットを取得
   const activePreset = allPresets.find((p) => p.isActive);
@@ -1442,14 +1444,31 @@ export default function KeybindingsPage() {
   const remapSourceKeyCounts = useMemo(() => countRemapSourceKeys(localRemaps), [localRemaps]);
   const modalRemapSourceKeyCounts = useMemo(() => countRemapSourceKeys(modalRemaps), [modalRemaps]);
 
-  // キーボードプレビューへ渡すリマップ（編集中はどの種別も全表示。remapType はツールチップのバッジ表示用）
-  const keyboardRemaps = useMemo(
+  // キーボードビューの Trigger/Chat 表示切替（プロフィールと同条件: 種別付きリマップがある場合のみ）
+  const [remapView, setRemapView] = useState<RemapContext>("trigger");
+  const hasTypedRemaps = useMemo(
     () =>
-      localRemaps
-        .filter((r) => !r._delete)
-        .map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey, remapType: r.remapType })),
+      localRemaps.some(
+        (r) => !r._delete && (r.remapType === "trigger" || r.remapType === "chat"),
+      ),
     [localRemaps],
   );
+
+  // キーボードプレビューへ渡すリマップ。表示文脈（Trigger/Chat）で絞り込む
+  // （remapType はツールチップのバッジ表示にも使う）
+  const keyboardRemaps = useMemo(
+    () =>
+      filterRemapsForContext(
+        localRemaps
+          .filter((r) => !r._delete)
+          .map((r) => ({ sourceKey: r.sourceKey, targetKey: r.targetKey, remapType: r.remapType })),
+        remapView,
+      ),
+    [localRemaps, remapView],
+  );
+
+  // プリセット切替（apply-preset）中はキーボードビュー・入力欄をロックする
+  const [presetSwitching, setPresetSwitching] = useState(false);
 
   const modalKeybindingsWithLocalChanges = useMemo(() =>
     validKeybindings.map((kb) => ({
@@ -1694,7 +1713,9 @@ export default function KeybindingsPage() {
         ...base,
         {
           sourceKey: keyCode,
-          targetKey: "",
+          // 無効（disabled）は null で表す。"" だとキーボードビューの無効判定
+          // （targetKey === null）に一致せず、保存するまで「×」が出ない（タブ側の addRemap と統一）
+          targetKey: null,
           software: null,
           notes: null,
           remapType: "unset" as const,
@@ -2082,12 +2103,17 @@ export default function KeybindingsPage() {
         presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasUnsavedChanges}
+        onSwitchingChange={setPresetSwitching}
         onCopyFromOther={presets.length > 1 ? () => {
           setCopyTarget("all");
           setCopyDialogOpen(true);
         } : undefined}
       />
 
+      {/* プリセット切替中はキーボードビュー・入力欄をロックする */}
+      <PresetSwitchLock locked={presetSwitching}>
+      {/* キーボードビューとタブの間の余白（ページ直下の space-y-6 相当）を維持する */}
+      <div className="space-y-6">
       {/* コントローラーモード: コントローラービュー */}
       {isControllerMode ? (
         <Card>
@@ -2173,7 +2199,13 @@ export default function KeybindingsPage() {
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <CardTitle className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
-              <FingerLegend />
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
+                {hasTypedRemaps && (
+                  <RemapViewToggle value={remapView} onChange={setRemapView} />
+                )}
+                <FingerLegend />
+              </div>
             </div>
             <CardDescription>
               {t("meKeybindings.keyboardViewDesc")}
@@ -2372,7 +2404,7 @@ export default function KeybindingsPage() {
             </CardHeader>
             <CardContent>
               {localRemaps.filter((r) => !r._delete).length > 0 ? (
-                <div className="space-y-3">
+                <div className="divide-y border-y">
                   {localRemaps.map((remap, index) => {
                     if (remap._delete) return null;
                     // 同一 sourceKey の行が他にある場合は All を選択不可にする（All共存禁止）
@@ -2550,6 +2582,8 @@ export default function KeybindingsPage() {
         </TabsContent>
         )}
       </Tabs>
+      </div>
+      </PresetSwitchLock>
 
       {/* 保存バー */}
       <FloatingSaveBar
