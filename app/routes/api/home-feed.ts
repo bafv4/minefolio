@@ -13,6 +13,7 @@ import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
 import { getCachedVideos } from "@/lib/youtube-cache";
+import { getCachedVods } from "@/lib/twitch-vod-cache";
 import { getUserData } from "@/lib/home-user-data.server";
 
 // キャッシュTTL設定（ミリ秒）
@@ -33,6 +34,7 @@ const CDN_CACHE = {
   PACES: 300, // 5分（DBはcronが30分毎に更新）
   YOUTUBE: 1800, // 30分（DBはcronが2時間毎に更新）
   YOUTUBE_LIVE: 60, // 1分（ライブ配信）
+  TWITCH_VODS: 900, // 15分（DBはcronが30分毎に更新）
 };
 
 // TTL切れ後もエッジからstale配信しつつバックグラウンドで再検証する猶予（1日）。
@@ -254,6 +256,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
 
       return jsonResponse({ recentVideos: cachedVideos }, CDN_CACHE.YOUTUBE, CDN_SWR_LONG);
+    }
+
+    case "twitch-vods": {
+      // キャッシュテーブル（twitch_vod_cache。Cronが30分毎に更新）から取得
+      const recentVods = await getCachedVods();
+
+      // 空状態はVOD公開・障害復旧で即変わり得るため短TTL（youtube-videos と同じ方針）
+      if (recentVods.length === 0) {
+        return jsonResponse({ recentVods: [] }, 60);
+      }
+
+      return jsonResponse({ recentVods }, CDN_CACHE.TWITCH_VODS, CDN_SWR_LONG);
     }
 
     case "youtube-live": {

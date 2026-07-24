@@ -6,6 +6,7 @@ import { createDb } from "./db";
 import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
 import { createId } from "@paralleldrive/cuid2";
+import { VIDEO_FEED_RETENTION_DAYS } from "./videos-feed.server";
 import type { YouTubeVideo, YouTubeSearchResult } from "./youtube";
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
@@ -14,9 +15,9 @@ const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 const CACHE_CONFIG = {
   // 存在確認の間隔（12時間）
   VERIFICATION_INTERVAL: 12 * 60 * 60 * 1000,
-  // 表示する動画の最大期間（72時間）
-  MAX_AGE_HOURS: 72,
-  // 取得する最大件数
+  // 表示・保持する動画の最大期間（90日 = /videos 照会ページの保持期間と共通）
+  MAX_AGE_MS: VIDEO_FEED_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  // ホームフィード用の最大取得件数
   MAX_VIDEOS: 10,
 };
 
@@ -45,18 +46,18 @@ export interface CachedYouTubeVideo {
 export async function getCachedVideos(): Promise<CachedYouTubeVideo[] | null> {
   try {
     const db = createDb();
-    const cutoffTime = new Date(Date.now() - CACHE_CONFIG.MAX_AGE_HOURS * 60 * 60 * 1000);
+    const cutoffTime = new Date(Date.now() - CACHE_CONFIG.MAX_AGE_MS);
 
     const videos = await db.query.youtubeVideoCache.findMany({
       where: and(
         eq(youtubeVideoCache.isAvailable, true),
-        // 72時間以内の動画のみ
+        // 保持期間内の動画のみ
       ),
       orderBy: [desc(youtubeVideoCache.publishedAt)],
       limit: CACHE_CONFIG.MAX_VIDEOS,
     });
 
-    // 72時間以内の動画のみフィルタリング
+    // 保持期間（90日）以内の動画のみフィルタリング
     const recentVideos = videos.filter(v => v.publishedAt >= cutoffTime);
 
     if (recentVideos.length === 0) {
@@ -271,6 +272,23 @@ export async function verifyVideosExistence(apiKey: string): Promise<{ verified:
   }
 
   return { verified, removed };
+}
+
+/**
+ * 保持期間（90日）を超えた動画キャッシュ行を削除（Cron: update 内で実行）
+ */
+export async function cleanupOldVideos(): Promise<number> {
+  try {
+    const db = createDb();
+    const cutoff = new Date(Date.now() - CACHE_CONFIG.MAX_AGE_MS);
+    const result = await db
+      .delete(youtubeVideoCache)
+      .where(lt(youtubeVideoCache.publishedAt, cutoff));
+    return result.rowsAffected;
+  } catch (error) {
+    console.error("Failed to cleanup old videos:", error);
+    return 0;
+  }
 }
 
 // ========================================

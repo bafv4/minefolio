@@ -10,6 +10,7 @@ import {
   getRegisteredYouTubeChannels,
   fetchAndCacheLiveStreams,
   cleanupOldLiveCache,
+  cleanupOldVideos,
 } from "@/lib/youtube-cache";
 
 export async function loader({ request }: { request: Request }) {
@@ -96,12 +97,15 @@ export async function loader({ request }: { request: Request }) {
       }
 
       const result = await fetchAndCacheNewVideos(apiKey, channels);
+      // 保持期間（90日）を超えた動画キャッシュを削除
+      const cleaned = await cleanupOldVideos();
       return Response.json({
         success: true,
         action: "update",
         channels: channels.length,
         added: result.added,
         updated: result.updated,
+        cleaned,
       });
     }
   } catch (error) {

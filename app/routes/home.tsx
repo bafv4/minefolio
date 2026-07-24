@@ -20,6 +20,7 @@ import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { FeedVideoCard, type FeedVideo } from "@/components/feed-video-card";
 import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -75,7 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // セッションをチェックしてユーザーが登録済みか確認
   const session = await getOptionalSession(request, auth);
   let isRegistered = false;
-  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showYoutubeOnHome: boolean } | null = null;
+  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showYoutubeOnHome: boolean; showTwitchOnHome: boolean } | null = null;
   if (session) {
     const existingUser = await db.query.users.findFirst({
       where: eq(users.discordId, session.user.id),
@@ -84,6 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         mcid: true,
         showPacemanOnHome: true,
         showYoutubeOnHome: true,
+        showTwitchOnHome: true,
       },
     });
     if (existingUser) {
@@ -92,6 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         mcid: existingUser.mcid,
         showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
         showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+        showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
       };
     }
   }
@@ -181,6 +184,10 @@ interface YouTubeVideosResponse {
   recentVideos: CachedYouTubeVideo[];
 }
 
+interface TwitchVodsResponse {
+  recentVods: FeedVideo[];
+}
+
 interface RecentPacesResponse {
   recentPaces: CachedPace[];
   mcidToUuid: Record<string, string>;
@@ -196,6 +203,7 @@ interface LiveRunsResponse {
 // Feed状態管理用のReducer
 interface FeedState {
   recentVideos: CachedYouTubeVideo[];
+  twitchVods: FeedVideo[];
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
@@ -203,11 +211,13 @@ interface FeedState {
   mcidToSkinUrl: Record<string, string>;
   loading: {
     videos: boolean;
+    twitchVods: boolean;
     paces: boolean;
     liveRuns: boolean;
   };
   errors: {
     videos: boolean;
+    twitchVods: boolean;
     paces: boolean;
     liveRuns: boolean;
   };
@@ -215,12 +225,14 @@ interface FeedState {
 
 type FeedAction =
   | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
+  | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
   | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
   | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
 
 const initialFeedState: FeedState = {
   recentVideos: [],
+  twitchVods: [],
   recentPaces: [],
   liveRuns: [],
   mcidToUuid: {},
@@ -228,11 +240,13 @@ const initialFeedState: FeedState = {
   mcidToSkinUrl: {},
   loading: {
     videos: true,
+    twitchVods: true,
     paces: true,
     liveRuns: true,
   },
   errors: {
     videos: false,
+    twitchVods: false,
     paces: false,
     liveRuns: false,
   },
@@ -245,6 +259,12 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         ...state,
         recentVideos: action.payload,
         loading: { ...state.loading, videos: false },
+      };
+    case "SET_TWITCH_VODS":
+      return {
+        ...state,
+        twitchVods: action.payload,
+        loading: { ...state.loading, twitchVods: false },
       };
     case "SET_PACES":
       return {
@@ -281,64 +301,8 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
   }
 }
 
-function formatVideoTime(date: Date): string {
-  const now = Date.now();
-  const hoursAgo = Math.floor((now - new Date(date).getTime()) / (1000 * 60 * 60));
-
-  if (hoursAgo < 1) return t("home.justWithinHour");
-  if (hoursAgo < 24) return t("playerStats.hoursAgo", { count: hoursAgo });
-  return t("playerStats.daysAgo", { count: Math.floor(hoursAgo / 24) });
-}
-
-function HomeVideoFeedCard({ video }: { video: CachedYouTubeVideo }) {
-  const thumbnailUrl = video.thumbnailUrl || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
-  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-  const showName = video.displayName || video.channelTitle || "Unknown";
-
-  return (
-    <div
-      className="group relative overflow-hidden rounded-2xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
-    >
-      <a
-        href={videoUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute inset-0 z-0 rounded-2xl"
-        aria-label={video.title}
-      />
-      <div className="relative aspect-video overflow-hidden bg-muted">
-        <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" />
-        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white">
-          <Youtube className="h-3 w-3" />
-          YouTube
-        </span>
-      </div>
-
-      <div className="space-y-3 p-4">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
-          {video.title}
-        </h3>
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          {video.slug ? (
-            <Link to={`/player/${video.slug}`} prefetch="intent" className="relative z-10 inline-flex min-w-0 items-center gap-2 hover:text-primary transition-colors">
-              {video.uuid ? (
-                <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
-              ) : video.discordAvatar ? (
-                <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
-              ) : (
-                <div className="h-5 w-5 rounded-md bg-muted" />
-              )}
-              <span className="truncate">{showName}</span>
-            </Link>
-          ) : (
-            <span className="truncate">{showName}</span>
-          )}
-          <span className="shrink-0">{formatVideoTime(video.publishedAt)}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ホームの動画フィードに表示する新着件数（全件は /videos 照会ページ）
+const HOME_VIDEO_DISPLAY_COUNT = 6;
 
 // セクション全体のローディングスケルトン（memo化）
 const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
@@ -457,14 +421,38 @@ export default function HomePage() {
     [feed.liveRuns, currentUser?.showPacemanOnHome, currentUser?.mcid]
   );
 
-  const filteredRecentVideos = useMemo(() =>
-    currentUser?.showYoutubeOnHome === false && currentUser?.mcid
-      ? feed.recentVideos.filter(video =>
-        !video.minefolioMcid || video.minefolioMcid.toLowerCase() !== currentUser.mcid!.toLowerCase()
-      )
-      : feed.recentVideos,
-    [feed.recentVideos, currentUser?.showYoutubeOnHome, currentUser?.mcid]
-  );
+  // YouTube動画とTwitch VODを統一形式にマージし、新しい順にソート
+  const mergedFeedVideos = useMemo<FeedVideo[]>(() => {
+    const youtubeVideos: FeedVideo[] = feed.recentVideos.map((v) => ({
+      platform: "youtube" as const,
+      videoId: v.videoId,
+      title: v.title,
+      thumbnailUrl: v.thumbnailUrl,
+      channelTitle: v.channelTitle,
+      publishedAt: v.publishedAt,
+      minefolioMcid: v.minefolioMcid,
+      uuid: v.uuid,
+      slug: v.slug,
+      displayName: v.displayName,
+      discordAvatar: v.discordAvatar,
+      customSkinUrl: v.customSkinUrl,
+    }));
+    return [...youtubeVideos, ...feed.twitchVods].sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+  }, [feed.recentVideos, feed.twitchVods]);
+
+  // 自分の動画/VODを非表示にするユーザー設定を適用（プラットフォームごとのフラグ）
+  const filteredRecentVideos = useMemo(() => {
+    const myMcid = currentUser?.mcid?.toLowerCase();
+    if (!myMcid) return mergedFeedVideos;
+    return mergedFeedVideos.filter((video) => {
+      if (!video.minefolioMcid || video.minefolioMcid.toLowerCase() !== myMcid) return true;
+      return video.platform === "youtube"
+        ? currentUser!.showYoutubeOnHome !== false
+        : currentUser!.showTwitchOnHome !== false;
+    });
+  }, [mergedFeedVideos, currentUser]);
 
   // お気に入りを先頭に並べ替え（表示用）
   const sortedRecentPaces = useMemo(
@@ -475,8 +463,14 @@ export default function HomePage() {
     () => sortFavoritesFirst(filteredLiveRuns, (run) => mcidToSlug[run.nickname.toLowerCase()]),
     [filteredLiveRuns, sortFavoritesFirst, mcidToSlug]
   );
+  // ホームは新着数件のみ表示（全件は /videos 照会ページへ）。
+  // 新着順で切り出してから、その中でお気に入りを先頭に並べ替える
   const sortedRecentVideos = useMemo(
-    () => sortFavoritesFirst(filteredRecentVideos, (video) => video.slug),
+    () =>
+      sortFavoritesFirst(
+        filteredRecentVideos.slice(0, HOME_VIDEO_DISPLAY_COUNT),
+        (video) => video.slug
+      ),
     [filteredRecentVideos, sortFavoritesFirst]
   );
 
@@ -495,6 +489,17 @@ export default function HomePage() {
         .catch((err) => {
           console.error("Failed to fetch YouTube videos:", err);
           dispatch({ type: "SET_ERROR", payload: "videos" });
+        }),
+
+      // Twitch VOD
+      fetch("/api/home-feed?type=twitch-vods")
+        .then((res) => res.json() as Promise<TwitchVodsResponse>)
+        .then((data) => {
+          dispatch({ type: "SET_TWITCH_VODS", payload: data.recentVods || [] });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch Twitch VODs:", err);
+          dispatch({ type: "SET_ERROR", payload: "twitchVods" });
         }),
 
       // 最近のペース
@@ -744,7 +749,7 @@ export default function HomePage() {
         </section>
       ) : null}
 
-      {feed.loading.videos ? (
+      {feed.loading.videos || feed.loading.twitchVods ? (
         <SectionSkeleton columns={3} />
       ) : sortedRecentVideos.length > 0 ? (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
@@ -756,13 +761,16 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.videoFeedLabel")}</p>
               <h2 className="text-xl font-bold">{t("home.sectionVideos")}</h2>
             </div>
-            <span className="ml-auto rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-              {t("home.videosCount", { count: sortedRecentVideos.length })}
-            </span>
+            <Button variant="ghost" size="sm" asChild className="ml-auto">
+              <Link to="/videos">
+                {t("home.viewAll")}
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sortedRecentVideos.map((video) => (
-              <HomeVideoFeedCard key={video.videoId} video={video} />
+              <FeedVideoCard key={`${video.platform}:${video.videoId}`} video={video} />
             ))}
           </div>
         </section>

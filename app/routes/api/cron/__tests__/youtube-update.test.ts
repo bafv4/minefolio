@@ -9,6 +9,7 @@ const youtubeCacheMocks = vi.hoisted(() => ({
   getRegisteredYouTubeChannels: vi.fn(),
   fetchAndCacheLiveStreams: vi.fn(),
   cleanupOldLiveCache: vi.fn(),
+  cleanupOldVideos: vi.fn(),
 }));
 
 vi.mock("@/lib/youtube-cache", () => youtubeCacheMocks);

@@ -464,6 +464,26 @@ CREATE UNIQUE INDEX `speedrun_categories_slug_unique` ON `speedrun_categories` (
 CREATE INDEX `idx_speedrun_categories_slug` ON `speedrun_categories` (`slug`);
 CREATE INDEX `idx_speedrun_categories_type` ON `speedrun_categories` (`category_type`);
 CREATE INDEX `idx_speedrun_categories_speedruncom` ON `speedrun_categories` (`speedruncom_category_id`);
+CREATE TABLE `twitch_vod_cache` (
+	`id` text PRIMARY KEY NOT NULL,
+	`vod_id` text NOT NULL,
+	`user_login` text NOT NULL,
+	`title` text NOT NULL,
+	`thumbnail_url` text,
+	`channel_title` text,
+	`duration_seconds` integer,
+	`published_at` integer NOT NULL,
+	`last_verified_at` integer NOT NULL,
+	`is_available` integer DEFAULT true NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+
+CREATE UNIQUE INDEX `twitch_vod_cache_vod_id_unique` ON `twitch_vod_cache` (`vod_id`);
+CREATE INDEX `idx_twitch_vod_cache_vod_id` ON `twitch_vod_cache` (`vod_id`);
+CREATE INDEX `idx_twitch_vod_cache_user_login` ON `twitch_vod_cache` (`user_login`);
+CREATE INDEX `idx_twitch_vod_cache_published` ON `twitch_vod_cache` (`published_at`);
+CREATE INDEX `idx_twitch_vod_cache_available` ON `twitch_vod_cache` (`is_available`);
 CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`discord_id` text NOT NULL,

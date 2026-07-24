@@ -794,6 +794,36 @@ export type YoutubeVideoCache = typeof youtubeVideoCache.$inferSelect;
 export type NewYoutubeVideoCache = typeof youtubeVideoCache.$inferInsert;
 
 // ============================================
+// 17b. twitch_vod_cache（Twitch配信アーカイブキャッシュ）
+// ============================================
+// youtube_video_cache と同様に cron（/api/cron/twitch-update）で蓄積する。
+// ユーザーとの紐付けは userLogin（小文字）を social_links.identifier と突合して読み時に解決する
+// （MCIDを持たないユーザーのVODも扱えるようにするため、mcid列は持たない）
+export const twitchVodCache = sqliteTable("twitch_vod_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  vodId: text("vod_id").unique().notNull(), // Twitch VOD ID（数値文字列）
+  userLogin: text("user_login").notNull(), // 配信者の login 名（小文字）
+  title: text("title").notNull(),
+  thumbnailUrl: text("thumbnail_url"), // サイズ解決済みURL。処理中VODは null
+  channelTitle: text("channel_title"), // 配信者の表示名（user_name）
+  durationSeconds: integer("duration_seconds"), // 配信時間（秒）
+  publishedAt: integer("published_at", { mode: "timestamp" }).notNull(),
+  // キャッシュ管理
+  lastVerifiedAt: integer("last_verified_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  isAvailable: integer("is_available", { mode: "boolean" }).default(true).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idx_twitch_vod_cache_vod_id").on(table.vodId),
+  index("idx_twitch_vod_cache_user_login").on(table.userLogin),
+  index("idx_twitch_vod_cache_published").on(table.publishedAt),
+  index("idx_twitch_vod_cache_available").on(table.isAvailable),
+]);
+
+export type TwitchVodCache = typeof twitchVodCache.$inferSelect;
+export type NewTwitchVodCache = typeof twitchVodCache.$inferInsert;
+
+// ============================================
 // 18. youtube_live_cache（YouTubeライブ配信キャッシュ）
 // ============================================
 export const youtubeLiveCache = sqliteTable("youtube_live_cache", {
