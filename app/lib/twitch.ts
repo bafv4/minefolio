@@ -129,6 +129,98 @@ export async function getLiveStreams(
   }
 }
 
+export interface TwitchChannelStats {
+  /** フォロワー数（取得失敗時は null） */
+  followerCount: number | null;
+  /** 配信中かどうか */
+  isLive: boolean;
+  /** 前回配信の日時（ISO 8601）。配信中なら開始日時、VODが無い場合は null */
+  lastStreamAt: string | null;
+}
+
+/**
+ * チャンネルの統計情報（フォロワー数・前回配信日時・配信中フラグ）を取得
+ * @param clientId Twitch Client ID
+ * @param accessToken App Access Token
+ * @param login Twitchユーザー名（login名）
+ */
+export async function getChannelStats(
+  clientId: string,
+  accessToken: string,
+  login: string
+): Promise<TwitchChannelStats | null> {
+  const headers = {
+    "Client-ID": clientId,
+    Authorization: `Bearer ${accessToken}`,
+  };
+
+  try {
+    // login → broadcaster id
+    const userRes = await fetch(
+      `${TWITCH_API}/users?login=${encodeURIComponent(login)}`,
+      { headers, signal: AbortSignal.timeout(10000) }
+    );
+    if (!userRes.ok) {
+      console.error("Twitch users API failed:", userRes.status);
+      return null;
+    }
+    const userData = (await userRes.json()) as { data?: Array<{ id: string }> };
+    const broadcasterId = userData.data?.[0]?.id;
+    if (!broadcasterId) return null;
+
+    // フォロワー数と配信状態を並列取得
+    // （/channels/followers の total は App Access Token でも返る。data はスコープが必要だが未使用）
+    const [followersRes, streamsRes] = await Promise.all([
+      fetch(
+        `${TWITCH_API}/channels/followers?broadcaster_id=${broadcasterId}&first=1`,
+        { headers, signal: AbortSignal.timeout(10000) }
+      ),
+      fetch(
+        `${TWITCH_API}/streams?user_id=${broadcasterId}&first=1`,
+        { headers, signal: AbortSignal.timeout(10000) }
+      ),
+    ]);
+
+    let followerCount: number | null = null;
+    if (followersRes.ok) {
+      const followersData = (await followersRes.json()) as { total?: number };
+      followerCount = typeof followersData.total === "number" ? followersData.total : null;
+    }
+
+    let isLive = false;
+    let lastStreamAt: string | null = null;
+    if (streamsRes.ok) {
+      const streamsData = (await streamsRes.json()) as {
+        data?: Array<{ type: string; started_at: string }>;
+      };
+      const stream = streamsData.data?.[0];
+      if (stream?.type === "live") {
+        isLive = true;
+        lastStreamAt = stream.started_at;
+      }
+    }
+
+    // 配信中でなければ最新の配信アーカイブから前回配信日時を取得
+    if (!isLive) {
+      const videosRes = await fetch(
+        `${TWITCH_API}/videos?user_id=${broadcasterId}&type=archive&first=1`,
+        { headers, signal: AbortSignal.timeout(10000) }
+      );
+      if (videosRes.ok) {
+        const videosData = (await videosRes.json()) as {
+          data?: Array<{ created_at: string }>;
+        };
+        lastStreamAt = videosData.data?.[0]?.created_at ?? null;
+      }
+    }
+
+    return { followerCount, isLive, lastStreamAt };
+  } catch (error) {
+    console.error("Twitch channel stats error:", error);
+    return null;
+  }
+}
+
 /**
  * サムネイルURLを適切なサイズに変換
  */

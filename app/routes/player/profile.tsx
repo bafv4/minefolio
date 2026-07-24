@@ -43,6 +43,8 @@ import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
 import { safeExternalHref } from "@/lib/safe-url";
 import { YouTubeEmbed } from "@/components/youtube-embed";
+import type { YouTubeChannelStats } from "@/lib/youtube";
+import type { TwitchChannelStats } from "@/lib/twitch";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -874,8 +876,8 @@ export default function PlayerProfilePage() {
         {/* Profile Tab */}
         <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
-          <Card>
-            <CardContent className="pt-4 pb-4">
+          <Card className="py-4">
+            <CardContent className="px-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (() => {
@@ -1018,35 +1020,18 @@ export default function PlayerProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Social Links */}
+          {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 pb-4">
-                <div className="flex flex-wrap gap-2">
-                  {player.socialLinks.map((link) => (
-                    <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
-                      <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
-                        <SocialIcon platform={link.platform} />
-                        <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
-                        <span className="text-muted-foreground">{link.identifier}</span>
-                      </a>
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <SocialLinksCard links={player.socialLinks} slug={player.slug} />
           )}
 
           {/* Bio */}
           {player.bio && (
-            <Card>
-              <CardHeader className="py-3">
+            <Card className="gap-2 py-4">
+              <CardHeader className="px-4">
                 <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 pb-4">
+              <CardContent className="px-4">
                 <Suspense
                   fallback={
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -1062,14 +1047,14 @@ export default function PlayerProfilePage() {
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <Card>
-              <CardHeader className="py-3">
+            <Card className="gap-2 py-4">
+              <CardHeader className="px-4">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Video className="h-4 w-4" />
                   {t("playerProfile.videos")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 pb-4 space-y-4">
+              <CardContent className="px-4 space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
                   <VideoEmbed video={displayVideos[0]} size="large" />
@@ -2056,6 +2041,169 @@ function getSocialPlatformName(platform: string, customLabel?: string | null): s
     default:
       return platform;
   }
+}
+
+// ソーシャルリンクカードで扱うリンク行（loader の socialLinks から使用する列のみ）
+type ProfileSocialLink = {
+  id: string;
+  platform: string;
+  identifier: string;
+  customLabel: string | null;
+  customUrl: string | null;
+};
+
+// /api/social-stats のレスポンス形状
+type SocialStatsData = {
+  youtube: YouTubeChannelStats | null;
+  twitch: TwitchChannelStats | null;
+};
+
+// 1万以上は「1.2万」等のコンパクト表記、それ未満は桁区切り（例: 2,170）
+function formatCompactCount(count: number): string {
+  if (count < 10000) return count.toLocaleString("ja-JP");
+  return new Intl.NumberFormat("ja-JP", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(count);
+}
+
+// ソーシャルリンクカード: YouTube/Twitch は統計（登録者数・最終活動日時）付きの
+// リッチカード、その他のプラットフォームは従来のボタン表示。
+// 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
+function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
+  const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
+  const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
+  const [stats, setStats] = useState<SocialStatsData | null>(null);
+
+  const hasRichLinks = richLinks.length > 0;
+  useEffect(() => {
+    if (!hasRichLinks) return;
+    let cancelled = false;
+    fetch(`/api/social-stats?slug=${encodeURIComponent(slug)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<SocialStatsData>) : null))
+      .then((data) => {
+        if (!cancelled && data) setStats(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch social stats:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, hasRichLinks]);
+
+  return (
+    <Card className="gap-2 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 space-y-2">
+        {hasRichLinks && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {richLinks.map((link) => (
+              <SocialLinkRichCard
+                key={link.id}
+                link={link}
+                stats={
+                  link.platform === "youtube"
+                    ? (stats?.youtube ?? null)
+                    : (stats?.twitch ?? null)
+                }
+              />
+            ))}
+          </div>
+        )}
+        {plainLinks.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {plainLinks.map((link) => (
+              <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
+                <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
+                  <SocialIcon platform={link.platform} />
+                  <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
+                  <span className="text-muted-foreground">{link.identifier}</span>
+                </a>
+              </Button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// YouTube/Twitch のリッチカード。統計未取得（ロード中・失敗・APIキー未設定）の間は
+// リンク行のみを表示し、取得後に統計行と配信中バッジを出す
+function SocialLinkRichCard({
+  link,
+  stats,
+}: {
+  link: ProfileSocialLink;
+  stats: YouTubeChannelStats | TwitchChannelStats | null;
+}) {
+  const statParts: string[] = [];
+  let isLive = false;
+
+  if (stats) {
+    if (link.platform === "youtube") {
+      const yt = stats as YouTubeChannelStats;
+      if (yt.subscriberCount != null) {
+        statParts.push(
+          t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount) }),
+        );
+      }
+      if (yt.latestVideoAt) {
+        statParts.push(
+          t("playerProfile.latestVideoAgo", {
+            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: ja }),
+          }),
+        );
+      }
+    } else {
+      const tw = stats as TwitchChannelStats;
+      isLive = tw.isLive;
+      if (tw.followerCount != null) {
+        statParts.push(
+          t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount) }),
+        );
+      }
+      if (!tw.isLive && tw.lastStreamAt) {
+        statParts.push(
+          t("playerProfile.lastStreamAgo", {
+            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: ja }),
+          }),
+        );
+      }
+    }
+  }
+
+  return (
+    <a
+      href={getSocialUrl(link.platform, link.identifier, link.customUrl)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-lg border bg-secondary/30 px-3.5 py-2.5 transition-colors hover:bg-secondary/60"
+    >
+      <SocialIcon platform={link.platform} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm font-medium">
+            {getSocialPlatformName(link.platform, link.customLabel)}
+          </span>
+          <span className="truncate text-sm text-muted-foreground">{link.identifier}</span>
+          {isLive && (
+            <Badge className="shrink-0 gap-1 border-transparent bg-red-600 px-1.5 text-white">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              {t("playerProfile.liveNow")}
+            </Badge>
+          )}
+        </div>
+        {statParts.length > 0 && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{statParts.join(" · ")}</p>
+        )}
+      </div>
+      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </a>
+  );
 }
 
 function DeviceRow({ label, value, unit }: { label: string; value: string; unit?: string }) {

@@ -750,7 +750,7 @@ export type NewFavorite = typeof favorites.$inferInsert;
 export const apiCache = sqliteTable("api_cache", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   cacheKey: text("cache_key").unique().notNull(),
-  cacheType: text("cache_type", { enum: ["youtube_videos", "recent_paces", "twitch_streams", "live_runs"] }).notNull(),
+  cacheType: text("cache_type", { enum: ["youtube_videos", "recent_paces", "twitch_streams", "live_runs", "social_stats"] }).notNull(),
   data: text("data").notNull(), // JSON
   expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

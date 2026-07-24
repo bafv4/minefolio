@@ -21,6 +21,7 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
 | `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
+| `/api/social-stats` | GET | 不要（privateは本人のみ） | プロフィールのYouTube/Twitch統計 |
 | `/api/keybindings-csv` | GET | 不要 | キー配置CSVエクスポート |
 | `/api/set-locale` | POST | 不要 | ロケール切替（Cookie） |
 | `/api/cron/youtube-update` | GET | CRON_SECRET | YouTube動画キャッシュ更新 |
@@ -123,6 +124,35 @@ Minecraftスキン画像を返す。
 - 環境変数未設定のサービスはスキップ
 
 **関連ファイル:** `app/routes/api/home-feed.ts`
+
+---
+
+### `GET /api/social-stats`
+
+プロフィールページ「リンク」カード用に、対象ユーザーの YouTube / Twitch チャンネル統計を返す。
+APIキーがサーバー専用のため、クライアントから任意 identifier を受けるオープンプロキシにはせず、
+slug 経由でDB保存済みのソーシャルリンクに対してのみ統計を返す。
+
+**パラメータ:**
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `slug` | string | ○ | 対象ユーザーのslug（大文字小文字は無視） |
+
+**レスポンス:**
+```json
+{
+  "youtube": { "subscriberCount": 12000, "latestVideoAt": "ISO8601 | null" },
+  "twitch": { "followerCount": 3400, "isLive": false, "lastStreamAt": "ISO8601 | null" }
+}
+```
+
+- リンク未登録・APIキー未設定・取得失敗のプラットフォームは `null`
+- YouTubeの `subscriberCount` は登録者数非公開チャンネルで `null`。`latestVideoAt` は uploads プレイリスト先頭（配信アーカイブ含む）
+- Twitchの `lastStreamAt` は配信中なら開始日時、それ以外は最新アーカイブの `created_at`（VOD無効なら `null`）
+- **可視性ゲート**: `private` プロフィールは本人のみ 200（`Cache-Control: private, no-store`）、他人は 404
+- **キャッシュ**: DBキャッシュ（`api_cache` / `cacheType: "social_stats"`）YouTube 6時間（失敗時15分）・Twitch 5分。CDN `s-maxage=300, stale-while-revalidate=3600`
+
+**関連ファイル:** `app/routes/api/social-stats.ts`, `app/lib/youtube.ts`（`getChannelStats`）, `app/lib/twitch.ts`（`getChannelStats`）
 
 ---
 

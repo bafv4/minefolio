@@ -240,6 +240,26 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 | `twitter` | ユーザー名 | `https://x.com/{identifier}` |
 | `custom` | 任意 | `customUrl` を直接使用、`customLabel` が必要 |
 
+### YouTube / Twitch の統計表示（プロフィールタブ）
+
+プロフィールタブの「リンク」カードでは、YouTube / Twitch のリンクは統計付きのリッチカードで表示する
+（その他のプラットフォームは従来のボタン表示）。
+
+- **YouTube**: 登録者数 + 最新動画（配信アーカイブ含む）の投稿日時。「配信中/配信予定」の検出は
+  Search API のクォータコスト（100 units/call）が高いため行わない
+- **Twitch**: フォロワー数 + 前回配信日時（最新アーカイブの `created_at`）+ 配信中バッジ
+- 取得は `GET /api/social-stats?slug={slug}`（`app/routes/api/social-stats.ts`）からのクライアント
+  遅延フェッチ。APIキー（`YOUTUBE_API_KEY` / `TWITCH_CLIENT_ID/SECRET`）はサーバー専用のため、
+  クライアントから任意 identifier を受けるオープンプロキシにはせず、slug 経由でDB保存済みの
+  リンクに対してのみ統計を返す
+- **可視性ゲート**: `private` プロフィールは本人（セッション一致）のみ取得可（`Cache-Control: private, no-store`）、
+  他人には 404。`public` / `unlisted` は取得可
+- **キャッシュ**: `api_cache`（`cacheType: "social_stats"`）に YouTube 6時間（取得失敗時は15分の
+  ネガティブキャッシュ）・Twitch 5分（配信中フラグの鮮度優先）。CDNは `s-maxage=300, stale-while-revalidate=3600`
+- 統計未取得の間（ロード中・取得失敗・APIキー未設定）はリンク行のみ表示にフォールバックする
+- 実装: `app/lib/youtube.ts` の `getChannelStats()`（channels + playlistItems、計2 units）、
+  `app/lib/twitch.ts` の `getChannelStats()`（users / channels/followers / streams / videos）
+
 ---
 
 ## 動画欄（複数動画）

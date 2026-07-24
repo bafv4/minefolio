@@ -87,6 +87,7 @@ export default [
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/social-stats", "routes/api/social-stats.ts"),
   route("api/paces", "routes/api/paces.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
   route("api/browse", "routes/api/browse.ts"),
