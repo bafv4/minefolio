@@ -1,18 +1,16 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router";
 import {
-  MinecraftItemIcon,
   formatItemName,
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { coerceStringArray } from "@/lib/preset-read";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
 import { t } from "@/lib/messages";
-
-const TEXTURE_BASE_URL = "/mcitems";
 
 // ========================================
 // 共通型
@@ -298,7 +296,7 @@ export function SearchCraftEmbedView({
           <div className="flex flex-wrap items-center gap-2">
             {items.map((itemId: string, idx: number) => (
               <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
-                <MinecraftItemIcon itemId={itemId} size={28} textureBaseUrl={TEXTURE_BASE_URL} className="pixelated" />
+                <ItemIcon itemId={itemId} size={28} />
                 <span className="text-base">{getItemDisplayName(itemId)}</span>
               </div>
             ))}

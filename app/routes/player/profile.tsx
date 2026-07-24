@@ -22,10 +22,10 @@ import {
   type MCSRRankedMatch,
 } from "@/lib/external-stats";
 import {
-  MinecraftItemIcon,
   formatItemName,
   getItemNameJa,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
@@ -1735,7 +1735,6 @@ function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
 }
 
 // mcitemsのテクスチャベースURL
-const TEXTURE_BASE_URL = "/mcitems";
 
 // アイテム名を日本語で取得するヘルパー
 function getItemDisplayName(itemId: string): string {
@@ -1797,12 +1796,7 @@ function ItemLayoutCard({
                       <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
                         {items.length > 0 ? (
                           <>
-                            <MinecraftItemIcon
-                              itemId={items[0]}
-                              size={36}
-                              textureBaseUrl={TEXTURE_BASE_URL}
-                              className="pixelated"
-                            />
+                            <ItemIcon itemId={items[0]} size={36} />
                             {items.length > 1 && (
                               <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
                                 {items.length}
@@ -1828,12 +1822,7 @@ function ItemLayoutCard({
                 <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
                   {offhand.length > 0 ? (
                     <>
-                      <MinecraftItemIcon
-                        itemId={offhand[0]}
-                        size={36}
-                        textureBaseUrl={TEXTURE_BASE_URL}
-                        className="pixelated"
-                      />
+                      <ItemIcon itemId={offhand[0]} size={36} />
                       {offhand.length > 1 && (
                         <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
                           {offhand.length}
@@ -1863,12 +1852,7 @@ function ItemLayoutCard({
                 {items.map((item, idx) => (
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <MinecraftItemIcon
-                      itemId={item}
-                      size={16}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={item} size={16} />
                     <span className="text-xs">{getItemDisplayName(item)}</span>
                   </span>
                 ))}
@@ -1883,12 +1867,7 @@ function ItemLayoutCard({
                 {offhand.map((item, idx) => (
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <MinecraftItemIcon
-                      itemId={item}
-                      size={16}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={item} size={16} />
                     <span className="text-xs">{getItemDisplayName(item)}</span>
                   </span>
                 ))}

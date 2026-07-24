@@ -61,9 +61,6 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
   return false;
 }
 
-// mcitemsのテクスチャベースURL
-const TEXTURE_BASE_URL = "/mcitems";
-
 type SearchCraftItem = {
   id: string;
   sequence: number;

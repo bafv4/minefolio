@@ -41,6 +41,12 @@
 - `lucide-react` を統一使用
 - サイズは用途に合わせる（フッター: `h-3 w-3`、ボタン内: `h-4 w-4`、空状態: `h-12 w-12`）
 
+### Minecraft アイテムアイコン
+- **`ItemIcon`（`app/components/item-icon.tsx`）を使う**。`@bafv4/mcitems` の `MinecraftItemIcon` を直接呼ばない
+- ラッパー側でテクスチャ配信元（`TEXTURE_BASE_URL = "/mcitems"`）・`pixelated` クラス・読み込み中の円形プログレスを既定化している
+  （`loadLang()` に渡すベースURLも同モジュールの `TEXTURE_BASE_URL` を import する）
+- 読み込み中のプレースホルダは `size` と同じ外枠を保つため、画像に切り替わってもレイアウトがずれない
+
 ## ダイアログ・モーダル
 - shadcn/ui の `Dialog` コンポーネントを使用
 - 構造: `DialogHeader` → `DialogTitle` → コンテンツ → `DialogFooter`（キャンセル + アクションボタン）

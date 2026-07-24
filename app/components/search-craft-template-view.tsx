@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
-  MinecraftItemIcon,
   formatItemName,
   getItemName,
   loadLang,
   isLangLoaded,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
 import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
@@ -23,8 +23,6 @@ import { Copy } from "lucide-react";
  * プレイヤープロフィールのサーチクラフトタブ・テンプレート詳細ページ・Playground で共用する。
  * タイミング別グループカード + 3カラム表形式（v1.6.0 の刷新スタイル）。
  */
-
-const TEXTURE_BASE_URL = "/mcitems";
 
 /** サーチクラフトのゲーム内言語が未設定のときのフォールバック言語（アプリ既定=日本語）。 */
 const DEFAULT_ITEM_LANG = "ja_jp";
@@ -407,12 +405,7 @@ function SearchCraftRow({
               key={idx}
               className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1"
             >
-              <MinecraftItemIcon
-                itemId={itemId}
-                size={24}
-                textureBaseUrl={TEXTURE_BASE_URL}
-                className="pixelated"
-              />
+              <ItemIcon itemId={itemId} size={24} />
               <span className="text-sm">{getItemDisplayName(itemId, lang)}</span>
             </div>
           ))}

@@ -1,7 +1,5 @@
 import { cn } from "@/lib/utils";
-import { MinecraftItemIcon } from "@bafv4/mcitems/1.16/react";
-
-const TEXTURE_BASE_URL = "/mcitems";
+import { ItemIcon } from "@/components/item-icon";
 
 const SPLIT_MARK_ITEM: Record<string, string> = {
   "Enter Nether": "minecraft:crying_obsidian",
@@ -39,12 +37,7 @@ export function PaceManSplitMark({
 
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <MinecraftItemIcon
-        itemId={itemId}
-        size={size}
-        textureBaseUrl={TEXTURE_BASE_URL}
-        className="shrink-0 pixelated"
-      />
+      <ItemIcon itemId={itemId} size={size} className="shrink-0" />
       {withLabel && (
         <span className={cn("leading-none", labelClassName)}>{timeline}</span>
       )}

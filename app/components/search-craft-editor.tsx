@@ -56,7 +56,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  MinecraftItemIcon,
   getCraftableItems,
   getCraftableItemsByCategory,
   searchItems,
@@ -64,14 +63,12 @@ import {
   ITEM_CATEGORIES,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import { ActualKeyBadges, TIMING_META } from "@/components/search-craft-template-view";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/messages";
-
-// mcitemsのテクスチャベースURL
-const TEXTURE_BASE_URL = "/mcitems";
 
 /**
  * サーチクラフト編集UI（/me/search-craft とテンプレートエディタで共通）。
@@ -168,12 +165,7 @@ function ItemSelectDialog({
                   className="cursor-pointer flex items-center gap-1 pl-1"
                   onClick={() => toggleItem(itemId)}
                 >
-                  <MinecraftItemIcon
-                    itemId={itemId}
-                    size={16}
-                    textureBaseUrl={TEXTURE_BASE_URL}
-                    className="pixelated"
-                  />
+                  <ItemIcon itemId={itemId} size={16} />
                   {formatItemName(itemId)}
                   <span className="ml-1 text-muted-foreground">×</span>
                 </Badge>
@@ -195,12 +187,7 @@ function ItemSelectDialog({
                         : "border-transparent hover:border-border hover:bg-secondary/50"
                     }`}
                   >
-                    <MinecraftItemIcon
-                      itemId={itemId}
-                      size={28}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={itemId} size={28} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>{formatItemName(itemId)}</TooltipContent>
@@ -290,12 +277,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                 key={itemIndex}
                 className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
               >
-                <MinecraftItemIcon
-                  itemId={itemId}
-                  size={20}
-                  textureBaseUrl={TEXTURE_BASE_URL}
-                  className="pixelated"
-                />
+                <ItemIcon itemId={itemId} size={20} />
                 <span className="text-sm">{formatItemName(itemId)}</span>
                 <button
                   type="button"

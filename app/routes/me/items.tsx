@@ -56,13 +56,13 @@ import {
   Copy,
 } from "lucide-react";
 import {
-  MinecraftItemIcon,
   searchItems,
   formatItemName,
   ITEM_CATEGORIES,
   getItemsByCategory,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
+import { ItemIcon } from "@/components/item-icon";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { t } from "@/lib/messages";
@@ -104,9 +104,6 @@ const SEGMENT_PRESETS = [
   "Enter End",
   "Enter End (Zero)",
 ] as const;
-
-// mcitemsのテクスチャベースURL
-const TEXTURE_BASE_URL = "/mcitems";
 
 type Slot = {
   slot: number;
@@ -354,18 +351,8 @@ function HotbarSlot({
         >
           {items.length > 0 ? (
             <div className="relative w-full h-full flex items-center justify-center">
-              <MinecraftItemIcon
-                itemId={items[0]}
-                size={24}
-                textureBaseUrl={TEXTURE_BASE_URL}
-                className="pixelated sm:hidden"
-              />
-              <MinecraftItemIcon
-                itemId={items[0]}
-                size={28}
-                textureBaseUrl={TEXTURE_BASE_URL}
-                className="pixelated hidden sm:block"
-              />
+              <ItemIcon itemId={items[0]} size={24} className="sm:hidden" />
+              <ItemIcon itemId={items[0]} size={28} className="hidden sm:block" />
               {items.length > 1 && (
                 <span className="absolute bottom-0 right-0 text-[10px] bg-background/80 px-0.5 rounded">
                   +{items.length - 1}
@@ -426,12 +413,7 @@ function HotbarSlot({
                   className="cursor-pointer flex items-center gap-1 pl-1"
                   onClick={() => toggleItem(itemId)}
                 >
-                  <MinecraftItemIcon
-                    itemId={itemId}
-                    size={16}
-                    textureBaseUrl={TEXTURE_BASE_URL}
-                    className="pixelated"
-                  />
+                  <ItemIcon itemId={itemId} size={16} />
                   {formatItemName(itemId)}
                   <span className="ml-1 text-muted-foreground">×</span>
                 </Badge>
@@ -453,12 +435,7 @@ function HotbarSlot({
                         : "border-transparent hover:border-border hover:bg-secondary/50"
                     }`}
                   >
-                    <MinecraftItemIcon
-                      itemId={itemId}
-                      size={28}
-                      textureBaseUrl={TEXTURE_BASE_URL}
-                      className="pixelated"
-                    />
+                    <ItemIcon itemId={itemId} size={28} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>{formatItemName(itemId)}</TooltipContent>
