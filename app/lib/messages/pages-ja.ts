@@ -1231,6 +1231,8 @@ export const PAGES_JA = {
     errorTagTooLong: "タグは50文字以内で入力してください",
     errorSlugRequired: "URLを入力してください（半角英小文字・数字・ハイフン・アンダースコア）",
     errorSlugTaken: "このURLは既に使われています。別の値を指定してください",
+    errorContentTooLong:
+      "本文が長すぎます（公開できる上限は50万文字です）。下書きとしては保存できます。内容を分割・整理してから公開してください。",
   },
   guideEditor: {
     save: "保存",
