@@ -12,6 +12,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
+    "gen:test-schema": "drizzle-kit export --dialect=sqlite --schema=./app/lib/schema.ts > app/lib/__tests__/helpers/test-schema.sql",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
