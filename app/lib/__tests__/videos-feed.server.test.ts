@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   createTestDbAt,
   seedUser,
+  daysAgo,
   schema,
   type TestDb,
 } from "./helpers/test-db";
@@ -19,10 +20,6 @@ const FEED_CACHE_KEY = "videos:feed:all";
 
 let db: TestDb;
 let originalUrl: string | undefined;
-
-function daysAgo(days: number): Date {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-}
 
 beforeEach(async () => {
   originalUrl = process.env.TURSO_DATABASE_URL;
@@ -82,7 +79,7 @@ describe("getPublicVideoFeed", () => {
     await seedYtVideo({ videoId: "y1", minefolioMcid: "runner1", publishedAt: daysAgo(2) });
     await seedVod({ vodId: "t1", publishedAt: daysAgo(1) });
 
-    const { items } = await getPublicVideoFeed(db);
+    const items = await getPublicVideoFeed(db);
 
     expect(items.map((v) => `${v.platform}:${v.videoId}`)).toEqual([
       "twitch:t1",
@@ -113,7 +110,7 @@ describe("getPublicVideoFeed", () => {
     await seedVod({ vodId: "private-vod", userLogin: "hiddentv" });
     await seedVod({ vodId: "keep-vod" });
 
-    const { items } = await getPublicVideoFeed(db);
+    const items = await getPublicVideoFeed(db);
 
     expect(items.map((v) => v.videoId).sort()).toEqual(["keep", "keep-vod"]);
   });
@@ -126,15 +123,15 @@ describe("getPublicVideoFeed", () => {
     await seedVod({ vodId: "t2", userLogin: "othertv", publishedAt: daysAgo(1) });
 
     const platformFiltered = await getPublicVideoFeed(db, { platform: "twitch" });
-    expect(platformFiltered.items.map((v) => v.videoId)).toEqual(["t2", "t1"]);
+    expect(platformFiltered.map((v) => v.videoId)).toEqual(["t2", "t1"]);
 
     await invalidateCache(FEED_CACHE_KEY);
     const playerFiltered = await getPublicVideoFeed(db, { player: "runner2" });
-    expect(playerFiltered.items.map((v) => v.videoId)).toEqual(["t2"]);
+    expect(playerFiltered.map((v) => v.videoId)).toEqual(["t2"]);
 
     await invalidateCache(FEED_CACHE_KEY);
     const dateFiltered = await getPublicVideoFeed(db, { from: daysAgo(7), to: daysAgo(3) });
-    expect(dateFiltered.items.map((v) => v.videoId)).toEqual(["t1"]);
+    expect(dateFiltered.map((v) => v.videoId)).toEqual(["t1"]);
   });
 });
 

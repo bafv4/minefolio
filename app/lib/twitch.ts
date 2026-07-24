@@ -229,7 +229,6 @@ export interface TwitchVod {
   /** 配信者の表示名 */
   userName: string;
   title: string;
-  url: string;
   /** サムネイルURL（サイズ解決済み）。処理中のVOD等で未生成なら null */
   thumbnailUrl: string | null;
   /** 公開日時（ISO 8601） */
@@ -263,7 +262,6 @@ interface TwitchVideoResponse {
     user_login: string;
     user_name: string;
     title: string;
-    url: string;
     thumbnail_url: string;
     published_at: string;
     created_at: string;
@@ -272,21 +270,21 @@ interface TwitchVideoResponse {
   }>;
 }
 
+// VOD取得の上限（youtube-cache.ts の「チャンネルごと3件・最大10チャンネル」と同水準）
+const VODS_PER_CHANNEL = 3;
+const VOD_MAX_CHANNELS = 10;
+
 /**
  * 指定した配信者たちの最近の配信アーカイブ（VOD）を取得
  * /users は最大100件バッチ、/videos は配信者ごとに1リクエスト
  * @param clientId Twitch Client ID
  * @param accessToken App Access Token
  * @param userLogins Twitchユーザー名の配列
- * @param vodsPerChannel 配信者ごとの最大取得件数
- * @param maxChannels 取得対象の最大配信者数（リクエスト数の上限）
  */
 export async function getRecentVods(
   clientId: string,
   accessToken: string,
-  userLogins: string[],
-  vodsPerChannel: number = 3,
-  maxChannels: number = 10
+  userLogins: string[]
 ): Promise<TwitchVod[]> {
   if (userLogins.length === 0) return [];
 
@@ -297,7 +295,7 @@ export async function getRecentVods(
 
   try {
     // login → broadcaster id をバッチ解決（最大100件/リクエスト）
-    const limitedLogins = userLogins.slice(0, maxChannels);
+    const limitedLogins = userLogins.slice(0, VOD_MAX_CHANNELS);
     const params = limitedLogins
       .map((u) => `login=${encodeURIComponent(u)}`)
       .join("&");
@@ -320,7 +318,7 @@ export async function getRecentVods(
       broadcasters.map(async ({ id }) => {
         try {
           const res = await fetch(
-            `${TWITCH_API}/videos?user_id=${id}&type=archive&first=${vodsPerChannel}`,
+            `${TWITCH_API}/videos?user_id=${id}&type=archive&first=${VODS_PER_CHANNEL}`,
             { headers, signal: AbortSignal.timeout(10000) }
           );
           if (!res.ok) {
@@ -341,7 +339,6 @@ export async function getRecentVods(
       userLogin: v.user_login.toLowerCase(),
       userName: v.user_name,
       title: v.title,
-      url: v.url,
       thumbnailUrl: resolveVodThumbnail(v.thumbnail_url),
       publishedAt: v.published_at || v.created_at,
       durationSeconds: parseTwitchDuration(v.duration),

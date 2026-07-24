@@ -5,15 +5,11 @@
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
 import { fetchLiveRuns } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
-import { excludeViewersCondition } from "@/lib/users-filter";
 import { getCached, setCached } from "@/lib/cache";
-import { getCachedVideos } from "@/lib/youtube-cache";
-import { getCachedVods } from "@/lib/twitch-vod-cache";
+import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getUserData } from "@/lib/home-user-data.server";
 
 // キャッシュTTL設定（ミリ秒）
@@ -24,6 +20,9 @@ const CACHE_TTL = {
   USER_DATA: 60 * 1000, // 1分（ユーザーデータ）
   TWITCH_LINKS: 5 * 60 * 1000, // 5分（Twitchリンク一覧）
 };
+
+// 動画フィード（youtube-videos / twitch-vods）でホームに返す最大件数
+const HOME_FEED_VIDEO_LIMIT = 10;
 
 // CDNキャッシュヘッダー（秒）
 // DBキャッシュ系（paces/youtube）はデータ鮮度がcron更新間隔（30分/2時間）で決まるため、
@@ -60,26 +59,8 @@ async function getCachedTwitchLinks(): Promise<TwitchLinkCache | null> {
 }
 
 async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
-  const db = createDb();
-  const twitchLinks = await db
-    .select({
-      identifier: socialLinks.identifier,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      slug: users.slug,
-      displayName: users.displayName,
-      discordAvatar: users.discordAvatar,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(socialLinks)
-    .innerJoin(users, eq(socialLinks.userId, users.id))
-    .where(
-      and(
-        eq(users.profileVisibility, "public"),
-        eq(socialLinks.platform, "twitch"),
-        excludeViewersCondition,
-      )
-    );
+  // クエリ本体（可視性ルール含む）は videos-feed.server.ts と共有し、ここではキャッシュのみ担う
+  const twitchLinks = await getPublicTwitchLinks();
 
   const data: TwitchLinkCache = { links: twitchLinks };
   await setCached("home-feed:twitch-links", data, CACHE_TTL.TWITCH_LINKS);
@@ -246,21 +227,26 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
 
     case "youtube-videos": {
-      // キャッシュから動画を取得（Cronで更新、新しい順）
-      const cachedVideos = await getCachedVideos();
+      // キャッシュテーブル（Cronが2時間毎に更新）から取得。可視性・ユーザー紐付けは
+      // /videos と同一の getPublicVideoFeed に委譲し、twitch-vods と同じ FeedVideo 形式で返す
+      const recentVideos = (
+        await getPublicVideoFeed(createDb(), { platform: "youtube" })
+      ).slice(0, HOME_FEED_VIDEO_LIMIT);
 
-      // null（DBエラー or 72時間以内の動画なし）や0件は、動画公開・障害復旧で即変わり得るため
-      // 短TTLで返す（長TTL+SWRだと空状態がエッジに最大1日残ってしまう）
-      if (!cachedVideos || cachedVideos.length === 0) {
+      // 0件は、動画公開・障害復旧で即変わり得るため短TTLで返す
+      // （長TTL+SWRだと空状態がエッジに最大1日残ってしまう）
+      if (recentVideos.length === 0) {
         return jsonResponse({ recentVideos: [] }, 60);
       }
 
-      return jsonResponse({ recentVideos: cachedVideos }, CDN_CACHE.YOUTUBE, CDN_SWR_LONG);
+      return jsonResponse({ recentVideos }, CDN_CACHE.YOUTUBE, CDN_SWR_LONG);
     }
 
     case "twitch-vods": {
       // キャッシュテーブル（twitch_vod_cache。Cronが30分毎に更新）から取得
-      const recentVods = await getCachedVods();
+      const recentVods = (
+        await getPublicVideoFeed(createDb(), { platform: "twitch" })
+      ).slice(0, HOME_FEED_VIDEO_LIMIT);
 
       // 空状態はVOD公開・障害復旧で即変わり得るため短TTL（youtube-videos と同じ方針）
       if (recentVods.length === 0) {

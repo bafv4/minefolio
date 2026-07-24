@@ -1,33 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { formatRelativeTimeInHours } from "@/lib/relative-time";
+import type { FeedVideo } from "@/lib/feed-video";
 import { Youtube, Twitch, Play, ExternalLink } from "lucide-react";
 import { t } from "@/lib/messages";
 
-/**
- * ホームの動画フィードの統一アイテム（YouTube動画 / Twitch VOD）。
- * publishedAt はAPIレスポンス由来のためISO文字列とDateの両方を許容する
- */
-export interface FeedVideo {
-  platform: "youtube" | "twitch";
-  videoId: string;
-  title: string;
-  thumbnailUrl: string | null;
-  channelTitle: string | null;
-  publishedAt: string | Date;
-  /** 配信時間（秒）。Twitch VODのみ */
-  durationSeconds?: number | null;
-  /** 紐付けMinefolioユーザーのMCID（ホームの自分の動画非表示フィルタ用） */
-  minefolioMcid: string | null;
-  uuid: string | null;
-  slug: string | null;
-  displayName: string | null;
-  discordAvatar: string | null;
-  customSkinUrl: string | null;
-}
-
 /** プラットフォーム上の視聴ページURL */
-export function getFeedVideoUrl(video: FeedVideo): string {
+function getFeedVideoUrl(video: FeedVideo): string {
   return video.platform === "youtube"
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`
     : `https://www.twitch.tv/videos/${encodeURIComponent(video.videoId)}`;
@@ -43,13 +23,6 @@ function getEmbedUrl(video: FeedVideo): string {
   }
   const parent = encodeURIComponent(window.location.hostname);
   return `https://player.twitch.tv/?video=${encodeURIComponent(video.videoId)}&parent=${parent}&autoplay=true`;
-}
-
-function formatVideoTime(date: string | Date): string {
-  const hoursAgo = Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60));
-  if (hoursAgo < 1) return t("home.justWithinHour");
-  if (hoursAgo < 24) return t("playerStats.hoursAgo", { count: hoursAgo });
-  return t("playerStats.daysAgo", { count: Math.floor(hoursAgo / 24) });
 }
 
 /** 秒を "1:23:45" / "12:34" 形式に変換 */
@@ -160,7 +133,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="truncate">{showName}</span>
           )}
           <span className="flex shrink-0 items-center gap-2">
-            {formatVideoTime(video.publishedAt)}
+            {formatRelativeTimeInHours(video.publishedAt)}
             <a
               href={watchUrl}
               target="_blank"

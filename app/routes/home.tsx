@@ -10,7 +10,6 @@ import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
 import { type CachedPace } from "@/components/recent-pace-card";
-import type { CachedYouTubeVideo } from "@/lib/youtube-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
@@ -18,9 +17,9 @@ import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceFeedCard } from "@/components/pace-feed-card";
-import { FeedVideoCard, type FeedVideo } from "@/components/feed-video-card";
+import { FeedVideoCard } from "@/components/feed-video-card";
+import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video";
 import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -33,7 +32,6 @@ import {
   History,
   Sparkles,
   Users,
-  Youtube,
   BookOpen,
   Shuffle,
   Timer,
@@ -179,9 +177,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// APIレスポンスの型定義
+// APIレスポンスの型定義（動画系はどちらも FeedVideo 形式で返る）
 interface YouTubeVideosResponse {
-  recentVideos: CachedYouTubeVideo[];
+  recentVideos: FeedVideo[];
 }
 
 interface TwitchVodsResponse {
@@ -202,7 +200,7 @@ interface LiveRunsResponse {
 
 // Feed状態管理用のReducer
 interface FeedState {
-  recentVideos: CachedYouTubeVideo[];
+  recentVideos: FeedVideo[];
   twitchVods: FeedVideo[];
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
@@ -224,7 +222,7 @@ interface FeedState {
 }
 
 type FeedAction =
-  | { type: "SET_VIDEOS"; payload: CachedYouTubeVideo[] }
+  | { type: "SET_VIDEOS"; payload: FeedVideo[] }
   | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
   | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
   | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
@@ -421,38 +419,23 @@ export default function HomePage() {
     [feed.liveRuns, currentUser?.showPacemanOnHome, currentUser?.mcid]
   );
 
-  // YouTube動画とTwitch VODを統一形式にマージし、新しい順にソート
-  const mergedFeedVideos = useMemo<FeedVideo[]>(() => {
-    const youtubeVideos: FeedVideo[] = feed.recentVideos.map((v) => ({
-      platform: "youtube" as const,
-      videoId: v.videoId,
-      title: v.title,
-      thumbnailUrl: v.thumbnailUrl,
-      channelTitle: v.channelTitle,
-      publishedAt: v.publishedAt,
-      minefolioMcid: v.minefolioMcid,
-      uuid: v.uuid,
-      slug: v.slug,
-      displayName: v.displayName,
-      discordAvatar: v.discordAvatar,
-      customSkinUrl: v.customSkinUrl,
-    }));
-    return [...youtubeVideos, ...feed.twitchVods].sort(
-      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-  }, [feed.recentVideos, feed.twitchVods]);
+  // YouTube動画とTwitch VOD（どちらも FeedVideo 形式）をマージし、新しい順にソート
+  const mergedFeedVideos = useMemo<FeedVideo[]>(
+    () =>
+      [...feed.recentVideos, ...feed.twitchVods].sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      ),
+    [feed.recentVideos, feed.twitchVods]
+  );
 
-  // 自分の動画/VODを非表示にするユーザー設定を適用（プラットフォームごとのフラグ）
-  const filteredRecentVideos = useMemo(() => {
-    const myMcid = currentUser?.mcid?.toLowerCase();
-    if (!myMcid) return mergedFeedVideos;
-    return mergedFeedVideos.filter((video) => {
-      if (!video.minefolioMcid || video.minefolioMcid.toLowerCase() !== myMcid) return true;
-      return video.platform === "youtube"
-        ? currentUser!.showYoutubeOnHome !== false
-        : currentUser!.showTwitchOnHome !== false;
-    });
-  }, [mergedFeedVideos, currentUser]);
+  // 自分の動画/VODを非表示にするユーザー設定を適用（プラットフォームごとのフラグ。/videos と共通）
+  const filteredRecentVideos = useMemo(
+    () =>
+      currentUser
+        ? filterOwnVideos(mergedFeedVideos, currentUser)
+        : mergedFeedVideos,
+    [mergedFeedVideos, currentUser]
+  );
 
   // お気に入りを先頭に並べ替え（表示用）
   const sortedRecentPaces = useMemo(
@@ -770,7 +753,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sortedRecentVideos.map((video) => (
-              <FeedVideoCard key={`${video.platform}:${video.videoId}`} video={video} />
+              <FeedVideoCard key={feedVideoKey(video)} video={video} />
             ))}
           </div>
         </section>

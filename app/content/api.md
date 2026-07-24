@@ -168,7 +168,7 @@ Minecraft スキン画像を返す。
 
 | 名前   | 型     | 必須 | 説明                                                               |
 | ------ | ------ | ---- | ------------------------------------------------------------------ |
-| `type` | string | ○    | `live-runs` / `recent-paces` / `pace-timeline` / `twitch-streams` / `youtube-videos` |
+| `type` | string | ○    | `live-runs` / `recent-paces` / `pace-timeline` / `twitch-streams` / `youtube-videos` / `twitch-vods` |
 | `mcid` | string | `type=pace-timeline`時のみ○ | 対象プレイヤーのMCID |
 | `runId` | string | `type=pace-timeline`時のみ○ | PaceManのラン ID |
 

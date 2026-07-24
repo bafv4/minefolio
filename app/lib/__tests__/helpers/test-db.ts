@@ -71,6 +71,11 @@ export async function createTestDb(): Promise<TestDb> {
   return createTestDbAt(":memory:");
 }
 
+/** N日前（小数可）の Date。時系列データのシード用 */
+export function daysAgo(days: number): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
 type UserRow = typeof schema.users.$inferInsert;
 
 /**

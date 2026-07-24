@@ -38,7 +38,8 @@ const STATEMENTS = [
 	\`updated_at\` integer NOT NULL
 )`,
   "CREATE UNIQUE INDEX IF NOT EXISTS `twitch_vod_cache_vod_id_unique` ON `twitch_vod_cache` (`vod_id`)",
-  "CREATE INDEX IF NOT EXISTS `idx_twitch_vod_cache_vod_id` ON `twitch_vod_cache` (`vod_id`)",
+  // vod_id の個別indexはUNIQUE索引と重複するため作成しない（初期適用分は下でDROP）
+  "DROP INDEX IF EXISTS `idx_twitch_vod_cache_vod_id`",
   "CREATE INDEX IF NOT EXISTS `idx_twitch_vod_cache_user_login` ON `twitch_vod_cache` (`user_login`)",
   "CREATE INDEX IF NOT EXISTS `idx_twitch_vod_cache_published` ON `twitch_vod_cache` (`published_at`)",
   "CREATE INDEX IF NOT EXISTS `idx_twitch_vod_cache_available` ON `twitch_vod_cache` (`is_available`)",
@@ -67,7 +68,7 @@ if (apply) {
     console.error("❌ テーブルの作成に失敗しました。");
     process.exit(1);
   }
-  console.log("✅ 適用完了（twitch_vod_cache + インデックス4件 + UNIQUE索引）。");
+  console.log("✅ 適用完了（twitch_vod_cache + UNIQUE索引 + インデックス3件、冗長なvod_id個別indexは削除）。");
 } else {
   console.log("実行予定のSQL:");
   for (const stmt of STATEMENTS) {

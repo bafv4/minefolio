@@ -62,7 +62,6 @@ export const PAGES_JA = {
     sectionGuides: "最近のガイド",
     rtaTime: "タイム",
     justWithinHour: "1時間以内",
-    videosCount: "{count}件",
     playEmbedded: "{title} をこの場で再生",
     openOnPlatform: "{platform} で開く",
     viewAll: "すべて見る",
@@ -103,8 +102,7 @@ export const PAGES_JA = {
     platformAll: "すべて",
     filterPeriod: "時期",
     filterPeriodTo: "終了日",
-    loadMoreError: "追加の読み込みに失敗しました",
-    retry: "再試行",
+    loadMore: "もっと読み込む",
   },
   secretGrid: {
     title: "??? - Minefolio",

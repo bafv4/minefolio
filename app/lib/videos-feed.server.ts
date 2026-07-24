@@ -3,17 +3,15 @@
 // 統一形式 FeedVideo にマージし、検索条件で絞り込む。
 // /paces（paces-feed.server.ts）と同じ構成: 全体をメモリキャッシュ → JSフィルタ → ページング
 
-import { eq, and, isNotNull, gte, desc } from "drizzle-orm";
+import { eq, and, isNotNull, gte, desc, inArray, sql } from "drizzle-orm";
 import { createDb } from "./db";
 import { createAuth } from "./auth";
 import { users, socialLinks, youtubeVideoCache, twitchVodCache } from "./schema";
 import { getOptionalSession } from "./session";
 import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
-import type { FeedVideo } from "@/components/feed-video-card";
-
-/** 動画・VODの保持期間（日）。cron のクリーンアップと表示フィルタの両方で使用 */
-export const VIDEO_FEED_RETENTION_DAYS = 90;
+import { parseDateParam } from "./paces-feed.server";
+import { videoRetentionCutoff, type FeedVideo } from "./feed-video";
 
 // フィード全体のメモリキャッシュTTL（無限スクロールのページ毎の全走査を避ける）
 const VIDEOS_FEED_CACHE_TTL = 60 * 1000;
@@ -50,16 +48,9 @@ export interface VideoSearchFilters {
   to?: Date;
 }
 
-// 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（paces-feed.server.ts と同じ規約）
-function parseDateParam(value: string | null, endOfDay: boolean): Date | undefined {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-  const time = endOfDay ? "23:59:59.999" : "00:00:00.000";
-  const date = new Date(`${value}T${time}+09:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
 /**
- * URLクエリパラメータから /videos の検索条件を解析する（不正な値は無視）
+ * URLクエリパラメータから /videos の検索条件を解析する（不正な値は無視。
+ * 日付は paces-feed.server.ts と共有の parseDateParam＝JST解釈）
  */
 export function parseVideoSearchParams(searchParams: URLSearchParams): VideoSearchFilters {
   const filters: VideoSearchFilters = {};
@@ -91,9 +82,9 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
   const cached = await getCached<FeedVideo[]>(cacheKey);
   if (cached) return cached;
 
-  const cutoff = new Date(Date.now() - VIDEO_FEED_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const cutoff = videoRetentionCutoff();
 
-  const [ytRows, vodRows, ytUsers, twitchLinks] = await Promise.all([
+  const [ytRows, vodRows, twitchLinks] = await Promise.all([
     db.query.youtubeVideoCache.findMany({
       where: and(
         eq(youtubeVideoCache.isAvailable, true),
@@ -108,34 +99,46 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
       ),
       orderBy: [desc(twitchVodCache.publishedAt)],
     }),
-    db.query.users.findMany({
-      where: and(
-        isNotNull(users.mcid),
-        eq(users.profileVisibility, "public"),
-        excludeViewersCondition,
-      ),
-      columns: {
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        discordAvatar: true,
-        customSkinUrl: true,
-      },
-    }),
     getPublicTwitchLinks(),
   ]);
+
+  // YouTube動画に実際に紐付いているMCIDのユーザーのみ取得（全公開ユーザーの走査を避ける）
+  const ytMcids = [
+    ...new Set(
+      ytRows
+        .map((v) => v.minefolioMcid?.toLowerCase())
+        .filter((mcid): mcid is string => !!mcid)
+    ),
+  ];
+  const ytUsers =
+    ytMcids.length > 0
+      ? await db.query.users.findMany({
+          where: and(
+            isNotNull(users.mcid),
+            inArray(sql`lower(${users.mcid})`, ytMcids),
+            eq(users.profileVisibility, "public"),
+            excludeViewersCondition,
+          ),
+          columns: {
+            mcid: true,
+            uuid: true,
+            slug: true,
+            displayName: true,
+            discordAvatar: true,
+            customSkinUrl: true,
+          },
+        })
+      : [];
 
   const ytUserMap = new Map(ytUsers.map((u) => [u.mcid!.toLowerCase(), u]));
   const twitchLinkMap = new Map(twitchLinks.map((l) => [l.identifier.toLowerCase(), l]));
 
-  const items: FeedVideo[] = [];
-
+  const ytItems: FeedVideo[] = [];
   for (const v of ytRows) {
     // 紐付けユーザーが非公開・viewer化・退会した動画は出さない（紐付けなしの旧データは残す）
     const user = v.minefolioMcid ? ytUserMap.get(v.minefolioMcid.toLowerCase()) : null;
     if (v.minefolioMcid && !user) continue;
-    items.push({
+    ytItems.push({
       platform: "youtube",
       videoId: v.videoId,
       title: v.title,
@@ -151,10 +154,11 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
     });
   }
 
+  const vodItems: FeedVideo[] = [];
   for (const v of vodRows) {
     const link = twitchLinkMap.get(v.userLogin);
     if (!link) continue; // リンク解除・非公開化したユーザーのVODは出さない
-    items.push({
+    vodItems.push({
       platform: "twitch",
       videoId: v.vodId,
       title: v.title,
@@ -171,9 +175,22 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
     });
   }
 
-  items.sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  );
+  // 両リストとも publishedAt 降順で取得済みのため、全体ソートせず線形マージする
+  const timeOf = (v: FeedVideo) => new Date(v.publishedAt).getTime();
+  const items: FeedVideo[] = [];
+  let yi = 0;
+  let vi = 0;
+  while (yi < ytItems.length || vi < vodItems.length) {
+    const yt = ytItems[yi];
+    const vod = vodItems[vi];
+    if (!vod || (yt && timeOf(yt) >= timeOf(vod))) {
+      items.push(yt);
+      yi++;
+    } else {
+      items.push(vod);
+      vi++;
+    }
+  }
 
   await setCached(cacheKey, items, VIDEOS_FEED_CACHE_TTL);
   return items;
@@ -187,7 +204,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
 export async function getPublicVideoFeed(
   db: Db,
   filters: VideoSearchFilters = {},
-): Promise<{ items: FeedVideo[] }> {
+): Promise<FeedVideo[]> {
   let items = await getVideoFeedBase(db);
 
   if (filters.platform) {
@@ -214,7 +231,7 @@ export async function getPublicVideoFeed(
     });
   }
 
-  return { items };
+  return items;
 }
 
 /**

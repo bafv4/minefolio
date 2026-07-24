@@ -814,7 +814,7 @@ export const twitchVodCache = sqliteTable("twitch_vod_cache", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_twitch_vod_cache_vod_id").on(table.vodId),
+  // vodId は .unique() が索引を生成するため個別indexは持たない
   index("idx_twitch_vod_cache_user_login").on(table.userLogin),
   index("idx_twitch_vod_cache_published").on(table.publishedAt),
   index("idx_twitch_vod_cache_available").on(table.isAvailable),

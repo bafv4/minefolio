@@ -125,9 +125,11 @@ Minecraftスキン画像を返す。
 
 - レスポンスはユーザー非依存（新しい順）。お気に入りを先頭に出す並べ替えはクライアント側で適用
 - 環境変数未設定のサービスはスキップ
-- `twitch-vods` は `twitch_vod_cache` テーブル（`/api/cron/twitch-update` が30分毎に蓄積）から
-  公開プロフィール（viewer除外）のTwitchリンクに紐付くVODを新しい順に最大10件返す
-  （`FeedVideo` 形式: platform / videoId / title / thumbnailUrl / durationSeconds / 紐付けユーザー情報）
+- `youtube-videos` / `twitch-vods` はどちらもキャッシュテーブル（cron蓄積: YouTube 2時間毎 /
+  Twitch 30分毎）からの読み出しで、可視性ゲート（公開プロフィールのみ・viewer除外）と
+  ユーザー紐付けを `/api/videos` と共通の `getPublicVideoFeed` に委譲し、
+  **統一形式 `FeedVideo`**（platform / videoId / title / thumbnailUrl / durationSeconds /
+  紐付けユーザー情報）で新しい順に最大10件返す
 
 **関連ファイル:** `app/routes/api/home-feed.ts`
 
@@ -141,13 +143,12 @@ Minecraftスキン画像を返す。
 **パラメータ:**
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `offset` | number | △ | ページングオフセット（デフォルト: 0） |
-| `limit` | number | △ | 取得件数（デフォルト: 24、最大: 60） |
+| `page` | number | △ | 1始まりのページ番号（デフォルト: 1、24件/ページ） |
 | `q` | string | △ | プレイヤー検索（MCID・表示名・slug・チャンネル名の部分一致） |
 | `platform` | string | △ | `youtube` / `twitch` |
 | `from` / `to` | string | △ | 時期（YYYY-MM-DD、JST解釈） |
 
-**レスポンス:** `{ "videos": FeedVideo[], "total": number, "hasMore": boolean }`
+**レスポンス:** `{ "items": FeedVideo[], "page": number, "total": number, "hasMore": boolean }`（`use-infinite-scroll` フックの規約）
 
 - 可視性: 公開プロフィール（viewer除外）に紐付く動画・VODのみ（/paces と同じ「公開のみ」ルール）
 - レスポンスはユーザー非依存。「自分の動画を隠す」設定はクライアント側で適用

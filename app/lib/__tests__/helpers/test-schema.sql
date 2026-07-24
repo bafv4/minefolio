@@ -480,7 +480,6 @@ CREATE TABLE `twitch_vod_cache` (
 );
 
 CREATE UNIQUE INDEX `twitch_vod_cache_vod_id_unique` ON `twitch_vod_cache` (`vod_id`);
-CREATE INDEX `idx_twitch_vod_cache_vod_id` ON `twitch_vod_cache` (`vod_id`);
 CREATE INDEX `idx_twitch_vod_cache_user_login` ON `twitch_vod_cache` (`user_login`);
 CREATE INDEX `idx_twitch_vod_cache_published` ON `twitch_vod_cache` (`published_at`);
 CREATE INDEX `idx_twitch_vod_cache_available` ON `twitch_vod_cache` (`is_available`);

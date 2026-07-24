@@ -1,5 +1,5 @@
 import { useLoaderData, useSearchParams } from "react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/videos";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -20,11 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FeedVideoCard, type FeedVideo } from "@/components/feed-video-card";
+import { FeedVideoCard } from "@/components/feed-video-card";
+import { feedVideoKey, filterOwnVideos, type FeedVideo, type OwnVideoPrefs } from "@/lib/feed-video";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { VIDEOS_PAGE_SIZE } from "./api/videos";
 import { Play, Film, Loader2, Search, X } from "lucide-react";
-
-// 初回・追加読み込みの件数（無限スクロールで順次追加）
-const PAGE_SIZE = 24;
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "platform", "from", "to"] as const;
@@ -56,120 +56,71 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parseVideoSearchParams(url.searchParams);
-  const [{ items }, viewerPrefs] = await Promise.all([
+  const [items, viewerPrefs] = await Promise.all([
     getPublicVideoFeed(db, filters),
     getViewerVideoPrefs(db, auth, request),
   ]);
 
   return {
     appUrl,
-    videos: items.slice(0, PAGE_SIZE),
+    videos: items.slice(0, VIDEOS_PAGE_SIZE),
     total: items.length,
     viewerPrefs,
   };
 }
 
-interface VideosApiResponse {
-  videos: FeedVideo[];
-  total: number;
-  hasMore: boolean;
-}
-
-// 無限スクロール付きの動画一覧（検索条件が変わったら key で作り直す）
+// 無限スクロール付きの動画一覧（/browse と同じ use-infinite-scroll フックを使用。
+// 検索条件の変化は resetDeps でフック側がリセットする）
 function VideosList({
   initialVideos,
   initialTotal,
-  searchQuery,
-  hidePrefs,
+  filterKey,
+  viewerPrefs,
 }: {
   initialVideos: FeedVideo[];
   initialTotal: number;
-  searchQuery: string;
-  hidePrefs: { mcid: string | null; hideYoutube: boolean; hideTwitch: boolean };
+  filterKey: string;
+  viewerPrefs: OwnVideoPrefs;
 }) {
-  const [videos, setVideos] = useState(initialVideos);
-  const [reachedEnd, setReachedEnd] = useState(initialVideos.length >= initialTotal);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const loadingRef = useRef(false);
-  const offsetRef = useRef(initialVideos.length);
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const infinite = useInfiniteScroll<FeedVideo>({
+    initialItems: initialVideos,
+    initialPage: 1,
+    initialHasMore: initialVideos.length < initialTotal,
+    endpoint: "/api/videos",
+    resetDeps: [filterKey],
+  });
 
-  const loadMore = useCallback(async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoadingMore(true);
-    setLoadError(false);
-    try {
-      const params = new URLSearchParams(searchQuery);
-      params.set("offset", String(offsetRef.current));
-      params.set("limit", String(PAGE_SIZE));
-      const res = await fetch(`/api/videos?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as VideosApiResponse;
-
-      offsetRef.current += data.videos.length;
-      if (data.videos.length === 0 || !data.hasMore) {
-        setReachedEnd(true);
-      }
-      // 追加読み込み中に新しい動画が入って一覧がずれた場合の重複を除去
-      setVideos((prev) => {
-        const seen = new Set(prev.map((v) => `${v.platform}:${v.videoId}`));
-        return [...prev, ...data.videos.filter((v) => !seen.has(`${v.platform}:${v.videoId}`))];
-      });
-    } catch (err) {
-      console.error("Failed to load more videos:", err);
-      setLoadError(true);
-    } finally {
-      loadingRef.current = false;
-      setLoadingMore(false);
-    }
-  }, [searchQuery]);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || reachedEnd || loadError) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) void loadMore();
-      },
-      { rootMargin: "400px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [loadMore, reachedEnd, loadError]);
-
-  // 「ホームに自分の動画を表示しない」設定時、自分の動画/VODを除外（ホームと同じ挙動）
-  // レスポンス自体はユーザー非依存（CDNキャッシュ対象）のため、フィルタはクライアント側で適用する
-  const visibleVideos = useMemo(() => {
-    const myMcid = hidePrefs.mcid?.toLowerCase();
-    if (!myMcid || (!hidePrefs.hideYoutube && !hidePrefs.hideTwitch)) return videos;
-    return videos.filter((v) => {
-      if (!v.minefolioMcid || v.minefolioMcid.toLowerCase() !== myMcid) return true;
-      return v.platform === "youtube" ? !hidePrefs.hideYoutube : !hidePrefs.hideTwitch;
-    });
-  }, [videos, hidePrefs]);
+  // 「ホームに自分の動画を表示しない」設定時、自分の動画/VODを除外（ホームと共通の filterOwnVideos）
+  const visibleVideos = useMemo(
+    () => filterOwnVideos(infinite.items, viewerPrefs),
+    [infinite.items, viewerPrefs]
+  );
 
   return (
     <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {visibleVideos.map((video) => (
-          <FeedVideoCard key={`${video.platform}:${video.videoId}`} video={video} />
+          <FeedVideoCard key={feedVideoKey(video)} video={video} />
         ))}
       </div>
 
-      {!reachedEnd && (
-        <div ref={sentinelRef} className="flex justify-center py-4">
-          {loadError ? (
-            <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-              <p>{t("videos.loadMoreError")}</p>
-              <Button variant="outline" size="sm" onClick={() => void loadMore()}>
-                {t("videos.retry")}
-              </Button>
-            </div>
-          ) : (
-            loadingMore && <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          )}
+      {/* スクリーンリーダー向け追加読み込み通知 */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {infinite.liveMessage}
+      </div>
+
+      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック */}
+      {infinite.items.length > 0 && infinite.hasMore && (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
+          <Button
+            variant="outline"
+            onClick={infinite.loadMore}
+            disabled={infinite.isLoadingMore}
+          >
+            {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {t("videos.loadMore")}
+          </Button>
         </div>
       )}
     </>
@@ -179,16 +130,6 @@ function VideosList({
 export default function VideosPage() {
   const { videos, total, viewerPrefs } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // 「自分の動画を表示しない」設定（プラットフォーム別）
-  const hidePrefs = useMemo(
-    () => ({
-      mcid: viewerPrefs.mcid,
-      hideYoutube: viewerPrefs.showYoutubeOnHome === false,
-      hideTwitch: viewerPrefs.showTwitchOnHome === false,
-    }),
-    [viewerPrefs]
-  );
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
@@ -303,11 +244,10 @@ export default function VideosPage() {
 
       {videos.length > 0 ? (
         <VideosList
-          key={filterKey}
           initialVideos={videos}
           initialTotal={total}
-          searchQuery={searchParams.toString()}
-          hidePrefs={hidePrefs}
+          filterKey={filterKey}
+          viewerPrefs={viewerPrefs}
         />
       ) : (
         <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">

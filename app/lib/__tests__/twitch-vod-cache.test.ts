@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
   seedUser,
+  daysAgo,
   schema,
   type TestDb,
 } from "./helpers/test-db";
+import { invalidateCache } from "../cache";
 
 // Twitch API層はモックし、蓄積（upsert）・存在確認・クリーンアップのDB挙動を実DBで検証する
 const twitchMocks = vi.hoisted(() => ({
@@ -27,17 +29,12 @@ const SHARED_URL = "file::memory:?cache=shared";
 let db: TestDb;
 let originalUrl: string | undefined;
 
-function daysAgo(days: number): Date {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-}
-
 function makeApiVod(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "111",
     userLogin: "runnertv",
     userName: "RunnerTV",
     title: "Any% practice",
-    url: "https://www.twitch.tv/videos/111",
     thumbnailUrl: "https://example.com/thumb.jpg",
     publishedAt: daysAgo(1).toISOString(),
     durationSeconds: 3600,
@@ -50,6 +47,7 @@ beforeEach(async () => {
   originalUrl = process.env.TURSO_DATABASE_URL;
   process.env.TURSO_DATABASE_URL = SHARED_URL;
   db = await createTestDbAt(SHARED_URL);
+  await invalidateCache("videos:feed:all");
 
   twitchMocks.getTwitchAppToken.mockResolvedValue("test-app-token");
   twitchMocks.getRecentVods.mockResolvedValue([]);
@@ -104,10 +102,10 @@ describe("fetchAndCacheNewVods", () => {
     });
   });
 
-  it("公開Twitchリンクが無ければ外部APIを呼ばない", async () => {
+  it("公開Twitchリンクが無ければVOD取得APIを呼ばない", async () => {
     const result = await fetchAndCacheNewVods("cid", "secret");
     expect(result).toMatchObject({ added: 0, updated: 0, channels: 0 });
-    expect(twitchMocks.getTwitchAppToken).not.toHaveBeenCalled();
+    // トークン取得はリンク一覧と並列のため呼ばれ得るが、VOD取得までは進まない
     expect(twitchMocks.getRecentVods).not.toHaveBeenCalled();
   });
 });

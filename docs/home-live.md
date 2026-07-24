@@ -64,7 +64,7 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
   （`type=twitch-vods`、`twitch_vod_cache`）を並列取得し、クライアント側で
   統一形式 `FeedVideo`（`app/components/feed-video-card.tsx`）にマージして新しい順に表示する
 - **どちらも cron 蓄積の専用テーブル読み**（YouTube: `youtube-update` 2時間毎 / Twitch: `twitch-update` 30分毎）。
-  保持期間は**90日**（`videos-feed.server.ts` の `VIDEO_FEED_RETENTION_DAYS`。cron がそれ以前の行を削除）
+  保持期間は**90日**（`app/lib/feed-video.ts` の `VIDEO_FEED_RETENTION_DAYS`。cron がそれ以前の行を削除）
 - **ホームは新着6件のみ表示**（`HOME_VIDEO_DISPLAY_COUNT`。新着順で切り出してからお気に入りを先頭に並べ替え）。
   セクションヘッダーの「すべて見る」から動画一覧ページ（`/videos`）へ遷移できる
 - カードは `FeedVideoCard`:
@@ -97,7 +97,7 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
 
 ```
 interface FeedState {
-  recentVideos: CachedYouTubeVideo[];
+  recentVideos: FeedVideo[];
   twitchVods: FeedVideo[];
   recentPaces: CachedPace[];
   mcidToUuid: Record<string, string>;
@@ -192,8 +192,8 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 ### 遅延ロード・無限スクロール
 
 - loader（SSR）は先頭24件と総件数のみ返す
-- スクロールで `IntersectionObserver` が `/api/videos?offset=N&limit=24`（+検索条件）を呼び、順次追加
-- 重複除去キーは `platform:videoId`。検索条件の変更時は `key` による再マウントでリセット
+- 追加ロードは `/browse` と共通の `use-infinite-scroll` フック（`/api/videos?page=N` + 検索条件、
+  レスポンスは `{ items, page, hasMore }` 規約）。検索条件の変更はフックの `resetDeps` でリセット
 
 ---
 
@@ -302,7 +302,8 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/lib/youtube-cache.ts` - YouTube動画・ライブキャッシュ管理
 - `app/lib/twitch.ts` - Twitch API連携（トークン取得、ストリーム取得、VOD取得）
 - `app/lib/twitch-vod-cache.ts` - Twitch VODキャッシュ管理（蓄積・存在確認・クリーンアップ）
-- `app/lib/videos-feed.server.ts` - 動画一覧の共通ロジック（マージ・検索条件解析・保持期間定数）
+- `app/lib/feed-video.ts` - 動画フィードの共有ドメイン型・ユーティリティ（`FeedVideo` / 保持期間定数 / 自分の動画非表示フィルタ）
+- `app/lib/videos-feed.server.ts` - 動画一覧の共通ロジック（マージ・可視性・検索条件解析）
 - `app/lib/paceman.ts` - PaceMan API連携（ライブラン取得）
 - `app/lib/paceman-cache.ts` - PaceManペースキャッシュ管理（蓄積・保持期間・フィード取得）
 - `app/lib/paces-feed.server.ts` - ペース一覧の共通ロジック（検索条件解析・表示対象の絞り込み）

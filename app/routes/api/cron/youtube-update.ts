@@ -4,6 +4,7 @@
 // 5分毎: ライブ配信の確認
 
 import { getEnv } from "@/lib/env.server";
+import { requireCronAuth } from "@/lib/cron-auth.server";
 import {
   fetchAndCacheNewVideos,
   verifyVideosExistence,
@@ -16,24 +17,8 @@ import {
 export async function loader({ request }: { request: Request }) {
   const env = getEnv();
 
-  // Vercel Cron認証。CRON_SECRET は getEnv() の返却に含まれないため
-  // paceman/rankings と同様に process.env から直接参照する。
-  const authHeader = request.headers.get("Authorization");
-  const expectedToken = process.env.CRON_SECRET;
-
-  // CRON_SECRET が未設定なら認証不能。フェイルクローズして処理を拒否する
-  // （スキップすると未認証の呼び出しで YouTube Data API のクォータを消費できてしまう）。
-  if (!expectedToken) {
-    return Response.json(
-      { error: "Cron authentication is not configured" },
-      { status: 503 }
-    );
-  }
-
-  // CRON_SECRET が設定済みの場合は正しい Bearer トークンを必須とする
-  if (authHeader !== `Bearer ${expectedToken}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authError = requireCronAuth(request);
+  if (authError) return authError;
 
   const apiKey = env.YOUTUBE_API_KEY;
   if (!apiKey) {
@@ -96,9 +81,11 @@ export async function loader({ request }: { request: Request }) {
         });
       }
 
-      const result = await fetchAndCacheNewVideos(apiKey, channels);
-      // 保持期間（90日）を超えた動画キャッシュを削除
-      const cleaned = await cleanupOldVideos();
+      // 新着取得と保持期間（90日）超過分の削除は独立なので並列実行
+      const [result, cleaned] = await Promise.all([
+        fetchAndCacheNewVideos(apiKey, channels),
+        cleanupOldVideos(),
+      ]);
       return Response.json({
         success: true,
         action: "update",

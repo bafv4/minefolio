@@ -3,6 +3,7 @@
 // 8時間毎: VODの存在確認（Twitch VODは配信者設定により14〜60日で自動削除されるため）
 
 import { getEnv } from "@/lib/env.server";
+import { requireCronAuth } from "@/lib/cron-auth.server";
 import {
   fetchAndCacheNewVods,
   verifyVodsExistence,
@@ -12,21 +13,8 @@ import {
 export async function loader({ request }: { request: Request }) {
   const env = getEnv();
 
-  // Vercel Cron認証（youtube-update と同パターン）。
-  // CRON_SECRET が未設定なら認証不能。フェイルクローズして処理を拒否する
-  const authHeader = request.headers.get("Authorization");
-  const expectedToken = process.env.CRON_SECRET;
-
-  if (!expectedToken) {
-    return Response.json(
-      { error: "Cron authentication is not configured" },
-      { status: 503 }
-    );
-  }
-
-  if (authHeader !== `Bearer ${expectedToken}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authError = requireCronAuth(request);
+  if (authError) return authError;
 
   const clientId = env.TWITCH_CLIENT_ID;
   const clientSecret = env.TWITCH_CLIENT_SECRET;
@@ -52,9 +40,11 @@ export async function loader({ request }: { request: Request }) {
       });
     }
 
-    // 新しいVODの取得 + 保持期間超過分のクリーンアップ（30分毎に実行）
-    const result = await fetchAndCacheNewVods(clientId, clientSecret);
-    const cleaned = await cleanupOldVods();
+    // 新しいVODの取得 + 保持期間超過分のクリーンアップ（30分毎に実行。両者は独立なので並列）
+    const [result, cleaned] = await Promise.all([
+      fetchAndCacheNewVods(clientId, clientSecret),
+      cleanupOldVods(),
+    ]);
 
     return Response.json({
       success: true,
