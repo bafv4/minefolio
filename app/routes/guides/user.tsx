@@ -6,6 +6,8 @@ import {
 } from "react-router";
 import { useState } from "react";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -46,9 +48,11 @@ export function meta({
   ];
 }
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
 
   const { authorSlug } = params as { authorSlug: string };
 
@@ -62,10 +66,24 @@ export async function loader({ params }: LoaderFunctionArgs) {
       displayName: true,
       discordAvatar: true,
       customSkinUrl: true,
+      profileVisibility: true,
     },
   });
 
   if (!author) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  // プライベートプロフィールの著者のガイド一覧は本人以外に404を返す（プロフィール本体と挙動を揃える）
+  let isOwner = false;
+  if (session) {
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: { id: true },
+    });
+    isOwner = currentUser?.id === author.id;
+  }
+  if (author.profileVisibility === "private" && !isOwner) {
     throw new Response("Not Found", { status: 404 });
   }
 

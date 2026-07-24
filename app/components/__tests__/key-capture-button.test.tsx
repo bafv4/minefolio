@@ -44,6 +44,14 @@ function key(type: "keydown" | "keyup", init: KeyboardEventInit) {
   });
 }
 
+function mouseDown(buttonIndex: number) {
+  act(() => {
+    button().dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: buttonIndex }),
+    );
+  });
+}
+
 beforeEach(() => {
   mount = document.createElement("div");
   document.body.appendChild(mount);
@@ -90,6 +98,33 @@ describe("KeyCaptureButton", () => {
       key("keydown", { code: "ShiftLeft", key: "Shift", shiftKey: true });
       key("keyup", { code: "ShiftLeft", key: "Shift", shiftKey: false });
       expect(captured).toEqual(["ShiftLeft"]);
+    });
+
+    it("マウスの進むボタン(button=4)は サイド1(Mouse3) を確定する", async () => {
+      await renderButton(true);
+      mouseDown(4);
+      expect(captured).toEqual(["Mouse3"]);
+    });
+
+    it("マウスの戻るボタン(button=3)は サイド2(Mouse4) を確定する", async () => {
+      await renderButton(true);
+      mouseDown(3);
+      expect(captured).toEqual(["Mouse4"]);
+    });
+
+    it("左クリック(button=0)では確定しない", async () => {
+      await renderButton(true);
+      mouseDown(0);
+      expect(captured).toEqual([]);
+    });
+  });
+
+  describe("リマップ先はマウスサイドボタンを受け付けない（キー限定）", () => {
+    it("allowModifiers=false ではサイドボタンを無視する", async () => {
+      await renderButton(false);
+      mouseDown(4);
+      mouseDown(3);
+      expect(captured).toEqual([]);
     });
   });
 });

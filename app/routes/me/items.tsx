@@ -69,6 +69,7 @@ import { t } from "@/lib/messages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
+import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meItems.title") }];
@@ -133,6 +134,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       itemLayouts: {
         orderBy: [asc(itemLayouts.displayOrder)],
       },
+      configPresets: {
+        columns: {
+          id: true,
+          name: true,
+          isActive: true,
+          isMain: true,
+          itemLayoutsData: true,
+        },
+      },
     },
   });
 
@@ -150,16 +160,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }));
 
   // 全プリセットを取得（コピー機能用）
-  const allPresets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, user.id),
-    columns: {
-      id: true,
-      name: true,
-      isActive: true,
-      isMain: true,
-      itemLayoutsData: true,
-    },
-  });
+  const allPresets = user.configPresets;
 
   // アクティブなプリセットを取得
   const activePreset = allPresets.find((p) => p.isActive);
@@ -702,6 +703,8 @@ export default function ItemLayoutsPage() {
   const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  // プリセット切替（apply-preset）中は入力欄をロックする
+  const [presetSwitching, setPresetSwitching] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -826,12 +829,15 @@ export default function ItemLayoutsPage() {
         presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
+        onSwitchingChange={setPresetSwitching}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
 
       {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
       {!hasPresets && <PresetRequiredNotice />}
 
+      {/* プリセット切替中はロックする */}
+      <PresetSwitchLock locked={presetSwitching}>
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {layouts.length > 0 ? (
         <div className="space-y-4">
@@ -861,6 +867,7 @@ export default function ItemLayoutsPage() {
         </Card>
       )}
       </div>
+      </PresetSwitchLock>
 
       <FloatingSaveBar
         hasChanges={hasChanges}

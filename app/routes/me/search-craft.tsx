@@ -38,6 +38,7 @@ import { t } from "@/lib/messages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
+import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: t("meSearchCraft.title") }];
@@ -89,6 +90,15 @@ export async function loader({ request }: Route.LoaderArgs) {
         orderBy: [asc(searchCrafts.sequence)],
       },
       keyRemaps: true,
+      configPresets: {
+        columns: {
+          id: true,
+          name: true,
+          isActive: true,
+          isMain: true,
+          searchCraftsData: true,
+        },
+      },
     },
   });
 
@@ -109,16 +119,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }));
 
   // 全プリセットを取得（コピー機能用）
-  const allPresets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, user.id),
-    columns: {
-      id: true,
-      name: true,
-      isActive: true,
-      isMain: true,
-      searchCraftsData: true,
-    },
-  });
+  const allPresets = user.configPresets;
 
   // アクティブなプリセットを取得
   const activePreset = allPresets.find((p) => p.isActive);
@@ -235,6 +236,19 @@ export async function action({ request }: Route.ActionArgs) {
     try {
       const crafts = JSON.parse(craftsJson) as SearchCraftItem[];
 
+      // items が string[] であることを保証する。非配列・非文字列要素のまま永続化されると、
+      // 公開ガイド埋め込みの SSR が items.map で TypeError を投げて 500 になるため、ここで拒否する。
+      if (
+        !Array.isArray(crafts) ||
+        crafts.some(
+          (craft) =>
+            !Array.isArray(craft?.items) ||
+            craft.items.some((item) => typeof item !== "string"),
+        )
+      ) {
+        return { error: t("meSearchCraft.invalidCraftData") };
+      }
+
       const now = new Date();
       await db.transaction(async (tx) => {
         // 既存のサーチクラフトを全削除
@@ -307,6 +321,8 @@ export default function SearchCraftPage() {
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  // プリセット切替（apply-preset）中は入力欄をロックする
+  const [presetSwitching, setPresetSwitching] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -445,12 +461,15 @@ export default function SearchCraftPage() {
         presets={presets.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive, isMain: p.isMain }))}
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasChanges}
+        onSwitchingChange={setPresetSwitching}
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
 
       {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
       {!hasPresets && <PresetRequiredNotice />}
 
+      {/* プリセット切替中はロックする */}
+      <PresetSwitchLock locked={presetSwitching}>
       <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
       {crafts.length > 0 ? (
         <Card>
@@ -484,6 +503,7 @@ export default function SearchCraftPage() {
         </Card>
       )}
       </div>
+      </PresetSwitchLock>
 
       <FloatingSaveBar
         hasChanges={hasChanges}

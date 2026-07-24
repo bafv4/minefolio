@@ -163,7 +163,7 @@ export default function FeedbackPage() {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
               <h2 className="text-xl font-semibold mb-2">

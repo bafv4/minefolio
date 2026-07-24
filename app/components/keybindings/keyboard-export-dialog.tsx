@@ -3,7 +3,6 @@
 // テーマ（ライト/ダーク/ウルトラダーク）を選んでプレビューし、html-to-image で出力する。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { toPng, toBlob } from "html-to-image";
 import { Check, Copy, Download, ImageDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -154,6 +153,9 @@ export function KeyboardExportDialog({
     if (!node || !hasSelection) return;
     setExporting(true);
     try {
+      // html-to-image はキーボードエクスポート時にのみ必要な重量ライブラリのため、
+      // 初回ロードの共通チャンクに含めず動的importで取得する
+      const { toPng } = await import("html-to-image");
       const dataUrl = await toPng(node, { pixelRatio: 2, cacheBust: true });
       const safeName = (playerName || "keybindings").replace(/[\\/:*?"<>|]+/g, "_");
       const link = document.createElement("a");
@@ -174,6 +176,7 @@ export function KeyboardExportDialog({
     if (!node || !hasSelection) return;
     setCopying(true);
     try {
+      const { toBlob } = await import("html-to-image");
       const blob = await toBlob(node, { pixelRatio: 2, cacheBust: true });
       if (!blob) throw new Error("toBlob returned null");
       await navigator.clipboard.write([

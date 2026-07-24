@@ -102,20 +102,16 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response(t("playerStats.notFound"), { status: 404 });
   }
 
-  // 外部サービスから統計情報を取得（MCIDがある場合のみ）
-  const externalStats = player.mcid
-    ? await fetchAllExternalStats(player.mcid)
-    : { paceman: null, ranked: null, speedruncom: null };
-
-  // PaceManキャッシュからデータを取得（MCIDがある場合のみ）
-  let netherEnterCount = 0;
-  let recentPaces: GroupedPaceEntry[] = [];
-  if (player.mcid) {
-    [netherEnterCount, recentPaces] = await Promise.all([
-      getNetherEnterCount(player.mcid),
-      getMainPaces(player.mcid, 10),
-    ]);
-  }
+  // 外部サービス・PaceManキャッシュから統計情報を並列取得（MCIDがある場合のみ。直列待ちを解消）
+  const [externalStats, netherEnterCount, recentPaces] = await Promise.all([
+    player.mcid
+      ? fetchAllExternalStats(player.mcid)
+      : Promise.resolve({ paceman: null, ranked: null, speedruncom: null }),
+    player.mcid ? getNetherEnterCount(player.mcid) : Promise.resolve(0),
+    player.mcid
+      ? getMainPaces(player.mcid, 10)
+      : Promise.resolve<GroupedPaceEntry[]>([]),
+  ]);
 
   return {
     mcid: player.mcid,

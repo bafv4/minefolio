@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
 
 // ============================================
@@ -693,6 +693,10 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   index("idx_paceman_paces_mcid").on(table.mcid),
+  // lower(mcid) 検索用の式インデックス（paceman-cache.ts の sql`lower(${pacemanPaces.mcid}) = ...`）。
+  // drizzle-kit push は式インデックスの差分検出に非対応のため db:push では反映されない。
+  // 実DBへの適用は scripts/add-paceman-mcid-lower-index.ts（手動DDL）で行う。
+  index("idx_paceman_paces_mcid_lower").on(sql`lower(${table.mcid})`),
   index("idx_paceman_paces_user_id").on(table.userId),
   index("idx_paceman_paces_date").on(table.date),
   index("idx_paceman_paces_timeline").on(table.timeline),
@@ -746,7 +750,7 @@ export type NewFavorite = typeof favorites.$inferInsert;
 export const apiCache = sqliteTable("api_cache", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   cacheKey: text("cache_key").unique().notNull(),
-  cacheType: text("cache_type", { enum: ["youtube_videos", "recent_paces", "twitch_streams", "live_runs"] }).notNull(),
+  cacheType: text("cache_type", { enum: ["youtube_videos", "recent_paces", "twitch_streams", "live_runs", "social_stats"] }).notNull(),
   data: text("data").notNull(), // JSON
   expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
@@ -788,6 +792,36 @@ export const youtubeVideoCache = sqliteTable("youtube_video_cache", {
 
 export type YoutubeVideoCache = typeof youtubeVideoCache.$inferSelect;
 export type NewYoutubeVideoCache = typeof youtubeVideoCache.$inferInsert;
+
+// ============================================
+// 17b. twitch_vod_cache（Twitch配信アーカイブキャッシュ）
+// ============================================
+// youtube_video_cache と同様に cron（/api/cron/twitch-update）で蓄積する。
+// ユーザーとの紐付けは userLogin（小文字）を social_links.identifier と突合して読み時に解決する
+// （MCIDを持たないユーザーのVODも扱えるようにするため、mcid列は持たない）
+export const twitchVodCache = sqliteTable("twitch_vod_cache", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  vodId: text("vod_id").unique().notNull(), // Twitch VOD ID（数値文字列）
+  userLogin: text("user_login").notNull(), // 配信者の login 名（小文字）
+  title: text("title").notNull(),
+  thumbnailUrl: text("thumbnail_url"), // サイズ解決済みURL。処理中VODは null
+  channelTitle: text("channel_title"), // 配信者の表示名（user_name）
+  durationSeconds: integer("duration_seconds"), // 配信時間（秒）
+  publishedAt: integer("published_at", { mode: "timestamp" }).notNull(),
+  // キャッシュ管理
+  lastVerifiedAt: integer("last_verified_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  isAvailable: integer("is_available", { mode: "boolean" }).default(true).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  // vodId は .unique() が索引を生成するため個別indexは持たない
+  index("idx_twitch_vod_cache_user_login").on(table.userLogin),
+  index("idx_twitch_vod_cache_published").on(table.publishedAt),
+  index("idx_twitch_vod_cache_available").on(table.isAvailable),
+]);
+
+export type TwitchVodCache = typeof twitchVodCache.$inferSelect;
+export type NewTwitchVodCache = typeof twitchVodCache.$inferInsert;
 
 // ============================================
 // 18. youtube_live_cache（YouTubeライブ配信キャッシュ）

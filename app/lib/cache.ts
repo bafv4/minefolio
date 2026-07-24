@@ -174,7 +174,7 @@ export function getPaceManCacheKey(type: string): string {
 // DBキャッシュ関連の関数
 // ============================================
 
-type CacheType = "youtube_videos" | "recent_paces" | "twitch_streams" | "live_runs";
+type CacheType = "youtube_videos" | "recent_paces" | "twitch_streams" | "live_runs" | "social_stats";
 
 /**
  * DBからキャッシュを取得

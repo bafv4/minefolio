@@ -31,8 +31,9 @@ export interface PaceSearchFilters {
   maxRta?: number; // タイム上限（ミリ秒）
 }
 
-// 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（アプリは日本語圏向け）
-function parseDateParam(value: string | null, endOfDay: boolean): Date | undefined {
+// 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（アプリは日本語圏向け）。
+// /videos の検索条件（videos-feed.server.ts）も同じ規約を共有する
+export function parseDateParam(value: string | null, endOfDay: boolean): Date | undefined {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const time = endOfDay ? "23:59:59.999" : "00:00:00.000";
   const date = new Date(`${value}T${time}+09:00`);
@@ -97,7 +98,17 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
-    .where(and(isNotNull(users.mcid), isNotNull(users.uuid), excludeViewersCondition));
+    .where(
+      and(
+        isNotNull(users.mcid),
+        isNotNull(users.uuid),
+        excludeViewersCondition,
+        // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴・表示名・スキンを
+        // 未認証で配信される公開フィードに露出させない。/paces はディスカバリ一覧なので、
+        // 一覧系と同じ「公開のみ」ルール（browse-query.server.ts と同一）に揃える。
+        eq(users.profileVisibility, "public"),
+      ),
+    );
 
   const registeredMcidSet = new Set(usersWithMcid.map((u) => u.mcid!.toLowerCase()));
   const mcidToUuid = Object.fromEntries(
@@ -129,35 +140,21 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
 }
 
 /**
- * 表示対象のペース一覧（保持期間内、新しい順）と表示用マップを取得
+ * 表示対象のペース一覧（保持期間内、新しい順）と表示用マップを取得（セッション非依存）
  * - 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）のペースのみ
- * - ログインユーザーが showPacemanOnHome = false の場合、自分のペースを除外（ホームと同じ挙動）
  * - filters（プレイヤー・時期・区間・タイム）で絞り込み可能
+ * - レスポンスはユーザー非依存なのでCDNキャッシュ可能。
+ *   「自分のペースを隠す」設定（showPacemanOnHome）はここでは適用せず、
+ *   getViewerPacePrefs の結果を使ってクライアント側でフィルタする（ホームと同じ挙動）
  */
-export async function getVisiblePaceFeed(
+export async function getPublicPaceFeed(
   db: Db,
-  auth: Auth,
-  request: Request,
   filters: PaceSearchFilters = {},
 ): Promise<VisiblePaceFeed> {
-  const session = await getOptionalSession(request, auth);
-  let hideOwnMcid: string | null = null;
-  if (session) {
-    const me = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: { mcid: true, showPacemanOnHome: true },
-    });
-    if (me && me.showPacemanOnHome === false && me.mcid) {
-      hideOwnMcid = me.mcid.toLowerCase();
-    }
-  }
-
   const base = await getPaceFeedBase(db, filters.timeline);
   const { mcidToUuid, mcidToDisplayName, mcidToSkinUrl } = base;
 
-  let items = hideOwnMcid
-    ? base.items.filter((p) => p.mcid.toLowerCase() !== hideOwnMcid)
-    : base.items;
+  let items = base.items;
 
   // 時期（ランは同一日時の行しか持たないため、ラン単位のJSフィルタでSQL条件と等価）
   if (filters.from) {
@@ -186,4 +183,25 @@ export async function getVisiblePaceFeed(
   }
 
   return { items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl };
+}
+
+/**
+ * ログインユーザーの表示設定（自分のペースを一覧・ホームに表示するか）を取得
+ * 未ログイン・未登録ユーザーは { mcid: null, showPacemanOnHome: true }（フィルタなし扱い）
+ */
+export async function getViewerPacePrefs(
+  db: Db,
+  auth: Auth,
+  request: Request,
+): Promise<{ mcid: string | null; showPacemanOnHome: boolean }> {
+  const session = await getOptionalSession(request, auth);
+  if (!session) return { mcid: null, showPacemanOnHome: true };
+
+  const me = await db.query.users.findFirst({
+    where: eq(users.discordId, session.user.id),
+    columns: { mcid: true, showPacemanOnHome: true },
+  });
+  if (!me) return { mcid: null, showPacemanOnHome: true };
+
+  return { mcid: me.mcid, showPacemanOnHome: me.showPacemanOnHome ?? true };
 }

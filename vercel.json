@@ -9,6 +9,14 @@
       "schedule": "0 */8 * * *"
     },
     {
+      "path": "/api/cron/twitch-update?action=update",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/twitch-update?action=verify",
+      "schedule": "0 */8 * * *"
+    },
+    {
       "path": "/api/cron/update-paceman-cache",
       "schedule": "*/30 * * * *"
     },

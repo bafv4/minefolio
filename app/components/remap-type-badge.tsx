@@ -23,7 +23,16 @@ export function RemapTypeBadge({
   const type = normalizeKeyRemapType(remapType);
   if (type === "unset") return null;
   return (
-    <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", TYPE_STYLES[type], className)}>
+    <Badge
+      variant="outline"
+      // 種別ラベル(All/Trigger/Chat)は幅がまちまちなので min-w で統一し中央寄せ。
+      // 3rem(48px) は最大ラベル "Trigger"(≈46.3px @ text-[10px]) を収める最小値。
+      className={cn(
+        "min-w-[3rem] justify-center text-[10px] px-1.5 py-0",
+        TYPE_STYLES[type],
+        className,
+      )}
+    >
       {t(`remapType.${type}`)}
     </Badge>
   );

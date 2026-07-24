@@ -168,7 +168,7 @@ Minecraft スキン画像を返す。
 
 | 名前   | 型     | 必須 | 説明                                                               |
 | ------ | ------ | ---- | ------------------------------------------------------------------ |
-| `type` | string | ○    | `live-runs` / `recent-paces` / `pace-timeline` / `twitch-streams` / `youtube-videos` |
+| `type` | string | ○    | `live-runs` / `recent-paces` / `pace-timeline` / `twitch-streams` / `youtube-videos` / `twitch-vods` |
 | `mcid` | string | `type=pace-timeline`時のみ○ | 対象プレイヤーのMCID |
 | `runId` | string | `type=pace-timeline`時のみ○ | PaceManのラン ID |
 
@@ -182,7 +182,7 @@ Minecraft スキン画像を返す。
 }
 ```
 
-CDN キャッシュ付き（種別ごとに 10秒〜5分）。視聴者ロールのユーザーは含まれない。
+CDN キャッシュ付き（種別ごとに 30秒〜30分、stale-while-revalidate あり）。並び順は新しい順で、ユーザーに依存しない。視聴者ロールのユーザーは含まれない。
 
 ---
 

@@ -15,15 +15,6 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/**
- * ネストした量指定子（(a+)+ 等）による catastrophic backtracking (ReDoS) を大まかに検出する。
- * 完全な検出ではないが、代表的な危険パターンと過度に長いパターンを弾く。
- */
-function isDangerousRegex(pattern: string): boolean {
-  if (pattern.length > 100) return true;
-  return /\((?:[^()]*[*+}][^()]*)\)[*+{]/.test(pattern);
-}
-
 /** page パラメータを安全な整数範囲にクランプする。 */
 function parseBrowsePage(raw: string | null): number {
   const p = parseInt(raw || "1", 10);
@@ -46,8 +37,6 @@ export type BrowseFilterPlatform =
 
 export interface BrowseQueryArgs {
   q: string;
-  /** q を正規表現として解釈する（libSQL に REGEXP がないため JS 側で照合） */
-  regex: boolean;
   sort: BrowseSortOption;
   page: number;
   roles: BrowseFilterRole[];
@@ -59,7 +48,6 @@ export interface BrowseQueryArgs {
 export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQueryArgs {
   return {
     q: searchParams.get("q") ?? "",
-    regex: searchParams.get("regex") === "1",
     sort: (searchParams.get("sort") as BrowseSortOption) || "updatedAt",
     page: parseBrowsePage(searchParams.get("page")),
     roles: searchParams.getAll("role") as BrowseFilterRole[],
@@ -69,7 +57,7 @@ export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQu
   };
 }
 
-/** 一覧で取得する列（通常・正規表現の両パスで共通） */
+/** 一覧で取得する列 */
 const BROWSE_LIST_COLUMNS = {
   mcid: true,
   uuid: true,
@@ -95,8 +83,7 @@ function buildWhere(args: BrowseQueryArgs) {
   // 検索対象は mcid と displayName のみ。
   // slug は MCID 登録時は mcid と同一、未登録時は `@{discordId}`（Discord の数値ID）に
   // なるため、検索に含めると数字パターン等で Discord ID にヒットしてしまう。
-  // 正規表現モードの q は SQL で表現できないため JS 側で照合する（buildWhere では無視）。
-  if (args.q && !args.regex) {
+  if (args.q) {
     // LIKE のワイルドカードをエスケープし、ユーザー入力を部分一致リテラルとして扱う。
     const likePattern = `%${escapeLike(args.q)}%`;
     conditions.push(
@@ -153,39 +140,6 @@ export async function loadBrowsePage(
   const orderBy = favoritePriority
     ? [favoritePriority, orderByClause]
     : [orderByClause];
-
-  // 正規表現モード: libSQL に REGEXP がないため、フィルタ条件に一致する全件を
-  // 並び順どおり取得し、JS 側で照合してからページングする。
-  if (args.regex && args.q) {
-    // ReDoS対策: 過度に長い / ネスト量指定子を含む危険なパターンは「該当なし」として拒否する。
-    if (isDangerousRegex(args.q)) {
-      return { players: [], totalCount: 0, totalPages: 0, hasMore: false };
-    }
-    let re: RegExp;
-    try {
-      re = new RegExp(args.q, "i");
-    } catch {
-      // 不正なパターンは「該当なし」として扱う
-      return { players: [], totalCount: 0, totalPages: 0, hasMore: false };
-    }
-    const all = await db.query.users.findMany({
-      where: whereCondition,
-      columns: BROWSE_LIST_COLUMNS,
-      orderBy,
-    });
-    const filtered = all.filter(
-      (u) => re.test(u.mcid ?? "") || re.test(u.displayName ?? ""),
-    );
-    const totalCount = filtered.length;
-    const totalPages = Math.ceil(totalCount / BROWSE_ITEMS_PER_PAGE);
-    const start = (args.page - 1) * BROWSE_ITEMS_PER_PAGE;
-    return {
-      players: filtered.slice(start, start + BROWSE_ITEMS_PER_PAGE),
-      totalCount,
-      totalPages,
-      hasMore: args.page < totalPages,
-    };
-  }
 
   // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
   const [totalCountResult, playerList] = await Promise.all([

@@ -44,12 +44,14 @@
 | --- | --- |
 | `app/lib/changelog.ts` | `parseChangelog(md)` / `unreadEntries(entries, seen)`。純関数（import なし） |
 | `app/lib/__tests__/changelog.test.ts` | パースの成功系・失敗系 + 実際の changelog.md がパースできることのCI保険 |
-| `app/components/whats-new.tsx` | アイコンボタン + Popover 本体。`@/content/changelog.md?raw` をモジュールレベルで一度だけパース |
+| `app/components/whats-new.tsx` | アイコンボタン + Popover 本体。changelog データは自身ではパースせず `whats-new-data.ts` を動的 import して読み込む |
+| `app/components/whats-new-data.ts` | `@/content/changelog.md?raw`（23KB）の読み込みと `parseChangelog()` を切り出した専用モジュール。共通レイアウトの初期チャンクに含めないため、`whats-new.tsx` から `requestIdleCallback`（非対応環境は `setTimeout` フォールバック）でアイドル時に動的 import される |
 | `app/components/whats-new-markdown.tsx` | 本文のmarkdown描画。**`React.lazy` で開いた時にだけロード**（react-markdown 一式を共通チャンクに入れないため） |
 | `app/components/layout/header.tsx` | 設置箇所（デスクトップ/モバイルの2箇所） |
 | `app/lib/messages/pages-ja.ts` | `whatsNew.*` 文言 |
 
 - SSR整合: 初期stateは常に「未読なし」で、localStorage 判定は初回マウントの `useEffect` に閉じ込める（`cookie-consent.tsx` と同じパターン）。ハイドレーション不一致は発生しない
+- changelogデータ（`entries`）自体も初回マウント後にアイドル時（`requestIdleCallback`）に動的読み込みするため、**未読バッジの点灯はページ表示直後ではなくアイドル後に少し遅れる**（プル型設計＝ユーザーが自分で開くまで内容を出さない、という前提と整合するため許容）。読み込み前にポップオーバーを開いた場合は本文をSkeleton表示する
 - フェイルセーフ: changelog の見出しフォーマット（`## vX.Y.Z（YYYY/MM/DD）`・全角括弧）に一致しない場合、パース結果が空になり**ドットなしの通常状態**に静かにフォールバックする（ポップオーバーを開くとタイトル行 +「更新情報を読み込めませんでした」メッセージ + 更新履歴リンクを表示）
 - markdown 描画チャンクの取得に失敗した場合（再デプロイ後の旧タブ等）は、markdown 原文のプレーンテキスト表示にフォールバックし、ページ全体をエラーに落とさない
 
