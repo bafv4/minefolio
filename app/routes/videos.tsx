@@ -61,10 +61,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     getViewerVideoPrefs(db, auth, request),
   ]);
 
+  // 見出しの件数バッジは実際に表示されるカード数と一致させる。
+  // 一方 total は /api/videos（ユーザー非依存・CDNキャッシュ）のページングの基準なので、
+  // 除外前の件数のまま保つ
+  const visibleTotal = filterOwnVideos(items, viewerPrefs).length;
+
   return {
     appUrl,
     videos: items.slice(0, VIDEOS_PAGE_SIZE),
     total: items.length,
+    visibleTotal,
     viewerPrefs,
   };
 }
@@ -128,7 +134,7 @@ function VideosList({
 }
 
 export default function VideosPage() {
-  const { videos, total, viewerPrefs } = useLoaderData<typeof loader>();
+  const { videos, total, visibleTotal, viewerPrefs } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // 検索フォームの入力状態（URLクエリと同期）
@@ -177,7 +183,7 @@ export default function VideosPage() {
         </div>
         <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
           <Film className="h-3.5 w-3.5" />
-          {t("videos.count", { count: total })}
+          {t("videos.count", { count: visibleTotal })}
         </span>
       </div>
       <p className="text-sm text-muted-foreground">{t("videos.description")}</p>
@@ -242,7 +248,7 @@ export default function VideosPage() {
         </div>
       </form>
 
-      {videos.length > 0 ? (
+      {visibleTotal > 0 ? (
         <VideosList
           initialVideos={videos}
           initialTotal={total}

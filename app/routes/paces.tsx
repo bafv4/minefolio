@@ -5,6 +5,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { PACE_FEED_SPLITS } from "@/lib/pace-splits";
+import { filterOwnPaces, type OwnPacePrefs } from "@/lib/pace-visibility";
 import {
   getPublicPaceFeed,
   getViewerPacePrefs,
@@ -64,10 +65,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       getViewerPacePrefs(db, auth, request),
     ]);
 
+  // 見出しの件数バッジは実際に表示されるカード数と一致させる。
+  // 一方 total は /api/paces（ユーザー非依存・CDNキャッシュ）のoffsetページングの
+  // 基準なので、除外前の件数のまま保つ
+  const visibleTotal = filterOwnPaces(items, viewerPrefs).length;
+
   return {
     appUrl,
     paces: items.slice(0, PAGE_SIZE),
     total: items.length,
+    visibleTotal,
     mcidToUuid,
     mcidToDisplayName,
     mcidToSkinUrl,
@@ -89,7 +96,7 @@ function PacesList({
   mcidToUuid,
   mcidToDisplayName,
   mcidToSkinUrl,
-  hideMcid,
+  viewerPrefs,
 }: {
   initialPaces: PaceFeedItem[];
   initialTotal: number;
@@ -97,7 +104,7 @@ function PacesList({
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
-  hideMcid: string | null;
+  viewerPrefs: OwnPacePrefs;
 }) {
   const [paces, setPaces] = useState(initialPaces);
   const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
@@ -154,8 +161,8 @@ function PacesList({
   // 「ホームに自分のペースを表示しない」設定時、自分のペースを除外（ホームと同じ挙動）
   // レスポンス自体はユーザー非依存（CDNキャッシュ対象）のため、フィルタはクライアント側で適用する
   const visiblePaces = useMemo(
-    () => (hideMcid ? paces.filter((p) => p.mcid.toLowerCase() !== hideMcid) : paces),
-    [paces, hideMcid]
+    () => filterOwnPaces(paces, viewerPrefs),
+    [paces, viewerPrefs]
   );
 
   return (
@@ -191,18 +198,9 @@ function PacesList({
 }
 
 export default function PacesPage() {
-  const { paces, total, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
+  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // 「ホームに自分のペースを表示しない」設定時に除外するMCID（未設定なら null）
-  const hideMcid = useMemo(
-    () =>
-      viewerPrefs.showPacemanOnHome === false && viewerPrefs.mcid
-        ? viewerPrefs.mcid.toLowerCase()
-        : null,
-    [viewerPrefs.showPacemanOnHome, viewerPrefs.mcid]
-  );
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
@@ -253,7 +251,7 @@ export default function PacesPage() {
         </div>
         <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
           <Activity className="h-3.5 w-3.5" />
-          {t("paces.count", { count: total })}
+          {t("paces.count", { count: visibleTotal })}
         </span>
       </div>
       <p className="text-sm text-muted-foreground">{t("paces.description")}</p>
@@ -332,7 +330,7 @@ export default function PacesPage() {
         </div>
       </form>
 
-      {paces.length > 0 ? (
+      {visibleTotal > 0 ? (
         <PacesList
           key={filterKey}
           initialPaces={paces}
@@ -341,7 +339,7 @@ export default function PacesPage() {
           mcidToUuid={mcidToUuid}
           mcidToDisplayName={mcidToDisplayName}
           mcidToSkinUrl={mcidToSkinUrl}
-          hideMcid={hideMcid}
+          viewerPrefs={viewerPrefs}
         />
       ) : (
         <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
