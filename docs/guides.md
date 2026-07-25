@@ -92,12 +92,21 @@
 | 引用 | ブロッククォート |
 | 水平線 | `<hr>` |
 | リンク | URL設定 |
-| 画像 | ファイル選択・クリップボードペースト |
+| 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更と**横方向の配置**（未設定 / 左 / 中央 / 右）に対応 |
 | YouTube埋め込み | YouTube動画のiframe埋め込み |
 | テーブル | リサイズ可能（列幅ドラッグ変更） |
 | ハイライト | 色付きハイライト |
 | テキスト色 | 文字色の変更 |
 | 背景色 | 背景色の変更 |
+| 文字サイズ | 5段階（極小 0.75em / 小 0.875em / 標準 / 大 1.25em / 特大 1.5em）。単一情報源は `app/lib/guide-font-sizes.ts`。**見出し（h1〜h3）内では変更できない**（下記） |
+
+#### 文字サイズと見出しの関係
+
+見出しは `app/app.css` で h1=1.875em / h2=1.5em / h3=1.15em の固定サイズを持つため、そこに span の `font-size` を重ねると見出し階層の一貫性が壊れる。**見出し内では文字サイズを変更できない**よう3層で担保している:
+
+1. **UI**: `isFontSizeEditable(editor)`（`panels/font-size-picker.tsx`、`!editor.isActive("heading")`）が false のとき `PickerTrigger` を `disabled` にし、ラベルを「見出しでは文字サイズを変更できません」に切り替える（ツールバー・バブルメニューの両方）
+2. **コマンド**: `applyGuideFontSize(editor, value)` が同じ判定でガードする（サイズ指定済みのテキストを見出しへ変換した直後など、UI を経由しない経路の保険）
+3. **表示**: 既存ガイドや外部ペーストで焼き付いた指定は `.guide-content.prose :is(h1…h6) span[style*="font-size"] { font-size: inherit !important; }` で打ち消す。**インラインスタイルはセレクタの詳細度では勝てないため `!important` が必須**。サニタイズ（cssfilter）は要素単位の判定しかできず親が見出しかを知れないため、この層は CSS が担う
 
 ### テーブル機能
 
@@ -137,7 +146,9 @@
 
 - **許可タグ**: 必要最小限のHTMLタグのみ許可
 - **許可属性**: 各タグに対して安全な属性のみ許可（`class` は全タグ共通で許可）
-- **許可スタイル**: インラインスタイルは許可プロパティ（color / background-color / text-align / min-width / width）のみ通す
+- **許可スタイル**: インラインスタイルは許可プロパティ（color / background-color / **font-size** / text-align / min-width / width）のみ通す
+  - **color / background-color / font-size は値も検査する**。パレット色・段階サイズ以外は除去される。判定関数は `app/lib/guide-colors.ts`（`isPaletteTextColor` / `isPaletteBgColor`）と `app/lib/guide-font-sizes.ts`（`isAllowedFontSize`）が持ち、**エディタのペースト時（入口）と表示時サニタイズ（出口）で同じ判定を共有する**。外部からのペーストで焼き付いた任意の色・サイズ（`14px` 等）はどちらでも落ちる
+- **画像の配置**: `<img>` は `style` を許可しないため、横方向の配置は `data-align="left|center|right"` 属性で表す（未設定は属性ごと出力しない）。表示は `app/app.css` の `.guide-content.prose img[data-align=...]` が担い、エディタ側は `image-node-view.tsx` のラッパーが同じ見た目を作る
 - **colgroup/colタグ**: テーブルの列幅指定用に許可
 - **iframe**: YouTube 埋め込みホスト（www.youtube.com / www.youtube-nocookie.com）のみ src を許可
 

@@ -1271,6 +1271,9 @@ export const PAGES_JA = {
       "本文が長すぎます（公開できる上限は50万文字です）。下書きとしては保存できます。内容を分割・整理してから公開してください。",
   },
   guideEditor: {
+    fontSize: "文字サイズ",
+    fontSizeDisabledInHeading: "見出しでは文字サイズを変更できません",
+    imageAlign: "配置",
     save: "保存",
     saving: "保存中...",
     saved: "保存済み",

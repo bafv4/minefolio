@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker, TableStylePicker } from "../panels/color-picker";
+import { FontSizePicker } from "../panels/font-size-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import {
   setBlockType,
@@ -336,7 +337,8 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.code")} shortcut="Ctrl E" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
                   <Code className="h-4 w-4" />
                 </ToolbarButton>
-                <InlineColorPicker editor={editor} />
+                <FontSizePicker editor={editor} />
+      <InlineColorPicker editor={editor} />
                 <ToolbarSeparator />
                 <ToolbarButton label={t("guideEditor.unorderedList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
                   <List className="h-4 w-4" />

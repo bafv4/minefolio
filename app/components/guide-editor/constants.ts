@@ -1,5 +1,6 @@
 // ガイドエディタの共有定数。旧 index.tsx から逐語移植（互換性のため値を変更しない）。
 import { GUIDE_TEXT_COLORS, GUIDE_BG_COLORS } from "@/lib/guide-colors";
+import { GUIDE_FONT_SIZES } from "@/lib/guide-font-sizes";
 
 /** 文字色パレット（Notion 準拠）。単一情報源は app/lib/guide-colors.ts */
 export const TEXT_COLORS = GUIDE_TEXT_COLORS;
@@ -9,6 +10,19 @@ export const BG_COLORS = GUIDE_BG_COLORS;
 
 /** テーブルセルの背景色（BG_COLORS を流用） */
 export const CELL_COLORS = BG_COLORS;
+
+/** 文字サイズの段階。単一情報源は app/lib/guide-font-sizes.ts */
+export const FONT_SIZES = GUIDE_FONT_SIZES;
+
+/** 画像の横方向の配置（value 空文字 = 未設定） */
+export const IMAGE_ALIGNMENTS = [
+  { value: "", label: "未設定" },
+  { value: "left", label: "左揃え" },
+  { value: "center", label: "中央揃え" },
+  { value: "right", label: "右揃え" },
+] as const;
+
+export type ImageAlign = "left" | "center" | "right";
 
 /** コールアウト種別 */
 export const CALLOUT_TYPES = [

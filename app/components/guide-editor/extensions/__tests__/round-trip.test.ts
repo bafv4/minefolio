@@ -38,6 +38,14 @@ const FIXTURES: Record<string, string> = {
   coloredTable: `<table><tbody><tr><th style="background-color: #F1F1EF">見出し</th><td style="background-color: #FDEBEC; color: #D44C47">セル</td></tr></tbody></table>`,
   alignedTable: `<table><tbody><tr><th style="text-align: center">中央</th><td style="background-color: #FDEBEC; text-align: right">右</td></tr></tbody></table>`,
   widthImage: `<img src="https://example.com/i.png" alt="代替テキスト" width="320">`,
+  alignedImage: `<img src="https://example.com/i.png" alt="代替テキスト" width="320" data-align="center">`,
+  fontSizeSpan: `<p><span style="font-size: 1.25em">大きい文字</span>と標準</p>`,
+  fontSizeWithColor: `<p><span style="color: #D44C47; font-size: 0.75em">極小の赤</span></p>`,
+  // 見出し内の font-size span は既存ガイド・外部ペースト由来で入り得る形。
+  // エディタは見出し内で文字サイズを設定できなくなったが、既に保存済みの HTML は
+  // そのまま保持する（削除はしない）。無効化は表示側の CSS（app.css）が担うため、
+  // HTML としては不動点であることをここで保証する。
+  fontSizeSpanInHeading: `<h2><span style="font-size: 1.5em">見出し内の文字サイズ</span></h2>`,
 };
 
 describe("guide editor round-trip", () => {
@@ -107,6 +115,34 @@ describe("guide editor round-trip", () => {
     const out = roundTrip(FIXTURES.widthImage);
     expect(out).toContain('width="320"');
     expect(out).toContain('alt="代替テキスト"');
+  });
+
+  it("画像の data-align は保持され、width と併存する", () => {
+    const out = roundTrip(FIXTURES.alignedImage);
+    expect(out).toContain('data-align="center"');
+    expect(out).toContain('width="320"');
+  });
+
+  it("配置未設定の画像には data-align を出力しない", () => {
+    const out = roundTrip(FIXTURES.widthImage);
+    expect(out).not.toContain("data-align");
+  });
+
+  it("文字サイズ（段階）は span の font-size として保持される", () => {
+    const out = roundTrip(FIXTURES.fontSizeSpan);
+    expect(out).toContain("font-size: 1.25em");
+  });
+
+  it("文字サイズは文字色と同じ span に併存する", () => {
+    const out = roundTrip(FIXTURES.fontSizeWithColor);
+    expect(out).toContain("font-size: 0.75em");
+    expect(out).toContain("color: #D44C47");
+  });
+
+  it("見出し内の font-size span は HTML としては保持される（無効化は表示側 CSS の責務）", () => {
+    const out = roundTrip(FIXTURES.fontSizeSpanInHeading);
+    expect(out).toContain("<h2>");
+    expect(out).toContain("font-size: 1.5em");
   });
 
   // 再編集ロード（HTML → doc パース）での空白消失の回帰テスト。

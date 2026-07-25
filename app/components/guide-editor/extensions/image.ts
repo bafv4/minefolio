@@ -16,6 +16,18 @@ export const CustomImage = Image.configure({ inline: false, allowBase64: true })
           return { width: attributes.width };
         },
       },
+      // 横方向の配置（left / center / right）。未設定は属性ごと出力しない＝従来の流し込み表示。
+      // <img> はサニタイズで style を許可していないため data 属性で持つ
+      // （guide-sanitize.server.ts の TAG_ATTRS.img に data-align を許可済み）。
+      // 表示は app.css の .guide-content.prose img[data-align=...] が担う
+      align: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-align"),
+        renderHTML: (attributes: Record<string, unknown>) => {
+          if (!attributes.align) return {};
+          return { "data-align": attributes.align };
+        },
+      },
     };
   },
   addNodeView() {

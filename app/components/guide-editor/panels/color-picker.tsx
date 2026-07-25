@@ -17,10 +17,13 @@ export function PickerTrigger({
   label,
   children,
   showLabel,
+  disabled,
 }: {
   label: string;
   children: ReactNode;
   showLabel?: boolean;
+  /** true で Popover を開けなくする（トリガーは残し、ラベルで理由を示す用途）。省略時は他利用箇所と同じ挙動 */
+  disabled?: boolean;
 }) {
   const labelable = showLabel !== undefined;
   return (
@@ -30,9 +33,10 @@ export function PickerTrigger({
           <button
             type="button"
             aria-label={label}
+            disabled={disabled}
             onMouseDown={(e) => e.preventDefault()}
             className={cn(
-              "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors",
+              "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors disabled:pointer-events-none disabled:opacity-50",
               labelable ? "h-8 justify-start px-2" : "h-7 w-7 justify-center",
             )}
           >

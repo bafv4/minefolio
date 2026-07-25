@@ -8,6 +8,7 @@ import { CellSelection } from "@tiptap/pm/tables";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
+import { FontSizePicker } from "../panels/font-size-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
 
@@ -100,6 +101,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       <ToolbarButton sm label="リンク" active={editor.isActive("link")} onClick={onLink}>
         <LinkIcon className="h-4 w-4" />
       </ToolbarButton>
+      <FontSizePicker editor={editor} />
       <InlineColorPicker editor={editor} />
     </BubbleMenu>
   );

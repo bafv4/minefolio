@@ -63,6 +63,22 @@ describe("sanitizeGuideHtml", () => {
       expect(out).not.toContain("srcset");
     });
 
+    it("img の data-align（横方向の配置）を保持する", () => {
+      for (const align of ["left", "center", "right"]) {
+        expect(
+          sanitizeGuideHtml(`<img src="https://example.com/a.png" data-align="${align}">`),
+        ).toContain(`data-align="${align}"`);
+      }
+    });
+
+    it("img の style は引き続き除去する（配置は data-align で表す）", () => {
+      const out = sanitizeGuideHtml(
+        `<img src="https://example.com/a.png" style="float: right; margin: 100px;">`,
+      );
+      expect(out).not.toContain("style");
+      expect(out).not.toContain("float");
+    });
+
     it("a の javascript: href を無効化する", () => {
       const out = sanitizeGuideHtml(`<a href="javascript:alert(1)">link</a>`);
       expect(out).not.toContain("javascript:");
@@ -116,6 +132,29 @@ describe("sanitizeGuideHtml", () => {
         `<span style="background-color: rgb(30, 41, 59);">x</span>`,
       );
       expect(bakedBg).not.toContain("background-color");
+    });
+
+    it("font-size は許可された段階のみ通す（任意サイズは除去）", () => {
+      // ピッカーの段階（guide-font-sizes.ts）は保持
+      for (const size of ["0.75em", "0.875em", "1.25em", "1.5em"]) {
+        expect(sanitizeGuideHtml(`<span style="font-size: ${size};">x</span>`)).toContain(
+          `font-size:${size}`,
+        );
+      }
+      // 外部ペースト由来の任意サイズ（px / pt / 段階外の em）は除去
+      for (const size of ["14px", "2em", "120%", "xx-large", "1.3em"]) {
+        expect(sanitizeGuideHtml(`<span style="font-size: ${size};">x</span>`)).not.toContain(
+          "font-size",
+        );
+      }
+    });
+
+    it("font-size は色と同じ span に併存できる", () => {
+      const out = sanitizeGuideHtml(
+        `<span style="color: #D44C47; font-size: 1.25em;">x</span>`,
+      );
+      expect(out).toContain("color:#D44C47");
+      expect(out).toContain("font-size:1.25em");
     });
 
     it("text-align は left/center/right/justify のみ許可する", () => {

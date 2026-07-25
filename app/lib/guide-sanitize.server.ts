@@ -1,5 +1,6 @@
 import { FilterXSS } from "xss";
 import { isPaletteTextColor, isPaletteBgColor } from "./guide-colors";
+import { isAllowedFontSize } from "./guide-font-sizes";
 
 /**
  * ガイド本文（TipTap の getHTML() 出力）のサーバーサイドサニタイズ。
@@ -43,7 +44,8 @@ const ALLOWED_TAGS = [
 /** タグ別の許可属性（class は全タグ共通で許可するためここには書かない） */
 const TAG_ATTRS: Record<string, string[]> = {
   a: ["href", "name", "target", "rel"],
-  img: ["src", "alt", "title", "width", "height"],
+  // data-align: 画像の横方向の配置（left / center / right。未設定は属性ごと無し）
+  img: ["src", "alt", "title", "width", "height", "data-align"],
   iframe: ["src", "width", "height", "frameborder", "allowfullscreen", "allow"],
   div: [
     "data-youtube-video", "data-callout", "data-callout-type", "data-guide-link",
@@ -69,6 +71,8 @@ const TAG_ATTRS: Record<string, string[]> = {
 const CSS_WHITELIST: Record<string, boolean | RegExp | ((value: string) => boolean)> = {
   color: isPaletteTextColor,
   "background-color": isPaletteBgColor,
+  // 段階指定のみ許可（任意サイズはエディタから設定できない。guide-font-sizes.ts 参照）
+  "font-size": isAllowedFontSize,
   "text-align": /^(left|center|right|justify)$/,
   "min-width": true,
   width: true,
