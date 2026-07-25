@@ -11,6 +11,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -100,6 +101,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       viewCount: true,
       updatedAt: true,
     },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
   });
 
   const appUrl = env.APP_URL || "https://minefolio.app";
@@ -186,9 +188,9 @@ export default function UserGuidesPage() {
           <p>まだガイドが公開されていません。</p>
         </div>
       ) : viewMode === "card" ? (
-        <GuideCardGrid guides={authorGuides as GuideItem[]} linkFn={linkFn} />
+        <GuideCardGrid guides={authorGuides} linkFn={linkFn} />
       ) : (
-        <GuideListView guides={authorGuides as GuideItem[]} linkFn={linkFn} />
+        <GuideListView guides={authorGuides} linkFn={linkFn} />
       )}
     </div>
   );

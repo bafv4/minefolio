@@ -12,6 +12,8 @@ import { CookieConsentBanner } from "@/components/cookie-consent";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { FavoritesProvider } from "@/hooks/use-favorites";
 import { getFavoritesFromDb } from "@/lib/favorites";
+import { LikesProvider } from "@/hooks/use-likes";
+import { getViewerLikedIds } from "@/lib/likes.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -21,7 +23,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   if (!session) {
-    return { user: null, initialFavorites: [] as string[] };
+    return {
+      user: null,
+      initialFavorites: [] as string[],
+      likedGuideIds: [] as string[],
+      likedTemplateIds: [] as string[],
+    };
   }
 
   // Get user from our users table
@@ -37,12 +44,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    return { user: null, initialFavorites: [] as string[] };
+    return {
+      user: null,
+      initialFavorites: [] as string[],
+      likedGuideIds: [] as string[],
+      likedTemplateIds: [] as string[],
+    };
   }
 
-  // アバター更新（必要なら）と initialFavorites 取得を並列実行（DB ラウンドトリップ削減）
+  // アバター更新（必要なら）と initialFavorites / いいね済みid の取得を並列実行
+  // （DB ラウンドトリップ削減）
   const needsAvatarUpdate = session.user.image !== user.discordAvatar;
-  const [, initialFavorites] = await Promise.all([
+  const [, initialFavorites, likedIds] = await Promise.all([
     needsAvatarUpdate
       ? db
           .update(users)
@@ -50,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           .where(eq(users.discordId, session.user.id))
       : Promise.resolve(),
     getFavoritesFromDb(db, user.id),
+    getViewerLikedIds(db, user.id),
   ]);
   if (needsAvatarUpdate) {
     user.discordAvatar = session.user.image ?? null;
@@ -58,15 +72,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     user: { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar },
     initialFavorites,
+    likedGuideIds: likedIds.guideIds,
+    likedTemplateIds: likedIds.templateIds,
   };
 }
 
 export default function Layout() {
-  const { user, initialFavorites } = useLoaderData<typeof loader>();
+  const { user, initialFavorites, likedGuideIds, likedTemplateIds } =
+    useLoaderData<typeof loader>();
 
   return (
     <NuqsAdapter>
       <FavoritesProvider isLoggedIn={!!user} initialFavorites={initialFavorites}>
+      <LikesProvider
+        isLoggedIn={!!user}
+        likedGuideIds={likedGuideIds}
+        likedTemplateIds={likedTemplateIds}
+      >
         <div className="flex min-h-screen flex-col">
         {/* スキップリンク（Tab フォーカス時のみ表示） */}
         <a
@@ -88,6 +110,7 @@ export default function Layout() {
         <CookieConsentBanner />
         <BackToTopButton />
         </div>
+      </LikesProvider>
       </FavoritesProvider>
     </NuqsAdapter>
   );

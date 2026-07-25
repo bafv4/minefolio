@@ -121,6 +121,49 @@ export async function seedGuide(
   return row;
 }
 
+type SearchCraftTemplateRow = typeof schema.searchCraftTemplates.$inferInsert;
+
+/**
+ * search_craft_templates を 1 件挿入して返す。userId は必須（seedUser の戻り値の id）。
+ * craftsData の既定は "[]"（公開一覧が json_array_length を実行するため、必ず有効なJSON配列にする）。
+ */
+export async function seedSearchCraftTemplate(
+  db: TestDb,
+  userId: string,
+  overrides: Partial<SearchCraftTemplateRow> = {},
+): Promise<typeof schema.searchCraftTemplates.$inferSelect> {
+  const id = overrides.id ?? createId();
+  const suffix = id.slice(0, 8);
+  const values: SearchCraftTemplateRow = {
+    id,
+    userId,
+    title: overrides.title ?? `Template ${suffix}`,
+    craftsData: overrides.craftsData ?? "[]",
+    isPublished: overrides.isPublished ?? true,
+    ...overrides,
+  };
+  const [row] = await db.insert(schema.searchCraftTemplates).values(values).returning();
+  return row;
+}
+
+/** guide_likes を 1 件挿入する（いいね済み状態を用意するショートカット）。 */
+export async function seedGuideLike(
+  db: TestDb,
+  userId: string,
+  guideId: string,
+): Promise<void> {
+  await db.insert(schema.guideLikes).values({ userId, guideId });
+}
+
+/** search_craft_template_likes を 1 件挿入する。 */
+export async function seedTemplateLike(
+  db: TestDb,
+  userId: string,
+  templateId: string,
+): Promise<void> {
+  await db.insert(schema.searchCraftTemplateLikes).values({ userId, templateId });
+}
+
 type PaceRow = typeof schema.pacemanPaces.$inferInsert;
 
 /**

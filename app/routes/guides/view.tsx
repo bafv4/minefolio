@@ -12,6 +12,8 @@ import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import { decodePresetConfig } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
+import { getGuideLikeCount } from "@/lib/likes.server";
+import { LikeButton } from "@/components/like-button";
 import { t } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -267,16 +269,31 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const appUrl = env.APP_URL || "https://minefolio.app";
+  const likeCount = await getGuideLikeCount(db, guide.id);
   return {
+    // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
+    // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
+    // 全閲覧者のSSRペイロードに載ってしまう（埋め込みユーザーと同じ方針）。
     guide: {
-      ...guide,
+      id: guide.id,
+      slug: guide.slug,
       title: viewTitle,
       summary: viewSummary,
       coverImageUrl: viewCover,
       tags: viewTags,
+      viewCount: guide.viewCount,
+      updatedAt: guide.updatedAt,
       sanitizedContent: contentWithIds,
+      likeCount,
     },
-    author,
+    // 同様に、著者も表示に使う分だけ渡す（id / profileVisibility は可視性判定用のサーバー内部値）
+    author: {
+      slug: author.slug,
+      mcid: author.mcid,
+      uuid: author.uuid,
+      displayName: author.displayName,
+      customSkinUrl: author.customSkinUrl,
+    },
     appUrl,
     embedUsers,
     isOwner,
@@ -421,6 +438,14 @@ export default function GuideViewPage() {
           <Eye className="h-3.5 w-3.5" />
           {guide.viewCount}
         </span>
+        <LikeButton
+          variant="detail"
+          targetType="guide"
+          targetId={guide.id}
+          likeCount={guide.likeCount}
+          isOwn={isOwner}
+          className="ml-auto"
+        />
       </div>
 
       {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。

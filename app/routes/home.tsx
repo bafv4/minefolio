@@ -9,13 +9,14 @@ import { users, guides } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
-import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
+import { GuideCardGrid, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
@@ -136,6 +137,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       tags: guides.tags,
       coverImageUrl: guides.coverImageUrl,
       viewCount: guides.viewCount,
+      likeCount: guideLikeCountSql(),
       updatedAt: guides.updatedAt,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
@@ -623,13 +625,16 @@ export default function HomePage() {
             </Button>
           </div>
           <GuideCardGrid
-            guides={recentGuides.map((g) => ({
-              ...g,
-              authorName: g.authorDisplayName || g.authorMcid || g.authorSlug,
-              _authorSlug: g.authorSlug,
-            })) as (GuideItem & { _authorSlug: string })[]}
+            guides={recentGuides.map(
+              (g): GuideItemWithAuthorSlug => ({
+                ...g,
+                likeCount: Number(g.likeCount),
+                authorName: g.authorDisplayName || g.authorMcid || g.authorSlug,
+                _authorSlug: g.authorSlug,
+              }),
+            )}
             linkFn={(guide) => {
-              const item = guide as GuideItem & { _authorSlug: string };
+              const item = guide as GuideItemWithAuthorSlug;
               return `/guides/${item._authorSlug}/${guide.slug}`;
             }}
             gridCols="md:grid-cols-2 lg:grid-cols-4"

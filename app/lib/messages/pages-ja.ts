@@ -164,6 +164,24 @@ export const PAGES_JA = {
     emptyTitle: "お気に入りがありません",
     cookieNotice: "お気に入りはブラウザに保存されます。別のブラウザやデバイスでは表示されません。",
   },
+  likes: {
+    label: "いいね",
+    labelActive: "いいね済み",
+    /** aria-label（{count} は現在の件数） */
+    addAria: "いいねする（現在{count}件）",
+    removeAria: "いいねを取り消す（現在{count}件）",
+    countAria: "いいね{count}件",
+    loginToLike: "ログインしていいね",
+    ownContent: "自分の投稿にはいいねできません",
+  },
+  contentSort: {
+    label: "並び替え",
+    /** テンプレート一覧（createdAt 基準） */
+    newest: "新着順",
+    /** ガイド一覧（updatedAt 基準） */
+    recentlyUpdated: "更新順",
+    popular: "人気順",
+  },
   keybindings: {
     title: "操作設定一覧",
     metaTitle: "操作設定一覧 - Minefolio",

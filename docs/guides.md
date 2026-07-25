@@ -152,10 +152,13 @@
 
 ### /guides — ガイド一覧
 
-- 全ユーザーの公開ガイドを一覧表示
+- 全ユーザーの公開ガイドを一覧表示（著者が公開プロフィールのもののみ）
 - **グリッド表示**: カード形式で表示。カバー画像がない場合はプレースホルダーを表示
 - **リスト表示**: リスト形式で表示。カバー画像を左端に表示
 - 表示切替が可能
+- **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」と「人気順（いいね数降順）」を切り替えられる（`ContentSortSelect`）。同数時は `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す
+- **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
+  - カード全体のクリックは**オーバーレイのリンク**（`absolute inset-0`）が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない
 
 ### /guides/:authorSlug — 著者別ガイド一覧
 
@@ -166,6 +169,8 @@
 - 個別ガイドの全文表示
 - カバー画像、タイトル、著者情報、本文を表示
 - 閲覧時に viewCount をインクリメント
+- メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
+- **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
 
 ---
 

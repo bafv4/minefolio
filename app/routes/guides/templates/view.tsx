@@ -45,6 +45,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ShareButton } from "@/components/share-button";
+import { LikeButton } from "@/components/like-button";
+import { getTemplateLikeCount } from "@/lib/likes.server";
 import {
   SearchCraftGroupedList,
   KeyBadgeLegend,
@@ -104,7 +106,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     where: eq(searchCraftTemplates.id, params.templateId),
     with: {
       user: {
-        columns: { id: true, slug: true, displayName: true, mcid: true, discordId: true },
+        columns: {
+          id: true,
+          slug: true,
+          displayName: true,
+          mcid: true,
+          discordId: true,
+          profileVisibility: true,
+        },
       },
     },
   });
@@ -115,6 +124,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const isOwner = !!session && template.user.discordId === session.user.id;
   if (!template.isPublished && !isOwner) {
+    throw new Response(t("templates.notFound"), { status: 404 });
+  }
+  // 非公開（private）プロフィールのテンプレートは本人以外に見せない。
+  // 限定公開（unlisted）は一覧に出さないだけで、URL 指定なら閲覧可（名指し参照のルール）
+  if (template.user.profileVisibility === "private" && !isOwner) {
     throw new Response(t("templates.notFound"), { status: 404 });
   }
 
@@ -131,6 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const appUrl = env.APP_URL || "https://minefolio.app";
+  const likeCount = await getTemplateLikeCount(db, template.id);
 
   return {
     template: {
@@ -140,6 +155,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       gameLanguage: template.gameLanguage,
       isPublished: template.isPublished,
       applyCount: template.applyCount,
+      likeCount,
       createdAt: template.createdAt.toISOString(),
       updatedAt: template.updatedAt.toISOString(),
     },
@@ -578,6 +594,13 @@ export default function TemplateViewPage() {
         <ShareButton
           title={`${template.title} - ${t("templates.pageTitle")} | Minefolio`}
           url={`${appUrl}/guides/templates/${template.id}`}
+        />
+        <LikeButton
+          variant="detail"
+          targetType="template"
+          targetId={template.id}
+          likeCount={template.likeCount}
+          isOwn={isOwner}
         />
         {isOwner && (
           <Button asChild variant="ghost" size="sm" className="ml-auto">

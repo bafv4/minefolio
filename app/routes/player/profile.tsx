@@ -42,6 +42,7 @@ import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
 import { safeExternalHref } from "@/lib/safe-url";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
@@ -398,6 +399,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       updatedAt: true,
       isPinned: true,
     },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
   });
 
   // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
@@ -1592,13 +1594,13 @@ export default function PlayerProfilePage() {
               </div>
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
-                  guides={playerGuides as GuideItem[]}
+                  guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                   gridCols="sm:grid-cols-2"
                 />
               ) : (
                 <GuideListView
-                  guides={playerGuides as GuideItem[]}
+                  guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                 />
               )}

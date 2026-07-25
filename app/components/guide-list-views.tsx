@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Eye, FileText, LayoutGrid, List, Pin } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LikeButton } from "@/components/like-button";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -21,12 +22,19 @@ export type GuideItem = {
   tags: string;
   coverImageUrl: string | null;
   viewCount: number;
+  /** いいね数。必須にして各ローダーの取得漏れを型検査で捕まえる */
+  likeCount: number;
   updatedAt: string | Date;
   /** Per-guide author display name (for multi-author listings) */
   authorName?: string;
   /** プロフィールのガイドタブでのピン留め（カード表示で先頭・拡大） */
   isPinned?: boolean;
+  /** 閲覧者自身のガイドか（自分のガイドにはいいねできない） */
+  isOwn?: boolean;
 };
+
+/** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
+export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
 
 type ViewMode = "card" | "list";
 
@@ -69,18 +77,25 @@ export function GuideCardGrid({
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
 }) {
+  // ログイン状態は LikesProvider が持つ（未ログインなら LikeButton が静的表示に落ちる）
   return (
     <div className={`grid gap-4 ${gridCols}`}>
       {guides.map((guide) => {
         const tags = JSON.parse(guide.tags) as string[];
         return (
-          <Link
+          // カード全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
+          // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
+          <div
             key={guide.id}
-            to={linkFn(guide)}
-            prefetch="intent"
             // ピン留めカードはグリッド2列分に拡大して強調する
-            className={cn("group", guide.isPinned && "sm:col-span-2")}
+            className={cn("group relative", guide.isPinned && "sm:col-span-2")}
           >
+            <Link
+              to={linkFn(guide)}
+              prefetch="intent"
+              className="absolute inset-0 z-0 rounded-xl"
+              aria-label={guide.title}
+            />
             <Card
               className={cn(
                 "h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40 group-hover:-translate-y-0.5",
@@ -124,13 +139,21 @@ export function GuideCardGrid({
                     ))}
                   </div>
                 )}
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  {guide.authorName && <span>{guide.authorName}</span>}
+                {/* justify-between は子3つ前提で崩れるため gap + ml-auto に統一（リスト表示と同じ） */}
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {guide.authorName && <span className="truncate">{guide.authorName}</span>}
                   <span className="flex items-center gap-1">
                     <Eye className="h-3 w-3" />
                     {guide.viewCount}
                   </span>
-                  <span>
+                  <LikeButton
+                    variant="compact"
+                    targetType="guide"
+                    targetId={guide.id}
+                    likeCount={guide.likeCount}
+                    isOwn={guide.isOwn}
+                  />
+                  <span className="ml-auto shrink-0">
                     {formatDistanceToNow(guide.updatedAt, {
                       addSuffix: true,
                       locale: ja,
@@ -139,7 +162,7 @@ export function GuideCardGrid({
                 </div>
               </CardContent>
             </Card>
-          </Link>
+          </div>
         );
       })}
     </div>
@@ -159,12 +182,17 @@ export function GuideListView({
       {guides.map((guide) => {
         const tags = JSON.parse(guide.tags) as string[];
         return (
-          <Link
+          // カード全体のクリックはオーバーレイのリンクが担う（カード表示と同じ理由）
+          <div
             key={guide.id}
-            to={linkFn(guide)}
-            prefetch="intent"
-            className="flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors group"
+            className="group relative flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors"
           >
+            <Link
+              to={linkFn(guide)}
+              prefetch="intent"
+              className="absolute inset-0 z-0 rounded"
+              aria-label={guide.title}
+            />
             {guide.coverImageUrl && (
               <img
                 src={guide.coverImageUrl}
@@ -192,12 +220,19 @@ export function GuideListView({
                 </div>
               )}
               <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                {guide.authorName && <span>{guide.authorName}</span>}
-                <span className="flex items-center gap-0.5">
+                {guide.authorName && <span className="truncate">{guide.authorName}</span>}
+                <span className="flex items-center gap-1">
                   <Eye className="h-3 w-3" />
                   {guide.viewCount}
                 </span>
-                <span>
+                <LikeButton
+                  variant="compact"
+                  targetType="guide"
+                  targetId={guide.id}
+                  likeCount={guide.likeCount}
+                  isOwn={guide.isOwn}
+                />
+                <span className="ml-auto shrink-0">
                   {formatDistanceToNow(guide.updatedAt, {
                     addSuffix: true,
                     locale: ja,
@@ -205,7 +240,7 @@ export function GuideListView({
                 </span>
               </div>
             </div>
-          </Link>
+          </div>
         );
       })}
     </div>

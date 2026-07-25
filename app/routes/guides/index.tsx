@@ -1,9 +1,12 @@
 import { useLoaderData, useSearchParams, useNavigation, Form, type LoaderFunctionArgs } from "react-router";
 import { useState } from "react";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, asc, desc } from "drizzle-orm";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +21,13 @@ import {
   GuideCardGrid,
   GuideListView,
   type GuideItem,
+  type GuideItemWithAuthorSlug,
 } from "@/components/guide-list-views";
+import {
+  ContentSortSelect,
+  parseContentSort,
+  type ContentSort,
+} from "@/components/content-sort-select";
 
 export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
   const title = t("guides.title");
@@ -43,9 +52,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
 
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
+  const viewer = session
+    ? await db.query.users.findFirst({
+        where: eq(users.discordId, session.user.id),
+        columns: { id: true },
+      })
+    : null;
+
   const url = new URL(request.url);
   const tag = url.searchParams.get("tag") || "";
   const q = url.searchParams.get("q") || "";
+  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"));
+
+  const likeCount = guideLikeCountSql();
+  // 同数（初日は全件0）で順序が不定にならないよう id まで含めて全順序にする
+  const orderBy =
+    sort === "popular"
+      ? [desc(likeCount), desc(guides.updatedAt), asc(guides.id)]
+      : [desc(guides.updatedAt), asc(guides.id)];
 
   const allGuides = await db
     .select({
@@ -59,6 +85,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         viewCount: guides.viewCount,
         updatedAt: guides.updatedAt,
       },
+      likeCount,
+      authorId: guides.authorId,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
       authorMcid: users.mcid,
@@ -67,7 +95,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .innerJoin(users, eq(guides.authorId, users.id))
     // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
     .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-    .orderBy(desc(guides.updatedAt));
+    .orderBy(...orderBy);
 
   // Filter in memory for tag/search (simple approach)
   let filtered = allGuides;
@@ -100,11 +128,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .map(([name]) => name);
 
   const appUrl = env.APP_URL || "https://minefolio.app";
-  return { guides: filtered, allTags, tag, q, appUrl };
+  return { guides: filtered, allTags, tag, q, sort, viewerId: viewer?.id ?? null, appUrl };
 }
 
 export default function GuidesIndexPage() {
-  const { guides: allGuides, allTags, tag, q } = useLoaderData<typeof loader>();
+  const { guides: allGuides, allTags, tag, q, sort, viewerId } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
@@ -114,17 +142,32 @@ export default function GuidesIndexPage() {
   // Transform loader data to GuideItem[]
   // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
   // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
-  const guideItems: GuideItem[] = allGuides.map(({ guide, authorSlug, authorDisplayName, authorMcid }) => {
-    return {
+  // 型注釈にする（as キャストだと likeCount 等の取得漏れを型検査が見逃す）
+  const guideItems: GuideItemWithAuthorSlug[] = allGuides.map(
+    ({ guide, likeCount, authorId, authorSlug, authorDisplayName, authorMcid }) => ({
       ...guide,
+      likeCount: Number(likeCount),
+      isOwn: !!viewerId && authorId === viewerId,
       authorName: authorDisplayName || authorMcid || authorSlug,
       _authorSlug: authorSlug,
-    };
-  }) as (GuideItem & { _authorSlug: string })[];
+    }),
+  );
 
   const linkFn = (guide: GuideItem) => {
-    const item = guide as GuideItem & { _authorSlug: string };
+    const item = guide as GuideItemWithAuthorSlug;
     return `/guides/${item._authorSlug}/${guide.slug}`;
+  };
+
+  const handleSortChange = (value: ContentSort) => {
+    setSearchParams(
+      (prev) => {
+        // 既定値のときはパラメータを消してURLを綺麗に保つ
+        if (value === "new") prev.delete("sort");
+        else prev.set("sort", value);
+        return prev;
+      },
+      { preventScrollReset: true },
+    );
   };
 
   return (
@@ -147,6 +190,8 @@ export default function GuidesIndexPage() {
         <div className="flex items-center gap-2">
           <Form method="get" className="flex gap-2 flex-1">
             {tag && <input type="hidden" name="tag" value={tag} />}
+            {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
+            {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -161,6 +206,11 @@ export default function GuidesIndexPage() {
               検索
             </Button>
           </Form>
+          <ContentSortSelect
+            value={sort}
+            onChange={handleSortChange}
+            newestLabel={t("contentSort.recentlyUpdated")}
+          />
           <ViewToggle viewMode={viewMode} onChange={setViewMode} />
         </div>
         {allTags.length > 0 && (

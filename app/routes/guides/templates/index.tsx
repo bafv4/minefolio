@@ -1,10 +1,19 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, Link, Form, type LoaderFunctionArgs } from "react-router";
+import { useLoaderData, Link, Form, useSearchParams, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { templateLikeCountSql } from "@/lib/likes.server";
 import { t } from "@/lib/messages";
+import {
+  ContentSortSelect,
+  parseContentSort,
+  type ContentSort,
+} from "@/components/content-sort-select";
+import { LikeButton } from "@/components/like-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,17 +49,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
 
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
+  const viewer = session
+    ? await db.query.users.findFirst({
+        where: eq(users.discordId, session.user.id),
+        columns: { id: true },
+      })
+    : null;
+
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const lang = (url.searchParams.get("lang") ?? "").trim();
+  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"));
 
   // 言語はSQLで絞り込む（完全一致）
-  const conditions = [eq(searchCraftTemplates.isPublished, true)];
+  // 非公開・限定公開の著者のテンプレートは公開一覧（discovery）に出さない
+  // （ガイド一覧 guides/index.tsx と同じルール）
+  const conditions = [
+    eq(searchCraftTemplates.isPublished, true),
+    eq(users.profileVisibility, "public"),
+  ];
   if (lang) {
     conditions.push(eq(searchCraftTemplates.gameLanguage, lang));
   }
 
-  // craftCount / hasRemaps はSQLで算出し、craftsData/remapsData 本体は転送・パースしない
+  // craftCount / hasRemaps / likeCount はSQLで算出し、craftsData/remapsData 本体は転送・パースしない
+  const likeCount = templateLikeCountSql();
+
+  // 人気順は必ず SQL の ORDER BY で行う。limit(100) が先に効くため、メモリ上で並べ替えると
+  // 「新しい100件を人気順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない。
+  // 同数（初日は全件0）で順序が不定にならないよう id まで含めて全順序にする。
+  const orderBy =
+    sort === "popular"
+      ? [desc(likeCount), desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)]
+      : [desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)];
+
   const rows = await db
     .select({
       id: searchCraftTemplates.id,
@@ -60,6 +94,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       hasRemaps: sql<boolean>`${searchCraftTemplates.remapsData} is not null`,
       gameLanguage: searchCraftTemplates.gameLanguage,
       applyCount: searchCraftTemplates.applyCount,
+      likeCount,
+      ownerId: searchCraftTemplates.userId,
       createdAt: searchCraftTemplates.createdAt,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
@@ -68,7 +104,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .from(searchCraftTemplates)
     .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
     .where(and(...conditions))
-    .orderBy(desc(searchCraftTemplates.createdAt))
+    .orderBy(...orderBy)
     .limit(100);
 
   let templates = rows.map((row) => ({
@@ -79,6 +115,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     hasRemaps: !!row.hasRemaps,
     gameLanguage: row.gameLanguage,
     applyCount: row.applyCount,
+    likeCount: Number(row.likeCount),
+    isOwn: !!viewer && row.ownerId === viewer.id,
     createdAt: row.createdAt.toISOString(),
     authorSlug: row.authorSlug,
     authorName: row.authorDisplayName || row.authorMcid || row.authorSlug,
@@ -94,15 +132,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 
-  return { templates, q, lang, appUrl };
+  return { templates, q, lang, sort, isLoggedIn: !!viewer, appUrl };
 }
 
 export default function TemplatesIndexPage() {
-  const { templates, q, lang } = useLoaderData<typeof loader>();
+  const { templates, q, lang, sort } = useLoaderData<typeof loader>();
   const [langValue, setLangValue] = useState(lang || "__all");
+  const [, setSearchParams] = useSearchParams();
   const hasFilters = !!q || !!lang;
   // タブ切替（→ /guides）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
+
+  const handleSortChange = (value: ContentSort) => {
+    setSearchParams(
+      (prev) => {
+        // 既定値のときはパラメータを消してURLを綺麗に保つ
+        if (value === "new") prev.delete("sort");
+        else prev.set("sort", value);
+        return prev;
+      },
+      { preventScrollReset: true },
+    );
+  };
 
   // 戻る/進むナビゲーション時にローダーの値へ同期する
   useEffect(() => {
@@ -159,21 +210,37 @@ export default function TemplatesIndexPage() {
           />
         </div>
         {langValue !== "__all" && <input type="hidden" name="lang" value={langValue} />}
+        {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（lang と同じ理由） */}
+        {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
         <Button type="submit">
           <Search className="mr-2 h-4 w-4" />
           {t("templates.searchButton")}
         </Button>
       </Form>
 
+      <div className="flex items-center justify-end">
+        <ContentSortSelect
+          value={sort}
+          onChange={handleSortChange}
+          newestLabel={t("contentSort.newest")}
+        />
+      </div>
+
       {templates.length > 0 ? (
         <div className="divide-y">
           {templates.map((template) => (
-            <Link
+            // 行全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
+            // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
+            <div
               key={template.id}
-              to={`/guides/templates/${template.id}`}
-              prefetch="intent"
-              className="flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors group"
+              className="group relative flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors"
             >
+              <Link
+                to={`/guides/templates/${template.id}`}
+                prefetch="intent"
+                className="absolute inset-0 z-0 rounded"
+                aria-label={template.title}
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1">
@@ -208,6 +275,13 @@ export default function TemplatesIndexPage() {
                     <Download className="h-3 w-3" />
                     {template.applyCount}
                   </span>
+                  <LikeButton
+                    variant="compact"
+                    targetType="template"
+                    targetId={template.id}
+                    likeCount={template.likeCount}
+                    isOwn={template.isOwn}
+                  />
                   <span>
                     {formatDistanceToNow(new Date(template.createdAt), {
                       addSuffix: true,
@@ -216,7 +290,7 @@ export default function TemplatesIndexPage() {
                   </span>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       ) : hasFilters ? (

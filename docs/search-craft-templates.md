@@ -38,7 +38,7 @@
 
 ### 管理・エディタ（/my-guides/templates）
 
-- `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `toggle-publish` / `delete` のみ。
+- `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `toggle-publish` / `delete` のみ（いいねは `/api/likes` が担当）。
 - **作成 `/my-guides/templates/new`**（`app/routes/my-guides/template-new.tsx`）・**編集 `/my-guides/templates/:templateId/edit`**（`app/routes/my-guides/template-edit.tsx`）: テンプレートエディタでテンプレートの内容そのものを直接編集する。**プリセットや現在の設定を経由せずゼロから作成できる**。
   - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（バーチャルキーボード → キーリマップ編集 → サーチクラフト編集。タイピングテストはバーチャルキーボードカード右上のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
   - サーチクラフト編集部の `SearchCraftListEditor` は行形式（ドラッグハンドル + 順番 + アイテムチップ + サーチ文字列 + タイミング + 「Shiftを押しながら」チェックボックス + コメント常時表示）。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。
@@ -48,11 +48,14 @@
 
 ### 公開ページ
 
-- **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` のテンプレートを新着順に最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム内言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
-  - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム内言語（`?lang=`、SQLで完全一致）で絞り込める。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。絞り込み結果が0件の場合はリセットリンク付きの専用メッセージを表示。
+- **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` **かつ著者が公開プロフィール（`profileVisibility = "public"`）** のテンプレートを最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム内言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
+  - **並び替え**: `?sort=` で「新着順（既定、`createdAt` 降順）」と「人気順（いいね数降順）」を切り替えられる（`ContentSortSelect`）。`.limit(100)` より前に SQL の `ORDER BY` で並べる（メモリ上で並べ替えると「新しい100件を人気順に並べた」結果になるため）。同数時は `createdAt` → `id` でタイブレークする。
+  - **いいね**: 各行にいいね数を表示し、ログイン中は行内のグッドボタンで直接いいねできる（自分のテンプレートは件数のみ）。詳細は `docs/likes.md`
+  - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム内言語（`?lang=`、SQLで完全一致）で絞り込める。並び順は hidden input で持ち越す。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。絞り込み結果が0件の場合はリセットリンク付きの専用メッセージを表示。
 - **詳細 `/guides/templates/:templateId`**（`app/routes/guides/templates/view.tsx`）: テンプレートの内容（リマップ・サーチクラフト一覧）を表示。ゲーム内言語はバッジではなくヘッダー部に大きく表示する（サーチ文字列の前提となる最重要情報のため）。
   - 実入力キーはテンプレートに含まれるリマップを前提に `getActualKeyInfos()` で導出して表示する。withShift のエントリは `{ shiftHeld: true }` で導出し「⇧ Shift」バッジ付きで表示する（詳細は docs/items-searchcraft.md の「Shiftを押しながらクラフト」参照）。
-  - 非公開テンプレートは作成者本人のみ閲覧可能（他者には404）。
+  - 非公開テンプレートは作成者本人のみ閲覧可能（他者には404）。**著者のプロフィールが非公開（private）の場合も本人以外は404**（限定公開 unlisted はURL指定なら閲覧可）。
+  - アクション行に**いいねボタン**を置く（`ShareButton` の直後）。自分のテンプレートでは押せず件数のみ表示する。
   - OGP: `/og-image?title=...` を使用。`ShareButton` で共有可能。
 
 ## テンプレートの適用（自分の設定への反映）
