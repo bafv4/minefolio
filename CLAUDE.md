@@ -115,7 +115,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 必須: `TURSO_DATABASE_URL`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `APP_URL`, `BETTER_AUTH_SECRET`
 
-任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`
+任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY`
 
 ローカル開発は `TURSO_DATABASE_URL=file:local.db`（ローカルSQLite）+ `DEV_AUTH=1`（`/dev/login` の簡易ログイン、本番・リモートDB接続時は常に無効）で Turso / Discord OAuth なしに動かせる。リモートTursoの接続情報は `.env` ではなく `.env.remote` に置く（上記「接続先の分離運用」参照）。詳細: `docs/local-development.md`
 
