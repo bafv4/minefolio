@@ -512,6 +512,7 @@ CREATE TABLE `users` (
 	`uuid` text,
 	`slug` text NOT NULL,
 	`display_name` text,
+	`display_name_alphabet` text,
 	`discord_avatar` text,
 	`bio` text,
 	`has_imported` integer DEFAULT false NOT NULL,

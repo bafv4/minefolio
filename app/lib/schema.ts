@@ -18,6 +18,9 @@ export const users = sqliteTable("users", {
   slug: text("slug").unique().notNull(),
 
   displayName: text("display_name"),
+  // アルファベット表記の表示名（任意）。英語ロケールでは表示名の代わりに使い、
+  // プロフィールページではロケールを問わず併記する（未入力なら displayName にフォールバック）。
+  displayNameAlphabet: text("display_name_alphabet"),
   discordAvatar: text("discord_avatar"),
   bio: text("bio"),
   hasImported: integer("has_imported", { mode: "boolean" }).default(false).notNull(),
