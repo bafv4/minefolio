@@ -109,4 +109,8 @@ export default [
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
+
+  // 未マッチパスのキャッチオール（必ず最後）。root ローダーを走らせてロケールを
+  // 確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
+  route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;
