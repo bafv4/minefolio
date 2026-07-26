@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale } from "@/lib/locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
@@ -29,7 +30,8 @@ function escapeCsv(v: string): string {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // CSV のヘッダー・ラベルは閲覧者のロケールに合わせる
-  const t = createTranslator(resolveLocale(request));
+  const locale = resolveLocale(request);
+  const t = createTranslator(locale);
   const url = new URL(request.url);
   const sections = url.searchParams.get("sections")?.split(",") ?? ["actions"];
   // 個別指定: userSlugs=slug1,slug2 のように指定すると対象を絞り込む。未指定なら全公開ユーザー。
@@ -46,7 +48,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     slugs: userSlugs ?? undefined,
   });
 
-  const playerName = (p: typeof players[0]) => p.displayName ?? p.mcid ?? p.slug;
+  const playerName = (p: typeof players[0]) => getLocalizedDisplayName(p, locale);
 
   const csvBlocks: string[] = [];
 

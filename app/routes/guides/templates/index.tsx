@@ -1,5 +1,6 @@
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { pickDisplayName } from "@/lib/slug";
 import { useState, useEffect } from "react";
 import { useLoaderData, Link, Form, useSearchParams, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
@@ -58,6 +59,7 @@ export const meta = ({
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
+  const locale = resolveLocale(request);
 
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -110,6 +112,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       createdAt: searchCraftTemplates.createdAt,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
+      authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
     })
     .from(searchCraftTemplates)
@@ -130,7 +133,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     isOwn: !!viewer && row.ownerId === viewer.id,
     createdAt: row.createdAt.toISOString(),
     authorSlug: row.authorSlug,
-    authorName: row.authorDisplayName || row.authorMcid || row.authorSlug,
+    authorName:
+      pickDisplayName(
+        { displayName: row.authorDisplayName, displayNameAlphabet: row.authorDisplayNameAlphabet },
+        locale,
+      ) || row.authorMcid || row.authorSlug,
   }));
 
   // 名称の絞り込みはガイド一覧と同様にメモリ上で行う（部分一致・大文字小文字を無視）

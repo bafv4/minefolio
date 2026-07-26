@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   getPublicPaceFeed,
+  paceFeedCacheKey,
   parsePaceSearchParams,
 } from "../paces-feed.server";
 import { invalidateCache } from "../cache";
@@ -18,9 +19,9 @@ let originalUrl: string | undefined;
 
 // getPaceFeedBase のフィード全体キャッシュ（区間キー毎）を毎テスト消す
 async function clearFeedCache() {
-  await invalidateCache("paces:feed:all");
+  await invalidateCache(paceFeedCacheKey());
   for (const split of PACE_FEED_SPLITS) {
-    await invalidateCache(`paces:feed:${split}`);
+    await invalidateCache(paceFeedCacheKey(split));
   }
 }
 

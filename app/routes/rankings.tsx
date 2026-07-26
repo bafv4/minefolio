@@ -10,7 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Trophy, Timer, Swords, Video, ExternalLink, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { pickDisplayName } from "@/lib/slug";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -199,6 +200,7 @@ export default function RankingsPage() {
 // Speedrun.com ランキングテーブル
 function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
   const t = useT();
+  const locale = useLocale();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
@@ -256,7 +258,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                     />
                     <div className="min-w-0">
                       <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
-                        {entry.displayName ?? entry.mcid ?? "Unknown"}
+                        {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
                         {isPending && (
                           <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-500">
                             {t("rankings.pendingVerificationSuffix")}
@@ -308,6 +310,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
 // Ranked PB テーブル
 function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
   const t = useT();
+  const locale = useLocale();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
@@ -349,7 +352,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {entry.displayName ?? entry.mcid ?? "Unknown"}
+                      {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
                     </p>
                   </div>
                 </Link>
@@ -366,6 +369,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
 // Ranked Elo テーブル
 function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
   const t = useT();
+  const locale = useLocale();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
@@ -409,7 +413,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {entry.displayName ?? entry.mcid ?? "Unknown"}
+                      {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
                     </p>
                   </div>
                 </Link>

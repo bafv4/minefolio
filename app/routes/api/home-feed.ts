@@ -143,6 +143,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           recentPaces,
           mcidToUuid: userData.mcidToUuid,
           mcidToDisplayName: userData.mcidToDisplayName,
+          mcidToDisplayNameAlphabet: userData.mcidToDisplayNameAlphabet,
           mcidToSkinUrl: userData.mcidToSkinUrl,
         },
         CDN_CACHE.PACES,

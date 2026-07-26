@@ -12,6 +12,11 @@ import { getCached, setCached } from "./cache";
 // 無限スクロールのページ毎にテーブル全体を走査しないためのもの
 const PACES_FEED_CACHE_TTL = 60 * 1000;
 
+/** フィード全体キャッシュのキー。形状を変えたら版数を上げる（テストからも参照する） */
+export function paceFeedCacheKey(timeline?: string): string {
+  return `paces:feed:v2:${timeline ?? "all"}`;
+}
+
 // /paces ページと /api/paces で共用するフィード項目（クライアント表示用に整形済み）
 export interface PaceFeedItem {
   mcid: string;
@@ -74,6 +79,8 @@ export interface VisiblePaceFeed {
   items: PaceFeedItem[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
+  mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
 }
 
@@ -86,7 +93,7 @@ type Auth = ReturnType<typeof createAuth>;
  * それ以外の条件（プレイヤー・時期・タイム）はキャッシュ済みリストへのJSフィルタで等価に適用できる。
  */
 async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFeed> {
-  const cacheKey = `paces:feed:${timeline ?? "all"}`;
+  const cacheKey = paceFeedCacheKey(timeline);
   const cached = await getCached<VisiblePaceFeed>(cacheKey);
   if (cached) return cached;
 
@@ -95,6 +102,7 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
@@ -117,6 +125,11 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
   const mcidToDisplayName = Object.fromEntries(
     usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
   );
+  const mcidToDisplayNameAlphabet = Object.fromEntries(
+    usersWithMcid
+      .filter((u) => u.displayNameAlphabet)
+      .map((u) => [u.mcid!.toLowerCase(), u.displayNameAlphabet!])
+  );
   const mcidToSkinUrl = Object.fromEntries(
     usersWithMcid
       .filter((u) => u.customSkinUrl !== null)
@@ -134,7 +147,7 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
     time: Math.floor(p.date.getTime() / 1000),
   }));
 
-  const base: VisiblePaceFeed = { items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl };
+  const base: VisiblePaceFeed = { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
   await setCached(cacheKey, base, PACES_FEED_CACHE_TTL);
   return base;
 }
@@ -152,7 +165,7 @@ export async function getPublicPaceFeed(
   filters: PaceSearchFilters = {},
 ): Promise<VisiblePaceFeed> {
   const base = await getPaceFeedBase(db, filters.timeline);
-  const { mcidToUuid, mcidToDisplayName, mcidToSkinUrl } = base;
+  const { mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } = base;
 
   let items = base.items;
 
@@ -178,11 +191,12 @@ export async function getPublicPaceFeed(
     items = items.filter((p) => {
       const mcidLower = p.mcid.toLowerCase();
       const displayName = mcidToDisplayName[mcidLower]?.toLowerCase() ?? "";
-      return mcidLower.includes(q) || displayName.includes(q);
+      const alphabet = mcidToDisplayNameAlphabet[mcidLower]?.toLowerCase() ?? "";
+      return mcidLower.includes(q) || displayName.includes(q) || alphabet.includes(q);
     });
   }
 
-  return { items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl };
+  return { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
 }
 
 /**

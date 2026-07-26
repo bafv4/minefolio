@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
 import { useState, useMemo } from "react";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import type { Translator } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -147,6 +148,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       customSkinUrl: true,
     },
     orderBy: [asc(users.slug)],
@@ -193,6 +195,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         uuid: true,
         slug: true,
         displayName: true,
+        displayNameAlphabet: true,
         customSkinUrl: true,
       },
       with: {
@@ -237,6 +240,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: user.uuid,
           slug: user.slug,
           displayName: user.displayName,
+          displayNameAlphabet: user.displayNameAlphabet,
           customSkinUrl: user.customSkinUrl,
           matches,
           total,
@@ -309,6 +313,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function ComparePage() {
   const t = useT();
+  const locale = useLocale();
   const { allPlayers, player1, player2, similarPlayers } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search1, setSearch1] = useState("");
@@ -335,7 +340,8 @@ export default function ComparePage() {
       (p) =>
         p.slug.toLowerCase().includes(lower) ||
         p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower)
+        p.displayName?.toLowerCase().includes(lower) ||
+        p.displayNameAlphabet?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search1]);
 
@@ -346,7 +352,8 @@ export default function ComparePage() {
       (p) =>
         p.slug.toLowerCase().includes(lower) ||
         p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower)
+        p.displayName?.toLowerCase().includes(lower) ||
+        p.displayNameAlphabet?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search2]);
 
@@ -442,7 +449,7 @@ export default function ComparePage() {
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      <span>{getLocalizedDisplayName(p, locale)}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
@@ -484,7 +491,7 @@ export default function ComparePage() {
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      <span>{getLocalizedDisplayName(p, locale)}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
@@ -514,7 +521,7 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
                   <div>
-                    <p className="font-bold">{player1.displayName ?? player1.mcid ?? player1.slug}</p>
+                    <p className="font-bold">{getLocalizedDisplayName(player1, locale)}</p>
                     {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
                   </div>
                 </div>
@@ -538,7 +545,7 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player2.uuid} size={40} skinUrl={player2.customSkinUrl} />
                   <div>
-                    <p className="font-bold">{player2.displayName ?? player2.mcid ?? player2.slug}</p>
+                    <p className="font-bold">{getLocalizedDisplayName(player2, locale)}</p>
                     {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
                   </div>
                 </div>
@@ -601,8 +608,8 @@ export default function ComparePage() {
               <CardContent>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
-                  <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid ?? player1.slug}</div>
-                  <div className="font-medium text-sm text-center">{player2.displayName ?? player2.mcid ?? player2.slug}</div>
+                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player1, locale)}</div>
+                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player2, locale)}</div>
 
                   <CompareRow
                     label={t("compare.mouseDpi")}
@@ -695,6 +702,7 @@ function SimilarPlayersSection({
   onSelectPlayer: (slug: string) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <Card>
       <CardHeader>
@@ -703,7 +711,7 @@ function SimilarPlayersSection({
           {t("compare.similarTitle")}
         </CardTitle>
         <CardDescription>
-          {(targetPlayer.displayName ?? targetPlayer.mcid ?? targetPlayer.slug) + t("compare.similarSuffix")}
+          {getLocalizedDisplayName(targetPlayer, locale) + t("compare.similarSuffix")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -717,7 +725,7 @@ function SimilarPlayersSection({
                 <div className="flex items-center gap-3">
                   <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
                   <div>
-                    <p className="font-medium">{player.displayName ?? player.mcid ?? player.slug}</p>
+                    <p className="font-medium">{getLocalizedDisplayName(player, locale)}</p>
                     {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
                   </div>
                 </div>

@@ -13,8 +13,10 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Download, Keyboard, ArrowLeftRight, Wand2, Mouse, FileSpreadsheet, Search, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createTranslator, type MessageKey } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
-import { useT } from "@/hooks/use-locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
+import type { Locale } from "@/lib/locale";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -36,11 +38,13 @@ interface AvailableUser {
   slug: string;
   mcid: string | null;
   displayName: string | null;
+  displayNameAlphabet: string | null;
 }
 
-export async function loader() {
+export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
+  const locale = resolveLocale(request);
 
   // 設定（キー配置・リマップ・カスタムアクションのいずれか）が登録されている公開ユーザーを取得
   const allPlayers = await db.query.users.findMany({
@@ -49,6 +53,7 @@ export async function loader() {
       slug: true,
       mcid: true,
       displayName: true,
+      displayNameAlphabet: true,
     },
     with: {
       keybindings: { columns: { id: true } },
@@ -59,10 +64,11 @@ export async function loader() {
 
   const availableUsers: AvailableUser[] = allPlayers
     .filter((p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0)
-    .map((p) => ({ slug: p.slug, mcid: p.mcid, displayName: p.displayName }))
+    .map((p) => ({ slug: p.slug, mcid: p.mcid, displayName: p.displayName, displayNameAlphabet: p.displayNameAlphabet }))
     .sort((a, b) => {
-      const an = (a.displayName ?? a.mcid ?? a.slug).toLowerCase();
-      const bn = (b.displayName ?? b.mcid ?? b.slug).toLowerCase();
+      // 並び順は表示に使う名前に合わせる（英語表示ではアルファベット表記で並ぶ）
+      const an = getLocalizedDisplayName(a, locale).toLowerCase();
+      const bn = getLocalizedDisplayName(b, locale).toLowerCase();
       return an.localeCompare(bn);
     });
 
@@ -129,12 +135,13 @@ const SECTIONS: SectionDef[] = [
   },
 ];
 
-function getDisplayName(user: AvailableUser): string {
-  return user.displayName ?? user.mcid ?? user.slug;
+function getDisplayName(user: AvailableUser, locale: Locale): string {
+  return getLocalizedDisplayName(user, locale);
 }
 
 export default function ExportPage() {
   const t = useT();
+  const locale = useLocale();
   const { availableUsers } = useLoaderData<typeof loader>();
   const [selectedSections, setSelectedSections] = useState<Set<string>>(
     new Set(["actions", "remaps", "custom-actions", "mouse"]),
@@ -172,7 +179,8 @@ export default function ExportPage() {
       return (
         u.slug.toLowerCase().includes(q) ||
         (u.mcid?.toLowerCase().includes(q) ?? false) ||
-        (u.displayName?.toLowerCase().includes(q) ?? false)
+        (u.displayName?.toLowerCase().includes(q) ?? false) ||
+        (u.displayNameAlphabet?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [availableUsers, userSearch]);
@@ -323,7 +331,7 @@ export default function ExportPage() {
               <div className="divide-y">
                 {filteredUsers.map((user) => {
                   const isChecked = selectedUsers.has(user.slug);
-                  const name = getDisplayName(user);
+                  const name = getDisplayName(user, locale);
                   return (
                     <button
                       type="button"

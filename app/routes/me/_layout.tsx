@@ -19,7 +19,8 @@ import {
   Upload,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { pickDisplayName } from "@/lib/slug";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -59,7 +60,10 @@ const secondaryNavItems = [
 
 export default function MeLayout() {
   const t = useT();
+  const locale = useLocale();
   const { user, appUrl } = useLoaderData<typeof loader>();
+  // 英語表示ではアルファベット表記を優先する
+  const userName = pickDisplayName(user, locale) ?? user.mcid;
   const navigation = useNavigation();
 
   // ナビゲーション中（ローディング中）かどうか
@@ -73,14 +77,14 @@ export default function MeLayout() {
           <div className="mb-4 pb-4 border-b flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium truncate">
-                {user.displayName ?? user.mcid}
+                {userName}
               </p>
               <p className="text-sm text-muted-foreground truncate">
                 @{user.mcid}
               </p>
             </div>
             <ShareButton
-              title={`${user.displayName ?? user.mcid} - Minefolio`}
+              title={`${userName} - Minefolio`}
               url={`${appUrl}/player/${user.slug}`}
             />
           </div>

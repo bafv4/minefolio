@@ -555,6 +555,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プロフィール情報の更新
   const displayName = (formData.get("displayName") as string)?.trim() || null;
+  const displayNameAlphabet = (formData.get("displayNameAlphabet") as string)?.trim() || null;
   const bio = (formData.get("bio") as string)?.trim() || null;
   const location = (formData.get("location") as string)?.trim() || null;
   const pronouns = (formData.get("pronouns") as string)?.trim() || null;
@@ -580,6 +581,15 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.displayNameMax") };
   }
 
+  if (displayNameAlphabet && displayNameAlphabet.length > 50) {
+    return { error: t("meEdit.displayNameAlphabetMax") };
+  }
+
+  // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
+  if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
+    return { error: t("meEdit.displayNameAlphabetInvalid") };
+  }
+
   if (bio && bio.length > 500) {
     return { error: t("meEdit.bioMax") };
   }
@@ -600,6 +610,7 @@ export async function action({ request }: Route.ActionArgs) {
     .update(users)
     .set({
       displayName,
+      displayNameAlphabet,
       bio,
       location,
       pronouns,
@@ -865,6 +876,7 @@ export default function EditProfilePage() {
   // フォームの値をトラッキングして変更を検出
   const [formValues, setFormValues] = useState({
     displayName: user.displayName ?? "",
+    displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
@@ -888,6 +900,7 @@ export default function EditProfilePage() {
 
   const initialFormValues = useRef({
     displayName: user.displayName ?? "",
+    displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
@@ -935,6 +948,7 @@ export default function EditProfilePage() {
   const handleSave = useCallback(() => {
     const formData = new FormData();
     formData.set("displayName", formValues.displayName);
+    formData.set("displayNameAlphabet", formValues.displayNameAlphabet);
     formData.set("bio", formValues.bio);
     formData.set("location", formValues.location);
     formData.set("pronouns", formValues.pronouns);
@@ -1406,6 +1420,20 @@ export default function EditProfilePage() {
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.fallbackToMcidOrSlug", { value: user.mcid ? "MCID" : "slug" })}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="displayNameAlphabet">{t("meEdit.displayNameAlphabet")}</Label>
+              <Input
+                id="displayNameAlphabet"
+                value={formValues.displayNameAlphabet}
+                onChange={(e) => handleInputChange("displayNameAlphabet", e.target.value)}
+                placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
+                maxLength={50}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("meEdit.displayNameAlphabetHint")}
               </p>
             </div>
 

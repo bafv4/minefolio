@@ -21,7 +21,8 @@ import {
   Cm360Cell,
 } from "./keybindings-cells";
 import type { KeybindingsRow } from "./keybindings-columns";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 function parseFingers(json: string | null | undefined): FingerAssignment {
   if (!json) return {};
@@ -84,6 +85,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   index: number;
 }) {
   const t = useT();
+  const locale = useLocale();
   const cardRef = useRef<HTMLDivElement>(null);
   // SSR/クライアント初期レンダーで一致させるため、index のみで判定する（typeof IntersectionObserver
   // による分岐は行わない。非対応環境のフォールバックは直下の useEffect 側で処理する）。
@@ -157,7 +159,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
               className="rounded-sm shrink-0"
             />
             <p className="font-medium text-sm truncate">
-              {player.displayName ?? player.mcid ?? player.slug}
+              {getLocalizedDisplayName(player, locale)}
             </p>
           </Link>
           <Badge variant="outline" className="text-[10px] shrink-0">

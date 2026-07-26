@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Search } from "lucide-react";
-import { useT } from "@/hooks/use-locale";
-import { localeFromMatches } from "@/lib/locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { pickDisplayName } from "@/lib/slug";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
@@ -61,6 +62,7 @@ export const meta = ({
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
+  const locale = resolveLocale(request);
 
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
@@ -96,6 +98,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorId: guides.authorId,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
+      authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
     })
     .from(guides)
@@ -140,6 +143,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function GuidesIndexPage() {
   const t = useT();
+  const locale = useLocale();
   const { guides: allGuides, allTags, tag, q, sort, viewerId } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -152,11 +156,15 @@ export default function GuidesIndexPage() {
   // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   // 型注釈にする（as キャストだと likeCount 等の取得漏れを型検査が見逃す）
   const guideItems: GuideItemWithAuthorSlug[] = allGuides.map(
-    ({ guide, likeCount, authorId, authorSlug, authorDisplayName, authorMcid }) => ({
+    ({ guide, likeCount, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid }) => ({
       ...guide,
       likeCount: Number(likeCount),
       isOwn: !!viewerId && authorId === viewerId,
-      authorName: authorDisplayName || authorMcid || authorSlug,
+      authorName:
+        pickDisplayName(
+          { displayName: authorDisplayName, displayNameAlphabet: authorDisplayNameAlphabet },
+          locale,
+        ) || authorMcid || authorSlug,
       _authorSlug: authorSlug,
     }),
   );

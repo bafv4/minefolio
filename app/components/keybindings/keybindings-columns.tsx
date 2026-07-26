@@ -31,6 +31,7 @@ export type KeybindingsRow = {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   customSkinUrl: string | null;
   keybindings: Array<{
     id: string;

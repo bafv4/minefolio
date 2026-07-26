@@ -8,7 +8,7 @@ const MAX_SLUGS = 100;
 /**
  * POST /api/users/by-slugs
  * Body: { slugs: string[] }
- * Response: { users: Array<{ slug, mcid, uuid, displayName, shortBio, location, updatedAt }> }
+ * Response: { users: Array<{ slug, mcid, uuid, displayName, displayNameAlphabet, shortBio, location, updatedAt }> }
  *
  * 未ログインユーザーがlocalStorageのslug一覧から走者カードを取得するためのエンドポイント。
  * SSR表示で必要な最低限のフィールドのみ返す。
@@ -50,6 +50,7 @@ export async function action({ request }: ActionFunctionArgs) {
       mcid: true,
       uuid: true,
       displayName: true,
+      displayNameAlphabet: true,
       shortBio: true,
       location: true,
       updatedAt: true,

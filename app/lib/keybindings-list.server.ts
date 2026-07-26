@@ -68,6 +68,7 @@ async function fetchKeybindingsListPlayers(
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       customSkinUrl: true,
     },
     with: {

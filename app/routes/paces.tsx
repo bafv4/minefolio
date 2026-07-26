@@ -14,7 +14,7 @@ import {
   parsePaceSearchParams,
   type PaceFeedItem,
 } from "@/lib/paces-feed.server";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parsePaceSearchParams(url.searchParams);
-  const [{ items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }, viewerPrefs] =
+  const [{ items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }, viewerPrefs] =
     await Promise.all([
       getPublicPaceFeed(db, filters),
       getViewerPacePrefs(db, auth, request),
@@ -80,6 +80,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     visibleTotal,
     mcidToUuid,
     mcidToDisplayName,
+    mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     viewerPrefs,
   };
@@ -98,6 +99,7 @@ function PacesList({
   searchQuery,
   mcidToUuid,
   mcidToDisplayName,
+  mcidToDisplayNameAlphabet,
   mcidToSkinUrl,
   viewerPrefs,
 }: {
@@ -106,10 +108,12 @@ function PacesList({
   searchQuery: string;
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
   viewerPrefs: OwnPacePrefs;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [paces, setPaces] = useState(initialPaces);
   const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -177,7 +181,11 @@ function PacesList({
             key={run.pacemanRunId}
             run={run}
             uuid={mcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-            displayName={mcidToDisplayName[run.mcid.toLowerCase()]}
+            displayName={
+              (locale !== "ja"
+                ? mcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
+                : undefined) ?? mcidToDisplayName[run.mcid.toLowerCase()]
+            }
             skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
           />
         ))}
@@ -203,7 +211,7 @@ function PacesList({
 
 export default function PacesPage() {
   const t = useT();
-  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
+  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -343,6 +351,7 @@ export default function PacesPage() {
           searchQuery={searchParams.toString()}
           mcidToUuid={mcidToUuid}
           mcidToDisplayName={mcidToDisplayName}
+          mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
           mcidToSkinUrl={mcidToSkinUrl}
           viewerPrefs={viewerPrefs}
         />

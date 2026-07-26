@@ -1,5 +1,5 @@
 import { createTranslator } from "@/lib/messages";
-import { resolveLocale } from "@/lib/locale";
+import { resolveLocale, localeFromMatches } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
@@ -31,6 +31,7 @@ import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -55,7 +56,7 @@ const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
 const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
-export function meta({ loaderData, params }: Route.MetaArgs) {
+export function meta({ loaderData, params, matches }: Route.MetaArgs) {
   if (!loaderData?.player) {
     return [
       { title: "Player Not Found - Minefolio" },
@@ -64,7 +65,7 @@ export function meta({ loaderData, params }: Route.MetaArgs) {
   }
 
   const { player } = loaderData;
-  const displayName = player.displayName || player.mcid || player.slug;
+  const displayName = getLocalizedDisplayName(player, localeFromMatches(matches));
   const description = player.shortBio || player.bio || `${displayName}'s Minecraft speedrunning profile`;
   // OGP画像: MCIDがある場合のみMCIDパラメータを付与
   const ogImageUrl = player.mcid
@@ -469,6 +470,9 @@ export default function PlayerProfilePage() {
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
 
+  // 英語表示ではアルファベット表記を優先する（未入力なら表示名にフォールバック）
+  const playerName = getLocalizedDisplayName(player, locale);
+
   // プリセット切替中のローディング状態（`?preset=` の実変更によるナビゲーション中のみ。
   // タブ切替や他ページへの遷移では出さない）
   const isSwitchingPreset =
@@ -716,14 +720,14 @@ export default function PlayerProfilePage() {
           ) : player.discordAvatar ? (
             <img
               src={player.discordAvatar}
-              alt={player.displayName ?? "Avatar"}
+              alt={playerName}
               className="w-8 h-8 rounded"
             />
           ) : (
             <div className="w-8 h-8 bg-muted rounded" />
           )}
           <div className="text-left">
-            <p className="font-medium text-sm">{player.displayName ?? player.mcid ?? player.slug}</p>
+            <p className="font-medium text-sm">{playerName}</p>
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
           </div>
         </div>
@@ -778,14 +782,14 @@ export default function PlayerProfilePage() {
               ) : player.discordAvatar ? (
                 <img
                   src={player.discordAvatar}
-                  alt={player.displayName ?? "Avatar"}
+                  alt={playerName}
                   className="w-10 h-10 rounded shrink-0"
                 />
               ) : (
                 <div className="w-10 h-10 bg-muted rounded shrink-0" />
               )}
               <div className="text-left min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{player.displayName ?? player.mcid ?? player.slug}</p>
+                <p className="font-medium text-sm truncate">{playerName}</p>
                 {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
                 {player.shortBio && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
@@ -931,7 +935,7 @@ export default function PlayerProfilePage() {
                         <DialogContent className="max-w-2xl">
                           <DialogHeader>
                             <DialogTitle>
-                              {player.displayName ?? player.mcid ?? player.slug} のスキン
+                              {t("playerProfile.skinDialogTitle", { name: playerName })}
                             </DialogTitle>
                           </DialogHeader>
                           {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
@@ -954,7 +958,11 @@ export default function PlayerProfilePage() {
                 {/* Info */}
                 <div className="flex-1 space-y-4">
                   <div className="text-center sm:text-left">
-                    <h1 className="text-2xl font-bold">{player.displayName ?? player.mcid ?? player.slug}</h1>
+                    <h1 className="text-2xl font-bold">{playerName}</h1>
+                    {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
+                    {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
+                      <p className="text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
+                    )}
                     {player.mcid && <p className="text-muted-foreground">@{player.mcid}</p>}
                     {player.shortBio && (
                       <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
@@ -1014,7 +1022,7 @@ export default function PlayerProfilePage() {
                     )}
                     <FavoriteButton slug={player.slug} />
                     <ShareButton
-                      title={`${player.displayName ?? player.mcid ?? player.slug} - Minefolio`}
+                      title={`${playerName} - Minefolio`}
                       description={player.shortBio ?? undefined}
                       includeTab={true}
                     />
@@ -1119,6 +1127,7 @@ export default function PlayerProfilePage() {
                           skinUrl: player.customSkinUrl,
                           mcid: player.mcid,
                           displayName: player.displayName,
+                          displayNameAlphabet: player.displayNameAlphabet,
                           slug: player.slug,
                         }}
                       />

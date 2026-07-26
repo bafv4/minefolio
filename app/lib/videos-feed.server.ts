@@ -26,6 +26,7 @@ export async function getPublicTwitchLinks() {
       uuid: users.uuid,
       slug: users.slug,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       discordAvatar: users.discordAvatar,
       customSkinUrl: users.customSkinUrl,
     })
@@ -124,6 +125,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
             uuid: true,
             slug: true,
             displayName: true,
+            displayNameAlphabet: true,
             discordAvatar: true,
             customSkinUrl: true,
           },
@@ -149,6 +151,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
       uuid: user?.uuid ?? null,
       slug: user?.slug ?? null,
       displayName: user?.displayName ?? null,
+      displayNameAlphabet: user?.displayNameAlphabet ?? null,
       discordAvatar: user?.discordAvatar ?? null,
       customSkinUrl: user?.customSkinUrl ?? null,
     });
@@ -170,6 +173,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
       uuid: link.uuid,
       slug: link.slug,
       displayName: link.displayName,
+      displayNameAlphabet: link.displayNameAlphabet,
       discordAvatar: link.discordAvatar,
       customSkinUrl: link.customSkinUrl,
     });

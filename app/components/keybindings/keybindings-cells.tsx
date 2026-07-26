@@ -23,7 +23,8 @@ import {
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import { truncateByVisualWidth } from "@/lib/text-width";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 /** 走者列の最小データ */
 export type PlayerSummary = {
@@ -31,6 +32,7 @@ export type PlayerSummary = {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   customSkinUrl: string | null;
 };
 
@@ -47,7 +49,8 @@ export function RunnerCell({
   /** compact: モバイル向け縦並び（頭を大きめ＋名前を下に小さく） */
   variant?: "default" | "compact";
 }) {
-  const name = player.displayName ?? player.mcid ?? player.slug;
+  const locale = useLocale();
+  const name = getLocalizedDisplayName(player, locale);
 
   if (variant === "compact") {
     return (

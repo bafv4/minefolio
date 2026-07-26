@@ -24,12 +24,14 @@ import { authClient } from "@/lib/auth-client";
 import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 interface HeaderProps {
   user?: {
     mcid: string | null;
     slug: string;
     displayName: string | null;
+    displayNameAlphabet: string | null;
     discordAvatar: string | null;
   } | null;
 }
@@ -50,6 +52,9 @@ export function Header({ user }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+
+  // 英語表示ではアルファベット表記を優先する
+  const userName = user ? getLocalizedDisplayName(user, locale) : "";
 
   const handleLogout = useCallback(async () => {
     await authClient.signOut();
@@ -122,10 +127,10 @@ export function Header({ user }: HeaderProps) {
                       <Avatar className="h-9 w-9">
                         <AvatarImage
                           src={user.discordAvatar ?? undefined}
-                          alt={user.displayName ?? user.mcid ?? user.slug}
+                          alt={userName}
                         />
                         <AvatarFallback>
-                          {(user.displayName ?? user.mcid ?? user.slug)[0].toUpperCase()}
+                          {userName[0]?.toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -134,7 +139,7 @@ export function Header({ user }: HeaderProps) {
                     <div className="flex items-center justify-start gap-2 px-2 py-2">
                       <div className="flex flex-col space-y-0.5">
                         <p className="text-sm font-medium">
-                          {user.displayName ?? user.mcid ?? user.slug}
+                          {userName}
                         </p>
                         {user.mcid && (
                           <p className="text-xs text-muted-foreground">
@@ -266,15 +271,15 @@ export function Header({ user }: HeaderProps) {
                         <Avatar className="h-10 w-10">
                           <AvatarImage
                             src={user.discordAvatar ?? undefined}
-                            alt={user.displayName ?? user.mcid ?? user.slug}
+                            alt={userName}
                           />
                           <AvatarFallback>
-                            {(user.displayName ?? user.mcid ?? user.slug)[0].toUpperCase()}
+                            {userName[0]?.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {user.displayName ?? user.mcid ?? user.slug}
+                            {userName}
                           </p>
                           {user.mcid && (
                             <p className="text-xs text-muted-foreground truncate">

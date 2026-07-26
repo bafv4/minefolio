@@ -131,7 +131,7 @@ describe("SSRペイロードにドラフトを含めない", () => {
     const author = data.author as Record<string, unknown>;
 
     expect(Object.keys(author).sort()).toEqual(
-      ["customSkinUrl", "displayName", "mcid", "slug", "uuid"].sort(),
+      ["customSkinUrl", "displayName", "displayNameAlphabet", "mcid", "slug", "uuid"].sort(),
     );
   });
 

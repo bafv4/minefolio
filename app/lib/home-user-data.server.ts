@@ -9,16 +9,21 @@ import { getCached, setCached } from "@/lib/cache";
 
 const USER_DATA_TTL = 60 * 1000; // 1分
 
+/** キャッシュキー。形状を変えたら版数を上げる（テストからも参照する） */
+export const USER_DATA_CACHE_KEY = "home-feed:user-data:v3";
+
 export interface UserDataCache {
   registeredMcids: string[];
   mcidToUuid: Record<string, string>;
   mcidToSlug: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
+  mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
 }
 
 async function getCachedUserData(): Promise<UserDataCache | null> {
-  return getCached<UserDataCache>("home-feed:user-data:v2");
+  return getCached<UserDataCache>(USER_DATA_CACHE_KEY);
 }
 
 async function fetchAndCacheUserData(): Promise<UserDataCache> {
@@ -33,6 +38,7 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
       uuid: users.uuid,
       slug: users.slug,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(users)
@@ -56,6 +62,11 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
     mcidToDisplayName: Object.fromEntries(
       usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
     ),
+    mcidToDisplayNameAlphabet: Object.fromEntries(
+      usersWithMcid
+        .filter((u) => u.displayNameAlphabet)
+        .map((u) => [u.mcid!.toLowerCase(), u.displayNameAlphabet!])
+    ),
     mcidToSkinUrl: Object.fromEntries(
       usersWithMcid
         .filter((u) => u.customSkinUrl !== null)
@@ -63,7 +74,7 @@ async function fetchAndCacheUserData(): Promise<UserDataCache> {
     ),
   };
 
-  await setCached("home-feed:user-data:v2", data, USER_DATA_TTL);
+  await setCached(USER_DATA_CACHE_KEY, data, USER_DATA_TTL);
   return data;
 }
 

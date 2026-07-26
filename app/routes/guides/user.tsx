@@ -1,6 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import {
   useLoaderData,
   Link,
@@ -37,7 +38,7 @@ export function meta({
   if (!loaderData?.author) {
     return [{ title: `${t("guides.userNotFound")} - Minefolio` }];
   }
-  const name = loaderData.author.displayName || loaderData.author.mcid || loaderData.author.slug;
+  const name = getLocalizedDisplayName(loaderData.author, localeFromMatches(matches));
   const title = `${t("guides.userGuidesTitle", { name })} - Minefolio`;
   const description = t("guides.userGuidesDescription", { name });
   const ogImage = `${loaderData.appUrl}/icon.png`;
@@ -71,6 +72,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mcid: true,
       uuid: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
       customSkinUrl: true,
       profileVisibility: true,
@@ -117,8 +119,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export default function UserGuidesPage() {
   const t = useT();
+  const locale = useLocale();
   const { author, guides: authorGuides } = useLoaderData<typeof loader>();
-  const authorName = author.displayName || author.mcid || author.slug;
+  const authorName = getLocalizedDisplayName(author, locale);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";

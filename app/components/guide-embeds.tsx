@@ -14,7 +14,8 @@ import {
   TIMING_META,
   timingLabelById,
 } from "@/components/search-craft-template-view";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 // ========================================
 // 共通型
@@ -23,6 +24,7 @@ import { useT } from "@/hooks/use-locale";
 export type EmbedUserData = {
   slug: string;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   mcid: string | null;
   presets: Array<{
     name: string;
@@ -155,7 +157,8 @@ export function KeybindEmbedView({
   presetName: string | null;
 }) {
   const t = useT();
-  const displayName = userData.displayName || userData.mcid || userData.slug;
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(userData, locale);
 
   // プリセット名指定時はそのプリセットのデータを使用
   let keybindingsRaw = userData.keybindings;
@@ -256,7 +259,8 @@ export function SearchCraftEmbedView({
   presetName: string | null;
 }) {
   const t = useT();
-  const displayName = userData.displayName || userData.mcid || userData.slug;
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(userData, locale);
 
   let crafts = userData.searchCrafts;
   let remapsRaw = userData.keyRemaps;

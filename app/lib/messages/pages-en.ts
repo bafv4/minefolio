@@ -650,6 +650,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   playerProfile: {
     viewSkin3d: "View skin in 3D",
+    skinDialogTitle: "{name}'s skin",
     noGuidesTitle: "No guides",
     noGuidesDescription: "This player hasn't published any guides yet.",
     platformPcWindows: "PC (Windows)",
@@ -871,6 +872,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     linkSaveFailed: "Failed to save the link",
     deleteConfirmMismatch: "The text doesn't match",
     displayNameMax: "Display name must be 50 characters or fewer",
+    displayNameAlphabetMax:
+      "Alphabet display name must be 50 characters or fewer",
+    displayNameAlphabetInvalid:
+      "Alphabet display name can only contain basic Latin letters, digits and symbols",
     bioMax: "About must be 500 characters or fewer",
     locationMax: "Location must be 100 characters or fewer",
     shortBioMax: "Tagline must be 50 characters or fewer",
@@ -944,6 +949,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     basicInfo: "Basic info",
     displayName: "Display name",
     fallbackToMcidOrSlug: "If left blank, {value} will be used",
+    displayNameAlphabet: "Display name (alphabet)",
+    displayNameAlphabetPlaceholder: "e.g. Yamada Taro",
+    displayNameAlphabetHint:
+      "Used instead of the display name when the site is in English. Always shown alongside it on your profile page.",
     bio: "About",
     bioPlaceholder: "Write something about yourself…",
     location: "Location",

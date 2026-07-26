@@ -44,6 +44,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       pronouns: true,
       role: true,
       mainEdition: true,

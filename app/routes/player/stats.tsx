@@ -30,7 +30,8 @@ import {
   Flame,
   Clock,
 } from "lucide-react";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import type { Translator } from "@/lib/messages";
 
 // 相対時間を計算
@@ -90,6 +91,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       mcid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       profileVisibility: true,
       discordId: true,
     },
@@ -122,6 +124,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     mcid: player.mcid,
     slug: player.slug,
     displayName: player.displayName,
+    displayNameAlphabet: player.displayNameAlphabet,
     externalStats,
     netherEnterCount,
     recentPaces,
@@ -131,10 +134,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
 export default function PlayerStatsPage() {
   const t = useT();
-  const { mcid, slug, displayName, externalStats, netherEnterCount, recentPaces } = useLoaderData<typeof loader>();
+  const locale = useLocale();
+  const { mcid, slug, displayName, displayNameAlphabet, externalStats, netherEnterCount, recentPaces } = useLoaderData<typeof loader>();
 
-  // 表示名の優先順位: displayName > mcid > slug
-  const playerDisplayName = displayName || mcid || slug;
+  // 表示名の優先順位: （英語表示なら）アルファベット表記 > displayName > mcid > slug
+  const playerDisplayName = getLocalizedDisplayName(
+    { displayName, displayNameAlphabet, mcid, slug },
+    locale,
+  );
 
   const hasPacemanData = externalStats.paceman?.isRegistered || netherEnterCount > 0 || recentPaces.length > 0;
   const hasAnyData =

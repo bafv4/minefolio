@@ -4,13 +4,15 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { User, Clock3, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatRelativeDate } from "@/lib/relative-time";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   pronouns: string | null;
   role: "runner" | "viewer" | null;
   mainEdition: "java" | "bedrock" | null;
@@ -23,7 +25,8 @@ export interface ProfileFeedCardPlayer {
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
   const t = useT();
-  const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(player, locale);
   const userRoleLabel =
     player.role === "runner"
       ? t("common.runner")
@@ -107,7 +110,8 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
 /** Compact list row for players */
 export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer }) {
   const t = useT();
-  const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(player, locale);
   const userRoleLabel =
     player.role === "runner"
       ? t("common.runner")

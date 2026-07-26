@@ -16,7 +16,8 @@ import {
 import { getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import type {
   KeybindingStats,
   F3RemapStats,
@@ -30,6 +31,7 @@ interface StatsViewProps {
 
 export function StatsView({ data }: StatsViewProps) {
   const t = useT();
+  const locale = useLocale();
   const {
     keybindingStats,
     f3RemapStats,
@@ -378,7 +380,7 @@ export function StatsView({ data }: StatsViewProps) {
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {player.displayName ?? player.mcid ?? player.slug}
+                      {getLocalizedDisplayName(player, locale)}
                     </p>
                     {player.mcid && (
                       <p className="text-xs text-muted-foreground">@{player.mcid}</p>

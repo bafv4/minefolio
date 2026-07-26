@@ -1,5 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { useState, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/view";
@@ -114,6 +115,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           id: true,
           slug: true,
           displayName: true,
+          displayNameAlphabet: true,
           mcid: true,
           discordId: true,
           profileVisibility: true,
@@ -167,7 +169,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     remaps: parseTemplateRemaps(template.remapsData),
     author: {
       slug: template.user.slug,
-      name: template.user.displayName || template.user.mcid || template.user.slug,
+      name: getLocalizedDisplayName(template.user, resolveLocale(request)),
     },
     myPresets,
     isOwner,

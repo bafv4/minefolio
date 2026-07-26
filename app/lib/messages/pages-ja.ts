@@ -618,6 +618,7 @@ export const PAGES_JA = {
   },
   playerProfile: {
     viewSkin3d: "スキンを 3D で表示",
+    skinDialogTitle: "{name} のスキン",
     noGuidesTitle: "ガイドがありません",
     noGuidesDescription: "このプレイヤーはまだガイドを公開していません。",
     /** プラットフォーム名（me/edit の選択肢と共有） */
@@ -837,6 +838,8 @@ export const PAGES_JA = {
     linkSaveFailed: "リンクの保存に失敗しました",
     deleteConfirmMismatch: "入力が一致しません",
     displayNameMax: "表示名は50文字以下にしてください",
+    displayNameAlphabetMax: "アルファベット表記は50文字以下にしてください",
+    displayNameAlphabetInvalid: "アルファベット表記は半角の英数字・記号のみ使用できます",
     bioMax: "自己紹介は500文字以下にしてください",
     locationMax: "場所は100文字以下にしてください",
     shortBioMax: "ひとことは50文字以下にしてください",
@@ -907,6 +910,9 @@ export const PAGES_JA = {
     basicInfo: "基本情報",
     displayName: "表示名",
     fallbackToMcidOrSlug: "空欄の場合は{value}が使用されます",
+    displayNameAlphabet: "表示名（アルファベット表記）",
+    displayNameAlphabetPlaceholder: "例: Yamada Taro",
+    displayNameAlphabetHint: "英語表示のときに表示名の代わりに使われます。プロフィールページでは常に併記されます。",
     bio: "自己紹介",
     bioPlaceholder: "自己紹介を入力...",
     location: "場所",

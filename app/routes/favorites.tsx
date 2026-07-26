@@ -24,6 +24,7 @@ type FavoritePlayer = {
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   shortBio: string | null;
   location: string | null;
   updatedAt: Date;
@@ -81,6 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       shortBio: true,
       location: true,
       updatedAt: true,

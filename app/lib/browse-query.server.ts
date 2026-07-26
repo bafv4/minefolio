@@ -63,6 +63,7 @@ const BROWSE_LIST_COLUMNS = {
   uuid: true,
   slug: true,
   displayName: true,
+  displayNameAlphabet: true,
   pronouns: true,
   role: true,
   mainEdition: true,

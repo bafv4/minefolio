@@ -17,6 +17,7 @@ import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
@@ -43,12 +44,13 @@ export function meta({
   loaderData: Awaited<ReturnType<typeof loader>> | undefined;
   matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
 }) {
-  const t = createTranslator(localeFromMatches(matches));
+  const locale = localeFromMatches(matches);
+  const t = createTranslator(locale);
   if (!loaderData?.guide) {
     return [{ title: t("guideView.notFoundTitle") }];
   }
   const title = `${loaderData.guide.title} - Minefolio`;
-  const description = loaderData.guide.summary || t("guideView.metaDescription", { name: loaderData.author.displayName || loaderData.author.mcid || "" });
+  const description = loaderData.guide.summary || t("guideView.metaDescription", { name: pickDisplayName(loaderData.author, locale) || loaderData.author.mcid || "" });
   const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
@@ -83,6 +85,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mcid: true,
       uuid: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
       customSkinUrl: true,
       slimSkin: true,
@@ -167,6 +170,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         id: true,
         slug: true,
         displayName: true,
+        displayNameAlphabet: true,
         mcid: true,
       },
       with: {
@@ -199,6 +203,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           id: true,
           slug: true,
           displayName: true,
+          displayNameAlphabet: true,
           mcid: true,
         },
         with: {
@@ -255,6 +260,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       const data: EmbedUserData = {
         slug: u.slug,
         displayName: u.displayName,
+        displayNameAlphabet: u.displayNameAlphabet,
         mcid: u.mcid,
         // クライアント（guide-embeds）が使うフィールドのみ渡す
         // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
@@ -297,6 +303,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mcid: author.mcid,
       uuid: author.uuid,
       displayName: author.displayName,
+      displayNameAlphabet: author.displayNameAlphabet,
       customSkinUrl: author.customSkinUrl,
     },
     appUrl,
@@ -318,7 +325,7 @@ export default function GuideViewPage() {
   } catch {
     // invalid JSON in tags — fallback to empty
   }
-  const authorName = author.displayName || author.mcid || author.slug;
+  const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Inject copy buttons on code blocks

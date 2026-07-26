@@ -21,6 +21,7 @@ export interface RankingEntry {
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   timeMs: number | null;
   timeFormatted: string | null;
   recordDate: string | null;
@@ -71,6 +72,7 @@ const playerColumns = {
   uuid: users.uuid,
   slug: users.slug,
   displayName: users.displayName,
+  displayNameAlphabet: users.displayNameAlphabet,
   customSkinUrl: users.customSkinUrl,
 } as const;
 
@@ -80,6 +82,7 @@ type PlayerRow = {
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   customSkinUrl: string | null;
 };
 
@@ -91,6 +94,7 @@ function emptyEntry(rank: number | null, row: PlayerRow): Omit<RankingEntry, "ti
     uuid: row.uuid,
     slug: row.slug,
     displayName: row.displayName,
+    displayNameAlphabet: row.displayNameAlphabet,
     customSkinUrl: row.customSkinUrl,
   };
 }

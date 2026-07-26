@@ -85,6 +85,7 @@ export interface PlayerInfo {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   customSkinUrl: string | null;
 }
 
@@ -199,6 +200,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keybindings)
@@ -218,7 +220,7 @@ export async function loadKeybindingsStats(
     const keyGroups = new Map<string, PlayerInfo[]>();
     for (const r of results) {
       const players = keyGroups.get(r.keyCode) ?? [];
-      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
+      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, displayNameAlphabet: r.displayNameAlphabet, customSkinUrl: r.customSkinUrl });
       keyGroups.set(r.keyCode, players);
     }
 
@@ -250,6 +252,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keyRemaps)
@@ -264,12 +267,13 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keybindings)
     .innerJoin(users, eq(keybindings.userId, users.id))
     .where(publicCondition)
-    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.customSkinUrl);
+    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl);
 
   const f3DefaultUsers = usersWithKeybindingsData.filter(
     (u) => !remappedToF3UserIds.has(u.userId),
@@ -284,6 +288,7 @@ export async function loadKeybindingsStats(
         mcid: u.mcid,
         uuid: u.uuid,
         displayName: u.displayName,
+        displayNameAlphabet: u.displayNameAlphabet,
         customSkinUrl: u.customSkinUrl,
       })),
     );
@@ -293,7 +298,7 @@ export async function loadKeybindingsStats(
     // sourceKey が無い行のグループ化キー。表示は描画側が unassigned を訳す
     const inputKey = r.sourceKey ?? UNASSIGNED_INPUT_KEY;
     const players = f3Groups.get(inputKey) ?? [];
-    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
+    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, displayNameAlphabet: r.displayNameAlphabet, customSkinUrl: r.customSkinUrl });
     f3Groups.set(inputKey, players);
   }
 
@@ -323,6 +328,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(playerConfigs)
@@ -346,6 +352,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -391,6 +398,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -432,6 +440,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -461,6 +470,7 @@ export async function loadKeybindingsStats(
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      displayNameAlphabet: c.displayNameAlphabet,
       customSkinUrl: c.customSkinUrl,
     })),
     offPlayers: offConfigs.map((c) => ({
@@ -468,6 +478,7 @@ export async function loadKeybindingsStats(
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      displayNameAlphabet: c.displayNameAlphabet,
       customSkinUrl: c.customSkinUrl,
     })),
   };

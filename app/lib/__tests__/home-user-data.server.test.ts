@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getUserData } from "../home-user-data.server";
+import { getUserData, USER_DATA_CACHE_KEY } from "../home-user-data.server";
 import { invalidateCache } from "../cache";
 import { createTestDbAt, seedUser, type TestDb } from "./helpers/test-db";
 
@@ -8,7 +8,7 @@ import { createTestDbAt, seedUser, type TestDb } from "./helpers/test-db";
 // env を共有メモリ DB に向けて同一 URL でシードし、キャッシュキーを毎テスト消して検証する。
 // （共有メモリ方式は問題なく機能したため、代替の述語再現には切り替えていない。）
 const SHARED_URL = "file::memory:?cache=shared";
-const CACHE_KEY = "home-feed:user-data:v2";
+const CACHE_KEY = USER_DATA_CACHE_KEY;
 
 let db: TestDb;
 let originalUrl: string | undefined;

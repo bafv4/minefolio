@@ -19,6 +19,7 @@ function makeVideo(overrides: Partial<FeedVideo> = {}): FeedVideo {
     uuid: null,
     slug: null,
     displayName: null,
+    displayNameAlphabet: null,
     discordAvatar: null,
     customSkinUrl: null,
     ...overrides,

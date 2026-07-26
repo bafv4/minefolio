@@ -40,6 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       mcid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
     },
   });
@@ -71,7 +72,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return {
-    user: { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar },
+    user: {
+      mcid: user.mcid,
+      slug: user.slug,
+      displayName: user.displayName,
+      displayNameAlphabet: user.displayNameAlphabet,
+      discordAvatar: user.discordAvatar,
+    },
     initialFavorites,
     likedGuideIds: likedIds.guideIds,
     likedTemplateIds: likedIds.templateIds,
