@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   prepareImageForUpload,
+  isAnimatedImageUrl,
   ImageTooLargeError,
   UnsupportedImageError,
 } from "../image-processing";
@@ -33,5 +34,26 @@ describe("prepareImageForUpload", () => {
     await expect(
       prepareImageForUpload(jpg, { maxDimension: 1600, maxBytes: 1_000_000 }),
     ).rejects.toBeInstanceOf(UnsupportedImageError);
+  });
+});
+
+// canvas 経由のトリミングに GIF を通すとアニメーションが 1 枚に潰れるため、
+// GIF は全フレーム再エンコード（gif-crop.ts）へ振り分ける。その判定を担保する。
+describe("isAnimatedImageUrl", () => {
+  it("GIF の URL を検出する（クエリ・フラグメント付きも含む）", () => {
+    expect(isAnimatedImageUrl("https://blob.example/a/b.gif")).toBe(true);
+    expect(isAnimatedImageUrl("https://blob.example/a/b.GIF?v=2")).toBe(true);
+    expect(isAnimatedImageUrl("https://blob.example/a/b.gif#x")).toBe(true);
+  });
+
+  it("data URL の GIF も検出する（ペースト経路の allowBase64）", () => {
+    expect(isAnimatedImageUrl("data:image/gif;base64,R0lGODlh")).toBe(true);
+  });
+
+  it("GIF 以外は false", () => {
+    expect(isAnimatedImageUrl("https://blob.example/a/b.webp")).toBe(false);
+    expect(isAnimatedImageUrl("data:image/png;base64,iVBORw0K")).toBe(false);
+    // パスに gif を含むだけの URL に誤反応しない
+    expect(isAnimatedImageUrl("https://blob.example/gifs/photo.png")).toBe(false);
   });
 });

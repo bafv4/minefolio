@@ -1,10 +1,37 @@
-// 画像拡張。width 属性 + リサイズ NodeView。
+// 画像拡張。width / align 属性 + リサイズ・トリミング NodeView。
 // 旧 index.tsx の Image.configure(...).extend(...) から逐語移植。
 import { Image } from "@tiptap/extension-image";
 import { ReactNodeViewRenderer } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
 import { ImageNodeView } from "../node-views/image-node-view";
+import type { GuideMediaContext } from "../types";
+
+/** 画像拡張のストレージ。NodeView から宿主のアップロード処理を呼ぶための注入口 */
+interface ImageStorage {
+  ctx: GuideMediaContext | null;
+}
+
+function imageStorage(editor: Editor): ImageStorage | undefined {
+  return (editor.storage as unknown as Record<string, unknown>).image as ImageStorage | undefined;
+}
+
+/** 宿主（GuideEditor）からメディア操作を注入する */
+export function setImageMediaContext(editor: Editor, ctx: GuideMediaContext): void {
+  const storage = imageStorage(editor);
+  if (storage) storage.ctx = ctx;
+}
+
+/** NodeView からメディア操作を取り出す（未注入なら null） */
+export function getImageMediaContext(editor: Editor): GuideMediaContext | null {
+  return imageStorage(editor)?.ctx ?? null;
+}
 
 export const CustomImage = Image.configure({ inline: false, allowBase64: true }).extend({
+  // ストレージ経由で宿主の処理を受け取る（スラッシュコマンドと同じ注入方式）。
+  // 本文 HTML の生成には関与しないため、round-trip の不変条件には影響しない。
+  addStorage(): ImageStorage {
+    return { ctx: null };
+  },
   addAttributes() {
     return {
       ...this.parent?.(),

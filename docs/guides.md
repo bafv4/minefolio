@@ -72,9 +72,14 @@
 | `node-views/` | React NodeView（表示 + 属性編集） |
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
-| `panels/` | metadata-fields / color-picker / embed-dialog / guide-link-search |
+| `panels/` | metadata-fields / color-picker / font-size-picker / embed-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
 | `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
+| `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
+| `lib/image-crop.ts` | トリミング矩形の計算（純粋関数 / DOM 非依存） |
+| `lib/video-to-gif.ts` | 動画→GIF 変換（`<video>` のシーク走査） |
+| `lib/gif-crop.ts` | GIF のトリミング（omggif で全フレーム復元 → 切り出し） |
+| `lib/gif-encode.ts` | GIF 書き出しの共通処理（パレット作成 + gifenc）。上の 2 つが共有 |
 
 #### HTML 互換性
 
@@ -92,7 +97,8 @@
 | 引用 | ブロッククォート |
 | 水平線 | `<hr>` |
 | リンク | URL設定 |
-| 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更と**横方向の配置**（未設定 / 左 / 中央 / 右）に対応 |
+| 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更、**横方向の配置**（未設定 / 左 / 中央 / 右）、**トリミング**に対応 |
+| GIF（動画から変換） | 短い動画をブラウザ内で GIF に変換して挿入（下記） |
 | YouTube埋め込み | YouTube動画のiframe埋め込み |
 | テーブル | リサイズ可能（列幅ドラッグ変更） |
 | ハイライト | 色付きハイライト |
@@ -129,6 +135,39 @@
 - **クリップボードペースト**: コピーした画像をエディタに直接ペースト
 - アップロード先は **Vercel Blob**
 - APIエンドポイント: `/api/me/guides/upload-image`
+- アップロード前に `lib/image-processing.ts` の `prepareImageForUpload()` がブラウザ側で長辺を縮小し webp（不可なら jpeg）へ再エンコードする。**GIF はアニメーション保持のため無加工**で通す（サイズ上限のみ検査）
+
+#### トリミング
+
+画像にホバー（またはタッチで選択）すると出るツールバーの ✂ ボタンで、挿入済みの画像を切り出せる。
+
+- **矩形の計算は `lib/image-crop.ts` の純粋関数**（DOM 非依存 / `lib/__tests__/image-crop.test.ts` で検証）。座標は画像サイズに依存しない **0..1 の正規化値**で保持し、画面表示（%）と切り出し（px）で同じ値を使う
+- 比率プリセット（自由 / 1:1 / 4:3 / 3:4 / 16:9 / 9:16）。正規化系は画像の縦横比の分だけ歪むため、ピクセル比は `toNormalizedAspect()` で変換してから使う。**比率固定中は角ハンドルのみ**を出す（辺ハンドルでは比率を保てないため）
+- 適用すると `cropImageFromUrl()` が元 URL を CORS fetch → canvas で切り出し → PNG（可逆）で返し、通常のアップロード経路（webp 再エンコード）に載せて**新しい Blob** として保存し、ノードの `src` を差し替える。元の Blob は消さない（他ガイドからの参照や履歴を壊さないため）
+- 表示幅（`width` 属性）は残した領域の割合だけ縮める。切り出した部分の画面上の大きさが操作前と変わらず、レイアウトが跳ねない
+
+##### GIF のトリミング（アニメーション保持）
+
+GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、専用経路（`lib/gif-crop.ts`）へ振り分ける。振り分けは `isAnimatedImageUrl()`（拡張子 + data URL の MIME）で判定する。
+
+- デコードは [omggif](https://github.com/deanm/omggif)（MIT / 依存なし）。**ブラウザ内蔵の `ImageDecoder` は使わない** — Safari が未対応で、使うと Safari だけ機能が消えるため。omggif なら全ブラウザで同じ経路になる
+- GIF はフレームごとに**部分矩形だけを更新**し、透過画素は下の絵を透かす。さらに廃棄方法（disposal: 2=背景で消去 / 3=直前へ復元）で次フレームの下地が決まる。`cropFrames()` がこれを論理画面バッファ上で正しく合成してから、`cropRgbaBuffer()` で矩形を切り出す（canvas を通さないのでアルファがそのまま残る）
+- パレットは全フレームを見てから決めるが、GIF は前フレームに依存して途中から復元できない。全フレームを保持するとメモリを食うため**デコードを 2 周**する（シーク不要で十分速い）
+- 出力は常に「合成済みの全画面フレーム」なので、透過を含む場合は各フレームに **disposal 2 を書く**。書かないと透過画素から前フレームが透け、元 GIF で消去されていた領域に残像が出る
+- 表示時間（センチ秒）とループ設定（`toGifRepeat()`）は元の GIF から引き継ぐ
+- 上限を超えた場合は `GifTooLargeError` を投げ、「切り出す範囲を狭めてください」とトーストで案内する
+
+#### 動画から GIF への変換
+
+`/` メニューまたはツールバーの「動画をGIFに変換」から、短い動画を GIF にして本文へ挿入できる。**変換はすべてブラウザ内で完結し、動画自体はサーバへ送らない**（アップロードされるのは生成後の GIF だけ）。
+
+- 実装は `lib/video-to-gif.ts`。`<video>` を目的の時刻へシーク → canvas へ描画 → `getImageData` でフレームを取り出し、`lib/gif-encode.ts`（[gifenc](https://github.com/mattdesl/gifenc) / MIT / 依存なし）へ渡す。gifenc も omggif も**動的 import** なので SSR では評価されず、実行するまで読み込まれない
+- **パレットはグローバル 1 枚**（`lib/gif-encode.ts`、GIF のトリミングと共通）。範囲全体から最大 6 フレームをサンプリングして連結し、まとめて `quantize()` する。フレームごとにパレットを作ると色がちらつき、ローカルカラーテーブルでファイルも太る。透過画素があれば `rgba4444`、なければ `rgb565`（色の再現性が高い）を自動で選ぶ
+- フレームは**逐次シークしながら 1 枚ずつ**エンコーダへ渡す（全フレームを抱えないのでメモリが増えない）
+- 上限: 長さ **15 秒**（`GIF_MAX_DURATION_SEC`）、フレーム数 **200**（`GIF_MAX_FRAMES`）、出力サイズ **15MB**（`MAX_UPLOAD_BYTES` と共通）。フレーム数の上限に当たった場合は範囲全体へ均等配分し、遅延も伸ばして**再生速度を実時間どおりに保つ**
+- 指定できるのは切り出し範囲（開始 / 終了、再生位置からの取り込み可）・幅（320 / 480 / 640px）・フレームレート（8 / 10 / 12 / 15）
+- MediaRecorder 由来の webm は `duration` が `Infinity` になることがあるため、`resolveVideoDuration()` が巨大時刻へのシークで実長を確定させる
+- 純粋関数（`scaleToWidth` / `planGifFrames` / `clampTrimRange`）は `lib/__tests__/video-to-gif.test.ts` で検証している。実デコードとエンコードは JSDOM で再現できないためブラウザ実機での確認が必要
 
 ### カバー画像
 

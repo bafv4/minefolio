@@ -34,6 +34,7 @@ import {
   ChevronDown,
   Link as LinkIcon,
   ImageIcon,
+  Film,
   Table2,
   Minus,
   Columns2,
@@ -94,6 +95,7 @@ interface DesktopToolbarProps {
   previewUrl: string;
   onImagePicker: () => void;
   onYoutube: () => void;
+  onVideoToGif: () => void;
   onLink: () => void;
   onEmbed: (kind: "keybind" | "searchcraft") => void;
   onGuideLink: () => void;
@@ -185,6 +187,7 @@ export function DesktopToolbar({
   previewUrl,
   onImagePicker,
   onYoutube,
+  onVideoToGif,
   onLink,
   onEmbed,
   onGuideLink,
@@ -359,6 +362,9 @@ export function DesktopToolbar({
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.image")} onClick={onImagePicker}>
                   <ImageIcon className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton label={t("guideEditor.gifTitle")} onClick={onVideoToGif}>
+                  <Film className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.youtube")} onClick={onYoutube}>
                   <YoutubeIcon className="h-4 w-4" />

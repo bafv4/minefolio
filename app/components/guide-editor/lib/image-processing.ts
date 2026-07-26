@@ -1,12 +1,22 @@
 // アップロード前のクライアント側画像処理。
 // 実機写真（HEIC/大サイズ等）をそのまま送るとサーバの content-type / サイズ上限で
 // 弾かれるため、ブラウザでデコード→縮小→webp/jpeg 再エンコードして正規化する。
+// アップロード済み画像のトリミング（cropImageFromUrl）もここに置く。
+import { toPixelRect, type CropRect } from "./image-crop";
 
 /** ブラウザでデコードできない形式（例: Chrome の HEIC）や再エンコード失敗 */
 export class UnsupportedImageError extends Error {
   constructor() {
     super("UNSUPPORTED_IMAGE");
     this.name = "UnsupportedImageError";
+  }
+}
+
+/** アップロード済み画像を取得できない（CORS 不許可・URL 失効・オフライン等） */
+export class ImageLoadError extends Error {
+  constructor() {
+    super("IMAGE_LOAD_FAILED");
+    this.name = "ImageLoadError";
   }
 }
 
@@ -87,6 +97,54 @@ export async function prepareImageForUpload(
 
     const base = file.name.replace(/\.[^.]+$/, "") || "image";
     return new File([blob], `${base}.${ext}`, { type });
+  } finally {
+    bitmap.close();
+  }
+}
+
+/**
+ * canvas 経由の加工でアニメーションが失われる形式か。
+ * GIF は createImageBitmap すると 1 フレーム目だけの静止画になるため、
+ * トリミングは canvas ではなく gif-crop.ts の全フレーム再エンコードへ回す。
+ * 判定は拡張子と data URL の MIME の両方（allowBase64 の貼り付け経路がある）。
+ */
+export function isAnimatedImageUrl(src: string): boolean {
+  return /^data:image\/gif[;,]/i.test(src) || /\.gif(?:[?#]|$)/i.test(src);
+}
+
+/**
+ * アップロード済みの画像を取得し、正規化矩形で切り出した File を返す。
+ *
+ * 出力を PNG（可逆）にしているのは、この後 prepareImageForUpload が webp へ
+ * 再エンコードするため。ここで webp にすると非可逆変換が 2 回かかる。
+ * 画像の取得には CORS が必要（Vercel Blob の公開 URL は許可されている）。
+ */
+export async function cropImageFromUrl(
+  src: string,
+  rect: CropRect,
+  fileName: string,
+): Promise<File> {
+  let bitmap: ImageBitmap;
+  try {
+    const res = await fetch(src, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    bitmap = await createImageBitmap(await res.blob(), { imageOrientation: "from-image" });
+  } catch {
+    throw new ImageLoadError();
+  }
+
+  try {
+    const { sx, sy, sw, sh } = toPixelRect(rect, bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new UnsupportedImageError();
+    ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    const blob = await canvasToBlob(canvas, "image/png", 1);
+    if (!blob) throw new UnsupportedImageError();
+    return new File([blob], fileName, { type: "image/png" });
   } finally {
     bitmap.close();
   }

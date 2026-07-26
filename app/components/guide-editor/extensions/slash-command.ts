@@ -19,6 +19,7 @@ const NOOP_CONTEXT: SlashCommandContext = {
   insertLink: () => {},
   openEmbedDialog: () => {},
   openGuideLinkSearch: () => {},
+  openVideoToGif: () => {},
 };
 
 export const SlashCommand = Extension.create<Record<string, never>, SlashCommandStorage>({

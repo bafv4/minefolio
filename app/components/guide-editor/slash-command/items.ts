@@ -16,6 +16,7 @@ import {
   Columns2,
   Columns3,
   ImageIcon,
+  Film,
   Youtube as YoutubeIcon,
   Link as LinkIcon,
   FileText,
@@ -151,6 +152,13 @@ export const SLASH_ITEMS: SlashItem[] = [
     icon: ImageIcon,
     group: GROUP.media,
     run: (_editor, ctx) => ctx.openImagePicker(),
+  },
+  {
+    title: "GIF（動画から変換）",
+    keywords: ["gif", "video", "movie", "じふ", "動画", "変換", "アニメ"],
+    icon: Film,
+    group: GROUP.media,
+    run: (_editor, ctx) => ctx.openVideoToGif(),
   },
   {
     title: "YouTube",
