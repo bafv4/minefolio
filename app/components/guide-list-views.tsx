@@ -89,8 +89,15 @@ export function GuideCardGrid({
           // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
           <div
             key={guide.id}
-            // ピン留めカードはグリッド2列分に拡大して強調する
-            className={cn("group relative", guide.isPinned && "sm:col-span-2")}
+            className={cn(
+              "group relative transition-all",
+              // ホバー時の浮き上がりは必ずこの外枠に持たせる。Card 側に transform を置くと
+              // Card が重ね合わせコンテキストを作り、兄弟のオーバーレイリンク（z-0）より
+              // 手前に描画されてカードのクリックが届かなくなる（ホバーしないと押せないため実質死ぬ）
+              "hover:-translate-y-0.5",
+              // ピン留めカードはグリッド2列分に拡大して強調する
+              guide.isPinned && "sm:col-span-2",
+            )}
           >
             <Link
               to={linkFn(guide)}
@@ -100,7 +107,7 @@ export function GuideCardGrid({
             />
             <Card
               className={cn(
-                "h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40 group-hover:-translate-y-0.5",
+                "h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40",
                 guide.isPinned && "border-primary/40",
               )}
             >
