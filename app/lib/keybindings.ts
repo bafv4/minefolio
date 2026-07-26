@@ -693,20 +693,6 @@ export function isControllerKeyCode(keyCode: string): boolean {
   return keyCode.startsWith("Gamepad");
 }
 
-/** 入力方法ラベル */
-export const INPUT_METHOD_LABELS: Record<string, string> = {
-  keyboard_mouse: "キーボード/マウス",
-  controller: "コントローラー",
-  touch: "タッチ",
-};
-
-/** 入力方法の短縮ラベル */
-export const INPUT_METHOD_SHORT_LABELS: Record<string, string> = {
-  keyboard_mouse: "KBM",
-  controller: "Controller",
-  touch: "Touch",
-};
-
 // =====================================
 // 修飾キー組み合わせ
 // =====================================

@@ -14,38 +14,15 @@ export const CELL_COLORS = BG_COLORS;
 /** 文字サイズの段階。単一情報源は app/lib/guide-font-sizes.ts */
 export const FONT_SIZES = GUIDE_FONT_SIZES;
 
-/** 画像の横方向の配置（value 空文字 = 未設定） */
-export const IMAGE_ALIGNMENTS = [
-  { value: "", label: "未設定" },
-  { value: "left", label: "左揃え" },
-  { value: "center", label: "中央揃え" },
-  { value: "right", label: "右揃え" },
-] as const;
-
 export type ImageAlign = "left" | "center" | "right";
 
-/** コールアウト種別 */
-export const CALLOUT_TYPES = [
-  { type: "tip", icon: "💡", label: "ヒント" },
-  { type: "info", icon: "ℹ️", label: "情報" },
-  { type: "warning", icon: "⚠️", label: "警告" },
-  { type: "danger", icon: "🚨", label: "危険" },
-] as const;
-
+/** コールアウト種別ごとのアイコン（種別と表示名は desktop-toolbar.tsx が持つ） */
 export const CALLOUT_ICONS: Record<string, string> = {
   tip: "💡",
   info: "ℹ️",
   warning: "⚠️",
   danger: "🚨",
 };
-
-/** 画像サイズの離散プリセット（px、null = 原寸/フル幅） */
-export const IMAGE_SIZE_PRESETS = [
-  { key: "S", label: "S", width: 320 },
-  { key: "M", label: "M", width: 480 },
-  { key: "L", label: "L", width: 640 },
-  { key: "Full", label: "原寸", width: null },
-] as const;
 
 /** オートセーブの debounce（ミリ秒） */
 export const AUTO_SAVE_DEBOUNCE_MS = 2000;
