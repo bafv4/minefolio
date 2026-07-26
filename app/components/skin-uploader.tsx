@@ -3,7 +3,7 @@ import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Upload, Trash2, AlertCircle, CheckCircle } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface SkinUploaderProps {
   userId: string;
@@ -18,6 +18,7 @@ export function SkinUploader({
   onUploadComplete,
   onDelete,
 }: SkinUploaderProps) {
+  const t = useT();
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -19,7 +19,8 @@ import {
   Upload,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { pickDisplayName } from "@/lib/slug";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -43,22 +44,26 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // 主要なナビゲーション項目
 const mainNavItems = [
-  { to: "/me/edit", label: t("meLayout.editProfile"), icon: Pencil },
-  { to: "/me/records", label: t("meLayout.records"), icon: Trophy },
-  { to: "/me/keybindings", label: t("meLayout.keybindings"), icon: Keyboard },
-  { to: "/me/devices", label: t("meLayout.devices"), icon: Mouse },
-  { to: "/me/items", label: t("meLayout.itemLayouts"), icon: Package },
-  { to: "/me/search-craft", label: t("meLayout.searchCraft"), icon: Search },
+  { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil },
+  { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy },
+  { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard },
+  { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse },
+  { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package },
+  { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search },
 ];
 
 // 補助的なナビゲーション項目（区切り線の下）
 const secondaryNavItems = [
-  { to: "/me/presets", label: t("meLayout.presets"), icon: Save },
-  { to: "/me/import", label: t("meLayout.import"), icon: Upload },
+  { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Save },
+  { to: "/me/import", labelKey: "meLayout.import" as const, icon: Upload },
 ];
 
 export default function MeLayout() {
+  const t = useT();
+  const locale = useLocale();
   const { user, appUrl } = useLoaderData<typeof loader>();
+  // 英語表示ではアルファベット表記を優先する
+  const userName = pickDisplayName(user, locale) ?? user.mcid;
   const navigation = useNavigation();
 
   // ナビゲーション中（ローディング中）かどうか
@@ -72,14 +77,14 @@ export default function MeLayout() {
           <div className="mb-4 pb-4 border-b flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium truncate">
-                {user.displayName ?? user.mcid}
+                {userName}
               </p>
               <p className="text-sm text-muted-foreground truncate">
                 @{user.mcid}
               </p>
             </div>
             <ShareButton
-              title={`${user.displayName ?? user.mcid} - Minefolio`}
+              title={`${userName} - Minefolio`}
               url={`${appUrl}/player/${user.slug}`}
             />
           </div>
@@ -108,7 +113,7 @@ export default function MeLayout() {
                   ) : (
                     <item.icon className="h-4 w-4" />
                   )}
-                  {item.label}
+                  {t(item.labelKey)}
                 </>
               )}
             </NavLink>
@@ -141,7 +146,7 @@ export default function MeLayout() {
                   ) : (
                     <item.icon className="h-4 w-4" />
                   )}
-                  {item.label}
+                  {t(item.labelKey)}
                 </>
               )}
             </NavLink>

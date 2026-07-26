@@ -6,7 +6,8 @@ import { useTheme } from "next-themes";
 import { Check, Copy, Download, ImageDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import {
   filterRemapsForContext,
   toUiRemaps,
@@ -63,6 +64,7 @@ interface KeyboardExportDialogProps {
     skinUrl: string | null;
     mcid: string | null;
     displayName: string | null;
+    displayNameAlphabet: string | null;
     slug: string;
   };
 }
@@ -85,10 +87,12 @@ export function KeyboardExportDialog({
   isTKL,
   player,
 }: KeyboardExportDialogProps) {
+  const t = useT();
+  const locale = useLocale();
   const { resolvedTheme } = useTheme();
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const playerName = player.displayName ?? player.mcid ?? player.slug;
+  const playerName = getLocalizedDisplayName(player, locale);
 
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);

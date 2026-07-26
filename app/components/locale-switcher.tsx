@@ -1,6 +1,6 @@
-// 言語切り替えコンポーネント
-import { useFetcher } from "react-router";
-import { Globe } from "lucide-react";
+// 言語切り替え。選択は Cookie に保存し、リロードして全体を切り替える
+// （文言はサーバー側で決まるため、クライアント state だけでは切り替わらない）。
+import { Languages, Check } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,42 +8,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { supportedLocales, type Locale } from "@/lib/i18n";
+import { useLocale, useT, useSetLocale } from "@/hooks/use-locale";
+import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
 
-interface LocaleSwitcherProps {
-  currentLocale: Locale;
-}
-
-export function LocaleSwitcher({ currentLocale }: LocaleSwitcherProps) {
-  const fetcher = useFetcher();
-
-  const handleLocaleChange = (locale: Locale) => {
-    const formData = new FormData();
-    formData.append("locale", locale);
-    fetcher.submit(formData, {
-      method: "post",
-      action: "/api/set-locale",
-    });
-  };
+export function LocaleSwitcher() {
+  const currentLocale = useLocale();
+  const setLocale = useSetLocale();
+  const t = useT();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Change language">
-          <Globe className="h-5 w-5" />
+        <Button variant="ghost" size="icon" aria-label={t("nav.changeLanguage")}>
+          <Languages className="h-5 w-5" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {Object.entries(supportedLocales).map(([locale, { nativeName }]) => (
+        {SUPPORTED_LOCALES.map((locale) => (
           <DropdownMenuItem
             key={locale}
-            onClick={() => handleLocaleChange(locale as Locale)}
-            className={currentLocale === locale ? "bg-accent" : ""}
+            onClick={() => setLocale(locale)}
+            aria-current={currentLocale === locale}
           >
-            {nativeName}
-            {currentLocale === locale && (
-              <span className="ml-auto">✓</span>
-            )}
+            {LOCALE_NAMES[locale]}
+            {currentLocale === locale && <Check className="ml-auto h-4 w-4" aria-hidden />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

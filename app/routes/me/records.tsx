@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/records";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,7 +47,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 // pbVideoUrl は http/https スキームのみ許可する（javascript: 等を弾き Stored XSS を防ぐ）。
 // F6 が所有する共有ヘルパー app/lib/safe-url.ts とは独立させるため、この機能内の
@@ -60,7 +62,8 @@ export function isHttpVideoUrl(value: string): boolean {
   return parsed.protocol === "http:" || parsed.protocol === "https:";
 }
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meRecords.title") }];
 };
 
@@ -73,6 +76,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: Shou
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -118,6 +122,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -152,6 +157,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -273,6 +279,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function RecordsPage() {
+  const t = useT();
   const {
     records,
     speedruncomRecords,
@@ -630,6 +637,7 @@ export default function RecordsPage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

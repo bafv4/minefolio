@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useT } from "@/hooks/use-locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +17,7 @@ interface PaceCardProps {
 }
 
 export function PaceCard({ run, isRegistered }: PaceCardProps) {
+  const t = useT();
   const latestSplit = getLatestSplit(run);
   const now = Date.now();
   const updatedAgo = Math.floor((now - run.lastUpdated) / 1000 / 60); // 分
@@ -46,7 +48,7 @@ export function PaceCard({ run, isRegistered }: PaceCardProps) {
             {latestSplit && (
               <div className="mt-2 flex items-center gap-2">
                 <Badge variant="secondary" className="font-normal">
-                  {getSplitLabel(latestSplit.eventId)}
+                  {getSplitLabel(t, latestSplit.eventId)}
                 </Badge>
                 <span className="font-mono text-lg font-bold">
                   {formatTime(latestSplit.igt)}
@@ -64,7 +66,7 @@ export function PaceCard({ run, isRegistered }: PaceCardProps) {
                       key={event.eventId}
                       className="text-xs text-muted-foreground"
                     >
-                      {getSplitLabel(event.eventId)}: {formatTime(event.igt)}
+                      {getSplitLabel(t, event.eventId)}: {formatTime(event.igt)}
                     </span>
                   ))}
               </div>
@@ -75,7 +77,7 @@ export function PaceCard({ run, isRegistered }: PaceCardProps) {
           <div className="flex flex-col items-end gap-1 shrink-0">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <Timer className="h-3 w-3" />
-              {updatedAgo < 1 ? "今" : `${updatedAgo}分前`}
+              {updatedAgo < 1 ? t("relativeMinutes.now") : t("relativeMinutes.minutesAgo", { count: updatedAgo })}
             </span>
             {run.user.liveAccount && (
               <a
@@ -85,7 +87,7 @@ export function PaceCard({ run, isRegistered }: PaceCardProps) {
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 <ExternalLink className="h-3 w-3" />
-                配信を見る
+                {t("paceCard.watchStream")}
               </a>
             )}
           </div>

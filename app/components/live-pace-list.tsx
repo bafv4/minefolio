@@ -7,7 +7,7 @@ import {
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +24,14 @@ interface LivePaceListProps {
   mcidToSlug: Record<string, string>;
   mcidToUuid: Record<string, string | null>;
   mcidToDisplayName: Record<string, string>;
+  /** アルファベット表記の表示名（入力済みのユーザーのみ） */
+  mcidToDisplayNameAlphabet?: Record<string, string>;
   mcidToSkinUrl?: Record<string, string>;
 }
 
-export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }: LivePaceListProps) {
+export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }: LivePaceListProps) {
+  const t = useT();
+  const locale = useLocale();
   if (runs.length === 0) {
     return null;
   }
@@ -52,7 +56,10 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
             const slug = mcidToSlug[mcidLower];
             const uuid = mcidToUuid[mcidLower];
             const skinUrl = mcidToSkinUrl?.[mcidLower];
-            const displayName = mcidToDisplayName[mcidLower];
+            // 英語表示ではアルファベット表記を優先する
+            const displayName =
+              (locale !== "ja" ? mcidToDisplayNameAlphabet?.[mcidLower] : undefined) ??
+              mcidToDisplayName[mcidLower];
 
             return (
               <tr key={run.worldId} className="border-b hover:bg-accent/50 transition-colors">

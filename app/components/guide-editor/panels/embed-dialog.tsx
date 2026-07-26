@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export type EmbedKind = "keybind" | "searchcraft";
 
@@ -22,6 +22,7 @@ interface EmbedDialogProps {
 }
 
 export function EmbedDialog({ kind, onOpenChange, onInsert }: EmbedDialogProps) {
+  const t = useT();
   const [slug, setSlug] = useState("");
   const [preset, setPreset] = useState("");
 

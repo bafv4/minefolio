@@ -34,6 +34,7 @@ import {
   ChevronDown,
   Link as LinkIcon,
   ImageIcon,
+  Film,
   Table2,
   Minus,
   Columns2,
@@ -63,6 +64,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker, TableStylePicker } from "../panels/color-picker";
+import { FontSizePicker } from "../panels/font-size-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import {
   setBlockType,
@@ -78,7 +80,8 @@ import {
 } from "../lib/block-commands";
 import { EDITOR_Z } from "../constants";
 import type { SaveMode } from "../hooks/use-guide-save";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import type { MessageKey } from "@/lib/messages";
 
 type TabKey = "home" | "insert" | "table";
 
@@ -93,6 +96,7 @@ interface DesktopToolbarProps {
   previewUrl: string;
   onImagePicker: () => void;
   onYoutube: () => void;
+  onVideoToGif: () => void;
   onLink: () => void;
   onEmbed: (kind: "keybind" | "searchcraft") => void;
   onGuideLink: () => void;
@@ -100,40 +104,40 @@ interface DesktopToolbarProps {
 
 // テキストブロックの種別変換（ホームタブのドロップダウン）。
 // コールアウト/トグルは「挿入」タブへ分離（種別を選んで挿入する性質のため）。
-const BLOCK_TYPES: { type: BlockType; label: string; icon: LucideIcon }[] = [
-  { type: "paragraph", label: "テキスト", icon: Type },
-  { type: "heading1", label: "見出し 1", icon: Heading1 },
-  { type: "heading2", label: "見出し 2", icon: Heading2 },
-  { type: "heading3", label: "見出し 3", icon: Heading3 },
-  { type: "bulletList", label: "箇条書き", icon: List },
-  { type: "orderedList", label: "番号付きリスト", icon: ListOrdered },
-  { type: "blockquote", label: "引用", icon: Quote },
-  { type: "codeBlock", label: "コードブロック", icon: Terminal },
+const BLOCK_TYPES: { type: BlockType; labelKey: MessageKey; icon: LucideIcon }[] = [
+  { type: "paragraph", labelKey: "guideEditor.slash.text", icon: Type },
+  { type: "heading1", labelKey: "guideEditor.slash.heading1", icon: Heading1 },
+  { type: "heading2", labelKey: "guideEditor.slash.heading2", icon: Heading2 },
+  { type: "heading3", labelKey: "guideEditor.slash.heading3", icon: Heading3 },
+  { type: "bulletList", labelKey: "guideEditor.slash.bulletList", icon: List },
+  { type: "orderedList", labelKey: "guideEditor.slash.orderedList", icon: ListOrdered },
+  { type: "blockquote", labelKey: "guideEditor.slash.quote", icon: Quote },
+  { type: "codeBlock", labelKey: "guideEditor.slash.codeBlock", icon: Terminal },
 ];
 
 // コールアウト種別（挿入タブのドロップダウン）
-const CALLOUT_TYPES: { type: CalloutType; label: string; icon: LucideIcon }[] = [
-  { type: "tip", label: "ヒント", icon: Lightbulb },
-  { type: "info", label: "情報", icon: Info },
-  { type: "warning", label: "警告", icon: TriangleAlert },
-  { type: "danger", label: "危険", icon: Siren },
+const CALLOUT_TYPES: { type: CalloutType; labelKey: MessageKey; icon: LucideIcon }[] = [
+  { type: "tip", labelKey: "guideEditor.callout.tip", icon: Lightbulb },
+  { type: "info", labelKey: "guideEditor.callout.info", icon: Info },
+  { type: "warning", labelKey: "guideEditor.callout.warning", icon: TriangleAlert },
+  { type: "danger", labelKey: "guideEditor.callout.danger", icon: Siren },
 ];
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "home", label: "ホーム" },
-  { key: "insert", label: "挿入" },
-  { key: "table", label: "テーブル" },
+const TABS: { key: TabKey; labelKey: MessageKey }[] = [
+  { key: "home", labelKey: "guideEditor.toolbar.tabHome" },
+  { key: "insert", labelKey: "guideEditor.toolbar.tabInsert" },
+  { key: "table", labelKey: "guideEditor.toolbar.tabTable" },
 ];
 
-function currentBlock(editor: Editor): { label: string; icon: LucideIcon } {
-  if (editor.isActive("heading", { level: 1 })) return { label: "見出し 1", icon: Heading1 };
-  if (editor.isActive("heading", { level: 2 })) return { label: "見出し 2", icon: Heading2 };
-  if (editor.isActive("heading", { level: 3 })) return { label: "見出し 3", icon: Heading3 };
-  if (editor.isActive("bulletList")) return { label: "箇条書き", icon: List };
-  if (editor.isActive("orderedList")) return { label: "番号付きリスト", icon: ListOrdered };
-  if (editor.isActive("blockquote")) return { label: "引用", icon: Quote };
-  if (editor.isActive("codeBlock")) return { label: "コードブロック", icon: Terminal };
-  return { label: "テキスト", icon: Type };
+function currentBlock(editor: Editor): { labelKey: MessageKey; icon: LucideIcon } {
+  if (editor.isActive("heading", { level: 1 })) return { labelKey: "guideEditor.slash.heading1", icon: Heading1 };
+  if (editor.isActive("heading", { level: 2 })) return { labelKey: "guideEditor.slash.heading2", icon: Heading2 };
+  if (editor.isActive("heading", { level: 3 })) return { labelKey: "guideEditor.slash.heading3", icon: Heading3 };
+  if (editor.isActive("bulletList")) return { labelKey: "guideEditor.slash.bulletList", icon: List };
+  if (editor.isActive("orderedList")) return { labelKey: "guideEditor.slash.orderedList", icon: ListOrdered };
+  if (editor.isActive("blockquote")) return { labelKey: "guideEditor.slash.quote", icon: Quote };
+  if (editor.isActive("codeBlock")) return { labelKey: "guideEditor.slash.codeBlock", icon: Terminal };
+  return { labelKey: "guideEditor.slash.text", icon: Type };
 }
 
 /** 保存状態インジケーター（aria-live） */
@@ -146,12 +150,14 @@ function SaveIndicator({
   saving: boolean;
   lastSaved: { mode: SaveMode; at: Date } | null;
 }) {
-  const time = lastSaved ? lastSaved.at.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : null;
+  const t = useT();
+  const locale = useLocale();
+  const time = lastSaved ? lastSaved.at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : null;
   if (saving) {
     return (
       <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        保存中…
+        {t("guideEditor.saving")}
       </span>
     );
   }
@@ -159,7 +165,7 @@ function SaveIndicator({
     // 未保存の変更あり → 警告色
     return (
       <span className="text-xs text-warning whitespace-nowrap" aria-live="polite">
-        未保存の変更があります
+        {t("guideEditor.toolbar.unsavedChanges")}
       </span>
     );
   }
@@ -167,7 +173,7 @@ function SaveIndicator({
   return (
     <span className="flex items-center gap-1 text-xs text-success whitespace-nowrap" aria-live="polite">
       <Check className="h-3.5 w-3.5" />
-      {lastSaved?.mode === "draft" ? "仮保存済み" : "保存済み"}
+      {lastSaved?.mode === "draft" ? t("guideEditor.toolbar.savedDraft") : t("guideEditor.saved")}
       {time && <span className="tabular-nums">{time}</span>}
     </span>
   );
@@ -184,10 +190,12 @@ export function DesktopToolbar({
   previewUrl,
   onImagePicker,
   onYoutube,
+  onVideoToGif,
   onLink,
   onEmbed,
   onGuideLink,
 }: DesktopToolbarProps) {
+  const t = useT();
   useEditorRerender(editor);
   const [tab, setTab] = useState<TabKey>("home");
 
@@ -221,13 +229,13 @@ export function DesktopToolbar({
         className="fixed top-16 left-0 right-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
         style={{ zIndex: EDITOR_Z.toolbar }}
         role="toolbar"
-        aria-label="エディタツールバー"
+        aria-label={t("guideEditor.toolbar.ariaToolbar")}
       >
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
           {/* 1段目: タブ + メタ操作 */}
           <div className="flex items-center gap-1 pt-1.5">
-            <div className="flex items-center gap-0.5" role="tablist" aria-label="ツールバータブ">
-              {visibleTabs.map(({ key, label }) => (
+            <div className="flex items-center gap-0.5" role="tablist" aria-label={t("guideEditor.toolbar.ariaTabs")}>
+              {visibleTabs.map(({ key, labelKey }) => (
                 <button
                   key={key}
                   type="button"
@@ -244,7 +252,7 @@ export function DesktopToolbar({
                       : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                   )}
                 >
-                  {label}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
@@ -255,10 +263,10 @@ export function DesktopToolbar({
                 <TooltipTrigger asChild>
                   <Button type="button" variant="ghost" size="sm" onClick={onOpenSettings}>
                     <Settings className="h-4 w-4" />
-                    <span className="hidden md:inline">ガイド設定</span>
+                    <span className="hidden md:inline">{t("guideEditor.toolbar.settings")}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" showArrow={false}>ガイド設定</TooltipContent>
+                <TooltipContent side="bottom" showArrow={false}>{t("guideEditor.toolbar.settings")}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -274,7 +282,7 @@ export function DesktopToolbar({
               <ToolbarSeparator />
               <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
                 <FileEdit className="h-4 w-4" />
-                <span className="hidden md:inline">仮保存</span>
+                <span className="hidden md:inline">{t("guideEditor.toolbar.saveDraft")}</span>
               </Button>
               <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
                 <Save className="h-4 w-4" />
@@ -285,10 +293,10 @@ export function DesktopToolbar({
 
           {/* 2段目: 常時表示の Undo/Redo + アクティブタブのツール */}
           <div className="flex flex-wrap items-center gap-0.5 py-1.5">
-            <ToolbarButton label="元に戻す" shortcut="Ctrl Z" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
+            <ToolbarButton label={t("guideEditor.toolbar.undo")} shortcut="Ctrl Z" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
               <Undo2 className="h-4 w-4" />
             </ToolbarButton>
-            <ToolbarButton label="やり直し" shortcut="Ctrl Shift Z" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
+            <ToolbarButton label={t("guideEditor.toolbar.redo")} shortcut="Ctrl Shift Z" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
               <Redo2 className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarSeparator />
@@ -301,10 +309,10 @@ export function DesktopToolbar({
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors min-w-32"
-                      aria-label="ブロックの種別"
+                      aria-label={t("guideEditor.toolbar.ariaBlockType")}
                     >
                       <BlockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{block.label}</span>
+                      <span className="truncate">{t(block.labelKey)}</span>
                       <ChevronDown className="h-3.5 w-3.5 ml-auto shrink-0 text-muted-foreground" />
                     </button>
                   </DropdownMenuTrigger>
@@ -314,7 +322,7 @@ export function DesktopToolbar({
                       return (
                         <DropdownMenuItem key={opt.type} onClick={() => setBlockType(editor, opt.type)}>
                           <Icon className="h-4 w-4 text-muted-foreground" />
-                          {opt.label}
+                          {t(opt.labelKey)}
                         </DropdownMenuItem>
                       );
                     })}
@@ -327,7 +335,7 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.italic")} shortcut="Ctrl I" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
                   <Italic className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="下線" shortcut="Ctrl U" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+                <ToolbarButton label={t("guideEditor.toolbar.underline")} shortcut="Ctrl U" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
                   <UnderlineIcon className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.strike")} shortcut="Ctrl Shift S" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
@@ -336,7 +344,8 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.code")} shortcut="Ctrl E" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
                   <Code className="h-4 w-4" />
                 </ToolbarButton>
-                <InlineColorPicker editor={editor} />
+                <FontSizePicker editor={editor} />
+      <InlineColorPicker editor={editor} />
                 <ToolbarSeparator />
                 <ToolbarButton label={t("guideEditor.unorderedList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
                   <List className="h-4 w-4" />
@@ -358,6 +367,9 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.image")} onClick={onImagePicker}>
                   <ImageIcon className="h-4 w-4" />
                 </ToolbarButton>
+                <ToolbarButton label={t("guideEditor.gifTitle")} onClick={onVideoToGif}>
+                  <Film className="h-4 w-4" />
+                </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.youtube")} onClick={onYoutube}>
                   <YoutubeIcon className="h-4 w-4" />
                 </ToolbarButton>
@@ -368,10 +380,10 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.horizontalRule")} onClick={() => insertHorizontalRule(editor)}>
                   <Minus className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="2 カラム" onClick={() => insertColumns(editor, 2)}>
+                <ToolbarButton label={t("guideEditor.slash.columns2")} onClick={() => insertColumns(editor, 2)}>
                   <Columns2 className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="3 カラム" onClick={() => insertColumns(editor, 3)}>
+                <ToolbarButton label={t("guideEditor.slash.columns3")} onClick={() => insertColumns(editor, 3)}>
                   <Columns3 className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
@@ -384,15 +396,15 @@ export function DesktopToolbar({
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
                           className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm hover:bg-muted transition-colors"
-                          aria-label="コールアウトを挿入"
+                          aria-label={t("guideEditor.toolbar.ariaInsertCallout")}
                         >
                           <Lightbulb className="h-4 w-4 text-muted-foreground" />
-                          <span className="hidden lg:inline">コールアウト</span>
+                          <span className="hidden lg:inline">{t("guideEditor.toolbar.calloutLabel")}</span>
                           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         </button>
                       </DropdownMenuTrigger>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" showArrow={false}>コールアウト</TooltipContent>
+                    <TooltipContent side="bottom" showArrow={false}>{t("guideEditor.toolbar.calloutLabel")}</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent align="start" className="w-40">
                     {CALLOUT_TYPES.map((opt) => {
@@ -400,17 +412,17 @@ export function DesktopToolbar({
                       return (
                         <DropdownMenuItem key={opt.type} onClick={() => insertCallout(editor, opt.type)}>
                           <Icon className="h-4 w-4 text-muted-foreground" />
-                          {opt.label}
+                          {t(opt.labelKey)}
                         </DropdownMenuItem>
                       );
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <ToolbarButton label="トグルリスト" onClick={() => insertToggle(editor)}>
+                <ToolbarButton label={t("guideEditor.slash.toggleList")} onClick={() => insertToggle(editor)}>
                   <ChevronRight className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
-                <ToolbarButton label="ガイドリンク" onClick={onGuideLink}>
+                <ToolbarButton label={t("guideEditor.slash.guideLink")} onClick={onGuideLink}>
                   <FileText className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.embedKeybind")} onClick={() => onEmbed("keybind")}>
@@ -424,41 +436,41 @@ export function DesktopToolbar({
 
             {tab === "table" && (
               <>
-                <ToolbarButton label="上に行を追加" disabled={!inTable} onClick={() => applyTableOp(editor, "addRowBefore")}>
+                <ToolbarButton label={t("guideEditor.toolbar.addRowBefore")} disabled={!inTable} onClick={() => applyTableOp(editor, "addRowBefore")}>
                   <ArrowUpToLine className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="下に行を追加" disabled={!inTable} onClick={() => applyTableOp(editor, "addRowAfter")}>
+                <ToolbarButton label={t("guideEditor.toolbar.addRowAfter")} disabled={!inTable} onClick={() => applyTableOp(editor, "addRowAfter")}>
                   <ArrowDownToLine className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="行を削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteRow")}>
+                <ToolbarButton label={t("guideEditor.toolbar.deleteRow")} disabled={!inTable} onClick={() => applyTableOp(editor, "deleteRow")}>
                   <Trash2 className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
-                <ToolbarButton label="左に列を追加" disabled={!inTable} onClick={() => applyTableOp(editor, "addColBefore")}>
+                <ToolbarButton label={t("guideEditor.toolbar.addColBefore")} disabled={!inTable} onClick={() => applyTableOp(editor, "addColBefore")}>
                   <ArrowLeftToLine className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="右に列を追加" disabled={!inTable} onClick={() => applyTableOp(editor, "addColAfter")}>
+                <ToolbarButton label={t("guideEditor.toolbar.addColAfter")} disabled={!inTable} onClick={() => applyTableOp(editor, "addColAfter")}>
                   <ArrowRightToLine className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="列を削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteCol")}>
+                <ToolbarButton label={t("guideEditor.toolbar.deleteCol")} disabled={!inTable} onClick={() => applyTableOp(editor, "deleteCol")}>
                   <Trash2 className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="列幅を統一" disabled={!inTable} onClick={() => unifyColumnWidths(editor)}>
+                <ToolbarButton label={t("guideEditor.toolbar.unifyColWidths")} disabled={!inTable} onClick={() => unifyColumnWidths(editor)}>
                   <AlignHorizontalDistributeCenter className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
-                <ToolbarButton label="セルを結合 / 分割" disabled={!inTable} onClick={() => applyTableOp(editor, "mergeOrSplit")}>
+                <ToolbarButton label={t("guideEditor.toolbar.mergeOrSplit")} disabled={!inTable} onClick={() => applyTableOp(editor, "mergeOrSplit")}>
                   <Combine className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="見出し行を切替" disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderRow")}>
+                <ToolbarButton label={t("guideEditor.toolbar.toggleHeaderRow")} disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderRow")}>
                   <PanelTop className="h-4 w-4" />
                 </ToolbarButton>
-                <ToolbarButton label="見出し列を切替" disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderColumn")}>
+                <ToolbarButton label={t("guideEditor.toolbar.toggleHeaderColumn")} disabled={!inTable} onClick={() => applyTableOp(editor, "toggleHeaderColumn")}>
                   <PanelLeft className="h-4 w-4" />
                 </ToolbarButton>
                 {inTable && <TableStylePicker editor={editor} />}
                 <ToolbarSeparator />
-                <ToolbarButton label="テーブルを削除" disabled={!inTable} onClick={() => applyTableOp(editor, "deleteTable")}>
+                <ToolbarButton label={t("guideEditor.toolbar.deleteTable")} disabled={!inTable} onClick={() => applyTableOp(editor, "deleteTable")}>
                   <Table2 className="h-4 w-4" />
                 </ToolbarButton>
               </>

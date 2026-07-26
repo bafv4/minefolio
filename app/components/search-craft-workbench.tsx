@@ -30,7 +30,7 @@ import {
 } from "@/lib/remap-utils";
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
 
 /**
@@ -76,6 +76,7 @@ export function effectiveRemapsFrom(remaps: WorkbenchRemap[]): RemapInfo[] {
 // ============================================
 
 function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
+  const t = useT();
   const [entries, setEntries] = useState<SimulatedKeyOutput[]>([]);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -93,7 +94,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
     (e: React.KeyboardEvent) => {
       if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) {
         // 修飾キー単独のリマップ（例: ShiftLeft → KeyE）だけを処理する
-        const result = simulateRemapOutput(e.code, remaps);
+        const result = simulateRemapOutput(t, e.code, remaps);
         if (result.isRemapped) {
           e.preventDefault();
           applyResult(result);
@@ -113,7 +114,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
       if (e.metaKey) modifiers.push("Meta");
       const combo = modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code;
 
-      applyResult(simulateRemapOutput(combo, remaps));
+      applyResult(simulateRemapOutput(t, combo, remaps));
     },
     [remaps, applyResult],
   );
@@ -201,6 +202,7 @@ export function SearchCraftWorkbench({
   layout: KeyboardLayoutOption;
   onLayoutChange: (layout: KeyboardLayoutOption) => void;
 }) {
+  const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
   const updateRemapAt = useCallback(
@@ -320,7 +322,7 @@ export function SearchCraftWorkbench({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span className="font-mono text-xl">
-                {editingKeyCode && getKeyLabel(editingKeyCode, layout)}
+                {editingKeyCode && getKeyLabel(t, editingKeyCode, layout)}
               </span>
               <span className="text-muted-foreground text-sm font-normal">
                 {t("meKeybindings.settingsSuffix")}

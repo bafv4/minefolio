@@ -1,6 +1,8 @@
 // Vercel Blob への画像アップロード共通フック（本文画像 / カバー画像で再利用）。
 // アップロード前にクライアント側で縮小＋webp/jpeg 再エンコードし、サーバの
 // content-type / サイズ上限で弾かれにくくする。
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { useState, useCallback } from "react";
 import { upload } from "@vercel/blob/client";
 import {
@@ -43,12 +45,14 @@ export interface UseImageUploadResult {
   error: string | null;
 }
 
-function messageFor(e: unknown, fallback: string): string {
+function messageFor(t: Translator, e: unknown, fallback: string): string {
   if (e instanceof UnsupportedImageError) {
-    return "この画像形式には対応していません。JPEG / PNG などで保存し直してからお試しください。";
+    return t("guideEditor.ui.uploadUnsupportedFormat");
   }
   if (e instanceof ImageTooLargeError) {
-    return `画像サイズが大きすぎます（上限 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB）。`;
+    return t("guideEditor.ui.uploadTooLarge", {
+      mb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024),
+    });
   }
   return fallback;
 }
@@ -58,6 +62,7 @@ function messageFor(e: unknown, fallback: string): string {
  * 本文画像とカバー画像で独立した状態が必要なため、用途ごとに 1 インスタンス生成する。
  */
 export function useImageUpload(): UseImageUploadResult {
+  const t = useT();
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,14 +80,14 @@ export function useImageUpload(): UseImageUploadResult {
         return blob.url;
       } catch (e) {
         console.error("Image upload failed:", e);
-        setError(messageFor(e, opts.errorMessage));
+        setError(messageFor(t, e, opts.errorMessage));
         setTimeout(() => setError(null), ERROR_CLEAR_MS);
         return null;
       } finally {
         setIsUploading(false);
       }
     },
-    [],
+    [t],
   );
 
   return { uploadTo, isUploading, error };

@@ -12,31 +12,33 @@
 // 両方で徹底する。パレット色は hex（ピッカー由来）と rgb 形式
 // （公開ページからのコピー等でブラウザが正規化した形）の両方を受理する。
 
-/** 文字色パレット（value 空文字 = デフォルト / 色指定なし） */
-export const GUIDE_TEXT_COLORS = [
-  { name: "デフォルト", value: "" },
-  { name: "グレー", value: "#787774" },
-  { name: "赤", value: "#D44C47" },
-  { name: "オレンジ", value: "#CB7B2C" },
-  { name: "黄", value: "#998A2B" },
-  { name: "緑", value: "#448361" },
-  { name: "青", value: "#337EA9" },
-  { name: "紫", value: "#9065B0" },
-  { name: "ピンク", value: "#C14C8A" },
-] as const;
+import type { MessageKey } from "@/lib/messages";
 
-/** 背景色パレット（value 空文字 = なし） */
-export const GUIDE_BG_COLORS = [
-  { name: "なし", value: "" },
-  { name: "グレー", value: "#F1F1EF" },
-  { name: "赤", value: "#FDEBEC" },
-  { name: "オレンジ", value: "#FBF3DB" },
-  { name: "黄", value: "#FBF3DB" },
-  { name: "緑", value: "#EDF3EC" },
-  { name: "青", value: "#E7F3F8" },
-  { name: "紫", value: "#F6F3F9" },
-  { name: "ピンク", value: "#F9F0F5" },
-] as const;
+/** 文字色パレット（value 空文字 = デフォルト / 色指定なし。名称は翻訳キー） */
+export const GUIDE_TEXT_COLORS: ReadonlyArray<{ nameKey: MessageKey; value: string }> = [
+  { nameKey: "guideEditor.colors.default", value: "" },
+  { nameKey: "guideEditor.colors.gray", value: "#787774" },
+  { nameKey: "guideEditor.colors.red", value: "#D44C47" },
+  { nameKey: "guideEditor.colors.orange", value: "#CB7B2C" },
+  { nameKey: "guideEditor.colors.yellow", value: "#998A2B" },
+  { nameKey: "guideEditor.colors.green", value: "#448361" },
+  { nameKey: "guideEditor.colors.blue", value: "#337EA9" },
+  { nameKey: "guideEditor.colors.purple", value: "#9065B0" },
+  { nameKey: "guideEditor.colors.pink", value: "#C14C8A" },
+];
+
+/** 背景色パレット（value 空文字 = なし。名称は翻訳キー） */
+export const GUIDE_BG_COLORS: ReadonlyArray<{ nameKey: MessageKey; value: string }> = [
+  { nameKey: "guideEditor.colors.none", value: "" },
+  { nameKey: "guideEditor.colors.gray", value: "#F1F1EF" },
+  { nameKey: "guideEditor.colors.red", value: "#FDEBEC" },
+  { nameKey: "guideEditor.colors.orange", value: "#FBF3DB" },
+  { nameKey: "guideEditor.colors.yellow", value: "#FBF3DB" },
+  { nameKey: "guideEditor.colors.green", value: "#EDF3EC" },
+  { nameKey: "guideEditor.colors.blue", value: "#E7F3F8" },
+  { nameKey: "guideEditor.colors.purple", value: "#F6F3F9" },
+  { nameKey: "guideEditor.colors.pink", value: "#F9F0F5" },
+];
 
 /**
  * 過去バージョンで保存されたハイライト色（旧既定の Tailwind yellow-200 等）。

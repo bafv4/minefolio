@@ -336,6 +336,7 @@ export interface CachedYouTubeLive {
   uuid: string | null;
   slug: string | null;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   discordAvatar: string | null;
   customSkinUrl: string | null;
 }
@@ -361,7 +362,7 @@ export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
     const usersData = mcids.length > 0
       ? await db.query.users.findMany({
           where: excludeViewersCondition,
-          columns: { mcid: true, uuid: true, slug: true, displayName: true, discordAvatar: true, customSkinUrl: true },
+          columns: { mcid: true, uuid: true, slug: true, displayName: true, displayNameAlphabet: true, discordAvatar: true, customSkinUrl: true },
         })
       : [];
 
@@ -394,6 +395,7 @@ export async function getCachedLiveStreams(): Promise<CachedYouTubeLive[]> {
         uuid: user?.uuid ?? null,
         slug: user?.slug ?? null,
         displayName: user?.displayName ?? null,
+        displayNameAlphabet: user?.displayNameAlphabet ?? null,
         discordAvatar: user?.discordAvatar ?? null,
         customSkinUrl: user?.customSkinUrl ?? null,
       };

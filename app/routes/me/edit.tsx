@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, useParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
@@ -63,9 +65,10 @@ import {
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meEdit.title") }];
 };
 
@@ -78,6 +81,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: Shou
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -121,6 +125,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
       {/* Header Skeleton */}
@@ -167,6 +172,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -195,7 +201,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meEdit.mcidNotSetForImport"), action: "import" };
     }
 
-    const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
+    const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
       return {
         success: true,
@@ -549,6 +555,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プロフィール情報の更新
   const displayName = (formData.get("displayName") as string)?.trim() || null;
+  const displayNameAlphabet = (formData.get("displayNameAlphabet") as string)?.trim() || null;
   const bio = (formData.get("bio") as string)?.trim() || null;
   const location = (formData.get("location") as string)?.trim() || null;
   const pronouns = (formData.get("pronouns") as string)?.trim() || null;
@@ -574,6 +581,15 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.displayNameMax") };
   }
 
+  if (displayNameAlphabet && displayNameAlphabet.length > 50) {
+    return { error: t("meEdit.displayNameAlphabetMax") };
+  }
+
+  // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
+  if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
+    return { error: t("meEdit.displayNameAlphabetInvalid") };
+  }
+
   if (bio && bio.length > 500) {
     return { error: t("meEdit.bioMax") };
   }
@@ -594,6 +610,7 @@ export async function action({ request }: Route.ActionArgs) {
     .update(users)
     .set({
       displayName,
+      displayNameAlphabet,
       bio,
       location,
       pronouns,
@@ -625,7 +642,7 @@ const platformOptions = [
   { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
-  { value: "custom", label: t("meEdit.customSns"), placeholder: "e.g. username", prefix: "" },
+  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
 ] as const;
 
 function getPlatformIcon(platform: string) {
@@ -673,6 +690,7 @@ function SocialLinkDialog({
   linkFetcher: ReturnType<typeof useFetcher<typeof action>>;
   isSubmitting: boolean;
 }) {
+  const t = useT();
   const [selectedPlatform, setSelectedPlatform] = useState(editingLink?.platform ?? "youtube");
 
   const currentOption = platformOptions.find((opt) => opt.value === selectedPlatform);
@@ -775,6 +793,7 @@ function VideoDialog({
   isSubmitting: boolean;
   defaultUrl?: string;
 }) {
+  const t = useT();
   return (
     <videoFetcher.Form method="post">
       <input type="hidden" name="_action" value={editingVideo ? "update_video" : "create_video"} />
@@ -832,6 +851,7 @@ function VideoDialog({
 }
 
 export default function EditProfilePage() {
+  const t = useT();
   const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
@@ -856,6 +876,7 @@ export default function EditProfilePage() {
   // フォームの値をトラッキングして変更を検出
   const [formValues, setFormValues] = useState({
     displayName: user.displayName ?? "",
+    displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
@@ -879,6 +900,7 @@ export default function EditProfilePage() {
 
   const initialFormValues = useRef({
     displayName: user.displayName ?? "",
+    displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
@@ -926,6 +948,7 @@ export default function EditProfilePage() {
   const handleSave = useCallback(() => {
     const formData = new FormData();
     formData.set("displayName", formValues.displayName);
+    formData.set("displayNameAlphabet", formValues.displayNameAlphabet);
     formData.set("bio", formValues.bio);
     formData.set("location", formValues.location);
     formData.set("pronouns", formValues.pronouns);
@@ -1040,7 +1063,7 @@ export default function EditProfilePage() {
         parts.push(t("meEdit.importedSettings"));
       }
       if (parts.length > 0) {
-        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join("、") }));
+        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join(t("common.listSeparatorComma")) }));
       } else {
         toast.success(t("meEdit.importCompletedNoData"));
       }
@@ -1401,6 +1424,20 @@ export default function EditProfilePage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="displayNameAlphabet">{t("meEdit.displayNameAlphabet")}</Label>
+              <Input
+                id="displayNameAlphabet"
+                value={formValues.displayNameAlphabet}
+                onChange={(e) => handleInputChange("displayNameAlphabet", e.target.value)}
+                placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
+                maxLength={50}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("meEdit.displayNameAlphabetHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="bio">{t("meEdit.bio")}</Label>
               <Textarea
                 id="bio"
@@ -1477,9 +1514,9 @@ export default function EditProfilePage() {
                     <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pc_windows">PC（Windows）</SelectItem>
-                    <SelectItem value="pc_mac">PC（Mac）</SelectItem>
-                    <SelectItem value="pc_linux">PC（Linux）</SelectItem>
+                    <SelectItem value="pc_windows">{t("playerProfile.platformPcWindows")}</SelectItem>
+                    <SelectItem value="pc_mac">{t("playerProfile.platformPcMac")}</SelectItem>
+                    <SelectItem value="pc_linux">{t("playerProfile.platformPcLinux")}</SelectItem>
                     <SelectItem value="switch">Switch</SelectItem>
                     <SelectItem value="mobile">{t("meEdit.mobile")}</SelectItem>
                     <SelectItem value="other">{t("meEdit.other")}</SelectItem>
@@ -2025,6 +2062,7 @@ export default function EditProfilePage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

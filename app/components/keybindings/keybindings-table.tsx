@@ -14,14 +14,14 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  COLUMN_PRESETS,
+  columnPresets,
   type KeybindingsRow,
   type PresetKey,
 } from "./keybindings-columns";
 import { RunnerCell } from "./keybindings-cells";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 const ROW_ESTIMATED_SIZE = 56;
 /** remaps / custom-actions は内容次第で背丈が伸びるため、初期見積もりを上げる */
@@ -38,11 +38,12 @@ interface KeybindingsTableProps {
 }
 
 export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
+  const t = useT();
   const isMobile = useMediaQuery("(max-width: 767px)", false);
   // モバイルでは走者列を狭め、セルを縦並び（頭＋名前）の compact 表示に差し替える。
   // 列幅は TanStack の size（px）で決まり CSS では切り替えられないため JS 側で分岐する。
   const columns = useMemo<ColumnDef<KeybindingsRow>[]>(() => {
-    const base = COLUMN_PRESETS[preset] as ColumnDef<KeybindingsRow>[];
+    const base = columnPresets(t)[preset] as ColumnDef<KeybindingsRow>[];
     if (!isMobile) return base;
     return base.map((col) =>
       col.id === "runner"

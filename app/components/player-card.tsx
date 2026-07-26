@@ -1,4 +1,6 @@
 import { Link } from "react-router";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { MapPin, Clock } from "lucide-react";
 import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +19,7 @@ interface PlayerCardProps {
     uuid: string | null;
     slug: string;
     displayName: string | null;
+    displayNameAlphabet?: string | null;
     customSkinUrl?: string | null;
     discordAvatar?: string | null;
     location: string | null;
@@ -27,7 +30,9 @@ interface PlayerCardProps {
 
 // 相対時間を計算するヘルパー関数
 function PlayerCardComponent({ player }: PlayerCardProps) {
-  const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const t = useT();
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(player, locale);
 
   return (
     <Link to={`/player/${player.slug}`} prefetch="intent">
@@ -40,7 +45,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
               ) : player.discordAvatar ? (
                 <img
                   src={player.discordAvatar}
-                  alt={player.displayName ?? "Avatar"}
+                  alt={displayName}
                   className="w-12 h-12 object-cover"
                 />
               ) : (
@@ -77,7 +82,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
                 )}
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatRelativeDate(player.updatedAt)}
+                  {formatRelativeDate(t, player.updatedAt)}
                 </span>
               </div>
             </div>

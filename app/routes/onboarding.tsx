@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState } from "react";
 import { redirect, useFetcher, useLoaderData } from "react-router";
 import type { Route } from "./+types/onboarding";
@@ -24,9 +26,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle2, AlertCircle, Info, SkipForward } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("onboarding.title");
   const description = t("onboarding.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -74,6 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -208,6 +212,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function OnboardingPage() {
+  const t = useT();
   const { discordUser } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [step, setStep] = useState<1 | 2>(1);

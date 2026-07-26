@@ -88,6 +88,8 @@ export default [
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
+  route("api/likes", "routes/api/likes.ts"),
+  route("api/set-locale", "routes/api/set-locale.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
   route("api/social-stats", "routes/api/social-stats.ts"),
@@ -107,4 +109,8 @@ export default [
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
+
+  // 未マッチパスのキャッチオール（必ず最後）。root ローダーを走らせてロケールを
+  // 確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
+  route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

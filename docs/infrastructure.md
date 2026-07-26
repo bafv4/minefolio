@@ -204,6 +204,7 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 | `TWITCH_CLIENT_SECRET` | Twitch API クライアントシークレット |
 | `YOUTUBE_API_KEY` | YouTube Data API キー |
 | `RESEND_API_KEY` | Resend メール送信APIキー |
+| `ANTHROPIC_API_KEY` | 利用者コンテンツの自動翻訳（`docs/translation.md`）。未設定なら機能ごと無効 |
 | `FEEDBACK_EMAIL` | フィードバック送信先メールアドレス |
 | `LEGACY_API_URL` | レガシーAPI（MCSRer Hotkeys）のURL |
 | `VERCEL_WEBHOOK_SECRET` | Vercel Webhook の署名検証シークレット（リリース通知） |

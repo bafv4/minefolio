@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
+import { nullsLast } from "./sort-order";
 import { getFavoritesFromDb } from "./favorites";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
@@ -63,6 +64,7 @@ const BROWSE_LIST_COLUMNS = {
   uuid: true,
   slug: true,
   displayName: true,
+  displayNameAlphabet: true,
   pronouns: true,
   role: true,
   mainEdition: true,
@@ -130,16 +132,20 @@ export async function loadBrowsePage(
       ? sql`CASE WHEN ${inArray(users.slug, favoriteSlugs)} THEN 0 ELSE 1 END`
       : null;
 
+  // 未設定（NULL）の行は必ず末尾へ送る（sort-order.ts の共通ルール）。
+  // SQLite の既定では昇順で NULL が先頭に来てしまい、MCID 未登録・表示名未設定の
+  // 走者が並び替えのたびに 1 ページ目を占有する。
   const orderByClause =
     args.sort === "mcid"
-      ? asc(users.mcid)
+      ? [nullsLast(users.mcid), asc(users.mcid)]
       : args.sort === "displayName"
-      ? asc(users.displayName)
-      : desc(users.updatedAt);
+      ? [nullsLast(users.displayName), asc(users.displayName)]
+      : // updatedAt は NOT NULL なので NULL 対策は不要
+        [desc(users.updatedAt)];
 
   const orderBy = favoritePriority
-    ? [favoritePriority, orderByClause]
-    : [orderByClause];
+    ? [favoritePriority, ...orderByClause]
+    : orderByClause;
 
   // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
   const [totalCountResult, playerList] = await Promise.all([

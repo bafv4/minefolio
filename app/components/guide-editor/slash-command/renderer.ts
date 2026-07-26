@@ -5,12 +5,13 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { SuggestionOptions } from "@tiptap/suggestion";
 import type { SlashItem } from "../types";
+import type { Translator } from "@/lib/messages";
 import { SlashMenu } from "./slash-menu";
 import { EDITOR_Z } from "../constants";
 
 type SlashRender = NonNullable<SuggestionOptions<SlashItem>["render"]>;
 
-export function createSlashRenderer(): SlashRender {
+export function createSlashRenderer(getT: () => Translator): SlashRender {
   return () => {
     let container: HTMLDivElement | null = null;
     let root: Root | null = null;
@@ -28,6 +29,7 @@ export function createSlashRenderer(): SlashRender {
       root.render(
         createElement(SlashMenu, {
           items,
+          t: getT(),
           selectedIndex,
           onSelect: (item: SlashItem) => command?.(item),
         }),

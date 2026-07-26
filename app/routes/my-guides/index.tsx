@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import {
   useLoaderData,
   useFetcher,
@@ -22,10 +24,13 @@ import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { dateFnsLocale } from "@/lib/date-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
 
-export const meta = () => [{ title: t("meGuides.title") }];
+export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  return [{ title: t("meGuides.title") }];
+};
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
@@ -93,6 +98,8 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function MyGuidesPage() {
+  const t = useT();
+  const locale = useLocale();
   const { guides: userGuides, user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   // タブ切替（→ /my-guides/templates）中は一覧をスケルトンに差し替える
@@ -159,11 +166,12 @@ export default function MyGuidesPage() {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       <span>
-                        {formatDistanceToNow(guide.updatedAt, {
-                          addSuffix: true,
-                          locale: ja,
-                        })}{" "}
-                        更新
+                        {t("common.updatedAgo", {
+                          time: formatDistanceToNow(guide.updatedAt, {
+                            addSuffix: true,
+                            locale: dateFnsLocale(locale),
+                          }),
+                        })}
                       </span>
                       {guide.isPublished && (
                         <span className="flex items-center gap-1">

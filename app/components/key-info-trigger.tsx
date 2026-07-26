@@ -1,4 +1,6 @@
+import type { MessageKey } from "@/lib/messages";
 import { type ReactNode } from "react";
+import { useT } from "@/hooks/use-locale";
 import {
   ArrowBigUp,
   ChevronUp,
@@ -28,7 +30,7 @@ import {
   getActionLabel,
   getKeyLabel,
   parseKeyCombination,
-  FINGER_LABELS,
+  getFingerLabel,
   type FingerType,
 } from "@/lib/keybindings";
 import {
@@ -106,11 +108,11 @@ export type KeyInfoData = {
   layout?: string | null;
 };
 
-// カスタムアクションのカテゴリ表示ラベル（本ファイルは日本語ハードコード方針に合わせる）
-const CUSTOM_ACTION_CATEGORY_LABELS: Record<string, string> = {
-  other: "その他",
-  macro: "マクロ",
-  tool: "ツール",
+// カスタムアクションのカテゴリ表示ラベル（描画時に解決する）
+const CUSTOM_ACTION_CATEGORY_LABEL_KEYS: Record<string, MessageKey> = {
+  other: "keybindings.customActionOther",
+  macro: "keybindings.customActionMacro",
+  tool: "keybindings.customActionTool",
 };
 
 /** キーコンビネーション（例: Shift+KeyA）をアイコン chip 列にレンダリング */
@@ -121,8 +123,9 @@ function KeyComboChips({
   combo: string;
   layout?: string | null;
 }) {
+  const t = useT();
   const parsed = parseKeyCombination(combo);
-  const baseLabel = getKeyLabel(parsed.keyCode, layout ?? null);
+  const baseLabel = getKeyLabel(t, parsed.keyCode, layout ?? null);
   return (
     <span className="inline-flex items-center gap-0.5">
       {parsed.modifiers.map((m, i) => {
@@ -150,6 +153,7 @@ function RemapRow({
   remap: RemapInfo;
   layout?: string | null;
 }) {
+  const t = useT();
   const isDisabled = remap.targetKey === null;
   return (
     <div className="space-y-0.5">
@@ -157,12 +161,12 @@ function RemapRow({
         <KeyComboChips combo={remap.sourceKey} layout={layout} />
         <span className="text-muted-foreground">→</span>
         {isDisabled ? (
-          <span className="text-muted-foreground italic">無効化</span>
+          <span className="text-muted-foreground italic">{t("keybindings.remapDisabledMark")}</span>
         ) : remap.targetKey && isSpecialRemapTarget(remap.targetKey) ? (
           <kbd className="inline-flex items-center justify-center px-1 h-5 bg-secondary rounded text-[11px] font-mono">
-            <span className="text-muted-foreground/50">「</span>
+            <span className="text-muted-foreground/50">{t("keybindings.remapCharOpen")}</span>
             {remap.targetKey}
-            <span className="text-muted-foreground/50">」</span>
+            <span className="text-muted-foreground/50">{t("keybindings.remapCharClose")}</span>
           </kbd>
         ) : remap.targetKey ? (
           <KeyComboChips combo={remap.targetKey} layout={layout} />
@@ -173,7 +177,7 @@ function RemapRow({
         <div className="ml-1 space-y-0.5">
           {remap.software && (
             <p className="text-[10px] text-muted-foreground">
-              ツール: {remap.software}
+              {t("keybindings.toolPrefix")}: {remap.software}
             </p>
           )}
           {remap.notes && (
@@ -187,13 +191,14 @@ function RemapRow({
 
 /** Tooltip と Dialog で共有する Body 部分（タイトル含めない） */
 function KeyInfoBody({ info }: { info: KeyInfoData }) {
+  const t = useT();
   const { bindings = [], remaps = [], customActions = [], finger, layout = null } = info;
   return (
     <div className="space-y-2 text-foreground">
       {remaps.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
-            リマップ
+            {t("keybindings.remapsHeading")}
           </p>
           <div className="space-y-1.5">
             {remaps.map((r, i) => (
@@ -205,7 +210,7 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
       {bindings.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
-            操作
+            {t("keybindings.actionsHeading")}
           </p>
           <div className="space-y-0.5">
             {bindings.map((b, i) => {
@@ -221,7 +226,7 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
                       aria-hidden
                     />
                   )}
-                  <span>{getActionLabel(b.action)}</span>
+                  <span>{getActionLabel(t, b.action)}</span>
                 </div>
               );
             })}
@@ -231,12 +236,12 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
       {customActions.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
-            カスタムアクション
+            {t("keybindings.customActionsHeading")}
           </p>
           <div className="space-y-1.5">
             {customActions.map((ca, i) => {
               const categoryLabel = ca.category
-                ? CUSTOM_ACTION_CATEGORY_LABELS[ca.category]
+                ? t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[ca.category])
                 : undefined;
               return (
                 <div key={i} className="space-y-0.5">
@@ -271,7 +276,7 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
             aria-hidden
           />
           <span className="text-muted-foreground">
-            指: {FINGER_LABELS[finger]}
+            {t("keybindings.fingerPrefix")}: {getFingerLabel(t, finger)}
           </span>
         </div>
       )}

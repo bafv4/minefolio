@@ -4,13 +4,15 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { User, Clock3, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatRelativeDate } from "@/lib/relative-time";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   pronouns: string | null;
   role: "runner" | "viewer" | null;
   mainEdition: "java" | "bedrock" | null;
@@ -22,7 +24,9 @@ export interface ProfileFeedCardPlayer {
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
-  const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const t = useT();
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(player, locale);
   const userRoleLabel =
     player.role === "runner"
       ? t("common.runner")
@@ -96,7 +100,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
         </div>
         <span className="inline-flex items-center gap-1 shrink-0">
           <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(player.updatedAt)}
+          {formatRelativeDate(t, player.updatedAt)}
         </span>
       </div>
     </Link>
@@ -105,7 +109,9 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
 
 /** Compact list row for players */
 export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer }) {
-  const displayName = player.displayName ?? player.mcid ?? player.slug;
+  const t = useT();
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(player, locale);
   const userRoleLabel =
     player.role === "runner"
       ? t("common.runner")
@@ -155,7 +161,7 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
         )}
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">
           <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(player.updatedAt)}
+          {formatRelativeDate(t, player.updatedAt)}
         </span>
       </div>
     </Link>

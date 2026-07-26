@@ -18,9 +18,14 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { t } from "@/lib/messages";
-import type { GuideEditorProps, SlashCommandContext } from "./types";
+import { useT } from "@/hooks/use-locale";
+import type { GuideEditorProps, SlashCommandContext, GuideMediaContext } from "./types";
 import type { SlashCommandStorage } from "./extensions/slash-command";
+import { setImageMediaContext } from "./extensions/image";
+import { cropImageFromUrl, isAnimatedImageUrl, ImageLoadError } from "./lib/image-processing";
+import { cropAnimatedGifFromUrl } from "./lib/gif-crop";
+import { GifTooLargeError } from "./lib/gif-encode";
+import type { CropRect } from "./lib/image-crop";
 import { useGuideEditor } from "./hooks/use-guide-editor";
 import { useGuideSave } from "./hooks/use-guide-save";
 import {
@@ -29,11 +34,13 @@ import {
   buildCoverImagePath,
   COVER_IMAGE_PREPARE,
   INLINE_IMAGE_PREPARE,
+  MAX_UPLOAD_BYTES,
 } from "./hooks/use-image-upload";
 import { useUnsavedWarning } from "./hooks/use-unsaved-warning";
 import { insertEmbed, insertGuideLink } from "./lib/block-commands";
 import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
+import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
 import { EditorBubbleMenu } from "./toolbar/bubble-menu";
@@ -56,6 +63,7 @@ export function GuideEditor({
   authorSlug,
   guideSlug,
 }: GuideEditorProps) {
+  const t = useT();
   // ── 本文・メタ状態 ──────────────────────────
   // 本文(content)は editor を真実源とし React state に持たない（毎キー再レンダリング回避）。
   const [title, setTitle] = useState(initialTitle);
@@ -74,6 +82,7 @@ export function GuideEditor({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
+  const [videoToGifOpen, setVideoToGifOpen] = useState(false);
 
   const isTouch = useMediaQuery("(hover: none)");
 
@@ -168,10 +177,10 @@ export function GuideEditor({
   // ── ハンドラ ──────────────────────────────
   const handleLinkInsert = useCallback(() => {
     if (!editor) return;
-    const href = window.prompt("URLを入力してください", "https://");
+    const href = window.prompt(t("guideEditor.ui.linkUrlPrompt"), "https://");
     if (!href) return;
     if (editor.state.selection.empty) {
-      const text = window.prompt("リンクテキストを入力してください", href) || href;
+      const text = window.prompt(t("guideEditor.ui.linkTextPrompt"), href) || href;
       editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
     } else {
       editor.chain().focus().setLink({ href }).run();
@@ -184,7 +193,7 @@ export function GuideEditor({
       const url = await imageUpload.uploadTo(
         buildInlineImagePath(userId, guideId),
         file,
-        { ...INLINE_IMAGE_PREPARE, errorMessage: "画像のアップロードに失敗しました" },
+        { ...INLINE_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.imageUploadFailed") },
       );
       if (url) {
         editor
@@ -198,6 +207,42 @@ export function GuideEditor({
   );
   imageUploadRef.current = handleImageUpload;
 
+  // 画像 NodeView からのトリミング要求。取得 → 切り出し → 新しい Blob として再アップロードし、
+  // 新 URL を返す（元の Blob はそのまま残る＝ 他ガイドからの参照や取り消し操作を壊さない）。
+  const handleCropImage = useCallback(
+    async (src: string, rect: CropRect): Promise<string | null> => {
+      let cropped: File;
+      try {
+        // GIF は canvas を通すと 1 フレーム目の静止画になるため、
+        // 全フレームをデコードして切り出し、アニメーションを保ったまま書き戻す。
+        // 出力は image/gif で、アップロード経路（prepareImageForUpload）は GIF を素通しする
+        cropped = isAnimatedImageUrl(src)
+          ? await cropAnimatedGifFromUrl(src, rect, "cropped.gif", {
+              maxBytes: MAX_UPLOAD_BYTES,
+            })
+          : await cropImageFromUrl(src, rect, "cropped.png");
+      } catch (e) {
+        if (e instanceof ImageLoadError) toast.error(t("guideEditor.cropLoadError"));
+        else if (e instanceof GifTooLargeError) {
+          toast.error(
+            t("guideEditor.cropGifTooLarge", {
+              size: (e.actualBytes / 1024 / 1024).toFixed(1),
+              max: (MAX_UPLOAD_BYTES / 1024 / 1024).toFixed(1),
+            }),
+          );
+        } else toast.error(t("guideEditor.cropFailed"));
+        return null;
+      }
+      const url = await imageUpload.uploadTo(buildInlineImagePath(userId, guideId), cropped, {
+        ...INLINE_IMAGE_PREPARE,
+        errorMessage: t("guideEditor.cropFailed"),
+      });
+      if (!url) toast.error(t("guideEditor.cropFailed"));
+      return url;
+    },
+    [userId, guideId, imageUpload],
+  );
+
   // ── スラッシュコマンドのコンテキスト注入 ──────
   const slashContext: SlashCommandContext = useMemo(
     () => ({
@@ -205,7 +250,7 @@ export function GuideEditor({
       insertYoutube: () => {
         if (!editor) return;
         const url = window.prompt(
-          "YouTube URLを入力してください",
+          t("guideEditor.youtubeUrlPrompt"),
           "https://www.youtube.com/watch?v=",
         );
         if (url) editor.commands.setYoutubeVideo({ src: url });
@@ -213,6 +258,7 @@ export function GuideEditor({
       insertLink: handleLinkInsert,
       openEmbedDialog: (kind) => setEmbedKind(kind),
       openGuideLinkSearch: () => setGuideLinkOpen(true),
+      openVideoToGif: () => setVideoToGifOpen(true),
     }),
     [editor, handleLinkInsert],
   );
@@ -222,8 +268,21 @@ export function GuideEditor({
     const storage = (editor.storage as unknown as Record<string, unknown>).slashCommand as
       | SlashCommandStorage
       | undefined;
-    if (storage) storage.ctx = slashContext;
-  }, [editor, slashContext]);
+    if (storage) {
+      storage.ctx = slashContext;
+      storage.t = t;
+    }
+  }, [editor, slashContext, t]);
+
+  // ── 画像 NodeView のコンテキスト注入 ──────────
+  const mediaContext: GuideMediaContext = useMemo(
+    () => ({ cropImage: handleCropImage }),
+    [handleCropImage],
+  );
+
+  useEffect(() => {
+    if (editor) setImageMediaContext(editor, mediaContext);
+  }, [editor, mediaContext]);
 
   const handleInsertEmbed = (kind: EmbedKind, slug: string, preset: string) => {
     if (editor) insertEmbed(editor, kind, slug, preset || null);
@@ -250,6 +309,7 @@ export function GuideEditor({
           previewUrl={previewUrl}
           onImagePicker={() => imageInputRef.current?.click()}
           onYoutube={slashContext.insertYoutube}
+          onVideoToGif={() => setVideoToGifOpen(true)}
           onLink={handleLinkInsert}
           onEmbed={(kind) => setEmbedKind(kind)}
           onGuideLink={() => setGuideLinkOpen(true)}
@@ -272,7 +332,7 @@ export function GuideEditor({
         {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
         {draftActive && (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            <span>未公開のドラフトを編集中です。「保存」で公開版へ反映、または公開版に戻せます。</span>
+            <span>{t("guideEditor.ui.draftBanner")}</span>
             <Button
               type="button"
               variant="outline"
@@ -282,7 +342,7 @@ export function GuideEditor({
               disabled={saving}
             >
               <Undo2 className="h-3.5 w-3.5" />
-              公開版に戻す
+              {t("guideEditor.ui.revertToPublished")}
             </Button>
           </div>
         )}
@@ -326,7 +386,7 @@ export function GuideEditor({
           coverUpload.uploadTo(
             buildCoverImagePath(userId, guideId),
             file,
-            { ...COVER_IMAGE_PREPARE, errorMessage: "カバー画像のアップロードに失敗しました" },
+            { ...COVER_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.coverUploadFailed") },
           )
         }
         isUploadingCover={coverUpload.isUploading}
@@ -352,6 +412,16 @@ export function GuideEditor({
         open={guideLinkOpen}
         onOpenChange={setGuideLinkOpen}
         onInsert={handleInsertGuideLink}
+      />
+      <VideoToGifDialog
+        open={videoToGifOpen}
+        onOpenChange={setVideoToGifOpen}
+        onInsert={(gif) => {
+          // 先に閉じてから挿入する（開いたままだと Dialog のフォーカストラップが
+          // editor.chain().focus() と競合し、挿入位置が復元されない）
+          setVideoToGifOpen(false);
+          void handleImageUpload(gif);
+        }}
       />
 
       {/* 未保存離脱の確認 */}

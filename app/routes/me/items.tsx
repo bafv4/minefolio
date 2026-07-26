@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/items";
@@ -65,13 +67,14 @@ import {
 import { ItemIcon } from "@/components/item-icon";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meItems.title") }];
 };
 
@@ -119,6 +122,7 @@ type ItemLayout = {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -180,6 +184,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -217,6 +222,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -318,6 +324,7 @@ function HotbarSlot({
   onItemsChange: (items: string[]) => void;
   isOffhand?: boolean;
 }) {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
@@ -469,6 +476,7 @@ function Hotbar({
   onSlotsChange: (slots: Slot[]) => void;
   onOffhandChange: (items: string[]) => void;
 }) {
+  const t = useT();
   const updateSlot = (slotNum: number, items: string[]) => {
     const newSlots = slots.map((s) =>
       s.slot === slotNum ? { ...s, items } : s
@@ -526,6 +534,7 @@ function SegmentNameInput({
   onChange: (value: string) => void;
   existingSegments: string[];
 }) {
+  const t = useT();
   // 未使用のプリセットのみ表示
   const availablePresets = SEGMENT_PRESETS.filter(
     (preset) => preset === value || !existingSegments.includes(preset)
@@ -561,6 +570,7 @@ function EditableLayoutCard({
   onDelete: () => void;
   existingSegments: string[];
 }) {
+  const t = useT();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleSegmentChange = (segment: string) => {
@@ -661,6 +671,7 @@ function EditableLayoutCard({
  * 既存データは読み取り専用で表示される。
  */
 function PresetRequiredNotice() {
+  const t = useT();
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -675,6 +686,7 @@ function PresetRequiredNotice() {
 }
 
 export default function ItemLayoutsPage() {
+  const t = useT();
   const { layouts: initialLayouts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
@@ -912,6 +924,7 @@ export default function ItemLayoutsPage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

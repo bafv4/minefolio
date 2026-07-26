@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Cookie, X } from "lucide-react";
@@ -49,6 +50,7 @@ interface CookieConsentBannerProps {
 }
 
 export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }: CookieConsentBannerProps = {}) {
+  const t = useT();
   const { hasConsent, acceptCookies, declineCookies } = useCookieConsent();
   const [isVisible, setIsVisible] = useState(false);
 
@@ -98,18 +100,18 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
             <Cookie className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
             <div className="flex-1 space-y-3">
               <div>
-                <p className="font-medium text-sm">Cookieの使用について</p>
+                <p className="font-medium text-sm">{t("cookieConsent.title")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  お気に入り機能を利用するためにCookieを使用します。
-                  Cookieにはお気に入りに登録した走者のIDのみが保存されます。
+                  {t("cookieConsent.body1")}
+                  {t("cookieConsent.body2")}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleAccept}>
-                  同意する
+                  {t("cookieConsent.accept")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleDecline}>
-                  拒否する
+                  {t("cookieConsent.decline")}
                 </Button>
               </div>
             </div>

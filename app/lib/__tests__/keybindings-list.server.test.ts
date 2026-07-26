@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { loadKeybindingsListPlayers } from "../keybindings-list.server";
 import { invalidateCache } from "../cache";
+import { keyRemaps } from "../schema";
 import {
   createTestDb,
   seedUser,
@@ -74,6 +75,70 @@ describe("loadKeybindingsListPlayers - メインプリセット優先", () => {
     const actions = players[0].keybindings.map((k) => k.action);
     expect(actions).toContain("preset_action");
     expect(actions).not.toContain("live_action");
+  });
+
+  it("メインが編集中（isActive）ならライブを使う（古いスナップショットを拾わない）", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner", role: "runner" });
+    // 現在適用中の設定＝ライブテーブル（不変条件）
+    await seedKeybinding(db, user.id, { action: "live_action", keyCode: "KeyL", category: "movement" });
+    // メイン かつ 編集中。スナップショットは同期漏れで古い
+    await seedConfigPreset(db, user.id, {
+      isMain: true,
+      isActive: true,
+      keybindingsData: JSON.stringify([
+        { action: "stale_action", keyCode: "KeyP", category: "movement" },
+      ]),
+    });
+
+    const players = await loadKeybindingsListPlayers(db);
+    const actions = players[0].keybindings.map((k) => k.action);
+    expect(actions).toEqual(["live_action"]);
+  });
+
+  it("編集中の別プリセットがあっても、非アクティブなメインのスナップショットを使う", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner", role: "runner" });
+    // ライブ＝編集中プリセット「Sub」の内容
+    await seedKeybinding(db, user.id, { action: "sub_action", keyCode: "KeyS", category: "movement" });
+    await seedConfigPreset(db, user.id, {
+      name: "Sub",
+      isActive: true,
+      keybindingsData: JSON.stringify([
+        { action: "sub_action", keyCode: "KeyS", category: "movement" },
+      ]),
+    });
+    await seedConfigPreset(db, user.id, {
+      name: "Main",
+      isMain: true,
+      keybindingsData: JSON.stringify([
+        { action: "main_action", keyCode: "KeyM", category: "movement" },
+      ]),
+    });
+
+    const players = await loadKeybindingsListPlayers(db);
+    const actions = players[0].keybindings.map((k) => k.action);
+    expect(actions).toEqual(["main_action"]);
+  });
+
+  it("メインが編集中でも、リマップ・カスタムアクション等はライブから拾う", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner", role: "runner" });
+    await seedKeybinding(db, user.id, { action: "attack", keyCode: "Mouse0" });
+    await db.insert(keyRemaps).values({
+      userId: user.id,
+      sourceKey: "CapsLock",
+      targetKey: "ControlLeft",
+    });
+    await seedConfigPreset(db, user.id, {
+      isMain: true,
+      isActive: true,
+      // スナップショット側はリマップを持たない（同期漏れ）
+      remapsData: null,
+    });
+
+    const players = await loadKeybindingsListPlayers(db);
+    expect(players[0].keyRemaps.map((r) => r.sourceKey)).toEqual(["CapsLock"]);
   });
 });
 

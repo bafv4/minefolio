@@ -1,3 +1,7 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import {
   useLoaderData,
   Link,
@@ -11,6 +15,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -24,15 +29,18 @@ import {
 
 export function meta({
   loaderData,
+  matches,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+  matches: Parameters<typeof localeFromMatches>[0];
 }) {
+  const t = createTranslator(localeFromMatches(matches));
   if (!loaderData?.author) {
-    return [{ title: "ユーザーが見つかりません - Minefolio" }];
+    return [{ title: `${t("guides.userNotFound")} - Minefolio` }];
   }
-  const name = loaderData.author.displayName || loaderData.author.mcid || loaderData.author.slug;
-  const title = `${name}のガイド - Minefolio`;
-  const description = `${name}が公開しているガイド一覧`;
+  const name = getLocalizedDisplayName(loaderData.author, localeFromMatches(matches));
+  const title = `${t("guides.userGuidesTitle", { name })} - Minefolio`;
+  const description = t("guides.userGuidesDescription", { name });
   const ogImage = `${loaderData.appUrl}/icon.png`;
   return [
     { title },
@@ -64,6 +72,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mcid: true,
       uuid: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
       customSkinUrl: true,
       profileVisibility: true,
@@ -100,6 +109,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       viewCount: true,
       updatedAt: true,
     },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
   });
 
   const appUrl = env.APP_URL || "https://minefolio.app";
@@ -108,8 +118,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 
 export default function UserGuidesPage() {
+  const t = useT();
+  const locale = useLocale();
   const { author, guides: authorGuides } = useLoaderData<typeof loader>();
-  const authorName = author.displayName || author.mcid || author.slug;
+  const authorName = getLocalizedDisplayName(author, locale);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
@@ -122,7 +134,7 @@ export default function UserGuidesPage() {
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <Link to="/guides">
           <ArrowLeft className="h-4 w-4 mr-1" />
-          ガイド一覧
+          {t("guides.guideList")}
         </Link>
       </Button>
 
@@ -146,7 +158,7 @@ export default function UserGuidesPage() {
               <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">
-              {authorGuides.length} 件のガイド
+              {t("guides.guidesCount", { count: authorGuides.length })}
             </p>
           </div>
         </div>
@@ -183,12 +195,12 @@ export default function UserGuidesPage() {
       ) : authorGuides.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>まだガイドが公開されていません。</p>
+          <p>{t("guides.noPublishedGuides")}</p>
         </div>
       ) : viewMode === "card" ? (
-        <GuideCardGrid guides={authorGuides as GuideItem[]} linkFn={linkFn} />
+        <GuideCardGrid guides={authorGuides} linkFn={linkFn} />
       ) : (
-        <GuideListView guides={authorGuides as GuideItem[]} linkFn={linkFn} />
+        <GuideListView guides={authorGuides} linkFn={linkFn} />
       )}
     </div>
   );

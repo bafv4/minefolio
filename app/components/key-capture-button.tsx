@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { getKeyLabel, getKeyCombinationLabel } from "@/lib/keybindings";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 const MODIFIER_KEY_CODES = new Set([
   "ShiftLeft", "ShiftRight",
@@ -53,6 +53,7 @@ export function KeyCaptureButton({
   allowModifiers?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const [isCapturing, setIsCapturing] = useState(false);
   const [heldModifiers, setHeldModifiers] = useState<string[]>([]);
 
@@ -134,8 +135,8 @@ export function KeyCaptureButton({
       ) : value ? (
         <span>
           {allowModifiers
-            ? getKeyCombinationLabel(value, keyboardLayout)
-            : getKeyLabel(value, keyboardLayout)}
+            ? getKeyCombinationLabel(t, value, keyboardLayout)
+            : getKeyLabel(t, value, keyboardLayout)}
         </span>
       ) : (
         <span className="text-muted-foreground">{placeholder}</span>

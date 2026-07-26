@@ -18,6 +18,9 @@ export const users = sqliteTable("users", {
   slug: text("slug").unique().notNull(),
 
   displayName: text("display_name"),
+  // アルファベット表記の表示名（任意）。英語ロケールでは表示名の代わりに使い、
+  // プロフィールページではロケールを問わず併記する（未入力なら displayName にフォールバック）。
+  displayNameAlphabet: text("display_name_alphabet"),
   discordAvatar: text("discord_avatar"),
   bio: text("bio"),
   hasImported: integer("has_imported", { mode: "boolean" }).default(false).notNull(),
@@ -445,11 +448,12 @@ export const guides = sqliteTable("guides", {
   index("guides_author_idx").on(t.authorId),
 ]);
 
-export const guidesRelations = relations(guides, ({ one }) => ({
+export const guidesRelations = relations(guides, ({ one, many }) => ({
   author: one(users, {
     fields: [guides.authorId],
     references: [users.id],
   }),
+  likes: many(guideLikes),
 }));
 
 export type Guide = typeof guides.$inferSelect;
@@ -481,6 +485,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   customActions: many(customActions),
   guides: many(guides),
   searchCraftTemplates: many(searchCraftTemplates),
+  guideLikes: many(guideLikes),
+  searchCraftTemplateLikes: many(searchCraftTemplateLikes),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -1048,11 +1054,12 @@ export const searchCraftTemplates = sqliteTable("search_craft_templates", {
   index("idx_search_craft_templates_published_created").on(table.isPublished, table.createdAt),
 ]);
 
-export const searchCraftTemplatesRelations = relations(searchCraftTemplates, ({ one }) => ({
+export const searchCraftTemplatesRelations = relations(searchCraftTemplates, ({ one, many }) => ({
   user: one(users, {
     fields: [searchCraftTemplates.userId],
     references: [users.id],
   }),
+  likes: many(searchCraftTemplateLikes),
 }));
 
 export type SearchCraftTemplate = typeof searchCraftTemplates.$inferSelect;
@@ -1070,3 +1077,122 @@ export const appMeta = sqliteTable("app_meta", {
 
 export type AppMeta = typeof appMeta.$inferSelect;
 export type NewAppMeta = typeof appMeta.$inferInsert;
+
+// ============================================
+// 25. likes（いいね）
+// ============================================
+// ガイド／サーチクラフトテンプレートへの「いいね」。ログイン必須・1ユーザー1対象1件。
+//
+// 【整合性ポリシー】favorites（16節）の favoriteSlug は FK なしの弱参照で孤児化リスクを抱えるが、
+//   いいねは対象の *id* を FK（ON DELETE cascade）で参照する。libSQL は外部キーを既定で有効
+//   （PRAGMA foreign_keys = 1）にするため cascade が実際に効き、対象やユーザーの削除で自動的に消える。
+//   単一の多態テーブル（target_type + target_id）だと targetId に FK を張れず同じ孤児問題を
+//   再発させるため、対象ごとにテーブルを分ける。
+//
+// 【カウント方針】いいね数は非正規化列を持たず、この表の COUNT(*) を都度算出する。
+//   既存テーブルへの NOT NULL + falsy デフォルト列の追加は db:push が TRUNCATE を提案する形であり、
+//   かつカウンタは実体（この表）とドリフトし得るため。詳細は docs/likes.md を参照。
+export const guideLikes = sqliteTable("guide_likes", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  guideId: text("guide_id").notNull().references(() => guides.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  // 対象列を先頭に置く: いいね数の相関サブクエリがこの索引だけで完結する（カバリング）＋一意性
+  uniqueIndex("guide_likes_guide_user_uniq").on(table.guideId, table.userId),
+  // 閲覧者の「いいね済み id 一覧」取得用（_layout の一括取得）
+  index("guide_likes_user_idx").on(table.userId, table.guideId),
+]);
+
+export const guideLikesRelations = relations(guideLikes, ({ one }) => ({
+  guide: one(guides, {
+    fields: [guideLikes.guideId],
+    references: [guides.id],
+  }),
+  user: one(users, {
+    fields: [guideLikes.userId],
+    references: [users.id],
+  }),
+}));
+
+export type GuideLike = typeof guideLikes.$inferSelect;
+export type NewGuideLike = typeof guideLikes.$inferInsert;
+
+export const searchCraftTemplateLikes = sqliteTable("search_craft_template_likes", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  templateId: text("template_id").notNull().references(() => searchCraftTemplates.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("search_craft_template_likes_template_user_uniq").on(table.templateId, table.userId),
+  index("search_craft_template_likes_user_idx").on(table.userId, table.templateId),
+]);
+
+export const searchCraftTemplateLikesRelations = relations(searchCraftTemplateLikes, ({ one }) => ({
+  template: one(searchCraftTemplates, {
+    fields: [searchCraftTemplateLikes.templateId],
+    references: [searchCraftTemplates.id],
+  }),
+  user: one(users, {
+    fields: [searchCraftTemplateLikes.userId],
+    references: [users.id],
+  }),
+}));
+
+export type SearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferSelect;
+export type NewSearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferInsert;
+
+// ============================================
+// content_translations（利用者コンテンツの自動翻訳）
+// ============================================
+// ガイド本文・プロフィール文の機械翻訳を保存する。仕様は docs/translation.md。
+//
+// 対象ごとにテーブルを分けず targetType で束ねる（ガイド・bio・将来のテンプレートを
+// 同じ読み書き経路で扱うため）。外部キーは張らない（targetType ごとに参照先が異なるため）。
+// 対象の削除時は Phase 1/2 の書き込み経路で明示的に消す。
+export const contentTranslations = sqliteTable("content_translations", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  /** 翻訳対象の種別（"guide" | "userBio"。将来 "template" 等を追加） */
+  targetType: text("target_type").notNull(),
+  /** 対象の id（guides.id / users.id） */
+  targetId: text("target_id").notNull(),
+  /** 翻訳先ロケール（app/lib/locale.ts の Locale） */
+  locale: text("locale").notNull(),
+
+  // --- 失効判定 ---
+  // 読み取り側は「sourceHash 一致 かつ glossaryVersion 一致 かつ status = ready」の
+  // ときだけ訳文を使い、それ以外は必ず原文へフォールバックする。
+  /** 原文のハッシュ（app/lib/translate.server.ts の sourceHash()） */
+  sourceHash: text("source_hash").notNull(),
+  /** 翻訳時の用語集バージョン（translation-glossary.ts の GLOSSARY_VERSION） */
+  glossaryVersion: integer("glossary_version").notNull(),
+
+  // --- 訳文（対象に無いフィールドは null） ---
+  title: text("title"),
+  summary: text("summary"),
+  content: text("content"),
+
+  /** "pending" | "ready" | "failed" */
+  status: text("status").notNull().default("pending"),
+  /** 翻訳エンジン識別子（"anthropic" 等） */
+  engine: text("engine"),
+  /** 使用モデル（記録用。切り替え時の追跡に使う） */
+  model: text("model"),
+  /** 失敗理由（status = "failed" のときのみ） */
+  error: text("error"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("content_translations_target_locale_uniq").on(
+    table.targetType,
+    table.targetId,
+    table.locale,
+  ),
+  // Cron が pending / failed を拾うための索引
+  index("content_translations_status_idx").on(table.status, table.updatedAt),
+]);
+
+export type ContentTranslation = typeof contentTranslations.$inferSelect;
+export type NewContentTranslation = typeof contentTranslations.$inferInsert;

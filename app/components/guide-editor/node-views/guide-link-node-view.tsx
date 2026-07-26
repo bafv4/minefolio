@@ -1,5 +1,6 @@
 // ガイドリンクカードの NodeView。カバー画像 + タイトル + 著者を表示。
 // 旧 index.tsx GuideLinkNodeView から逐語移植（class 名 guide-link-* を保持）。
+import { useT } from "@/hooks/use-locale";
 import { NodeViewWrapper } from "@tiptap/react";
 import { FileText, Trash2 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -11,6 +12,7 @@ export function GuideLinkNodeView({
   node: { attrs: Record<string, string> };
   deleteNode: () => void;
 }) {
+  const t = useT();
   return (
     <NodeViewWrapper>
       <div className="guide-link-card group" contentEditable={false}>
@@ -52,7 +54,7 @@ export function GuideLinkNodeView({
               <Trash2 className="h-3 w-3" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>リンクを削除</TooltipContent>
+          <TooltipContent>{t("guideEditor.ui.removeLink")}</TooltipContent>
         </Tooltip>
       </div>
     </NodeViewWrapper>

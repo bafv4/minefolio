@@ -137,6 +137,26 @@ CREATE TABLE `config_presets` (
 CREATE INDEX `idx_config_presets_user_id` ON `config_presets` (`user_id`);
 CREATE INDEX `idx_config_presets_is_active` ON `config_presets` (`is_active`);
 CREATE INDEX `idx_config_presets_is_main` ON `config_presets` (`is_main`);
+CREATE TABLE `content_translations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text NOT NULL,
+	`locale` text NOT NULL,
+	`source_hash` text NOT NULL,
+	`glossary_version` integer NOT NULL,
+	`title` text,
+	`summary` text,
+	`content` text,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`engine` text,
+	`model` text,
+	`error` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+
+CREATE UNIQUE INDEX `content_translations_target_locale_uniq` ON `content_translations` (`target_type`,`target_id`,`locale`);
+CREATE INDEX `content_translations_status_idx` ON `content_translations` (`status`,`updated_at`);
 CREATE TABLE `custom_actions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -217,6 +237,17 @@ CREATE TABLE `favorites` (
 
 CREATE UNIQUE INDEX `idx_favorites_user_slug` ON `favorites` (`user_id`,`favorite_slug`);
 CREATE INDEX `idx_favorites_user_id` ON `favorites` (`user_id`);
+CREATE TABLE `guide_likes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`guide_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`guide_id`) REFERENCES `guides`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `guide_likes_guide_user_uniq` ON `guide_likes` (`guide_id`,`user_id`);
+CREATE INDEX `guide_likes_user_idx` ON `guide_likes` (`user_id`,`guide_id`);
 CREATE TABLE `guides` (
 	`id` text PRIMARY KEY NOT NULL,
 	`author_id` text NOT NULL,
@@ -397,6 +428,17 @@ CREATE INDEX `idx_rankings_cache_key` ON `rankings_cache` (`cache_key`);
 CREATE INDEX `idx_rankings_cache_type` ON `rankings_cache` (`cache_type`);
 CREATE INDEX `idx_rankings_cache_expires` ON `rankings_cache` (`expires_at`);
 CREATE INDEX `idx_rankings_cache_category` ON `rankings_cache` (`category_id`);
+CREATE TABLE `search_craft_template_likes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`template_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`template_id`) REFERENCES `search_craft_templates`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `search_craft_template_likes_template_user_uniq` ON `search_craft_template_likes` (`template_id`,`user_id`);
+CREATE INDEX `search_craft_template_likes_user_idx` ON `search_craft_template_likes` (`user_id`,`template_id`);
 CREATE TABLE `search_craft_templates` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -490,6 +532,7 @@ CREATE TABLE `users` (
 	`uuid` text,
 	`slug` text NOT NULL,
 	`display_name` text,
+	`display_name_alphabet` text,
 	`discord_avatar` text,
 	`bio` text,
 	`has_imported` integer DEFAULT false NOT NULL,

@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
@@ -35,9 +36,12 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("browse.metaTitle");
   const description = t("browse.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -97,6 +101,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 function PlayerCardSkeleton() {
+  const t = useT();
   return (
     <div className="border border-border/70 rounded-xl p-3">
       <div className="flex items-center gap-3">
@@ -112,10 +117,11 @@ function PlayerCardSkeleton() {
 }
 
 // フィルタラベル
-const ROLE_LABELS: Record<string, string> = {
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+const roleLabels = (t: Translator): Record<string, string> => ({
   runner: t("browse.roleRunner"),
   viewer: t("browse.roleViewer"),
-};
+});
 const EDITION_LABELS: Record<string, string> = {
   java: "Java",
   bedrock: "Bedrock",
@@ -125,16 +131,17 @@ const INPUT_METHOD_LABELS: Record<string, string> = {
   controller: "Controller",
   touch: "Touch",
 };
-const PLATFORM_LABELS: Record<string, string> = {
+const platformLabels = (t: Translator): Record<string, string> => ({
   pc_windows: "Windows",
   pc_mac: "Mac",
   pc_linux: "Linux",
   switch: "Switch",
   mobile: "Mobile",
   other: t("browse.platformOther"),
-};
+});
 
 export default function BrowsePage() {
+  const t = useT();
   const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -279,7 +286,7 @@ export default function BrowsePage() {
                 <Input
                   type="search"
                   placeholder={t("browse.searchPlaceholder")}
-                  aria-label="走者を検索"
+                  aria-label={t("browse.searchAria")}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className="pl-10"
@@ -287,7 +294,7 @@ export default function BrowsePage() {
               </div>
               <Button type="submit">
                 <Search className="mr-2 h-4 w-4" />
-                検索
+                {t("common.search")}
               </Button>
             </div>
           </Form>
@@ -297,7 +304,7 @@ export default function BrowsePage() {
               <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="h-4 w-4" />
-                  フィルタ
+                  {t("browse.filter")}
                   {activeFilterCount > 0 && (
                     <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
                       {activeFilterCount}
@@ -307,7 +314,7 @@ export default function BrowsePage() {
               </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>絞り込み</DialogTitle>
+                  <DialogTitle>{t("browse.filterTitle")}</DialogTitle>
                   <DialogDescription>
                     {t("browse.filterDescription")}
                   </DialogDescription>
@@ -316,7 +323,7 @@ export default function BrowsePage() {
                 <div className="space-y-6 py-4">
                   {/* ロール */}
                   <div className="space-y-3">
-                    <div className="text-sm font-medium">ロール</div>
+                    <div className="text-sm font-medium">{t("browse.role")}</div>
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -343,7 +350,7 @@ export default function BrowsePage() {
 
                   {/* エディション */}
                   <div className="space-y-3">
-                    <div className="text-sm font-medium">エディション</div>
+                    <div className="text-sm font-medium">{t("browse.edition")}</div>
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -370,7 +377,7 @@ export default function BrowsePage() {
 
                   {/* プラットフォーム */}
                   <div className="space-y-3">
-                    <div className="text-sm font-medium">プラットフォーム</div>
+                    <div className="text-sm font-medium">{t("browse.platform")}</div>
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -430,14 +437,14 @@ export default function BrowsePage() {
                             handleDraftFilterChange("platforms", "other", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="platform-other" className="cursor-pointer">その他</RadixLabel>
+                        <RadixLabel htmlFor="platform-other" className="cursor-pointer">{t("browse.platformOther")}</RadixLabel>
                       </div>
                     </div>
                   </div>
 
                   {/* 入力方法 */}
                   <div className="space-y-3">
-                    <div className="text-sm font-medium">入力方法</div>
+                    <div className="text-sm font-medium">{t("browse.inputMethod")}</div>
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -447,7 +454,7 @@ export default function BrowsePage() {
                             handleDraftFilterChange("inputMethods", "keyboard_mouse", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="input-kbm" className="cursor-pointer">キーボード/マウス</RadixLabel>
+                        <RadixLabel htmlFor="input-kbm" className="cursor-pointer">{t("browse.inputKeyboardMouse")}</RadixLabel>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -457,7 +464,7 @@ export default function BrowsePage() {
                             handleDraftFilterChange("inputMethods", "controller", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="input-controller" className="cursor-pointer">コントローラー</RadixLabel>
+                        <RadixLabel htmlFor="input-controller" className="cursor-pointer">{t("browse.inputController")}</RadixLabel>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -467,7 +474,7 @@ export default function BrowsePage() {
                             handleDraftFilterChange("inputMethods", "touch", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="input-touch" className="cursor-pointer">タッチ</RadixLabel>
+                        <RadixLabel htmlFor="input-touch" className="cursor-pointer">{t("browse.inputTouch")}</RadixLabel>
                       </div>
                     </div>
                   </div>
@@ -481,14 +488,14 @@ export default function BrowsePage() {
                       onClick={clearDraftFilters}
                     >
                       <X className="h-4 w-4 mr-2" />
-                      すべてクリア
+                      {t("common.clearAll")}
                     </Button>
                   )}
                   <Button
                     className="w-full sm:w-auto"
                     onClick={applyDraftFilters}
                   >
-                    完了
+                    {t("common.complete")}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -501,9 +508,9 @@ export default function BrowsePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="updatedAt">更新日順</SelectItem>
-                <SelectItem value="mcid">MCID順</SelectItem>
-                <SelectItem value="displayName">名前順</SelectItem>
+                <SelectItem value="updatedAt">{t("browse.sortUpdatedAt")}</SelectItem>
+                <SelectItem value="mcid">{t("browse.sortMcid")}</SelectItem>
+                <SelectItem value="displayName">{t("browse.sortDisplayName")}</SelectItem>
               </SelectContent>
             </Select>
             <PlayerViewToggle viewMode={viewMode} onChange={setViewMode} />
@@ -515,7 +522,7 @@ export default function BrowsePage() {
           <div className="flex flex-wrap gap-2">
             {filters.roles.map((role) => (
               <Badge key={role} variant="secondary" className="gap-1">
-                {ROLE_LABELS[role]}
+                {roleLabels(t)[role]}
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
                   className="ml-1 hover:text-destructive"
@@ -537,7 +544,7 @@ export default function BrowsePage() {
             ))}
             {filters.platforms.map((platform) => (
               <Badge key={platform} variant="secondary" className="gap-1">
-                {PLATFORM_LABELS[platform]}
+                {platformLabels(t)[platform]}
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
                   className="ml-1 hover:text-destructive"
@@ -616,7 +623,7 @@ export default function BrowsePage() {
                 setSearchParams(newParams);
               }}
             >
-              検索・フィルタをクリア
+              {t("browse.clearSearchAndFilters")}
             </Button>
           )}
         </div>
@@ -639,13 +646,13 @@ export default function BrowsePage() {
             {infinite.isLoadingMore && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
             )}
-            もっと読み込む
+            {t("browse.loadMore")}
           </Button>
         </div>
       )}
       {infinite.items.length > 0 && !infinite.hasMore && totalCount > 0 && (
         <p className="text-center text-sm text-muted-foreground py-6">
-          すべての走者を表示しました ({totalCount} 件)
+          {t("browse.allShown", { count: totalCount })}
         </p>
       )}
     </div>

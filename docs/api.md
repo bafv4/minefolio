@@ -19,6 +19,7 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
+| `/api/likes` | POST | 必須 | ガイド・テンプレートのいいね追加/解除 |
 | `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
 | `/api/videos` | GET | 不要 | 動画一覧（/videos）のページング+検索 |
@@ -250,6 +251,34 @@ DB に存在しない slug のみ追加（重複は無視）。レスポンス�
 
 ---
 
+### `POST /api/likes`
+
+ガイド・サーチクラフトテンプレートへの「いいね」を追加・解除する。**認証必須**。
+
+**リクエストボディ（JSON）:**
+```json
+{ "targetType": "guide" | "template", "targetId": "<cuid2>", "action": "like" | "unlike" }
+```
+
+**レスポンス:** `{ "liked": boolean, "count": number }`（書き込み後の権威ある件数）
+
+| ステータス | 条件 |
+|---|---|
+| 400 | JSON不正 / `targetType`・`targetId`・`action` が不正、`targetId` が64文字超 |
+| 401 | 未ログイン、またはセッションはあるが `users` 行が無い（未オンボーディング） |
+| 403 | 自分の投稿にいいねしようとした |
+| 404 | 不存在・未公開・著者が非公開（すべて同一の応答。存在の列挙オラクルにしない） |
+| 405 | POST 以外 |
+
+- `action` は絶対指定（トグルではない）で冪等。二重送信・再送でも状態がずれない
+- 対象は **id**（`guides.slug` は著者内でしか一意でないため）
+- いいね可否の可視性は public + unlisted（`publiclyReferencableCondition`）。解除は無検査
+- `Cache-Control: private, no-store`
+
+**関連ファイル:** `app/routes/api/likes.ts`, `app/lib/likes.server.ts`, `app/hooks/use-likes.tsx`, `app/components/like-button.tsx`（詳細: `docs/likes.md`）
+
+---
+
 ### `POST /api/users/by-slugs`
 
 スラッグ配列からユーザー詳細を取得する（未ログインユーザーがlocalStorageのお気に入り一覧から走者カードを表示するために使用）。
@@ -261,7 +290,7 @@ DB に存在しない slug のみ追加（重複は無視）。レスポンス�
 
 最大100件まで。
 
-**レスポンス:** `{ "users": [{ slug, mcid, uuid, displayName, shortBio, location, updatedAt, customSkinUrl, slimSkin }, ...] }`
+**レスポンス:** `{ "users": [{ slug, mcid, uuid, displayName, displayNameAlphabet, shortBio, location, updatedAt, customSkinUrl, slimSkin }, ...] }`
 
 入力順にソートされる。
 

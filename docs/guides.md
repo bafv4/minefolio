@@ -14,7 +14,7 @@
 |--------|------|------|
 | id | string (PK) | ガイドID |
 | authorId | string (FK) | 著者のユーザーID |
-| slug | string | URLスラッグ。作成時はタイトルから自動生成され、以降は編集画面の設定モーダルの「URL」欄でユーザーが変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化） |
+| slug | string | URLスラッグ。作成時にユーザーが必ず入力し（自動生成しない）、以降は編集画面の設定モーダルの「URL」欄で変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化。入力欄では `softNormalizeSlug()`） |
 | title | string | タイトル |
 | summary | string | 概要・要約 |
 | content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。仮保存（draft）には上限を適用しない |
@@ -72,9 +72,14 @@
 | `node-views/` | React NodeView（表示 + 属性編集） |
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
-| `panels/` | metadata-fields / color-picker / embed-dialog / guide-link-search |
+| `panels/` | metadata-fields / color-picker / font-size-picker / embed-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
 | `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
+| `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
+| `lib/image-crop.ts` | トリミング矩形の計算（純粋関数 / DOM 非依存） |
+| `lib/video-to-gif.ts` | 動画→GIF 変換（`<video>` のシーク走査） |
+| `lib/gif-crop.ts` | GIF のトリミング（omggif で全フレーム復元 → 切り出し） |
+| `lib/gif-encode.ts` | GIF 書き出しの共通処理（パレット作成 + gifenc）。上の 2 つが共有 |
 
 #### HTML 互換性
 
@@ -92,12 +97,22 @@
 | 引用 | ブロッククォート |
 | 水平線 | `<hr>` |
 | リンク | URL設定 |
-| 画像 | ファイル選択・クリップボードペースト |
+| 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更、**横方向の配置**（未設定 / 左 / 中央 / 右）、**トリミング**に対応 |
+| GIF（動画から変換） | 短い動画をブラウザ内で GIF に変換して挿入（下記） |
 | YouTube埋め込み | YouTube動画のiframe埋め込み |
 | テーブル | リサイズ可能（列幅ドラッグ変更） |
 | ハイライト | 色付きハイライト |
 | テキスト色 | 文字色の変更 |
 | 背景色 | 背景色の変更 |
+| 文字サイズ | 5段階（極小 0.75em / 小 0.875em / 標準 / 大 1.25em / 特大 1.5em）。単一情報源は `app/lib/guide-font-sizes.ts`。**見出し（h1〜h3）内では変更できない**（下記） |
+
+#### 文字サイズと見出しの関係
+
+見出しは `app/app.css` で h1=1.875em / h2=1.5em / h3=1.15em の固定サイズを持つため、そこに span の `font-size` を重ねると見出し階層の一貫性が壊れる。**見出し内では文字サイズを変更できない**よう3層で担保している:
+
+1. **UI**: `isFontSizeEditable(editor)`（`panels/font-size-picker.tsx`、`!editor.isActive("heading")`）が false のとき `PickerTrigger` を `disabled` にし、ラベルを「見出しでは文字サイズを変更できません」に切り替える（ツールバー・バブルメニューの両方）
+2. **コマンド**: `applyGuideFontSize(editor, value)` が同じ判定でガードする（サイズ指定済みのテキストを見出しへ変換した直後など、UI を経由しない経路の保険）
+3. **表示**: 既存ガイドや外部ペーストで焼き付いた指定は `.guide-content.prose :is(h1…h6) span[style*="font-size"] { font-size: inherit !important; }` で打ち消す。**インラインスタイルはセレクタの詳細度では勝てないため `!important` が必須**。サニタイズ（cssfilter）は要素単位の判定しかできず親が見出しかを知れないため、この層は CSS が担う
 
 ### テーブル機能
 
@@ -120,6 +135,62 @@
 - **クリップボードペースト**: コピーした画像をエディタに直接ペースト
 - アップロード先は **Vercel Blob**
 - APIエンドポイント: `/api/me/guides/upload-image`
+- アップロード前に `lib/image-processing.ts` の `prepareImageForUpload()` がブラウザ側で長辺を縮小し webp（不可なら jpeg）へ再エンコードする。**GIF はアニメーション保持のため無加工**で通す（サイズ上限のみ検査）
+
+#### 参照されなくなった Blob の回収（手動運用）
+
+アプリ側で `del()` を呼ぶのは**カスタムスキンの差し替え/削除**と、**ガイド削除時のカバー画像**だけ。本文画像・差し替え前のカバー・ドラフトのカバーには削除経路がなく、参照されなくなっても Blob に残る。トリミングも元画像を残す（同じ Blob が他のガイドやドラフト/公開版から参照されている可能性があり、参照追跡なしに消すと表示が壊れるため）。
+
+cron は置かず、**`scripts/` のスクリプトを必要なときに手で実行**して回収する。
+
+```bash
+pnpm exec tsx scripts/audit-orphan-blobs.ts --remote     # 実測（読み取りのみ）
+pnpm exec tsx scripts/delete-orphan-blobs.ts --remote    # 削除対象の確認（dry-run）
+pnpm exec tsx scripts/delete-orphan-blobs.ts --remote --apply  # 実際に削除
+```
+
+- **参照判定は `scripts/lib/blob-refs.ts` に集約**している。監査と削除で別実装にすると「監査では参照ありなのに削除側では孤児」という食い違いが画像消失に直結するため、必ずここを共有すること。走査対象には**ドラフト列（`draft_content` / `draft_cover_image_url`）を必ず含める**（公開版から消しただけでドラフトがまだ参照している状態がある）
+- 突き合わせは URL 文字列ではなく**パス（pathname）**。Blob の URL はストア ID をホスト名に含むため、文字列比較だとホストが変わった瞬間に全件を孤児と誤判定する
+- 削除スクリプトの安全装置:
+  - **既定は dry-run**（`--apply` を付けたときだけ削除）
+  - `--min-age-days`（既定 7）— アップロード直後のファイルは対象外。「上げたがまだ保存していない編集中の画像」を守る
+  - `--max-orphan-ratio`（既定 0.6）— 孤児の割合が異常に高いと中断。**最も多い事故である「DB の取り違え」**（本番 Blob をローカル DB と突き合わせて全件孤児に見える）を機械的に止める
+  - 壊れた参照（DB にあるのに Blob に無い）が 1 件でもあれば中断（`--allow-broken-refs` で解除）
+  - `--max-delete`（既定 500）で 1 回の実行の影響範囲を限定
+- **Blob の接続先は常に `.env` の `BLOB_READ_WRITE_TOKEN`**（ストアは 1 つ）。`--remote` は DB 側だけを切り替えるので、本番の回収には必ず `--remote` を付ける
+- 両スクリプトは `process.exit()` を使わず `runScript()` 経由で終了コードを返す。ローカル DB（`file:`）のネイティブクライアントを開いたまま強制終了すると Windows の libuv が assert で落ち、**終了コードが 127 に化けて成否を判定できなくなる**（リモート DB では再現しないので気づきにくい）
+
+#### トリミング
+
+画像にホバー（またはタッチで選択）すると出るツールバーの ✂ ボタンで、挿入済みの画像を切り出せる。
+
+- **矩形の計算は `lib/image-crop.ts` の純粋関数**（DOM 非依存 / `lib/__tests__/image-crop.test.ts` で検証）。座標は画像サイズに依存しない **0..1 の正規化値**で保持し、画面表示（%）と切り出し（px）で同じ値を使う
+- 比率プリセット（自由 / 1:1 / 4:3 / 3:4 / 16:9 / 9:16）。正規化系は画像の縦横比の分だけ歪むため、ピクセル比は `toNormalizedAspect()` で変換してから使う。**比率固定中は角ハンドルのみ**を出す（辺ハンドルでは比率を保てないため）
+- 適用すると `cropImageFromUrl()` が元 URL を CORS fetch → canvas で切り出し → PNG（可逆）で返し、通常のアップロード経路（webp 再エンコード）に載せて**新しい Blob** として保存し、ノードの `src` を差し替える。元の Blob は消さない（他ガイドからの参照や履歴を壊さないため）
+- 表示幅（`width` 属性）は残した領域の割合だけ縮める。切り出した部分の画面上の大きさが操作前と変わらず、レイアウトが跳ねない
+
+##### GIF のトリミング（アニメーション保持）
+
+GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、専用経路（`lib/gif-crop.ts`）へ振り分ける。振り分けは `isAnimatedImageUrl()`（拡張子 + data URL の MIME）で判定する。
+
+- デコードは [omggif](https://github.com/deanm/omggif)（MIT / 依存なし）。**ブラウザ内蔵の `ImageDecoder` は使わない** — Safari が未対応で、使うと Safari だけ機能が消えるため。omggif なら全ブラウザで同じ経路になる
+- GIF はフレームごとに**部分矩形だけを更新**し、透過画素は下の絵を透かす。さらに廃棄方法（disposal: 2=背景で消去 / 3=直前へ復元）で次フレームの下地が決まる。`cropFrames()` がこれを論理画面バッファ上で正しく合成してから、`cropRgbaBuffer()` で矩形を切り出す（canvas を通さないのでアルファがそのまま残る）
+- パレットは全フレームを見てから決めるが、GIF は前フレームに依存して途中から復元できない。全フレームを保持するとメモリを食うため**デコードを 2 周**する（シーク不要で十分速い）
+- 出力は常に「合成済みの全画面フレーム」なので、透過を含む場合は各フレームに **disposal 2 を書く**。書かないと透過画素から前フレームが透け、元 GIF で消去されていた領域に残像が出る
+- 表示時間（センチ秒）とループ設定（`toGifRepeat()`）は元の GIF から引き継ぐ
+- 上限を超えた場合は `GifTooLargeError` を投げ、「切り出す範囲を狭めてください」とトーストで案内する
+
+#### 動画から GIF への変換
+
+`/` メニューまたはツールバーの「動画をGIFに変換」から、短い動画を GIF にして本文へ挿入できる。**変換はすべてブラウザ内で完結し、動画自体はサーバへ送らない**（アップロードされるのは生成後の GIF だけ）。
+
+- 実装は `lib/video-to-gif.ts`。`<video>` を目的の時刻へシーク → canvas へ描画 → `getImageData` でフレームを取り出し、`lib/gif-encode.ts`（[gifenc](https://github.com/mattdesl/gifenc) / MIT / 依存なし）へ渡す。gifenc も omggif も**動的 import** なので SSR では評価されず、実行するまで読み込まれない
+- **パレットはグローバル 1 枚**（`lib/gif-encode.ts`、GIF のトリミングと共通）。範囲全体から最大 6 フレームをサンプリングして連結し、まとめて `quantize()` する。フレームごとにパレットを作ると色がちらつき、ローカルカラーテーブルでファイルも太る。透過画素があれば `rgba4444`、なければ `rgb565`（色の再現性が高い）を自動で選ぶ
+- フレームは**逐次シークしながら 1 枚ずつ**エンコーダへ渡す（全フレームを抱えないのでメモリが増えない）
+- 上限: 長さ **15 秒**（`GIF_MAX_DURATION_SEC`）、フレーム数 **200**（`GIF_MAX_FRAMES`）、出力サイズ **15MB**（`MAX_UPLOAD_BYTES` と共通）。フレーム数の上限に当たった場合は範囲全体へ均等配分し、遅延も伸ばして**再生速度を実時間どおりに保つ**
+- 指定できるのは切り出し範囲（開始 / 終了、再生位置からの取り込み可）・幅（320 / 480 / 640px）・フレームレート（8 / 10 / 12 / 15）
+- MediaRecorder 由来の webm は `duration` が `Infinity` になることがあるため、`resolveVideoDuration()` が巨大時刻へのシークで実長を確定させる
+- 純粋関数（`scaleToWidth` / `planGifFrames` / `clampTrimRange`）は `lib/__tests__/video-to-gif.test.ts` で検証している。実デコードとエンコードは JSDOM で再現できないためブラウザ実機での確認が必要
 
 ### カバー画像
 
@@ -137,7 +208,9 @@
 
 - **許可タグ**: 必要最小限のHTMLタグのみ許可
 - **許可属性**: 各タグに対して安全な属性のみ許可（`class` は全タグ共通で許可）
-- **許可スタイル**: インラインスタイルは許可プロパティ（color / background-color / text-align / min-width / width）のみ通す
+- **許可スタイル**: インラインスタイルは許可プロパティ（color / background-color / **font-size** / text-align / min-width / width）のみ通す
+  - **color / background-color / font-size は値も検査する**。パレット色・段階サイズ以外は除去される。判定関数は `app/lib/guide-colors.ts`（`isPaletteTextColor` / `isPaletteBgColor`）と `app/lib/guide-font-sizes.ts`（`isAllowedFontSize`）が持ち、**エディタのペースト時（入口）と表示時サニタイズ（出口）で同じ判定を共有する**。外部からのペーストで焼き付いた任意の色・サイズ（`14px` 等）はどちらでも落ちる
+- **画像の配置**: `<img>` は `style` を許可しないため、横方向の配置は `data-align="left|center|right"` 属性で表す（未設定は属性ごと出力しない）。表示は `app/app.css` の `.guide-content.prose img[data-align=...]` が担い、エディタ側は `image-node-view.tsx` のラッパーが同じ見た目を作る
 - **colgroup/colタグ**: テーブルの列幅指定用に許可
 - **iframe**: YouTube 埋め込みホスト（www.youtube.com / www.youtube-nocookie.com）のみ src を許可
 
@@ -152,10 +225,13 @@
 
 ### /guides — ガイド一覧
 
-- 全ユーザーの公開ガイドを一覧表示
+- 全ユーザーの公開ガイドを一覧表示（著者が公開プロフィールのもののみ）
 - **グリッド表示**: カード形式で表示。カバー画像がない場合はプレースホルダーを表示
 - **リスト表示**: リスト形式で表示。カバー画像を左端に表示
 - 表示切替が可能
+- **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」「**おすすめ順**（直近30日のいいね数降順）」「人気順（総いいね数降順）」を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、同数時は 総いいね → `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す。詳細は [`docs/likes.md`](./likes.md#並び替え人気順おすすめ順)
+- **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
+  - カード全体のクリックは**オーバーレイのリンク**（`absolute inset-0`）が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない
 
 ### /guides/:authorSlug — 著者別ガイド一覧
 
@@ -166,6 +242,8 @@
 - 個別ガイドの全文表示
 - カバー画像、タイトル、著者情報、本文を表示
 - 閲覧時に viewCount をインクリメント
+- メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
+- **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
 
 ---
 
@@ -179,7 +257,11 @@
 
 ### /my-guides/new — 新規作成
 
-- ガイドエディタを表示し、新規ガイドを作成
+- タイトルと **URL（スラッグ）** を入力して空のガイドを作り、`/my-guides/{slug}/edit` へ遷移する
+- **スラッグは必須入力**。タイトルからの自動生成は行わない（日本語のみのタイトルは `normalizeSlug()` で空になり、`guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため）
+  - 入力欄は `softNormalizeSlug()` でタイプ中に許可外文字を落とすため、日本語だけを打つと空のままになり、`required` でそのまま送信できない
+  - サーバー側でも `normalizeSlug()` 後に空なら `errorSlugRequired`、同一著者内で重複していれば `errorSlugTaken` を返す（重複時に連番・乱数を自動付与しない）
+  - `/guides/{authorSlug}/{slug}` のプレビューを入力欄の下に表示する（編集画面の設定モーダルと同じ体裁）
 
 ### /my-guides/:guideSlug/edit — 編集
 

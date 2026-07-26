@@ -3,12 +3,15 @@
 // ユーザー絞り込み・数値フィルタはクライアント側で行うため、ここでは公開ユーザーを全件返す。
 //
 // 表示データはメイン（公開用）プリセットのスナップショットを優先する。
-// メインプリセットが無いユーザーのみライブテーブル（従来挙動）へフォールバックする
-// （メインがある場合、null の種別は「空」であり、編集中のライブデータを混ぜてはならない）。
+// ただしメインが「編集中（isActive）」の場合はライブテーブルを使う — 不変条件
+// 「アクティブプリセット = ライブテーブル」により、ライブこそが現在適用中の設定だから
+// （判定は shouldUsePresetSnapshot に集約。プロフィールページも同じ規則）。
+// メインプリセットが無いユーザーもライブテーブル（従来挙動）へフォールバックする。
+// メインが非アクティブな場合、null の種別は「空」であり、編集中のライブデータを混ぜてはならない。
 //
-// フェッチは2段構え: まず全員分のスナップショットだけを取り、メインが無いユーザーに限って
-// 2段目でライブ行を取る。メイン整備後はほぼ全ユーザーがスナップショット表示のため、
-// 全員分のライブ行を取ってから捨てる一括フェッチより転送量が大幅に少ない。
+// フェッチは2段構え: まずプリセットのフラグだけ（重量 JSON 列なし）を取り、2段目で
+// 表示元がスナップショットのユーザーには *Data 列を、ライブのユーザーにはライブ行を、
+// 必要な分だけ並列に取る（ユーザーごとにどちらか一方しか引かないため転送量が最小になる）。
 import { asc, desc, and, eq, inArray } from "drizzle-orm";
 import type { Database } from "./db";
 import {
@@ -20,7 +23,7 @@ import {
   configPresets,
 } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
-import { decodePresetConfig } from "./preset-read";
+import { decodePresetConfig, shouldUsePresetSnapshot } from "./preset-read";
 import { getCached, setCached } from "./cache";
 
 const KEYBINDINGS_LIST_CACHE_KEY = "keybindings:list:all";
@@ -59,6 +62,7 @@ async function fetchKeybindingsListPlayers(
       : []),
   );
 
+  // 1段目: ユーザー + メインプリセットのフラグのみ（重量 JSON 列は取らない）
   const playersWithMain = await db.query.users.findMany({
     where: baseCondition,
     orderBy: [desc(users.createdAt)],
@@ -68,32 +72,49 @@ async function fetchKeybindingsListPlayers(
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       customSkinUrl: true,
     },
     with: {
       configPresets: {
         where: eq(configPresets.isMain, true),
-        columns: {
-          id: true,
-          keybindingsData: true,
-          playerConfigData: true,
-          remapsData: true,
-          fingerAssignmentsData: true,
-          customKeysData: true,
-          customActionsData: true,
-        },
+        columns: { id: true, isActive: true },
       },
     },
   });
 
-  // 2段目: メインプリセットが無いユーザーのライブ行のみ取得
-  const fallbackIds = playersWithMain
-    .filter((p) => p.configPresets.length === 0)
-    .map((p) => p.id);
-  const liveRows =
-    fallbackIds.length > 0
-      ? await db.query.users.findMany({
-          where: inArray(users.id, fallbackIds),
+  // 表示元の振り分け: メインが非アクティブならスナップショット、それ以外（メイン無し /
+  // メインが編集中）はライブテーブル（＝現在適用中の設定そのもの）
+  const snapshotPresetIds: string[] = [];
+  const liveUserIds: string[] = [];
+  for (const p of playersWithMain) {
+    const mainPreset = p.configPresets[0];
+    if (shouldUsePresetSnapshot(mainPreset)) {
+      snapshotPresetIds.push(mainPreset.id);
+    } else {
+      liveUserIds.push(p.id);
+    }
+  }
+
+  // 2段目: 必要な側だけを取得する
+  const [snapshotRows, liveRows] = await Promise.all([
+    snapshotPresetIds.length > 0
+      ? db.query.configPresets.findMany({
+          where: inArray(configPresets.id, snapshotPresetIds),
+          columns: {
+            id: true,
+            keybindingsData: true,
+            playerConfigData: true,
+            remapsData: true,
+            fingerAssignmentsData: true,
+            customKeysData: true,
+            customActionsData: true,
+          },
+        })
+      : Promise.resolve([]),
+    liveUserIds.length > 0
+      ? db.query.users.findMany({
+          where: inArray(users.id, liveUserIds),
           columns: { id: true },
           with: {
             keybindings: {
@@ -125,14 +146,19 @@ async function fetchKeybindingsListPlayers(
             },
           },
         })
-      : [];
+      : Promise.resolve([]),
+  ]);
+  const snapshotById = new Map(snapshotRows.map((p) => [p.id, p]));
   const liveById = new Map(liveRows.map((u) => [u.id, u]));
 
   const players = playersWithMain.map((p) => {
     const { configPresets: userPresets, ...rest } = p;
     const mainPreset = userPresets[0];
+    const snapshot = shouldUsePresetSnapshot(mainPreset)
+      ? snapshotById.get(mainPreset.id)
+      : undefined;
 
-    if (!mainPreset) {
+    if (!snapshot) {
       const live = liveById.get(p.id);
       return {
         ...rest,
@@ -144,7 +170,7 @@ async function fetchKeybindingsListPlayers(
       };
     }
 
-    const decoded = decodePresetConfig(mainPreset, p.id);
+    const decoded = decodePresetConfig(snapshot, p.id);
     const cfg = decoded.playerConfig;
     return {
       ...rest,

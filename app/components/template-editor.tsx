@@ -22,13 +22,13 @@ import {
   normalizeLayout,
   type KeyboardLayoutOption,
 } from "@/components/search-craft-workbench";
-import { GAME_LANGUAGE_OPTIONS } from "@/lib/game-languages";
+import { gameLanguageOptions } from "@/lib/game-languages";
 import {
   TEMPLATE_TITLE_MAX,
   TEMPLATE_DESCRIPTION_MAX,
   draftId,
 } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Download, Loader2, Save, X } from "lucide-react";
 
@@ -65,6 +65,8 @@ export function TemplateEditorForm({
   isSubmitting: boolean;
   onSubmit: (data: TemplateEditorData) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [gameLanguage, setGameLanguage] = useState(initial.gameLanguage);
@@ -181,7 +183,7 @@ export function TemplateEditorForm({
             <Label htmlFor="template-language">{t("meTemplates.languageLabel")}</Label>
             <div className="flex items-center gap-2">
               <Combobox
-                options={GAME_LANGUAGE_OPTIONS}
+                options={gameLanguageOptions(t, locale)}
                 value={gameLanguage}
                 onValueChange={setGameLanguage}
                 placeholder={t("meTemplates.languageNone")}

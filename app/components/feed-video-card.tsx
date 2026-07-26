@@ -4,7 +4,8 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
 import { Youtube, Twitch, Play, ExternalLink } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { pickDisplayName } from "@/lib/slug";
 
 /** プラットフォーム上の視聴ページURL */
 function getFeedVideoUrl(video: FeedVideo): string {
@@ -40,11 +41,13 @@ function formatDuration(totalSeconds: number): string {
  * タイトル・外部リンクアイコンからプラットフォームの視聴ページへ遷移できる
  */
 export function FeedVideoCard({ video }: { video: FeedVideo }) {
+  const t = useT();
+  const locale = useLocale();
   const [isPlaying, setIsPlaying] = useState(false);
 
   const isYouTube = video.platform === "youtube";
   const watchUrl = getFeedVideoUrl(video);
-  const showName = video.displayName || video.channelTitle || "Unknown";
+  const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
   const platformName = isYouTube ? "YouTube" : "Twitch";
   const thumbnailUrl =
     video.thumbnailUrl ||
@@ -133,7 +136,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="truncate">{showName}</span>
           )}
           <span className="flex shrink-0 items-center gap-2">
-            {formatRelativeTimeInHours(video.publishedAt)}
+            {formatRelativeTimeInHours(t, video.publishedAt)}
             <a
               href={watchUrl}
               target="_blank"

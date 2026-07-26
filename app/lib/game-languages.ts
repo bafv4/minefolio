@@ -1,11 +1,16 @@
-import { t } from "@/lib/messages";
+import type { MessageKey, Translator } from "@/lib/messages";
+import type { Locale } from "@/lib/locale";
 
 // Minecraftゲーム内言語リスト（公式Wiki準拠）
 // native: ゲーム内表記、ja: 日本語名（native と同じ・冗長な場合は省略）
 // 入力（Combobox）と表示（プロフィール等）の両方で共通利用する
 type GameLanguageDef = {
   value: string;
-  native: string;
+  /** 自称表記（原語）。翻訳が要るものだけ nativeKey を使う */
+  native?: string;
+  /** 翻訳キー（日本語・中国語など、UIロケールで表記を切り替えたいもの） */
+  nativeKey?: MessageKey;
+  /** 和名。日本語UIでのみ併記する */
   ja?: string;
 };
 
@@ -73,7 +78,7 @@ const GAME_LANGUAGE_DEFS: GameLanguageDef[] = [
   { value: "is_is", native: "Íslenska", ja: "アイスランド語" },
   { value: "isv", native: "Interslavic", ja: "汎スラヴ語" },
   { value: "it_it", native: "Italiano", ja: "イタリア語" },
-  { value: "ja_jp", native: t("common.langJaJp") },
+  { value: "ja_jp", nativeKey: "common.langJaJp" as const },
   { value: "jbo_en", native: "la .lojban.", ja: "ロジバン" },
   { value: "ka_ge", native: "ქართული", ja: "ジョージア語" },
   { value: "kk_kz", native: "Қазақша", ja: "カザフ語" },
@@ -89,7 +94,7 @@ const GAME_LANGUAGE_DEFS: GameLanguageDef[] = [
   { value: "lol_us", native: "LOLCAT" },
   { value: "lt_lt", native: "Lietuvių", ja: "リトアニア語" },
   { value: "lv_lv", native: "Latviešu", ja: "ラトビア語" },
-  { value: "lzh", native: t("common.langLzh"), ja: "漢文" },
+  { value: "lzh", nativeKey: "common.langLzh" as const, ja: "漢文" },
   { value: "mk_mk", native: "Македонски", ja: "マケドニア語" },
   { value: "mn_mn", native: "Монгол", ja: "モンゴル語" },
   { value: "ms_my", native: "Bahasa Melayu", ja: "マレー語" },
@@ -133,28 +138,38 @@ const GAME_LANGUAGE_DEFS: GameLanguageDef[] = [
   { value: "vi_vn", native: "Tiếng Việt", ja: "ベトナム語" },
   { value: "yi_de", native: "ייִדיש", ja: "イディッシュ語" },
   { value: "yo_ng", native: "Yorùbá", ja: "ヨルバ語" },
-  { value: "zh_cn", native: t("common.langZhCn"), ja: "中国語（簡体字）" },
-  { value: "zh_hk", native: t("common.langZhHk"), ja: "中国語（繁体字・香港）" },
-  { value: "zh_tw", native: t("common.langZhTwTaiwan"), ja: "中国語（繁体字・台湾）" },
+  { value: "zh_cn", nativeKey: "common.langZhCn" as const, ja: "中国語（簡体字）" },
+  { value: "zh_hk", nativeKey: "common.langZhHk" as const, ja: "中国語（繁体字・香港）" },
+  { value: "zh_tw", nativeKey: "common.langZhTwTaiwan" as const, ja: "中国語（繁体字・台湾）" },
   { value: "zlm_arab", native: "بهاس ملايو (جاوي)", ja: "マレー語（ジャウィ文字）" },
 ];
 
 /** ゲーム内表記に日本語名を併記した表示ラベルを構築する（例: "Svenska（スウェーデン語）"） */
-function buildLanguageLabel(def: GameLanguageDef): string {
-  return def.ja && def.ja !== def.native ? `${def.native}（${def.ja}）` : def.native;
+/** 自称表記。翻訳キーを持つものだけ t で解決する（大半は原語表記のまま） */
+function nativeName(t: Translator, def: GameLanguageDef): string {
+  return "nativeKey" in def && def.nativeKey ? t(def.nativeKey as MessageKey) : (def.native ?? def.value);
 }
 
-export const GAME_LANGUAGE_OPTIONS = GAME_LANGUAGE_DEFS.map((def) => ({
-  value: def.value,
-  label: buildLanguageLabel(def),
-}));
+// 併記する和名は日本語UIでのみ意味があるため、英語では自称表記だけを出す
+function buildLanguageLabel(t: Translator, locale: Locale, def: GameLanguageDef): string {
+  const native = nativeName(t, def);
+  if (locale !== "ja") return native;
+  return def.ja && def.ja !== native ? `${native}（${def.ja}）` : native;
+}
 
-// 言語コード→Mapを構築（逆引き用）
-const GAME_LANGUAGE_MAP = new Map(
-  GAME_LANGUAGE_OPTIONS.map((opt) => [opt.value, opt.label])
-);
+/** 言語の選択肢。ロケール依存なので描画時に組み立てる */
+export function gameLanguageOptions(
+  t: Translator,
+  locale: Locale,
+): { value: string; label: string }[] {
+  return GAME_LANGUAGE_DEFS.map((def) => ({
+    value: def.value,
+    label: buildLanguageLabel(t, locale, def),
+  }));
+}
 
-/** 言語コードから表示名（日本語名併記）を取得する。未知のコードはそのまま返す */
-export function getGameLanguageName(code: string): string {
-  return GAME_LANGUAGE_MAP.get(code.toLowerCase()) ?? code;
+/** 言語コードから表示名を取得する。未知のコードはそのまま返す */
+export function getGameLanguageName(t: Translator, locale: Locale, code: string): string {
+  const def = GAME_LANGUAGE_DEFS.find((d) => d.value === code.toLowerCase());
+  return def ? buildLanguageLabel(t, locale, def) : code;
 }

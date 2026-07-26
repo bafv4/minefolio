@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { redirect, useLoaderData } from "react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Route } from "./+types/secret-grid";
@@ -7,13 +9,16 @@ import { excludeViewersCondition } from "@/lib/users-filter";
 import { and, desc, eq } from "drizzle-orm";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { warmAvatars } from "@/lib/avatar-cache";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Sparkles } from "lucide-react";
 
-export const meta: Route.MetaFunction = () => [
-  { title: t("secretGrid.title") },
-  { name: "robots", content: "noindex" },
-];
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  return [
+    { title: t("secretGrid.title") },
+    { name: "robots", content: "noindex" },
+  ];
+};
 
 // プールから重複アリで4件をランダム抽出する（同じプレイヤーが複数セルに出てもよい）。
 function pickFour<T>(pool: T[]): T[] {
@@ -39,6 +44,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       pronouns: true,
       role: true,
       mainEdition: true,
@@ -55,6 +61,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function SecretGridPage() {
+  const t = useT();
   const { pool } = useLoaderData<typeof loader>();
   const [cells, setCells] = useState<ProfileFeedCardPlayer[]>(() => pool.slice(0, 4));
   const containerRef = useRef<HTMLDivElement>(null);

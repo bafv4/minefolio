@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { getActionLabel } from "@/lib/keybindings";
 import { calculateCm360, calculateCursorSpeed } from "@/lib/mouse-settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { t } from "@/lib/messages";
+import type { Translator } from "@/lib/messages";
 import {
   ActionKeyCell,
   buildCustomKeyNames,
@@ -31,6 +31,7 @@ export type KeybindingsRow = {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   customSkinUrl: string | null;
   keybindings: Array<{
     id: string;
@@ -48,14 +49,14 @@ export type KeybindingsRow = {
  * 共通: 走者列（左端 sticky）
  * ========================================================== */
 
-const runnerColumn: ColumnDef<KeybindingsRow> = {
+const runnerColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
   id: "runner",
   header: () => t("keybindings.columnRunner"),
   cell: ({ row }) => <RunnerCell player={row.original} />,
   enableSorting: false,
   size: 224,
   minSize: 140,
-};
+});
 
 /* ============================================================
  * アクション列ジェネレーター
@@ -63,15 +64,15 @@ const runnerColumn: ColumnDef<KeybindingsRow> = {
  * ========================================================== */
 
 /** アクション 1 件分のキー表示列を生成 */
-function actionColumn(action: string): ColumnDef<KeybindingsRow> {
+function actionColumn(t: Translator, action: string): ColumnDef<KeybindingsRow> {
   return {
     id: `action.${action}`,
     header: () => (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span>{getActionLabel(action)}</span>
+          <span>{getActionLabel(t, action)}</span>
         </TooltipTrigger>
-        <TooltipContent>{getActionLabel(action)}</TooltipContent>
+        <TooltipContent>{getActionLabel(t, action)}</TooltipContent>
       </Tooltip>
     ),
     accessorFn: (row) =>
@@ -90,7 +91,7 @@ function actionColumn(action: string): ColumnDef<KeybindingsRow> {
   };
 }
 
-const hotbarColumn: ColumnDef<KeybindingsRow> = {
+const hotbarColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
   id: "action.hotbar",
   header: () => (
     <Tooltip>
@@ -112,26 +113,26 @@ const hotbarColumn: ColumnDef<KeybindingsRow> = {
   size: 360,
   minSize: 140,
   meta: { align: "left" as const },
-};
+});
 
 // 移動: 前進・後退・左右・ジャンプ・スニーク・ダッシュ
-export const movementColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
-  ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map(actionColumn),
+const movementColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
+  ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map((a) => actionColumn(t, a)),
 ];
 
 // インベントリ: ホットバー（集約）・オフハンド・インベントリ・ブロック選択・ドロップ
-export const inventoryColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
-  hotbarColumn,
-  ...["swapHands", "inventory", "pickBlock", "drop"].map(actionColumn),
+const inventoryColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
+  hotbarColumn(t),
+  ...["swapHands", "inventory", "pickBlock", "drop"].map((a) => actionColumn(t, a)),
 ];
 
 // 戦闘・UI: 攻撃・使用・視点切替・チャット・コマンド・全画面
-export const combatUiColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const combatUiColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   ...["attack", "use", "togglePerspective", "chat", "command", "fullscreen"].map(
-    actionColumn,
+    (a: string) => actionColumn(t, a),
   ),
 ];
 
@@ -139,8 +140,8 @@ export const combatUiColumns: ColumnDef<KeybindingsRow>[] = [
  * remaps プリセット
  * ========================================================== */
 
-export const remapsColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const remapsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "remaps",
     header: () => t("keybindings.remapsTab"),
@@ -161,8 +162,8 @@ export const remapsColumns: ColumnDef<KeybindingsRow>[] = [
  * custom-actions プリセット
  * ========================================================== */
 
-export const customActionsColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const customActionsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "custom-actions",
     header: () => t("keybindings.customActionsTab"),
@@ -181,6 +182,14 @@ export const customActionsColumns: ColumnDef<KeybindingsRow>[] = [
  * mouse プリセット（数値列のみソート可）
  * ========================================================== */
 
+/**
+ * ソート用アクセサの値。
+ * TanStack Table の `sortUndefined` は `undefined` だけを見る（null は素通りして
+ * 通常の比較に回る）ため、未設定は必ず undefined に寄せる。これにより
+ * `sortUndefined: "last"` が昇順・降順の両方で効き、未設定行が常に末尾へ落ちる。
+ */
+const forSort = <T,>(value: T | null | undefined): T | undefined => value ?? undefined;
+
 const sensitivityPercent = (config: MouseConfig): number | null =>
   config?.gameSensitivity != null
     ? Math.floor(config.gameSensitivity * 200)
@@ -193,12 +202,12 @@ const windowsMultiplier = (config: MouseConfig): number | null => {
   return config.windowsSpeed;
 };
 
-export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "mouse.dpi",
     header: () => "DPI",
-    accessorFn: (row) => row.playerConfig?.mouseDpi ?? null,
+    accessorFn: (row) => forSort(row.playerConfig?.mouseDpi),
     cell: ({ row }) => <DpiCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -220,7 +229,7 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
         <TooltipContent>{t("keybindings.inGameSensitivityRange")}</TooltipContent>
       </Tooltip>
     ),
-    accessorFn: (row) => sensitivityPercent(row.playerConfig),
+    accessorFn: (row) => forSort(sensitivityPercent(row.playerConfig)),
     cell: ({ row }) => <SensitivityCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -244,15 +253,16 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
     ),
     accessorFn: (row) => {
       const config = row.playerConfig;
-      return config
-        ? calculateCm360(
-            config.mouseDpi,
-            config.gameSensitivity,
-            config.rawInput,
-            config.windowsSpeed,
-            config.windowsSpeedMultiplier,
-          )
-        : null;
+      if (!config) return undefined;
+      return forSort(
+        calculateCm360(
+          config.mouseDpi,
+          config.gameSensitivity,
+          config.rawInput,
+          config.windowsSpeed,
+          config.windowsSpeedMultiplier,
+        ),
+      );
     },
     cell: ({ row }) => <Cm360Cell config={row.original.playerConfig} />,
     enableSorting: true,
@@ -263,7 +273,7 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
   {
     id: "mouse.windowsSpeed",
     header: () => "Win Sens",
-    accessorFn: (row) => windowsMultiplier(row.playerConfig),
+    accessorFn: (row) => forSort(windowsMultiplier(row.playerConfig)),
     cell: ({ row }) => <WindowsSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -275,13 +285,14 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
     header: () => "Cursor Speed",
     accessorFn: (row) => {
       const config = row.playerConfig;
-      return config
-        ? calculateCursorSpeed(
-            config.mouseDpi,
-            config.windowsSpeed,
-            config.windowsSpeedMultiplier,
-          )
-        : null;
+      if (!config) return undefined;
+      return forSort(
+        calculateCursorSpeed(
+          config.mouseDpi,
+          config.windowsSpeed,
+          config.windowsSpeedMultiplier,
+        ),
+      );
     },
     cell: ({ row }) => <CursorSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
@@ -308,13 +319,16 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
 ];
 
 /** プリセット名 → ColumnDef（プリセット名は TAB_OPTIONS と一致） */
-export const COLUMN_PRESETS = {
-  movement: movementColumns,
-  inventory: inventoryColumns,
-  "combat-ui": combatUiColumns,
-  remaps: remapsColumns,
-  "custom-actions": customActionsColumns,
-  mouse: mouseColumns,
-} as const;
+/** プリセット名 → ColumnDef。ヘッダーの文言がロケール依存なので描画時に組み立てる */
+export function columnPresets(t: Translator) {
+  return {
+    movement: movementColumns(t),
+    inventory: inventoryColumns(t),
+    "combat-ui": combatUiColumns(t),
+    remaps: remapsColumns(t),
+    "custom-actions": customActionsColumns(t),
+    mouse: mouseColumns(t),
+  } as const;
+}
 
-export type PresetKey = keyof typeof COLUMN_PRESETS;
+export type PresetKey = keyof ReturnType<typeof columnPresets>;

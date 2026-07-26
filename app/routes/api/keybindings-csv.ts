@@ -1,5 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
+import { createTranslator } from "@/lib/messages";
+import { resolveLocale } from "@/lib/locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
@@ -26,6 +29,9 @@ function escapeCsv(v: string): string {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // CSV のヘッダー・ラベルは閲覧者のロケールに合わせる
+  const locale = resolveLocale(request);
+  const t = createTranslator(locale);
   const url = new URL(request.url);
   const sections = url.searchParams.get("sections")?.split(",") ?? ["actions"];
   // 個別指定: userSlugs=slug1,slug2 のように指定すると対象を絞り込む。未指定なら全公開ユーザー。
@@ -42,12 +48,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     slugs: userSlugs ?? undefined,
   });
 
-  const playerName = (p: typeof players[0]) => p.displayName ?? p.mcid ?? p.slug;
+  const playerName = (p: typeof players[0]) => getLocalizedDisplayName(p, locale);
 
   const csvBlocks: string[] = [];
 
   if (sections.includes("actions")) {
-    const header = ["Player", ...KEYBOARD_ACTIONS.map((a) => getActionLabel(a))];
+    const header = ["Player", ...KEYBOARD_ACTIONS.map((a) => getActionLabel(t, a))];
     csvBlocks.push(header.map(escapeCsv).join(","));
     for (const player of players) {
       const keybindMap = new Map(player.keybindings.map((kb) => [kb.action, kb.keyCode]));
@@ -58,8 +64,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           const keyCode = keybindMap.get(action);
           if (!keyCode || isUnbound(keyCode)) return "";
           return keyCode.includes("+")
-            ? getKeyCombinationLabel(keyCode, layout)
-            : getKeyLabel(keyCode, layout);
+            ? getKeyCombinationLabel(t, keyCode, layout)
+            : getKeyLabel(t, keyCode, layout);
         }),
       ];
       csvBlocks.push(row.map(escapeCsv).join(","));
@@ -72,11 +78,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     for (const player of players) {
       const layout = player.playerConfig?.keyboardLayout;
       for (const remap of player.keyRemaps) {
-        const source = getRemapSourceLabel(remap.sourceKey, layout);
+        const source = getRemapSourceLabel(t, remap.sourceKey, layout);
         const target = remap.targetKey
           ? (remap.targetKey.includes("+")
-            ? getKeyCombinationLabel(remap.targetKey, layout)
-            : getKeyLabel(remap.targetKey, layout))
+            ? getKeyCombinationLabel(t, remap.targetKey, layout)
+            : getKeyLabel(t, remap.targetKey, layout))
           : "(disabled)";
         // 未設定は空欄、それ以外は小文字enum値のまま出力
         const type = remap.remapType === "unset" ? "" : remap.remapType;
@@ -91,7 +97,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     for (const player of players) {
       const layout = player.playerConfig?.keyboardLayout;
       for (const action of player.customActions) {
-        const key = getKeyCombinationLabel(action.triggerKey, layout);
+        const key = getKeyCombinationLabel(t, action.triggerKey, layout);
         csvBlocks.push([playerName(player), key, action.actionName].map(escapeCsv).join(","));
       }
     }

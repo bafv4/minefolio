@@ -1,6 +1,7 @@
 // インライン整形のバブルメニュー（太字 / 斜体 / 取り消し線 / コード / リンク / 文字色）。
 // 旧実装の手動 position:fixed フローティングメニューを @tiptap/extension-bubble-menu に置換。
 // 空選択時・画像/コードブロック選択時・モバイル時は非表示。
+import { useT } from "@/hooks/use-locale";
 import { useCallback } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/core";
@@ -8,6 +9,7 @@ import { CellSelection } from "@tiptap/pm/tables";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
+import { FontSizePicker } from "../panels/font-size-picker";
 import { useEditorRerender } from "../hooks/use-editor-rerender";
 import { EDITOR_Z } from "../constants";
 
@@ -24,6 +26,7 @@ interface EditorBubbleMenuProps {
 }
 
 export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbleMenuProps) {
+  const t = useT();
   useEditorRerender(editor);
 
   // 安定参照（編集位置の判定は呼び出し時に live state を読むため問題ない）
@@ -45,13 +48,13 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       shouldShow={shouldShow}
       options={BUBBLE_OPTIONS}
       role="toolbar"
-      aria-label="テキスト整形"
+      aria-label={t("guideEditor.ui.textFormatting")}
       className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-xl"
       style={{ zIndex: EDITOR_Z.bubble }}
     >
       <ToolbarButton
         sm
-        label="太字"
+        label={t("guideEditor.bold")}
         shortcut="Ctrl B"
         active={editor.isActive("bold")}
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -60,7 +63,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       </ToolbarButton>
       <ToolbarButton
         sm
-        label="斜体"
+        label={t("guideEditor.italic")}
         shortcut="Ctrl I"
         active={editor.isActive("italic")}
         onClick={() => editor.chain().focus().toggleItalic().run()}
@@ -69,7 +72,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       </ToolbarButton>
       <ToolbarButton
         sm
-        label="下線"
+        label={t("guideEditor.toolbar.underline")}
         shortcut="Ctrl U"
         active={editor.isActive("underline")}
         onClick={() => editor.chain().focus().toggleUnderline().run()}
@@ -78,7 +81,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       </ToolbarButton>
       <ToolbarButton
         sm
-        label="取り消し線"
+        label={t("guideEditor.ui.strikethrough")}
         shortcut="Ctrl Shift S"
         active={editor.isActive("strike")}
         onClick={() => editor.chain().focus().toggleStrike().run()}
@@ -87,7 +90,7 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
       </ToolbarButton>
       <ToolbarButton
         sm
-        label="インラインコード"
+        label={t("guideEditor.ui.inlineCode")}
         shortcut="Ctrl E"
         active={editor.isActive("code")}
         onClick={() => editor.chain().focus().toggleCode().run()}
@@ -97,9 +100,10 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
 
       <ToolbarSeparator />
 
-      <ToolbarButton sm label="リンク" active={editor.isActive("link")} onClick={onLink}>
+      <ToolbarButton sm label={t("guideEditor.link")} active={editor.isActive("link")} onClick={onLink}>
         <LinkIcon className="h-4 w-4" />
       </ToolbarButton>
+      <FontSizePicker editor={editor} />
       <InlineColorPicker editor={editor} />
     </BubbleMenu>
   );

@@ -13,6 +13,7 @@ Minefolio が提供する公開 API の仕様書です。認証なしで利用�
 | `/api/favorites`       | GET      | 任意 | お気に入り一覧取得（未認証時は空配列）            |
 | `/api/favorites`       | POST     | 必須 | お気に入りの追加・削除                            |
 | `/api/favorites`       | PUT      | 必須 | localStorage→DB の一括同期                        |
+| `/api/likes`           | POST     | 必須 | ガイド・テンプレートのいいね追加/解除             |
 | `/api/users/by-slugs`  | POST     | 不要 | スラッグ配列からユーザー詳細を取得                |
 | `/api/home-feed`       | GET      | 不要 | ホームフィード（ライブ・ペース・動画・配信）      |
 | `/api/keybindings-csv` | GET      | 不要 | 公開プロフィールの設定データを CSV でエクスポート |
@@ -126,6 +127,30 @@ Minecraft スキン画像を返す。
 
 ---
 
+## `POST /api/likes`
+
+ガイド・サーチクラフトテンプレートへの「いいね」を追加・解除する。**認証必須**。
+
+**リクエストボディ:**
+
+```json
+{ "targetType": "guide", "targetId": "<id>", "action": "like" }
+```
+
+- `targetType`: `guide` または `template`
+- `targetId`: ガイド／テンプレートの ID（スラッグではない）
+- `action`: `like`（いいねする）または `unlike`（解除）。絶対指定なので再送しても状態がずれない
+
+**レスポンス:**
+
+```json
+{ "liked": true, "count": 3 }
+```
+
+**エラー:** 400（リクエスト不正）/ 401（未ログイン）/ 403（自分の投稿）/ 404（対象なし・未公開・著者が非公開）/ 405（POST以外）
+
+---
+
 ## `POST /api/users/by-slugs`
 
 スラッグ配列から複数ユーザーの基本情報を取得する。最大 100 件。
@@ -146,6 +171,7 @@ Minecraft スキン画像を返す。
       "mcid": "...",
       "uuid": "...",
       "displayName": "...",
+      "displayNameAlphabet": "...",
       "shortBio": "...",
       "location": "...",
       "updatedAt": "...",

@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/favorites";
 import { useEffect, useState } from "react";
@@ -15,19 +16,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, Users, ArrowLeft, Cookie, Loader2 } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import { localeFromMatches } from "@/lib/locale";
 
 type FavoritePlayer = {
   mcid: string | null;
   uuid: string | null;
   slug: string;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   shortBio: string | null;
   location: string | null;
   updatedAt: Date;
 };
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("favorites.metaTitle");
   const description = t("favorites.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -78,6 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       shortBio: true,
       location: true,
       updatedAt: true,
@@ -94,6 +99,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function FavoritesPage() {
+  const t = useT();
   const { players: ssrPlayers, isLoggedIn } = useLoaderData<typeof loader>();
   const { hasConsent, acceptCookies } = useCookieConsent();
 
@@ -205,6 +211,7 @@ export default function FavoritesPage() {
 }
 
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

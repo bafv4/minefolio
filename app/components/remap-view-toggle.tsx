@@ -1,6 +1,6 @@
 import type { RemapContext } from "@/lib/remap-utils";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /**
  * 仮想キーボードの Trigger/Chat 表示切替セグメント。
@@ -15,6 +15,7 @@ export function RemapViewToggle({
   onChange: (value: RemapContext) => void;
   className?: string;
 }) {
+  const t = useT();
   return (
     <div
       role="group"

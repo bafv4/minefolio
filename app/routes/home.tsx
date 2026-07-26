@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, Link, useNavigate } from "react-router";
 import { useEffect, useReducer, memo, useMemo, useCallback, useState } from "react";
 import type { Route } from "./+types/home";
@@ -9,13 +10,14 @@ import { users, guides } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
-import { GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
+import { GuideCardGrid, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
@@ -23,7 +25,9 @@ import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video"
 import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { localeFromMatches } from "@/lib/locale";
+import { pickDisplayName } from "@/lib/slug";
 import {
   ArrowRight,
   Play,
@@ -38,7 +42,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const title = t("home.title");
   const description = t("home.heroDescription");
@@ -99,7 +104,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
   // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
-  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToSkinUrl } =
+  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
     await getUserData();
 
   // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
@@ -113,6 +118,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       pronouns: true,
       role: true,
       mainEdition: true,
@@ -136,9 +142,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       tags: guides.tags,
       coverImageUrl: guides.coverImageUrl,
       viewCount: guides.viewCount,
+      likeCount: guideLikeCountSql(),
       updatedAt: guides.updatedAt,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
+      authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
     })
     .from(guides)
@@ -169,6 +177,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToUuid,
     mcidToSlug,
     mcidToDisplayName,
+    mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
@@ -190,6 +199,7 @@ interface RecentPacesResponse {
   recentPaces: CachedPace[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToDisplayNameAlphabet: Record<string, string>;
 }
 
 interface LiveRunsResponse {
@@ -206,6 +216,7 @@ interface FeedState {
   liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
   loading: {
     videos: boolean;
@@ -224,7 +235,7 @@ interface FeedState {
 type FeedAction =
   | { type: "SET_VIDEOS"; payload: FeedVideo[] }
   | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
-  | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string> } }
+  | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string>; mcidToDisplayNameAlphabet?: Record<string, string> } }
   | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
 
@@ -235,6 +246,7 @@ const initialFeedState: FeedState = {
   liveRuns: [],
   mcidToUuid: {},
   mcidToDisplayName: {},
+  mcidToDisplayNameAlphabet: {},
   mcidToSkinUrl: {},
   loading: {
     videos: true,
@@ -274,6 +286,9 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         mcidToDisplayName: action.payload.mcidToDisplayName
           ? { ...state.mcidToDisplayName, ...action.payload.mcidToDisplayName }
           : state.mcidToDisplayName,
+        mcidToDisplayNameAlphabet: action.payload.mcidToDisplayNameAlphabet
+          ? { ...state.mcidToDisplayNameAlphabet, ...action.payload.mcidToDisplayNameAlphabet }
+          : state.mcidToDisplayNameAlphabet,
         loading: { ...state.loading, paces: false },
       };
     case "SET_LIVE_RUNS":
@@ -328,6 +343,8 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
 });
 
 export default function HomePage() {
+  const t = useT();
+  const locale = useLocale();
   const {
     isRegistered,
     currentUser,
@@ -335,6 +352,7 @@ export default function HomePage() {
     mcidToUuid,
     mcidToSlug,
     mcidToDisplayName,
+    mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     recentGuides,
@@ -459,6 +477,7 @@ export default function HomePage() {
 
   const pacesMcidToUuid = feed.mcidToUuid;
   const pacesMcidToDisplayName = feed.mcidToDisplayName;
+  const pacesMcidToDisplayNameAlphabet = feed.mcidToDisplayNameAlphabet;
 
   // 遅延読み込み（Promise.allで並列化）
   useEffect(() => {
@@ -495,6 +514,7 @@ export default function HomePage() {
               recentPaces: data.recentPaces || [],
               mcidToUuid: data.mcidToUuid,
               mcidToDisplayName: data.mcidToDisplayName,
+              mcidToDisplayNameAlphabet: data.mcidToDisplayNameAlphabet,
             },
           });
         })
@@ -623,13 +643,20 @@ export default function HomePage() {
             </Button>
           </div>
           <GuideCardGrid
-            guides={recentGuides.map((g) => ({
-              ...g,
-              authorName: g.authorDisplayName || g.authorMcid || g.authorSlug,
-              _authorSlug: g.authorSlug,
-            })) as (GuideItem & { _authorSlug: string })[]}
+            guides={recentGuides.map(
+              (g): GuideItemWithAuthorSlug => ({
+                ...g,
+                likeCount: Number(g.likeCount),
+                authorName:
+                  pickDisplayName(
+                    { displayName: g.authorDisplayName, displayNameAlphabet: g.authorDisplayNameAlphabet },
+                    locale,
+                  ) || g.authorMcid || g.authorSlug,
+                _authorSlug: g.authorSlug,
+              }),
+            )}
             linkFn={(guide) => {
-              const item = guide as GuideItem & { _authorSlug: string };
+              const item = guide as GuideItemWithAuthorSlug;
               return `/guides/${item._authorSlug}/${guide.slug}`;
             }}
             gridCols="md:grid-cols-2 lg:grid-cols-4"
@@ -684,6 +711,7 @@ export default function HomePage() {
                 mcidToSlug={mcidToSlug}
                 mcidToUuid={mergedMcidToUuid}
                 mcidToDisplayName={mcidToDisplayName}
+                mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
                 mcidToSkinUrl={mergedMcidToSkinUrl}
               />
             ) : (
@@ -722,7 +750,11 @@ export default function HomePage() {
                     key={`${run.mcid}-${run.time}-${run.timeline}`}
                     run={run}
                     uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-                    displayName={pacesMcidToDisplayName[run.mcid.toLowerCase()]}
+                    displayName={
+                      (locale !== "ja"
+                        ? pacesMcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
+                        : undefined) ?? pacesMcidToDisplayName[run.mcid.toLowerCase()]
+                    }
                     skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
                   />
                 ))}

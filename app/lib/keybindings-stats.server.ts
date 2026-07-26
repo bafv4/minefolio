@@ -6,34 +6,37 @@ import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { calculateCm360 } from "./mouse-settings";
-import { getActionLabel } from "./keybindings";
-import { t } from "./messages";
+import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
+// 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
+import { UNASSIGNED_INPUT_KEY } from "./keybindings-stats-shared";
 
-// 主要なアクション（集計対象）
+export { UNASSIGNED_INPUT_KEY };
+
+// 主要なアクション（集計対象）。ラベルはロケール依存なのでキーで持ち、描画時に解決する
 export const TRACKED_ACTIONS = [
-  { action: "forward", label: getActionLabel("forward") },
-  { action: "back", label: getActionLabel("back") },
-  { action: "left", label: getActionLabel("left") },
-  { action: "right", label: getActionLabel("right") },
-  { action: "sprint", label: getActionLabel("sprint") },
-  { action: "sneak", label: getActionLabel("sneak") },
-  { action: "jump", label: getActionLabel("jump") },
-  { action: "inventory", label: getActionLabel("inventory") },
-  { action: "swapHands", label: getActionLabel("swapHands") },
-  { action: "drop", label: getActionLabel("drop") },
-  { action: "pickBlock", label: getActionLabel("pickBlock") },
-  { action: "attack", label: getActionLabel("attack") },
-  { action: "use", label: getActionLabel("use") },
-  { action: "hotbar1", label: getActionLabel("hotbar1") },
-  { action: "hotbar2", label: getActionLabel("hotbar2") },
-  { action: "hotbar3", label: getActionLabel("hotbar3") },
-  { action: "hotbar4", label: getActionLabel("hotbar4") },
-  { action: "hotbar5", label: getActionLabel("hotbar5") },
-  { action: "hotbar6", label: getActionLabel("hotbar6") },
-  { action: "hotbar7", label: getActionLabel("hotbar7") },
-  { action: "hotbar8", label: getActionLabel("hotbar8") },
-  { action: "hotbar9", label: getActionLabel("hotbar9") },
+  { action: "forward", labelKey: "actionLabels.forward" as const },
+  { action: "back", labelKey: "actionLabels.back" as const },
+  { action: "left", labelKey: "actionLabels.left" as const },
+  { action: "right", labelKey: "actionLabels.right" as const },
+  { action: "sprint", labelKey: "actionLabels.sprint" as const },
+  { action: "sneak", labelKey: "actionLabels.sneak" as const },
+  { action: "jump", labelKey: "actionLabels.jump" as const },
+  { action: "inventory", labelKey: "actionLabels.inventory" as const },
+  { action: "swapHands", labelKey: "actionLabels.swapHands" as const },
+  { action: "drop", labelKey: "actionLabels.drop" as const },
+  { action: "pickBlock", labelKey: "actionLabels.pickBlock" as const },
+  { action: "attack", labelKey: "actionLabels.attack" as const },
+  { action: "use", labelKey: "actionLabels.use" as const },
+  { action: "hotbar1", labelKey: "actionLabels.hotbar1" as const },
+  { action: "hotbar2", labelKey: "actionLabels.hotbar2" as const },
+  { action: "hotbar3", labelKey: "actionLabels.hotbar3" as const },
+  { action: "hotbar4", labelKey: "actionLabels.hotbar4" as const },
+  { action: "hotbar5", labelKey: "actionLabels.hotbar5" as const },
+  { action: "hotbar6", labelKey: "actionLabels.hotbar6" as const },
+  { action: "hotbar7", labelKey: "actionLabels.hotbar7" as const },
+  { action: "hotbar8", labelKey: "actionLabels.hotbar8" as const },
+  { action: "hotbar9", labelKey: "actionLabels.hotbar9" as const },
 ] as const;
 
 // DPI 区分（11段階）
@@ -86,12 +89,14 @@ export interface PlayerInfo {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   customSkinUrl: string | null;
 }
 
 export interface KeybindingStats {
   action: string;
-  label: string;
+  /** ラベルは翻訳キーで返し、描画側（useT）で解決する */
+  labelKey: MessageKey;
   topKeys: Array<{ keyCode: string; count: number; percentage: number; players: PlayerInfo[] }>;
   totalCount: number;
 }
@@ -196,6 +201,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keybindings)
@@ -215,7 +221,7 @@ export async function loadKeybindingsStats(
     const keyGroups = new Map<string, PlayerInfo[]>();
     for (const r of results) {
       const players = keyGroups.get(r.keyCode) ?? [];
-      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
+      players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, displayNameAlphabet: r.displayNameAlphabet, customSkinUrl: r.customSkinUrl });
       keyGroups.set(r.keyCode, players);
     }
 
@@ -232,7 +238,7 @@ export async function loadKeybindingsStats(
 
     keybindingStats.push({
       action: tracked.action,
-      label: tracked.label,
+      labelKey: tracked.labelKey,
       topKeys,
       totalCount,
     });
@@ -247,6 +253,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keyRemaps)
@@ -261,12 +268,13 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(keybindings)
     .innerJoin(users, eq(keybindings.userId, users.id))
     .where(publicCondition)
-    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.customSkinUrl);
+    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl);
 
   const f3DefaultUsers = usersWithKeybindingsData.filter(
     (u) => !remappedToF3UserIds.has(u.userId),
@@ -281,15 +289,17 @@ export async function loadKeybindingsStats(
         mcid: u.mcid,
         uuid: u.uuid,
         displayName: u.displayName,
+        displayNameAlphabet: u.displayNameAlphabet,
         customSkinUrl: u.customSkinUrl,
       })),
     );
   }
 
   for (const r of f3InputRemaps) {
-    const inputKey = r.sourceKey ?? t("meKeybindings.unassigned");
+    // sourceKey が無い行のグループ化キー。表示は描画側が unassigned を訳す
+    const inputKey = r.sourceKey ?? UNASSIGNED_INPUT_KEY;
     const players = f3Groups.get(inputKey) ?? [];
-    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
+    players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, displayNameAlphabet: r.displayNameAlphabet, customSkinUrl: r.customSkinUrl });
     f3Groups.set(inputKey, players);
   }
 
@@ -319,6 +329,7 @@ export async function loadKeybindingsStats(
       mcid: users.mcid,
       uuid: users.uuid,
       displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
       customSkinUrl: users.customSkinUrl,
     })
     .from(playerConfigs)
@@ -342,6 +353,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -387,6 +399,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -428,6 +441,7 @@ export async function loadKeybindingsStats(
         mcid: c.mcid,
         uuid: c.uuid,
         displayName: c.displayName,
+        displayNameAlphabet: c.displayNameAlphabet,
         customSkinUrl: c.customSkinUrl,
       })),
     };
@@ -457,6 +471,7 @@ export async function loadKeybindingsStats(
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      displayNameAlphabet: c.displayNameAlphabet,
       customSkinUrl: c.customSkinUrl,
     })),
     offPlayers: offConfigs.map((c) => ({
@@ -464,6 +479,7 @@ export async function loadKeybindingsStats(
       mcid: c.mcid,
       uuid: c.uuid,
       displayName: c.displayName,
+      displayNameAlphabet: c.displayNameAlphabet,
       customSkinUrl: c.customSkinUrl,
     })),
   };

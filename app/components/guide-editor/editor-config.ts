@@ -8,6 +8,7 @@ import { Link as Link2 } from "@tiptap/extension-link";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import { FontSize } from "@tiptap/extension-text-style/font-size";
 import { Highlight } from "@tiptap/extension-highlight";
 import { CustomCodeBlock } from "./extensions/code-block";
 import { CustomTable, CustomTableCell, CustomTableHeader } from "./extensions/table";
@@ -40,6 +41,9 @@ export function buildExtensions(placeholder = ""): Extensions {
     CustomYoutube,
     TextStyle,
     Color,
+    // 文字サイズ（段階指定）。textStyle マークの属性として <span style="font-size: …"> を出す。
+    // 許可する段階は app/lib/guide-font-sizes.ts が単一情報源
+    FontSize,
     Highlight.configure({ multicolor: true }),
     CalloutExtension,
     ToggleListExtension,

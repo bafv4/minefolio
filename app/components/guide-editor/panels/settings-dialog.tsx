@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
-import { normalizeSlug } from "@/lib/guide-slug";
-import { t } from "@/lib/messages";
+import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
+import { useT } from "@/hooks/use-locale";
 
 export interface GuideSettingsValues {
   title: string;
@@ -42,17 +42,6 @@ interface SettingsDialogProps {
   onApply: (values: GuideSettingsValues) => void;
 }
 
-/**
- * 入力欄用の「ゆるい」正規化（タイプ中に文字が消えないよう、ハイフンの圧縮・前後trimは行わない）。
- * 確定値は反映時に normalizeSlug() で厳密化する。
- */
-function softNormalizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-");
-}
-
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -63,6 +52,7 @@ export function SettingsDialog({
   uploadError,
   onApply,
 }: SettingsDialogProps) {
+  const t = useT();
   // ── モーダル内ローカル State ──
   const [title, setTitle] = useState(initialValues.title);
   const [summary, setSummary] = useState(initialValues.summary);
@@ -101,9 +91,9 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>ガイド設定</DialogTitle>
+          <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>
-            タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」で編集中の内容へ反映されます（保存は別途行ってください）。
+            {t("guideEditor.ui.settingsDesc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -147,8 +137,8 @@ export function SettingsDialog({
             <Label htmlFor="guide-publish-toggle">{t("guideEditor.published")}</Label>
             <p className="text-xs text-muted-foreground">
               {isPublished
-                ? "公開する（保存時に公開状態が反映されます）"
-                : "下書き（保存時に非公開のままになります）"}
+                ? t("guideEditor.ui.publishOn")
+                : t("guideEditor.ui.publishOff")}
             </p>
           </div>
           <Switch
@@ -161,10 +151,10 @@ export function SettingsDialog({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            キャンセル
+            {t("guideEditor.ui.cancel")}
           </Button>
           <Button type="button" onClick={apply}>
-            反映
+            {t("guideEditor.ui.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

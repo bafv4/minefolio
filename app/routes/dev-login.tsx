@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { Form, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/dev-login";
 import { createDb } from "@/lib/db";
@@ -15,7 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Loader2, TerminalSquare } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /**
  * ローカル開発専用の簡易ログイン。
@@ -28,7 +30,10 @@ import { t } from "@/lib/messages";
 const DEV_PASSWORD = "minefolio-dev-password";
 const USERNAME_PATTERN = /^[a-z0-9-]{1,20}$/;
 
-export const meta: Route.MetaFunction = () => [{ title: t("devLogin.title") }];
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  return [{ title: t("devLogin.title") }];
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   if (!isDevAuthEnabled()) {
@@ -49,6 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   if (!isDevAuthEnabled()) {
     throw new Response("Not Found", { status: 404 });
   }
@@ -89,6 +95,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DevLoginPage({ actionData }: Route.ComponentProps) {
+  const t = useT();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 

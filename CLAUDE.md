@@ -86,10 +86,13 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 ### i18n（国際化）
 
-2つのシステムを併用:
-- `app/lib/i18n.ts`: カテゴリベースの `t(category, key)` でロケールパラメータ付き
-- `app/lib/messages/`: ドットパスキー（例: `t("playerProfile.keybindingsTab")`）と `{param}` 補間
-- デフォルトロケール: `"ja"`、Cookie → Accept-Languageヘッダーの順で検出
+日本語（既定）と英語に対応。**英語は主要導線から段階的**に広げており、未翻訳キーは日本語へフォールバックする。
+
+- 文言: `app/lib/messages/`（ドットパスキー + `{param}` 補間）。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
+- コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる
+- ロケール検出: `app/lib/locale.ts` の `resolveLocale()` — Cookie（`minefolio_locale`）→ Accept-Language（q値順）→ 既定 `ja`
+- 切替UIはヘッダー。`/api/set-locale` に Cookie を保存して再検証する
+- 詳細: `docs/i18n.md`
 
 ### ドキュメント・ルールファイル
 
@@ -112,7 +115,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 必須: `TURSO_DATABASE_URL`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `APP_URL`, `BETTER_AUTH_SECRET`
 
-任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`
+任意: `TWITCH_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY`
 
 ローカル開発は `TURSO_DATABASE_URL=file:local.db`（ローカルSQLite）+ `DEV_AUTH=1`（`/dev/login` の簡易ログイン、本番・リモートDB接続時は常に無効）で Turso / Discord OAuth なしに動かせる。リモートTursoの接続情報は `.env` ではなく `.env.remote` に置く（上記「接続先の分離運用」参照）。詳細: `docs/local-development.md`
 

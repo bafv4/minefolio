@@ -28,6 +28,7 @@ export interface FeedVideo {
   uuid: string | null;
   slug: string | null;
   displayName: string | null;
+  displayNameAlphabet: string | null;
   discordAvatar: string | null;
   customSkinUrl: string | null;
 }

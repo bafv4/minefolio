@@ -3,10 +3,13 @@ import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { resolveLocale } from "@/lib/locale";
+import { pickDisplayName } from "@/lib/slug";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
+  const locale = resolveLocale(request);
 
   const url = new URL(request.url);
   const q = url.searchParams.get("q")?.trim().slice(0, 100) || "";
@@ -27,6 +30,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       coverImageUrl: guides.coverImageUrl,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
+      authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
     })
     .from(guides)
@@ -50,7 +54,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       summary: r.summary,
       coverImageUrl: r.coverImageUrl,
       authorSlug: r.authorSlug,
-      authorName: r.authorDisplayName || r.authorMcid || r.authorSlug,
+      authorName:
+        pickDisplayName(
+          { displayName: r.authorDisplayName, displayNameAlphabet: r.authorDisplayNameAlphabet },
+          locale,
+        ) || r.authorMcid || r.authorSlug,
       url: `/guides/${r.authorSlug}/${r.slug}`,
     })),
   });

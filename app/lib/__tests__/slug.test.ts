@@ -3,7 +3,9 @@ import {
   generateSlug,
   isGeneratedSlug,
   getDisplayName,
+  getLocalizedDisplayName,
   getMentionDisplay,
+  pickDisplayName,
 } from "../slug";
 
 describe("generateSlug", () => {
@@ -42,6 +44,58 @@ describe("getDisplayName", () => {
   it("displayName・mcid がどちらも null/空なら slug を返す", () => {
     expect(getDisplayName(null, null, "@123")).toBe("@123");
     expect(getDisplayName("", "", "@123")).toBe("@123");
+  });
+});
+
+describe("pickDisplayName", () => {
+  const user = { displayName: "ドリーム", displayNameAlphabet: "Dream JP" };
+
+  it("ja ではアルファベット表記があっても displayName を返す", () => {
+    expect(pickDisplayName(user, "ja")).toBe("ドリーム");
+  });
+
+  it("en ではアルファベット表記を優先する", () => {
+    expect(pickDisplayName(user, "en")).toBe("Dream JP");
+  });
+
+  it("en でもアルファベット表記が未入力なら displayName にフォールバックする", () => {
+    expect(pickDisplayName({ displayName: "ドリーム", displayNameAlphabet: null }, "en")).toBe("ドリーム");
+    expect(pickDisplayName({ displayName: "ドリーム", displayNameAlphabet: "" }, "en")).toBe("ドリーム");
+  });
+
+  it("クエリで displayNameAlphabet を選んでいない（undefined）場合も落ちない", () => {
+    expect(pickDisplayName({ displayName: "ドリーム" }, "en")).toBe("ドリーム");
+  });
+
+  it("displayName も無ければ null を返す（mcid/slug へのフォールバックは呼び出し側）", () => {
+    expect(pickDisplayName({ displayName: null, displayNameAlphabet: null }, "ja")).toBeNull();
+  });
+});
+
+describe("getLocalizedDisplayName", () => {
+  it("en ではアルファベット表記 > displayName > mcid > slug の順で解決する", () => {
+    const base = { mcid: "Dream", slug: "Dream" };
+    expect(
+      getLocalizedDisplayName({ ...base, displayName: "ドリーム", displayNameAlphabet: "Dream JP" }, "en"),
+    ).toBe("Dream JP");
+    expect(
+      getLocalizedDisplayName({ ...base, displayName: "ドリーム", displayNameAlphabet: null }, "en"),
+    ).toBe("ドリーム");
+    expect(
+      getLocalizedDisplayName({ ...base, displayName: null, displayNameAlphabet: null }, "en"),
+    ).toBe("Dream");
+    expect(
+      getLocalizedDisplayName({ mcid: null, slug: "@123", displayName: null, displayNameAlphabet: null }, "en"),
+    ).toBe("@123");
+  });
+
+  it("ja ではアルファベット表記を使わない", () => {
+    expect(
+      getLocalizedDisplayName(
+        { mcid: "Dream", slug: "Dream", displayName: "ドリーム", displayNameAlphabet: "Dream JP" },
+        "ja",
+      ),
+    ).toBe("ドリーム");
   });
 });
 

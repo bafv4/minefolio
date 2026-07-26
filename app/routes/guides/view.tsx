@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import {
   useLoaderData,
   Link,
@@ -9,15 +11,18 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
-import { decodePresetConfig } from "@/lib/preset-read";
+import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
-import { t } from "@/lib/messages";
+import { getGuideLikeCount } from "@/lib/likes.server";
+import { LikeButton } from "@/components/like-button";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
 import { format } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
@@ -34,14 +39,18 @@ import {
 
 export function meta({
   loaderData,
+  matches,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+  matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
 }) {
+  const locale = localeFromMatches(matches);
+  const t = createTranslator(locale);
   if (!loaderData?.guide) {
-    return [{ title: "ガイドが見つかりません - Minefolio" }];
+    return [{ title: t("guideView.notFoundTitle") }];
   }
   const title = `${loaderData.guide.title} - Minefolio`;
-  const description = loaderData.guide.summary || `${loaderData.author.displayName || loaderData.author.mcid}のガイド`;
+  const description = loaderData.guide.summary || t("guideView.metaDescription", { name: pickDisplayName(loaderData.author, locale) || loaderData.author.mcid || "" });
   const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
@@ -76,6 +85,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mcid: true,
       uuid: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
       customSkinUrl: true,
       slimSkin: true,
@@ -160,6 +170,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         id: true,
         slug: true,
         displayName: true,
+        displayNameAlphabet: true,
         mcid: true,
       },
       with: {
@@ -192,6 +203,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           id: true,
           slug: true,
           displayName: true,
+          displayNameAlphabet: true,
           mcid: true,
         },
         with: {
@@ -218,13 +230,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     for (const u of embedUserRows) {
       // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
-      // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
+      // メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
+      // ユーザーはライブ（従来挙動）。スナップショットを使う場合、null の種別は「空」
       const mainPreset = u.configPresets.find((p) => p.isMain);
       let display: Pick<
         EmbedUserData,
         "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
       >;
-      if (mainPreset) {
+      if (shouldUsePresetSnapshot(mainPreset)) {
         const decoded = decodePresetConfig(mainPreset, u.id);
         display = {
           keybindings: decoded.keybindings,
@@ -248,6 +261,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       const data: EmbedUserData = {
         slug: u.slug,
         displayName: u.displayName,
+        displayNameAlphabet: u.displayNameAlphabet,
         mcid: u.mcid,
         // クライアント（guide-embeds）が使うフィールドのみ渡す
         // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
@@ -267,16 +281,32 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const appUrl = env.APP_URL || "https://minefolio.app";
+  const likeCount = await getGuideLikeCount(db, guide.id);
   return {
+    // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
+    // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
+    // 全閲覧者のSSRペイロードに載ってしまう（埋め込みユーザーと同じ方針）。
     guide: {
-      ...guide,
+      id: guide.id,
+      slug: guide.slug,
       title: viewTitle,
       summary: viewSummary,
       coverImageUrl: viewCover,
       tags: viewTags,
+      viewCount: guide.viewCount,
+      updatedAt: guide.updatedAt,
       sanitizedContent: contentWithIds,
+      likeCount,
     },
-    author,
+    // 同様に、著者も表示に使う分だけ渡す（id / profileVisibility は可視性判定用のサーバー内部値）
+    author: {
+      slug: author.slug,
+      mcid: author.mcid,
+      uuid: author.uuid,
+      displayName: author.displayName,
+      displayNameAlphabet: author.displayNameAlphabet,
+      customSkinUrl: author.customSkinUrl,
+    },
     appUrl,
     embedUsers,
     isOwner,
@@ -287,6 +317,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 
 export default function GuideViewPage() {
+  const t = useT();
+  const locale = useLocale();
   const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
@@ -294,7 +326,7 @@ export default function GuideViewPage() {
   } catch {
     // invalid JSON in tags — fallback to empty
   }
-  const authorName = author.displayName || author.mcid || author.slug;
+  const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Inject copy buttons on code blocks
@@ -308,7 +340,7 @@ export default function GuideViewPage() {
       if (pre.querySelector(".code-copy-btn")) return;
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
-      btn.title = "コピー";
+      btn.title = t("guideView.copy");
       btn.textContent = "📋";
       const controller = new AbortController();
       controllers.push(controller);
@@ -346,7 +378,7 @@ export default function GuideViewPage() {
 
       {previewingDraft && (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
+          {t("guideView.draftPreviewNotice")}
         </div>
       )}
       {/* Back button + Owner edit button */}
@@ -415,12 +447,20 @@ export default function GuideViewPage() {
         </Link>
         <span className="flex items-center gap-1">
           <Calendar className="h-3.5 w-3.5" />
-          {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
+          {format(guide.updatedAt, dateFormatPattern(locale), { locale: dateFnsLocale(locale) })}
         </span>
         <span className="flex items-center gap-1">
           <Eye className="h-3.5 w-3.5" />
           {guide.viewCount}
         </span>
+        <LikeButton
+          variant="detail"
+          targetType="guide"
+          targetId={guide.id}
+          likeCount={guide.likeCount}
+          isOwn={isOwner}
+          className="ml-auto"
+        />
       </div>
 
       {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。
@@ -471,6 +511,7 @@ function GuideContent({
   html: string;
   embedUsers: Record<string, EmbedUserData>;
 }) {
+  const t = useT();
   const segments = splitContentAtEmbeds(html);
   const hasEmbeds = segments.some((s) => s.type !== "html");
 
@@ -495,7 +536,7 @@ function GuideContent({
         if (!userData) {
           return (
             <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
-              ユーザー「{seg.userSlug}」が見つかりません
+              {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
             </div>
           );
         }

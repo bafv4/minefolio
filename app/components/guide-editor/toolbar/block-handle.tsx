@@ -1,6 +1,8 @@
 // ブロックハンドル。ブロック左に表示し、種別変更 / 削除 / テーブル行列操作を提供。
 // デスクトップ: ポインタ位置から posAtCoords（マウスは高精度）。
 // タッチ: selectionUpdate でアクティブブロックを追従（旧 posAtCoords のタッチ不安定を回避）。
+import type { MessageKey } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
@@ -25,17 +27,17 @@ import { CELL_COLORS } from "../constants";
 import { EDITOR_Z } from "../constants";
 import { MenuItem } from "./menu-item";
 
-const BLOCK_TYPES: { type: BlockType; label: string; icon: LucideIcon }[] = [
-  { type: "paragraph", label: "テキスト", icon: AlignLeft },
-  { type: "heading1", label: "見出し 1", icon: Heading1 },
-  { type: "heading2", label: "見出し 2", icon: Heading2 },
-  { type: "heading3", label: "見出し 3", icon: Heading3 },
-  { type: "bulletList", label: "箇条書き", icon: List },
-  { type: "orderedList", label: "番号付きリスト", icon: ListOrdered },
-  { type: "blockquote", label: "引用", icon: Quote },
-  { type: "codeBlock", label: "コードブロック", icon: Terminal },
-  { type: "callout", label: "コールアウト", icon: Lightbulb },
-  { type: "toggleList", label: "トグルリスト", icon: ChevronRight },
+const BLOCK_TYPES: { type: BlockType; labelKey: MessageKey; icon: LucideIcon }[] = [
+  { type: "paragraph", labelKey: "guideEditor.slash.text", icon: AlignLeft },
+  { type: "heading1", labelKey: "guideEditor.slash.heading1", icon: Heading1 },
+  { type: "heading2", labelKey: "guideEditor.slash.heading2", icon: Heading2 },
+  { type: "heading3", labelKey: "guideEditor.slash.heading3", icon: Heading3 },
+  { type: "bulletList", labelKey: "guideEditor.slash.bulletList", icon: List },
+  { type: "orderedList", labelKey: "guideEditor.slash.orderedList", icon: ListOrdered },
+  { type: "blockquote", labelKey: "guideEditor.slash.quote", icon: Quote },
+  { type: "codeBlock", labelKey: "guideEditor.slash.codeBlock", icon: Terminal },
+  { type: "callout", labelKey: "guideEditor.slash.callout", icon: Lightbulb },
+  { type: "toggleList", labelKey: "guideEditor.slash.toggleList", icon: ChevronRight },
 ];
 
 interface HandleState {
@@ -62,6 +64,7 @@ export function BlockHandle({
    */
   suppressInTable?: boolean;
 }) {
+  const t = useT();
   const [state, setState] = useState<HandleState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -186,14 +189,14 @@ export function BlockHandle({
   };
 
   const ROW_OPS: { op: TableOpKind; label: string; danger?: boolean }[] = [
-    { op: "addRowBefore", label: "上に行を追加" },
-    { op: "addRowAfter", label: "下に行を追加" },
-    { op: "deleteRow", label: "行を削除", danger: true },
+    { op: "addRowBefore", label: t("guideEditor.toolbar.addRowBefore") },
+    { op: "addRowAfter", label: t("guideEditor.toolbar.addRowAfter") },
+    { op: "deleteRow", label: t("guideEditor.toolbar.deleteRow"), danger: true },
   ];
   const COL_OPS: { op: TableOpKind; label: string; danger?: boolean }[] = [
-    { op: "addColBefore", label: "左に列を追加" },
-    { op: "addColAfter", label: "右に列を追加" },
-    { op: "deleteCol", label: "列を削除", danger: true },
+    { op: "addColBefore", label: t("guideEditor.toolbar.addColBefore") },
+    { op: "addColAfter", label: t("guideEditor.toolbar.addColAfter") },
+    { op: "deleteCol", label: t("guideEditor.toolbar.deleteCol"), danger: true },
   ];
 
   const applyCellColor = (color: string | null) => {
@@ -219,7 +222,7 @@ export function BlockHandle({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="ブロック操作"
+          aria-label={t("guideEditor.ui.blockActions")}
           aria-haspopup="menu"
           onMouseDown={(e) => e.preventDefault()}
           onMouseEnter={cancelHide}
@@ -248,18 +251,18 @@ export function BlockHandle({
       >
         {state.inTable ? (
           <>
-            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">行</p>
+            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">{t("guideEditor.ui.scopeRow")}</p>
             {ROW_OPS.map(({ op, label, danger }) => (
               <MenuItem key={op} label={label} danger={danger} onClick={() => runTableOp(op)} />
             ))}
-            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">列</p>
+            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">{t("guideEditor.ui.scopeColumn")}</p>
             {COL_OPS.map(({ op, label, danger }) => (
               <MenuItem key={op} label={label} danger={danger} onClick={() => runTableOp(op)} />
             ))}
-            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">セル背景色</p>
+            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">{t("guideEditor.ui.cellBgColor")}</p>
             <div className="flex flex-wrap gap-1 px-2 py-1">
               {CELL_COLORS.map((c) => (
-                <Tooltip key={c.name}>
+                <Tooltip key={c.nameKey}>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
@@ -267,28 +270,28 @@ export function BlockHandle({
                         e.preventDefault();
                         applyCellColor(c.value || null);
                       }}
-                      aria-label={c.name}
+                      aria-label={t(c.nameKey)}
                       className="h-5 w-5 rounded border border-border hover:ring-2 hover:ring-ring transition-all flex items-center justify-center"
                       style={{ backgroundColor: c.value || "transparent" }}
                     >
                       {!c.value && <span className="text-[10px]">✕</span>}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent showArrow={false}>{c.name}</TooltipContent>
+                  <TooltipContent showArrow={false}>{t(c.nameKey)}</TooltipContent>
                 </Tooltip>
               ))}
             </div>
             <div className="border-t my-1" />
-            <MenuItem label="テーブルを削除" danger icon={Trash2} onClick={() => runTableOp("deleteTable")} />
+            <MenuItem label={t("guideEditor.toolbar.deleteTable")} danger icon={Trash2} onClick={() => runTableOp("deleteTable")} />
           </>
         ) : (
           <>
-            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">ブロックタイプ</p>
+            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">{t("guideEditor.ui.blockType")}</p>
             {BLOCK_TYPES.map((opt) => (
-              <MenuItem key={opt.type} label={opt.label} icon={opt.icon} onClick={() => applyType(opt.type)} />
+              <MenuItem key={opt.type} label={t(opt.labelKey)} icon={opt.icon} onClick={() => applyType(opt.type)} />
             ))}
             <div className="border-t my-1" />
-            <MenuItem label="ブロックを削除" danger icon={Trash2} onClick={deleteBlock} />
+            <MenuItem label={t("guideEditor.ui.deleteBlock")} danger icon={Trash2} onClick={deleteBlock} />
           </>
         )}
       </PopoverContent>

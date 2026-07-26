@@ -1,29 +1,25 @@
-// ロケール設定API
-import { createLocaleCookieValue, type Locale } from "@/lib/i18n";
+// 表示ロケールを Cookie に保存し、元のページへ戻す。
+import { isLocale, localeCookieValue } from "@/lib/locale";
 
 export async function action({ request }: { request: Request }) {
   const formData = await request.formData();
-  const locale = formData.get("locale") as string;
+  const locale = formData.get("locale");
 
-  // バリデーション
-  if (!locale || (locale !== "ja" && locale !== "en")) {
+  if (typeof locale !== "string" || !isLocale(locale)) {
     return new Response(JSON.stringify({ error: "Invalid locale" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // Cookieを設定してリダイレクト
-  const referer = request.headers.get("Referer");
+  // オープンリダイレクト対策: Referer は同一オリジンのときだけ採用し、
+  // パス以降のみを使う（他サイトへ飛ばせないようにする）
   let redirectUrl = "/";
-
+  const referer = request.headers.get("Referer");
   if (referer) {
     try {
       const refererUrl = new URL(referer);
-      const requestUrl = new URL(request.url);
-
-      // 同一オリジンの場合のみリダイレクト
-      if (refererUrl.origin === requestUrl.origin) {
+      if (refererUrl.origin === new URL(request.url).origin) {
         redirectUrl = refererUrl.pathname + refererUrl.search + refererUrl.hash;
       }
     } catch {
@@ -35,7 +31,7 @@ export async function action({ request }: { request: Request }) {
     status: 302,
     headers: {
       Location: redirectUrl,
-      "Set-Cookie": createLocaleCookieValue(locale as Locale),
+      "Set-Cookie": localeCookieValue(locale),
     },
   });
 }

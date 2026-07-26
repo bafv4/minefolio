@@ -7,19 +7,22 @@ import { keybindingsParsers } from "@/lib/keybindings-search-params";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useTabScrollbar } from "@/hooks/use-tab-scrollbar";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
+import { useT } from "@/hooks/use-locale";
+import type { MessageKey } from "@/lib/messages";
 
 type Item = {
   path: string;
-  label: string;
+  /** ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定） */
+  labelKey: MessageKey;
   icon: typeof Table2;
   /** フィルタ等の検索パラメータを引き継ぐか（表・ビジュアルのみ） */
   keepSearch: boolean;
 };
 
 const ITEMS: Item[] = [
-  { path: "/keybindings", label: "表", icon: Table2, keepSearch: true },
-  { path: "/keybindings/visual", label: "ビジュアル", icon: LayoutGrid, keepSearch: true },
-  { path: "/keybindings/stats", label: "統計", icon: BarChart3, keepSearch: false },
+  { path: "/keybindings", labelKey: "keybindings.viewTable", icon: Table2, keepSearch: true },
+  { path: "/keybindings/visual", labelKey: "keybindings.viewVisual", icon: LayoutGrid, keepSearch: true },
+  { path: "/keybindings/stats", labelKey: "keybindings.viewStats", icon: BarChart3, keepSearch: false },
 ];
 
 // nuqs のパラメータ → クエリ文字列。nuqs の shallow 更新は React Router の
@@ -35,6 +38,7 @@ const serialize = createSerializer(keybindingsParsers);
  * -mb-px で 1px 重ね、アクティブタブの bg がベースラインを覆ってページ面に開く。
  */
 export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
+  const t = useT();
   const location = useLocation();
   const { params } = useKeybindingsFilters();
   const search = serialize(params);
@@ -53,7 +57,7 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
       <div
         ref={scrollerRef}
         role="tablist"
-        aria-label="ビュー切替"
+        aria-label={t("keybindings.viewSwitcher")}
         className={cn(
           "flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           // スクロールが必要なときだけ、上側にスクロールバーの余白を確保
@@ -83,7 +87,7 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
               )}
             >
               <Icon className="h-4 w-4" aria-hidden />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </Link>
           );
         })}

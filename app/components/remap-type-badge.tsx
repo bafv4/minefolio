@@ -1,6 +1,6 @@
 import { normalizeKeyRemapType, type KeyRemapType } from "@/lib/remap-utils";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Badge } from "@/components/ui/badge";
 
 const TYPE_STYLES: Record<Exclude<KeyRemapType, "unset">, string> = {
@@ -20,6 +20,7 @@ export function RemapTypeBadge({
   remapType: string | null | undefined;
   className?: string;
 }) {
+  const t = useT();
   const type = normalizeKeyRemapType(remapType);
   if (type === "unset") return null;
   return (

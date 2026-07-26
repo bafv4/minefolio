@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export interface PresetSelectorPreset {
   id: string;
@@ -55,6 +55,7 @@ export function PresetSelector({
   onSwitchingChange,
   className,
 }: PresetSelectorProps) {
+  const t = useT();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
   // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす

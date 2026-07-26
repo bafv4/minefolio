@@ -23,7 +23,8 @@ import {
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import { truncateByVisualWidth } from "@/lib/text-width";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
 
 /** 走者列の最小データ */
 export type PlayerSummary = {
@@ -31,6 +32,7 @@ export type PlayerSummary = {
   mcid: string | null;
   uuid: string | null;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   customSkinUrl: string | null;
 };
 
@@ -47,7 +49,8 @@ export function RunnerCell({
   /** compact: モバイル向け縦並び（頭を大きめ＋名前を下に小さく） */
   variant?: "default" | "compact";
 }) {
-  const name = player.displayName ?? player.mcid ?? player.slug;
+  const locale = useLocale();
+  const name = getLocalizedDisplayName(player, locale);
 
   if (variant === "compact") {
     return (
@@ -100,6 +103,7 @@ export function KeyBadge({
   /** カスタムキー keyCode → 表示名。標準ラベルより優先して使用する。 */
   customKeyNames?: Record<string, string>;
 }) {
+  const t = useT();
   if (isUnbound(keyCode)) {
     return <span className="text-muted-foreground/40">-</span>;
   }
@@ -109,8 +113,8 @@ export function KeyBadge({
   const label =
     customName ??
     (keyCode.includes("+")
-      ? getKeyCombinationLabel(keyCode, keyboardLayout)
-      : getKeyLabel(keyCode, keyboardLayout));
+      ? getKeyCombinationLabel(t, keyCode, keyboardLayout)
+      : getKeyLabel(t, keyCode, keyboardLayout));
   const truncated = truncateByVisualWidth(label);
   const isMouse =
     keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
@@ -244,6 +248,7 @@ export function RemapCell({
   keyboardLayout?: string | null;
   customKeyNames?: Record<string, string>;
 }) {
+  const t = useT();
   if (remaps.length === 0) {
     return <span className="text-muted-foreground/40 text-sm">-</span>;
   }
@@ -251,8 +256,8 @@ export function RemapCell({
     <div className="flex flex-wrap gap-1.5">
       {remaps.map((remap) => (
         <Badge key={remap.id} variant="secondary" className="font-mono text-xs">
-          {getRemapSourceLabel(remap.sourceKey, keyboardLayout, customKeyNames)} →{" "}
-          {getRemapOutputLabel(remap, keyboardLayout, customKeyNames)}
+          {getRemapSourceLabel(t, remap.sourceKey, keyboardLayout, customKeyNames)} →{" "}
+          {getRemapOutputLabel(t, remap, keyboardLayout, customKeyNames)}
         </Badge>
       ))}
     </div>
@@ -278,6 +283,7 @@ export function CustomActionCell({
   customActions: CustomActionItem[];
   keyboardLayout?: string | null;
 }) {
+  const t = useT();
   if (customActions.length === 0) {
     return <span className="text-muted-foreground/40 text-sm">-</span>;
   }
@@ -286,7 +292,7 @@ export function CustomActionCell({
       {customActions.map((action) => (
         <div key={action.id} className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="font-mono text-xs">
-            {getKeyCombinationLabel(action.triggerKey, keyboardLayout)}
+            {getKeyCombinationLabel(t, action.triggerKey, keyboardLayout)}
           </Badge>
           <span className="text-sm font-medium">{action.actionName}</span>
         </div>
@@ -353,6 +359,7 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
 }
 
 export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config?.windowsSpeedMultiplier != null) {
     return (
       <Tooltip>

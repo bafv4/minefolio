@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { resolveLocale, localeFromMatches } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
@@ -29,9 +31,11 @@ import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { dateFnsLocale } from "@/lib/date-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
@@ -42,6 +46,7 @@ import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
 import { safeExternalHref } from "@/lib/safe-url";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
@@ -51,7 +56,7 @@ const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
 const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
-export function meta({ loaderData, params }: Route.MetaArgs) {
+export function meta({ loaderData, params, matches }: Route.MetaArgs) {
   if (!loaderData?.player) {
     return [
       { title: "Player Not Found - Minefolio" },
@@ -60,7 +65,7 @@ export function meta({ loaderData, params }: Route.MetaArgs) {
   }
 
   const { player } = loaderData;
-  const displayName = player.displayName || player.mcid || player.slug;
+  const displayName = getLocalizedDisplayName(player, localeFromMatches(matches));
   const description = player.shortBio || player.bio || `${displayName}'s Minecraft speedrunning profile`;
   // OGP画像: MCIDがある場合のみMCIDパラメータを付与
   const ogImageUrl = player.mcid
@@ -98,6 +103,8 @@ export function meta({ loaderData, params }: Route.MetaArgs) {
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
+  const t = useT();
+  const locale = useLocale();
   const params = useParams();
   const slug = params.slug || "loading";
 
@@ -243,6 +250,7 @@ export function shouldRevalidate({
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -398,6 +406,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       updatedAt: true,
       isPinned: true,
     },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
   });
 
   // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
@@ -453,11 +462,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
+  const t = useT();
+  const locale = useLocale();
   const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+
+  // 英語表示ではアルファベット表記を優先する（未入力なら表示名にフォールバック）
+  const playerName = getLocalizedDisplayName(player, locale);
 
   // プリセット切替中のローディング状態（`?preset=` の実変更によるナビゲーション中のみ。
   // タブ切替や他ページへの遷移では出さない）
@@ -508,7 +522,7 @@ export default function PlayerProfilePage() {
   const resolveKeyLabel = (keyCode: string): string => {
     const customLabel = customKeyLabelByCode.get(normalizeKeyCode(keyCode));
     if (customLabel) return customLabel;
-    return getKeyLabel(keyCode);
+    return getKeyLabel(t, keyCode);
   };
   const resolveKeyCombinationLabel = (combo: string): string => {
     if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
@@ -644,7 +658,7 @@ export default function PlayerProfilePage() {
     { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
     { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
     { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
-    { value: "guides", icon: BookOpen, label: "ガイド" },
+    { value: "guides", icon: BookOpen, label: t("playerProfile.guidesTab") },
   ];
 
   // 有効なタブ値のリスト
@@ -706,14 +720,14 @@ export default function PlayerProfilePage() {
           ) : player.discordAvatar ? (
             <img
               src={player.discordAvatar}
-              alt={player.displayName ?? "Avatar"}
+              alt={playerName}
               className="w-8 h-8 rounded"
             />
           ) : (
             <div className="w-8 h-8 bg-muted rounded" />
           )}
           <div className="text-left">
-            <p className="font-medium text-sm">{player.displayName ?? player.mcid ?? player.slug}</p>
+            <p className="font-medium text-sm">{playerName}</p>
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
           </div>
         </div>
@@ -768,14 +782,14 @@ export default function PlayerProfilePage() {
               ) : player.discordAvatar ? (
                 <img
                   src={player.discordAvatar}
-                  alt={player.displayName ?? "Avatar"}
+                  alt={playerName}
                   className="w-10 h-10 rounded shrink-0"
                 />
               ) : (
                 <div className="w-10 h-10 bg-muted rounded shrink-0" />
               )}
               <div className="text-left min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{player.displayName ?? player.mcid ?? player.slug}</p>
+                <p className="font-medium text-sm truncate">{playerName}</p>
                 {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
                 {player.shortBio && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
@@ -900,7 +914,7 @@ export default function PlayerProfilePage() {
                         <DialogTrigger asChild>
                           <button
                             type="button"
-                            aria-label="スキンを 3D で表示"
+                            aria-label={t("playerProfile.viewSkin3d")}
                             className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
@@ -921,7 +935,7 @@ export default function PlayerProfilePage() {
                         <DialogContent className="max-w-2xl">
                           <DialogHeader>
                             <DialogTitle>
-                              {player.displayName ?? player.mcid ?? player.slug} のスキン
+                              {t("playerProfile.skinDialogTitle", { name: playerName })}
                             </DialogTitle>
                           </DialogHeader>
                           {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
@@ -944,7 +958,11 @@ export default function PlayerProfilePage() {
                 {/* Info */}
                 <div className="flex-1 space-y-4">
                   <div className="text-center sm:text-left">
-                    <h1 className="text-2xl font-bold">{player.displayName ?? player.mcid ?? player.slug}</h1>
+                    <h1 className="text-2xl font-bold">{playerName}</h1>
+                    {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
+                    {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
+                      <p className="text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
+                    )}
                     {player.mcid && <p className="text-muted-foreground">@{player.mcid}</p>}
                     {player.shortBio && (
                       <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
@@ -962,7 +980,7 @@ export default function PlayerProfilePage() {
                       <Badge variant="outline">{player.mainEdition === "java" ? "Java" : "Bedrock"}</Badge>
                     )}
                     {player.mainPlatform && (
-                      <Badge variant="outline">{getPlatformLabel(player.mainPlatform)}</Badge>
+                      <Badge variant="outline">{getPlatformLabel(t, player.mainPlatform)}</Badge>
                     )}
                     {player.inputMethodBadge && (
                       <Badge variant="outline">
@@ -1004,7 +1022,7 @@ export default function PlayerProfilePage() {
                     )}
                     <FavoriteButton slug={player.slug} />
                     <ShareButton
-                      title={`${player.displayName ?? player.mcid ?? player.slug} - Minefolio`}
+                      title={`${playerName} - Minefolio`}
                       description={player.shortBio ?? undefined}
                       includeTab={true}
                     />
@@ -1109,6 +1127,7 @@ export default function PlayerProfilePage() {
                           skinUrl: player.customSkinUrl,
                           mcid: player.mcid,
                           displayName: player.displayName,
+                          displayNameAlphabet: player.displayNameAlphabet,
                           slug: player.slug,
                         }}
                       />
@@ -1184,7 +1203,7 @@ export default function PlayerProfilePage() {
                               key={kb.id}
                               className="flex justify-between items-center py-2.5"
                             >
-                              <span className="text-sm">{getActionLabel(kb.action)}</span>
+                              <span className="text-sm">{getActionLabel(t, kb.action)}</span>
                               <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
                                 {resolveKeyLabel(kb.keyCode)}
                               </kbd>
@@ -1341,7 +1360,7 @@ export default function PlayerProfilePage() {
                       <Languages className="h-4 w-4" />
                       <span>{t("playerProfile.gameLanguage")}:</span>
                       <Badge variant="secondary">
-                        {getGameLanguageName(player.playerConfig.gameLanguage)}
+                        {getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                       </Badge>
                     </div>
                   )}
@@ -1547,7 +1566,7 @@ export default function PlayerProfilePage() {
                       {player.playerConfig.gameLanguage && (
                         <DeviceRow
                           label={t("playerProfile.gameLanguage")}
-                          value={getGameLanguageName(player.playerConfig.gameLanguage)}
+                          value={getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                         />
                       )}
                     </div>
@@ -1592,13 +1611,13 @@ export default function PlayerProfilePage() {
               </div>
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
-                  guides={playerGuides as GuideItem[]}
+                  guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                   gridCols="sm:grid-cols-2"
                 />
               ) : (
                 <GuideListView
-                  guides={playerGuides as GuideItem[]}
+                  guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                 />
               )}
@@ -1606,8 +1625,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
-              title="ガイドがありません"
-              description="このプレイヤーはまだガイドを公開していません。"
+              title={t("playerProfile.noGuidesTitle")}
+              description={t("playerProfile.noGuidesDescription")}
             />
           )}
         </TabsContent>
@@ -1620,6 +1639,8 @@ export default function PlayerProfilePage() {
 
 // Eloレートグラフコンポーネント
 function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
+  const t = useT();
+  const locale = useLocale();
   // Eloレートが0のマッチを除外してから古い順に並べ替え（グラフ表示用）
   const validMatches = matches.filter((m) => m.eloAfter > 0);
   const sortedMatches = [...validMatches].reverse();
@@ -1744,11 +1765,11 @@ function getItemDisplayName(itemId: string): string {
 // ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
 // プラットフォーム表示名を取得
-function getPlatformLabel(platform: string): string {
+function getPlatformLabel(t: Translator, platform: string): string {
   const labels: Record<string, string> = {
-    pc_windows: "PC（Windows）",
-    pc_mac: "PC（Mac）",
-    pc_linux: "PC（Linux）",
+    pc_windows: t("playerProfile.platformPcWindows"),
+    pc_mac: t("playerProfile.platformPcMac"),
+    pc_linux: t("playerProfile.platformPcLinux"),
     switch: "Switch",
     mobile: "Mobile",
     other: "Other",
@@ -1767,6 +1788,8 @@ function ItemLayoutCard({
     notes: string | null;
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   const slots = JSON.parse(layout.slots) as { slot: number; items: string[] }[];
   const offhand = layout.offhand ? JSON.parse(layout.offhand) as string[] : [];
 
@@ -1916,6 +1939,8 @@ function RecordCard({
     isPinned?: boolean;
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   return (
     // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
     <Card className={cn(record.isPinned && "md:col-span-2 border-primary/40")}>
@@ -2050,6 +2075,8 @@ function formatCompactCount(count: number): string {
 // リッチカード、その他のプラットフォームは従来のボタン表示。
 // 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
 function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
+  const t = useT();
+  const locale = useLocale();
   const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
   const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
   const [stats, setStats] = useState<SocialStatsData | null>(null);
@@ -2119,6 +2146,8 @@ function SocialLinkRichCard({
   link: ProfileSocialLink;
   stats: YouTubeChannelStats | TwitchChannelStats | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const statParts: string[] = [];
   let isLive = false;
 
@@ -2133,7 +2162,7 @@ function SocialLinkRichCard({
       if (yt.latestVideoAt) {
         statParts.push(
           t("playerProfile.latestVideoAgo", {
-            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: ja }),
+            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
           }),
         );
       }
@@ -2148,7 +2177,7 @@ function SocialLinkRichCard({
       if (!tw.isLive && tw.lastStreamAt) {
         statParts.push(
           t("playerProfile.lastStreamAgo", {
-            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: ja }),
+            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
           }),
         );
       }
@@ -2204,6 +2233,8 @@ function SettingBadge({
   label: string;
   enabled: boolean | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   if (enabled === null) return null;
 
   return (
@@ -2404,6 +2435,8 @@ function StatsServiceLoadingCard({
   description: string;
   state: "loading" | "done" | "error";
 }) {
+  const t = useT();
+  const locale = useLocale();
   const isLoading = state === "loading";
   const isError = state === "error";
 
@@ -2425,7 +2458,7 @@ function StatsServiceLoadingCard({
           <div>
             <p className="font-medium">{title}</p>
             <p className="text-sm text-muted-foreground">
-              {isLoading ? description : isError ? "読み込みに失敗しました" : "読み込み完了"}
+              {isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete")}
             </p>
           </div>
         </div>
@@ -2442,7 +2475,7 @@ function filterWeeklyMainPaces(mainPaces: any[]): any[] {
   });
 }
 
-function formatRelativeDateTime(dateStr: string): string {
+function formatRelativeDateTime(t: Translator, dateStr: string): string {
   const date = new Date(dateStr);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -2476,6 +2509,8 @@ function StatsContent({
     speedruncom: "loading" | "done" | "error";
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
@@ -2490,7 +2525,7 @@ function StatsContent({
       {player.showRankedStats !== false && loadState.ranked === "loading" && (
         <StatsServiceLoadingCard
           title="MCSR Ranked"
-          description="レート・対戦統計を読み込み中"
+          description={t("loading.rankedStats")}
           state={loadState.ranked}
         />
       )}
@@ -2612,7 +2647,7 @@ function StatsContent({
       {loadState.paceman === "loading" && (
         <StatsServiceLoadingCard
           title="PaceMan"
-          description="登録状態とペース情報を読み込み中"
+          description={t("loading.pacemanStats")}
           state={loadState.paceman}
         />
       )}
@@ -2679,7 +2714,7 @@ function StatsContent({
                       const runUrl = pace?.pacemanRunId
                         ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
                         : null;
-                      const relativeDate = pace?.date ? formatRelativeDateTime(pace.date) : "";
+                      const relativeDate = pace?.date ? formatRelativeDateTime(t, pace.date) : "";
                       const dateLabel = pace?.date ? new Date(pace.date).toLocaleString() : null;
 
                       return runUrl ? (
@@ -2742,7 +2777,7 @@ function StatsContent({
       {player.speedruncomUsername && loadState.speedruncom === "loading" && (
         <StatsServiceLoadingCard
           title="Speedrun.com"
-          description="自己ベスト記録を読み込み中"
+          description={t("loading.speedruncomStats")}
           state={loadState.speedruncom}
         />
       )}

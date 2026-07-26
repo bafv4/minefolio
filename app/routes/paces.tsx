@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams } from "react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "./+types/paces";
@@ -12,7 +14,7 @@ import {
   parsePaceSearchParams,
   type PaceFeedItem,
 } from "@/lib/paces-feed.server";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +34,8 @@ const PAGE_SIZE = 60;
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("paces.metaTitle");
   const description = t("paces.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -59,7 +62,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parsePaceSearchParams(url.searchParams);
-  const [{ items, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }, viewerPrefs] =
+  const [{ items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }, viewerPrefs] =
     await Promise.all([
       getPublicPaceFeed(db, filters),
       getViewerPacePrefs(db, auth, request),
@@ -77,6 +80,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     visibleTotal,
     mcidToUuid,
     mcidToDisplayName,
+    mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     viewerPrefs,
   };
@@ -95,6 +99,7 @@ function PacesList({
   searchQuery,
   mcidToUuid,
   mcidToDisplayName,
+  mcidToDisplayNameAlphabet,
   mcidToSkinUrl,
   viewerPrefs,
 }: {
@@ -103,9 +108,12 @@ function PacesList({
   searchQuery: string;
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
+  mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
   viewerPrefs: OwnPacePrefs;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [paces, setPaces] = useState(initialPaces);
   const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -173,7 +181,11 @@ function PacesList({
             key={run.pacemanRunId}
             run={run}
             uuid={mcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-            displayName={mcidToDisplayName[run.mcid.toLowerCase()]}
+            displayName={
+              (locale !== "ja"
+                ? mcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
+                : undefined) ?? mcidToDisplayName[run.mcid.toLowerCase()]
+            }
             skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
           />
         ))}
@@ -198,7 +210,8 @@ function PacesList({
 }
 
 export default function PacesPage() {
-  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
+  const t = useT();
+  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -295,7 +308,7 @@ export default function PacesPage() {
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
-              <span className="shrink-0 text-muted-foreground">〜</span>
+              <span className="shrink-0 text-muted-foreground">{t("common.rangeSeparator")}</span>
               <Input
                 type="date"
                 value={to}
@@ -338,6 +351,7 @@ export default function PacesPage() {
           searchQuery={searchParams.toString()}
           mcidToUuid={mcidToUuid}
           mcidToDisplayName={mcidToDisplayName}
+          mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
           mcidToSkinUrl={mcidToSkinUrl}
           viewerPrefs={viewerPrefs}
         />

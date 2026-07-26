@@ -866,6 +866,19 @@ body {
   margin-bottom: 0.15em;
 }
 
+/* 見出し内の文字サイズ指定を無効化する（既存ガイドや外部ペースト由来で
+   <h2><span style="font-size: ...">...</span></h2> のような形が入り得るが、
+   エディタは見出し内では文字サイズを設定できない＝表示側でも見出しの
+   固定サイズ（h1〜h3）を優先する。表示時サニタイズは要素単位の判定しかできず
+   親が見出しかを見られないため、CSS の継承で打ち消すのが最小の手当て）。
+   打ち消す対象は span 自身の style 属性（インラインスタイル）で、これは
+   セレクタの詳細度に関わらず通常の author スタイルシートより常に優先されるため、
+   ここだけ !important が必要（他の巻き戻し系ルールと同じ理由で :is() を使用）。
+   このルールはエディタ本体（.guide-content.prose を同じく付与）にも効く。 */
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) span[style*="font-size"] {
+  font-size: inherit !important;
+}
+
 .guide-content.prose :where(ul, ol) {
   margin-top: 0.4em;
   margin-bottom: 0.4em;
@@ -967,6 +980,22 @@ body {
   margin-bottom: 0.75em;
   max-width: 100%;
   height: auto;
+}
+
+/* 画像の横方向の配置（エディタの data-align 属性と対。未設定は従来どおり行の流れに従う）。
+   :where() は詳細度 0 なので上のルールに勝つ。エディタ側は image-node-view.tsx の
+   ラッパー（w-fit + mr-auto / mx-auto / ml-auto）が同じ見た目を作る */
+.guide-content.prose img[data-align] {
+  display: block;
+}
+.guide-content.prose img[data-align="left"] {
+  margin-inline: 0 auto;
+}
+.guide-content.prose img[data-align="center"] {
+  margin-inline: auto;
+}
+.guide-content.prose img[data-align="right"] {
+  margin-inline: auto 0;
 }
 
 .guide-content.prose :where(hr) {

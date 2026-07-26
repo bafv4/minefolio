@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ImagePlus, Trash2, Loader2, AlertCircle, X } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface MetadataFieldsProps {
   title: string;
@@ -41,6 +41,7 @@ export function MetadataFields({
   isUploadingCover,
   uploadError,
 }: MetadataFieldsProps) {
+  const t = useT();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [tagInput, setTagInput] = useState("");
 
@@ -56,7 +57,7 @@ export function MetadataFields({
     <div className="space-y-4">
       {/* タイトル */}
       <div className="space-y-1.5">
-        <Label htmlFor="guide-title">タイトル</Label>
+        <Label htmlFor="guide-title">{t("guideEditor.ui.titleLabel")}</Label>
         <Input
           id="guide-title"
           value={title}
@@ -68,7 +69,7 @@ export function MetadataFields({
 
       {/* 概要 */}
       <div className="space-y-1.5">
-        <Label htmlFor="guide-summary">概要</Label>
+        <Label htmlFor="guide-summary">{t("guideEditor.ui.summaryLabel")}</Label>
         <Textarea
           id="guide-summary"
           value={summary}
@@ -81,13 +82,13 @@ export function MetadataFields({
 
       {/* カバー画像 */}
       <div className="space-y-1.5">
-        <Label>カバー画像</Label>
+        <Label>{t("guideEditor.ui.coverImage")}</Label>
         <div className="flex items-center gap-3">
           {coverImageUrl ? (
             <div className="relative group">
               <img
                 src={coverImageUrl}
-                alt="サムネイル"
+                alt={t("guideEditor.ui.thumbnailAlt")}
                 className="h-20 rounded-lg object-cover aspect-2/1 border"
               />
               <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
@@ -101,7 +102,7 @@ export function MetadataFields({
                       <ImagePlus className="h-3.5 w-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>変更</TooltipContent>
+                  <TooltipContent>{t("guideEditor.ui.change")}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -113,7 +114,7 @@ export function MetadataFields({
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>削除</TooltipContent>
+                  <TooltipContent>{t("guideEditor.ui.delete")}</TooltipContent>
                 </Tooltip>
               </div>
             </div>
@@ -129,7 +130,7 @@ export function MetadataFields({
               ) : (
                 <ImagePlus className="h-4 w-4" />
               )}
-              サムネイル画像を追加
+              {t("guideEditor.ui.addThumbnail")}
             </button>
           )}
           <input
@@ -158,7 +159,7 @@ export function MetadataFields({
 
       {/* タグ */}
       <div className="space-y-1.5">
-        <Label htmlFor="guide-tag-input">タグ</Label>
+        <Label htmlFor="guide-tag-input">{t("guideEditor.ui.tagsLabel")}</Label>
         <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-transparent px-3 py-2 min-h-9 focus-within:ring-1 focus-within:ring-ring">
           {tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="gap-1">
@@ -166,7 +167,7 @@ export function MetadataFields({
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                aria-label={`${tag} を削除`}
+                aria-label={t("guideEditor.ui.removeTag", { tag })}
                 className="hover:text-destructive transition-colors"
               >
                 <X className="h-3 w-3" />

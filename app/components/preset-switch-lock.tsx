@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /**
  * プリセット切替（apply-preset の送信〜loader 再検証）中に、その下のコンテンツ
@@ -18,6 +18,7 @@ export function PresetSwitchLock({
   children: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   return (
     <div className={cn("relative", className)} aria-busy={locked}>
       <div

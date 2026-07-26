@@ -1,3 +1,4 @@
+import { useT } from "@/hooks/use-locale";
 import { Outlet, useLoaderData } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import type { Route } from "./+types/_layout";
@@ -12,6 +13,8 @@ import { CookieConsentBanner } from "@/components/cookie-consent";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { FavoritesProvider } from "@/hooks/use-favorites";
 import { getFavoritesFromDb } from "@/lib/favorites";
+import { LikesProvider } from "@/hooks/use-likes";
+import { getViewerLikedIds } from "@/lib/likes.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -21,7 +24,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request, auth);
 
   if (!session) {
-    return { user: null, initialFavorites: [] as string[] };
+    return {
+      user: null,
+      initialFavorites: [] as string[],
+      likedGuideIds: [] as string[],
+      likedTemplateIds: [] as string[],
+    };
   }
 
   // Get user from our users table
@@ -32,17 +40,24 @@ export async function loader({ request }: Route.LoaderArgs) {
       mcid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       discordAvatar: true,
     },
   });
 
   if (!user) {
-    return { user: null, initialFavorites: [] as string[] };
+    return {
+      user: null,
+      initialFavorites: [] as string[],
+      likedGuideIds: [] as string[],
+      likedTemplateIds: [] as string[],
+    };
   }
 
-  // アバター更新（必要なら）と initialFavorites 取得を並列実行（DB ラウンドトリップ削減）
+  // アバター更新（必要なら）と initialFavorites / いいね済みid の取得を並列実行
+  // （DB ラウンドトリップ削減）
   const needsAvatarUpdate = session.user.image !== user.discordAvatar;
-  const [, initialFavorites] = await Promise.all([
+  const [, initialFavorites, likedIds] = await Promise.all([
     needsAvatarUpdate
       ? db
           .update(users)
@@ -50,30 +65,46 @@ export async function loader({ request }: Route.LoaderArgs) {
           .where(eq(users.discordId, session.user.id))
       : Promise.resolve(),
     getFavoritesFromDb(db, user.id),
+    getViewerLikedIds(db, user.id),
   ]);
   if (needsAvatarUpdate) {
     user.discordAvatar = session.user.image ?? null;
   }
 
   return {
-    user: { mcid: user.mcid, slug: user.slug, displayName: user.displayName, discordAvatar: user.discordAvatar },
+    user: {
+      mcid: user.mcid,
+      slug: user.slug,
+      displayName: user.displayName,
+      displayNameAlphabet: user.displayNameAlphabet,
+      discordAvatar: user.discordAvatar,
+    },
     initialFavorites,
+    likedGuideIds: likedIds.guideIds,
+    likedTemplateIds: likedIds.templateIds,
   };
 }
 
 export default function Layout() {
-  const { user, initialFavorites } = useLoaderData<typeof loader>();
+  const t = useT();
+  const { user, initialFavorites, likedGuideIds, likedTemplateIds } =
+    useLoaderData<typeof loader>();
 
   return (
     <NuqsAdapter>
       <FavoritesProvider isLoggedIn={!!user} initialFavorites={initialFavorites}>
+      <LikesProvider
+        isLoggedIn={!!user}
+        likedGuideIds={likedGuideIds}
+        likedTemplateIds={likedTemplateIds}
+      >
         <div className="flex min-h-screen flex-col">
         {/* スキップリンク（Tab フォーカス時のみ表示） */}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          本文へスキップ
+          {t("common.skipToContent")}
         </a>
         <NavigationProgress />
         <Header user={user} />
@@ -88,6 +119,7 @@ export default function Layout() {
         <CookieConsentBanner />
         <BackToTopButton />
         </div>
+      </LikesProvider>
       </FavoritesProvider>
     </NuqsAdapter>
   );

@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { Link, redirect } from "react-router";
 import type { Route } from "./+types/login";
 import { createDb } from "@/lib/db";
@@ -17,9 +18,11 @@ import {
 } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import { localeFromMatches } from "@/lib/locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("login.title");
   const description = t("login.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -68,6 +71,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function LoginPage({ loaderData }: Route.ComponentProps) {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDiscordLogin = async () => {

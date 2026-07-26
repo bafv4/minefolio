@@ -158,6 +158,36 @@ describe("loadBrowsePage - ソート", () => {
     expect(result.players.map((p) => p.displayName)).toEqual(["Alpha", "Mu", "Zeta"]);
   });
 
+  it("mcid 未登録（NULL）のユーザーは末尾に置く", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "@none1", mcid: null, role: "runner" });
+    await seedUser(db, { slug: "b", mcid: "Bob", role: "runner" });
+    await seedUser(db, { slug: "@none2", mcid: null, role: "runner" });
+    await seedUser(db, { slug: "a", mcid: "Alice", role: "runner" });
+
+    const result = await loadBrowsePage(db, args({ sort: "mcid" }), []);
+    expect(result.players.map((p) => p.mcid)).toEqual(["Alice", "Bob", null, null]);
+  });
+
+  it("displayName 未設定（NULL）のユーザーは末尾に置く", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "n", mcid: "None", displayName: null, role: "runner" });
+    await seedUser(db, { slug: "z", mcid: "Z", displayName: "Zeta", role: "runner" });
+    await seedUser(db, { slug: "a", mcid: "A", displayName: "Alpha", role: "runner" });
+
+    const result = await loadBrowsePage(db, args({ sort: "displayName" }), []);
+    expect(result.players.map((p) => p.displayName)).toEqual(["Alpha", "Zeta", null]);
+  });
+
+  it("お気に入り優先は NULL 末尾より強い（お気に入りなら未設定でも先頭）", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "@fav", mcid: null, role: "runner" });
+    await seedUser(db, { slug: "a", mcid: "Alice", role: "runner" });
+
+    const result = await loadBrowsePage(db, args({ sort: "mcid" }), ["@fav"]);
+    expect(result.players.map((p) => p.slug)).toEqual(["@fav", "a"]);
+  });
+
   it("updatedAt 降順（新しい順）で並ぶ", async () => {
     const db = await createTestDb();
     await seedUser(db, { slug: "old", mcid: "Old", role: "runner", updatedAt: new Date("2020-01-01") });

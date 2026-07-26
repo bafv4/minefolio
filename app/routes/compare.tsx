@@ -1,10 +1,17 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, configPresets } from "@/lib/schema";
 import { eq, asc, and, sql } from "drizzle-orm";
-import { decodePresetConfig, decodePresetKeybindings, type PresetSnapshot } from "@/lib/preset-read";
+import {
+  decodePresetConfig,
+  decodePresetKeybindings,
+  shouldUsePresetSnapshot,
+  type PresetSnapshot,
+} from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
@@ -23,9 +30,12 @@ import {
 } from "@/components/ui/select";
 import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
 import { useState, useMemo } from "react";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
+import type { Translator } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = `${t("compare.title")} - Minefolio`;
   const description = t("compare.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -78,16 +88,18 @@ const COMPARE_ACTIONS = [
   { action: "command", category: "ui" },
 ];
 
-const categoryLabels: Record<string, string> = {
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+const categoryLabelsOf = (t: Translator): Record<string, string> => ({
   movement: t("compare.movement"),
   combat: t("compare.combat"),
   inventory: t("compare.inventory"),
   ui: "UI",
-};
+});
 
 // 比較用に取得するメイン（公開用）プリセットのスナップショット列
 const MAIN_PRESET_COLUMNS = {
   id: true,
+  isActive: true,
   keybindingsData: true,
   playerConfigData: true,
   remapsData: true,
@@ -95,8 +107,9 @@ const MAIN_PRESET_COLUMNS = {
 } as const;
 
 // 公開比較はメイン（公開用）プリセットのスナップショットを優先する。
-// メインが無いユーザーのみライブ（従来挙動）へフォールバック。
-// メインがある場合、null の種別は「空」であり編集中のライブデータを混ぜない。
+// メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
+// ユーザーはライブへフォールバックする（判定は shouldUsePresetSnapshot に集約）。
+// スナップショットを使う場合、null の種別は「空」であり編集中のライブデータを混ぜない。
 // デコード行はライブ行と構造互換のためキャストで型を維持する。
 function applyMainPreset<
   P extends {
@@ -104,12 +117,12 @@ function applyMainPreset<
     keybindings: unknown;
     keyRemaps: unknown;
     playerConfig: unknown;
-    configPresets: (PresetSnapshot & { id: string })[];
+    configPresets: (PresetSnapshot & { id: string; isActive: boolean })[];
   },
 >(player: P): Omit<P, "configPresets"> {
   const { configPresets: userPresets, ...rest } = player;
   const main = userPresets[0];
-  if (!main) return rest;
+  if (!shouldUsePresetSnapshot(main)) return rest;
   const decoded = decodePresetConfig(main, player.id);
   return {
     ...rest,
@@ -142,6 +155,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       uuid: true,
       slug: true,
       displayName: true,
+      displayNameAlphabet: true,
       customSkinUrl: true,
     },
     orderBy: [asc(users.slug)],
@@ -188,6 +202,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         uuid: true,
         slug: true,
         displayName: true,
+        displayNameAlphabet: true,
         customSkinUrl: true,
       },
       with: {
@@ -195,7 +210,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         keybindings: { columns: { action: true, keyCode: true } },
         configPresets: {
           where: eq(configPresets.isMain, true),
-          columns: { id: true, keybindingsData: true },
+          columns: { id: true, isActive: true, keybindingsData: true },
         },
       },
       limit: 50,
@@ -204,7 +219,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const similarPlayers = allUsersWithKeybindings
       .map((user) => {
         const mainPreset = user.configPresets[0];
-        const userKeybindings = mainPreset
+        const userKeybindings = shouldUsePresetSnapshot(mainPreset)
           ? (decodePresetKeybindings(mainPreset.keybindingsData, user.id) ?? [])
           : user.keybindings;
         const userKeyMap: Record<string, string> = {};
@@ -232,6 +247,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: user.uuid,
           slug: user.slug,
           displayName: user.displayName,
+          displayNameAlphabet: user.displayNameAlphabet,
           customSkinUrl: user.customSkinUrl,
           matches,
           total,
@@ -303,6 +319,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function ComparePage() {
+  const t = useT();
+  const locale = useLocale();
   const { allPlayers, player1, player2, similarPlayers } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search1, setSearch1] = useState("");
@@ -329,7 +347,8 @@ export default function ComparePage() {
       (p) =>
         p.slug.toLowerCase().includes(lower) ||
         p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower)
+        p.displayName?.toLowerCase().includes(lower) ||
+        p.displayNameAlphabet?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search1]);
 
@@ -340,7 +359,8 @@ export default function ComparePage() {
       (p) =>
         p.slug.toLowerCase().includes(lower) ||
         p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower)
+        p.displayName?.toLowerCase().includes(lower) ||
+        p.displayNameAlphabet?.toLowerCase().includes(lower)
     );
   }, [allPlayers, search2]);
 
@@ -436,7 +456,7 @@ export default function ComparePage() {
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      <span>{getLocalizedDisplayName(p, locale)}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
@@ -478,7 +498,7 @@ export default function ComparePage() {
                   <SelectItem key={p.slug} value={p.slug}>
                     <div className="flex items-center gap-2">
                       <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{p.displayName ?? p.mcid ?? p.slug}</span>
+                      <span>{getLocalizedDisplayName(p, locale)}</span>
                       {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
                     </div>
                   </SelectItem>
@@ -508,7 +528,7 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
                   <div>
-                    <p className="font-bold">{player1.displayName ?? player1.mcid ?? player1.slug}</p>
+                    <p className="font-bold">{getLocalizedDisplayName(player1, locale)}</p>
                     {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
                   </div>
                 </div>
@@ -532,7 +552,7 @@ export default function ComparePage() {
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player2.uuid} size={40} skinUrl={player2.customSkinUrl} />
                   <div>
-                    <p className="font-bold">{player2.displayName ?? player2.mcid ?? player2.slug}</p>
+                    <p className="font-bold">{getLocalizedDisplayName(player2, locale)}</p>
                     {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
                   </div>
                 </div>
@@ -546,7 +566,7 @@ export default function ComparePage() {
             {Object.entries(groupedActions).map(([category, actions]) => (
               <Card key={category}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{categoryLabels[category]}</CardTitle>
+                  <CardTitle className="text-base">{categoryLabelsOf(t)[category]}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="divide-y">
@@ -568,15 +588,15 @@ export default function ComparePage() {
                           <div className="flex items-center gap-2 flex-1">
                             {isSame && <Check className="h-4 w-4 text-green-500" />}
                             {isDifferent && <X className="h-4 w-4 text-red-500" />}
-                            <span className="text-sm">{getActionLabel(item.action)}</span>
+                            <span className="text-sm">{getActionLabel(t, item.action)}</span>
                           </div>
                           <div className="flex items-center gap-4">
                             <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key1 ? getKeyLabel(key1) : "-"}
+                              {key1 ? getKeyLabel(t, key1) : "-"}
                             </kbd>
                             <ArrowRight className="h-4 w-4 text-muted-foreground" />
                             <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key2 ? getKeyLabel(key2) : "-"}
+                              {key2 ? getKeyLabel(t, key2) : "-"}
                             </kbd>
                           </div>
                         </div>
@@ -595,8 +615,8 @@ export default function ComparePage() {
               <CardContent>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
-                  <div className="font-medium text-sm text-center">{player1.displayName ?? player1.mcid ?? player1.slug}</div>
-                  <div className="font-medium text-sm text-center">{player2.displayName ?? player2.mcid ?? player2.slug}</div>
+                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player1, locale)}</div>
+                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player2, locale)}</div>
 
                   <CompareRow
                     label={t("compare.mouseDpi")}
@@ -688,6 +708,8 @@ function SimilarPlayersSection({
   similarPlayers: Awaited<ReturnType<typeof loader>>["similarPlayers"];
   onSelectPlayer: (slug: string) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   return (
     <Card>
       <CardHeader>
@@ -696,7 +718,7 @@ function SimilarPlayersSection({
           {t("compare.similarTitle")}
         </CardTitle>
         <CardDescription>
-          {(targetPlayer.displayName ?? targetPlayer.mcid ?? targetPlayer.slug) + t("compare.similarSuffix")}
+          {getLocalizedDisplayName(targetPlayer, locale) + t("compare.similarSuffix")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -710,7 +732,7 @@ function SimilarPlayersSection({
                 <div className="flex items-center gap-3">
                   <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
                   <div>
-                    <p className="font-medium">{player.displayName ?? player.mcid ?? player.slug}</p>
+                    <p className="font-medium">{getLocalizedDisplayName(player, locale)}</p>
                     {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
                   </div>
                 </div>

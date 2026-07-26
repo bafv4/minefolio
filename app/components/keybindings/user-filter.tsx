@@ -14,18 +14,21 @@ import {
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { cn } from "@/lib/utils";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
+import type { Locale } from "@/lib/locale";
 
 export type UserFilterPlayer = {
   slug: string;
   mcid: string | null;
   displayName: string | null;
+  displayNameAlphabet?: string | null;
   uuid: string | null;
   customSkinUrl: string | null;
 };
 
-function displayLabel(p: UserFilterPlayer): string {
-  return p.displayName ?? p.mcid ?? p.slug;
+function displayLabel(p: UserFilterPlayer, locale: Locale): string {
+  return getLocalizedDisplayName(p, locale);
 }
 
 /**
@@ -44,6 +47,8 @@ export function UserSelectList({
   onToggle: (slug: string) => void;
   onClear: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const selectedSet = new Set(selected);
   const selectedCount = selectedSet.size;
 
@@ -69,7 +74,7 @@ export function UserSelectList({
         )}
         <CommandGroup>
           {players.map((p) => {
-            const label = displayLabel(p);
+            const label = displayLabel(p, locale);
             const isSelected = selectedSet.has(p.slug);
             return (
               <CommandItem
@@ -103,6 +108,8 @@ export function UserSelectList({
 
 /** 選択中ユーザーのチップ列（ヘッダー下に表示し、横断で見えるようにする）。 */
 export function UserFilterChips({ players }: { players: UserFilterPlayer[] }) {
+  const t = useT();
+  const locale = useLocale();
   const { params, toggleUser, clearUsers } = useKeybindingsFilters();
   const selectedSet = new Set(params.users);
   const selectedPlayers = players.filter((p) => selectedSet.has(p.slug));
@@ -122,7 +129,7 @@ export function UserFilterChips({ players }: { players: UserFilterPlayer[] }) {
             size={16}
             className="rounded-sm"
           />
-          {displayLabel(p)}
+          {displayLabel(p, locale)}
           <button
             type="button"
             onClick={() => toggleUser(p.slug)}
