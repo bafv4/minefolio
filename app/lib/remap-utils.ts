@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/messages";
 import {
   getKeyLabel,
   normalizeKeyCode,
@@ -178,38 +179,41 @@ export function toPersistedRemapPayload(remap: RemapInfo): PersistedRemapPayload
 
 /** 単一キーの表示ラベル。customKeyNames があれば標準ラベルより優先する。 */
 function resolveKeyLabel(
+  t: Translator,
   keyCode: string,
   layout?: string | null,
   customKeyNames?: Record<string, string>,
 ): string {
   const custom =
     customKeyNames?.[keyCode] ?? customKeyNames?.[normalizeKeyCode(keyCode)];
-  return custom ?? getKeyLabel(keyCode, layout);
+  return custom ?? getKeyLabel(t, keyCode, layout);
 }
 
 export function getRemapOutputLabel(
+  t: Translator,
   remap: RemapInfo,
   layout?: string | null,
   customKeyNames?: Record<string, string>,
 ): string {
   if (remap.targetKey === null) return "×";
   if (isSpecialRemapTarget(remap.targetKey)) return remap.targetKey;
-  return resolveKeyLabel(remap.targetKey, layout, customKeyNames);
+  return resolveKeyLabel(t, remap.targetKey, layout, customKeyNames);
 }
 
 export function getRemapSourceLabel(
+  t: Translator,
   sourceKey: string,
   layout?: string | null,
   customKeyNames?: Record<string, string>,
 ): string {
   if (sourceKey.includes("+")) {
     const parsed = parseKeyCombination(sourceKey);
-    const keyLabel = resolveKeyLabel(parsed.keyCode, layout, customKeyNames);
+    const keyLabel = resolveKeyLabel(t, parsed.keyCode, layout, customKeyNames);
     if (parsed.modifiers.length === 0) return keyLabel;
     const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
     return [...modifierLabels, keyLabel].join("+");
   }
-  return resolveKeyLabel(sourceKey, layout, customKeyNames);
+  return resolveKeyLabel(t, sourceKey, layout, customKeyNames);
 }
 
 // 記号キーの keyCode → 文字（US配列基準の簡易マッピング。IntlRo/IntlYen はJIS用）
@@ -278,9 +282,9 @@ function charToKeyCode(char: string): string {
 }
 
 /** キーコードのバッジ表示ラベル: 可視1文字はその文字（大文字）、それ以外（Space 等）は getKeyLabel() のラベル */
-function keyCodeToBadgeLabel(keyCode: string): string {
+function keyCodeToBadgeLabel(t: Translator, keyCode: string): string {
   const char = keyCodeToChar(keyCode);
-  return char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(keyCode);
+  return char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(t, keyCode);
 }
 
 export type ActualKeyInfo = {
@@ -390,6 +394,7 @@ function buildShiftHeldReverseMap(remaps: RemapInfo[]): Map<string, { sourceKey:
  * chat > all > unset の優先度で1行に解決される（filterRemapsForChat）。
  */
 export function getActualKeyInfos(
+  t: Translator,
   searchStr: string,
   remaps: RemapInfo[],
   options?: ActualKeyOptions,
@@ -455,7 +460,7 @@ export function getActualKeyInfos(
           keyCode: shiftInfo.sourceKey,
           isRemapped: true,
           needsShift: false,
-          displayLabel: keyCodeToBadgeLabel(shiftInfo.sourceKey),
+          displayLabel: keyCodeToBadgeLabel(t, shiftInfo.sourceKey),
         });
         continue;
       }
@@ -474,7 +479,7 @@ export function getActualKeyInfos(
         keyCode,
         isRemapped: false,
         needsShift: false,
-        displayLabel: keyCodeToBadgeLabel(keyCode),
+        displayLabel: keyCodeToBadgeLabel(t, keyCode),
       });
       continue;
     }
@@ -495,9 +500,9 @@ export function getActualKeyInfos(
           .slice(0, -1)
           .map(modifierToMark)
           .join("");
-        displayLabel = `${mods}+${keyCodeToBadgeLabel(parts[parts.length - 1])}`;
+        displayLabel = `${mods}+${keyCodeToBadgeLabel(t, parts[parts.length - 1])}`;
       } else {
-        displayLabel = keyCodeToBadgeLabel(sourceKey);
+        displayLabel = keyCodeToBadgeLabel(t, sourceKey);
       }
 
       result.push({
@@ -512,7 +517,7 @@ export function getActualKeyInfos(
 
     const baseKeyCode = charToKeyCode(char.toLowerCase());
     // スペースなど不可視文字はバッジが空になるためキーラベル（Space 等）を表示する
-    const baseLabel = char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(baseKeyCode);
+    const baseLabel = char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(t, baseKeyCode);
     const displayLabel = isUpperCase ? `⇧+${baseLabel}` : baseLabel;
     result.push({
       char: char.toLowerCase(),
@@ -549,7 +554,11 @@ export type SimulatedKeyOutput = {
  * getActualKeyInfos()（文字→押すキーの逆引き）の対になる簡易シミュレーション。
  * 完全一致（修飾キー込み）→ 基底キー一致（Shift は大文字化として扱う）の順で解決する。
  */
-export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): SimulatedKeyOutput {
+export function simulateRemapOutput(
+  t: Translator,
+  combo: string,
+  remaps: RemapInfo[],
+): SimulatedKeyOutput {
   const chatRemaps = filterRemapsForChat(remaps);
   const normalized = normalizeKeyCombination(combo);
   const parsed = parseKeyCombination(normalized);
@@ -558,7 +567,7 @@ export function simulateRemapOutput(combo: string, remaps: RemapInfo[]): Simulat
   // 可視の1文字はその文字、それ以外（Space, F3, ShiftLeft 等）はキーラベルを表示
   const baseLabel = baseChar.trim().length === 1
     ? baseChar.toUpperCase()
-    : getKeyLabel(parsed.keyCode);
+    : getKeyLabel(t, parsed.keyCode);
   const pressedLabel = parsed.modifiers.length > 0
     ? `${modifierMarks}+${baseLabel}`
     : baseLabel;

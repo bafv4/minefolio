@@ -63,15 +63,15 @@ const runnerColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
  * ========================================================== */
 
 /** アクション 1 件分のキー表示列を生成 */
-function actionColumn(action: string): ColumnDef<KeybindingsRow> {
+function actionColumn(t: Translator, action: string): ColumnDef<KeybindingsRow> {
   return {
     id: `action.${action}`,
     header: () => (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span>{getActionLabel(action)}</span>
+          <span>{getActionLabel(t, action)}</span>
         </TooltipTrigger>
-        <TooltipContent>{getActionLabel(action)}</TooltipContent>
+        <TooltipContent>{getActionLabel(t, action)}</TooltipContent>
       </Tooltip>
     ),
     accessorFn: (row) =>
@@ -117,21 +117,21 @@ const hotbarColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
 // 移動: 前進・後退・左右・ジャンプ・スニーク・ダッシュ
 const movementColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
   runnerColumn(t),
-  ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map(actionColumn),
+  ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map((a) => actionColumn(t, a)),
 ];
 
 // インベントリ: ホットバー（集約）・オフハンド・インベントリ・ブロック選択・ドロップ
 const inventoryColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
   runnerColumn(t),
   hotbarColumn(t),
-  ...["swapHands", "inventory", "pickBlock", "drop"].map(actionColumn),
+  ...["swapHands", "inventory", "pickBlock", "drop"].map((a) => actionColumn(t, a)),
 ];
 
 // 戦闘・UI: 攻撃・使用・視点切替・チャット・コマンド・全画面
 const combatUiColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
   runnerColumn(t),
   ...["attack", "use", "togglePerspective", "chat", "command", "fullscreen"].map(
-    actionColumn,
+    (a: string) => actionColumn(t, a),
   ),
 ];
 

@@ -1,3 +1,4 @@
+import type { MessageKey, Translator } from "@/lib/messages";
 // =====================================
 // 定数
 // =====================================
@@ -14,79 +15,73 @@ export function isUnbound(keyCode: string | null | undefined): boolean {
 // アクションラベル
 // =====================================
 
-// キーバインドアクションの日本語ラベル
-export const ACTION_LABELS: Record<string, string> = {
-  // 移動
-  forward: "前進",
-  back: "後退",
-  left: "左移動",
-  right: "右移動",
-  jump: "ジャンプ",
-  sneak: "スニーク",
-  sprint: "ダッシュ",
-  // 戦闘
-  attack: "攻撃/破壊",
-  use: "使用/設置",
-  pickBlock: "ブロック選択",
-  drop: "アイテムを捨てる",
-  // インベントリ
-  inventory: "インベントリ",
-  swapHands: "オフハンド",
-  hotbar1: "ホットバー1",
-  hotbar2: "ホットバー2",
-  hotbar3: "ホットバー3",
-  hotbar4: "ホットバー4",
-  hotbar5: "ホットバー5",
-  hotbar6: "ホットバー6",
-  hotbar7: "ホットバー7",
-  hotbar8: "ホットバー8",
-  hotbar9: "ホットバー9",
-  // コントローラー用ホットバー操作
-  hotbarLeft: "ホットバー左",
-  hotbarRight: "ホットバー右",
-  // UI
-  togglePerspective: "視点切替",
-  fullscreen: "全画面",
-  chat: "チャット",
-  command: "コマンド",
-};
+// アクション名 → 翻訳キー。文言は pages-ja.ts / pages-en.ts の actionLabels / shortActionLabels
+// （モジュール評価時はロケールが未確定なので、ここでは文言そのものを持たない）
+const ACTION_LABEL_KEYS = {
+  forward: "actionLabels.forward",
+  back: "actionLabels.back",
+  left: "actionLabels.left",
+  right: "actionLabels.right",
+  jump: "actionLabels.jump",
+  sneak: "actionLabels.sneak",
+  sprint: "actionLabels.sprint",
+  attack: "actionLabels.attack",
+  use: "actionLabels.use",
+  pickBlock: "actionLabels.pickBlock",
+  drop: "actionLabels.drop",
+  inventory: "actionLabels.inventory",
+  swapHands: "actionLabels.swapHands",
+  hotbar1: "actionLabels.hotbar1",
+  hotbar2: "actionLabels.hotbar2",
+  hotbar3: "actionLabels.hotbar3",
+  hotbar4: "actionLabels.hotbar4",
+  hotbar5: "actionLabels.hotbar5",
+  hotbar6: "actionLabels.hotbar6",
+  hotbar7: "actionLabels.hotbar7",
+  hotbar8: "actionLabels.hotbar8",
+  hotbar9: "actionLabels.hotbar9",
+  hotbarLeft: "actionLabels.hotbarLeft",
+  hotbarRight: "actionLabels.hotbarRight",
+  togglePerspective: "actionLabels.togglePerspective",
+  fullscreen: "actionLabels.fullscreen",
+  chat: "actionLabels.chat",
+  command: "actionLabels.command",
+} as const satisfies Record<string, MessageKey>;
 
-// キーバインドアクションの短縮ラベル（チップ用）
-export const SHORT_ACTION_LABELS: Record<string, string> = {
-  // 移動
-  forward: "前",
-  back: "後",
-  left: "左",
-  right: "右",
-  jump: "ジャンプ",
-  sneak: "スニーク",
-  sprint: "ダッシュ",
-  // 戦闘
-  attack: "攻撃",
-  use: "使用",
-  pickBlock: "選択",
-  drop: "捨てる",
-  // インベントリ
-  inventory: "ｲﾝﾍﾞﾝﾄﾘ",
-  swapHands: "OH",
-  hotbar1: "HB1",
-  hotbar2: "HB2",
-  hotbar3: "HB3",
-  hotbar4: "HB4",
-  hotbar5: "HB5",
-  hotbar6: "HB6",
-  hotbar7: "HB7",
-  hotbar8: "HB8",
-  hotbar9: "HB9",
-  // コントローラー用ホットバー操作
-  hotbarLeft: "HB←",
-  hotbarRight: "HB→",
-  // UI
-  togglePerspective: "視点",
-  fullscreen: "全画面",
-  chat: "チャット",
-  command: "コマンド",
-};
+/** チップ表示用の短縮ラベル（幅が限られる箇所で使う） */
+const SHORT_ACTION_LABEL_KEYS = {
+  forward: "shortActionLabels.forward",
+  back: "shortActionLabels.back",
+  left: "shortActionLabels.left",
+  right: "shortActionLabels.right",
+  jump: "shortActionLabels.jump",
+  sneak: "shortActionLabels.sneak",
+  sprint: "shortActionLabels.sprint",
+  attack: "shortActionLabels.attack",
+  use: "shortActionLabels.use",
+  pickBlock: "shortActionLabels.pickBlock",
+  drop: "shortActionLabels.drop",
+  inventory: "shortActionLabels.inventory",
+  swapHands: "shortActionLabels.swapHands",
+  hotbar1: "shortActionLabels.hotbar1",
+  hotbar2: "shortActionLabels.hotbar2",
+  hotbar3: "shortActionLabels.hotbar3",
+  hotbar4: "shortActionLabels.hotbar4",
+  hotbar5: "shortActionLabels.hotbar5",
+  hotbar6: "shortActionLabels.hotbar6",
+  hotbar7: "shortActionLabels.hotbar7",
+  hotbar8: "shortActionLabels.hotbar8",
+  hotbar9: "shortActionLabels.hotbar9",
+  hotbarLeft: "shortActionLabels.hotbarLeft",
+  hotbarRight: "shortActionLabels.hotbarRight",
+  togglePerspective: "shortActionLabels.togglePerspective",
+  fullscreen: "shortActionLabels.fullscreen",
+  chat: "shortActionLabels.chat",
+  command: "shortActionLabels.command",
+} as const satisfies Record<string, MessageKey>;
+
+/** 表示対象のアクション一覧（順序は上の定義順） */
+export const ACTION_KEYS = Object.keys(ACTION_LABEL_KEYS);
 
 // =====================================
 // キーコード正規化・表示ラベル
@@ -96,11 +91,11 @@ export const SHORT_ACTION_LABELS: Record<string, string> = {
 // 正規化後の形式（PascalCase）で定義
 export const KEY_CODE_LABELS: Record<string, string> = {
   // マウス
-  Mouse0: "左クリック",
-  Mouse1: "右クリック",
-  Mouse2: "中クリック",
-  Mouse3: "サイド1",
-  Mouse4: "サイド2",
+  Mouse0: "",  // → keyLabels.mouseLeft
+  Mouse1: "",  // → keyLabels.mouseRight
+  Mouse2: "",  // → keyLabels.mouseMiddle
+  Mouse3: "",  // → keyLabels.mouseSide1
+  Mouse4: "",  // → keyLabels.mouseSide2
   // コントローラー
   GamepadA: "A",
   GamepadB: "B",
@@ -120,14 +115,14 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   GamepadSelect: "Select",
   // 特殊キー
   Space: "Space",
-  ControlLeft: "左Ctrl",
-  ControlRight: "右Ctrl",
-  ShiftLeft: "左Shift",
-  ShiftRight: "右Shift",
-  AltLeft: "左Alt",
-  AltRight: "右Alt",
-  MetaLeft: "左Win",
-  MetaRight: "右Win",
+  ControlLeft: "",  // → keyLabels.ctrlLeft
+  ControlRight: "",  // → keyLabels.ctrlRight
+  ShiftLeft: "",  // → keyLabels.shiftLeft
+  ShiftRight: "",  // → keyLabels.shiftRight
+  AltLeft: "",  // → keyLabels.altLeft
+  AltRight: "",  // → keyLabels.altRight
+  MetaLeft: "",  // → keyLabels.winLeft
+  MetaRight: "",  // → keyLabels.winRight
   Tab: "Tab",
   CapsLock: "CapsLock",
   Escape: "Esc",
@@ -178,18 +173,42 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   NumLock: "NumLock",
 };
 
+/** KEY_CODE_LABELS のうち翻訳が必要なものの上書き（英数キーは翻訳不要なので持たない） */
+const KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
+  Mouse0: "keyLabels.mouseLeft",
+  Mouse1: "keyLabels.mouseRight",
+  Mouse2: "keyLabels.mouseMiddle",
+  Mouse3: "keyLabels.mouseSide1",
+  Mouse4: "keyLabels.mouseSide2",
+  ControlLeft: "keyLabels.ctrlLeft",
+  ControlRight: "keyLabels.ctrlRight",
+  ShiftLeft: "keyLabels.shiftLeft",
+  ShiftRight: "keyLabels.shiftRight",
+  AltLeft: "keyLabels.altLeft",
+  AltRight: "keyLabels.altRight",
+  MetaLeft: "keyLabels.winLeft",
+  MetaRight: "keyLabels.winRight",
+};
+
+/** JIS 配列だけ翻訳が要るキー */
+const JIS_KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
+  Backquote: "keyLabels.hankaku",
+};
+
 /**
  * アクション名を表示用ラベルに変換
  */
-export function getActionLabel(action: string): string {
-  return ACTION_LABELS[action] || action;
+export function getActionLabel(t: Translator, action: string): string {
+  const key = ACTION_LABEL_KEYS[action as keyof typeof ACTION_LABEL_KEYS];
+  return key ? t(key) : action;
 }
 
 /**
  * アクション名を短縮ラベルに変換（チップ用）
  */
-export function getShortActionLabel(action: string): string {
-  return SHORT_ACTION_LABELS[action] || action;
+export function getShortActionLabel(t: Translator, action: string): string {
+  const key = SHORT_ACTION_LABEL_KEYS[action as keyof typeof SHORT_ACTION_LABEL_KEYS];
+  return key ? t(key) : action;
 }
 
 // =====================================
@@ -431,7 +450,7 @@ const JIS_KEY_LABELS: Record<string, string> = {
   BracketLeft: "@",
   BracketRight: "[",
   Backslash: "]",
-  Backquote: "半角",
+  Backquote: "",  // → keyLabels.hankaku
 };
 
 const US_KEY_LABELS: Record<string, string> = {
@@ -454,7 +473,11 @@ const US_KEY_LABELS: Record<string, string> = {
  * @param keyCode キーコード（任意の形式）
  * @param keyboardLayout キーボード配列 ("jis" | "us" | null)
  */
-export function getKeyLabel(keyCode: string, keyboardLayout: string | null = null): string {
+export function getKeyLabel(
+  t: Translator,
+  keyCode: string,
+  keyboardLayout: string | null = null,
+): string {
   // 不使用の場合
   if (keyCode === UNBOUND_KEY) {
     return "-";
@@ -463,10 +486,19 @@ export function getKeyLabel(keyCode: string, keyboardLayout: string | null = nul
   // まず正規化（Minecraft形式、大文字形式などをPascalCaseに統一）
   const normalized = normalizeKeyCode(keyCode);
 
-  // キーボード配列による違いを適用
-  const layoutLabels = keyboardLayout === "jis" ? JIS_KEY_LABELS : US_KEY_LABELS;
+  // キーボード配列による違いを適用（JIS の半角キーだけ翻訳が要る）
+  const isJis = keyboardLayout === "jis";
+  if (isJis && JIS_KEY_LABEL_KEY_OVERRIDES[normalized]) {
+    return t(JIS_KEY_LABEL_KEY_OVERRIDES[normalized]);
+  }
+  const layoutLabels = isJis ? JIS_KEY_LABELS : US_KEY_LABELS;
   if (layoutLabels[normalized]) {
     return layoutLabels[normalized];
+  }
+
+  // 翻訳が要るキー名（左Ctrl / 左クリック 等）を先に見る
+  if (KEY_LABEL_KEY_OVERRIDES[normalized]) {
+    return t(KEY_LABEL_KEY_OVERRIDES[normalized]);
   }
 
   // 既知のキーコードの場合
@@ -511,18 +543,26 @@ export type FingerType =
   | "right-pinky";
 
 // 指のラベル
-export const FINGER_LABELS: Record<FingerType, string> = {
-  "left-pinky": "左小指",
-  "left-ring": "左薬指",
-  "left-middle": "左中指",
-  "left-index": "左人差指",
-  "left-thumb": "左親指",
-  "right-thumb": "右親指",
-  "right-index": "右人差指",
-  "right-middle": "右中指",
-  "right-ring": "右薬指",
-  "right-pinky": "右小指",
+const FINGER_LABEL_KEYS: Record<FingerType, MessageKey> = {
+  "left-pinky": "fingerLabels.leftPinky",
+  "left-ring": "fingerLabels.leftRing",
+  "left-middle": "fingerLabels.leftMiddle",
+  "left-index": "fingerLabels.leftIndex",
+  "left-thumb": "fingerLabels.leftThumb",
+  "right-thumb": "fingerLabels.rightThumb",
+  "right-index": "fingerLabels.rightIndex",
+  "right-middle": "fingerLabels.rightMiddle",
+  "right-ring": "fingerLabels.rightRing",
+  "right-pinky": "fingerLabels.rightPinky",
 };
+
+/** 指割り当ての表示名。描画時に解決する */
+export function getFingerLabel(t: Translator, finger: FingerType): string {
+  return t(FINGER_LABEL_KEYS[finger]);
+}
+
+/** 指の一覧（表示順） */
+export const FINGER_TYPES = Object.keys(FINGER_LABEL_KEYS) as FingerType[];
 
 // デフォルトの指割り当て（一般的なWASD配置）
 export const DEFAULT_FINGER_ASSIGNMENTS: Record<string, FingerType[]> = {
@@ -795,21 +835,22 @@ export function normalizeKeyCombination(input: string): string {
  * // => "Ctrl+Shift+A"
  */
 export function getKeyCombinationLabel(
+  t: Translator,
   combo: string,
   keyboardLayout: string | null = null
 ): string {
   if (!combo || combo === UNBOUND_KEY) {
-    return getKeyLabel(combo, keyboardLayout);
+    return getKeyLabel(t, combo, keyboardLayout);
   }
 
   const parsed = parseKeyCombination(combo);
 
   if (parsed.modifiers.length === 0) {
-    return getKeyLabel(parsed.keyCode, keyboardLayout);
+    return getKeyLabel(t, parsed.keyCode, keyboardLayout);
   }
 
   const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
-  const keyLabel = getKeyLabel(parsed.keyCode, keyboardLayout);
+  const keyLabel = getKeyLabel(t, parsed.keyCode, keyboardLayout);
 
   return [...modifierLabels, keyLabel].join("+");
 }

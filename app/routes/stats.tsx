@@ -1,5 +1,5 @@
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
@@ -142,9 +142,15 @@ function normalizeKeyCodeForStats(keyCode: string): string {
   return keyCode;
 }
 
-export async function loader() {
+export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
+
+  // 分布グラフの区間ラベル。単位は文字列として渡す（"5%" / "10cm" / "" ）
+  const binUpTo = (max: string) => t("stats.binUpTo", { max });
+  const binRange = (min: number, max: string) => t("stats.binRange", { min, max });
+  const binFrom = (min: string) => t("stats.binFrom", { min });
 
   // 総ユーザー数
   const [{ totalUsers }] = await db.select({ totalUsers: count() }).from(users);
@@ -208,14 +214,14 @@ export async function loader() {
   // DPI分布（参考: mchotkeys）
   const dpiDistribution: Record<string, number> = {};
   const dpiRanges = [
-    { label: "〜400", min: 0, max: 399 },
-    { label: "400〜799", min: 400, max: 799 },
-    { label: "800〜1199", min: 800, max: 1199 },
-    { label: "1200〜1599", min: 1200, max: 1599 },
-    { label: "1600〜1999", min: 1600, max: 1999 },
-    { label: "2000〜2399", min: 2000, max: 2399 },
-    { label: "2400〜3199", min: 2400, max: 3199 },
-    { label: "3200〜", min: 3200, max: Infinity },
+    { label: binUpTo("400"), min: 0, max: 399 },
+    { label: binRange(400, "799"), min: 400, max: 799 },
+    { label: binRange(800, "1199"), min: 800, max: 1199 },
+    { label: binRange(1200, "1599"), min: 1200, max: 1599 },
+    { label: binRange(1600, "1999"), min: 1600, max: 1999 },
+    { label: binRange(2000, "2399"), min: 2000, max: 2399 },
+    { label: binRange(2400, "3199"), min: 2400, max: 3199 },
+    { label: binFrom("3200"), min: 3200, max: Infinity },
   ];
 
   for (const range of dpiRanges) {
@@ -236,16 +242,16 @@ export async function loader() {
   // 感度分布（参考: mchotkeys）
   const sensitivityDistribution: Record<string, number> = {};
   const sensRanges = [
-    { label: "〜5%", min: 0, max: 4 },
-    { label: "5〜9%", min: 5, max: 9 },
-    { label: "10〜14%", min: 10, max: 14 },
-    { label: "15〜19%", min: 15, max: 19 },
-    { label: "20〜39%", min: 20, max: 39 },
-    { label: "40〜59%", min: 40, max: 59 },
-    { label: "60〜79%", min: 60, max: 79 },
-    { label: "80〜99%", min: 80, max: 99 },
+    { label: binUpTo("5%"), min: 0, max: 4 },
+    { label: binRange(5, "9%"), min: 5, max: 9 },
+    { label: binRange(10, "14%"), min: 10, max: 14 },
+    { label: binRange(15, "19%"), min: 15, max: 19 },
+    { label: binRange(20, "39%"), min: 20, max: 39 },
+    { label: binRange(40, "59%"), min: 40, max: 59 },
+    { label: binRange(60, "79%"), min: 60, max: 79 },
+    { label: binRange(80, "99%"), min: 80, max: 99 },
     { label: "100%", min: 100, max: 100 },
-    { label: "101%〜", min: 101, max: Infinity },
+    { label: binFrom("101%"), min: 101, max: Infinity },
   ];
 
   for (const range of sensRanges) {
@@ -269,15 +275,15 @@ export async function loader() {
   // cm/360分布（参考: mchotkeys のcm/180を2倍）
   const cm360Distribution: Record<string, number> = {};
   const cm360Ranges = [
-    { label: "〜10cm", min: 0, max: 9 },
-    { label: "10〜15cm", min: 10, max: 14 },
-    { label: "15〜20cm", min: 15, max: 19 },
-    { label: "20〜30cm", min: 20, max: 29 },
-    { label: "30〜40cm", min: 30, max: 39 },
-    { label: "40〜50cm", min: 40, max: 49 },
-    { label: "50〜70cm", min: 50, max: 69 },
-    { label: "70〜100cm", min: 70, max: 99 },
-    { label: "100cm〜", min: 100, max: Infinity },
+    { label: binUpTo("10cm"), min: 0, max: 9 },
+    { label: binRange(10, "15cm"), min: 10, max: 14 },
+    { label: binRange(15, "20cm"), min: 15, max: 19 },
+    { label: binRange(20, "30cm"), min: 20, max: 29 },
+    { label: binRange(30, "40cm"), min: 30, max: 39 },
+    { label: binRange(40, "50cm"), min: 40, max: 49 },
+    { label: binRange(50, "70cm"), min: 50, max: 69 },
+    { label: binRange(70, "100cm"), min: 70, max: 99 },
+    { label: binFrom("100cm"), min: 100, max: Infinity },
   ];
 
   for (const range of cm360Ranges) {
@@ -380,6 +386,7 @@ function ActionToKeyCard({
   keyStats: Record<string, number>;
   totalUsers: number;
 }) {
+  const t = useT();
   const entries = Object.entries(keyStats)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
@@ -391,13 +398,13 @@ function ActionToKeyCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">{getActionLabel(action)}</CardTitle>
+        <CardTitle className="text-base">{getActionLabel(t, action)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {entries.map(([key, count]) => (
           <StatBar
             key={key}
-            label={getKeyLabel(key)}
+            label={getKeyLabel(t, key)}
             count={count}
             total={totalUsers}
             maxCount={maxCount}
@@ -417,6 +424,7 @@ function KeyToActionCard({
   actionStats: Record<string, number>;
   totalUsers: number;
 }) {
+  const t = useT();
   const entries = Object.entries(actionStats)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
@@ -428,13 +436,13 @@ function KeyToActionCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">{getKeyLabel(keyCode)}</CardTitle>
+        <CardTitle className="text-base">{getKeyLabel(t, keyCode)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {entries.map(([action, count]) => (
           <StatBar
             key={action}
-            label={getActionLabel(action)}
+            label={getActionLabel(t, action)}
             count={count}
             total={totalUsers}
             maxCount={maxCount}

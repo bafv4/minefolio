@@ -518,7 +518,7 @@ export default function PlayerProfilePage() {
   const resolveKeyLabel = (keyCode: string): string => {
     const customLabel = customKeyLabelByCode.get(normalizeKeyCode(keyCode));
     if (customLabel) return customLabel;
-    return getKeyLabel(keyCode);
+    return getKeyLabel(t, keyCode);
   };
   const resolveKeyCombinationLabel = (combo: string): string => {
     if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
@@ -654,7 +654,7 @@ export default function PlayerProfilePage() {
     { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
     { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
     { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
-    { value: "guides", icon: BookOpen, label: "ガイド" },
+    { value: "guides", icon: BookOpen, label: t("playerProfile.guidesTab") },
   ];
 
   // 有効なタブ値のリスト
@@ -910,7 +910,7 @@ export default function PlayerProfilePage() {
                         <DialogTrigger asChild>
                           <button
                             type="button"
-                            aria-label="スキンを 3D で表示"
+                            aria-label={t("playerProfile.viewSkin3d")}
                             className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
@@ -972,7 +972,7 @@ export default function PlayerProfilePage() {
                       <Badge variant="outline">{player.mainEdition === "java" ? "Java" : "Bedrock"}</Badge>
                     )}
                     {player.mainPlatform && (
-                      <Badge variant="outline">{getPlatformLabel(player.mainPlatform)}</Badge>
+                      <Badge variant="outline">{getPlatformLabel(t, player.mainPlatform)}</Badge>
                     )}
                     {player.inputMethodBadge && (
                       <Badge variant="outline">
@@ -1194,7 +1194,7 @@ export default function PlayerProfilePage() {
                               key={kb.id}
                               className="flex justify-between items-center py-2.5"
                             >
-                              <span className="text-sm">{getActionLabel(kb.action)}</span>
+                              <span className="text-sm">{getActionLabel(t, kb.action)}</span>
                               <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
                                 {resolveKeyLabel(kb.keyCode)}
                               </kbd>
@@ -1616,8 +1616,8 @@ export default function PlayerProfilePage() {
           ) : (
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
-              title="ガイドがありません"
-              description="このプレイヤーはまだガイドを公開していません。"
+              title={t("playerProfile.noGuidesTitle")}
+              description={t("playerProfile.noGuidesDescription")}
             />
           )}
         </TabsContent>
@@ -1756,11 +1756,11 @@ function getItemDisplayName(itemId: string): string {
 // ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
 // プラットフォーム表示名を取得
-function getPlatformLabel(platform: string): string {
+function getPlatformLabel(t: Translator, platform: string): string {
   const labels: Record<string, string> = {
-    pc_windows: "PC（Windows）",
-    pc_mac: "PC（Mac）",
-    pc_linux: "PC（Linux）",
+    pc_windows: t("playerProfile.platformPcWindows"),
+    pc_mac: t("playerProfile.platformPcMac"),
+    pc_linux: t("playerProfile.platformPcLinux"),
     switch: "Switch",
     mobile: "Mobile",
     other: "Other",
@@ -2449,7 +2449,7 @@ function StatsServiceLoadingCard({
           <div>
             <p className="font-medium">{title}</p>
             <p className="text-sm text-muted-foreground">
-              {isLoading ? description : isError ? "読み込みに失敗しました" : "読み込み完了"}
+              {isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete")}
             </p>
           </div>
         </div>

@@ -389,7 +389,7 @@ export default function ImportPage() {
               <div className="bg-muted p-2 rounded font-mono text-xs">
                 CapsLock::Ctrl<br />
                 a::b<br />
-                XButton1::e ; コメント
+                XButton1::e ; {t("meImport.ahkCommentExample")}
               </div>
             </div>
             <div className="flex items-center justify-between">

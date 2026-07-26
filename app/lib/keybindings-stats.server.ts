@@ -6,34 +6,33 @@ import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { calculateCm360 } from "./mouse-settings";
-import { getActionLabel } from "./keybindings";
-import { t } from "./messages";
+import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
 
-// 主要なアクション（集計対象）
+// 主要なアクション（集計対象）。ラベルはロケール依存なのでキーで持ち、描画時に解決する
 export const TRACKED_ACTIONS = [
-  { action: "forward", label: getActionLabel("forward") },
-  { action: "back", label: getActionLabel("back") },
-  { action: "left", label: getActionLabel("left") },
-  { action: "right", label: getActionLabel("right") },
-  { action: "sprint", label: getActionLabel("sprint") },
-  { action: "sneak", label: getActionLabel("sneak") },
-  { action: "jump", label: getActionLabel("jump") },
-  { action: "inventory", label: getActionLabel("inventory") },
-  { action: "swapHands", label: getActionLabel("swapHands") },
-  { action: "drop", label: getActionLabel("drop") },
-  { action: "pickBlock", label: getActionLabel("pickBlock") },
-  { action: "attack", label: getActionLabel("attack") },
-  { action: "use", label: getActionLabel("use") },
-  { action: "hotbar1", label: getActionLabel("hotbar1") },
-  { action: "hotbar2", label: getActionLabel("hotbar2") },
-  { action: "hotbar3", label: getActionLabel("hotbar3") },
-  { action: "hotbar4", label: getActionLabel("hotbar4") },
-  { action: "hotbar5", label: getActionLabel("hotbar5") },
-  { action: "hotbar6", label: getActionLabel("hotbar6") },
-  { action: "hotbar7", label: getActionLabel("hotbar7") },
-  { action: "hotbar8", label: getActionLabel("hotbar8") },
-  { action: "hotbar9", label: getActionLabel("hotbar9") },
+  { action: "forward", labelKey: "actionLabels.forward" as const },
+  { action: "back", labelKey: "actionLabels.back" as const },
+  { action: "left", labelKey: "actionLabels.left" as const },
+  { action: "right", labelKey: "actionLabels.right" as const },
+  { action: "sprint", labelKey: "actionLabels.sprint" as const },
+  { action: "sneak", labelKey: "actionLabels.sneak" as const },
+  { action: "jump", labelKey: "actionLabels.jump" as const },
+  { action: "inventory", labelKey: "actionLabels.inventory" as const },
+  { action: "swapHands", labelKey: "actionLabels.swapHands" as const },
+  { action: "drop", labelKey: "actionLabels.drop" as const },
+  { action: "pickBlock", labelKey: "actionLabels.pickBlock" as const },
+  { action: "attack", labelKey: "actionLabels.attack" as const },
+  { action: "use", labelKey: "actionLabels.use" as const },
+  { action: "hotbar1", labelKey: "actionLabels.hotbar1" as const },
+  { action: "hotbar2", labelKey: "actionLabels.hotbar2" as const },
+  { action: "hotbar3", labelKey: "actionLabels.hotbar3" as const },
+  { action: "hotbar4", labelKey: "actionLabels.hotbar4" as const },
+  { action: "hotbar5", labelKey: "actionLabels.hotbar5" as const },
+  { action: "hotbar6", labelKey: "actionLabels.hotbar6" as const },
+  { action: "hotbar7", labelKey: "actionLabels.hotbar7" as const },
+  { action: "hotbar8", labelKey: "actionLabels.hotbar8" as const },
+  { action: "hotbar9", labelKey: "actionLabels.hotbar9" as const },
 ] as const;
 
 // DPI 区分（11段階）
@@ -89,9 +88,13 @@ export interface PlayerInfo {
   customSkinUrl: string | null;
 }
 
+/** F3 入力キーが未設定の行をまとめるための内部キー（表示前に翻訳へ差し替える） */
+export const UNASSIGNED_INPUT_KEY = "__unassigned__";
+
 export interface KeybindingStats {
   action: string;
-  label: string;
+  /** ラベルは翻訳キーで返し、描画側（useT）で解決する */
+  labelKey: MessageKey;
   topKeys: Array<{ keyCode: string; count: number; percentage: number; players: PlayerInfo[] }>;
   totalCount: number;
 }
@@ -232,7 +235,7 @@ export async function loadKeybindingsStats(
 
     keybindingStats.push({
       action: tracked.action,
-      label: tracked.label,
+      labelKey: tracked.labelKey,
       topKeys,
       totalCount,
     });
@@ -287,7 +290,8 @@ export async function loadKeybindingsStats(
   }
 
   for (const r of f3InputRemaps) {
-    const inputKey = r.sourceKey ?? t("meKeybindings.unassigned");
+    // sourceKey が無い行のグループ化キー。表示は描画側が unassigned を訳す
+    const inputKey = r.sourceKey ?? UNASSIGNED_INPUT_KEY;
     const players = f3Groups.get(inputKey) ?? [];
     players.push({ slug: r.slug, mcid: r.mcid, uuid: r.uuid, displayName: r.displayName, customSkinUrl: r.customSkinUrl });
     f3Groups.set(inputKey, players);

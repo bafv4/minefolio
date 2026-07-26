@@ -289,7 +289,7 @@ export function SearchCraftEmbedView({
     const items = coerceStringArray(craft.items);
     const withShift = craft.withShift === true;
     const keyInfos = craft.searchStr
-      ? getActualKeyInfos(craft.searchStr, remaps, { shiftHeld: withShift })
+      ? getActualKeyInfos(t, craft.searchStr, remaps, { shiftHeld: withShift })
       : [];
 
     return (

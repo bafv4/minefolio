@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { PresetRemapData, PresetSearchCraftData } from "./preset-utils";
 import { normalizeKeyRemapType, toUiRemaps, type UiRemapInfo } from "./remap-utils";
-import { t } from "./messages";
+import type { Translator } from "./messages";
 
 /**
  * サーチクラフトテンプレート共有ユーティリティ。
@@ -178,7 +178,10 @@ export type EditorSubmission = {
  * テンプレートエディタから送信されたフォームデータを検証し、DB保存用の形式に変換する。
  * 不正な場合は { error } を返す。
  */
-export function parseEditorSubmission(formData: FormData): EditorSubmission | { error: string } {
+export function parseEditorSubmission(
+  t: Translator,
+  formData: FormData,
+): EditorSubmission | { error: string } {
   const title = ((formData.get("title") as string | null) ?? "").trim();
   const description = ((formData.get("description") as string | null) ?? "").trim();
   const gameLanguage = ((formData.get("gameLanguage") as string | null) ?? "").trim();

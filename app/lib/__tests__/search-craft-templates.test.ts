@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { createTranslator } from "../messages";
+
+// エラーメッセージは表示ロケールに依存するため、テストでは日本語で固定する
+const t = createTranslator("ja");
 import {
   parseTemplateCrafts,
   parseTemplateRemapData,
@@ -149,7 +153,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
   ]);
 
   it("正常な送信をDB保存形式に変換する", () => {
-    const result = parseEditorSubmission(
+    const result = parseEditorSubmission(t, 
       buildForm({
         title: "  テスト  ",
         description: "説明",
@@ -174,7 +178,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
   });
 
   it("withShift を検証して保持する（未指定・不正値は false）", () => {
-    const result = parseEditorSubmission(
+    const result = parseEditorSubmission(t, 
       buildForm({
         title: "テスト",
         crafts: JSON.stringify([
@@ -192,7 +196,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
   });
 
   it("サーチ文字列の先頭・末尾スペースを保存値に保持する（trim は空判定のみ）", () => {
-    const result = parseEditorSubmission(
+    const result = parseEditorSubmission(t, 
       buildForm({
         title: "a",
         crafts: JSON.stringify([
@@ -209,7 +213,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
 
   it("スペースのみのサーチ文字列は拒否する", () => {
     expect(
-      parseEditorSubmission(
+      parseEditorSubmission(t, 
         buildForm({
           title: "a",
           crafts: JSON.stringify([{ items: ["minecraft:chest"], searchStr: "   " }]),
@@ -221,13 +225,13 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
 
   it("タイトル未入力・クラフト0件・アイテムなし・サーチ文字列なしを拒否する", () => {
     expect(
-      parseEditorSubmission(buildForm({ title: "", crafts: validCrafts, remaps: "[]" })),
+      parseEditorSubmission(t, buildForm({ title: "", crafts: validCrafts, remaps: "[]" })),
     ).toHaveProperty("error");
     expect(
-      parseEditorSubmission(buildForm({ title: "a", crafts: "[]", remaps: "[]" })),
+      parseEditorSubmission(t, buildForm({ title: "a", crafts: "[]", remaps: "[]" })),
     ).toHaveProperty("error");
     expect(
-      parseEditorSubmission(
+      parseEditorSubmission(t, 
         buildForm({
           title: "a",
           crafts: JSON.stringify([{ items: [], searchStr: "x" }]),
@@ -236,7 +240,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
       ),
     ).toHaveProperty("error");
     expect(
-      parseEditorSubmission(
+      parseEditorSubmission(t, 
         buildForm({
           title: "a",
           crafts: JSON.stringify([{ items: ["minecraft:chest"], searchStr: "" }]),
@@ -247,7 +251,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
   });
 
   it("未入力のリマップ行と重複sourceKeyを除外し、空なら remapsData を null にする", () => {
-    const result = parseEditorSubmission(
+    const result = parseEditorSubmission(t, 
       buildForm({
         title: "a",
         crafts: validCrafts,
@@ -264,7 +268,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect(remaps).toHaveLength(1);
     expect(remaps[0].targetKey).toBe("KeyC");
 
-    const empty = parseEditorSubmission(
+    const empty = parseEditorSubmission(t, 
       buildForm({ title: "a", crafts: validCrafts, remaps: "[]" }),
     );
     if ("error" in empty) throw new Error("unexpected error");
@@ -273,7 +277,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
 
   it("不正なJSONを拒否する", () => {
     expect(
-      parseEditorSubmission(buildForm({ title: "a", crafts: "oops", remaps: "[]" })),
+      parseEditorSubmission(t, buildForm({ title: "a", crafts: "oops", remaps: "[]" })),
     ).toHaveProperty("error");
   });
 });

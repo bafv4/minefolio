@@ -202,6 +202,7 @@ function FilterRange({
   placeholderMax?: string;
   suffix?: string;
 }) {
+  const t = useT();
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -220,7 +221,7 @@ function FilterRange({
             </span>
           )}
         </div>
-        <span className="text-muted-foreground text-sm">〜</span>
+        <span className="text-muted-foreground text-sm">{t("common.rangeSeparator")}</span>
         <div className="relative flex-1">
           <Input
             type="number"

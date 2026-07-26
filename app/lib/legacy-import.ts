@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/messages";
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
 import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, customActions } from "./schema";
@@ -201,6 +202,7 @@ function guessCustomKeyCategory(keyCode: string, keyName: string): "mouse" | "ke
  * MCSRer Hotkeysからデータをインポート
  */
 export async function importFromLegacy(
+  t: Translator,
   db: Database,
   userId: string,
   legacyApiUrl: string,
@@ -229,7 +231,7 @@ export async function importFromLegacy(
         settingsImported: false,
         itemLayoutsImported: 0,
         searchCraftsImported: 0,
-        error: "レガシーデータが見つかりません"
+        error: t("meImport.legacyNotFound")
       };
     }
 
@@ -592,7 +594,7 @@ export async function importFromLegacy(
       settingsImported: false,
       itemLayoutsImported: 0,
       searchCraftsImported: 0,
-      error: error instanceof Error ? error.message : "インポート中にエラーが発生しました"
+      error: error instanceof Error ? error.message : t("meImport.legacyImportFailed")
     };
   }
 }

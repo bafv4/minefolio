@@ -1,7 +1,10 @@
+import type { MessageKey } from "@/lib/messages";
 import { memo } from "react";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, FINGER_LABELS, parseKeyCombination, type FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
@@ -30,28 +33,32 @@ const MODIFIER_ICON_MAP: Record<string, LucideIcon> = {
 };
 
 /** 共通: キー/ボタンの aria-label を組み立てる */
-function buildKeyAriaLabel(opts: {
+function buildKeyAriaLabel(t: Translator, opts: {
   displayLabel: string;
   noun?: string; // 「キー」 or 「ボタン」
   bindings: Array<{ action: string }>;
   remaps: RemapInfo[];
   layout?: string | null;
 }): string {
-  const noun = opts.noun ?? "キー";
+  const noun = opts.noun ?? t("keyboardView.ariaKeyNoun");
   return [
     `${opts.displayLabel} ${noun}`,
-    ...opts.bindings.map((b) => getActionLabel(b.action)),
-    ...opts.remaps.map(
-      (r) =>
-        `リマップ ${getRemapSourceLabel(r.sourceKey, opts.layout)} → ${getRemapOutputLabel(r, opts.layout)}`,
+    ...opts.bindings.map((b) => getActionLabel(t, b.action)),
+    ...opts.remaps.map((r) =>
+      t("keyboardView.ariaRemap", {
+        from: getRemapSourceLabel(t, r.sourceKey, opts.layout),
+        to: getRemapOutputLabel(t, r, opts.layout),
+      }),
     ),
-  ].join("、");
+  ].join(t("keyboardView.ariaSeparator"));
 }
 
 // キーボードレイアウト定義
 type KeyDefinition = {
   code: string;
   label?: string;
+  /** label より優先される翻訳キー（ロケール依存のキーキャップ表記用） */
+  labelKey?: MessageKey;
   width?: number; // 1 = 1unit (40px base)
   height?: number;
   /** キー外観の追加クラス */
@@ -167,7 +174,7 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
   US_MAIN_LAYOUT[0],
   // Row 2: Number row (半角/全角追加)
   [
-    { code: "IntlYen", label: "半角" },
+    { code: "IntlYen", labelKey: "keyLabels.hankaku" },
     { code: "Digit1", label: "1" },
     { code: "Digit2", label: "2" },
     { code: "Digit3", label: "3" },
@@ -242,10 +249,10 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
     { code: "ControlLeft", label: "Ctrl", width: 1.25 },
     { code: "MetaLeft", label: "Win", width: 1.25 },
     { code: "AltLeft", label: "Alt", width: 1.25 },
-    { code: "NonConvert", label: "無変換", width: 1.25 },
+    { code: "NonConvert", labelKey: "keyLabels.nonConvert", width: 1.25 },
     { code: "Space", label: "Space", width: 3 },
-    { code: "Convert", label: "変換", width: 1.25 },
-    { code: "KanaMode", label: "かな", width: 1.25 },
+    { code: "Convert", labelKey: "keyLabels.convert", width: 1.25 },
+    { code: "KanaMode", labelKey: "keyLabels.kana", width: 1.25 },
     { code: "AltRight", label: "Alt", width: 1.25 },
     { code: "MetaRight", label: "Win", width: 1 },
     { code: "ContextMenu", label: "Menu", width: 1 },
@@ -487,6 +494,7 @@ function VirtualKeyboardComponent({
   hideNumpad = false,
   alwaysShowActions,
 }: VirtualKeyboardProps) {
+  const t = useT();
   const isJIS = layout === "JIS" || layout === "JIS_TKL";
   const isTKL = layout === "US_TKL" || layout === "JIS_TKL";
   const mainLayout = isJIS ? JIS_MAIN_LAYOUT : US_MAIN_LAYOUT;
@@ -561,7 +569,8 @@ function VirtualKeyboardComponent({
     // 複数リマップ対応: このキーに関連する全リマップを取得
     const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
     const isHighlighted = highlightedKeys.includes(key.code);
-    const displayLabel = key.label || getKeyLabel(key.code);
+    const displayLabel =
+    (key.labelKey ? t(key.labelKey) : key.label) || getKeyLabel(t, key.code);
 
     // 指割り当てが有効な場合は指の色を使用、そうでなければデフォルト
     const fingerKeyClass = showFingerAssignments && finger
@@ -580,7 +589,7 @@ function VirtualKeyboardComponent({
         : [];
     const showAction = filteredBindings.length > 0;
 
-    const ariaLabel = buildKeyAriaLabel({
+    const ariaLabel = buildKeyAriaLabel(t, {
       displayLabel,
       bindings: filteredBindings,
       remaps: keyRemaps,
@@ -590,15 +599,15 @@ function VirtualKeyboardComponent({
     // リマップのツールチップ説明を生成
     const getRemapTooltipText = (r: RemapInfo): string => {
       if (r.targetKey === null) {
-        return "無効化";
+        return t("keyboardView.remapDisabled");
       }
       if (isSpecialRemapTarget(r.targetKey)) {
-        return `文字「${r.targetKey}」を出力`;
+        return t("keyboardView.remapOutputsChar", { char: r.targetKey });
       }
       if (r.targetKey) {
-        return getKeyLabel(r.targetKey, layout);
+        return getKeyLabel(t, r.targetKey, layout);
       }
-      return "無効化";
+      return t("keyboardView.remapDisabled");
     };
 
     // リマップのソースキーの修飾キーマーク（シンボルで表示）
@@ -653,7 +662,7 @@ function VirtualKeyboardComponent({
             )}
             {keyRemaps.slice(0, 2).map((r, i) => {
               const isDisabled = r.targetKey === null;
-              const targetLabel = getRemapOutputLabel(r, layout);
+              const targetLabel = getRemapOutputLabel(t, r, layout);
               const modifierIcons = getModifierIcons(r);
               return (
                 <div key={i} className="flex items-center gap-0.5">
@@ -699,7 +708,7 @@ function VirtualKeyboardComponent({
                 "rounded px-1 py-0 leading-none text-[8px]",
                 chipClass
               )}>
-                {getShortActionLabel(binding.action)}
+                {getShortActionLabel(t, binding.action)}
               </span>
             ))}
           </div>
@@ -709,7 +718,7 @@ function VirtualKeyboardComponent({
 
     // ツールチップでバインディング情報を表示
     const info: KeyInfoData = {
-      title: getKeyLabel(key.code, layout),
+      title: getKeyLabel(t, key.code, layout),
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: keyRemaps,
       customActions: getCustomActionsForKeyCode(customActions, key.code),
@@ -732,7 +741,7 @@ function VirtualKeyboardComponent({
                   key={i}
                   className={cn("rounded px-1 py-0 leading-none text-[8px]", chipClass)}
                 >
-                  {getShortActionLabel(binding.action)}
+                  {getShortActionLabel(t, binding.action)}
                 </span>
               ))}
             </div>
@@ -847,7 +856,7 @@ function VirtualKeyboardComponent({
 
           const showAction = showActionLabels && bindings.length > 0;
           // リマップ先の表示ラベル
-          const remapTargetLabel = remap ? getRemapOutputLabel(remap, layout) : null;
+          const remapTargetLabel = remap ? getRemapOutputLabel(t, remap, layout) : null;
           const isRemapDisabled = remap?.targetKey === null;
 
           // カスタムキーのラベル長に応じてフォントサイズを段階的に切替。
@@ -868,7 +877,7 @@ function VirtualKeyboardComponent({
             !showAction &&
             ck.label.length + 1 + (remapTargetLabel?.length ?? 0) > remapInlineBudget;
 
-          const ariaLabel = buildKeyAriaLabel({
+          const ariaLabel = buildKeyAriaLabel(t, {
             displayLabel: ck.label,
             bindings,
             remaps: remap ? [remap] : [],
@@ -961,7 +970,7 @@ function VirtualKeyboardComponent({
                         chipClass,
                       )}
                     >
-                      {getShortActionLabel(binding.action)}
+                      {getShortActionLabel(t, binding.action)}
                     </span>
                   ))}
                 </div>
@@ -1041,7 +1050,7 @@ function VirtualKeyboardComponent({
         {/* カスタムキーボードキー */}
         {customKeys.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs text-muted-foreground mb-2">カスタムキー</p>
+            <p className="text-xs text-muted-foreground mb-2">{t("keyboardView.customKeys")}</p>
             {renderCustomKeys(baseSize, gap)}
           </div>
         )}
@@ -1090,6 +1099,7 @@ export function VirtualMouse({
   showFingerAssignments = false,
   showRemaps = false,
 }: VirtualMouseProps) {
+  const t = useT();
   const getBindingsForButton = (code: string): KeybindingInfoList => {
     return keybindings[code] || keybindings[code.toLowerCase()] || [];
   };
@@ -1113,11 +1123,11 @@ export function VirtualMouse({
 
   // ボタン定義
   const buttons: Array<{ code: string; label: string; width?: number; height?: number }> = [
-    { code: "Mouse0", label: "左", height: 2 },
-    { code: "Mouse1", label: "右", height: 2 },
-    { code: "Mouse2", label: "中", height: 2 },
-    { code: "Mouse3", label: "サイド1" },
-    { code: "Mouse4", label: "サイド2" },
+    { code: "Mouse0", label: t("keyLabels.mouseLeftShort"), height: 2 },
+    { code: "Mouse1", label: t("keyLabels.mouseRightShort"), height: 2 },
+    { code: "Mouse2", label: t("keyLabels.mouseMiddleShort"), height: 2 },
+    { code: "Mouse3", label: t("keyLabels.mouseSide1Short") },
+    { code: "Mouse4", label: t("keyLabels.mouseSide2Short") },
   ];
 
   const renderButton = (button: typeof buttons[0], index: number, isCustom = false) => {
@@ -1131,7 +1141,7 @@ export function VirtualMouse({
     const height = (button.height || 1) * baseSize + ((button.height || 1) - 1) * gap;
 
     // リマップ先の表示ラベル
-    const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
+    const remapTargetLabel = remap ? getRemapOutputLabel(t, remap) : null;
     const isRemapDisabled = remap?.targetKey === null;
 
     // カスタムボタンのラベル長に応じたフォント縮小 + リマップ 2 段化判定
@@ -1149,9 +1159,9 @@ export function VirtualMouse({
       !hasChips &&
       button.label.length + 1 + (remapTargetLabel?.length ?? 0) > 5;
 
-    const ariaLabel = buildKeyAriaLabel({
-      displayLabel: isCustom ? button.label : getKeyLabel(button.code),
-      noun: "ボタン",
+    const ariaLabel = buildKeyAriaLabel(t, {
+      displayLabel: isCustom ? button.label : getKeyLabel(t, button.code),
+      noun: t("keyboardView.ariaButtonNoun"),
       bindings,
       remaps: remap ? [remap] : [],
     });
@@ -1224,7 +1234,7 @@ export function VirtualMouse({
                   chipClass
                 )}
               >
-                {getShortActionLabel(binding.action)}
+                {getShortActionLabel(t, binding.action)}
               </span>
             ))}
           </div>
@@ -1234,7 +1244,7 @@ export function VirtualMouse({
 
     // カスタムボタンは常に表示、通常ボタンは情報があるときのみ。
     const info: KeyInfoData = {
-      title: isCustom ? button.label : getKeyLabel(button.code),
+      title: isCustom ? button.label : getKeyLabel(t, button.code),
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: remap ? [remap] : [],
       customActions: getCustomActionsForKeyCode(customActions, button.code),
@@ -1326,6 +1336,7 @@ export function VirtualNumpad({
   showRemaps = false,
   useDefaultFingerAssignments = false,
 }: VirtualNumpadProps) {
+  const t = useT();
   // 有効な指割り当て（ユーザー設定がなければデフォルトを使用）
   const effectiveFingerAssignments: FingerAssignment = useDefaultFingerAssignments
     ? { ...DEFAULT_FINGER_ASSIGNMENTS, ...fingerAssignments }
@@ -1380,7 +1391,8 @@ export function VirtualNumpad({
     const finger = getFingerForKey(key.code);
     const remap = showRemaps ? getRemapForKey(key.code) : undefined;
     const isHighlighted = highlightedKeys.includes(key.code);
-    const displayLabel = key.label || getKeyLabel(key.code);
+    const displayLabel =
+    (key.labelKey ? t(key.labelKey) : key.label) || getKeyLabel(t, key.code);
 
     const fingerKeyClass = showFingerAssignments && finger
       ? FINGER_KEY_COLORS[finger]
@@ -1391,7 +1403,7 @@ export function VirtualNumpad({
 
     const showAction = showActionLabels && bindings.length > 0;
     // リマップ先の表示ラベル
-    const remapTargetLabel = remap ? getRemapOutputLabel(remap) : null;
+    const remapTargetLabel = remap ? getRemapOutputLabel(t, remap) : null;
     const isRemapDisabled = remap?.targetKey === null;
     // 単一リマップのみで操作名チップ等を併置しない場合、収まらない長さなら矢印の前で改行する
     const isRemapStacked =
@@ -1399,7 +1411,7 @@ export function VirtualNumpad({
       !showAction &&
       displayLabel.length + 1 + (remapTargetLabel?.length ?? 0) > 5;
 
-    const ariaLabel = buildKeyAriaLabel({
+    const ariaLabel = buildKeyAriaLabel(t, {
       displayLabel,
       bindings,
       remaps: remap ? [remap] : [],
@@ -1470,7 +1482,7 @@ export function VirtualNumpad({
                 "rounded px-1 py-0 leading-none text-[8px]",
                 chipClass
               )}>
-                {getShortActionLabel(binding.action)}
+                {getShortActionLabel(t, binding.action)}
               </span>
             ))}
           </div>
@@ -1479,7 +1491,7 @@ export function VirtualNumpad({
     );
 
     const info: KeyInfoData = {
-      title: getKeyLabel(key.code),
+      title: getKeyLabel(t, key.code),
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: remap ? [remap] : [],
       customActions: getCustomActionsForKeyCode(customActions, key.code),
@@ -1542,17 +1554,19 @@ export function VirtualNumpad({
 
 // 指割り当て凡例コンポーネント
 export function FingerLegend({ className }: { className?: string }) {
-  const fingers: { key: FingerColorName; label: string }[] = [
-    { key: "pinky", label: "小指" },
-    { key: "ring", label: "薬指" },
-    { key: "middle", label: "中指" },
-    { key: "index", label: "人差指" },
-    { key: "thumb", label: "親指" },
+  const t = useT();
+  // 凡例は左右を区別しないので、fingerLabels の短縮形を使う
+  const fingers: { key: FingerColorName; labelKey: MessageKey }[] = [
+    { key: "pinky", labelKey: "fingerLabels.pinky" },
+    { key: "ring", labelKey: "fingerLabels.ring" },
+    { key: "middle", labelKey: "fingerLabels.middle" },
+    { key: "index", labelKey: "fingerLabels.index" },
+    { key: "thumb", labelKey: "fingerLabels.thumb" },
   ];
 
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
-      {fingers.map(({ key, label }) => (
+      {fingers.map(({ key, labelKey }) => (
         <div key={key} className="flex items-center gap-1">
           <div
             className={cn(
@@ -1560,7 +1574,7 @@ export function FingerLegend({ className }: { className?: string }) {
               FINGER_BG_COLORS[key]
             )}
           />
-          <span className="text-[11px] text-muted-foreground">{label}</span>
+          <span className="text-[11px] text-muted-foreground">{t(labelKey)}</span>
         </div>
       ))}
     </div>

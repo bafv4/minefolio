@@ -218,6 +218,7 @@ export function ModifierToggleGroup({
   keyboardLayout: string | null;
   onChange: (newComboKey: string) => void;
 }) {
+  const t = useT();
   const currentModifiers = parseKeyCombination(comboKey).modifiers;
 
   const toggleModifier = (mod: Modifier) => {
@@ -253,7 +254,7 @@ export function ModifierToggleGroup({
       </div>
       <span className="text-muted-foreground">+</span>
       <Badge variant="secondary" className="font-mono text-sm px-2 py-1">
-        {getKeyLabel(baseKeyCode, keyboardLayout)}
+        {getKeyLabel(t, baseKeyCode, keyboardLayout)}
       </Badge>
     </>
   );

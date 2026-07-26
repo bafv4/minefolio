@@ -201,7 +201,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meEdit.mcidNotSetForImport"), action: "import" };
     }
 
-    const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
+    const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
       return {
         success: true,
@@ -1049,7 +1049,7 @@ export default function EditProfilePage() {
         parts.push(t("meEdit.importedSettings"));
       }
       if (parts.length > 0) {
-        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join("、") }));
+        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join(t("common.listSeparatorComma")) }));
       } else {
         toast.success(t("meEdit.importCompletedNoData"));
       }
@@ -1486,9 +1486,9 @@ export default function EditProfilePage() {
                     <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pc_windows">PC（Windows）</SelectItem>
-                    <SelectItem value="pc_mac">PC（Mac）</SelectItem>
-                    <SelectItem value="pc_linux">PC（Linux）</SelectItem>
+                    <SelectItem value="pc_windows">{t("playerProfile.platformPcWindows")}</SelectItem>
+                    <SelectItem value="pc_mac">{t("playerProfile.platformPcMac")}</SelectItem>
+                    <SelectItem value="pc_linux">{t("playerProfile.platformPcLinux")}</SelectItem>
                     <SelectItem value="switch">Switch</SelectItem>
                     <SelectItem value="mobile">{t("meEdit.mobile")}</SelectItem>
                     <SelectItem value="other">{t("meEdit.other")}</SelectItem>

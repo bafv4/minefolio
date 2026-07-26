@@ -574,15 +574,15 @@ export default function ComparePage() {
                           <div className="flex items-center gap-2 flex-1">
                             {isSame && <Check className="h-4 w-4 text-green-500" />}
                             {isDifferent && <X className="h-4 w-4 text-red-500" />}
-                            <span className="text-sm">{getActionLabel(item.action)}</span>
+                            <span className="text-sm">{getActionLabel(t, item.action)}</span>
                           </div>
                           <div className="flex items-center gap-4">
                             <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key1 ? getKeyLabel(key1) : "-"}
+                              {key1 ? getKeyLabel(t, key1) : "-"}
                             </kbd>
                             <ArrowRight className="h-4 w-4 text-muted-foreground" />
                             <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key2 ? getKeyLabel(key2) : "-"}
+                              {key2 ? getKeyLabel(t, key2) : "-"}
                             </kbd>
                           </div>
                         </div>

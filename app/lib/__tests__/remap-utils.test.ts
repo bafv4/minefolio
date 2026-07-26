@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { createTranslator } from "../messages";
+
+// ラベル生成は表示ロケールに依存するため、テストでは日本語で固定する
+const t = createTranslator("ja");
 import {
   simulateRemapOutput,
   getActualKeyInfos,
@@ -21,115 +25,115 @@ const REMAPS: RemapInfo[] = [
 
 describe("simulateRemapOutput", () => {
   it("リマップなしの印字可能キーはそのままの文字を出力する", () => {
-    const result = simulateRemapOutput("KeyA", REMAPS);
+    const result = simulateRemapOutput(t, "KeyA", REMAPS);
     expect(result.output).toBe("a");
     expect(result.isRemapped).toBe(false);
   });
 
   it("Shift + 印字可能キーは大文字を出力する", () => {
-    const result = simulateRemapOutput("Shift+KeyB", REMAPS);
+    const result = simulateRemapOutput(t, "Shift+KeyB", REMAPS);
     expect(result.output).toBe("B");
     expect(result.isRemapped).toBe(false);
   });
 
   it("単一キーのリマップを適用する", () => {
-    const result = simulateRemapOutput("Semicolon", REMAPS);
+    const result = simulateRemapOutput(t, "Semicolon", REMAPS);
     expect(result.output).toBe("e");
     expect(result.isRemapped).toBe(true);
   });
 
   it("修飾キー込みの完全一致リマップを優先する", () => {
-    const result = simulateRemapOutput("Shift+KeyW", REMAPS);
+    const result = simulateRemapOutput(t, "Shift+KeyW", REMAPS);
     expect(result.output).toBe("a");
     expect(result.isRemapped).toBe(true);
   });
 
   it("Shift + 単一キーリマップは出力を大文字化する", () => {
-    const result = simulateRemapOutput("Shift+Semicolon", REMAPS);
+    const result = simulateRemapOutput(t, "Shift+Semicolon", REMAPS);
     expect(result.output).toBe("E");
     expect(result.isRemapped).toBe(true);
   });
 
   it("無効化されたキーは出力なし", () => {
-    const result = simulateRemapOutput("KeyQ", REMAPS);
+    const result = simulateRemapOutput(t, "KeyQ", REMAPS);
     expect(result.output).toBeNull();
     expect(result.isRemapped).toBe(true);
   });
 
   it("文字出力ターゲットはそのまま出力する", () => {
-    const result = simulateRemapOutput("Slash", REMAPS);
+    const result = simulateRemapOutput(t, "Slash", REMAPS);
     expect(result.output).toBe("-");
     expect(result.isRemapped).toBe(true);
   });
 
   it("印字不能キーは出力なし", () => {
-    const result = simulateRemapOutput("F3", REMAPS);
+    const result = simulateRemapOutput(t, "F3", REMAPS);
     expect(result.output).toBeNull();
     expect(result.isRemapped).toBe(false);
   });
 
   it("未定義の Ctrl 組み合わせは出力なし", () => {
-    const result = simulateRemapOutput("Ctrl+KeyC", REMAPS);
+    const result = simulateRemapOutput(t, "Ctrl+KeyC", REMAPS);
     expect(result.output).toBeNull();
     expect(result.isRemapped).toBe(false);
   });
 
   it("スペースキーは空白を出力する", () => {
-    const result = simulateRemapOutput("Space", REMAPS);
+    const result = simulateRemapOutput(t, "Space", REMAPS);
     expect(result.output).toBe(" ");
-    // 可視1文字でないキーは getKeyLabel() のラベル
+    // 可視1文字でないキーは getKeyLabel(t, ) のラベル
     expect(result.pressedLabel).toBe("Space");
   });
 
   it("記号キーは文字を出力する（keyCode名ではなく）", () => {
-    expect(simulateRemapOutput("Minus", REMAPS).output).toBe("-");
-    expect(simulateRemapOutput("Comma", REMAPS).output).toBe(",");
-    expect(simulateRemapOutput("Period", REMAPS).output).toBe(".");
+    expect(simulateRemapOutput(t, "Minus", REMAPS).output).toBe("-");
+    expect(simulateRemapOutput(t, "Comma", REMAPS).output).toBe(",");
+    expect(simulateRemapOutput(t, "Period", REMAPS).output).toBe(".");
   });
 
   it("Shift + 記号/数字キーはシフト後の文字を出力する（US配列基準）", () => {
-    expect(simulateRemapOutput("Shift+Minus", REMAPS).output).toBe("_");
-    expect(simulateRemapOutput("Shift+Digit1", REMAPS).output).toBe("!");
+    expect(simulateRemapOutput(t, "Shift+Minus", REMAPS).output).toBe("_");
+    expect(simulateRemapOutput(t, "Shift+Digit1", REMAPS).output).toBe("!");
   });
 
   it("JIS の Shift+IntlRo はアンダースコアを出力する", () => {
-    expect(simulateRemapOutput("Shift+IntlRo", REMAPS).output).toBe("_");
+    expect(simulateRemapOutput(t, "Shift+IntlRo", REMAPS).output).toBe("_");
   });
 
   it("キー出力ターゲットが記号キーの場合も文字を出力する", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "KeyB", targetKey: "Space" }];
-    expect(simulateRemapOutput("KeyB", remaps).output).toBe(" ");
+    expect(simulateRemapOutput(t, "KeyB", remaps).output).toBe(" ");
     const remaps2: RemapInfo[] = [{ sourceKey: "KeyC", targetKey: "Minus" }];
-    expect(simulateRemapOutput("KeyC", remaps2).output).toBe("-");
+    expect(simulateRemapOutput(t, "KeyC", remaps2).output).toBe("-");
   });
 
   it("修飾キー単独のリマップは完全一致で解決する", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "ShiftLeft", targetKey: "KeyE" }];
-    const result = simulateRemapOutput("ShiftLeft", remaps);
+    const result = simulateRemapOutput(t, "ShiftLeft", remaps);
     expect(result.output).toBe("e");
     expect(result.isRemapped).toBe(true);
   });
 
   it("outputKeyCode: リマップのキー出力先を返す（Backspace 検知用）", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "KeyQ", targetKey: "Backspace" }];
-    expect(simulateRemapOutput("KeyQ", remaps).outputKeyCode).toBe("Backspace");
+    expect(simulateRemapOutput(t, "KeyQ", remaps).outputKeyCode).toBe("Backspace");
   });
 
   it("outputKeyCode: リマップなしの物理キーは押したキー自体を返す", () => {
-    expect(simulateRemapOutput("Backspace", REMAPS).outputKeyCode).toBe("Backspace");
-    expect(simulateRemapOutput("KeyA", REMAPS).outputKeyCode).toBe("KeyA");
+    expect(simulateRemapOutput(t, "Backspace", REMAPS).outputKeyCode).toBe("Backspace");
+    expect(simulateRemapOutput(t, "KeyA", REMAPS).outputKeyCode).toBe("KeyA");
   });
 
   it("outputKeyCode: 文字出力ターゲット・無効化は null", () => {
     // Slash → "-"（文字出力）, KeyQ → null（無効化）
-    expect(simulateRemapOutput("Slash", REMAPS).outputKeyCode).toBeNull();
-    expect(simulateRemapOutput("KeyQ", REMAPS).outputKeyCode).toBeNull();
+    expect(simulateRemapOutput(t, "Slash", REMAPS).outputKeyCode).toBeNull();
+    expect(simulateRemapOutput(t, "KeyQ", REMAPS).outputKeyCode).toBeNull();
   });
 });
 
 describe("getActualKeyInfos のスペース処理", () => {
   it("スペース文字は Space キーとして解決し、バッジラベルも Space になる（空バッジにならない）", () => {
-    const infos = getActualKeyInfos(" s ", REMAPS);
+    const infos = getActualKeyInfos(t, " s ", REMAPS);
     expect(infos).toHaveLength(3);
     expect(infos[0].keyCode).toBe("Space");
     expect(infos[0].displayLabel).toBe("Space");
@@ -140,7 +144,7 @@ describe("getActualKeyInfos のスペース処理", () => {
 
   it("Space が変換元のリマップも Space ラベルで表示する", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "Space", targetKey: "KeyB" }];
-    const infos = getActualKeyInfos("b", remaps);
+    const infos = getActualKeyInfos(t, "b", remaps);
     expect(infos[0].isRemapped).toBe(true);
     expect(infos[0].keyCode).toBe("Space");
     expect(infos[0].displayLabel).toBe("Space");
@@ -159,7 +163,7 @@ describe("getActualKeyInfos の逆引き優先順位（修飾キーなしソー�
   ];
 
   it("同じ文字を出せる場合、修飾キーなしのソースを優先する（hm → E, W）", () => {
-    const infos = getActualKeyInfos("hm", LAYERED_REMAPS);
+    const infos = getActualKeyInfos(t, "hm", LAYERED_REMAPS);
     expect(infos.map((i) => i.keyCode)).toEqual(["KeyE", "KeyW"]);
     expect(infos.map((i) => i.displayLabel)).toEqual(["E", "W"]);
     expect(infos.every((i) => !i.needsShift)).toBe(true);
@@ -167,19 +171,19 @@ describe("getActualKeyInfos の逆引き優先順位（修飾キーなしソー�
 
   it("配列の並び順に関係なく修飾キーなしのソースが勝つ", () => {
     const reversed = [...LAYERED_REMAPS].reverse();
-    const infos = getActualKeyInfos("hm", reversed);
+    const infos = getActualKeyInfos(t, "hm", reversed);
     expect(infos.map((i) => i.keyCode)).toEqual(["KeyE", "KeyW"]);
   });
 
   it("修飾キー付きしかない文字は従来どおり修飾キー付きで解決する", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "Shift+KeyS", targetKey: "KeyH" }];
-    const infos = getActualKeyInfos("h", remaps);
+    const infos = getActualKeyInfos(t, "h", remaps);
     expect(infos[0].keyCode).toBe("Shift+KeyS");
     expect(infos[0].displayLabel).toBe("⇧+S");
   });
 
   it("shiftHeld 時は Shift+X 完全一致で逆引きする（HM → W, E）", () => {
-    const infos = getActualKeyInfos("HM", LAYERED_REMAPS, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "HM", LAYERED_REMAPS, { shiftHeld: true });
     expect(infos.map((i) => i.keyCode)).toEqual(["KeyW", "KeyE"]);
     expect(infos.map((i) => i.displayLabel)).toEqual(["W", "E"]);
   });
@@ -187,7 +191,7 @@ describe("getActualKeyInfos の逆引き優先順位（修飾キーなしソー�
 
 describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらクラフト）", () => {
   it("英字ターゲットのリマップは通常時と同じキーに解決する（大文字小文字は区別しない）", () => {
-    const infos = getActualKeyInfos("e", REMAPS, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "e", REMAPS, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("Semicolon");
     expect(infos[0].isRemapped).toBe(true);
     expect(infos[0].needsShift).toBe(false);
@@ -196,7 +200,7 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
   it("記号ターゲットのリマップはシフト後の文字を優先して逆引きする", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "KeyA", targetKey: "Semicolon" }];
     // Shift 押下中に A を押すと ":" が出力される
-    const infos = getActualKeyInfos(":", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, ":", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("KeyA");
     expect(infos[0].isRemapped).toBe(true);
     expect(infos[0].displayLabel).toBe("A");
@@ -205,11 +209,11 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
 
   it("Shift+X ソースの完全一致リマップは X 単独のバッジになる（⇧ なし）", () => {
     // 通常時は ⇧+W だが、Shift 押しっぱなしなので W だけ押せばよい
-    const normal = getActualKeyInfos("a", REMAPS);
+    const normal = getActualKeyInfos(t, "a", REMAPS);
     expect(normal[0].displayLabel).toBe("⇧+W");
     expect(normal[0].needsShift).toBe(true);
 
-    const shifted = getActualKeyInfos("a", REMAPS, { shiftHeld: true });
+    const shifted = getActualKeyInfos(t, "a", REMAPS, { shiftHeld: true });
     expect(shifted[0].keyCode).toBe("KeyW");
     expect(shifted[0].displayLabel).toBe("W");
     expect(shifted[0].needsShift).toBe(false);
@@ -221,26 +225,26 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
       { sourceKey: "Shift+KeyK", targetKey: "KeyE" },
     ];
     // Shift 押下中に K を押すと Shift+KeyK が発動して "e" が出る（":" ではない）
-    expect(getActualKeyInfos("e", remaps, { shiftHeld: true })[0].keyCode).toBe("KeyK");
+    expect(getActualKeyInfos(t, "e", remaps, { shiftHeld: true })[0].keyCode).toBe("KeyK");
     // ":" は K では出せないため、非リマップの Semicolon キーに解決する
-    expect(getActualKeyInfos(":", remaps, { shiftHeld: true })[0].keyCode).toBe("Semicolon");
+    expect(getActualKeyInfos(t, ":", remaps, { shiftHeld: true })[0].keyCode).toBe("Semicolon");
   });
 
   it("文字出力ターゲットは Shift の影響を受けずそのまま逆引きする", () => {
-    const infos = getActualKeyInfos("-", REMAPS, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "-", REMAPS, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("Slash");
     expect(infos[0].isRemapped).toBe(true);
   });
 
   it("非リマップのシフト記号は物理キーに逆引きする", () => {
-    const infos = getActualKeyInfos("_", REMAPS, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "_", REMAPS, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("Minus");
     expect(infos[0].isRemapped).toBe(false);
     expect(infos[0].needsShift).toBe(false);
   });
 
   it("非リマップの英字・スペースは基底キーのまま解決する", () => {
-    const infos = getActualKeyInfos("b ", REMAPS, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "b ", REMAPS, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("KeyB");
     expect(infos[0].displayLabel).toBe("B");
     expect(infos[0].needsShift).toBe(false);
@@ -255,7 +259,7 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
       { sourceKey: "Semicolon", targetKey: "KeyE" },
       { sourceKey: "Shift+Semicolon", targetKey: "KeyX" },
     ];
-    const infos = getActualKeyInfos("e", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "e", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("KeyE");
     expect(infos[0].isRemapped).toBe(false);
   });
@@ -266,13 +270,13 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
       { sourceKey: "Shift+KeyK", targetKey: null },
     ];
     // Shift押下中の K は無効化されており何も出力しない
-    const infos = getActualKeyInfos(";", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, ";", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).not.toBe("KeyK");
   });
 
   it("shiftHeld では Ctrl 組み合わせリマップにフォールバックしない", () => {
     const remaps: RemapInfo[] = [{ sourceKey: "Ctrl+KeyC", targetKey: "KeyE" }];
-    const infos = getActualKeyInfos("e", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "e", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("KeyE");
     expect(infos[0].isRemapped).toBe(false);
   });
@@ -280,7 +284,7 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
   it("シフト記号の逆引き先キー自体がリマップ済みの場合は使わない", () => {
     // Shift+Slash はリマップ（Slash→"-"）により "-" を出すため、"?" を Slash に解決してはいけない
     const remaps: RemapInfo[] = [{ sourceKey: "Slash", targetKey: "-" }];
-    const infos = getActualKeyInfos("?", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "?", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).not.toBe("Slash");
   });
 
@@ -290,11 +294,11 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
       { sourceKey: "Shift+KeyW", targetKey: "KeyA" },
     ];
     const searchStr = "a: e_";
-    const infos = getActualKeyInfos(searchStr, remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, searchStr, remaps, { shiftHeld: true });
     const roundTrip = infos
       .map((info) => {
         const combo = info.keyCode.includes("+") ? info.keyCode : `Shift+${info.keyCode}`;
-        return simulateRemapOutput(combo, remaps).output;
+        return simulateRemapOutput(t, combo, remaps).output;
       })
       .join("");
     expect(roundTrip.toLowerCase()).toBe(searchStr.toLowerCase());
@@ -304,18 +308,18 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
 describe("simulateRemapOutput と getActualKeyInfos の整合性", () => {
   it("逆引きで得たキーを順方向に適用すると元の文字に戻る", () => {
     const searchStr = "sea";
-    const keyInfos = getActualKeyInfos(searchStr, REMAPS);
+    const keyInfos = getActualKeyInfos(t, searchStr, REMAPS);
     const roundTrip = keyInfos
-      .map((info) => simulateRemapOutput(info.keyCode, REMAPS).output)
+      .map((info) => simulateRemapOutput(t, info.keyCode, REMAPS).output)
       .join("");
     expect(roundTrip).toBe(searchStr);
   });
 
   it("先頭・末尾スペースを含む文字列も逆引き→順方向で元に戻る", () => {
     const searchStr = " sea ";
-    const keyInfos = getActualKeyInfos(searchStr, REMAPS);
+    const keyInfos = getActualKeyInfos(t, searchStr, REMAPS);
     const roundTrip = keyInfos
-      .map((info) => simulateRemapOutput(info.keyCode, REMAPS).output)
+      .map((info) => simulateRemapOutput(t, info.keyCode, REMAPS).output)
       .join("");
     expect(roundTrip).toBe(searchStr);
   });
@@ -418,7 +422,7 @@ describe("getActualKeyInfos の種別フィルタ（chat 文脈）", () => {
       { sourceKey: "KeyE", targetKey: "KeyO", remapType: "trigger" },
       { sourceKey: "KeyE", targetKey: "KeyH", remapType: "chat" },
     ];
-    const infos = getActualKeyInfos("ho", remaps);
+    const infos = getActualKeyInfos(t, "ho", remaps);
     // "h" は chat 行（E→h）で KeyE に逆引きされる
     expect(infos[0].keyCode).toBe("KeyE");
     expect(infos[0].isRemapped).toBe(true);
@@ -433,7 +437,7 @@ describe("getActualKeyInfos の種別フィルタ（chat 文脈）", () => {
       { sourceKey: "KeyA", targetKey: "KeyB", remapType: "chat" },
     ];
     // trigger 行は chat 文脈で除外されるため、Minus は非リマップキーとして "_" に解決できる
-    const infos = getActualKeyInfos("_", remaps, { shiftHeld: true });
+    const infos = getActualKeyInfos(t, "_", remaps, { shiftHeld: true });
     expect(infos[0].keyCode).toBe("Minus");
     expect(infos[0].isRemapped).toBe(false);
     expect(infos[0].needsShift).toBe(false);
@@ -446,7 +450,7 @@ describe("simulateRemapOutput の種別フィルタ（chat 文脈）", () => {
       { sourceKey: "KeyE", targetKey: "KeyO", remapType: "trigger" },
       { sourceKey: "KeyE", targetKey: "KeyH", remapType: "chat" },
     ];
-    const result = simulateRemapOutput("KeyE", remaps);
+    const result = simulateRemapOutput(t, "KeyE", remaps);
     expect(result.output).toBe("h");
     expect(result.isRemapped).toBe(true);
   });

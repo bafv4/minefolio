@@ -135,8 +135,8 @@ export function KeyCaptureButton({
       ) : value ? (
         <span>
           {allowModifiers
-            ? getKeyCombinationLabel(value, keyboardLayout)
-            : getKeyLabel(value, keyboardLayout)}
+            ? getKeyCombinationLabel(t, value, keyboardLayout)
+            : getKeyLabel(t, value, keyboardLayout)}
         </span>
       ) : (
         <span className="text-muted-foreground">{placeholder}</span>

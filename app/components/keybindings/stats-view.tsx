@@ -1,3 +1,4 @@
+import { UNASSIGNED_INPUT_KEY } from "@/lib/keybindings-stats.server";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
@@ -410,7 +411,7 @@ function KeybindingStatCard({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{stat.label}</CardTitle>
+          <CardTitle className="text-base">{t(stat.labelKey)}</CardTitle>
           <CardDescription>{t("keybindingsStats.noData")}</CardDescription>
         </CardHeader>
       </Card>
@@ -420,7 +421,7 @@ function KeybindingStatCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{stat.label}</CardTitle>
+        <CardTitle className="text-base">{t(stat.labelKey)}</CardTitle>
         <CardDescription>
           {t("keybindingsStats.dataCount", { count: stat.totalCount })}
         </CardDescription>
@@ -428,7 +429,7 @@ function KeybindingStatCard({
       <CardContent>
         <div className="space-y-2">
           {stat.topKeys.map((key, index) => {
-            const label = getKeyLabel(key.keyCode);
+            const label = getKeyLabel(t, key.keyCode);
             return (
               <StatRow
                 key={key.keyCode}
@@ -437,7 +438,7 @@ function KeybindingStatCard({
                 isMouse={isMouseKey(key.keyCode)}
                 count={key.count}
                 percentage={key.percentage}
-                onClick={() => onPlayerClick(`${stat.label}: ${label}`, key.players)}
+                onClick={() => onPlayerClick(`${t(stat.labelKey)}: ${label}`, key.players)}
               />
             );
           })}
@@ -477,7 +478,11 @@ function F3RemapStatCard({
       <CardContent>
         <div className="space-y-2">
           {stat.topTargets.map((target, index) => {
-            const label = getKeyLabel(target.targetKey);
+            // 集計側は未設定行を内部キーでまとめている。表示時に訳へ差し替える
+            const label =
+              target.targetKey === UNASSIGNED_INPUT_KEY
+                ? t("meKeybindings.unassigned")
+                : getKeyLabel(t, target.targetKey);
             const dialogTitle =
               target.targetKey === "F3"
                 ? t("keybindingsStats.f3DefaultInput")

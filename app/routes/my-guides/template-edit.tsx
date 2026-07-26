@@ -104,7 +104,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const submission = parseEditorSubmission(formData);
+  const submission = parseEditorSubmission(t, formData);
   if ("error" in submission) {
     return { error: submission.error };
   }

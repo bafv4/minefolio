@@ -9,7 +9,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, or, inArray } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, FINGER_LABELS, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, getFingerLabel, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -232,7 +232,7 @@ function remapConflictErrorMessage(
   conflict: RemapConflict,
   keyboardLayout?: string | null,
 ): string {
-  const key = getRemapSourceLabel(conflict.sourceKey, keyboardLayout);
+  const key = getRemapSourceLabel(t, conflict.sourceKey, keyboardLayout);
   return conflict.kind === "duplicate"
     ? t("meKeybindings.remapDuplicateError", { key, type: t(`remapType.${conflict.remapType}`) })
     : t("meKeybindings.remapAllConflictError", { key });
@@ -633,7 +633,7 @@ export async function action({ request }: Route.ActionArgs) {
             id: createId(),
             userId: user.id,
             changeType: "keybinding",
-            changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join("・") }),
+            changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join(t("common.listSeparator")) }),
             newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
             createdAt: now,
           });
@@ -672,7 +672,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meKeybindings.mcidNotSetForImport") };
     }
 
-    const result = await importFromLegacy(db, user.id, legacyApiUrl, user.mcid);
+    const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
       // importFromLegacy が書き込みうるライブテーブルをすべて同期する
       // （itemLayouts / searchCrafts を欠くとスナップショットが古いままになる）
@@ -1444,7 +1444,7 @@ export default function KeybindingsPage() {
     if (customKeyNameMap[keyCode]) {
       return customKeyNameMap[keyCode];
     }
-    return getKeyLabel(keyCode);
+    return getKeyLabel(t, keyCode);
   }, [customKeyNameMap]);
 
   // 現在選択中のキーに割り当てられている操作のIDセット
@@ -1992,7 +1992,7 @@ export default function KeybindingsPage() {
       toast.success(
         t("meKeybindings.copiedFromPreset", {
           name: preset.name,
-          items: copiedItems.join("・"),
+          items: copiedItems.join(t("common.listSeparator")),
         })
       );
     } else {
@@ -2164,9 +2164,9 @@ export default function KeybindingsPage() {
                           binding ? "border-primary/30" : "border-input"
                         )}
                       >
-                        <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
+                        <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
                         <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
-                          {binding ? getActionLabel(binding.action) : t("meKeybindings.unassigned")}
+                          {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
                     );
@@ -2190,9 +2190,9 @@ export default function KeybindingsPage() {
                           binding ? "border-primary/30" : "border-input"
                         )}
                       >
-                        <span className="font-mono text-sm font-medium">{getKeyLabel(keyCode)}</span>
+                        <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
                         <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
-                          {binding ? getActionLabel(binding.action) : t("meKeybindings.unassigned")}
+                          {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
                     );
@@ -2318,7 +2318,7 @@ export default function KeybindingsPage() {
                         const [isFocused, setIsFocused] = useState(false);
                         return (
                           <div key={kb.id} className="flex items-center justify-between gap-2 py-2.5">
-                            <span className="text-sm">{getActionLabel(kb.action)}</span>
+                            <span className="text-sm">{getActionLabel(t, kb.action)}</span>
                             <div className="flex items-center gap-1">
                             {isControllerMode ? (
                               /* コントローラーモード: ドロップダウンでボタン選択 */
@@ -2331,7 +2331,7 @@ export default function KeybindingsPage() {
                                     {isUnbound(kb.keyCode) ? (
                                       <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
                                     ) : kb.keyCode ? (
-                                      getKeyLabel(kb.keyCode)
+                                      getKeyLabel(t, kb.keyCode)
                                     ) : (
                                       <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
                                     )}
@@ -2341,7 +2341,7 @@ export default function KeybindingsPage() {
                                   <SelectItem value={UNBOUND_KEY}>{t("meKeybindings.notUsed")}</SelectItem>
                                   {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3", "GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => (
                                     <SelectItem key={keyCode} value={keyCode}>
-                                      {getKeyLabel(keyCode)}
+                                      {getKeyLabel(t, keyCode)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -2472,8 +2472,7 @@ export default function KeybindingsPage() {
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</CardTitle>
               <CardDescription>
-                標準のキーボード以外のキー（マウスの追加ボタンなど）を定義します。
-                定義したカスタムキーは操作の割り当てやリマップで使用できます。
+                {t("meKeybindings.customKeysDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2563,8 +2562,7 @@ export default function KeybindingsPage() {
             <CardHeader>
               <CardTitle className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</CardTitle>
               <CardDescription>
-                DPIスイッチやマクロなど、ユーザー定義のアクションを登録します。
-                修飾キー（Ctrl, Shift, Alt）との組み合わせでトリガーを設定できます。
+                {t("meKeybindings.customActionsDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2627,11 +2625,11 @@ export default function KeybindingsPage() {
         >
           <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
             <DialogTitle className="flex items-center gap-2">
-              <span className="font-mono text-xl">{editingKeyCode && getKeyLabel(editingKeyCode)}</span>
+              <span className="font-mono text-xl">{editingKeyCode && getKeyLabel(t, editingKeyCode)}</span>
               <span className="text-muted-foreground text-sm font-normal">{t("meKeybindings.settingsSuffix")}</span>
             </DialogTitle>
             <DialogDescription>
-              このキーに関する設定を編集します
+              {t("meKeybindings.keyModalDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -2642,7 +2640,7 @@ export default function KeybindingsPage() {
               <Label>{t("meKeybindings.actionAssignment")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 {canEditPresetData
-                  ? "複数の操作を割り当てられます。他のキーに割当済の操作を選択すると、元のキーから削除されます。"
+                  ? t("meKeybindings.actionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
               <div className="max-h-64 overflow-y-auto border rounded-md p-2">
@@ -2676,10 +2674,12 @@ export default function KeybindingsPage() {
                                 htmlFor={`action-${kb.id}`}
                                 className="text-sm cursor-pointer select-none"
                               >
-                                {getActionLabel(kb.action)}
+                                {getActionLabel(t, kb.action)}
                                 {isAssignedToOtherKey && (
                                   <span className="ml-2 text-xs text-amber-500">
-                                    ⚠ {getKeyLabelWithCustom(assignedTo)}に割当済
+                                    ⚠ {t("meKeybindings.assignedToOtherKey", {
+                                      key: getKeyLabelWithCustom(assignedTo),
+                                    })}
                                   </span>
                                 )}
                               </label>
@@ -2709,12 +2709,12 @@ export default function KeybindingsPage() {
                   }}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  追加
+                  {t("meKeybindings.add")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
-                  ? "このキー（および修飾キーとの組み合わせ）のリマップを設定できます"
+                  ? t("meKeybindings.remapsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
 
@@ -2772,7 +2772,7 @@ export default function KeybindingsPage() {
                     <SelectItem key={finger} value={finger}>
                       <div className="flex items-center gap-2">
                         <span className={`w-3 h-3 rounded-full ${FINGER_COLOR_CLASSES[finger]}`} />
-                        {FINGER_LABELS[finger]}
+                        {getFingerLabel(t, finger)}
                       </div>
                     </SelectItem>
                   ))}
@@ -2794,12 +2794,12 @@ export default function KeybindingsPage() {
                   onClick={() => modalAddCustomActionForKey(editingKeyCode)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  追加
+                  {t("meKeybindings.add")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
-                  ? "このキーをトリガーにするカスタムアクションを追加・編集できます"
+                  ? t("meKeybindings.customActionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
 
@@ -2834,7 +2834,7 @@ export default function KeybindingsPage() {
             </Button>
             <Button onClick={saveKeyModalChanges} disabled={!canEditPresetData}>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {t("meKeybindings.saveLabel")}
             </Button>
           </DialogFooter>
         </DialogContent>

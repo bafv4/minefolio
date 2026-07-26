@@ -159,12 +159,12 @@ export function KeyBadge({
   const getTooltipText = () => {
     if (keyCode.includes("+")) {
       // 修飾キー組み合わせの場合
-      return getKeyCombinationLabel(keyCode);
+      return getKeyCombinationLabel(t, keyCode);
     }
     if (isRemapped) {
-      return t("playerProfile.remapped", { key: getKeyLabel(keyCode) });
+      return t("playerProfile.remapped", { key: getKeyLabel(t, keyCode) });
     }
-    return getKeyLabel(keyCode);
+    return getKeyLabel(t, keyCode);
   };
 
   return (
@@ -216,7 +216,8 @@ export function ActualKeyBadges({
   /** Shiftを押しながらクラフトする前提で逆引きし、先頭に ⇧ Shift バッジを表示する */
   shiftHeld?: boolean;
 }) {
-  const keyInfos = getActualKeyInfos(searchStr, remaps, { shiftHeld });
+  const t = useT();
+  const keyInfos = getActualKeyInfos(t, searchStr, remaps, { shiftHeld });
 
   // キーコードから指割り当てを取得
   const getFingerForKey = (keyCode: string): FingerType | undefined => {
