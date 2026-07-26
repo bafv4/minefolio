@@ -1,4 +1,3 @@
-import { UNASSIGNED_INPUT_KEY } from "@/lib/keybindings-stats.server";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
@@ -18,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+// 値は非 .server モジュールから取る（.server はクライアントバンドルに入れられない）
+import { UNASSIGNED_INPUT_KEY } from "@/lib/keybindings-stats-shared";
 import type {
   KeybindingStats,
   F3RemapStats,

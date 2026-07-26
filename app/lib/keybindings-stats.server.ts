@@ -8,6 +8,10 @@ import { excludeViewersCondition } from "./users-filter";
 import { calculateCm360 } from "./mouse-settings";
 import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
+// 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
+import { UNASSIGNED_INPUT_KEY } from "./keybindings-stats-shared";
+
+export { UNASSIGNED_INPUT_KEY };
 
 // 主要なアクション（集計対象）。ラベルはロケール依存なのでキーで持ち、描画時に解決する
 export const TRACKED_ACTIONS = [
@@ -88,9 +92,6 @@ export interface PlayerInfo {
   displayNameAlphabet: string | null;
   customSkinUrl: string | null;
 }
-
-/** F3 入力キーが未設定の行をまとめるための内部キー（表示前に翻訳へ差し替える） */
-export const UNASSIGNED_INPUT_KEY = "__unassigned__";
 
 export interface KeybindingStats {
   action: string;

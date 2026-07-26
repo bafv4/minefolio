@@ -70,6 +70,15 @@ const actionType = formData.get("_action") as string;
 - `db.query.users.findFirst({ where: eq(...), with: { ... } })`
 - 演算子: `eq`, `and`, `desc`, `asc`, `like`, `sql`
 
+## `.server` モジュール
+- `*.server.ts` はクライアントバンドルへ入れられない。コンポーネントから**値**として import すると
+  `pnpm build` が `Server-only module referenced by client` で失敗する
+- **`pnpm typecheck` も `pnpm test` もこれを検出しない**（型としては正しく、テストは Node 環境で動くため）。
+  クライアント側のファイルを触ったら `pnpm build` まで通すこと
+- 型だけなら `import type { ... } from "@/lib/xxx.server"` でよい（消えるので問題ない）
+- 集計サーバーと描画側が同じ**値**（センチネル・定数）を共有する場合は、`.server` ではない
+  モジュールに置いて両方からそれを import する（例: `app/lib/keybindings-stats-shared.ts`）
+
 ## その他注意点
 - まず使用するフレームワークのドキュメントを確認してください
 - 実装はなるべく疎結合に、特にユーティリティやUI部品は他の部分にも転用できるように設計してください
