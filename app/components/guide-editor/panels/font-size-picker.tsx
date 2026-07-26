@@ -67,7 +67,7 @@ export function FontSizePicker({
           const isActive = current === size.value;
           return (
             <button
-              key={size.name}
+              key={size.nameKey}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -84,9 +84,9 @@ export function FontSizePicker({
                 className="w-10 shrink-0 text-center leading-none"
                 style={{ fontSize: size.value || "1em" }}
               >
-                あA
+                {t("guideEditor.fontSizes.sample")}
               </span>
-              <span className="text-xs">{size.name}</span>
+              <span className="text-xs">{t(size.nameKey)}</span>
             </button>
           );
         })}

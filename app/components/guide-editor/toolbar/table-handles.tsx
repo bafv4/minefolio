@@ -3,6 +3,8 @@
 // CellSelection で選択し、追加・削除・スタイル（背景色 / 文字色 / 文字揃え）の
 // メニューを開く。ホバー前提のためデスクトップ専用
 // （タッチはブロックハンドル + ツールバー「テーブル」タブで操作）。
+import type { MessageKey } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
@@ -52,26 +54,26 @@ function resolveCell(target: HoverTarget): HTMLTableCellElement | null {
 const LINE_MENUS: Record<
   TableLineAxis,
   {
-    addOps: { op: TableOp; label: string; icon: LucideIcon }[];
+    addOps: { op: TableOp; labelKey: MessageKey; icon: LucideIcon }[];
     deleteOp: TableOp;
-    deleteLabel: string;
+    deleteLabelKey: MessageKey;
   }
 > = {
   row: {
     addOps: [
-      { op: "addRowBefore", label: "上に行を追加", icon: ArrowUpToLine },
-      { op: "addRowAfter", label: "下に行を追加", icon: ArrowDownToLine },
+      { op: "addRowBefore", labelKey: "guideEditor.toolbar.addRowBefore", icon: ArrowUpToLine },
+      { op: "addRowAfter", labelKey: "guideEditor.toolbar.addRowAfter", icon: ArrowDownToLine },
     ],
     deleteOp: "deleteRow",
-    deleteLabel: "行を削除",
+    deleteLabelKey: "guideEditor.toolbar.deleteRow",
   },
   column: {
     addOps: [
-      { op: "addColBefore", label: "左に列を追加", icon: ArrowLeftToLine },
-      { op: "addColAfter", label: "右に列を追加", icon: ArrowRightToLine },
+      { op: "addColBefore", labelKey: "guideEditor.toolbar.addColBefore", icon: ArrowLeftToLine },
+      { op: "addColAfter", labelKey: "guideEditor.toolbar.addColAfter", icon: ArrowRightToLine },
     ],
     deleteOp: "deleteCol",
-    deleteLabel: "列を削除",
+    deleteLabelKey: "guideEditor.toolbar.deleteCol",
   },
 };
 
@@ -89,7 +91,8 @@ function LineMenuContent({
   onCopyTable: () => void;
   onInteractOutside: (target: Node | null) => void;
 }) {
-  const { addOps, deleteOp, deleteLabel } = LINE_MENUS[axis];
+  const t = useT();
+  const { addOps, deleteOp, deleteLabelKey } = LINE_MENUS[axis];
   return (
     <PopoverContent
       side={axis === "row" ? "right" : "bottom"}
@@ -104,30 +107,30 @@ function LineMenuContent({
       // 外側クリックは開直後ガード（ダブルクリック対策）を通さず即閉じる
       onInteractOutside={(e) => onInteractOutside(e.target as Node | null)}
     >
-      {addOps.map(({ op, label, icon }) => (
-        <MenuItem key={op} label={label} icon={icon} onClick={() => runOp(op)} />
+      {addOps.map(({ op, labelKey, icon }) => (
+        <MenuItem key={op} label={t(labelKey)} icon={icon} onClick={() => runOp(op)} />
       ))}
       <div className="border-t my-1" />
       <div className="px-1 py-1 space-y-2">
         <TableAlignRow onPick={(v) => applyStyle("textAlign", v)} />
         <ColorSwatchGrid
-          label="背景色"
+          label={t("guideEditor.ui.bgColor")}
           colors={CELL_COLORS}
           kind="bg"
           onPick={(v) => applyStyle("backgroundColor", v)}
         />
         <ColorSwatchGrid
-          label="文字色"
+          label={t("guideEditor.ui.textColor")}
           colors={TEXT_COLORS}
           kind="text"
           onPick={(v) => applyStyle("textColor", v)}
         />
       </div>
       <div className="border-t my-1" />
-      <MenuItem label="テーブルをコピー" icon={Copy} onClick={onCopyTable} />
+      <MenuItem label={t("guideEditor.ui.copyTable")} icon={Copy} onClick={onCopyTable} />
       <div className="border-t my-1" />
-      <MenuItem label={deleteLabel} danger icon={Trash2} onClick={() => runOp(deleteOp)} />
-      <MenuItem label="テーブルを削除" danger icon={Trash2} onClick={() => runOp("deleteTable")} />
+      <MenuItem label={t(deleteLabelKey)} danger icon={Trash2} onClick={() => runOp(deleteOp)} />
+      <MenuItem label={t("guideEditor.toolbar.deleteTable")} danger icon={Trash2} onClick={() => runOp("deleteTable")} />
     </PopoverContent>
   );
 }
@@ -139,6 +142,7 @@ const REOPEN_GUARD_MS = 300;
 const PILL_NEAR_MARGIN = 24;
 
 export function TableHandles({ editor }: { editor: Editor }) {
+  const t = useT();
   const [hover, setHover] = useState<HoverTarget | null>(null);
   const [openAxis, setOpenAxis] = useState<TableLineAxis | null>(null);
   // スクロール / ドキュメント変更時に getBoundingClientRect を取り直すための再描画トリガー
@@ -373,11 +377,11 @@ export function TableHandles({ editor }: { editor: Editor }) {
   // テーブル全体をクリップボードへコピー（HTML + TSV）。メニューは閉じる
   const handleCopyTable = useCallback(() => {
     void copyTableToClipboard(editor).then((ok) => {
-      if (ok) toast.success("テーブルをコピーしました");
-      else toast.error("テーブルをコピーできませんでした");
+      if (ok) toast.success(t("guideEditor.ui.tableCopied"));
+      else toast.error(t("guideEditor.ui.tableCopyFailed"));
     });
     closeMenu();
-  }, [editor, closeMenu]);
+  }, [editor, closeMenu, t]);
 
   // スタイル適用。選択（= 行 / 列のハイライト）とメニューは維持して連続適用できるようにする
   const applyStyle = useCallback(
@@ -419,7 +423,7 @@ export function TableHandles({ editor }: { editor: Editor }) {
           <button
             ref={rowPillRef}
             type="button"
-            aria-label="行を選択"
+            aria-label={t("guideEditor.ui.selectRow")}
             aria-haspopup="menu"
             onMouseDown={(e) => e.preventDefault()}
             onPointerDown={cancelHide}
@@ -446,7 +450,7 @@ export function TableHandles({ editor }: { editor: Editor }) {
           <button
             ref={colPillRef}
             type="button"
-            aria-label="列を選択"
+            aria-label={t("guideEditor.ui.selectColumn")}
             aria-haspopup="menu"
             onMouseDown={(e) => e.preventDefault()}
             onPointerDown={cancelHide}

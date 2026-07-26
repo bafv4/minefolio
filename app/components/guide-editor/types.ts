@@ -2,6 +2,7 @@
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
 import type { CropRect } from "./lib/image-crop";
+import type { MessageKey } from "@/lib/messages";
 
 /** GuideEditor の props（旧 index.tsx と完全に同一 — ルート I/O 不変） */
 export interface GuideEditorProps {
@@ -78,4 +79,10 @@ export interface SlashItem {
    * 即時挿入は editor を、ダイアログ起動は ctx を使う。
    */
   run: (editor: Editor, ctx: SlashCommandContext) => void;
+}
+
+/** スラッシュコマンドの項目定義（文言は翻訳キーのまま持つ） */
+export interface SlashItemDef extends Omit<SlashItem, "title" | "group"> {
+  titleKey: MessageKey;
+  groupKey: MessageKey;
 }

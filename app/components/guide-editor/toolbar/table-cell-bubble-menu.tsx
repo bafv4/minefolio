@@ -1,6 +1,7 @@
 // セル選択（CellSelection）時のバブルメニュー。文字列選択のバブルメニューと同じ見た目で、
 // 内容はテーブル編集（結合 / 分割・文字揃え・背景色 / 文字色・テーブルコピー）に置き換える。
 // 行・列ハンドルのメニューが開いている間は重ならないよう抑制する（table-ui-state 参照）。
+import { useT } from "@/hooks/use-locale";
 import { useCallback, useEffect, useState } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/core";
@@ -32,9 +33,9 @@ import { CELL_COLORS, TEXT_COLORS, EDITOR_Z } from "../constants";
 const BUBBLE_OPTIONS = { placement: "top" } as const;
 
 const ALIGNS = [
-  { value: "left", label: "左揃え", Icon: AlignLeft },
-  { value: "center", label: "中央揃え", Icon: AlignCenter },
-  { value: "right", label: "右揃え", Icon: AlignRight },
+  { value: "left", labelKey: "guideEditor.ui.alignLeft", Icon: AlignLeft },
+  { value: "center", labelKey: "guideEditor.ui.alignCenter", Icon: AlignCenter },
+  { value: "right", labelKey: "guideEditor.ui.alignRight", Icon: AlignRight },
 ] as const;
 
 /** 選択中セルへの背景色・文字色ピッカー（CellSelection を保持したまま適用する）。
@@ -49,11 +50,12 @@ function CellColorPicker({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const apply = (attr: TableCellStyleAttr) => (value: string | null) =>
     setTableCellsStyle(editor, "cell", attr, value);
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PickerTrigger label="セルの背景色・文字色">
+      <PickerTrigger label={t("guideEditor.ui.cellColors")}>
         <Paintbrush className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent
@@ -64,8 +66,8 @@ function CellColorPicker({
         onCloseAutoFocus={(e) => e.preventDefault()}
         align="start"
       >
-        <ColorSwatchGrid label="背景色" colors={CELL_COLORS} kind="bg" onPick={apply("backgroundColor")} />
-        <ColorSwatchGrid label="文字色" colors={TEXT_COLORS} kind="text" onPick={apply("textColor")} />
+        <ColorSwatchGrid label={t("guideEditor.ui.bgColor")} colors={CELL_COLORS} kind="bg" onPick={apply("backgroundColor")} />
+        <ColorSwatchGrid label={t("guideEditor.ui.textColor")} colors={TEXT_COLORS} kind="text" onPick={apply("textColor")} />
       </PopoverContent>
     </Popover>
   );
@@ -78,6 +80,7 @@ interface TableCellBubbleMenuProps {
 }
 
 export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleMenuProps) {
+  const t = useT();
   useEditorRerender(editor);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -102,10 +105,10 @@ export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleM
 
   const handleCopyTable = useCallback(() => {
     void copyTableToClipboard(editor).then((ok) => {
-      if (ok) toast.success("テーブルをコピーしました");
-      else toast.error("テーブルをコピーできませんでした");
+      if (ok) toast.success(t("guideEditor.ui.tableCopied"));
+      else toast.error(t("guideEditor.ui.tableCopyFailed"));
     });
-  }, [editor]);
+  }, [editor, t]);
 
   return (
     <BubbleMenu
@@ -113,13 +116,13 @@ export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleM
       shouldShow={shouldShow}
       options={BUBBLE_OPTIONS}
       role="toolbar"
-      aria-label="表の編集"
+      aria-label={t("guideEditor.ui.editTable")}
       className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-xl"
       style={{ zIndex: EDITOR_Z.bubble }}
     >
       <ToolbarButton
         sm
-        label="セルを結合 / 分割"
+        label={t("guideEditor.toolbar.mergeOrSplit")}
         onClick={() => applyTableOp(editor, "mergeOrSplit")}
       >
         <TableCellsMerge className="h-4 w-4" />
@@ -127,11 +130,11 @@ export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleM
 
       <ToolbarSeparator />
 
-      {ALIGNS.map(({ value, label, Icon }) => (
+      {ALIGNS.map(({ value, labelKey, Icon }) => (
         <ToolbarButton
           key={value}
           sm
-          label={label}
+          label={t(labelKey)}
           onClick={() => setTableCellsStyle(editor, "cell", "textAlign", value)}
         >
           <Icon className="h-4 w-4" />
@@ -139,7 +142,7 @@ export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleM
       ))}
       <ToolbarButton
         sm
-        label="揃えを解除"
+        label={t("guideEditor.ui.clearAlign")}
         onClick={() => setTableCellsStyle(editor, "cell", "textAlign", null)}
       >
         <X className="h-4 w-4" />
@@ -151,7 +154,7 @@ export function TableCellBubbleMenu({ editor, enabled = true }: TableCellBubbleM
 
       <ToolbarSeparator />
 
-      <ToolbarButton sm label="テーブルをコピー" onClick={handleCopyTable}>
+      <ToolbarButton sm label={t("guideEditor.ui.copyTable")} onClick={handleCopyTable}>
         <Copy className="h-4 w-4" />
       </ToolbarButton>
     </BubbleMenu>

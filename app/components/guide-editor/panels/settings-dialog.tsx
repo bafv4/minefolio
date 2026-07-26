@@ -102,9 +102,9 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>ガイド設定</DialogTitle>
+          <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>
-            タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」で編集中の内容へ反映されます（保存は別途行ってください）。
+            {t("guideEditor.ui.settingsDesc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -148,8 +148,8 @@ export function SettingsDialog({
             <Label htmlFor="guide-publish-toggle">{t("guideEditor.published")}</Label>
             <p className="text-xs text-muted-foreground">
               {isPublished
-                ? "公開する（保存時に公開状態が反映されます）"
-                : "下書き（保存時に非公開のままになります）"}
+                ? t("guideEditor.ui.publishOn")
+                : t("guideEditor.ui.publishOff")}
             </p>
           </div>
           <Switch
@@ -162,10 +162,10 @@ export function SettingsDialog({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            キャンセル
+            {t("guideEditor.ui.cancel")}
           </Button>
           <Button type="button" onClick={apply}>
-            反映
+            {t("guideEditor.ui.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

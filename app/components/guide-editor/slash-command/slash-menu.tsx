@@ -2,6 +2,7 @@
 // 絞り込み・選択は renderer 側（ProseMirror keydown）が管理し、ここは描画に専念する。
 // cmdk の内部状態が ProseMirror のキー操作と競合するため、素の listbox で実装する。
 import { useEffect, useRef } from "react";
+import type { Translator } from "@/lib/messages";
 import type { SlashItem } from "../types";
 import { cn } from "@/lib/utils";
 
@@ -9,11 +10,16 @@ export const SLASH_MENU_ID = "guide-slash-menu";
 
 interface SlashMenuProps {
   items: SlashItem[];
+  /**
+   * 文言解決。このメニューはエディタ外の detached root に描画されるため
+   * LocaleProvider が届かない（useT() は常に日本語になる）。呼び出し側から渡す。
+   */
+  t: Translator;
   selectedIndex: number;
   onSelect: (item: SlashItem) => void;
 }
 
-export function SlashMenu({ items, selectedIndex, onSelect }: SlashMenuProps) {
+export function SlashMenu({ items, t, selectedIndex, onSelect }: SlashMenuProps) {
   const selectedRef = useRef<HTMLButtonElement>(null);
 
   // 選択中の項目を可視領域へスクロール
@@ -24,7 +30,7 @@ export function SlashMenu({ items, selectedIndex, onSelect }: SlashMenuProps) {
   if (items.length === 0) {
     return (
       <div className="w-64 rounded-lg border bg-popover p-3 text-sm text-muted-foreground shadow-xl">
-        該当するブロックがありません
+        {t("guideEditor.slash.noResults")}
       </div>
     );
   }
@@ -36,7 +42,7 @@ export function SlashMenu({ items, selectedIndex, onSelect }: SlashMenuProps) {
     <div
       id={SLASH_MENU_ID}
       role="listbox"
-      aria-label="ブロックを挿入"
+      aria-label={t("guideEditor.slash.menuLabel")}
       aria-activedescendant={`${SLASH_MENU_ID}-opt-${selectedIndex}`}
       className="w-64 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-xl"
     >

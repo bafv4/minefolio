@@ -1,5 +1,6 @@
 // コードブロックの NodeView。コピーボタン付き。
 // 旧 index.tsx CodeBlockNodeView から逐語移植（class 名 code-block-wrapper/code-block-copy を保持）。
+import { useT } from "@/hooks/use-locale";
 import { useState, useCallback } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { Copy, ClipboardCheck } from "lucide-react";
@@ -10,6 +11,7 @@ export function CodeBlockNodeView({
 }: {
   node: { attrs: Record<string, string>; textContent: string };
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -38,7 +40,7 @@ export function CodeBlockNodeView({
               )}
             </button>
           </TooltipTrigger>
-          <TooltipContent>コピー</TooltipContent>
+          <TooltipContent>{t("guideEditor.ui.copy")}</TooltipContent>
         </Tooltip>
         <pre>
           {/* @ts-expect-error as="code" works at runtime */}

@@ -1,5 +1,6 @@
 // ガイドリンク検索ダイアログ。タイトルで検索し、選択したガイドをカードとして挿入。
 // 旧 index.tsx の手動ポップオーバー + debounce 検索を shadcn Dialog に再構成。
+import { useT } from "@/hooks/use-locale";
 import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
@@ -62,6 +63,7 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
     return () => clearTimeout(timer.current);
   }, [query]);
 
+  const t = useT();
   const select = (guide: GuideSearchResult) => {
     onInsert(guide);
     onOpenChange(false);
@@ -71,23 +73,23 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>ガイドリンクを挿入</DialogTitle>
+          <DialogTitle>{t("guideEditor.ui.insertGuideLink")}</DialogTitle>
         </DialogHeader>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="タイトルで検索"
+            placeholder={t("guideEditor.ui.searchByTitle")}
             className="pl-8"
             autoFocus
           />
         </div>
-        <div className="max-h-72 overflow-y-auto -mx-1" role="listbox" aria-label="検索結果">
+        <div className="max-h-72 overflow-y-auto -mx-1" role="listbox" aria-label={t("guideEditor.ui.searchResults")}>
           {loading ? (
             <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-6">
               <Loader2 className="h-4 w-4 animate-spin" />
-              検索中…
+              {t("guideEditor.ui.searching")}
             </p>
           ) : results.length > 0 ? (
             results.map((guide) => (
@@ -119,9 +121,9 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
               </button>
             ))
           ) : query.trim() ? (
-            <p className="text-sm text-muted-foreground text-center py-6">ガイドが見つかりません</p>
+            <p className="text-sm text-muted-foreground text-center py-6">{t("guideEditor.ui.noGuidesFound")}</p>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-6">タイトルで検索</p>
+            <p className="text-sm text-muted-foreground text-center py-6">{t("guideEditor.ui.searchByTitle")}</p>
           )}
         </div>
       </DialogContent>

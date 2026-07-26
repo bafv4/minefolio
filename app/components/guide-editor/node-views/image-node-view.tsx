@@ -1,6 +1,7 @@
 // 画像ブロックの NodeView。リサイズ（ドラッグ）・配置・トリミング・削除・幅ラベルを提供。
 // 切り出しとアップロードは宿主（GuideEditor）が持ち、extensions/image.ts の
 // ストレージ経由で注入された GuideMediaContext から呼ぶ。
+import type { MessageKey } from "@/lib/messages";
 import { useState, useCallback, useRef } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
@@ -14,10 +15,10 @@ import type { CropRect } from "../lib/image-crop";
 
 /** 配置ボタン（TableAlignRow と同じ「3つのアイコン + ✕で解除」の形） */
 const ALIGN_BUTTONS = [
-  { value: "left", icon: AlignLeft, label: "左揃え" },
-  { value: "center", icon: AlignCenter, label: "中央揃え" },
-  { value: "right", icon: AlignRight, label: "右揃え" },
-] as const;
+  { value: "left", icon: AlignLeft, labelKey: "guideEditor.ui.alignLeft" },
+  { value: "center", icon: AlignCenter, labelKey: "guideEditor.ui.alignCenter" },
+  { value: "right", icon: AlignRight, labelKey: "guideEditor.ui.alignRight" },
+] as const satisfies ReadonlyArray<{ value: string; icon: unknown; labelKey: MessageKey }>;
 
 /** 配置に応じたラッパーの寄せ方（公開ページの app.css と対になる） */
 const WRAPPER_ALIGN_CLASS: Record<string, string> = {
@@ -121,7 +122,7 @@ export function ImageNodeView({
             selected && "opacity-100",
           )}
         >
-          {ALIGN_BUTTONS.map(({ value, icon: Icon, label }) => (
+          {ALIGN_BUTTONS.map(({ value, icon: Icon, labelKey }) => (
             <Tooltip key={value}>
               <TooltipTrigger asChild>
                 <button
@@ -131,7 +132,7 @@ export function ImageNodeView({
                     // 同じ配置をもう一度押したら解除する
                     updateAttributes({ align: align === value ? null : value });
                   }}
-                  aria-label={label}
+                  aria-label={t(labelKey)}
                   aria-pressed={align === value}
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded text-white transition-colors",
@@ -141,7 +142,7 @@ export function ImageNodeView({
                   <Icon className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>{label}</TooltipContent>
+              <TooltipContent>{t(labelKey)}</TooltipContent>
             </Tooltip>
           ))}
           {align && (
@@ -153,13 +154,13 @@ export function ImageNodeView({
                     e.preventDefault();
                     updateAttributes({ align: null });
                   }}
-                  aria-label="配置を解除"
+                  aria-label={t("guideEditor.ui.clearImageAlign")}
                   className="flex h-6 w-6 items-center justify-center rounded text-white transition-colors hover:bg-white/20"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>配置を解除</TooltipContent>
+              <TooltipContent>{t("guideEditor.ui.clearImageAlign")}</TooltipContent>
             </Tooltip>
           )}
           <span className="mx-0.5 h-4 w-px bg-white/30" aria-hidden />
@@ -187,13 +188,13 @@ export function ImageNodeView({
                   e.preventDefault();
                   deleteNode();
                 }}
-                aria-label="画像を削除"
+                aria-label={t("guideEditor.ui.deleteImage")}
                 className="flex h-6 w-6 items-center justify-center rounded text-white transition-colors hover:bg-white/20"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>画像を削除</TooltipContent>
+            <TooltipContent>{t("guideEditor.ui.deleteImage")}</TooltipContent>
           </Tooltip>
         </div>
         {/* Resize handle */}

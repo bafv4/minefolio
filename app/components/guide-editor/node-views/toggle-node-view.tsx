@@ -1,12 +1,15 @@
 // トグルリスト（details/summary）の NodeView。サマリーをインライン編集可能。
 // 旧 index.tsx ToggleListNodeView から逐語移植（class 名 toggle-content/toggle-summary-input を保持）。
+import { useT } from "@/hooks/use-locale";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 
 export function ToggleListNodeView({ node, updateAttributes }: {
   node: { attrs: Record<string, string> };
   updateAttributes: (attrs: Record<string, string>) => void;
 }) {
-  const summaryText = node.attrs.summaryText || "トグル";
+  const t = useT();
+  const summaryText =
+    node.attrs.summaryText || t("guideEditor.ui.toggleSummaryDefault");
 
   return (
     <NodeViewWrapper>
@@ -20,7 +23,7 @@ export function ToggleListNodeView({ node, updateAttributes }: {
             autoCorrect="off"
             autoCapitalize="off"
             className="toggle-summary-input"
-            placeholder="トグル"
+            placeholder={t("guideEditor.ui.toggleSummaryDefault")}
           />
         </summary>
         <div className="toggle-content">

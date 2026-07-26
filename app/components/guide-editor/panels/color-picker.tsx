@@ -1,8 +1,10 @@
 // 色選択の共通コンポーネント（文字色 / 背景ハイライト / テーブルのセル・行・列スタイル）。
 // 旧 index.tsx の手動ドロップダウンを shadcn Popover に置き換え、a11y と外側クリック処理を委譲。
+import { useT } from "@/hooks/use-locale";
 import { useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
-import { Palette, Paintbrush, AlignLeft, AlignCenter, AlignRight, X } from "lucide-react";
+import { Palette, Paintbrush, AlignLeft, AlignCenter, AlignRight, X, type LucideIcon } from "lucide-react";
+import type { MessageKey } from "@/lib/messages";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TEXT_COLORS, BG_COLORS, CELL_COLORS } from "../constants";
@@ -62,7 +64,7 @@ export function PickerTrigger({
 }
 
 interface ColorOption {
-  readonly name: string;
+  readonly nameKey: MessageKey;
   readonly value: string;
 }
 
@@ -78,12 +80,13 @@ export function ColorSwatchGrid({
   kind: SwatchKind;
   onPick: (value: string | null) => void;
 }) {
+  const t = useT();
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground px-1 mb-1">{label}</p>
       <div className="flex flex-wrap gap-1">
         {colors.map((c) => (
-          <Tooltip key={c.name}>
+          <Tooltip key={c.nameKey}>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -91,14 +94,14 @@ export function ColorSwatchGrid({
                   e.preventDefault();
                   onPick(c.value || null);
                 }}
-                aria-label={c.name}
+                aria-label={t(c.nameKey)}
                 className="h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all"
                 style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value || "transparent" }}
               >
                 {kind === "text" ? "A" : c.value ? "" : "✕"}
               </button>
             </TooltipTrigger>
-            <TooltipContent showArrow={false}>{c.name}</TooltipContent>
+            <TooltipContent showArrow={false}>{t(c.nameKey)}</TooltipContent>
           </Tooltip>
         ))}
       </div>
@@ -108,9 +111,10 @@ export function ColorSwatchGrid({
 
 /** インライン整形用の文字色・背景色ピッカー（バブルメニュー / ツールバーで使用） */
 export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showLabel?: boolean }) {
+  const t = useT();
   return (
     <Popover>
-      <PickerTrigger label="文字色・背景色" showLabel={showLabel}>
+      <PickerTrigger label={t("guideEditor.ui.textAndBgColor")} showLabel={showLabel}>
         <Palette className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent
@@ -122,7 +126,7 @@ export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showL
         align="start"
       >
         <ColorSwatchGrid
-          label="文字色"
+          label={t("guideEditor.ui.textColor")}
           colors={TEXT_COLORS}
           kind="text"
           onPick={(v) =>
@@ -132,7 +136,7 @@ export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showL
           }
         />
         <ColorSwatchGrid
-          label="背景色"
+          label={t("guideEditor.ui.bgColor")}
           colors={BG_COLORS}
           kind="bg"
           onPick={(v) =>
@@ -146,30 +150,31 @@ export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showL
   );
 }
 
-const TABLE_SCOPES: { key: TableStyleScope; label: string }[] = [
-  { key: "cell", label: "セル" },
-  { key: "row", label: "行" },
-  { key: "column", label: "列" },
+const TABLE_SCOPES: { key: TableStyleScope; labelKey: MessageKey }[] = [
+  { key: "cell", labelKey: "guideEditor.ui.scopeCell" },
+  { key: "row", labelKey: "guideEditor.ui.scopeRow" },
+  { key: "column", labelKey: "guideEditor.ui.scopeColumn" },
 ];
 
 const TABLE_ALIGNS = [
-  { value: "left", label: "左揃え", Icon: AlignLeft },
-  { value: "center", label: "中央揃え", Icon: AlignCenter },
-  { value: "right", label: "右揃え", Icon: AlignRight },
-] as const;
+  { value: "left", labelKey: "guideEditor.ui.alignLeft", Icon: AlignLeft },
+  { value: "center", labelKey: "guideEditor.ui.alignCenter", Icon: AlignCenter },
+  { value: "right", labelKey: "guideEditor.ui.alignRight", Icon: AlignRight },
+] as const satisfies ReadonlyArray<{ value: string; labelKey: MessageKey; Icon: LucideIcon }>;
 
 /** テーブルの文字揃えボタン行（左 / 中央 / 右 / 解除）。table-handles でも使用 */
 export function TableAlignRow({ onPick }: { onPick: (value: string | null) => void }) {
+  const t = useT();
   return (
     <div>
-      <p className="text-xs font-medium text-muted-foreground px-1 mb-1">文字揃え</p>
+      <p className="text-xs font-medium text-muted-foreground px-1 mb-1">{t("guideEditor.ui.textAlign")}</p>
       <div className="flex gap-1">
-        {TABLE_ALIGNS.map(({ value, label, Icon }) => (
+        {TABLE_ALIGNS.map(({ value, labelKey, Icon }) => (
           <Tooltip key={value}>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={label}
+                aria-label={t(labelKey)}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   onPick(value);
@@ -179,14 +184,14 @@ export function TableAlignRow({ onPick }: { onPick: (value: string | null) => vo
                 <Icon className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent showArrow={false}>{label}</TooltipContent>
+            <TooltipContent showArrow={false}>{t(labelKey)}</TooltipContent>
           </Tooltip>
         ))}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="揃えを解除"
+              aria-label={t("guideEditor.ui.clearAlign")}
               onMouseDown={(e) => {
                 e.preventDefault();
                 onPick(null);
@@ -196,7 +201,7 @@ export function TableAlignRow({ onPick }: { onPick: (value: string | null) => vo
               <X className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent showArrow={false}>揃えを解除</TooltipContent>
+          <TooltipContent showArrow={false}>{t("guideEditor.ui.clearAlign")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -208,11 +213,12 @@ export function TableAlignRow({ onPick }: { onPick: (value: string | null) => vo
  * 適用範囲（セル / 行 / 列）を選び、背景色・文字色・文字揃えを一括適用する。
  */
 export function TableStylePicker({ editor }: { editor: Editor }) {
+  const t = useT();
   const [scope, setScope] = useState<TableStyleScope>("cell");
 
   return (
     <Popover>
-      <PickerTrigger label="テーブルのスタイル">
+      <PickerTrigger label={t("guideEditor.ui.tableStyle")}>
         <Paintbrush className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent
@@ -224,7 +230,7 @@ export function TableStylePicker({ editor }: { editor: Editor }) {
       >
         {/* 適用範囲 */}
         <div>
-          <p className="text-xs font-medium text-muted-foreground px-1 mb-1">適用範囲</p>
+          <p className="text-xs font-medium text-muted-foreground px-1 mb-1">{t("guideEditor.ui.applyScope")}</p>
           <div className="flex gap-1">
             {TABLE_SCOPES.map((s) => (
               <button
@@ -241,7 +247,7 @@ export function TableStylePicker({ editor }: { editor: Editor }) {
                     : "bg-muted text-muted-foreground hover:bg-muted/70",
                 )}
               >
-                {s.label}
+                {t(s.labelKey)}
               </button>
             ))}
           </div>
@@ -251,13 +257,13 @@ export function TableStylePicker({ editor }: { editor: Editor }) {
         <TableAlignRow onPick={(v) => setTableCellsStyle(editor, scope, "textAlign", v)} />
 
         <ColorSwatchGrid
-          label="背景色"
+          label={t("guideEditor.ui.bgColor")}
           colors={CELL_COLORS}
           kind="bg"
           onPick={(v) => setTableCellsStyle(editor, scope, "backgroundColor", v)}
         />
         <ColorSwatchGrid
-          label="文字色"
+          label={t("guideEditor.ui.textColor")}
           colors={TEXT_COLORS}
           kind="text"
           onPick={(v) => setTableCellsStyle(editor, scope, "textColor", v)}

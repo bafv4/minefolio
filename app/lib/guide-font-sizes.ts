@@ -15,14 +15,16 @@
 // 見出し h1〜h3 が 1.15〜1.875em を担うので、本文のサイズ変更は
 // 「注釈で小さく」「少し強調」が主な用途になる想定。
 
-/** 文字サイズの段階（value 空文字 = 標準 / 指定なし） */
+import type { MessageKey } from "@/lib/messages";
+
+/** 文字サイズの段階（value 空文字 = 標準 / 指定なし。名称は翻訳キー） */
 export const GUIDE_FONT_SIZES = [
-  { name: "極小", value: "0.75em" },
-  { name: "小", value: "0.875em" },
-  { name: "標準", value: "" },
-  { name: "大", value: "1.25em" },
-  { name: "特大", value: "1.5em" },
-] as const;
+  { nameKey: "guideEditor.fontSizes.xs", value: "0.75em" },
+  { nameKey: "guideEditor.fontSizes.sm", value: "0.875em" },
+  { nameKey: "guideEditor.fontSizes.base", value: "" },
+  { nameKey: "guideEditor.fontSizes.lg", value: "1.25em" },
+  { nameKey: "guideEditor.fontSizes.xl", value: "1.5em" },
+] as const satisfies ReadonlyArray<{ nameKey: MessageKey; value: string }>;
 
 export type GuideFontSize = (typeof GUIDE_FONT_SIZES)[number]["value"];
 

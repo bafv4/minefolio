@@ -1,5 +1,6 @@
 // YouTube 埋め込みの NodeView。56.25% アスペクト比 + 削除ボタン。
 // 旧 index.tsx YoutubeNodeView / getYouTubeEmbedUrl から逐語移植。
+import { useT } from "@/hooks/use-locale";
 import { NodeViewWrapper } from "@tiptap/react";
 import { Trash2 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -19,6 +20,7 @@ export function YoutubeNodeView({
   node: { attrs: Record<string, string | number> };
   deleteNode: () => void;
 }) {
+  const t = useT();
   const embedUrl = getYouTubeEmbedUrl(String(node.attrs.src));
 
   return (
@@ -46,7 +48,7 @@ export function YoutubeNodeView({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>動画を削除</TooltipContent>
+          <TooltipContent>{t("guideEditor.ui.deleteVideo")}</TooltipContent>
         </Tooltip>
       </div>
     </NodeViewWrapper>

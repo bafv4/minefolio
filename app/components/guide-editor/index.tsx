@@ -177,10 +177,10 @@ export function GuideEditor({
   // ── ハンドラ ──────────────────────────────
   const handleLinkInsert = useCallback(() => {
     if (!editor) return;
-    const href = window.prompt("URLを入力してください", "https://");
+    const href = window.prompt(t("guideEditor.ui.linkUrlPrompt"), "https://");
     if (!href) return;
     if (editor.state.selection.empty) {
-      const text = window.prompt("リンクテキストを入力してください", href) || href;
+      const text = window.prompt(t("guideEditor.ui.linkTextPrompt"), href) || href;
       editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
     } else {
       editor.chain().focus().setLink({ href }).run();
@@ -193,7 +193,7 @@ export function GuideEditor({
       const url = await imageUpload.uploadTo(
         buildInlineImagePath(userId, guideId),
         file,
-        { ...INLINE_IMAGE_PREPARE, errorMessage: "画像のアップロードに失敗しました" },
+        { ...INLINE_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.imageUploadFailed") },
       );
       if (url) {
         editor
@@ -250,7 +250,7 @@ export function GuideEditor({
       insertYoutube: () => {
         if (!editor) return;
         const url = window.prompt(
-          "YouTube URLを入力してください",
+          t("guideEditor.youtubeUrlPrompt"),
           "https://www.youtube.com/watch?v=",
         );
         if (url) editor.commands.setYoutubeVideo({ src: url });
@@ -268,8 +268,11 @@ export function GuideEditor({
     const storage = (editor.storage as unknown as Record<string, unknown>).slashCommand as
       | SlashCommandStorage
       | undefined;
-    if (storage) storage.ctx = slashContext;
-  }, [editor, slashContext]);
+    if (storage) {
+      storage.ctx = slashContext;
+      storage.t = t;
+    }
+  }, [editor, slashContext, t]);
 
   // ── 画像 NodeView のコンテキスト注入 ──────────
   const mediaContext: GuideMediaContext = useMemo(
@@ -329,7 +332,7 @@ export function GuideEditor({
         {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
         {draftActive && (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            <span>未公開のドラフトを編集中です。「保存」で公開版へ反映、または公開版に戻せます。</span>
+            <span>{t("guideEditor.ui.draftBanner")}</span>
             <Button
               type="button"
               variant="outline"
@@ -339,7 +342,7 @@ export function GuideEditor({
               disabled={saving}
             >
               <Undo2 className="h-3.5 w-3.5" />
-              公開版に戻す
+              {t("guideEditor.ui.revertToPublished")}
             </Button>
           </div>
         )}
@@ -383,7 +386,7 @@ export function GuideEditor({
           coverUpload.uploadTo(
             buildCoverImagePath(userId, guideId),
             file,
-            { ...COVER_IMAGE_PREPARE, errorMessage: "カバー画像のアップロードに失敗しました" },
+            { ...COVER_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.coverUploadFailed") },
           )
         }
         isUploadingCover={coverUpload.isUploading}
