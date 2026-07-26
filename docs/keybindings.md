@@ -368,6 +368,9 @@ type ControllerSettings = {
   - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
+  - **未設定の行は昇順・降順のどちらでも末尾**。TanStack Table の `sortUndefined: "last"` は
+    `undefined` のみを見る（`null` は素通りして通常比較に回り、昇順で先頭に来る）ため、
+    ソート対象の `accessorFn` は未設定を必ず `undefined` で返す（`keybindings-columns.tsx` の `forSort()`）
 - プレイヤー名クリックでプロフィールページへ遷移
 - ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）

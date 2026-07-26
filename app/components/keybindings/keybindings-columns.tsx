@@ -182,6 +182,14 @@ const customActionsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
  * mouse プリセット（数値列のみソート可）
  * ========================================================== */
 
+/**
+ * ソート用アクセサの値。
+ * TanStack Table の `sortUndefined` は `undefined` だけを見る（null は素通りして
+ * 通常の比較に回る）ため、未設定は必ず undefined に寄せる。これにより
+ * `sortUndefined: "last"` が昇順・降順の両方で効き、未設定行が常に末尾へ落ちる。
+ */
+const forSort = <T,>(value: T | null | undefined): T | undefined => value ?? undefined;
+
 const sensitivityPercent = (config: MouseConfig): number | null =>
   config?.gameSensitivity != null
     ? Math.floor(config.gameSensitivity * 200)
@@ -199,7 +207,7 @@ const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
   {
     id: "mouse.dpi",
     header: () => "DPI",
-    accessorFn: (row) => row.playerConfig?.mouseDpi ?? null,
+    accessorFn: (row) => forSort(row.playerConfig?.mouseDpi),
     cell: ({ row }) => <DpiCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -221,7 +229,7 @@ const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
         <TooltipContent>{t("keybindings.inGameSensitivityRange")}</TooltipContent>
       </Tooltip>
     ),
-    accessorFn: (row) => sensitivityPercent(row.playerConfig),
+    accessorFn: (row) => forSort(sensitivityPercent(row.playerConfig)),
     cell: ({ row }) => <SensitivityCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -245,15 +253,16 @@ const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
     ),
     accessorFn: (row) => {
       const config = row.playerConfig;
-      return config
-        ? calculateCm360(
-            config.mouseDpi,
-            config.gameSensitivity,
-            config.rawInput,
-            config.windowsSpeed,
-            config.windowsSpeedMultiplier,
-          )
-        : null;
+      if (!config) return undefined;
+      return forSort(
+        calculateCm360(
+          config.mouseDpi,
+          config.gameSensitivity,
+          config.rawInput,
+          config.windowsSpeed,
+          config.windowsSpeedMultiplier,
+        ),
+      );
     },
     cell: ({ row }) => <Cm360Cell config={row.original.playerConfig} />,
     enableSorting: true,
@@ -264,7 +273,7 @@ const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
   {
     id: "mouse.windowsSpeed",
     header: () => "Win Sens",
-    accessorFn: (row) => windowsMultiplier(row.playerConfig),
+    accessorFn: (row) => forSort(windowsMultiplier(row.playerConfig)),
     cell: ({ row }) => <WindowsSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -276,13 +285,14 @@ const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
     header: () => "Cursor Speed",
     accessorFn: (row) => {
       const config = row.playerConfig;
-      return config
-        ? calculateCursorSpeed(
-            config.mouseDpi,
-            config.windowsSpeed,
-            config.windowsSpeedMultiplier,
-          )
-        : null;
+      if (!config) return undefined;
+      return forSort(
+        calculateCursorSpeed(
+          config.mouseDpi,
+          config.windowsSpeed,
+          config.windowsSpeedMultiplier,
+        ),
+      );
     },
     cell: ({ row }) => <CursorSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
