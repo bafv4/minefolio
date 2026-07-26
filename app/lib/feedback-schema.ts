@@ -1,17 +1,24 @@
 import { z } from "zod/v4";
+import type { Translator } from "@/lib/messages";
 
-export const feedbackSchema = z.object({
-  subject: z
-    .string()
-    .min(1, "件名を入力してください")
-    .min(5, "件名は5文字以上で入力してください")
-    .max(100, "件名は100文字以下で入力してください"),
-  message: z
-    .string()
-    .min(1, "本文を入力してください")
-    .min(10, "本文は10文字以上で入力してください")
-    .max(2000, "本文は2000文字以下で入力してください"),
-  category: z.enum(["bug", "feature", "other"]).optional().default("other"),
-});
+/**
+ * バリデーションメッセージはロケール依存のため、スキーマは呼び出し側で組み立てる。
+ * サーバー（action）では createTranslator(resolveLocale(request)) を渡すこと。
+ */
+export function createFeedbackSchema(t: Translator) {
+  return z.object({
+    subject: z
+      .string()
+      .min(1, t("feedback.subjectRequired"))
+      .min(5, t("feedback.subjectTooShort"))
+      .max(100, t("feedback.subjectTooLong")),
+    message: z
+      .string()
+      .min(1, t("feedback.bodyRequired"))
+      .min(10, t("feedback.bodyTooShort"))
+      .max(2000, t("feedback.bodyTooLong")),
+    category: z.enum(["bug", "feature", "other"]).optional().default("other"),
+  });
+}
 
-export type FeedbackFormData = z.infer<typeof feedbackSchema>;
+export type FeedbackFormData = z.infer<ReturnType<typeof createFeedbackSchema>>;

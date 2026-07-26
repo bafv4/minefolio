@@ -1,3 +1,4 @@
+import { useT } from "@/hooks/use-locale";
 import { Outlet, useLoaderData } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import type { Route } from "./+types/_layout";
@@ -78,6 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function Layout() {
+  const t = useT();
   const { user, initialFavorites, likedGuideIds, likedTemplateIds } =
     useLoaderData<typeof loader>();
 
@@ -95,7 +97,7 @@ export default function Layout() {
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          本文へスキップ
+          {t("common.skipToContent")}
         </a>
         <NavigationProgress />
         <Header user={user} />

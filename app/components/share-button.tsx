@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ interface ShareButtonProps {
 }
 
 export function ShareButton({ title, url, description, includeTab = false }: ShareButtonProps) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const getShareUrl = () => {
@@ -41,10 +43,10 @@ export function ShareButton({ title, url, description, includeTab = false }: Sha
     try {
       await navigator.clipboard.writeText(getShareUrl());
       setCopied(true);
-      toast.success("リンクをコピーしました");
+      toast.success(t("share.copied"));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("コピーに失敗しました");
+      toast.error(t("share.copyFailed"));
     }
   };
 
@@ -61,13 +63,13 @@ export function ShareButton({ title, url, description, includeTab = false }: Sha
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
           <Share2 className="h-4 w-4 mr-2" />
-          シェア
+          {t("share.label")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={handleShareTwitter}>
           <Twitter className="h-4 w-4 mr-2" />
-          Xでシェア
+          {t("share.shareOnX")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleCopyLink}>
           {copied ? (
@@ -75,7 +77,7 @@ export function ShareButton({ title, url, description, includeTab = false }: Sha
           ) : (
             <Link2 className="h-4 w-4 mr-2" />
           )}
-          リンクをコピー
+          {t("share.copyLink")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

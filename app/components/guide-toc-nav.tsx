@@ -3,6 +3,7 @@
 // - 狭い画面: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
 // どちらも共通の TocList を描画し、現在表示中の見出しをハイライトする。
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { useT } from "@/hooks/use-locale";
 import { List } from "lucide-react";
 import { useOverlayScrollbarY } from "@/hooks/use-overlay-scrollbar-y";
 import { cn } from "@/lib/utils";
@@ -178,6 +179,7 @@ function TocList({
  * 親側で `hidden xl:block` などの表示制御を行う前提。
  */
 export function GuideTocSidebar({ items }: { items: TocItem[] }) {
+  const t = useT();
   const activeId = useActiveHeading(items);
   const { scrollerRef, scrollbar } = useOverlayScrollbarY();
   useFollowActiveHeading(scrollerRef, activeId);
@@ -190,13 +192,13 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
     // 「目次」見出しは固定し、リスト部分だけを内部スクロールさせる。
     // スクロールバーは横幅を取らないオーバーレイ（ネイティブは非表示）。
     <nav
-      aria-label="目次"
+      aria-label={t("guideToc.title")}
       style={{ maxHeight }}
       className="sticky top-24 flex flex-col rounded-xl border bg-card p-3"
     >
       <p className="mb-2 flex shrink-0 items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <List className="h-3.5 w-3.5" />
-        目次
+        {t("guideToc.title")}
       </p>
       {/* max-h では percentage 高さ（h-full）が解決しないため、
           入れ子の flex-col + flex-1 でスクローラを高さ制約する */}
@@ -218,6 +220,7 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
  * 親側で `xl:hidden` などの表示制御を行う前提。
  */
 export function GuideTocMobile({ items }: { items: TocItem[] }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const activeId = useActiveHeading(items);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -243,7 +246,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
             className="flex w-full items-center gap-2 px-4 py-3.5 text-sm font-semibold sm:px-6"
           >
             <List className="h-4 w-4 text-muted-foreground" />
-            目次
+            {t("guideToc.title")}
           </button>
         </SheetTrigger>
         <SheetContent
@@ -252,7 +255,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
         >
           <SheetTitle className="flex items-center gap-2 border-b border-border px-5 py-4 text-sm font-semibold">
             <List className="h-4 w-4 text-muted-foreground" />
-            目次
+            {t("guideToc.title")}
           </SheetTitle>
           <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3">
             {/* 項目タップで閉じてからスクロールする（handleNavigate） */}
@@ -263,7 +266,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
             />
           </div>
           {/* アクセシビリティ用の隠しクローズ（右上 X は SheetContent 既定） */}
-          <SheetClose className="sr-only">閉じる</SheetClose>
+          <SheetClose className="sr-only">{t("guideToc.close")}</SheetClose>
         </SheetContent>
       </Sheet>
     </div>

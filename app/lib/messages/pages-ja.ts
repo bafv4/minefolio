@@ -1,4 +1,66 @@
 export const PAGES_JA = {
+  /** ガイド閲覧ページ（routes/guides/view.tsx） */
+  guideView: {
+    notFoundTitle: "ガイドが見つかりません - Minefolio",
+    metaDescription: "{name}のガイド",
+    copy: "コピー",
+    draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
+    embedUserNotFound: "ユーザー「{slug}」が見つかりません",
+  },
+  /** テーマ切替（components/layout/theme-toggle.tsx） */
+  theme: {
+    toggle: "テーマを切り替え",
+    light: "ライト",
+    dark: "ダーク",
+    ultraDark: "ウルトラダーク",
+    lightShort: "ライト",
+    darkShort: "ダーク",
+    ultraDarkShort: "ウルトラ",
+  },
+  /** 共有・コピー（components/share-button.tsx） */
+  share: {
+    label: "シェア",
+    shareOnX: "Xでシェア",
+    copyLink: "リンクをコピー",
+    copied: "リンクをコピーしました",
+    copyFailed: "コピーに失敗しました",
+  },
+  /** Cookie 同意バナー */
+  cookieConsent: {
+    title: "Cookieの使用について",
+    body1: "お気に入り機能を利用するためにCookieを使用します。",
+    body2: "Cookieにはお気に入りに登録した走者のIDのみが保存されます。",
+    accept: "同意する",
+    decline: "拒否する",
+  },
+  /** ガイドの目次 */
+  guideToc: {
+    title: "目次",
+    close: "閉じる",
+  },
+  /** ページ上部へ戻るボタン */
+  backToTop: {
+    label: "ページ上部に戻る",
+  },
+  /** 汎用コンボボックス（ui/combobox.tsx） */
+  combobox: {
+    placeholder: "選択...",
+    searchPlaceholder: "検索...",
+    empty: "見つかりません",
+    useRaw: "「{value}」を使用",
+  },
+  /** 分単位の相対時刻（ペースカード） */
+  relativeMinutes: {
+    justNow: "たった今",
+    now: "今",
+    minutesAgo: "{count}分前",
+    hoursAgo: "{count}時間前",
+    daysAgo: "{count}日前",
+  },
+  /** ライブペースのカード */
+  paceCard: {
+    watchStream: "配信を見る",
+  },
   /** Minecraft の操作名（lib/keybindings.ts の ACTION_LABELS） */
   actionLabels: {
     forward: "前進",
@@ -324,6 +386,17 @@ export const PAGES_JA = {
     viewOnPaceMan: "で見る",
   },
   paces: {
+    /** スプリット名（PaceMan のイベントID に対応） */
+    splitNether: "ネザーイン",
+    splitBastion: "バスティオン",
+    splitFortress: "フォートレス",
+    splitBlind: "ブラインド",
+    splitSecondPortal: "2ndポータル",
+    splitStronghold: "要塞",
+    splitEnd: "ジ・エンド",
+    splitFinish: "クリア",
+    splitFirstStructure: "1st構造物",
+    splitSecondStructure: "2nd構造物",
     title: "最近のペース",
     metaTitle: "最近のペース - Minefolio",
     description: "登録走者の過去2か月のペース一覧です。",
@@ -373,6 +446,22 @@ export const PAGES_JA = {
     emptyAll: "登録されているプロフィールがありません。",
     searchPlaceholder: "MCID・名前で検索...",
     platformOther: "その他",
+    searchAria: "走者を検索",
+    filter: "フィルタ",
+    filterTitle: "絞り込み",
+    role: "ロール",
+    edition: "エディション",
+    platform: "プラットフォーム",
+    inputMethod: "入力方法",
+    inputKeyboardMouse: "キーボード/マウス",
+    inputController: "コントローラー",
+    inputTouch: "タッチ",
+    sortUpdatedAt: "更新日順",
+    sortMcid: "MCID順",
+    sortDisplayName: "名前順",
+    clearSearchAndFilters: "検索・フィルタをクリア",
+    loadMore: "もっと読み込む",
+    allShown: "すべての走者を表示しました（{count} 件）",
   },
   compare: {
     title: "走者比較",
@@ -967,6 +1056,12 @@ export const PAGES_JA = {
     errorAlreadyRegistered: "すでに登録が完了しています。ページを再読み込みしてください。",
   },
   feedback: {
+    subjectRequired: "件名を入力してください",
+    subjectTooShort: "件名は5文字以上で入力してください",
+    subjectTooLong: "件名は100文字以下で入力してください",
+    bodyRequired: "本文を入力してください",
+    bodyTooShort: "本文は10文字以上で入力してください",
+    bodyTooLong: "本文は2000文字以下で入力してください",
     title: "フィードバック - Minefolio",
     metaDescription: "Minefolioへのフィードバックをお寄せください",
     pageTitle: "フィードバック",
@@ -1024,6 +1119,9 @@ export const PAGES_JA = {
     sourceCustom: "カスタム",
     // エラー
     errorSpeedruncom: "Speedrun.comからのデータ取得に失敗しました",
+    publicityNote: "記録の公開設定によってはランキングに表示されないことがあります。",
+    pendingVerification: "審査待ち",
+    pendingVerificationSuffix: "（審査待ち）",
     errorRanked: "MCSR Rankedからのデータ取得に失敗しました",
   },
   meImport: {
@@ -1838,6 +1936,12 @@ export const PAGES_JA = {
     leave: "保存せず離れる",
   },
   guides: {
+    guidesCount: "{count} 件のガイド",
+    guideList: "ガイド一覧",
+    userGuidesTitle: "{name}のガイド",
+    userGuidesDescription: "{name}が公開しているガイド一覧",
+    userNotFound: "ユーザーが見つかりません",
+    noPublishedGuides: "まだガイドが公開されていません。",
     title: "ガイド一覧 - Minefolio",
     pageTitle: "ガイド一覧",
     pageDesc: "Minefolioユーザーによる攻略・設定ガイド",

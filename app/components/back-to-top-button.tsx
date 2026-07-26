@@ -1,6 +1,7 @@
 // 一定量スクロールしたら右下に出るページトップ復帰ボタン。
 // グローバルに /_layout で配置し全ページで利用可能。
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/use-locale";
 import { ArrowUp } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function BackToTopButton({ threshold = 200 }: Props) {
+  const t = useT();
   const [visible, setVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -50,7 +52,7 @@ export function BackToTopButton({ threshold = 200 }: Props) {
         <button
           type="button"
           onClick={handleClick}
-          aria-label="ページ上部に戻る"
+          aria-label={t("backToTop.label")}
           className={cn(
             "fixed bottom-6 right-6 z-50 inline-flex items-center justify-center",
             "h-11 w-11 rounded-full bg-brand text-brand-foreground shadow-lg",
@@ -64,7 +66,7 @@ export function BackToTopButton({ threshold = 200 }: Props) {
           <ArrowUp className="h-5 w-5" aria-hidden />
         </button>
       </TooltipTrigger>
-      <TooltipContent>ページ上部に戻る</TooltipContent>
+      <TooltipContent>{t("backToTop.label")}</TooltipContent>
     </Tooltip>
   );
 }

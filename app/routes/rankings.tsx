@@ -111,7 +111,7 @@ export default function RankingsPage() {
           {t("rankings.pageTitle")}
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          記録の公開設定によってはランキングに表示されないことがあります。
+          {t("rankings.publicityNote")}
         </p>
       </div>
 
@@ -154,7 +154,7 @@ export default function RankingsPage() {
               onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-pb", subType: "pb" })}
               className={cn("transition-all", data.tab === "ranked" && data.rankedType === "pb" && "shadow-sm")}
             >
-              PB ランキング
+              {t("rankings.pbRanking")}
             </Button>
             <Button
               variant={data.tab === "ranked" && data.rankedType === "elo" ? "default" : "outline"}
@@ -162,7 +162,7 @@ export default function RankingsPage() {
               onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-elo", subType: "elo" })}
               className={cn("transition-all", data.tab === "ranked" && data.rankedType === "elo" && "shadow-sm")}
             >
-              Elo ランキング
+              {t("rankings.eloRanking")}
             </Button>
           </div>
         </div>
@@ -177,8 +177,8 @@ export default function RankingsPage() {
         ) : (
           <div className="text-center py-12 text-muted-foreground">
             {data.categories.length === 0
-              ? "カテゴリが登録されていません"
-              : "ランキングデータがありません"}
+              ? t("rankings.noCategories")
+              : t("rankings.noRankingData")}
           </div>
         )
       ) : items.length > 0 ? (
@@ -189,7 +189,7 @@ export default function RankingsPage() {
         )
       ) : (
         <div className="text-center py-12 text-muted-foreground">
-          ランキングデータがありません
+          {t("rankings.noRankingData")}
         </div>
       )}
     </div>
@@ -198,13 +198,14 @@ export default function RankingsPage() {
 
 // Speedrun.com ランキングテーブル
 function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
+  const t = useT();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">タイム</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">日付</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-center border-b-2">リンク</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">{t("rankings.date")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-center border-b-2">{t("rankings.links")}</TableHead>
     </TableRow>
   );
   return (
@@ -230,7 +231,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                           <Clock className="h-4 w-4 inline" />
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent>審査待ち</TooltipContent>
+                      <TooltipContent>{t("rankings.pendingVerification")}</TooltipContent>
                     </Tooltip>
                   ) : entry.rank !== null && entry.rank <= 3 ? (
                     <span className={
@@ -258,7 +259,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                         {entry.displayName ?? entry.mcid ?? "Unknown"}
                         {isPending && (
                           <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-500">
-                            (審査待ち)
+                            {t("rankings.pendingVerificationSuffix")}
                           </span>
                         )}
                       </p>
@@ -306,11 +307,12 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
 
 // Ranked PB テーブル
 function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
+  const t = useT();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">ベストタイム</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.bestTime")}</TableHead>
     </TableRow>
   );
   return (
@@ -363,13 +365,14 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
 
 // Ranked Elo テーブル
 function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
+  const t = useT();
   const headerRow = (
     <TableRow>
       <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">Elo</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">勝敗</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-20 text-right border-b-2">勝率</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">{t("rankings.winLoss")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-20 text-right border-b-2">{t("rankings.winRate")}</TableHead>
     </TableRow>
   );
   return (
@@ -428,15 +431,16 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
 
 // スケルトンローダー
 function RankingsTableSkeleton() {
+  const t = useT();
   return (
     <div className="relative border rounded-lg overflow-hidden">
       <table className="w-full caption-bottom text-sm">
         <TableHeader>
           <TableRow>
             <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 border-r border-b-2">#</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 border-b-2">プレイヤー</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">タイム</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">日付</TableHead>
+            <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
+            <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
+            <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">{t("rankings.date")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

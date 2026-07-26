@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useT } from "@/hooks/use-locale";
 import { Check, ChevronsUpDown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -37,12 +38,17 @@ export function Combobox({
   options,
   value,
   onValueChange,
-  placeholder = "選択...",
-  searchPlaceholder = "検索...",
-  emptyText = "見つかりません",
+  placeholder: placeholderProp,
+  searchPlaceholder: searchPlaceholderProp,
+  emptyText: emptyTextProp,
   allowCustomValue = false,
   className,
 }: ComboboxProps) {
+  // 既定値は本体で解決する（既定引数は useT() より先に評価されるため）
+  const t = useT();
+  const placeholder = placeholderProp ?? t("combobox.placeholder");
+  const searchPlaceholder = searchPlaceholderProp ?? t("combobox.searchPlaceholder");
+  const emptyText = emptyTextProp ?? t("combobox.empty");
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
 
@@ -109,7 +115,7 @@ export function Combobox({
                     setInputValue("")
                   }}
                 >
-                  「{inputValue}」を使用
+                  {t("combobox.useRaw", { value: inputValue })}
                 </button>
               ) : (
                 emptyText

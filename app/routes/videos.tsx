@@ -229,7 +229,7 @@ export default function VideosPage() {
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
-              <span className="shrink-0 text-muted-foreground">〜</span>
+              <span className="shrink-0 text-muted-foreground">{t("common.rangeSeparator")}</span>
               <Input
                 type="date"
                 value={to}

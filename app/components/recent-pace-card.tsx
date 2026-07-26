@@ -1,4 +1,6 @@
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import type { Translator } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Clock, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,20 +33,21 @@ function formatTime(ms: number): string {
 }
 
 // 相対時間を計算
-function getRelativeTime(unixSeconds: number): string {
+function getRelativeTime(t: Translator, unixSeconds: number): string {
   const now = Date.now();
   const diffMs = now - unixSeconds * 1000;
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
 
-  if (diffMinutes < 1) return "たった今";
-  if (diffMinutes < 60) return `${diffMinutes}分前`;
-  if (diffHours < 24) return `${diffHours}時間前`;
+  if (diffMinutes < 1) return t("relativeMinutes.justNow");
+  if (diffMinutes < 60) return t("relativeMinutes.minutesAgo", { count: diffMinutes });
+  if (diffHours < 24) return t("relativeMinutes.hoursAgo", { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}日前`;
+  return t("relativeMinutes.daysAgo", { count: diffDays });
 }
 
 export function RecentPaceCard({ run, isRegistered, uuid, displayName, skinUrl }: RecentPaceCardProps) {
+  const t = useT();
   const isFinished = run.timeline === "Finish";
   // PaceManのユーザーページにリンク
   const paceManUrl = `https://paceman.gg/stats/player/${encodeURIComponent(run.mcid)}`;
@@ -86,7 +89,7 @@ export function RecentPaceCard({ run, isRegistered, uuid, displayName, skinUrl }
         </div>
         <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
-          <span>{getRelativeTime(run.time)}</span>
+          <span>{getRelativeTime(t, run.time)}</span>
         </div>
       </div>
       <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />

@@ -1,5 +1,6 @@
 // PaceMan API - ライブペース取得
 
+import type { MessageKey, Translator } from "@/lib/messages";
 import { getCached, setCached, getPaceManCacheKey, CacheTTL } from "./cache";
 
 const PACEMAN_API = "https://paceman.gg/api/ars/liveruns";
@@ -58,18 +59,19 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
 /**
  * スプリットIDを日本語ラベルに変換
  */
-export function getSplitLabel(eventId: string): string {
-  const labels: Record<string, string> = {
-    "rsg.enter_nether": "ネザーイン",
-    "rsg.enter_bastion": "バスティオン",
-    "rsg.enter_fortress": "フォートレス",
-    "rsg.first_portal": "ブラインド",
-    "rsg.second_portal": "2ndポータル",
-    "rsg.enter_stronghold": "要塞",
-    "rsg.enter_end": "ジ・エンド",
-    "rsg.credits": "クリア",
+export function getSplitLabel(t: Translator, eventId: string): string {
+  const labelKeys: Record<string, MessageKey> = {
+    "rsg.enter_nether": "paces.splitNether",
+    "rsg.enter_bastion": "paces.splitBastion",
+    "rsg.enter_fortress": "paces.splitFortress",
+    "rsg.first_portal": "paces.splitBlind",
+    "rsg.second_portal": "paces.splitSecondPortal",
+    "rsg.enter_stronghold": "paces.splitStronghold",
+    "rsg.enter_end": "paces.splitEnd",
+    "rsg.credits": "paces.splitFinish",
   };
-  return labels[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
+  const key = labelKeys[eventId];
+  return key ? t(key) : eventId.replace("rsg.", "").replace(/_/g, " ");
 }
 
 // スプリットIDの正規タイムライン名（SPLIT_MARK_ITEM / pacemanPaces.timeline と同じ語彙）
@@ -265,22 +267,25 @@ export async function fetchRecentRunsForUsers(
 /**
  * 最近のペースの最終到達スプリットを取得
  */
-export function getRecentRunFinalSplit(run: PaceManRecentRun): {
+export function getRecentRunFinalSplit(
+  t: Translator,
+  run: PaceManRecentRun,
+): {
   splitId: string;
   label: string;
   igt: number;
 } | null {
   // 進行順に最後の到達スプリットを探す
   const splits = [
-    { id: "rsg.credits", key: "finish" as const, label: "クリア" },
-    { id: "rsg.enter_end", key: "end" as const, label: "ジ・エンド" },
-    { id: "rsg.enter_stronghold", key: "stronghold" as const, label: "要塞" },
-    { id: "rsg.first_portal", key: "first_portal" as const, label: "ブラインド" },
-    { id: "rsg.second_structure", key: "second_structure" as const, label: "2nd構造物" },
-    { id: "rsg.fortress", key: "fortress" as const, label: "フォートレス" },
-    { id: "rsg.bastion", key: "bastion" as const, label: "バスティオン" },
-    { id: "rsg.first_structure", key: "first_structure" as const, label: "1st構造物" },
-    { id: "rsg.enter_nether", key: "nether" as const, label: "ネザーイン" },
+    { id: "rsg.credits", key: "finish" as const, label: t("paces.splitFinish") },
+    { id: "rsg.enter_end", key: "end" as const, label: t("paces.splitEnd") },
+    { id: "rsg.enter_stronghold", key: "stronghold" as const, label: t("paces.splitStronghold") },
+    { id: "rsg.first_portal", key: "first_portal" as const, label: t("paces.splitBlind") },
+    { id: "rsg.second_structure", key: "second_structure" as const, label: t("paces.splitSecondStructure") },
+    { id: "rsg.fortress", key: "fortress" as const, label: t("paces.splitFortress") },
+    { id: "rsg.bastion", key: "bastion" as const, label: t("paces.splitBastion") },
+    { id: "rsg.first_structure", key: "first_structure" as const, label: t("paces.splitFirstStructure") },
+    { id: "rsg.enter_nether", key: "nether" as const, label: t("paces.splitNether") },
   ];
 
   for (const split of splits) {

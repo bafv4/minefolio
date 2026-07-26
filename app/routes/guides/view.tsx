@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import {
   useLoaderData,
   Link,
@@ -36,14 +38,17 @@ import {
 
 export function meta({
   loaderData,
+  matches,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+  matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
 }) {
+  const t = createTranslator(localeFromMatches(matches));
   if (!loaderData?.guide) {
-    return [{ title: "ガイドが見つかりません - Minefolio" }];
+    return [{ title: t("guideView.notFoundTitle") }];
   }
   const title = `${loaderData.guide.title} - Minefolio`;
-  const description = loaderData.guide.summary || `${loaderData.author.displayName || loaderData.author.mcid}のガイド`;
+  const description = loaderData.guide.summary || t("guideView.metaDescription", { name: loaderData.author.displayName || loaderData.author.mcid || "" });
   const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
@@ -327,7 +332,7 @@ export default function GuideViewPage() {
       if (pre.querySelector(".code-copy-btn")) return;
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
-      btn.title = "コピー";
+      btn.title = t("guideView.copy");
       btn.textContent = "📋";
       const controller = new AbortController();
       controllers.push(controller);
@@ -365,7 +370,7 @@ export default function GuideViewPage() {
 
       {previewingDraft && (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。
+          {t("guideView.draftPreviewNotice")}
         </div>
       )}
       {/* Back button + Owner edit button */}
@@ -498,6 +503,7 @@ function GuideContent({
   html: string;
   embedUsers: Record<string, EmbedUserData>;
 }) {
+  const t = useT();
   const segments = splitContentAtEmbeds(html);
   const hasEmbeds = segments.some((s) => s.type !== "html");
 
@@ -522,7 +528,7 @@ function GuideContent({
         if (!userData) {
           return (
             <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
-              ユーザー「{seg.userSlug}」が見つかりません
+              {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
             </div>
           );
         }

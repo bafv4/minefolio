@@ -330,7 +330,7 @@ export function Header({ user }: HeaderProps) {
                 <div className="border-t border-border px-4 py-3 shrink-0">
                   <span className="text-sm text-muted-foreground">{t("nav.theme")}</span>
                   <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
-                    {THEME_OPTIONS.map(({ value, shortLabel, icon: Icon }) => (
+                    {THEME_OPTIONS.map(({ value, shortLabelKey, icon: Icon }) => (
                       <button
                         key={value}
                         type="button"
@@ -344,7 +344,7 @@ export function Header({ user }: HeaderProps) {
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
-                        {shortLabel}
+                        {t(shortLabelKey)}
                       </button>
                     ))}
                   </div>

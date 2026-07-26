@@ -166,11 +166,12 @@ export default function MyGuidesPage() {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       <span>
-                        {formatDistanceToNow(guide.updatedAt, {
-                          addSuffix: true,
-                          locale: dateFnsLocale(locale),
-                        })}{" "}
-                        更新
+                        {t("common.updatedAgo", {
+                          time: formatDistanceToNow(guide.updatedAt, {
+                            addSuffix: true,
+                            locale: dateFnsLocale(locale),
+                          }),
+                        })}
                       </span>
                       {guide.isPublished && (
                         <span className="flex items-center gap-1">

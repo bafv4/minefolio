@@ -10,7 +10,7 @@ import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { sendFeedbackEmail } from "@/lib/email.server";
-import { feedbackSchema } from "@/lib/feedback-schema";
+import { createFeedbackSchema } from "@/lib/feedback-schema";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -101,7 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
     category: (formData.get("category") as string) || "other",
   };
 
-  const result = feedbackSchema.safeParse(rawData);
+  const result = createFeedbackSchema(t).safeParse(rawData);
   if (!result.success) {
     return {
       error: result.error.issues[0].message,
