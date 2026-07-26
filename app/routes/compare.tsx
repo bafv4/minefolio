@@ -6,7 +6,12 @@ import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { users, configPresets } from "@/lib/schema";
 import { eq, asc, and, sql } from "drizzle-orm";
-import { decodePresetConfig, decodePresetKeybindings, type PresetSnapshot } from "@/lib/preset-read";
+import {
+  decodePresetConfig,
+  decodePresetKeybindings,
+  shouldUsePresetSnapshot,
+  type PresetSnapshot,
+} from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
@@ -94,6 +99,7 @@ const categoryLabelsOf = (t: Translator): Record<string, string> => ({
 // 比較用に取得するメイン（公開用）プリセットのスナップショット列
 const MAIN_PRESET_COLUMNS = {
   id: true,
+  isActive: true,
   keybindingsData: true,
   playerConfigData: true,
   remapsData: true,
@@ -101,8 +107,9 @@ const MAIN_PRESET_COLUMNS = {
 } as const;
 
 // 公開比較はメイン（公開用）プリセットのスナップショットを優先する。
-// メインが無いユーザーのみライブ（従来挙動）へフォールバック。
-// メインがある場合、null の種別は「空」であり編集中のライブデータを混ぜない。
+// メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
+// ユーザーはライブへフォールバックする（判定は shouldUsePresetSnapshot に集約）。
+// スナップショットを使う場合、null の種別は「空」であり編集中のライブデータを混ぜない。
 // デコード行はライブ行と構造互換のためキャストで型を維持する。
 function applyMainPreset<
   P extends {
@@ -110,12 +117,12 @@ function applyMainPreset<
     keybindings: unknown;
     keyRemaps: unknown;
     playerConfig: unknown;
-    configPresets: (PresetSnapshot & { id: string })[];
+    configPresets: (PresetSnapshot & { id: string; isActive: boolean })[];
   },
 >(player: P): Omit<P, "configPresets"> {
   const { configPresets: userPresets, ...rest } = player;
   const main = userPresets[0];
-  if (!main) return rest;
+  if (!shouldUsePresetSnapshot(main)) return rest;
   const decoded = decodePresetConfig(main, player.id);
   return {
     ...rest,
@@ -203,7 +210,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         keybindings: { columns: { action: true, keyCode: true } },
         configPresets: {
           where: eq(configPresets.isMain, true),
-          columns: { id: true, keybindingsData: true },
+          columns: { id: true, isActive: true, keybindingsData: true },
         },
       },
       limit: 50,
@@ -212,7 +219,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const similarPlayers = allUsersWithKeybindings
       .map((user) => {
         const mainPreset = user.configPresets[0];
-        const userKeybindings = mainPreset
+        const userKeybindings = shouldUsePresetSnapshot(mainPreset)
           ? (decodePresetKeybindings(mainPreset.keybindingsData, user.id) ?? [])
           : user.keybindings;
         const userKeyMap: Record<string, string> = {};

@@ -11,7 +11,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
-import { decodePresetConfig } from "@/lib/preset-read";
+import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { getGuideLikeCount } from "@/lib/likes.server";
@@ -230,13 +230,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     for (const u of embedUserRows) {
       // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
-      // メインが無いユーザーのみライブ（従来挙動）。メインがある場合、null の種別は「空」
+      // メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
+      // ユーザーはライブ（従来挙動）。スナップショットを使う場合、null の種別は「空」
       const mainPreset = u.configPresets.find((p) => p.isMain);
       let display: Pick<
         EmbedUserData,
         "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
       >;
-      if (mainPreset) {
+      if (shouldUsePresetSnapshot(mainPreset)) {
         const decoded = decodePresetConfig(mainPreset, u.id);
         display = {
           keybindings: decoded.keybindings,
