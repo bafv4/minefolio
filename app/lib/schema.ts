@@ -1141,3 +1141,58 @@ export const searchCraftTemplateLikesRelations = relations(searchCraftTemplateLi
 
 export type SearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferSelect;
 export type NewSearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferInsert;
+
+// ============================================
+// content_translations（利用者コンテンツの自動翻訳）
+// ============================================
+// ガイド本文・プロフィール文の機械翻訳を保存する。仕様は docs/translation.md。
+//
+// 対象ごとにテーブルを分けず targetType で束ねる（ガイド・bio・将来のテンプレートを
+// 同じ読み書き経路で扱うため）。外部キーは張らない（targetType ごとに参照先が異なるため）。
+// 対象の削除時は Phase 1/2 の書き込み経路で明示的に消す。
+export const contentTranslations = sqliteTable("content_translations", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  /** 翻訳対象の種別（"guide" | "userBio"。将来 "template" 等を追加） */
+  targetType: text("target_type").notNull(),
+  /** 対象の id（guides.id / users.id） */
+  targetId: text("target_id").notNull(),
+  /** 翻訳先ロケール（app/lib/locale.ts の Locale） */
+  locale: text("locale").notNull(),
+
+  // --- 失効判定 ---
+  // 読み取り側は「sourceHash 一致 かつ glossaryVersion 一致 かつ status = ready」の
+  // ときだけ訳文を使い、それ以外は必ず原文へフォールバックする。
+  /** 原文のハッシュ（app/lib/translate.server.ts の sourceHash()） */
+  sourceHash: text("source_hash").notNull(),
+  /** 翻訳時の用語集バージョン（translation-glossary.ts の GLOSSARY_VERSION） */
+  glossaryVersion: integer("glossary_version").notNull(),
+
+  // --- 訳文（対象に無いフィールドは null） ---
+  title: text("title"),
+  summary: text("summary"),
+  content: text("content"),
+
+  /** "pending" | "ready" | "failed" */
+  status: text("status").notNull().default("pending"),
+  /** 翻訳エンジン識別子（"anthropic" 等） */
+  engine: text("engine"),
+  /** 使用モデル（記録用。切り替え時の追跡に使う） */
+  model: text("model"),
+  /** 失敗理由（status = "failed" のときのみ） */
+  error: text("error"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("content_translations_target_locale_uniq").on(
+    table.targetType,
+    table.targetId,
+    table.locale,
+  ),
+  // Cron が pending / failed を拾うための索引
+  index("content_translations_status_idx").on(table.status, table.updatedAt),
+]);
+
+export type ContentTranslation = typeof contentTranslations.$inferSelect;
+export type NewContentTranslation = typeof contentTranslations.$inferInsert;

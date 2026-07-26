@@ -137,6 +137,26 @@ CREATE TABLE `config_presets` (
 CREATE INDEX `idx_config_presets_user_id` ON `config_presets` (`user_id`);
 CREATE INDEX `idx_config_presets_is_active` ON `config_presets` (`is_active`);
 CREATE INDEX `idx_config_presets_is_main` ON `config_presets` (`is_main`);
+CREATE TABLE `content_translations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text NOT NULL,
+	`locale` text NOT NULL,
+	`source_hash` text NOT NULL,
+	`glossary_version` integer NOT NULL,
+	`title` text,
+	`summary` text,
+	`content` text,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`engine` text,
+	`model` text,
+	`error` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+
+CREATE UNIQUE INDEX `content_translations_target_locale_uniq` ON `content_translations` (`target_type`,`target_id`,`locale`);
+CREATE INDEX `content_translations_status_idx` ON `content_translations` (`status`,`updated_at`);
 CREATE TABLE `custom_actions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
