@@ -6,7 +6,7 @@ import { buildExtensions } from "../editor-config";
 import { SlashCommand } from "../extensions/slash-command";
 import { stripNonPaletteColorsFromHtml } from "@/lib/guide-colors";
 import { stripDisallowedFontSizesFromHtml } from "@/lib/guide-font-sizes";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface UseGuideEditorOptions {
   /** 初期 HTML 本文 */
@@ -27,6 +27,7 @@ export function useGuideEditor({
   onUpdate,
   onImagePaste,
 }: UseGuideEditorOptions): Editor | null {
+  const t = useT();
   return useEditor({
     // buildExtensions（HTML スキーマ = round-trip 担保）+ 編集 UX 専用の slash を合成
     extensions: [...buildExtensions(t("guideEditor.contentPlaceholder")), SlashCommand],

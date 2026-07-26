@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
@@ -41,14 +43,16 @@ import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/rema
 import { KeyCaptureButton } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetSyncKind } from "@/lib/preset-utils";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meKeybindings.title") }];
 };
 
@@ -72,6 +76,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -145,6 +150,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -221,7 +227,11 @@ type CustomKeyMutationInput = {
 };
 
 /** findRemapConflict の違反をユーザー向けメッセージへ変換する（サーバー/クライアント共用） */
-function remapConflictErrorMessage(conflict: RemapConflict, keyboardLayout?: string | null): string {
+function remapConflictErrorMessage(
+  t: Translator,
+  conflict: RemapConflict,
+  keyboardLayout?: string | null,
+): string {
   const key = getRemapSourceLabel(conflict.sourceKey, keyboardLayout);
   return conflict.kind === "duplicate"
     ? t("meKeybindings.remapDuplicateError", { key, type: t(`remapType.${conflict.remapType}`) })
@@ -238,6 +248,7 @@ type DbClient = Db | DbTransaction;
 class SaveAllAbortError extends Error {}
 
 async function persistRemaps(
+  t: Translator,
   db: DbClient,
   userId: string,
   remapsData: RemapMutationInput[],
@@ -246,7 +257,7 @@ async function persistRemaps(
   // 保存前バリデーション: 同一 (sourceKey, 種別) の完全重複 / All 行と他行の共存を拒否
   const conflict = findRemapConflict(remapsData.filter((r) => !r._delete && r.sourceKey));
   if (conflict) {
-    return { error: remapConflictErrorMessage(conflict) };
+    return { error: remapConflictErrorMessage(t, conflict) };
   }
 
   try {
@@ -470,6 +481,7 @@ function parseFingerAssignments(
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -532,7 +544,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
-    const remapError = await persistRemaps(db, user.id, remapsData, now);
+    const remapError = await persistRemaps(t, db, user.id, remapsData, now);
     if (remapError) return { error: remapError.error };
     await syncActivePresetSnapshot(db, user.id, ["remaps"]);
 
@@ -594,7 +606,7 @@ export async function action({ request }: Route.ActionArgs) {
         // リマップ（persistRemaps はエラーを返しうるため先に実行する。
         // エラー時は throw でトランザクション全体をロールバックする）
         if (remapsData) {
-          const remapError = await persistRemaps(tx, user.id, remapsData, now);
+          const remapError = await persistRemaps(t, tx, user.id, remapsData, now);
           if (remapError) throw new SaveAllAbortError(remapError.error);
         }
 
@@ -748,12 +760,13 @@ export async function action({ request }: Route.ActionArgs) {
   return { error: t("meKeybindings.unknownAction") };
 }
 
-const categoryLabels: Record<string, string> = {
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+const categoryLabelsOf = (t: Translator): Record<string, string> => ({
   movement: t("meKeybindings.categoryMovement"),
   combat: t("meKeybindings.categoryCombat"),
   inventory: t("meKeybindings.categoryInventory"),
   ui: t("meKeybindings.categoryUi"),
-};
+});
 
 const categoryColors: Record<string, string> = {
   movement: "text-category-movement",
@@ -927,6 +940,7 @@ function CustomActionRow({
   onUpdate: (index: number, updates: Partial<CustomActionEntry>) => void;
   onDelete: (index: number) => void;
 }) {
+  const t = useT();
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -1004,6 +1018,7 @@ function DialogCustomActionRow({
   onUpdate: (index: number, updates: Partial<CustomActionEntry>) => void;
   onDelete: (index: number) => void;
 }) {
+  const t = useT();
   return (
     <div className="p-3 rounded-lg border bg-secondary/20 space-y-3">
       {/* トリガー行（修飾キートグル + ベースキー + 削除） */}
@@ -1066,6 +1081,7 @@ function DialogCustomActionRow({
  * 編集できない旨を案内する。既存データは読み取り専用で表示される。
  */
 function PresetRequiredNotice() {
+  const t = useT();
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -1080,6 +1096,7 @@ function PresetRequiredNotice() {
 }
 
 export default function KeybindingsPage() {
+  const t = useT();
   const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
@@ -1270,7 +1287,7 @@ export default function KeybindingsPage() {
     if (isControllerMode) {
       return categoryOrder.map((category) => ({
         key: category,
-        label: categoryLabels[category],
+        label: categoryLabelsOf(t)[category],
         color: categoryColors[category],
         bindings: byCategory[category] ?? [],
       }));
@@ -1845,7 +1862,7 @@ export default function KeybindingsPage() {
     // 保存前バリデーション（サーバーと同じ判定・メッセージ）: 重複・All共存はここで止める
     const conflict = findRemapConflict(localRemaps.filter((r) => !r._delete && r.sourceKey));
     if (conflict) {
-      toast.error(remapConflictErrorMessage(conflict, keyboardLayout));
+      toast.error(remapConflictErrorMessage(t, conflict, keyboardLayout));
       return;
     }
 
@@ -2636,7 +2653,7 @@ export default function KeybindingsPage() {
                   return (
                     <div key={category} className="mb-3 last:mb-0">
                       <p className={`text-xs font-medium mb-1.5 ${categoryColors[category]}`}>
-                        {categoryLabels[category]}
+                        {categoryLabelsOf(t)[category]}
                       </p>
                       <div className="space-y-1.5 pl-2">
                         {bindings.map((kb) => {
@@ -2925,6 +2942,7 @@ export default function KeybindingsPage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

@@ -14,7 +14,7 @@ import {
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { cn } from "@/lib/utils";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export type UserFilterPlayer = {
   slug: string;
@@ -44,6 +44,7 @@ export function UserSelectList({
   onToggle: (slug: string) => void;
   onClear: () => void;
 }) {
+  const t = useT();
   const selectedSet = new Set(selected);
   const selectedCount = selectedSet.size;
 
@@ -103,6 +104,7 @@ export function UserSelectList({
 
 /** 選択中ユーザーのチップ列（ヘッダー下に表示し、横断で見えるようにする）。 */
 export function UserFilterChips({ players }: { players: UserFilterPlayer[] }) {
+  const t = useT();
   const { params, toggleUser, clearUsers } = useKeybindingsFilters();
   const selectedSet = new Set(params.users);
   const selectedPlayers = players.filter((p) => selectedSet.has(p.slug));

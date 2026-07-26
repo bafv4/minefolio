@@ -4,7 +4,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { User, Clock3, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatRelativeDate } from "@/lib/relative-time";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -22,6 +22,7 @@ export interface ProfileFeedCardPlayer {
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
+  const t = useT();
   const displayName = player.displayName ?? player.mcid ?? player.slug;
   const userRoleLabel =
     player.role === "runner"
@@ -96,7 +97,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
         </div>
         <span className="inline-flex items-center gap-1 shrink-0">
           <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(player.updatedAt)}
+          {formatRelativeDate(t, player.updatedAt)}
         </span>
       </div>
     </Link>
@@ -105,6 +106,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
 
 /** Compact list row for players */
 export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer }) {
+  const t = useT();
   const displayName = player.displayName ?? player.mcid ?? player.slug;
   const userRoleLabel =
     player.role === "runner"
@@ -155,7 +157,7 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
         )}
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">
           <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(player.updatedAt)}
+          {formatRelativeDate(t, player.updatedAt)}
         </span>
       </div>
     </Link>

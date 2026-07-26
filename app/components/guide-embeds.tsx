@@ -9,8 +9,12 @@ import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { coerceStringArray } from "@/lib/preset-read";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
-import { SearchStringText, TIMING_META } from "@/components/search-craft-template-view";
-import { t } from "@/lib/messages";
+import {
+  SearchStringText,
+  TIMING_META,
+  timingLabelById,
+} from "@/components/search-craft-template-view";
+import { useT } from "@/hooks/use-locale";
 
 // ========================================
 // 共通型
@@ -150,6 +154,7 @@ export function KeybindEmbedView({
   userData: EmbedUserData;
   presetName: string | null;
 }) {
+  const t = useT();
   const displayName = userData.displayName || userData.mcid || userData.slug;
 
   // プリセット名指定時はそのプリセットのデータを使用
@@ -241,10 +246,6 @@ function getItemDisplayName(itemId: string): string {
 
 // タイミングの表示順・ラベルは共通定義 TIMING_META（全6種）から導出する
 // （独自定義だと新タイミング追加時に該当クラフトが黙って非表示になる）
-const TIMING_LABELS: Record<string, string> = Object.fromEntries(
-  TIMING_META.map((m) => [m.id, m.label]),
-);
-
 const TIMING_ORDER = TIMING_META.map((m) => m.id);
 
 export function SearchCraftEmbedView({
@@ -254,6 +255,7 @@ export function SearchCraftEmbedView({
   userData: EmbedUserData;
   presetName: string | null;
 }) {
+  const t = useT();
   const displayName = userData.displayName || userData.mcid || userData.slug;
 
   let crafts = userData.searchCrafts;
@@ -353,7 +355,7 @@ export function SearchCraftEmbedView({
         {sortedKeys.map((timing) => (
           <div key={timing ?? "__none"} className="space-y-2">
             <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
-              {timing ? TIMING_LABELS[timing] ?? timing : t("playerProfile.timingUnspecified")}
+              {timing ? timingLabelById(t, timing) : t("playerProfile.timingUnspecified")}
             </h4>
             <div className="space-y-3">{grouped.get(timing)!.map(renderCraft)}</div>
           </div>

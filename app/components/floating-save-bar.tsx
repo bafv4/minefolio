@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Save, Loader2, RotateCcw } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface FloatingSaveBarProps {
   hasChanges: boolean;
@@ -19,10 +19,14 @@ export function FloatingSaveBar({
   isSubmitting,
   onSave,
   onReset,
-  saveLabel = t("common.saveChanges"),
-  resetLabel = t("common.discardChanges"),
+  saveLabel,
+  resetLabel,
   className,
 }: FloatingSaveBarProps) {
+  // 既定ラベルは本体で解決する（既定引数は useT() より先に評価されるため）
+  const t = useT();
+  const save = saveLabel ?? t("common.saveChanges");
+  const reset = resetLabel ?? t("common.discardChanges");
   return (
     <div
       role="region"
@@ -66,7 +70,7 @@ export function FloatingSaveBar({
             className="flex-1 sm:flex-none touch-manipulation"
           >
             <RotateCcw className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">{resetLabel}</span>
+            <span className="hidden sm:inline">{reset}</span>
             <span className="sm:hidden">{t("common.discard")}</span>
           </Button>
         )}
@@ -85,7 +89,7 @@ export function FloatingSaveBar({
           ) : (
             <>
               <Save className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">{saveLabel}</span>
+              <span className="hidden sm:inline">{save}</span>
               <span className="sm:hidden">{t("common.save")}</span>
             </>
           )}

@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useT } from "@/hooks/use-locale";
 import { MapPin, Clock } from "lucide-react";
 import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +28,7 @@ interface PlayerCardProps {
 
 // 相対時間を計算するヘルパー関数
 function PlayerCardComponent({ player }: PlayerCardProps) {
+  const t = useT();
   const displayName = player.displayName ?? player.mcid ?? player.slug;
 
   return (
@@ -77,7 +79,7 @@ function PlayerCardComponent({ player }: PlayerCardProps) {
                 )}
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatRelativeDate(player.updatedAt)}
+                  {formatRelativeDate(t, player.updatedAt)}
                 </span>
               </div>
             </div>

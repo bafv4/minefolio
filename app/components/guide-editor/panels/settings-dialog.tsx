@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
 import { normalizeSlug } from "@/lib/guide-slug";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export interface GuideSettingsValues {
   title: string;
@@ -63,6 +63,7 @@ export function SettingsDialog({
   uploadError,
   onApply,
 }: SettingsDialogProps) {
+  const t = useT();
   // ── モーダル内ローカル State ──
   const [title, setTitle] = useState(initialValues.title);
   const [summary, setSummary] = useState(initialValues.summary);

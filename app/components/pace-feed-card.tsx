@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -35,8 +36,8 @@ function formatRunTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-// Unix秒からの相対時間を表示
-function formatRelativeUnixTime(unixSeconds: number): string {
+// Unix秒からの相対時間を表示（モジュール関数のためフックを使えず、t を受け取る）
+function formatRelativeUnixTime(t: Translator, unixSeconds: number): string {
   const now = Date.now();
   const diffMs = now - unixSeconds * 1000;
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
@@ -59,6 +60,7 @@ export function PaceFeedCard({
   displayName?: string;
   skinUrl?: string;
 }) {
+  const t = useT();
   const isFinished = run.timeline === "Finish";
   const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -113,7 +115,7 @@ export function PaceFeedCard({
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
             {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}
-            <span suppressHydrationWarning>{formatRelativeUnixTime(run.time)}</span>
+            <span suppressHydrationWarning>{formatRelativeUnixTime(t, run.time)}</span>
           </span>
         </div>
       </div>
@@ -142,6 +144,7 @@ function PaceTimelineModal({
   displayName?: string;
   paceManUrl: string;
 }) {
+  const t = useT();
   const [state, setState] = useState<{
     status: "idle" | "loading" | "done" | "error";
     entries: PaceTimelineEntry[];

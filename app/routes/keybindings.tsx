@@ -5,9 +5,11 @@ import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { KeybindingsListLayout } from "@/components/keybindings/keybindings-list-layout";
-import { t } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("keybindings.metaTitle");
   const description = t("keybindings.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";

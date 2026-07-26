@@ -14,12 +14,12 @@ import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
 import { format } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
@@ -304,6 +304,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 
 export default function GuideViewPage() {
+  const t = useT();
+  const locale = useLocale();
   const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
   let tags: string[] = [];
   try {
@@ -432,7 +434,7 @@ export default function GuideViewPage() {
         </Link>
         <span className="flex items-center gap-1">
           <Calendar className="h-3.5 w-3.5" />
-          {format(guide.updatedAt, "yyyy/MM/dd", { locale: ja })}
+          {format(guide.updatedAt, dateFormatPattern(locale), { locale: dateFnsLocale(locale) })}
         </span>
         <span className="flex items-center gap-1">
           <Eye className="h-3.5 w-3.5" />

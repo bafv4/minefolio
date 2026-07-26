@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, Link, useNavigate } from "react-router";
 import { useEffect, useReducer, memo, useMemo, useCallback, useState } from "react";
 import type { Route } from "./+types/home";
@@ -24,7 +25,8 @@ import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video"
 import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import { localeFromMatches } from "@/lib/locale";
 import {
   ArrowRight,
   Play,
@@ -39,7 +41,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const title = t("home.title");
   const description = t("home.heroDescription");
@@ -330,6 +333,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
 });
 
 export default function HomePage() {
+  const t = useT();
   const {
     isRegistered,
     currentUser,

@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams, Link } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
@@ -23,9 +25,11 @@ import {
 } from "@/components/ui/select";
 import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
 import { useState, useMemo } from "react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = `${t("compare.title")} - Minefolio`;
   const description = t("compare.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -78,12 +82,13 @@ const COMPARE_ACTIONS = [
   { action: "command", category: "ui" },
 ];
 
-const categoryLabels: Record<string, string> = {
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+const categoryLabelsOf = (t: Translator): Record<string, string> => ({
   movement: t("compare.movement"),
   combat: t("compare.combat"),
   inventory: t("compare.inventory"),
   ui: "UI",
-};
+});
 
 // 比較用に取得するメイン（公開用）プリセットのスナップショット列
 const MAIN_PRESET_COLUMNS = {
@@ -303,6 +308,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function ComparePage() {
+  const t = useT();
   const { allPlayers, player1, player2, similarPlayers } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search1, setSearch1] = useState("");
@@ -546,7 +552,7 @@ export default function ComparePage() {
             {Object.entries(groupedActions).map(([category, actions]) => (
               <Card key={category}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{categoryLabels[category]}</CardTitle>
+                  <CardTitle className="text-base">{categoryLabelsOf(t)[category]}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="divide-y">
@@ -688,6 +694,7 @@ function SimilarPlayersSection({
   similarPlayers: Awaited<ReturnType<typeof loader>>["similarPlayers"];
   onSelectPlayer: (slug: string) => void;
 }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>

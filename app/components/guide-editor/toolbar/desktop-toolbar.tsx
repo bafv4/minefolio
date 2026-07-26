@@ -80,7 +80,7 @@ import {
 } from "../lib/block-commands";
 import { EDITOR_Z } from "../constants";
 import type { SaveMode } from "../hooks/use-guide-save";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 type TabKey = "home" | "insert" | "table";
 
@@ -192,6 +192,7 @@ export function DesktopToolbar({
   onEmbed,
   onGuideLink,
 }: DesktopToolbarProps) {
+  const t = useT();
   useEditorRerender(editor);
   const [tab, setTab] = useState<TabKey>("home");
 

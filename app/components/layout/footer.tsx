@@ -1,8 +1,10 @@
 import { Link } from "react-router";
+import { useT } from "@/hooks/use-locale";
 import { Github, MessageSquare, Heart, Code } from "lucide-react";
 import packageJson from "../../../package.json";
 
 export function Footer() {
+  const t = useT();
   return (
     <footer className="border-t border-border bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-8">
@@ -22,7 +24,7 @@ export function Footer() {
               className="hover:text-foreground transition-colors flex items-center gap-1"
             >
               <MessageSquare className="h-3 w-3" />
-              <span>フィードバック</span>
+              <span>{t("nav.feedback")}</span>
             </Link>
             <a
               href="https://github.com/bafv4/minefolio"
@@ -49,7 +51,7 @@ export function Footer() {
               className="hover:text-foreground transition-colors flex items-center gap-1"
             >
               <Code className="h-3 w-3" />
-              <span>Developers</span>
+              <span>{t("nav.developers")}</span>
             </Link>
           </div>
         </div>

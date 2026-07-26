@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/feedback";
@@ -30,11 +32,12 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, MessageSquare, Send, CheckCircle2 } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("feedback.title");
-  const description = "Minefolioへのフィードバックをお寄せください";
+  const description = t("feedback.metaDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = `${appUrl}/icon.png`;
   return [
@@ -52,6 +55,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -70,6 +74,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -125,6 +130,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function FeedbackPage() {
+  const t = useT();
   const fetcher = useFetcher<typeof action>();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");

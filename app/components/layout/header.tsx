@@ -21,6 +21,9 @@ import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
 import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
+import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
+import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 
 interface HeaderProps {
   user?: {
@@ -31,14 +34,18 @@ interface HeaderProps {
   } | null;
 }
 
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定のため）
 const navigation = [
-  { name: "探す", href: "/browse", icon: Search },
-  { name: "操作設定", href: "/keybindings", icon: Keyboard },
-  { name: "ランキング", href: "/rankings", icon: Trophy },
-  { name: "ガイド", href: "/guides", icon: BookOpen },
-];
+  { key: "nav.browse", href: "/browse", icon: Search },
+  { key: "nav.keybindings", href: "/keybindings", icon: Keyboard },
+  { key: "nav.rankings", href: "/rankings", icon: Trophy },
+  { key: "nav.guides", href: "/guides", icon: BookOpen },
+] as const;
 
 export function Header({ user }: HeaderProps) {
+  const t = useT();
+  const locale = useLocale();
+  const setLocale = useSetLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -61,7 +68,7 @@ export function Header({ user }: HeaderProps) {
     <>
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <nav
-          aria-label="メインナビゲーション"
+          aria-label={t("nav.mainNav")}
           className="container mx-auto px-4 sm:px-6 lg:px-8"
         >
           <div className="flex h-16 items-center justify-between">
@@ -78,7 +85,7 @@ export function Header({ user }: HeaderProps) {
               {navigation.map((item, index) => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.name} className="flex items-center">
+                  <div key={item.key} className="flex items-center">
                     {index > 0 && (
                       <div className="h-4 w-px bg-border mx-2" />
                     )}
@@ -92,7 +99,7 @@ export function Header({ user }: HeaderProps) {
                       )}
                     >
                       <Icon className="h-4 w-4" />
-                      {item.name}
+                      {t(item.key)}
                     </Link>
                   </div>
                 );
@@ -102,6 +109,7 @@ export function Header({ user }: HeaderProps) {
             {/* Right side - Desktop */}
             <div className="hidden md:flex items-center space-x-4">
               <ThemeToggle />
+              <LocaleSwitcher />
               <WhatsNew />
 
               {user ? (
@@ -139,19 +147,19 @@ export function Header({ user }: HeaderProps) {
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to={`/player/${user.slug}`}>
                         <User className="mr-2 h-4 w-4" />
-                        マイプロフィール
+                        {t("nav.myProfile")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/me/edit">
                         <Settings className="mr-2 h-4 w-4" />
-                        設定
+                        {t("nav.settings")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/my-guides">
                         <BookOpen className="mr-2 h-4 w-4" />
-                        ガイド
+                        {t("nav.myGuides")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
@@ -163,13 +171,13 @@ export function Header({ user }: HeaderProps) {
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
-                        お気に入り
+                        {t("nav.favorites")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/feedback">
                         <MessageSquare className="mr-2 h-4 w-4" />
-                        フィードバック
+                        {t("nav.feedback")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -179,13 +187,13 @@ export function Header({ user }: HeaderProps) {
                       className="cursor-pointer"
                     >
                       <LogOut className="mr-2 h-4 w-4" />
-                      ログアウト
+                      {t("nav.logout")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
                 <Button asChild size="sm">
-                  <Link to="/login">ログイン</Link>
+                  <Link to="/login">{t("nav.login")}</Link>
                 </Button>
               )}
             </div>
@@ -198,7 +206,7 @@ export function Header({ user }: HeaderProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="メニューを開く"
+                    aria-label={t("nav.openMenu")}
                   >
                     <Menu className="h-6 w-6" aria-hidden />
                   </Button>
@@ -208,7 +216,7 @@ export function Header({ user }: HeaderProps) {
                 side="right"
                 className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
               >
-                <SheetTitle className="sr-only">ナビゲーション</SheetTitle>
+                <SheetTitle className="sr-only">{t("nav.navigation")}</SheetTitle>
                 {/* ヘッダー */}
                 <div className="flex h-16 items-center px-5 border-b border-border shrink-0">
                   <Link
@@ -222,11 +230,11 @@ export function Header({ user }: HeaderProps) {
                 </div>
 
                 <nav
-                  aria-label="モバイルナビゲーション"
+                  aria-label={t("nav.mobileNav")}
                   className="flex-1 overflow-y-auto px-3 py-4"
                 >
                   <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    ナビゲーション
+                    {t("nav.navigation")}
                   </p>
                   <div className="flex flex-col gap-0.5">
                     {navigation.map((item) => {
@@ -234,7 +242,7 @@ export function Header({ user }: HeaderProps) {
                       const active = location.pathname === item.href;
                       return (
                         <Link
-                          key={item.name}
+                          key={item.key}
                           to={item.href}
                           onClick={() => setMobileMenuOpen(false)}
                           aria-current={active ? "page" : undefined}
@@ -246,7 +254,7 @@ export function Header({ user }: HeaderProps) {
                           )}
                         >
                           <Icon className="h-5 w-5 shrink-0" />
-                          {item.name}
+                          {t(item.key)}
                         </Link>
                       );
                     })}
@@ -278,12 +286,12 @@ export function Header({ user }: HeaderProps) {
 
                       <div className="mt-2 flex flex-col gap-0.5">
                         {[
-                          { href: `/player/${user.slug}`, icon: User, label: "マイプロフィール" },
-                          { href: "/me/edit", icon: Settings, label: "設定" },
-                          { href: "/my-guides", icon: BookOpen, label: "ガイド" },
+                          { href: `/player/${user.slug}`, icon: User, label: t("nav.myProfile") },
+                          { href: "/me/edit", icon: Settings, label: t("nav.settings") },
+                          { href: "/my-guides", icon: BookOpen, label: t("nav.myGuides") },
                           { href: "/playground", icon: FlaskConical, label: "Playground" },
-                          { href: "/favorites", icon: Heart, label: "お気に入り" },
-                          { href: "/feedback", icon: MessageSquare, label: "フィードバック" },
+                          { href: "/favorites", icon: Heart, label: t("nav.favorites") },
+                          { href: "/feedback", icon: MessageSquare, label: t("nav.feedback") },
                         ].map(({ href, icon: Icon, label }) => (
                           <Link
                             key={href}
@@ -304,7 +312,7 @@ export function Header({ user }: HeaderProps) {
                           }}
                         >
                           <LogOut className="h-5 w-5 shrink-0" />
-                          ログアウト
+                          {t("nav.logout")}
                         </button>
                       </div>
                     </>
@@ -312,7 +320,7 @@ export function Header({ user }: HeaderProps) {
                     <Button asChild className="mt-5 w-full gap-2">
                       <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
                         <LogIn className="h-4 w-4" />
-                        ログイン
+                        {t("nav.login")}
                       </Link>
                     </Button>
                   )}
@@ -320,7 +328,7 @@ export function Header({ user }: HeaderProps) {
 
                 {/* フッター: テーマ切替（ViewSwitcher と同じセグメント調） */}
                 <div className="border-t border-border px-4 py-3 shrink-0">
-                  <span className="text-sm text-muted-foreground">テーマ</span>
+                  <span className="text-sm text-muted-foreground">{t("nav.theme")}</span>
                   <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
                     {THEME_OPTIONS.map(({ value, shortLabel, icon: Icon }) => (
                       <button
@@ -337,6 +345,30 @@ export function Header({ user }: HeaderProps) {
                       >
                         <Icon className="h-4 w-4 shrink-0" />
                         {shortLabel}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 言語切替（デスクトップはヘッダー右のドロップダウン、
+                      モバイルはテーマと同じセグメント切替で並べる） */}
+                  <span className="mt-4 block text-sm text-muted-foreground">
+                    {t("nav.language")}
+                  </span>
+                  <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
+                    {SUPPORTED_LOCALES.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={locale === value}
+                        onClick={() => setLocale(value)}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                          locale === value
+                            ? "bg-secondary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {LOCALE_NAMES[value]}
                       </button>
                     ))}
                   </div>

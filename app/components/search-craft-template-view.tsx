@@ -14,7 +14,8 @@ import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
 import { Copy } from "lucide-react";
 
@@ -64,6 +65,7 @@ function useItemLang(gameLanguage: string | null | undefined): string {
  * スクリーンリーダーには aria-label で元の文字列を提供する。
  */
 export function SearchStringText({ value }: { value: string }) {
+  const t = useT();
   // 半角スペースの連続を捕捉して分割
   const parts = value.split(/( +)/);
   return (
@@ -86,18 +88,35 @@ export function SearchStringText({ value }: { value: string }) {
  * 「指定なし」(null) はこの配列外で、常に先頭に表示する。
  * dot はグループ見出し左の色ドット（カテゴリの識別用。意味的な良し悪しではない）。
  */
-export const TIMING_META: { id: SearchCraftTiming; label: string; dot: string }[] = [
+export const TIMING_META: {
+  id: SearchCraftTiming;
+  /** 固定表記（固有名詞は翻訳しない）。labelKey がある場合は使わない */
+  label?: string;
+  /** 翻訳が必要なものだけキーを持つ。解決は timingLabel() */
+  labelKey?: MessageKey;
+  dot: string;
+}[] = [
   { id: "ow", label: "OW", dot: "bg-success" },
   { id: "bastion", label: "Bastion", dot: "bg-warning" },
   { id: "bastion_fort", label: "Bastion→Fort", dot: "bg-info" },
   { id: "fortress", label: "Fortress", dot: "bg-destructive" },
   { id: "blinded", label: "Blinded", dot: "bg-primary" },
-  { id: "other", label: t("playerProfile.timingOther"), dot: "bg-muted-foreground" },
+  { id: "other", labelKey: "playerProfile.timingOther", dot: "bg-muted-foreground" },
 ];
 
-const TIMING_LABELS: Record<string, string> = Object.fromEntries(
-  TIMING_META.map((m) => [m.id, m.label]),
-);
+/** タイミングの表示ラベル。モジュール評価時はロケールが未確定なので描画時に解決する */
+export function timingLabel(
+  t: Translator,
+  meta: (typeof TIMING_META)[number],
+): string {
+  return meta.labelKey ? t(meta.labelKey) : (meta.label ?? meta.id);
+}
+
+/** id から表示ラベルを引く。未知の id はそのまま返す */
+export function timingLabelById(t: Translator, id: string): string {
+  const meta = TIMING_META.find((m) => m.id === id);
+  return meta ? timingLabel(t, meta) : id;
+}
 const TIMING_DOT_CLASSES: Record<string, string> = Object.fromEntries(
   TIMING_META.map((m) => [m.id, m.dot]),
 );
@@ -133,6 +152,7 @@ export function KeyBadge({
   isRemapped?: boolean;
   needsShift?: boolean;
 }) {
+  const t = useT();
   const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
 
   // ツールチップのテキスト
@@ -170,6 +190,7 @@ export function KeyBadge({
 
 /** 「Shiftを押しながらクラフト」を示すバッジ（入力キー列の先頭に表示） */
 export function ShiftCraftBadge() {
+  const t = useT();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -229,6 +250,7 @@ export function ActualKeyBadges({
 
 /** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
 export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
       <div className="flex items-center gap-1.5">
@@ -274,6 +296,7 @@ export function SearchCraftGroupedList({
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
 }) {
+  const t = useT();
   const lang = useItemLang(gameLanguage);
   const hasAnyTiming = crafts.some((c) => c.timing);
 
@@ -308,7 +331,7 @@ export function SearchCraftGroupedList({
       {sortedKeys.map((timing) => (
         <SearchCraftGroupCard
           key={timing ?? "__none"}
-          title={timing ? TIMING_LABELS[timing] ?? timing : t("playerProfile.timingUnspecified")}
+          title={timing ? timingLabelById(t, timing) : t("playerProfile.timingUnspecified")}
           dotClass={timing ? TIMING_DOT_CLASSES[timing] : undefined}
           crafts={grouped.get(timing)!}
           remaps={remaps}
@@ -336,6 +359,7 @@ function SearchCraftGroupCard({
   fingerAssignments?: Record<string, FingerType[]>;
   lang: string;
 }) {
+  const t = useT();
   return (
     <Card>
       {title && (
@@ -388,6 +412,7 @@ function SearchCraftRow({
   fingerAssignments?: Record<string, FingerType[]>;
   lang: string;
 }) {
+  const t = useT();
   const handleCopySearchStr = () => {
     if (!craft.searchStr || !navigator.clipboard) return;
     navigator.clipboard.writeText(craft.searchStr).then(() => {

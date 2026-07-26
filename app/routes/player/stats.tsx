@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
@@ -28,10 +30,11 @@ import {
   Flame,
   Clock,
 } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 
 // 相対時間を計算
-function getRelativeTime(dateStr: string): string {
+function getRelativeTime(t: Translator, dateStr: string): string {
   const now = Date.now();
   const date = new Date(dateStr);
   const diffMs = now - date.getTime();
@@ -45,7 +48,8 @@ function getRelativeTime(dateStr: string): string {
   return t("playerStats.daysAgo", { count: diffDays });
 }
 
-export const meta: Route.MetaFunction = ({ params, loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, params, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const displayName = loaderData?.mcid || params.slug;
   const title = t("playerStats.metaTitle", { name: displayName });
   const description = t("playerStats.metaDescription", { name: displayName });
@@ -68,6 +72,7 @@ export const meta: Route.MetaFunction = ({ params, loaderData }) => {
 };
 
 export async function loader({ params, request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.app";
   const { slug } = params;
@@ -125,6 +130,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export default function PlayerStatsPage() {
+  const t = useT();
   const { mcid, slug, displayName, externalStats, netherEnterCount, recentPaces } = useLoaderData<typeof loader>();
 
   // 表示名の優先順位: displayName > mcid > slug
@@ -397,7 +403,7 @@ export default function PlayerStatsPage() {
                               </span>
                             )}
                             <span className="text-xs text-muted-foreground">
-                              {getRelativeTime(pace.date)}
+                              {getRelativeTime(t, pace.date)}
                             </span>
                           </div>
                         </a>
@@ -498,6 +504,7 @@ export default function PlayerStatsPage() {
 
 // Eloレートグラフコンポーネント
 function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
+  const t = useT();
   // Eloレートが0のマッチを除外してから古い順に並べ替え（グラフ表示用）
   const validMatches = matches.filter((m) => m.eloAfter > 0);
   const sortedMatches = [...validMatches].reverse();

@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import {
   redirect,
   useActionData,
@@ -23,13 +25,16 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 function titleToSlug(title: string): string {
   return normalizeSlug(title) || `guide-${createId().slice(0, 6)}`;
 }
 
-export const meta = () => [{ title: t("meGuides.newTitle") }];
+export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  return [{ title: t("meGuides.newTitle") }];
+};
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
@@ -40,6 +45,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -96,6 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function NewGuidePage() {
+  const t = useT();
   const actionData = useActionData<typeof action>();
 
   return (

@@ -5,13 +5,25 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 import { Analytics } from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
+import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
+import { useT } from "@/hooks/use-locale";
 import "./app.css";
+
+/**
+ * 表示ロケールを決めてツリー全体へ配る（Cookie → Accept-Language → 既定）。
+ * ここで一度だけ決めることで、SSR とクライアントで同じ値になり
+ * ハイドレーション不一致が起きない。
+ */
+export function loader({ request }: Route.LoaderArgs) {
+  return { locale: resolveLocale(request) };
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -27,8 +39,13 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  // Layout はエラー時にも描画され、その場合 root ローダーのデータが無い。
+  // useLoaderData だと例外になるため useRouteLoaderData で取り、既定へ落とす。
+  const data = useRouteLoaderData<typeof loader>("root");
+  const locale: Locale = data?.locale ?? DEFAULT_LOCALE;
+
   return (
-    <html lang="ja" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -37,7 +54,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers locale={locale}>{children}</Providers>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -56,15 +73,16 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "おっと！";
-  let details = "予期しないエラーが発生しました。";
+  const t = useT();
+  let message = t("errorPage.title");
+  let details = t("errorPage.genericDetails");
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "エラー";
+    message = error.status === 404 ? "404" : t("errorPage.errorTitle");
     details =
       error.status === 404
-        ? "お探しのページが見つかりませんでした。"
+        ? t("errorPage.notFoundDetails")
         : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
@@ -89,7 +107,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
               href="/"
               className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4"
             >
-              ホームに戻る
+              {t("common.backToHome")}
             </a>
           </div>
         </div>

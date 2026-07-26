@@ -12,10 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Download, Keyboard, ArrowLeftRight, Wand2, Mouse, FileSpreadsheet, Search, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createTranslator, type MessageKey } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
-  const title = "データエクスポート - Developers - Minefolio";
-  const description = "全ユーザーまたは指定ユーザーのキー配置・リマップ・カスタムアクション・マウス設定をCSV形式でダウンロード";
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  const title = t("developers.exportMetaTitle");
+  const description = t("developers.exportMetaDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = `${appUrl}/icon.png`;
   return [
@@ -70,40 +74,58 @@ export async function loader() {
 
 interface SectionDef {
   id: "actions" | "remaps" | "custom-actions" | "mouse";
-  label: string;
+  labelKey: MessageKey;
   icon: typeof Keyboard;
-  description: string;
-  columns: string[];
+  descriptionKey: MessageKey;
+  columnKeys: MessageKey[];
 }
 
+// ラベル・説明・列名は描画時に t() で解決する（モジュール評価時はロケールが未確定）
 const SECTIONS: SectionDef[] = [
   {
     id: "actions",
-    label: "キー配置",
+    labelKey: "developers.sectionActions",
     icon: Keyboard,
-    description: "Minecraft の各操作（前進・攻撃・インベントリ等）に割り当てたキーの一覧。",
-    columns: ["カテゴリ", "操作", "キーコード", "表示ラベル"],
+    descriptionKey: "developers.sectionActionsDescription",
+    columnKeys: [
+      "developers.colCategory",
+      "developers.colAction",
+      "developers.colKeyCode",
+      "developers.colDisplayLabel",
+    ],
   },
   {
     id: "remaps",
-    label: "キーリマップ",
+    labelKey: "developers.sectionRemaps",
     icon: ArrowLeftRight,
-    description: "外部ソフトウェア等で行うキーリマップ設定（ソースキー → ターゲットキー）。",
-    columns: ["ソースキー", "ターゲットキー", "出力モード", "ソフトウェア", "メモ", "種別"],
+    descriptionKey: "developers.sectionRemapsDescription",
+    columnKeys: [
+      "developers.colSourceKey",
+      "developers.colTargetKey",
+      "developers.colOutputMode",
+      "developers.colSoftware",
+      "developers.colNotes",
+      "developers.colRemapType",
+    ],
   },
   {
     id: "custom-actions",
-    label: "カスタムアクション",
+    labelKey: "developers.sectionCustomActions",
     icon: Wand2,
-    description: "マクロ・ツール起動など、ユーザー定義のアクションとトリガーキー。",
-    columns: ["アクション名", "カテゴリ", "トリガーキー", "説明"],
+    descriptionKey: "developers.sectionCustomActionsDescription",
+    columnKeys: [
+      "developers.colActionName",
+      "developers.colCategory",
+      "developers.colTriggerKey",
+      "developers.colDescription",
+    ],
   },
   {
     id: "mouse",
-    label: "マウス設定",
+    labelKey: "developers.sectionMouse",
     icon: Mouse,
-    description: "DPI・ゲーム感度・Raw Input・Windows 速度設定など、マウス周りの数値。",
-    columns: ["項目", "値"],
+    descriptionKey: "developers.sectionMouseDescription",
+    columnKeys: ["developers.colItem", "developers.colValue"],
   },
 ];
 
@@ -112,6 +134,7 @@ function getDisplayName(user: AvailableUser): string {
 }
 
 export default function ExportPage() {
+  const t = useT();
   const { availableUsers } = useLoaderData<typeof loader>();
   const [selectedSections, setSelectedSections] = useState<Set<string>>(
     new Set(["actions", "remaps", "custom-actions", "mouse"]),
@@ -180,11 +203,11 @@ export default function ExportPage() {
 
       <div className="flex items-center gap-2">
         <Download className="h-7 w-7" />
-        <h1 className="text-3xl font-bold">データエクスポート</h1>
+        <h1 className="text-3xl font-bold">{t("developers.exportTitle")}</h1>
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Minefolio に登録された設定データを CSV 形式でダウンロードできます。デフォルトでは設定登録済みの全ユーザーが対象ですが、特定のユーザーだけを選択することも可能です。
+        {t("developers.exportLead")}
       </p>
 
       {/* セクション選択 */}
@@ -194,14 +217,14 @@ export default function ExportPage() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileSpreadsheet className="h-5 w-5" />
-                出力する項目
+                {t("developers.exportSections")}
               </CardTitle>
               <CardDescription className="mt-1">
-                複数項目を選択すると、それぞれのテーブルが順に並んだ単一の CSV として出力されます。
+                {t("developers.exportSectionsHint")}
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={toggleAllSections}>
-              {allSectionsSelected ? "すべて解除" : "すべて選択"}
+              {allSectionsSelected ? t("developers.exportDeselectAll") : t("developers.exportSelectAll")}
             </Button>
           </div>
         </CardHeader>
@@ -234,14 +257,14 @@ export default function ExportPage() {
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{section.label}</h3>
+                    <h3 className="font-semibold">{t(section.labelKey)}</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {section.description}
+                      {t(section.descriptionKey)}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {section.columns.map((col) => (
+                      {section.columnKeys.map((col) => (
                         <Badge key={col} variant="secondary" className="text-xs font-mono">
-                          {col}
+                          {t(col)}
                         </Badge>
                       ))}
                     </div>
@@ -260,10 +283,10 @@ export default function ExportPage() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Users className="h-5 w-5" />
-                対象ユーザー
+                {t("developers.exportTargets")}
               </CardTitle>
               <CardDescription className="mt-1">
-                何も選択していない場合は<strong>全 {availableUsers.length} 人</strong>がエクスポート対象になります。特定ユーザーだけ出力したい場合は下のリストから選択してください。
+                {t("developers.exportTargetsHint", { count: availableUsers.length })}
               </CardDescription>
             </div>
             <Button
@@ -273,7 +296,7 @@ export default function ExportPage() {
               disabled={selectedUsers.size === 0}
             >
               <X className="h-4 w-4 mr-1" />
-              選択をクリア
+              {t("developers.exportClearSelection")}
             </Button>
           </div>
         </CardHeader>
@@ -285,7 +308,7 @@ export default function ExportPage() {
               type="text"
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="ユーザー名・MCID で検索..."
+              placeholder={t("developers.exportSearchPlaceholder")}
               className="pl-9"
             />
           </div>
@@ -294,7 +317,7 @@ export default function ExportPage() {
           <div className="rounded-lg border max-h-80 overflow-y-auto">
             {filteredUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
-                該当するユーザーが見つかりませんでした
+                {t("developers.exportNoUsers")}
               </p>
             ) : (
               <div className="divide-y">
@@ -334,22 +357,24 @@ export default function ExportPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        ※ 公開プロフィール（profileVisibility = public）のみが対象です。Excel など一部のソフトでは UTF-8 BOM 付き CSV として開く必要がある場合があります。
+        {t("developers.exportNote")}
       </p>
 
       {/* ダウンロードバー（ページ末尾） */}
       <div className="rounded-xl border-2 border-primary/20 bg-card/95 p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-muted-foreground">
           {selectedSections.size === 0 ? (
-            "項目を選択してください"
+            t("developers.exportPickSections")
           ) : (
             <>
-              <span className="font-medium text-foreground">{selectedSections.size}</span>
-              {" 項目 × "}
-              <span className="font-medium text-foreground">{targetUserCount}</span>
-              {" 人"}
+              {t("developers.exportSummary", {
+                sections: selectedSections.size,
+                users: targetUserCount,
+              })}
               {isAllUsersMode && (
-                <span className="text-xs ml-1.5 text-muted-foreground">（全ユーザー）</span>
+                <span className="text-xs ml-1.5 text-muted-foreground">
+                  {t("developers.exportAllUsersSuffix")}
+                </span>
               )}
             </>
           )}
@@ -359,7 +384,7 @@ export default function ExportPage() {
           disabled={selectedSections.size === 0 || availableUsers.length === 0}
         >
           <Download className="h-4 w-4 mr-2" />
-          CSV をダウンロード
+          {t("developers.exportDownload")}
         </Button>
       </div>
     </div>

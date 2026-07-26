@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { UserSelectList, type UserFilterPlayer } from "./user-filter";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 function parseNumber(value: string): number | null {
   if (value.trim() === "") return null;
@@ -27,6 +27,7 @@ function parseNumber(value: string): number | null {
 }
 
 export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
+  const t = useT();
   const { params, setParams, activeFilterCount } = useKeybindingsFilters();
   const [open, setOpen] = useState(false);
 

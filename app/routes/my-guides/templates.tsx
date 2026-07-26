@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/templates";
@@ -9,7 +11,7 @@ import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { parseTemplateCrafts } from "@/lib/search-craft-templates";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,13 +44,15 @@ import {
   Languages,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale } from "@/lib/date-locale";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meTemplates.title") }];
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -84,6 +88,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -139,6 +144,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function MyTemplatesPage() {
+  const t = useT();
+  const locale = useLocale();
   const { templates } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -248,7 +255,7 @@ export default function MyTemplatesPage() {
                       {template.gameLanguage && (
                         <span className="inline-flex items-center gap-1">
                           <Languages className="h-3 w-3" />
-                          {getGameLanguageName(template.gameLanguage)}
+                          {getGameLanguageName(t, locale, template.gameLanguage)}
                         </span>
                       )}
                       {template.hasRemaps && (
@@ -264,7 +271,7 @@ export default function MyTemplatesPage() {
                       <span>
                         {formatDistanceToNow(new Date(template.createdAt), {
                           addSuffix: true,
-                          locale: ja,
+                          locale: dateFnsLocale(locale),
                         })}
                       </span>
                     </div>

@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useRevalidator } from "react-router";
 import type { Route } from "./+types/import";
 import { createDb } from "@/lib/db";
@@ -15,9 +17,10 @@ import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { createPresetFromImport, syncActivePresetSnapshot } from "@/lib/preset-utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [
     { title: t("meImport.title") },
     { name: "description", content: t("meImport.description") },
@@ -54,6 +57,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -351,6 +355,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ImportPage() {
+  const t = useT();
   const { remapCount, keybindingCount } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
 

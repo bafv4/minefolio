@@ -58,9 +58,12 @@ const actionType = formData.get("_action") as string;
 - import は `import { t } from "@/lib/messages"`（現行の主系統。約76ファイルで使用）
 - `t("dotPath.key")` でアクセス（例: `t("meEdit.mcidRequired")`）。キー実体は `app/lib/messages/pages-ja.ts`（ネストしたオブジェクト）
 - パラメータ補間: `t("key", { count: 5 })` → 文言中の `{count}` を置換
-- **文言の追加・変更は `app/lib/messages/pages-ja.ts` だけでよい**。`messages/index.ts` に登録済みのロケールは `ja` のみ＝日本語だけがアクティブ
+- **文言の追加は `app/lib/messages/pages-ja.ts`（日本語・全キーの基準）に入れる**。英語 `pages-en.ts` は任意（部分集合でよく、未翻訳キーは日本語へフォールバックする）
+- **コンポーネントでは `t()` を直接呼ばず `useT()`（`@/hooks/use-locale`）を使う**。`t()` はモジュールレベルの純粋関数でリクエスト文脈を持たないため、直接呼ぶと常に日本語になる
+- ローダー / meta ではロケールを明示する: `t(key, params, locale)`。locale は `resolveLocale(request)` / `localeFromMatches(matches)`（`@/lib/locale`）で得る
 - UIテキストは原則として翻訳キー経由、ハードコードしない。キーが無ければ `pages-ja.ts` に追加してから使う
-- 旧 `@/lib/i18n`（カテゴリ方式 `t(category, key, locale)`）は移行前の残存系統（2ファイルのみ）。新規コードでは使わない
+- 対応ロケールと検出（Cookie → Accept-Language → 既定）は `app/lib/locale.ts` が単一情報源。詳細は `docs/i18n.md`
+- 旧 `@/lib/i18n`（カテゴリ方式）は**削除済み**。ロケール関連は `@/lib/locale` に集約されている
 
 ## DB クエリ
 - リレーション読み込みは `with` を使用（別クエリにしない）

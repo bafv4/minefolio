@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import {
   FULL_CROP,
   clampCropRect,
@@ -66,6 +66,7 @@ interface ImageCropDialogProps {
 }
 
 export function ImageCropDialog({ src, onOpenChange, onApply, applying }: ImageCropDialogProps) {
+  const t = useT();
   const [rect, setRect] = useState<CropRect>(FULL_CROP);
   const [aspectKey, setAspectKey] = useState("free");
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { Film, Loader2 } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { MAX_UPLOAD_BYTES } from "../hooks/use-image-upload";
 import {
   convertVideoToGif,
@@ -44,6 +44,7 @@ interface VideoToGifDialogProps {
 }
 
 export function VideoToGifDialog({ open, onOpenChange, onInsert }: VideoToGifDialogProps) {
+  const t = useT();
   const [file, setFile] = useState<File | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);

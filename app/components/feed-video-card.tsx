@@ -4,7 +4,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
 import { Youtube, Twitch, Play, ExternalLink } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /** プラットフォーム上の視聴ページURL */
 function getFeedVideoUrl(video: FeedVideo): string {
@@ -40,6 +40,7 @@ function formatDuration(totalSeconds: number): string {
  * タイトル・外部リンクアイコンからプラットフォームの視聴ページへ遷移できる
  */
 export function FeedVideoCard({ video }: { video: FeedVideo }) {
+  const t = useT();
   const [isPlaying, setIsPlaying] = useState(false);
 
   const isYouTube = video.platform === "youtube";
@@ -133,7 +134,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="truncate">{showName}</span>
           )}
           <span className="flex shrink-0 items-center gap-2">
-            {formatRelativeTimeInHours(video.publishedAt)}
+            {formatRelativeTimeInHours(t, video.publishedAt)}
             <a
               href={watchUrl}
               target="_blank"

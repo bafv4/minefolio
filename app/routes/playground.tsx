@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/playground";
@@ -26,7 +28,7 @@ import {
   MAX_TEMPLATE_CRAFTS,
   type TemplateCraft,
 } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,7 +75,14 @@ import {
 // 選択肢として見せるための擬似プリセットID（実際のconfigPresetsの行ではない）
 const LIVE_PRESET_ID = "__live__";
 
-export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({
+  matches,
+  loaderData,
+}: {
+  matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+}) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("playground.title");
   const description = t("playground.pageDesc");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -104,6 +113,7 @@ type MyPresetOption = PlaygroundData & {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -187,6 +197,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -361,6 +372,7 @@ function saveDraftToStorage(draft: PlaygroundDraft) {
 // ============================================
 
 export default function PlaygroundPage() {
+  const t = useT();
   const { templateData, myPresets, keyboardLayout, isLoggedIn } = useLoaderData<typeof loader>();
   const saveFetcher = useFetcher<typeof action>();
   const prevSaveDataRef = useRef<typeof saveFetcher.data>(undefined);

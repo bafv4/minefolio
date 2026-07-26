@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams, useNavigation } from "react-router";
 import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
@@ -8,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Trophy, Timer, Swords, Video, ExternalLink, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -22,6 +24,7 @@ import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
 
 /** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ */
 function StickyHeaderShell({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <table className="w-full caption-bottom text-sm">
       <TableHeader>{children}</TableHeader>
@@ -29,7 +32,8 @@ function StickyHeaderShell({ children }: { children: ReactNode }) {
   );
 }
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("rankings.title");
   const description = t("rankings.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -72,6 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function RankingsPage() {
+  const t = useT();
   const data = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();

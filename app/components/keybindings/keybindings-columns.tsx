@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { getActionLabel } from "@/lib/keybindings";
 import { calculateCm360, calculateCursorSpeed } from "@/lib/mouse-settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { t } from "@/lib/messages";
+import type { Translator } from "@/lib/messages";
 import {
   ActionKeyCell,
   buildCustomKeyNames,
@@ -48,14 +48,14 @@ export type KeybindingsRow = {
  * 共通: 走者列（左端 sticky）
  * ========================================================== */
 
-const runnerColumn: ColumnDef<KeybindingsRow> = {
+const runnerColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
   id: "runner",
   header: () => t("keybindings.columnRunner"),
   cell: ({ row }) => <RunnerCell player={row.original} />,
   enableSorting: false,
   size: 224,
   minSize: 140,
-};
+});
 
 /* ============================================================
  * アクション列ジェネレーター
@@ -90,7 +90,7 @@ function actionColumn(action: string): ColumnDef<KeybindingsRow> {
   };
 }
 
-const hotbarColumn: ColumnDef<KeybindingsRow> = {
+const hotbarColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
   id: "action.hotbar",
   header: () => (
     <Tooltip>
@@ -112,24 +112,24 @@ const hotbarColumn: ColumnDef<KeybindingsRow> = {
   size: 360,
   minSize: 140,
   meta: { align: "left" as const },
-};
+});
 
 // 移動: 前進・後退・左右・ジャンプ・スニーク・ダッシュ
-export const movementColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const movementColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map(actionColumn),
 ];
 
 // インベントリ: ホットバー（集約）・オフハンド・インベントリ・ブロック選択・ドロップ
-export const inventoryColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
-  hotbarColumn,
+const inventoryColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
+  hotbarColumn(t),
   ...["swapHands", "inventory", "pickBlock", "drop"].map(actionColumn),
 ];
 
 // 戦闘・UI: 攻撃・使用・視点切替・チャット・コマンド・全画面
-export const combatUiColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const combatUiColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   ...["attack", "use", "togglePerspective", "chat", "command", "fullscreen"].map(
     actionColumn,
   ),
@@ -139,8 +139,8 @@ export const combatUiColumns: ColumnDef<KeybindingsRow>[] = [
  * remaps プリセット
  * ========================================================== */
 
-export const remapsColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const remapsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "remaps",
     header: () => t("keybindings.remapsTab"),
@@ -161,8 +161,8 @@ export const remapsColumns: ColumnDef<KeybindingsRow>[] = [
  * custom-actions プリセット
  * ========================================================== */
 
-export const customActionsColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const customActionsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "custom-actions",
     header: () => t("keybindings.customActionsTab"),
@@ -193,8 +193,8 @@ const windowsMultiplier = (config: MouseConfig): number | null => {
   return config.windowsSpeed;
 };
 
-export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
-  runnerColumn,
+const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+  runnerColumn(t),
   {
     id: "mouse.dpi",
     header: () => "DPI",
@@ -308,13 +308,16 @@ export const mouseColumns: ColumnDef<KeybindingsRow>[] = [
 ];
 
 /** プリセット名 → ColumnDef（プリセット名は TAB_OPTIONS と一致） */
-export const COLUMN_PRESETS = {
-  movement: movementColumns,
-  inventory: inventoryColumns,
-  "combat-ui": combatUiColumns,
-  remaps: remapsColumns,
-  "custom-actions": customActionsColumns,
-  mouse: mouseColumns,
-} as const;
+/** プリセット名 → ColumnDef。ヘッダーの文言がロケール依存なので描画時に組み立てる */
+export function columnPresets(t: Translator) {
+  return {
+    movement: movementColumns(t),
+    inventory: inventoryColumns(t),
+    "combat-ui": combatUiColumns(t),
+    remaps: remapsColumns(t),
+    "custom-actions": customActionsColumns(t),
+    mouse: mouseColumns(t),
+  } as const;
+}
 
-export type PresetKey = keyof typeof COLUMN_PRESETS;
+export type PresetKey = keyof ReturnType<typeof columnPresets>;

@@ -22,10 +22,12 @@ import { UserFilterChips } from "./user-filter";
 import type { KeybindingsRow, PresetKey } from "./keybindings-columns";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import type { Tab } from "@/lib/keybindings-search-params";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { MessageKey } from "@/lib/messages";
 
 /** ページ共通タイトル（全ビューで同一） */
 export function KeybindingsPageTitle() {
+  const t = useT();
   return (
     <div>
       <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -46,6 +48,7 @@ export function KeybindingsListLayout({
   players: KeybindingsRow[];
   mode: "table" | "visual";
 }) {
+  const t = useT();
   const filters = useKeybindingsFilters();
   const tab = filters.params.tab;
   // ビュー切替（/keybindings ⇄ /visual ⇄ /stats）中は本体をスケルトンに差し替える
@@ -125,13 +128,13 @@ export function KeybindingsListLayout({
             className="w-full"
           >
             <TabsList>
-              {TAB_ITEMS.map(({ value, label, icon: Icon, color }) => (
+              {TAB_ITEMS.map(({ value, labelKey, icon: Icon, color }) => (
                 <TabsTrigger key={value} value={value} className="gap-1.5">
                   <Icon
                     className="h-4 w-4"
                     style={color ? { color } : undefined}
                   />
-                  {label}
+                  {t(labelKey)}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -155,36 +158,37 @@ export function KeybindingsListLayout({
   );
 }
 
-/** 表ビューのサブタブ定義（操作はプレイヤー画面と同じ粒度で分割） */
+/** 表ビューのサブタブ定義（操作はプレイヤー画面と同じ粒度で分割）。
+ *  ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定のため） */
 const TAB_ITEMS: Array<{
   value: Tab;
-  label: string;
+  labelKey: MessageKey;
   icon: typeof Keyboard;
   color?: string;
 }> = [
   {
     value: "movement",
-    label: t("keybindings.movementTab"),
+    labelKey: "keybindings.movementTab",
     icon: Footprints,
     color: "var(--key-movement)",
   },
   {
     value: "inventory",
-    label: t("keybindings.inventoryTab"),
+    labelKey: "keybindings.inventoryTab",
     icon: Package,
     color: "var(--key-inventory)",
   },
   {
     value: "combat-ui",
-    label: t("keybindings.combatUiTab"),
+    labelKey: "keybindings.combatUiTab",
     icon: Swords,
     color: "var(--key-combat)",
   },
-  { value: "remaps", label: t("keybindings.remapsTab"), icon: ArrowLeftRight },
+  { value: "remaps", labelKey: "keybindings.remapsTab", icon: ArrowLeftRight },
   {
     value: "custom-actions",
-    label: t("keybindings.customActionsTab"),
+    labelKey: "keybindings.customActionsTab",
     icon: WandSparkles,
   },
-  { value: "mouse", label: t("keybindings.mouseTab"), icon: Mouse },
+  { value: "mouse", labelKey: "keybindings.mouseTab", icon: Mouse },
 ];

@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
@@ -44,15 +46,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { t } from "@/lib/messages";
-import { GAME_LANGUAGE_OPTIONS } from "@/lib/game-languages";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { gameLanguageOptions } from "@/lib/game-languages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meDevices.title") }];
 };
 
@@ -74,6 +77,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -124,6 +128,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
+  const locale = useLocale();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -169,6 +175,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -332,6 +339,8 @@ function parseControllerSettings(json: string | null | undefined): ControllerSet
  * 入力方法（users.inputMethod・プリセット非依存）はプリセットが無くても変更・保存できる。
  */
 function PresetRequiredNotice() {
+  const t = useT();
+  const locale = useLocale();
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -346,6 +355,8 @@ function PresetRequiredNotice() {
 }
 
 export default function DevicesPage() {
+  const t = useT();
+  const locale = useLocale();
   const { config, inputMethod, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -867,7 +878,7 @@ export default function DevicesPage() {
               <div className="space-y-2">
                 <Label htmlFor="gameLanguage">{t("meDevices.gameLanguage")}</Label>
                 <Combobox
-                  options={GAME_LANGUAGE_OPTIONS}
+                  options={gameLanguageOptions(t, locale)}
                   value={formValues.gameLanguage}
                   onValueChange={(value) => handleChange("gameLanguage", value)}
                   placeholder={t("meDevices.chooseLanguage")}
@@ -990,6 +1001,8 @@ export default function DevicesPage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
+  const locale = useLocale();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

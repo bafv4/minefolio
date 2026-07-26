@@ -86,10 +86,13 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 ### i18n（国際化）
 
-2つのシステムを併用:
-- `app/lib/i18n.ts`: カテゴリベースの `t(category, key)` でロケールパラメータ付き
-- `app/lib/messages/`: ドットパスキー（例: `t("playerProfile.keybindingsTab")`）と `{param}` 補間
-- デフォルトロケール: `"ja"`、Cookie → Accept-Languageヘッダーの順で検出
+日本語（既定）と英語に対応。**英語は主要導線から段階的**に広げており、未翻訳キーは日本語へフォールバックする。
+
+- 文言: `app/lib/messages/`（ドットパスキー + `{param}` 補間）。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
+- コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる
+- ロケール検出: `app/lib/locale.ts` の `resolveLocale()` — Cookie（`minefolio_locale`）→ Accept-Language（q値順）→ 既定 `ja`
+- 切替UIはヘッダー。`/api/set-locale` に Cookie を保存して再検証する
+- 詳細: `docs/i18n.md`
 
 ### ドキュメント・ルールファイル
 

@@ -18,7 +18,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import type { GuideEditorProps, SlashCommandContext, GuideMediaContext } from "./types";
 import type { SlashCommandStorage } from "./extensions/slash-command";
 import { setImageMediaContext } from "./extensions/image";
@@ -63,6 +63,7 @@ export function GuideEditor({
   authorSlug,
   guideSlug,
 }: GuideEditorProps) {
+  const t = useT();
   // ── 本文・メタ状態 ──────────────────────────
   // 本文(content)は editor を真実源とし React state に持たない（毎キー再レンダリング回避）。
   const [title, setTitle] = useState(initialTitle);

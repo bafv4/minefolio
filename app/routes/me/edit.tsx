@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, useParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
@@ -63,9 +65,10 @@ import {
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meEdit.title") }];
 };
 
@@ -78,6 +81,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: Shou
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -121,6 +125,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
       {/* Header Skeleton */}
@@ -167,6 +172,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -625,7 +631,7 @@ const platformOptions = [
   { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
-  { value: "custom", label: t("meEdit.customSns"), placeholder: "e.g. username", prefix: "" },
+  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
 ] as const;
 
 function getPlatformIcon(platform: string) {
@@ -673,6 +679,7 @@ function SocialLinkDialog({
   linkFetcher: ReturnType<typeof useFetcher<typeof action>>;
   isSubmitting: boolean;
 }) {
+  const t = useT();
   const [selectedPlatform, setSelectedPlatform] = useState(editingLink?.platform ?? "youtube");
 
   const currentOption = platformOptions.find((opt) => opt.value === selectedPlatform);
@@ -775,6 +782,7 @@ function VideoDialog({
   isSubmitting: boolean;
   defaultUrl?: string;
 }) {
+  const t = useT();
   return (
     <videoFetcher.Form method="post">
       <input type="hidden" name="_action" value={editingVideo ? "update_video" : "create_video"} />
@@ -832,6 +840,7 @@ function VideoDialog({
 }
 
 export default function EditProfilePage() {
+  const t = useT();
   const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
@@ -2025,6 +2034,7 @@ export default function EditProfilePage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

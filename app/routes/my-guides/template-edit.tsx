@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-edit";
@@ -16,16 +18,18 @@ import {
   toEditorCrafts,
   toEditorRemaps,
 } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { TemplateEditorForm } from "@/components/template-editor";
 import { ArrowLeft } from "lucide-react";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meTemplates.editorEditTitle") + " - Minefolio" }];
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -75,6 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -120,6 +125,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function TemplateEditPage() {
+  const t = useT();
   const { template, currentSettings, keyboardLayout } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const navigate = useNavigate();

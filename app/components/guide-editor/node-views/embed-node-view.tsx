@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { NodeViewWrapper } from "@tiptap/react";
 import { Keyboard, Package, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface EmbedNodeViewProps {
   node: { attrs: Record<string, string> };
@@ -43,9 +43,11 @@ function EmbedNodeView({
 }
 
 export function KeybindEmbedNodeView(props: EmbedNodeViewProps) {
+  const t = useT();
   return <EmbedNodeView {...props} icon={Keyboard} label={t("guideEditor.embedKeybindLabel")} />;
 }
 
 export function SearchCraftEmbedNodeView(props: EmbedNodeViewProps) {
+  const t = useT();
   return <EmbedNodeView {...props} icon={Package} label={t("guideEditor.embedSearchCraftLabel")} />;
 }

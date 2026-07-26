@@ -4,7 +4,7 @@ import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCookieConsent, CookieConsentBanner } from "@/components/cookie-consent";
 import { useFavorites } from "@/hooks/use-favorites";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface FavoriteButtonProps {
   /** お気に入り対象のスラッグ */
@@ -20,6 +20,7 @@ export function FavoriteButton({
   variant = "outline",
   showLabel = false,
 }: FavoriteButtonProps) {
+  const t = useT();
   const { hasConsent } = useCookieConsent();
   const { isFavorite, toggleFavorite, needsCookieConsent } = useFavorites();
   const [showConsentBanner, setShowConsentBanner] = useState(false);

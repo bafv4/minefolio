@@ -9,9 +9,11 @@ import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
-import { t } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("keybindingsStats.metaTitle");
   const description = t("keybindingsStats.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";

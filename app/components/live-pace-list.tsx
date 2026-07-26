@@ -7,7 +7,7 @@ import {
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ interface LivePaceListProps {
 }
 
 export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToSkinUrl }: LivePaceListProps) {
+  const t = useT();
   if (runs.length === 0) {
     return null;
   }

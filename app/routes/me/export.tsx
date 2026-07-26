@@ -18,7 +18,7 @@ import {
 } from "@/lib/schema";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export async function loader({ request }: { request: Request }) {
   const env = getEnv();
@@ -119,6 +119,7 @@ export async function action({ request }: { request: Request }) {
 }
 
 export default function ExportPage() {
+  const t = useT();
   return (
     <div className="container max-w-4xl py-8">
       <h1 className="text-3xl font-bold mb-6">{t("meExport.title")}</h1>

@@ -12,17 +12,26 @@ import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
-import { t } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 
 // 公開ガイド本文の最大文字数（多層防御。下書きには適用しない）
 const MAX_PUBLISHED_CONTENT_LENGTH = 500_000;
 
-export function meta({ loaderData }: { loaderData: { guide: { title: string } } | undefined }) {
+export function meta({
+  loaderData,
+  matches,
+}: {
+  loaderData: { guide: { title: string } } | undefined;
+  matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
+}) {
+  const t = createTranslator(localeFromMatches(matches));
   if (!loaderData?.guide) return [{ title: t("meGuides.editTitle") }];
-  return [{ title: `${loaderData.guide.title} - 編集 | Minefolio` }];
+  return [{ title: `${loaderData.guide.title} - ${t("guideEditor.edit")} | Minefolio` }];
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -73,6 +82,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);

@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { resolveLocale } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
@@ -30,8 +32,9 @@ import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbod
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { dateFnsLocale } from "@/lib/date-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
@@ -99,6 +102,8 @@ export function meta({ loaderData, params }: Route.MetaArgs) {
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
+  const t = useT();
+  const locale = useLocale();
   const params = useParams();
   const slug = params.slug || "loading";
 
@@ -244,6 +249,7 @@ export function shouldRevalidate({
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -455,6 +461,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function PlayerProfilePage() {
+  const t = useT();
+  const locale = useLocale();
   const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -1343,7 +1351,7 @@ export default function PlayerProfilePage() {
                       <Languages className="h-4 w-4" />
                       <span>{t("playerProfile.gameLanguage")}:</span>
                       <Badge variant="secondary">
-                        {getGameLanguageName(player.playerConfig.gameLanguage)}
+                        {getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                       </Badge>
                     </div>
                   )}
@@ -1549,7 +1557,7 @@ export default function PlayerProfilePage() {
                       {player.playerConfig.gameLanguage && (
                         <DeviceRow
                           label={t("playerProfile.gameLanguage")}
-                          value={getGameLanguageName(player.playerConfig.gameLanguage)}
+                          value={getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                         />
                       )}
                     </div>
@@ -1622,6 +1630,8 @@ export default function PlayerProfilePage() {
 
 // Eloレートグラフコンポーネント
 function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
+  const t = useT();
+  const locale = useLocale();
   // Eloレートが0のマッチを除外してから古い順に並べ替え（グラフ表示用）
   const validMatches = matches.filter((m) => m.eloAfter > 0);
   const sortedMatches = [...validMatches].reverse();
@@ -1769,6 +1779,8 @@ function ItemLayoutCard({
     notes: string | null;
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   const slots = JSON.parse(layout.slots) as { slot: number; items: string[] }[];
   const offhand = layout.offhand ? JSON.parse(layout.offhand) as string[] : [];
 
@@ -1918,6 +1930,8 @@ function RecordCard({
     isPinned?: boolean;
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   return (
     // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
     <Card className={cn(record.isPinned && "md:col-span-2 border-primary/40")}>
@@ -2052,6 +2066,8 @@ function formatCompactCount(count: number): string {
 // リッチカード、その他のプラットフォームは従来のボタン表示。
 // 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
 function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
+  const t = useT();
+  const locale = useLocale();
   const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
   const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
   const [stats, setStats] = useState<SocialStatsData | null>(null);
@@ -2121,6 +2137,8 @@ function SocialLinkRichCard({
   link: ProfileSocialLink;
   stats: YouTubeChannelStats | TwitchChannelStats | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const statParts: string[] = [];
   let isLive = false;
 
@@ -2135,7 +2153,7 @@ function SocialLinkRichCard({
       if (yt.latestVideoAt) {
         statParts.push(
           t("playerProfile.latestVideoAgo", {
-            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: ja }),
+            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
           }),
         );
       }
@@ -2150,7 +2168,7 @@ function SocialLinkRichCard({
       if (!tw.isLive && tw.lastStreamAt) {
         statParts.push(
           t("playerProfile.lastStreamAgo", {
-            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: ja }),
+            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
           }),
         );
       }
@@ -2206,6 +2224,8 @@ function SettingBadge({
   label: string;
   enabled: boolean | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   if (enabled === null) return null;
 
   return (
@@ -2406,6 +2426,8 @@ function StatsServiceLoadingCard({
   description: string;
   state: "loading" | "done" | "error";
 }) {
+  const t = useT();
+  const locale = useLocale();
   const isLoading = state === "loading";
   const isError = state === "error";
 
@@ -2444,7 +2466,7 @@ function filterWeeklyMainPaces(mainPaces: any[]): any[] {
   });
 }
 
-function formatRelativeDateTime(dateStr: string): string {
+function formatRelativeDateTime(t: Translator, dateStr: string): string {
   const date = new Date(dateStr);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -2478,6 +2500,8 @@ function StatsContent({
     speedruncom: "loading" | "done" | "error";
   };
 }) {
+  const t = useT();
+  const locale = useLocale();
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
@@ -2492,7 +2516,7 @@ function StatsContent({
       {player.showRankedStats !== false && loadState.ranked === "loading" && (
         <StatsServiceLoadingCard
           title="MCSR Ranked"
-          description="レート・対戦統計を読み込み中"
+          description={t("loading.rankedStats")}
           state={loadState.ranked}
         />
       )}
@@ -2614,7 +2638,7 @@ function StatsContent({
       {loadState.paceman === "loading" && (
         <StatsServiceLoadingCard
           title="PaceMan"
-          description="登録状態とペース情報を読み込み中"
+          description={t("loading.pacemanStats")}
           state={loadState.paceman}
         />
       )}
@@ -2681,7 +2705,7 @@ function StatsContent({
                       const runUrl = pace?.pacemanRunId
                         ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
                         : null;
-                      const relativeDate = pace?.date ? formatRelativeDateTime(pace.date) : "";
+                      const relativeDate = pace?.date ? formatRelativeDateTime(t, pace.date) : "";
                       const dateLabel = pace?.date ? new Date(pace.date).toLocaleString() : null;
 
                       return runUrl ? (
@@ -2744,7 +2768,7 @@ function StatsContent({
       {player.speedruncomUsername && loadState.speedruncom === "loading" && (
         <StatsServiceLoadingCard
           title="Speedrun.com"
-          description="自己ベスト記録を読み込み中"
+          description={t("loading.speedruncomStats")}
           state={loadState.speedruncom}
         />
       )}

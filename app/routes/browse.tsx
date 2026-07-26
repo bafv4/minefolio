@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
@@ -35,9 +36,12 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("browse.metaTitle");
   const description = t("browse.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -97,6 +101,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 function PlayerCardSkeleton() {
+  const t = useT();
   return (
     <div className="border border-border/70 rounded-xl p-3">
       <div className="flex items-center gap-3">
@@ -112,10 +117,11 @@ function PlayerCardSkeleton() {
 }
 
 // フィルタラベル
-const ROLE_LABELS: Record<string, string> = {
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+const roleLabels = (t: Translator): Record<string, string> => ({
   runner: t("browse.roleRunner"),
   viewer: t("browse.roleViewer"),
-};
+});
 const EDITION_LABELS: Record<string, string> = {
   java: "Java",
   bedrock: "Bedrock",
@@ -125,16 +131,17 @@ const INPUT_METHOD_LABELS: Record<string, string> = {
   controller: "Controller",
   touch: "Touch",
 };
-const PLATFORM_LABELS: Record<string, string> = {
+const platformLabels = (t: Translator): Record<string, string> => ({
   pc_windows: "Windows",
   pc_mac: "Mac",
   pc_linux: "Linux",
   switch: "Switch",
   mobile: "Mobile",
   other: t("browse.platformOther"),
-};
+});
 
 export default function BrowsePage() {
+  const t = useT();
   const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -515,7 +522,7 @@ export default function BrowsePage() {
           <div className="flex flex-wrap gap-2">
             {filters.roles.map((role) => (
               <Badge key={role} variant="secondary" className="gap-1">
-                {ROLE_LABELS[role]}
+                {roleLabels(t)[role]}
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
                   className="ml-1 hover:text-destructive"
@@ -537,7 +544,7 @@ export default function BrowsePage() {
             ))}
             {filters.platforms.map((platform) => (
               <Badge key={platform} variant="secondary" className="gap-1">
-                {PLATFORM_LABELS[platform]}
+                {platformLabels(t)[platform]}
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
                   className="ml-1 hover:text-destructive"

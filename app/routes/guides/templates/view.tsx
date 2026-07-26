@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/view";
@@ -18,7 +20,7 @@ import {
   parseTemplateRemaps,
   MAX_TEMPLATE_CRAFTS,
 } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,13 +68,14 @@ import {
 } from "lucide-react";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale } from "@/lib/date-locale";
 
 // リマップ表示用のバーチャルキーボードのレイアウト切替（テンプレートはレイアウト情報を持たないため閲覧者が選択）
 type KeyboardLayoutOption = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 const LAYOUT_OPTIONS: KeyboardLayoutOption[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   if (!loaderData) {
     return [{ title: t("templates.title") }];
   }
@@ -96,6 +99,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -173,6 +177,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -283,6 +288,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function TemplateViewPage() {
+  const t = useT();
+  const locale = useLocale();
   const { template, crafts, remaps, author, myPresets, isOwner, isLoggedIn, appUrl } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
@@ -380,7 +387,7 @@ export default function TemplateViewPage() {
           <span className="mx-2">·</span>
           {formatDistanceToNow(new Date(template.createdAt), {
             addSuffix: true,
-            locale: ja,
+            locale: dateFnsLocale(locale),
           })}
         </p>
         {template.description && (
@@ -394,7 +401,7 @@ export default function TemplateViewPage() {
               {t("playerProfile.gameLanguage")}:
             </span>
             <span className="text-lg font-semibold">
-              {getGameLanguageName(template.gameLanguage)}
+              {getGameLanguageName(t, locale, template.gameLanguage)}
             </span>
           </div>
         )}

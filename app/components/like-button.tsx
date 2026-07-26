@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLike, type LikeTargetType } from "@/hooks/use-likes";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface LikeButtonProps {
   targetType: LikeTargetType;
@@ -37,6 +37,7 @@ export function LikeButton({
   variant = "compact",
   className,
 }: LikeButtonProps) {
+  const t = useT();
   const { liked, count, isPending, isLoggedIn, toggle } = useLike(targetType, targetId, {
     liked: isLiked,
     count: likeCount,

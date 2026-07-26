@@ -7,10 +7,14 @@ import rehypeSanitize from "rehype-sanitize";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText } from "lucide-react";
 import apiMd from "@/content/api.md?raw";
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
-  const title = "API ドキュメント - Developers - Minefolio";
-  const description = "Minefolio が提供する公開 API の仕様";
+export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
+  const title = t("developers.apiMetaTitle");
+  const description = t("developers.apiDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = `${appUrl}/icon.png`;
   return [
@@ -29,20 +33,21 @@ export async function loader() {
 }
 
 export default function ApiDocsPage() {
+  const t = useT();
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <Button variant="ghost" size="sm" asChild className="-ml-2">
           <Link to="/developers">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Developers
+            {t("developers.heading")}
           </Link>
         </Button>
       </div>
 
       <div className="flex items-center gap-2">
         <FileText className="h-7 w-7" />
-        <h1 className="text-3xl font-bold">API ドキュメント</h1>
+        <h1 className="text-3xl font-bold">{t("developers.apiTitle")}</h1>
       </div>
 
       <article className="prose prose-sm dark:prose-invert max-w-none">

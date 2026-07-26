@@ -6,7 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowUpDown } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import type { ContentSort } from "@/lib/content-sort";
 
 // 並び順の型・選択肢・パースは React 非依存の @/lib/content-sort にある
@@ -31,6 +31,7 @@ export function ContentSortSelect({
   /** 既定順のラベル。ガイドは updatedAt 基準で「更新順」、テンプレートは createdAt 基準で「新着順」 */
   newestLabel: string;
 }) {
+  const t = useT();
   const label = (sort: ContentSort) => {
     if (sort === "new") return newestLabel;
     if (sort === "recommended") return t("contentSort.recommended");

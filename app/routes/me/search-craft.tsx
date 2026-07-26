@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/search-craft";
@@ -34,13 +36,14 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftListEditor, arrayMove } from "@/components/search-craft-editor";
 import { toUiRemaps } from "@/lib/remap-utils";
 import { parseTemplateCrafts } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meSearchCraft.title") }];
 };
 
@@ -74,6 +77,7 @@ type SearchCraftItem = {
 
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -141,6 +145,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -188,6 +193,7 @@ export function HydrateFallback() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -299,6 +305,7 @@ export async function action({ request }: Route.ActionArgs) {
  * 既存データは読み取り専用で表示される。
  */
 function PresetRequiredNotice() {
+  const t = useT();
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -313,6 +320,7 @@ function PresetRequiredNotice() {
 }
 
 export default function SearchCraftPage() {
+  const t = useT();
   const { crafts: initialCrafts, remaps, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
@@ -568,6 +576,7 @@ export default function SearchCraftPage() {
 }
 
 export function ErrorBoundary() {
+  const t = useT();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

@@ -6,7 +6,7 @@ import { useTheme } from "next-themes";
 import { Check, Copy, Download, ImageDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import {
   filterRemapsForContext,
   toUiRemaps,
@@ -85,6 +85,7 @@ export function KeyboardExportDialog({
   isTKL,
   player,
 }: KeyboardExportDialogProps) {
+  const t = useT();
   const { resolvedTheme } = useTheme();
   const previewRef = useRef<HTMLDivElement>(null);
 

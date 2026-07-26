@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ImagePlus, Trash2, Loader2, AlertCircle, X } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 interface MetadataFieldsProps {
   title: string;
@@ -41,6 +41,7 @@ export function MetadataFields({
   isUploadingCover,
   uploadError,
 }: MetadataFieldsProps) {
+  const t = useT();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [tagInput, setTagInput] = useState("");
 

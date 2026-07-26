@@ -2,26 +2,35 @@ import { useNavigation, useLocation } from "react-router";
 import { useMemo, useRef } from "react";
 import { Loader2, Lightbulb } from "lucide-react";
 import { inSameTabGroup } from "@/lib/tab-nav-groups";
+import { useT } from "@/hooks/use-locale";
+import type { MessageKey } from "@/lib/messages";
 
-// ランダムに表示するTips
-const TIPS = [
-  "キー配置・デバイス設定・アイテム配置・サーチクラフトはプリセットとしてまとめることができます。",
-  "走者はプロフィールの♡ボタンでお気に入りに登録することができます！",
-  "Speedrun.comのユーザー名を登録すると、活動・記録画面に自動で記録が表示されるようになります。",
-  "Twitchのユーザー名を登録すると、配信がホーム画面に表示されるようになります。",
-  "設定プリセットは複数登録できます。",
-  "複数の操作を1つのキーに割り当てることが可能です。",
-  "キーボードビューでキーをクリックすると詳細を確認・編集できます。",
-  "自己紹介欄ではMarkdownを使用できます。",
+// ランダムに表示する Tips。
+// アプリの使い方に関するものは翻訳する（文言は pages-ja.ts / pages-en.ts）。
+const TIP_KEYS = [
+  "loadingTips.presets",
+  "loadingTips.favorites",
+  "loadingTips.speedruncom",
+  "loadingTips.twitch",
+  "loadingTips.multiplePresets",
+  "loadingTips.multipleActions",
+  "loadingTips.keyboardView",
+  "loadingTips.markdownBio",
+  "loadingTips.fingerColors",
+  "loadingTips.feedback",
+] as const satisfies readonly MessageKey[];
+
+// Minecraft のスプラッシュテキストを踏まえたお遊びの文言。
+// 元ネタの語感がすべてなので、どのロケールでも**原文のまま**出す（翻訳対象外）。
+const SPLASH_TIPS = [
   "ネザーではいまFastionがトレンドです。",
   "Supercalifragilisticexpialidocious!",
-  "指割り当てを設定するとキーボードビューに色が表示されます。",
-  "なにか改善してほしいところがある場合は、制作者@bafv4まで遠慮なくご連絡ください！",
   "Now Java 17+!",
   "日本ハロー！",
 ];
 
 export function NavigationProgress() {
+  const t = useT();
   const navigation = useNavigation();
   const location = useLocation();
   const isNavigating = navigation.state === "loading";
@@ -39,9 +48,13 @@ export function NavigationProgress() {
     !!navigation.location &&
     inSameTabGroup(location.pathname, navigation.location.pathname);
 
-  // ランダムなTipを選択（ナビゲーション開始時に固定）
+  // ランダムなTipを選択（ナビゲーション開始時に固定）。
+  // 翻訳対象のヒントとスプラッシュ文言を同じ確率で混ぜる
   const tip = useMemo(() => {
-    return TIPS[Math.floor(Math.random() * TIPS.length)];
+    const index = Math.floor(Math.random() * (TIP_KEYS.length + SPLASH_TIPS.length));
+    return index < TIP_KEYS.length
+      ? t(TIP_KEYS[index])
+      : SPLASH_TIPS[index - TIP_KEYS.length];
   }, [isNavigating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isNavigating || isSamePageNavigation || isTabGroupNavigation) return null;
@@ -50,7 +63,7 @@ export function NavigationProgress() {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-4 p-6 max-w-sm text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-lg font-medium">読み込み中...</p>
+        <p className="text-lg font-medium">{t("loading.page")}</p>
         <div className="flex items-start gap-2 text-sm text-muted-foreground bg-secondary/50 rounded-lg p-3">
           <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-yellow-500" />
           <p className="text-left">{tip}</p>

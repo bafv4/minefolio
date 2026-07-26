@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useLocale } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,7 +13,7 @@ import { Eye, FileText, LayoutGrid, List, Pin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale } from "@/lib/date-locale";
 
 export type GuideItem = {
   id: string;
@@ -77,6 +78,7 @@ export function GuideCardGrid({
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
 }) {
+  const locale = useLocale();
   // ログイン状態は LikesProvider が持つ（未ログインなら LikeButton が静的表示に落ちる）
   return (
     <div className={`grid gap-4 ${gridCols}`}>
@@ -156,7 +158,7 @@ export function GuideCardGrid({
                   <span className="ml-auto shrink-0">
                     {formatDistanceToNow(guide.updatedAt, {
                       addSuffix: true,
-                      locale: ja,
+                      locale: dateFnsLocale(locale),
                     })}
                   </span>
                 </div>
@@ -177,6 +179,7 @@ export function GuideListView({
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
 }) {
+  const locale = useLocale();
   return (
     <div className="divide-y">
       {guides.map((guide) => {
@@ -235,7 +238,7 @@ export function GuideListView({
                 <span className="ml-auto shrink-0">
                   {formatDistanceToNow(guide.updatedAt, {
                     addSuffix: true,
-                    locale: ja,
+                    locale: dateFnsLocale(locale),
                   })}
                 </span>
               </div>

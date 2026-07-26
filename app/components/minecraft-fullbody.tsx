@@ -3,7 +3,7 @@ import type { SkinViewer } from "skinview3d";
 import { HelpCircle, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 
@@ -160,6 +160,7 @@ const MinecraftFullBodyComponent = ({
   interactive = false,
   showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
+  const t = useT();
   const skinIdentifier = skinUrl || uuid || STEVE_UUID;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);

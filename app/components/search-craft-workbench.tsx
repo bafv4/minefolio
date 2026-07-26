@@ -30,7 +30,7 @@ import {
 } from "@/lib/remap-utils";
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
 
 /**
@@ -76,6 +76,7 @@ export function effectiveRemapsFrom(remaps: WorkbenchRemap[]): RemapInfo[] {
 // ============================================
 
 function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
+  const t = useT();
   const [entries, setEntries] = useState<SimulatedKeyOutput[]>([]);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -201,6 +202,7 @@ export function SearchCraftWorkbench({
   layout: KeyboardLayoutOption;
   onLayoutChange: (layout: KeyboardLayoutOption) => void;
 }) {
+  const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
   const updateRemapAt = useCallback(

@@ -6,7 +6,7 @@ import { Popover, PopoverContent } from "@/components/ui/popover";
 import { PickerTrigger } from "./color-picker";
 import { FONT_SIZES } from "../constants";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /** 現在の選択に適用されている段階（未設定なら空文字＝標準） */
 function currentFontSize(editor: Editor): string {
@@ -43,6 +43,7 @@ export function FontSizePicker({
   editor: Editor;
   showLabel?: boolean;
 }) {
+  const t = useT();
   const current = currentFontSize(editor);
   const editable = isFontSizeEditable(editor);
 

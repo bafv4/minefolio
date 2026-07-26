@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams } from "react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "./+types/paces";
@@ -12,7 +14,7 @@ import {
   parsePaceSearchParams,
   type PaceFeedItem,
 } from "@/lib/paces-feed.server";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +34,8 @@ const PAGE_SIZE = 60;
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("paces.metaTitle");
   const description = t("paces.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -106,6 +109,7 @@ function PacesList({
   mcidToSkinUrl: Record<string, string>;
   viewerPrefs: OwnPacePrefs;
 }) {
+  const t = useT();
   const [paces, setPaces] = useState(initialPaces);
   const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -198,6 +202,7 @@ function PacesList({
 }
 
 export default function PacesPage() {
+  const t = useT();
   const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToSkinUrl, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();

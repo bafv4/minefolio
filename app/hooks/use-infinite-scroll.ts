@@ -3,6 +3,7 @@
 // SSR で 1 ページ目を受け取り、クライアントで append していくモデル。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useSearchParams } from "react-router";
+import { useT } from "@/hooks/use-locale";
 
 interface UseInfiniteScrollOptions<T> {
   /** SSR で受け取った初期データ */
@@ -45,6 +46,7 @@ export function useInfiniteScroll<T>({
   resetDeps,
   extraParams,
 }: UseInfiniteScrollOptions<T>) {
+  const t = useT();
   const [items, setItems] = useState<T[]>(initialItems);
   const [page, setPage] = useState(initialPage);
   const [hasMore, setHasMore] = useState(initialHasMore);
@@ -126,10 +128,10 @@ export function useInfiniteScroll<T>({
 
   // 通知用テキスト（aria-live で読み上げる）
   const liveMessage = useMemo(() => {
-    if (isLoadingMore) return "追加読み込み中…";
-    if (addedCount > 0) return `${addedCount}件を追加で読み込みました`;
+    if (isLoadingMore) return t("loading.more");
+    if (addedCount > 0) return t("loading.moreLoaded", { count: addedCount });
     return "";
-  }, [isLoadingMore, addedCount]);
+  }, [t, isLoadingMore, addedCount]);
 
   return {
     items,

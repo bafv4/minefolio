@@ -7,7 +7,7 @@ import type { Editor } from "@tiptap/core";
 import { Trash2, AlignLeft, AlignCenter, AlignRight, X, Crop } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { getImageMediaContext } from "../extensions/image";
 import { ImageCropDialog } from "../panels/image-crop-dialog";
 import type { CropRect } from "../lib/image-crop";
@@ -39,6 +39,7 @@ export function ImageNodeView({
   updateAttributes: (attrs: Record<string, unknown>) => void;
   selected: boolean;
 }) {
+  const t = useT();
   const [resizing, setResizing] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropping, setCropping] = useState(false);

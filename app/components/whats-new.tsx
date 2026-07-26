@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,7 @@ function normalizeHeading(text: string): string {
 }
 
 export function WhatsNew() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // changelog.md 全文＋パース処理を含む ./whats-new-data はアイドル時に
   // 動的 import する（共通レイアウトの初期チャンクから分離するため）。

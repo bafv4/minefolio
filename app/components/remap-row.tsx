@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { KeyCaptureButton } from "@/components/key-capture-button";
 import { ArrowRight, Trash2 } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /**
  * リマップ編集行（/me/keybindings のリマップタブと共通のUI・UX）。
@@ -89,6 +89,7 @@ function RemapTypeSelect({
   heightClass?: "h-9" | "h-8";
   disabledTypes?: KeyRemapType[];
 }) {
+  const t = useT();
   return (
     <Select value={value} onValueChange={(v: KeyRemapType) => onChange(v)}>
       <SelectTrigger className={cn("w-28 text-sm", heightClass)}>
@@ -122,6 +123,7 @@ export function RemapRow({
   showRemapType?: boolean;
   disabledRemapTypes?: KeyRemapType[];
 }) {
+  const t = useT();
   const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (
@@ -281,6 +283,7 @@ export function DialogRemapRow({
   showRemapType?: boolean;
   disabledRemapTypes?: KeyRemapType[];
 }) {
+  const t = useT();
   const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
 
   return (

@@ -23,7 +23,7 @@ import {
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import { truncateByVisualWidth } from "@/lib/text-width";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /** 走者列の最小データ */
 export type PlayerSummary = {
@@ -353,6 +353,7 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
 }
 
 export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config?.windowsSpeedMultiplier != null) {
     return (
       <Tooltip>

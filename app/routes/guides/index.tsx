@@ -1,3 +1,4 @@
+import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useSearchParams, useNavigation, Form, type LoaderFunctionArgs } from "react-router";
 import { useState } from "react";
 import { createDb } from "@/lib/db";
@@ -12,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Search } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
+import { localeFromMatches } from "@/lib/locale";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
@@ -30,7 +32,14 @@ import {
   type ContentSort,
 } from "@/components/content-sort-select";
 
-export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({
+  loaderData,
+  matches,
+}: {
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+  matches: ReadonlyArray<{ id: string; data?: unknown }>;
+}) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("guides.title");
   const description = t("guides.pageDesc");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -130,6 +139,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function GuidesIndexPage() {
+  const t = useT();
   const { guides: allGuides, allTags, tag, q, sort, viewerId } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -201,7 +211,7 @@ export default function GuidesIndexPage() {
             </div>
             <Button type="submit">
               <Search className="mr-2 h-4 w-4" />
-              検索
+              {t("common.search")}
             </Button>
           </Form>
           <ContentSortSelect
@@ -224,7 +234,7 @@ export default function GuidesIndexPage() {
                 })
               }
             >
-              すべて
+              {t("guides.tagAll")}
             </Badge>
             {allTags.map((t) => (
               <Badge

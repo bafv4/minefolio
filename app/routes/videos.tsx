@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/videos";
@@ -9,7 +11,7 @@ import {
   getViewerVideoPrefs,
   parseVideoSearchParams,
 } from "@/lib/videos-feed.server";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +31,8 @@ import { Play, Film, Loader2, Search, X } from "lucide-react";
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "platform", "from", "to"] as const;
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("videos.metaTitle");
   const description = t("videos.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -88,6 +91,7 @@ function VideosList({
   filterKey: string;
   viewerPrefs: OwnVideoPrefs;
 }) {
+  const t = useT();
   const infinite = useInfiniteScroll<FeedVideo>({
     initialItems: initialVideos,
     initialPage: 1,
@@ -134,6 +138,7 @@ function VideosList({
 }
 
 export default function VideosPage() {
+  const t = useT();
   const { videos, total, visibleTotal, viewerPrefs } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 

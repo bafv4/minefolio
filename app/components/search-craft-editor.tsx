@@ -64,11 +64,15 @@ import {
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
-import { ActualKeyBadges, TIMING_META } from "@/components/search-craft-template-view";
+import {
+  ActualKeyBadges,
+  TIMING_META,
+  timingLabel,
+} from "@/components/search-craft-template-view";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 /**
  * サーチクラフト編集UI（/me/search-craft とテンプレートエディタで共通）。
@@ -98,6 +102,7 @@ function ItemSelectDialog({
   selectedItems: string[];
   onItemsChange: (items: string[]) => void;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
 
@@ -223,6 +228,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   onUpdate: (updated: T) => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const withShiftCheckboxId = useId();
 
@@ -332,7 +338,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                   <SelectItem value="__none">{t("meSearchCraft.timingNone")}</SelectItem>
                   {TIMING_META.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.label}
+                      {timingLabel(t, m)}
                     </SelectItem>
                   ))}
                 </SelectContent>

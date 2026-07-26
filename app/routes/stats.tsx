@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
@@ -10,9 +12,10 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = ({ loaderData }) => {
+export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("stats.metaTitle");
   const description = t("stats.metaDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -346,6 +349,7 @@ function StatBar({
   total: number;
   maxCount: number;
 }) {
+  const t = useT();
   const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
   const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
 
@@ -483,6 +487,7 @@ function BooleanStatCard({
   enabled: number;
   disabled: number;
 }) {
+  const t = useT();
   const total = enabled + disabled;
   if (total === 0) return null;
 
@@ -507,6 +512,7 @@ function BooleanStatCard({
 }
 
 export default function StatsPage() {
+  const t = useT();
   const {
     totalUsers,
     usersWithKeybindings,

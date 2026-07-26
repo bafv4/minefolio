@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/presets";
 import { createDb, type Database } from "@/lib/db";
@@ -48,10 +50,11 @@ import {
 import { toast } from "sonner";
 import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
-import { t } from "@/lib/messages";
+import { dateFnsLocale } from "@/lib/date-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ matches }) => {
+  const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("mePresets.title") }];
 };
 
@@ -153,6 +156,7 @@ async function restorePlayerConfigFromSnapshot(
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -195,6 +199,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -858,6 +863,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PresetsPage() {
+  const t = useT();
+  const locale = useLocale();
   const { presets, history } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -1136,7 +1143,7 @@ export default function PresetsPage() {
                         </div>
 
                         <p className="text-xs text-muted-foreground mt-2">
-                          {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: ja })}
+                          {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1233,7 +1240,7 @@ export default function PresetsPage() {
                         {changeTypeLabels[entry.changeType] ?? entry.changeType}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: ja })}
+                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
                       </span>
                     </div>
                   </div>

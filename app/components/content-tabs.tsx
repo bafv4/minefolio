@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useTabScrollbar } from "@/hooks/use-tab-scrollbar";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { BookOpen, LayoutTemplate, type LucideIcon } from "lucide-react";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 
 export type ContentTab = {
   key: string;
@@ -63,6 +63,7 @@ export function ContentTabs({ tabs, active }: { tabs: ContentTab[]; active: stri
 
 /** 自分の公開コンテンツ（ガイド / サーチクラフトテンプレート）管理ページ間のタブ */
 export function MyContentTabs({ active }: { active: "guides" | "templates" }) {
+  const t = useT();
   return (
     <ContentTabs
       active={active}
@@ -76,6 +77,7 @@ export function MyContentTabs({ active }: { active: "guides" | "templates" }) {
 
 /** 公開ガイド一覧 / 公開テンプレート一覧間のタブ */
 export function GuidesContentTabs({ active }: { active: "guides" | "templates" }) {
+  const t = useT();
   return (
     <ContentTabs
       active={active}

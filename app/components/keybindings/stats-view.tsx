@@ -15,7 +15,7 @@ import {
 import { getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { t } from "@/lib/messages";
+import { useT } from "@/hooks/use-locale";
 import type {
   KeybindingStats,
   F3RemapStats,
@@ -28,6 +28,7 @@ interface StatsViewProps {
 }
 
 export function StatsView({ data }: StatsViewProps) {
+  const t = useT();
   const {
     keybindingStats,
     f3RemapStats,
@@ -404,6 +405,7 @@ function KeybindingStatCard({
   stat: KeybindingStats;
   onPlayerClick: (title: string, players: PlayerInfo[]) => void;
 }) {
+  const t = useT();
   if (stat.totalCount === 0) {
     return (
       <Card>
@@ -452,6 +454,7 @@ function F3RemapStatCard({
   stat: F3RemapStats;
   onPlayerClick: (title: string, players: PlayerInfo[]) => void;
 }) {
+  const t = useT();
   if (stat.totalCount === 0) {
     return (
       <Card>
@@ -517,6 +520,7 @@ function StatRow({
   percentage: number;
   onClick: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"

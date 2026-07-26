@@ -1,3 +1,5 @@
+import { createTranslator } from "@/lib/messages";
+import { localeFromMatches } from "@/lib/locale";
 import { useState, useEffect } from "react";
 import { useLoaderData, Link, Form, useSearchParams, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
@@ -7,7 +9,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
 import { templateLikeCountSql } from "@/lib/likes.server";
-import { t } from "@/lib/messages";
+import { useT, useLocale } from "@/hooks/use-locale";
 import {
   ContentSortSelect,
   parseContentSort,
@@ -23,11 +25,18 @@ import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages } f
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
-import { getGameLanguageName, GAME_LANGUAGE_OPTIONS } from "@/lib/game-languages";
+import { getGameLanguageName, gameLanguageOptions } from "@/lib/game-languages";
 import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
+import { dateFnsLocale } from "@/lib/date-locale";
 
-export const meta = ({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> | undefined }) => {
+export const meta = ({
+  matches,
+  loaderData,
+}: {
+  matches: ReadonlyArray<{ id: string; loaderData?: unknown }>;
+  loaderData: Awaited<ReturnType<typeof loader>> | undefined;
+}) => {
+  const t = createTranslator(localeFromMatches(matches));
   const title = t("templates.title");
   const description = t("templates.pageDesc");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
@@ -138,6 +147,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function TemplatesIndexPage() {
+  const t = useT();
+  const locale = useLocale();
   const { templates, q, lang, sort } = useLoaderData<typeof loader>();
   const [langValue, setLangValue] = useState(lang || "__all");
   const [, setSearchParams] = useSearchParams();
@@ -164,7 +175,7 @@ export default function TemplatesIndexPage() {
 
   const languageOptions = [
     { value: "__all", label: t("templates.allLanguages") },
-    ...GAME_LANGUAGE_OPTIONS,
+    ...gameLanguageOptions(t, locale),
   ];
 
   return (
@@ -253,7 +264,7 @@ export default function TemplatesIndexPage() {
                   {template.gameLanguage && (
                     <span className="flex items-center gap-1.5 text-sm font-medium shrink-0">
                       <Languages className="h-4 w-4 text-primary" />
-                      {getGameLanguageName(template.gameLanguage)}
+                      {getGameLanguageName(t, locale, template.gameLanguage)}
                     </span>
                   )}
                 </div>
@@ -288,7 +299,7 @@ export default function TemplatesIndexPage() {
                   <span>
                     {formatDistanceToNow(new Date(template.createdAt), {
                       addSuffix: true,
-                      locale: ja,
+                      locale: dateFnsLocale(locale),
                     })}
                   </span>
                 </div>
