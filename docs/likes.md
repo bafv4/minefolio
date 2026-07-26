@@ -144,9 +144,16 @@
 
 ---
 
-## 並び替え（人気順）
+## 並び替え（人気順・おすすめ順）
 
-`ContentSortSelect`（`app/components/content-sort-select.tsx`）を両一覧で共用する。`?sort=popular` で指定し、既定（`new`）ではパラメータを削除してURLを綺麗に保つ。
+型と選択肢とパースは `app/lib/content-sort.ts`（React 非依存。ローダー側の `guideListOrderBy` と定義を共有するため）、UI は `ContentSortSelect`（`app/components/content-sort-select.tsx`）。`?sort=` で指定し、既定（`new`）ではパラメータを削除してURLを綺麗に保つ。
+
+**選択肢は一覧ごとに異なる**ので `parseContentSort(value, allowed)` の `allowed` は必須にしている。省略可にすると、テンプレート一覧が `?sort=recommended` を受理して「UI は新着順なのに実際の順序が違う」状態になる。
+
+| 一覧 | 選択肢 | 定数 |
+|---|---|---|
+| ガイド | 更新順 / **おすすめ順** / 人気順 | `GUIDE_SORTS` |
+| テンプレート | 新着順 / 人気順 | `TEMPLATE_SORTS` |
 
 - ラベルはリストで異なる: ガイドは `updatedAt` 基準で**更新順**、テンプレートは `createdAt` 基準で**新着順**
 - **並び替えは必ず SQL の `ORDER BY` で行う**。テンプレート一覧は `.limit(100)` が先に効くため、メモリ上で並べ替えると「新しい100件を人気順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない
@@ -154,6 +161,32 @@
   - ガイド: `likeCount DESC, updatedAt DESC, id ASC`
   - テンプレート: `likeCount DESC, createdAt DESC, id ASC`
 - **GETフォームには `sort` の hidden input が必要**（GETフォームはクエリを総入れ替えするため、無いと検索のたびにソートが解除される。`tag` / `lang` と同じ対処）
+
+### おすすめ順（ガイドのみ）
+
+`guideListOrderBy()`（`likes.server.ts`）が単一情報源。**直近のいいね数 → 総いいね数 → 更新日時 → id** の順に見る。
+
+```
+recentLikeCount DESC, likeCount DESC, updatedAt DESC, id ASC
+```
+
+- 「直近」は `RECENT_LIKE_WINDOW_DAYS = 30` 日。母数が小さいコミュニティでは 7 日だとほぼ毎日全件0になり実質「人気順」と変わらなくなる。30 日はいいねの動きを拾いつつ、数か月前に伸びたきりの記事を上位に固定しない長さとして選んでいる
+- 直近が全件0でも総いいね・更新日時へ素直に落ちるので、いいねが少ない時期でも並びが破綻しない
+- テンプレートには用意していない（必要なら同じ形で `recentTemplateLikeCountSql` を足せる）
+- `created_at` は `integer(mode:"timestamp")` ＝ **秒**。Date をそのまま束縛せず秒へ変換する。ミリ秒のまま比較すると条件が常に偽になり、**エラーを出さずに「人気順」へ退化する**
+
+---
+
+## 相関サブクエリの書き方（`guideLikeCountSql` など）
+
+いいね数は外側の1行ごとに数える相関サブクエリで求める。ここには**クエリの形によって黙って壊れる罠**が2つあるため、内側テーブルを `(select 必要な列だけ from ...)` で包む形に統一している。
+
+1. drizzle は `${table.column}` を、**FROM が1テーブルだけのクエリ**（RQB の `findMany`、join なしの `select`）では**修飾なし**で描画する。素直に書くと `... from guide_likes where "guide_id" = "id"` となり、内側の `guide_likes` にも `id` があるためそちらへ解決され**常に0件**になる。SQLエラーにならないので「いいね0」と表示されるだけで気づけない
+2. かといってテーブル名で明示的に修飾すると、今度は RQB が根テーブルを**スキーマのキー名**で別名にするため壊れる（`from "search_craft_templates" "searchCraftTemplates"` → `no such column`）
+
+内側から `id` を消せば、外側の参照が修飾済み・未修飾のどちらで描画されても正しく外側の行に解決される。SQLite は単純な FROM 副問合せを平坦化するので索引の利用にも影響しない。
+
+> この罠は実際に踏んでいる。v1.10.0 の初版では `/guides/:authorSlug`（著者別一覧）とプロフィールのガイドタブが RQB の `extras` 経路だったため、**いいね数が常に0と表示されていた**。`app/lib/__tests__/likes-sort.test.ts` が両方のクエリ形で実値を検証して再発を防いでいる。
 
 ---
 

@@ -5,8 +5,8 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { and, eq, asc, desc } from "drizzle-orm";
-import { guideLikeCountSql } from "@/lib/likes.server";
+import { and, eq } from "drizzle-orm";
+import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
 import {
   ContentSortSelect,
   parseContentSort,
+  GUIDE_SORTS,
   type ContentSort,
 } from "@/components/content-sort-select";
 
@@ -64,14 +65,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const tag = url.searchParams.get("tag") || "";
   const q = url.searchParams.get("q") || "";
-  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"));
+  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), GUIDE_SORTS);
 
   const likeCount = guideLikeCountSql();
-  // 同数（初日は全件0）で順序が不定にならないよう id まで含めて全順序にする
-  const orderBy =
-    sort === "popular"
-      ? [desc(likeCount), desc(guides.updatedAt), asc(guides.id)]
-      : [desc(guides.updatedAt), asc(guides.id)];
+  // 並び順の定義（おすすめ順の重み付け含む）は likes.server.ts に集約している
+  const orderBy = guideListOrderBy(sort);
 
   const allGuides = await db
     .select({
@@ -209,6 +207,7 @@ export default function GuidesIndexPage() {
           <ContentSortSelect
             value={sort}
             onChange={handleSortChange}
+            options={GUIDE_SORTS}
             newestLabel={t("contentSort.recentlyUpdated")}
           />
           <ViewToggle viewMode={viewMode} onChange={setViewMode} />

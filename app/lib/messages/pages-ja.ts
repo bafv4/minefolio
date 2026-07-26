@@ -181,6 +181,8 @@ export const PAGES_JA = {
     /** ガイド一覧（updatedAt 基準） */
     recentlyUpdated: "更新順",
     popular: "人気順",
+    /** ガイド一覧のみ。直近のいいねが多い順（likes.server.ts の guideListOrderBy） */
+    recommended: "おすすめ順",
   },
   keybindings: {
     title: "操作設定一覧",

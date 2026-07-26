@@ -146,13 +146,17 @@ export async function seedSearchCraftTemplate(
   return row;
 }
 
-/** guide_likes を 1 件挿入する（いいね済み状態を用意するショートカット）。 */
+/**
+ * guide_likes を 1 件挿入する（いいね済み状態を用意するショートカット）。
+ * createdAt を渡すと「いつ付いたいいねか」を指定できる（おすすめ順の期間判定用）。
+ */
 export async function seedGuideLike(
   db: TestDb,
   userId: string,
   guideId: string,
+  createdAt?: Date,
 ): Promise<void> {
-  await db.insert(schema.guideLikes).values({ userId, guideId });
+  await db.insert(schema.guideLikes).values({ userId, guideId, ...(createdAt && { createdAt }) });
 }
 
 /** search_craft_template_likes を 1 件挿入する。 */

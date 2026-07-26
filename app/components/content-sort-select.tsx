@@ -7,28 +7,36 @@ import {
 } from "@/components/ui/select";
 import { ArrowUpDown } from "lucide-react";
 import { t } from "@/lib/messages";
+import type { ContentSort } from "@/lib/content-sort";
 
-/**
- * ガイド一覧・テンプレート一覧の並び替え。
- * URLクエリ `?sort=` を唯一の指定元にする（共有・ブックマーク可）。
- */
-export type ContentSort = "new" | "popular";
-
-/** URLクエリ文字列から並び順を解釈する（不正値・未指定は "new"）。 */
-export function parseContentSort(value: string | null): ContentSort {
-  return value === "popular" ? "popular" : "new";
-}
+// 並び順の型・選択肢・パースは React 非依存の @/lib/content-sort にある
+// （ローダー側の guideListOrderBy と定義を共有するため）。
+export {
+  parseContentSort,
+  GUIDE_SORTS,
+  TEMPLATE_SORTS,
+  type ContentSort,
+} from "@/lib/content-sort";
 
 export function ContentSortSelect({
   value,
   onChange,
+  options,
   newestLabel,
 }: {
   value: ContentSort;
   onChange: (value: ContentSort) => void;
+  /** 表示する選択肢（一覧ごとに異なる。GUIDE_SORTS / TEMPLATE_SORTS） */
+  options: readonly ContentSort[];
   /** 既定順のラベル。ガイドは updatedAt 基準で「更新順」、テンプレートは createdAt 基準で「新着順」 */
   newestLabel: string;
 }) {
+  const label = (sort: ContentSort) => {
+    if (sort === "new") return newestLabel;
+    if (sort === "recommended") return t("contentSort.recommended");
+    return t("contentSort.popular");
+  };
+
   return (
     <div className="flex shrink-0 items-center gap-2">
       <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -37,8 +45,11 @@ export function ContentSortSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="new">{newestLabel}</SelectItem>
-          <SelectItem value="popular">{t("contentSort.popular")}</SelectItem>
+          {options.map((sort) => (
+            <SelectItem key={sort} value={sort}>
+              {label(sort)}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>

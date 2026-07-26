@@ -11,6 +11,7 @@ import { t } from "@/lib/messages";
 import {
   ContentSortSelect,
   parseContentSort,
+  TEMPLATE_SORTS,
   type ContentSort,
 } from "@/components/content-sort-select";
 import { LikeButton } from "@/components/like-button";
@@ -61,7 +62,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const lang = (url.searchParams.get("lang") ?? "").trim();
-  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"));
+  // テンプレートは「おすすめ順」を持たない（未対応の値は既定順へ落ちる）
+  const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), TEMPLATE_SORTS);
 
   // 言語はSQLで絞り込む（完全一致）
   // 非公開・限定公開の著者のテンプレートは公開一覧（discovery）に出さない
@@ -222,6 +224,7 @@ export default function TemplatesIndexPage() {
         <ContentSortSelect
           value={sort}
           onChange={handleSortChange}
+          options={TEMPLATE_SORTS}
           newestLabel={t("contentSort.newest")}
         />
       </div>
