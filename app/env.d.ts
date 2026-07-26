@@ -14,6 +14,8 @@ export interface Env {
   TWITCH_CLIENT_ID?: string;
   TWITCH_CLIENT_SECRET?: string;
   YOUTUBE_API_KEY?: string;
+  // 利用者コンテンツの自動翻訳（docs/translation.md）。未設定なら機能ごと無効
+  ANTHROPIC_API_KEY?: string;
   // Feedback
   FEEDBACK_EMAIL?: string;
   RESEND_API_KEY?: string;

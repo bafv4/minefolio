@@ -21,6 +21,7 @@
     "db:studio:remote": "drizzle-kit studio --config drizzle.remote.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@bafv4/mcitems": "github:bafv4/mcitems",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
