@@ -18,6 +18,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `uuid` | text (unique, nullable) | Minecraft UUID |
 | `slug` | text (unique, NOT NULL) | URL用スラッグ |
 | `displayName` | text | 表示名 |
+| `displayNameAlphabet` | text | 表示名のアルファベット表記（任意）。英語ロケールでは表示名の代わりに使う |
 | `discordAvatar` | text | Discordアバター (セッションから自動同期) |
 | `bio` | text | プロフィール説明文 |
 | `shortBio` | text | 短い説明文 (OGP等で使用) |
@@ -79,7 +80,22 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 - `generateSlug(mcid, discordId)` - スラッグ生成
 - `isGeneratedSlug(slug)` - 自動生成スラッグかどうか (`@` で始まるか)
 - `getDisplayName(displayName, mcid, slug)` - 表示名取得 (優先順位: displayName > mcid > slug)
+- `pickDisplayName(user, locale)` - ロケール別の表示名を選ぶ (`ja` 以外は `displayNameAlphabet` を優先し、未入力なら `displayName`)
+- `getLocalizedDisplayName(user, locale)` - 上記 2 つの組み合わせ (アルファベット表記 > displayName > mcid > slug)
 - `getMentionDisplay(mcid, slug)` - メンション用文字列
+
+### 表示名のアルファベット表記
+
+`/me/edit` の「表示名（アルファベット表記）」で登録する任意項目。
+
+- **保存時の検証**: 50文字以内、かつ印字可能な ASCII（` `〜`~`）のみ
+- **英語ロケール**: 一覧・プロフィール・ヘッダー・ランキング・ガイド著者名など、表示名を出す箇所で
+  `displayName` の代わりに使う（未入力なら従来どおり `displayName`）
+- **プロフィールページ**: ロケールを問わず見出しの下に併記する（見出しと同じ文字列になる場合は省略）
+- **解決のタイミング**: リクエスト間で共有されるキャッシュ（`home-user-data.server.ts` /
+  `paces-feed.server.ts` / `youtube-cache.ts`）には**ロケール解決後の値を入れない**。
+  これらは `displayName` と `displayNameAlphabet` の両方を持ち回り、描画直前に `useLocale()` で解決する
+- **OGP画像（`/og-image`）は対象外**: クローラーはロケール Cookie を送らないため、常に `displayName` を使う
 
 ---
 

@@ -171,6 +171,7 @@ Minecraft スキン画像を返す。
       "mcid": "...",
       "uuid": "...",
       "displayName": "...",
+      "displayNameAlphabet": "...",
       "shortBio": "...",
       "location": "...",
       "updatedAt": "...",
