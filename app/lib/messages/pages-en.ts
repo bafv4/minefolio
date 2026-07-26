@@ -1766,9 +1766,13 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unpin: "Unpin",
     newTitle: "Create a new guide",
     newDesc:
-      "Enter a title for your guide. The title is used to generate the URL slug.",
+      "Enter a title and a public URL for your guide. Both can be changed later.",
     titleLabel: "Title",
     titlePlaceholder: "e.g. Fastest Any% RSG routing",
+    slugLabel: "URL",
+    slugHint:
+      "This becomes the guide's public URL. Lowercase letters, digits, \"-\" and \"_\" are allowed.",
+    slugEmptyPreview: "(not set)",
     createAndEdit: "Create and edit",
     editTitle: "Edit guide",
     errorTitleRequired: "Enter a title",

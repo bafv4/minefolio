@@ -1,8 +1,10 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { useState } from "react";
 import {
   redirect,
   useActionData,
+  useLoaderData,
   Form,
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
@@ -13,8 +15,11 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
-import { normalizeSlug } from "@/lib/guide-slug";
+import {
+  normalizeSlug,
+  softNormalizeSlug,
+  MAX_GUIDE_SLUG_LENGTH,
+} from "@/lib/guide-slug";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +32,6 @@ import {
 } from "@/components/ui/card";
 import { useT } from "@/hooks/use-locale";
 
-function titleToSlug(title: string): string {
-  return normalizeSlug(title) || `guide-${createId().slice(0, 6)}`;
-}
-
 export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
   const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meGuides.newTitle") }];
@@ -40,8 +41,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
-  await getSession(request, auth);
-  return null;
+  const session = await getSession(request, auth);
+
+  // 公開URLのプレビュー（/guides/<著者>/<スラッグ>）に著者スラッグが要る
+  const user = await db.query.users.findFirst({
+    where: eq(users.discordId, session.user.id),
+    columns: { slug: true },
+  });
+  if (!user) return redirect("/onboarding");
+
+  return { authorSlug: user.slug };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -66,6 +75,13 @@ export async function action({ request }: ActionFunctionArgs) {
     return { error: t("meGuides.errorTitleTooLong") };
   }
 
+  // スラッグは作成時の必須入力。自動生成にすると日本語タイトルでは空になり、
+  // `guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため、ここで必ず受け取る。
+  const slug = normalizeSlug((formData.get("slug") as string) ?? "");
+  if (!slug) {
+    return { error: t("meGuides.errorSlugRequired") };
+  }
+
   // Count check
   const userGuides = await db.query.guides.findMany({
     where: eq(guides.authorId, user.id),
@@ -75,14 +91,13 @@ export async function action({ request }: ActionFunctionArgs) {
     return { error: t("meGuides.errorLimitReached") };
   }
 
-  // Generate unique slug
-  let slug = titleToSlug(title);
+  // 同一著者内でスラッグは一意。重複は自動で連番/乱数を付けず、入力し直してもらう
   const existing = await db.query.guides.findFirst({
     where: and(eq(guides.authorId, user.id), eq(guides.slug, slug)),
     columns: { id: true },
   });
   if (existing) {
-    slug = `${slug}-${createId().slice(0, 6)}`;
+    return { error: t("meGuides.errorSlugTaken") };
   }
 
   const [newGuide] = await db
@@ -103,7 +118,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function NewGuidePage() {
   const t = useT();
+  const { authorSlug } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const [slug, setSlug] = useState("");
+
+  // 入力中はゆるい正規化にとどめ、確定形（保存される値）だけをプレビューに出す
+  const resolvedSlug = normalizeSlug(slug);
 
   return (
     <div className="max-w-lg mx-auto">
@@ -124,6 +144,28 @@ export default function NewGuidePage() {
                 autoFocus
                 maxLength={200}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="slug">{t("meGuides.slugLabel")}</Label>
+              <Input
+                id="slug"
+                name="slug"
+                value={slug}
+                onChange={(e) => setSlug(softNormalizeSlug(e.target.value))}
+                placeholder={t("guideEditor.slugPlaceholder")}
+                required
+                maxLength={MAX_GUIDE_SLUG_LENGTH}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+              <p className="text-xs text-muted-foreground break-all">
+                /guides/{authorSlug}/
+                <span className="text-foreground font-medium">
+                  {resolvedSlug || t("meGuides.slugEmptyPreview")}
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground">{t("meGuides.slugHint")}</p>
             </div>
             {actionData && "error" in actionData && (
               <p className="text-sm text-destructive">{actionData.error}</p>

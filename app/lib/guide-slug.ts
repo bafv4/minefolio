@@ -23,3 +23,15 @@ export function normalizeSlug(input: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, MAX_GUIDE_SLUG_LENGTH);
 }
+
+/**
+ * 入力欄用の「ゆるい」正規化。タイプ中に文字が消えて入力できなくなるのを避けるため、
+ * ハイフンの圧縮・前後の trim・切り詰めは行わない（許可外文字の除去と空白→ハイフンのみ）。
+ * 確定値は保存時に normalizeSlug() で厳密化する。
+ */
+export function softNormalizeSlug(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
+}

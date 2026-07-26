@@ -14,7 +14,7 @@
 |--------|------|------|
 | id | string (PK) | ガイドID |
 | authorId | string (FK) | 著者のユーザーID |
-| slug | string | URLスラッグ。作成時はタイトルから自動生成され、以降は編集画面の設定モーダルの「URL」欄でユーザーが変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化） |
+| slug | string | URLスラッグ。作成時にユーザーが必ず入力し（自動生成しない）、以降は編集画面の設定モーダルの「URL」欄で変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化。入力欄では `softNormalizeSlug()`） |
 | title | string | タイトル |
 | summary | string | 概要・要約 |
 | content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。仮保存（draft）には上限を適用しない |
@@ -257,7 +257,11 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 ### /my-guides/new — 新規作成
 
-- ガイドエディタを表示し、新規ガイドを作成
+- タイトルと **URL（スラッグ）** を入力して空のガイドを作り、`/my-guides/{slug}/edit` へ遷移する
+- **スラッグは必須入力**。タイトルからの自動生成は行わない（日本語のみのタイトルは `normalizeSlug()` で空になり、`guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため）
+  - 入力欄は `softNormalizeSlug()` でタイプ中に許可外文字を落とすため、日本語だけを打つと空のままになり、`required` でそのまま送信できない
+  - サーバー側でも `normalizeSlug()` 後に空なら `errorSlugRequired`、同一著者内で重複していれば `errorSlugTaken` を返す（重複時に連番・乱数を自動付与しない）
+  - `/guides/{authorSlug}/{slug}` のプレビューを入力欄の下に表示する（編集画面の設定モーダルと同じ体裁）
 
 ### /my-guides/:guideSlug/edit — 編集
 

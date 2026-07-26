@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
-import { normalizeSlug } from "@/lib/guide-slug";
+import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
 import { useT } from "@/hooks/use-locale";
 
 export interface GuideSettingsValues {
@@ -40,17 +40,6 @@ interface SettingsDialogProps {
   uploadError: string | null;
   /** 反映: モーダル内 State を親 State へコミット（保存はしない） */
   onApply: (values: GuideSettingsValues) => void;
-}
-
-/**
- * 入力欄用の「ゆるい」正規化（タイプ中に文字が消えないよう、ハイフンの圧縮・前後trimは行わない）。
- * 確定値は反映時に normalizeSlug() で厳密化する。
- */
-function softNormalizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-");
 }
 
 export function SettingsDialog({
