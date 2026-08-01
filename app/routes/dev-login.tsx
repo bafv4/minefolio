@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Loader2, TerminalSquare } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { sanitizeReturnTo } from "@/lib/return-to";
 
 /**
  * ローカル開発専用の簡易ログイン。
@@ -44,13 +45,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getOptionalSession(request, auth);
+  const url = new URL(request.url);
+  const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo"));
 
   // ログイン済みなら /login の分岐（プロフィール or オンボーディング）に任せる
+  // （returnTo は /login 側で再検証されるのでそのまま引き継ぐ）
   if (session) {
-    return redirect("/login");
+    return redirect(returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login");
   }
 
-  return null;
+  return { returnTo };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -64,6 +68,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (!USERNAME_PATTERN.test(username)) {
     return { error: t("devLogin.invalidUsername") };
   }
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
 
   const env = getEnv();
   const db = createDb();
@@ -86,18 +91,21 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // better-auth が発行したセッション Cookie を引き継いで /login へ
-  // （/login の loader がプロフィール or オンボーディングへ振り分ける）
-  const headers = new Headers({ Location: "/login" });
+  // （/login の loader がプロフィール or オンボーディングへ振り分ける。returnTo があれば引き継ぐ）
+  const headers = new Headers({
+    Location: returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login",
+  });
   for (const cookie of response.headers.getSetCookie()) {
     headers.append("Set-Cookie", cookie);
   }
   return new Response(null, { status: 302, headers });
 }
 
-export default function DevLoginPage({ actionData }: Route.ComponentProps) {
+export default function DevLoginPage({ loaderData, actionData }: Route.ComponentProps) {
   const t = useT();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const returnTo = loaderData?.returnTo ?? null;
 
   return (
     <div className="flex-1 flex items-center justify-center px-4">
@@ -111,6 +119,7 @@ export default function DevLoginPage({ actionData }: Route.ComponentProps) {
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4">
+            {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
             <div className="space-y-2">
               <Label htmlFor="username">{t("devLogin.usernameLabel")}</Label>
               <Input

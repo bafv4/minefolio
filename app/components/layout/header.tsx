@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
 import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
+import { sanitizeReturnTo } from "@/lib/return-to";
 import { authClient } from "@/lib/auth-client";
 import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
@@ -55,6 +56,10 @@ export function Header({ user }: HeaderProps) {
 
   // 英語表示ではアルファベット表記を優先する
   const userName = user ? getLocalizedDisplayName(user, locale) : "";
+
+  // ログイン後、遷移前にいたページ（現在地）へ戻れるように returnTo を付ける
+  const returnTo = sanitizeReturnTo(`${location.pathname}${location.search}`);
+  const loginHref = returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login";
 
   const handleLogout = useCallback(async () => {
     await authClient.signOut();
@@ -198,7 +203,7 @@ export function Header({ user }: HeaderProps) {
                 </DropdownMenu>
               ) : (
                 <Button asChild size="sm">
-                  <Link to="/login">{t("nav.login")}</Link>
+                  <Link to={loginHref}>{t("nav.login")}</Link>
                 </Button>
               )}
             </div>
@@ -323,7 +328,7 @@ export function Header({ user }: HeaderProps) {
                     </>
                   ) : (
                     <Button asChild className="mt-5 w-full gap-2">
-                      <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                      <Link to={loginHref} onClick={() => setMobileMenuOpen(false)}>
                         <LogIn className="h-4 w-4" />
                         {t("nav.login")}
                       </Link>

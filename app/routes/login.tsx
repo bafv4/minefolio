@@ -8,6 +8,7 @@ import { getEnv, isDevAuthEnabled } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { authClient } from "@/lib/auth-client";
+import { sanitizeReturnTo, encodeReturnToForCallback } from "@/lib/return-to";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,6 +48,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const auth = createAuth(db, env);
 
   const session = await getOptionalSession(request, auth);
+  const returnTo = sanitizeReturnTo(new URL(request.url).searchParams.get("returnTo"));
 
   // If already logged in, redirect appropriately
   if (session) {
@@ -55,30 +57,38 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
 
     if (user) {
-      // User exists, go to their profile（/player/:slug は slug で解決するため slug を使う。
-      // MCID 未設定ユーザーは mcid=null で /player/null になり 404 になるのを防ぐ）
-      return redirect(`/player/${user.slug}`);
+      // User exists, go to returnTo（あれば）／プロフィール（/player/:slug は slug で解決するため
+      // slug を使う。MCID 未設定ユーザーは mcid=null で /player/null になり 404 になるのを防ぐ）
+      return redirect(returnTo || `/player/${user.slug}`);
     } else {
-      // User needs to complete onboarding
-      return redirect("/onboarding");
+      // User needs to complete onboarding（returnTo はオンボーディング完了後に引き継ぐ）
+      return redirect(returnTo ? `/onboarding?returnTo=${encodeURIComponent(returnTo)}` : "/onboarding");
     }
   }
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
     devAuthEnabled: isDevAuthEnabled(),
+    returnTo,
   };
 }
 
 export default function LoginPage({ loaderData }: Route.ComponentProps) {
   const t = useT();
   const [isLoading, setIsLoading] = useState(false);
+  const { returnTo } = loaderData;
 
   const handleDiscordLogin = async () => {
     setIsLoading(true);
+    // returnTo は /onboarding のクエリとして引き継ぐ（既存ユーザーはそこで即座に returnTo へ、
+    // 新規ユーザーはオンボーディング完了後に returnTo へ遷移する）。better-auth の callbackURL は
+    // 独自の許可文字集合で検証されるため、encodeReturnToForCallback で追加エスケープする
+    const callbackURL = returnTo
+      ? `/onboarding?returnTo=${encodeReturnToForCallback(returnTo)}`
+      : "/onboarding";
     await authClient.signIn.social({
       provider: "discord",
-      callbackURL: "/onboarding",
+      callbackURL,
     });
   };
 
@@ -107,7 +117,9 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
           </Button>
           {loaderData.devAuthEnabled && (
             <Button asChild variant="outline" className="w-full">
-              <Link to="/dev/login">{t("devLogin.title")}</Link>
+              <Link to={returnTo ? `/dev/login?returnTo=${encodeURIComponent(returnTo)}` : "/dev/login"}>
+                {t("devLogin.title")}
+              </Link>
             </Button>
           )}
         </CardContent>
