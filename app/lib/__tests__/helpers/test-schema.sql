@@ -576,7 +576,8 @@ CREATE TABLE `users` (
 	`custom_skin_updated_at` integer,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	`pinned_speedrun_records` text
+	`pinned_speedrun_records` text,
+	`rta_started_year_month` text
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);

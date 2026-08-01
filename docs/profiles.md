@@ -28,6 +28,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `slimSkin` | boolean | スリムスキン使用 |
 | `location` | text | 所在地 |
 | `pronouns` | text | 代名詞 |
+| `rtaStartedYearMonth` | text | RTAを始めた年月（`"YYYY-MM"` 形式、未回答は `null`）。別プロジェクトmcsr-buttonの `started_year_month` と同形式で、経過年数は表示時に算出する（下記「RTA歴」参照） |
 | `defaultProfileTab` | enum | デフォルト表示タブ |
 | `featuredVideoUrl` | text | 注目動画URL（レガシー。`profile_videos` が1件でもあればそちらを優先表示し、この値は無視される） |
 | `mainEdition` | enum | `java` / `bedrock` |
@@ -348,6 +349,14 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 スキンと右側の基本情報は `flex-col sm:flex-row sm:items-center` で、デスクトップ時は上下中央揃え。
 
+### RTA歴
+
+`rtaStartedYearMonth` を登録している場合のみ、基本情報のメタ情報行（居住地・代名詞と同じ並び）に History アイコン付きで表示する。
+
+- 1年以上: `RTA歴 {years}年（{開始年/月}〜）`（`playerProfile.rtaCareerYears`）。端数月は表示しない（6年2か月 → 「6年」）
+- 1年未満: `RTA歴 {months}か月（{開始年/月}〜）`（`playerProfile.rtaCareerMonths`）。今月開始（経過0か月）は「1か月」に切り上げて表示する
+- 経過期間は DB には保存せず、表示のたびに `app/lib/rta-career.ts` の `rtaCareerElapsed()` で開始年月と基準時刻から算出する（月単位、日は考慮しない）。基準時刻は loader が返す `now` を使い、SSR とハイドレーションで計算結果を一致させる
+
 ### モバイルタブ選択ドロワー
 
 モバイル表示時の上部スティッキーボタンには `ChevronsDown` アイコンを使用（v1.4.0 でハンバーガー `Menu` から変更）。展開中は `X` アイコンに切り替わる。
@@ -381,6 +390,10 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 ### パス: `/me/edit`
 
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
+
+### RTA歴（開始年月）の入力
+
+基本情報カードで、年（2009〜現在年、降順）・月の2連 Select として入力する（各先頭に「未設定」項目）。年・月は両方選択するか両方未選択のみ有効で、片方だけ選ぶとクライアントでエラートーストを出す。サーバー側の action でも `isValidRtaStartedYearMonth`（`app/lib/rta-career.ts`）で `2009-01`〜現在年月の範囲を検証し、範囲外なら保存を拒否する。
 
 ---
 
@@ -438,3 +451,5 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
+| `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出 |
+| `scripts/add-rta-started-column.ts` | `rta_started_year_month` 列のDB反映スクリプト |

@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, useParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/edit";
@@ -16,6 +16,11 @@ import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
+import {
+  isValidRtaStartedYearMonth,
+  parseRtaStartedYearMonth,
+  RTA_STARTED_MIN_YEAR,
+} from "@/lib/rta-career";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
 import { Button } from "@/components/ui/button";
@@ -569,6 +574,8 @@ export async function action({ request }: Route.ActionArgs) {
   const inputMethod = (formData.get("inputMethod") as "keyboard_mouse" | "controller" | "touch") || null;
   const inputMethodBadge = (formData.get("inputMethodBadge") as "keyboard_mouse" | "controller" | "touch") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
+  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
+  const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
   const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
   const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
   const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
@@ -606,6 +613,10 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
 
+  if (rtaStartedYearMonth && !isValidRtaStartedYearMonth(rtaStartedYearMonth)) {
+    return { error: t("meEdit.rtaStartedInvalid") };
+  }
+
   await db
     .update(users)
     .set({
@@ -624,6 +635,7 @@ export async function action({ request }: Route.ActionArgs) {
       inputMethod,
       inputMethodBadge,
       shortBio,
+      rtaStartedYearMonth,
       speedruncomUsername,
       showPacemanOnHome,
       showTwitchOnHome,
@@ -636,6 +648,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   return { success: true, action: "profile" };
 }
+
+// Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
+const RTA_STARTED_NONE = "none";
+const RTA_STARTED_MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
@@ -873,6 +889,20 @@ export default function EditProfilePage() {
   );
   const [importCompleted, setImportCompleted] = useState(false);
 
+  // RTA歴（"YYYY-MM"）を年・月のセレクト値に分解する。未回答・不正値は両方 ""（未選択）
+  const initialRtaStarted = parseRtaStartedYearMonth(user.rtaStartedYearMonth ?? "");
+  const initialRtaStartedYear = initialRtaStarted ? String(initialRtaStarted.year) : "";
+  const initialRtaStartedMonth = initialRtaStarted ? String(initialRtaStarted.month) : "";
+
+  // 開始年の選択肢（現在年 → 2009 の降順）
+  const rtaStartedYearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from(
+      { length: currentYear - RTA_STARTED_MIN_YEAR + 1 },
+      (_, i) => currentYear - i,
+    );
+  }, []);
+
   // フォームの値をトラッキングして変更を検出
   const [formValues, setFormValues] = useState({
     displayName: user.displayName ?? "",
@@ -890,6 +920,8 @@ export default function EditProfilePage() {
     inputMethod: user.inputMethod ?? "",
     inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
+    rtaStartedYear: initialRtaStartedYear,
+    rtaStartedMonth: initialRtaStartedMonth,
     speedruncomUsername: user.speedruncomUsername ?? "",
     showPacemanOnHome: user.showPacemanOnHome ?? true,
     showTwitchOnHome: user.showTwitchOnHome ?? true,
@@ -914,6 +946,8 @@ export default function EditProfilePage() {
     inputMethod: user.inputMethod ?? "",
     inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
+    rtaStartedYear: initialRtaStartedYear,
+    rtaStartedMonth: initialRtaStartedMonth,
     speedruncomUsername: user.speedruncomUsername ?? "",
     showPacemanOnHome: user.showPacemanOnHome ?? true,
     showTwitchOnHome: user.showTwitchOnHome ?? true,
@@ -946,6 +980,13 @@ export default function EditProfilePage() {
 
   // 保存処理
   const handleSave = useCallback(() => {
+    const { rtaStartedYear, rtaStartedMonth } = formValues;
+    // RTA歴は年・月の両方を選ぶか、両方未選択（未回答）のみ有効
+    if (Boolean(rtaStartedYear) !== Boolean(rtaStartedMonth)) {
+      toast.error(t("meEdit.rtaStartedBothOrNone"));
+      return;
+    }
+
     const formData = new FormData();
     formData.set("displayName", formValues.displayName);
     formData.set("displayNameAlphabet", formValues.displayNameAlphabet);
@@ -962,6 +1003,12 @@ export default function EditProfilePage() {
     formData.set("inputMethod", formValues.inputMethod);
     formData.set("inputMethodBadge", formValues.inputMethodBadge);
     formData.set("shortBio", formValues.shortBio);
+    formData.set(
+      "rtaStartedYearMonth",
+      rtaStartedYear && rtaStartedMonth
+        ? `${rtaStartedYear}-${rtaStartedMonth.padStart(2, "0")}`
+        : "",
+    );
     formData.set("speedruncomUsername", formValues.speedruncomUsername);
     formData.set("showPacemanOnHome", String(formValues.showPacemanOnHome));
     formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
@@ -969,7 +1016,7 @@ export default function EditProfilePage() {
     formData.set("showRankedStats", String(formValues.showRankedStats));
     formData.set("showPacemanStats", String(formValues.showPacemanStats));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues]);
+  }, [fetcher, formValues, t]);
 
   // ポーズ変更を同期
   useEffect(() => {
@@ -1484,6 +1531,57 @@ export default function EditProfilePage() {
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.shortBioHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rtaStartedYear">{t("meEdit.rtaStarted")}</Label>
+              <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
+                <Select
+                  value={formValues.rtaStartedYear}
+                  onValueChange={(value) =>
+                    handleInputChange("rtaStartedYear", value === RTA_STARTED_NONE ? "" : value)
+                  }
+                >
+                  <SelectTrigger id="rtaStartedYear" className="w-full">
+                    <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                    {rtaStartedYearOptions.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {t("meEdit.rtaStartedYearOption", { year })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={formValues.rtaStartedMonth}
+                  onValueChange={(value) =>
+                    handleInputChange("rtaStartedMonth", value === RTA_STARTED_NONE ? "" : value)
+                  }
+                >
+                  {/* Label は年セレクトにのみ紐付くため、月側はアクセシブルネームを明示する */}
+                  <SelectTrigger
+                    id="rtaStartedMonth"
+                    className="w-full"
+                    aria-label={t("meEdit.rtaStartedMonthPlaceholder")}
+                  >
+                    <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                    {RTA_STARTED_MONTHS.map((month) => (
+                      <SelectItem key={month} value={String(month)}>
+                        {t("meEdit.rtaStartedMonthOption", { month })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("meEdit.rtaStartedHint")}
               </p>
             </div>
 

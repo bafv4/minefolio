@@ -45,6 +45,7 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
+import { parseRtaStartedYearMonth, rtaCareerElapsed } from "@/lib/rta-career";
 import { safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import { YouTubeEmbed } from "@/components/youtube-embed";
@@ -179,6 +180,7 @@ import {
   Twitter,
   Pencil,
   Calendar,
+  History,
   Target,
   CheckCircle2,
   Video,
@@ -434,6 +436,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
+    // RTA歴の経過計算の基準時刻。SSRとハイドレーションで new Date() を別々に評価すると
+    // 月替わり境界（TZ差）で表示がずれるため、サーバーの時刻を単一の基準にする
+    now: Date.now(),
     player: {
       ...player,
       keybindings: displayKeybindings,
@@ -465,7 +470,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
@@ -639,6 +644,17 @@ export default function PlayerProfilePage() {
       : player.featuredVideoUrl
         ? [{ id: "legacy-featured", url: player.featuredVideoUrl, title: null, isPinned: false }]
         : [];
+
+  // RTA歴（経過期間 + 開始年月）。未回答・不正値のときは表示しない
+  // 基準時刻は loader の now（SSRとハイドレーションで計算結果を一致させる）
+  const rtaCareer = useMemo(() => {
+    const value = player.rtaStartedYearMonth;
+    if (!value) return null;
+    const elapsed = rtaCareerElapsed(value, new Date(now));
+    const started = parseRtaStartedYearMonth(value);
+    if (!elapsed || !started) return null;
+    return { ...elapsed, start: `${started.year}/${started.month}` };
+  }, [player.rtaStartedYearMonth, now]);
 
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -1001,6 +1017,20 @@ export default function PlayerProfilePage() {
                       </span>
                     )}
                     {player.pronouns && <span>{player.pronouns}</span>}
+                    {rtaCareer && (
+                      <span className="flex items-center gap-1">
+                        <History className="h-4 w-4" />
+                        {rtaCareer.years >= 1
+                          ? t("playerProfile.rtaCareerYears", {
+                              years: rtaCareer.years,
+                              start: rtaCareer.start,
+                            })
+                          : t("playerProfile.rtaCareerMonths", {
+                              months: Math.max(rtaCareer.totalMonths, 1),
+                              start: rtaCareer.start,
+                            })}
+                      </span>
+                    )}
                     <span className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
                       {new Date(player.updatedAt).toLocaleDateString("ja-JP", {

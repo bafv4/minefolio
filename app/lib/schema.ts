@@ -71,6 +71,9 @@ export const users = sqliteTable("users", {
   // run ID の配列だけを保持する。JSON配列: ピン留めする記録のrun ID
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   pinnedSpeedrunRecords: text("pinned_speedrun_records"),
+
+  // RTAを始めた年月（"YYYY-MM"形式の文字列、未回答はnull）。別プロジェクトmcsr-buttonのstarted_year_monthと同形式で、経過年数は表示時に算出する
+  rtaStartedYearMonth: text("rta_started_year_month"),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
