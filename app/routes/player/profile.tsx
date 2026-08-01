@@ -12,7 +12,7 @@ import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
-import { getEnv, isProfileReactionsEnabled } from "@/lib/env.server";
+import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
@@ -420,14 +420,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 
   // プロフィール絵文字リアクション（docs/profile-reactions.md）。
-  // フラグOFFのときは null を返し、profile_reactions テーブルへは
-  // 一切クエリを発行しない（テーブル未作成の本番でも安全に動作する）。
   const resolveProfileReactions = async (): Promise<{
     counts: ProfileReactionCount[];
     viewerReactions: string[];
     viewerHasAccount: boolean;
-  } | null> => {
-    if (!isProfileReactionsEnabled()) return null;
+  }> => {
     // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
     // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
     const viewerUserId = isOwner
@@ -1329,15 +1326,13 @@ export default function PlayerProfilePage() {
                     </Button>
                   </div>
 
-                  {/* 絵文字リアクション（フラグOFF時は profileReactions が null でクエリ不発行） */}
-                  {profileReactions && (
-                    <ProfileReactionBar
-                      profileUserId={player.id}
-                      initialCounts={profileReactions.counts}
-                      initialViewerReactions={profileReactions.viewerReactions}
-                      isLoggedIn={profileReactions.viewerHasAccount}
-                    />
-                  )}
+                  {/* 絵文字リアクション */}
+                  <ProfileReactionBar
+                    profileUserId={player.id}
+                    initialCounts={profileReactions.counts}
+                    initialViewerReactions={profileReactions.viewerReactions}
+                    isLoggedIn={profileReactions.viewerHasAccount}
+                  />
                 </div>
               </div>
             </CardContent>

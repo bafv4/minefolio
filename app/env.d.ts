@@ -29,8 +29,5 @@ export interface Env {
   VERCEL_TEAM_ID?: string;
   // ローカル開発専用: "1" で /dev/login の簡易ログインを有効化（本番では NODE_ENV ガードにより常に無効）
   DEV_AUTH?: string;
-  // プロフィール絵文字リアクション機能フラグ（docs/profile-reactions.md）。"1" で有効化。
-  // NODE_ENV ガードは持たない（DEV_AUTH と異なり Vercel Preview / Dev 環境でも有効化できる設計）
-  FEATURE_PROFILE_REACTIONS?: string;
 }
 

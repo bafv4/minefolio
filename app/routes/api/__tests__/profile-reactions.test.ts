@@ -7,7 +7,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 
-// セッションはモックし、ルート本体（フラグゲート・認証ゲート・入力検証・ステータス）を
+// セッションはモックし、ルート本体（認証ゲート・入力検証・ステータス）を
 // 実DBで検証する。vi.mock は巻き上げられるため、モック関数は vi.hoisted で用意する
 // （likes.test.ts と同方式）。
 const sessionMocks = vi.hoisted(() => ({
@@ -28,7 +28,6 @@ const ENV_KEYS = [
   "TURSO_DATABASE_URL",
   "BETTER_AUTH_SECRET",
   "APP_URL",
-  "FEATURE_PROFILE_REACTIONS",
 ] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
@@ -57,8 +56,6 @@ beforeEach(async () => {
   process.env.TURSO_DATABASE_URL = SHARED_URL;
   process.env.BETTER_AUTH_SECRET = "test-secret";
   process.env.APP_URL = "https://minefolio.app";
-  // 既定はフラグON。フラグOFFを検証するテストのみ明示的に delete する
-  process.env.FEATURE_PROFILE_REACTIONS = "1";
   db = await createTestDbAt(SHARED_URL);
   sessionMocks.getOptionalSession.mockResolvedValue(null);
 });
@@ -88,24 +85,6 @@ async function reactionRowCount(profileUserId: string): Promise<number> {
     })
   ).length;
 }
-
-describe("フィーチャーフラグ（本番安全性の回帰テスト）", () => {
-  it("フラグOFFなら、正当なログイン済みリクエストでも404を返しDBに触れない", async () => {
-    delete process.env.FEATURE_PROFILE_REACTIONS;
-    const { profile } = await setupProfile();
-    signInAs("discord-viewer");
-
-    const res = await callAction({
-      profileUserId: profile.id,
-      emoji: "👍",
-      action: "react",
-    });
-
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "Not found" });
-    expect(await reactionRowCount(profile.id)).toBe(0);
-  });
-});
 
 describe("認証ゲート", () => {
   it("未ログインは 401 JSON を返す（リダイレクトしない）", async () => {

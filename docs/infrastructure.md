@@ -212,7 +212,6 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 | `VERCEL_API_TOKEN` | Vercel Web Analytics API のアクセストークン（ページビュー集計 → `/api/cron/update-page-views`） |
 | `VERCEL_PROJECT_ID` | ページビュー集計対象の Vercel プロジェクトID |
 | `VERCEL_TEAM_ID` | チームのプロジェクトのみ必要（個人アカウントのプロジェクトでは設定しない） |
-| `FEATURE_PROFILE_REACTIONS` | プロフィール絵文字リアクション機能フラグ（`docs/profile-reactions.md`）。`"1"` で有効化、未設定なら機能ごと無効（API 404・profile loaderはテーブル未参照） |
 
 ### アクセス方法
 

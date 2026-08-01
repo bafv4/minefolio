@@ -1,14 +1,10 @@
 // プロフィール絵文字リアクションのサーバー側ロジック（docs/profile-reactions.md）。
+// 常時有効の標準機能（かつてはフィーチャーフラグ付きだったが撤去済み）。
 //
 // 方針（likes.server.ts の相似形。差分は docs/profile-reactions.md 参照）:
 // - db を第一引数に取り、Request / セッションはここでは扱わない（likes.server.ts と同じ）
 // - 自分のプロフィールにも押せる（self 拒否なし）。likes と異なり著者=閲覧者を拒否しない
 // - カウントは非正規化列を持たず、この表の COUNT(*) を都度算出する（likes と同じ方針）
-//
-// 呼び出し側（loader・API ルート）は必ず isProfileReactionsEnabled() で先にガードすること。
-// このモジュール自身はフラグを見ない（db 第一引数の関数は Request 文脈を持たない、という
-// 既存方針に合わせるため）。フラグ OFF 時にこのモジュールの関数が呼ばれなければ
-// profile_reactions テーブルは一切参照されず、テーブル未作成でも安全に動作する。
 
 import { and, eq, sql } from "drizzle-orm";
 import { profileReactions, users } from "./schema";

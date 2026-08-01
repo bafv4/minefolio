@@ -26,7 +26,6 @@ export function getEnv(): Env {
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
     DEV_AUTH: process.env.DEV_AUTH,
-    FEATURE_PROFILE_REACTIONS: process.env.FEATURE_PROFILE_REACTIONS,
   };
 }
 
@@ -43,20 +42,4 @@ export function isDevAuthEnabled(): boolean {
     process.env.DEV_AUTH === "1" &&
     isLocalDbUrl(process.env.TURSO_DATABASE_URL ?? "file:local.db")
   );
-}
-
-/**
- * プロフィール絵文字リアクション機能が有効かどうか（docs/profile-reactions.md）。
- *
- * isDevAuthEnabled() とは異なり **NODE_ENV ガードを持たない**。Vercel Preview / Dev環境の
- * デプロイは NODE_ENV=production のため、NODE_ENV ゲートを付けると Dev環境だけを先行有効化する
- * という要件（本番は環境変数未設定のまま、Devだけ FEATURE_PROFILE_REACTIONS=1 を設定する）を
- * 満たせない。ローカルDB限定でもない（isLocalDbUrl 相当のガードもなし）。
- *
- * 安全性は「フラグ未設定＝OFF」がすべての呼び出し元（profile loader・APIルート）で
- * profile_reactions テーブルを一切参照しない設計で担保する（テーブル未作成の本番DBに
- * デプロイしても壊れない）。
- */
-export function isProfileReactionsEnabled(): boolean {
-  return process.env.FEATURE_PROFILE_REACTIONS === "1";
 }

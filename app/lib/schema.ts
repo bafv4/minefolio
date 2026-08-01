@@ -1160,11 +1160,10 @@ export type NewSearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferI
 // ============================================
 // 26. profile_reactions（プロフィール絵文字リアクション）
 // ============================================
-// プロフィールへの Discord 風の固定8絵文字リアクション。フィーチャーフラグ
-// FEATURE_PROFILE_REACTIONS（app/lib/env.server.ts の isProfileReactionsEnabled()）が
-// OFF の間は API・profile loader ともにこのテーブルを一切参照しない設計にしており、
-// この節がデプロイされてもテーブル未作成のまま本番が安全に動く
-// （フラグ未設定＝いつでもデプロイ可能。マイグレーション適用前でも壊れない）。
+// プロフィールへの Discord 風の固定8絵文字リアクション。常時有効の標準機能
+// （v1.14系まではフィーチャーフラグ FEATURE_PROFILE_REACTIONS 付きだったが撤去済み）。
+// デプロイ前に scripts/add-profile-reactions-table.ts --remote --apply の適用が必須
+// （テーブルが無いと profile loader が落ちる。詳細: docs/profile-reactions.md）。
 //
 // likes（25節）との設計上の差分:
 //   (a) 自分のプロフィールにも押せる（self 拒否なし）

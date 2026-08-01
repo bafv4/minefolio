@@ -1,9 +1,7 @@
 // プロフィール絵文字リアクションの追加・解除API（docs/profile-reactions.md）。
 //
 // api/likes.ts と同骨格の JSON リソースルート（フォーム action にすると profile loader が
-// クリックのたびに再検証されるため）。likes との最大の違いはフラグガードで、
-// isProfileReactionsEnabled() が false の間はメソッド・認証より前に404を返し、
-// DB（profile_reactions テーブル）には一切触れない（テーブル未作成の本番でも安全）。
+// クリックのたびに再検証されるため）。
 //
 // レート制限は設けない。ユニーク索引（profileUserId, emoji, reactorUserId）により
 // 1ユーザー1対象1絵文字1件が上限で、濫用の天井は「アカウント数 × 8絵文字」になる
@@ -12,7 +10,7 @@
 import type { Route } from "./+types/profile-reactions";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getEnv, isProfileReactionsEnabled } from "@/lib/env.server";
+import { getEnv } from "@/lib/env.server";
 import { apiJsonResponse, getApiUser } from "@/lib/api-auth.server";
 import { isProfileReactionEmoji } from "@/lib/profile-reactions";
 import { setProfileReaction } from "@/lib/profile-reactions.server";
@@ -21,12 +19,6 @@ import { setProfileReaction } from "@/lib/profile-reactions.server";
 const MAX_PROFILE_USER_ID_LENGTH = 64;
 
 export async function action({ request }: Route.ActionArgs) {
-  // ①フラグOFF: 存在自体を隠すため、メソッド・認証の判定より前に404を返す。
-  // ここで return するため profile_reactions テーブル・users テーブルのいずれにも触れない。
-  if (!isProfileReactionsEnabled()) {
-    return apiJsonResponse({ error: "Not found" }, { status: 404 });
-  }
-
   if (request.method.toUpperCase() !== "POST") {
     return apiJsonResponse({ error: "Method not allowed" }, { status: 405 });
   }

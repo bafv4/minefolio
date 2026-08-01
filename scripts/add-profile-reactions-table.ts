@@ -1,4 +1,6 @@
 // プロフィール絵文字リアクション用テーブル（profile_reactions）を追加する一回限りのスクリプト。
+// プロフィール絵文字リアクションは常時有効の標準機能（フィーチャーフラグは撤去済み）のため、
+// このテーブルが無いと profile loader が落ちる。デプロイ前に --remote --apply の適用が必須。
 //
 // 背景: add-like-tables.ts と同じ理由（drizzle の journal が現行スキーマから乖離しているため
 // `pnpm db:generate` / `db:migrate` が使えず、`pnpm db:push` もローカルDBとのドリフトで

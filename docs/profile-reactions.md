@@ -9,34 +9,27 @@
 - **カウントのみ公開**。押した人の一覧は一切非公開で、自分の押下のみハイライトする
 - 1ユーザー・1プロフィール・1絵文字につき1件（3列ユニーク索引で保証）
 
-設計はいいね機構（[`docs/likes.md`](./likes.md)）の相似形。差分は (a) self許可 (b) ユニークキーが3列 (c) 全経路をフィーチャーフラグでガードする、の3点。
+設計はいいね機構（[`docs/likes.md`](./likes.md)）の相似形。差分は (a) self許可 (b) ユニークキーが3列、の2点。
 
 ---
 
-## フィーチャーフラグ
+## 標準機能（フィーチャーフラグは撤去済み）
 
-`FEATURE_PROFILE_REACTIONS` 環境変数（値 `"1"` で有効）で全体をガードする。**本番は未設定のままいつでもデプロイ可能**にすることが要件の中核で、Dev環境（devブランチのVercelデプロイ）とローカルでのみ先行有効化する。
+v1.14系までは `FEATURE_PROFILE_REACTIONS` 環境変数でガードされたフィーチャーフラグ機能だったが、
+Dev環境・本番の両方で先行有効化・展開が完了したため、フラグ判定（`isProfileReactionsEnabled()`
+= `app/lib/env.server.ts`、`/player/:slug` loader のガード、`POST /api/profile-reactions` の
+404ゲート）は撤去し、**常時有効の標準機能**にしている。
 
-- 判定は `isProfileReactionsEnabled()`（`app/lib/env.server.ts`）= `process.env.FEATURE_PROFILE_REACTIONS === "1"`
-- **`isDevAuthEnabled()` と異なり `NODE_ENV` ガードを持たない**: Vercel の Preview / Dev 環境デプロイも `NODE_ENV=production` になるため、`NODE_ENV` ゲートを付けると「本番は未設定のまま、Dev環境だけ先行有効化する」という要件を満たせなくなる。ローカルDB限定（`isLocalDbUrl` 相当）のガードも持たない
-- 安全性は NODE_ENV ではなく、**呼び出し元での不変条件**で担保する
+- `/player/:slug` の loader は常に `getProfileReactionCounts` / `getViewerProfileReactions` を呼び、
+  `profileReactions: { counts, viewerReactions, viewerHasAccount }`（非null）を返す
+- `POST /api/profile-reactions` にフラグゲートはなく、405/401/400/404 の判定のみで応答する
+- `app/lib/profile-reactions.server.ts` は元々フラグを見ない設計（`db` を第一引数に取る既存方針＝
+  Request文脈を持たない関数にフラグ分岐を混ぜない）だったため、この撤去による変更はない
 
-### OFF時の不変条件
-
-| 箇所 | 挙動 |
-|---|---|
-| `/player/:slug` の loader | `profileReactions: null` を返し、`getProfileReactionCounts` / `getViewerProfileReactions` を一切呼ばない（`profile_reactions` テーブルへの SQL が発行されない） |
-| `POST /api/profile-reactions` | メソッド判定・認証より**前**に 404（存在自体を隠す。DB に一切触れない） |
-
-この2点により、**`profile_reactions` テーブルが未作成のDBに対してフラグOFFのままデプロイしても壊れない**（マイグレーション未適用でも安全）。`app/lib/profile-reactions.server.ts` 自体はフラグを見ない（`db` を第一引数に取る既存方針＝Request文脈を持たない関数にフラグ分岐を混ぜない）ため、ガードは必ず呼び出し側（loader・APIルート）の2箇所で行う。
-
-### 有効化手順
-
-| 環境 | 手順 |
-|---|---|
-| ローカル | `.env` に `FEATURE_PROFILE_REACTIONS=1` を追加し、ローカルDBへ「DB反映」節のスクリプトを `--apply` で実行してから開発サーバーを再起動 |
-| Dev環境（devブランチ） | リモートDDL適用（`pnpm exec tsx scripts/add-profile-reactions-table.ts --remote --apply`、要承認）→ Vercel の **devブランチ向け環境変数**に `FEATURE_PROFILE_REACTIONS=1` を設定 → dev 再デプロイ |
-| 将来の本番有効化 | Vercel の **Production 環境変数**に同変数を設定して再デプロイするのみ（DevとProdはリモートTursoを共有するため、テーブル自体は有効化時点で既に存在している） |
+> **デプロイ前の必須手順**: `profile_reactions` テーブルが存在しない環境（未適用のリモートDB等）
+> にこの機能をデプロイすると、profile loader が例外で落ちる（フラグによる回避が無いため）。
+> デプロイ前に必ず「DB反映」節の `scripts/add-profile-reactions-table.ts --remote --apply` を
+> 適用済みであることを確認する。
 
 ---
 
@@ -97,11 +90,10 @@
 
 | 順 | 条件 | ステータス |
 |---|---|---|
-| ① | フラグOFF | 404（存在自体を隠す。DBに一切触れない） |
-| ② | POST以外 | 405 |
-| ③ | 未ログイン、またはセッションはあるが `users` 行が無い（未オンボーディング） | 401 |
-| ④ | JSON不正 / `profileUserId` が空・64文字超 / `emoji` が allowlist（固定8種）外 / `action` が `react`/`unreact` 以外 | 400 |
-| ⑤ | 対象プロフィール不存在、または `private` かつ reactor が本人以外 | 404（③と同じ形の応答で存在の列挙オラクルにしない） |
+| ① | POST以外 | 405 |
+| ② | 未ログイン、またはセッションはあるが `users` 行が無い（未オンボーディング） | 401 |
+| ③ | JSON不正 / `profileUserId` が空・64文字超 / `emoji` が allowlist（固定8種）外 / `action` が `react`/`unreact` 以外 | 400 |
+| ④ | 対象プロフィール不存在、または `private` かつ reactor が本人以外 | 404（②と同じ形の応答で存在の列挙オラクルにしない） |
 
 - `Cache-Control: private, no-store`
 - **`getOptionalSession` を使い 401 を返す**（`getSession` は `throw redirect("/login")` するため、`fetch` が302を追って「200 + ログインHTML」を受け取り `res.json()` が壊れる。`api/likes.ts` と同じ理由）
@@ -119,7 +111,7 @@
 
 ## サーバー層（`app/lib/profile-reactions.server.ts`）
 
-`likes.server.ts` と同じ作法で、`db` を第一引数に取り `Request` / セッションを扱わない（テストしやすくするため）。**このモジュール自身はフラグを見ない**（呼び出し側で `isProfileReactionsEnabled()` によるガードが必須）。
+`likes.server.ts` と同じ作法で、`db` を第一引数に取り `Request` / セッションを扱わない（テストしやすくするため）。
 
 | 関数 | 用途 |
 |---|---|
@@ -162,8 +154,8 @@ Props: `profileUserId` / `initialCounts` / `initialViewerReactions` / `isLoggedI
 
 ### 組み込み（`app/routes/player/profile.tsx`）
 
-- loader はフラグON時のみ `getProfileReactionCounts` / `getViewerProfileReactions` を呼び、`profileReactions: { counts, viewerReactions, viewerHasAccount } | null` を返す。閲覧者が本人ならプロフィール対象の `player.id` をそのまま使い（追加クエリなし）、他人ログイン中は discordId → id を1回引く（未ログインは `null`）
-- 表示はアクションボタン行（編集/お気に入り/シェア/比較）の**閉じタグ直後**。`profileReactions` が `null`（フラグOFF）なら `ProfileReactionBar` ごと描画しない。`isLoggedIn` プロップには `viewerHasAccount`（セッションはあるが `users` 行が無い＝未オンボーディングは false 扱い）を渡す
+- loader は常に `getProfileReactionCounts` / `getViewerProfileReactions` を呼び、`profileReactions: { counts, viewerReactions, viewerHasAccount }`（非null）を返す。閲覧者が本人ならプロフィール対象の `player.id` をそのまま使い（追加クエリなし）、他人ログイン中は discordId → id を1回引く（未ログインは `null`）
+- 表示はアクションボタン行（編集/お気に入り/シェア/比較）の**閉じタグ直後**。`isLoggedIn` プロップには `viewerHasAccount`（セッションはあるが `users` 行が無い＝未オンボーディングは false 扱い）を渡す
 - i18n: `pages-ja.ts` の `likes` 節近くに `profileReactions` 節（`addLabel` / `loginToReact` / `reactAria` / `unreactAria` / `pillAria`（未ログイン時の静的ピルの aria-label） + `emoji.thumbsUp`〜`emoji.hundred` の8種名）を持つ。`pages-en.ts` にも対訳あり
 
 ---
@@ -193,6 +185,12 @@ pnpm exec tsx scripts/add-profile-reactions-table.ts --remote --apply  # リモ�
 
 DDL は `pnpm gen:test-schema`（drizzle-kit export）の出力と同一に、再実行に備えて `IF NOT EXISTS` のみ付け足したもの。新規テーブルの追加のみで既存データは変更しない。
 
+> **デプロイ前に必須**: 本機能は常時有効（フィーチャーフラグ無し）のため、`profile_reactions`
+> テーブルが無い環境に対して profile loader は無条件でこのテーブルへクエリを発行する。
+> リモート（devブランチ・本番共有のTurso）へのデプロイ前に、上記の
+> `scripts/add-profile-reactions-table.ts --remote --apply` の適用が完了していることを必ず確認する
+> （未適用のままデプロイすると `/player/:slug` が例外で落ちる）。
+
 ---
 
 ## 関連ファイル
@@ -202,14 +200,12 @@ DDL は `pnpm gen:test-schema`（drizzle-kit export）の出力と同一に、�
 | `app/lib/schema.ts`（26節） | `profileReactions` テーブル定義・relations・型 |
 | `app/lib/profile-reactions.ts` | 固定8絵文字・型・allowlist判定（非 `.server`、クライアント/サーバー共用） |
 | `app/lib/profile-reactions.server.ts` | サーバー層（カウント取得・閲覧者の押下取得・追加解除ディスパッチャ） |
-| `app/routes/api/profile-reactions.ts` | 追加・解除API（フラグガード込み） |
-| `app/lib/env.server.ts` | `isProfileReactionsEnabled()` |
-| `app/env.d.ts` | `FEATURE_PROFILE_REACTIONS` の型定義 |
-| `app/routes/player/profile.tsx` | プロフィール表示ページ（loaderでのフラグ分岐・バー組み込み） |
+| `app/routes/api/profile-reactions.ts` | 追加・解除API |
+| `app/routes/player/profile.tsx` | プロフィール表示ページ（loaderでの取得・バー組み込み） |
 | `app/hooks/use-profile-reactions.ts` | 単一ページ用ローカルフック |
 | `app/components/profile-reaction-bar.tsx` | ピル表示 + 追加ボタン（Popover パレット） |
 | `app/lib/messages/pages-ja.ts` / `pages-en.ts` | `profileReactions` 節（ボタン文言・aria・絵文字名） |
-| `scripts/add-profile-reactions-table.ts` | DB反映スクリプト |
+| `scripts/add-profile-reactions-table.ts` | DB反映スクリプト（デプロイ前に `--remote --apply` の適用が必須） |
 | `app/lib/__tests__/profile-reactions.server.test.ts` | サーバー層テスト |
-| `app/routes/api/__tests__/profile-reactions.test.ts` | APIルートテスト（フラグOFFで404になる回帰テストを含む） |
+| `app/routes/api/__tests__/profile-reactions.test.ts` | APIルートテスト |
 | `docs/likes.md` | 相似形の元になったいいね機構の仕様書 |
