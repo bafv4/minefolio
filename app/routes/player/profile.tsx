@@ -220,11 +220,15 @@ import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cach
 import {
   calculateCm360,
   calculateCursorSpeed,
-  getWindowsMultiplierOrNull,
   isValidSensitivity,
   toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+import {
+  cm360MissingReasons,
+  cursorSpeedMissingReasons,
+  joinMouseReasons,
+} from "@/lib/mouse-settings-reasons";
 import { HintTip } from "@/components/hint-tip";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 
@@ -2266,56 +2270,17 @@ type MouseSettingsSubset = {
   windowsSpeedMultiplier?: number | null;
 };
 
-/** 値が出せないときの「-」。理由があればヒントで示す（/keybindings の一覧と同じ体験） */
+/** 値が出せないときの「-」。理由があればヒントで示す（/keybindings の一覧と同じ体験）。
+    理由の導出は一覧セルと共有の @/lib/mouse-settings-reasons に集約している */
 function MissingDeviceValue({ reasons }: { reasons: string[] }) {
   if (reasons.length === 0) {
     return <span className="text-muted-foreground/40">-</span>;
   }
   return (
-    <HintTip message={reasons.join(" / ")} className="text-muted-foreground/60">
+    <HintTip message={joinMouseReasons(reasons)} className="text-muted-foreground/60">
       <span className="underline decoration-dotted underline-offset-4">-</span>
     </HintTip>
   );
-}
-
-/** Windows 側の乗数が決まらない理由（未設定 / 係数不明）。決まるなら null */
-function windowsMultiplierReason(t: Translator, config: MouseSettingsSubset) {
-  if (getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) != null) {
-    return null;
-  }
-  return config.windowsSpeed == null && config.windowsSpeedMultiplier == null
-    ? t("keybindings.reasonNoWindowsSpeed")
-    : t("keybindings.reasonUnknownWindowsMultiplier");
-}
-
-/** 振り向き（cm/360）が計算できない理由を、欠けている入力から導出する */
-function cm360MissingReasons(t: Translator, config: MouseSettingsSubset): string[] {
-  const reasons: string[] = [];
-  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
-  if (config.gameSensitivity == null) {
-    reasons.push(t("keybindings.reasonNoSensitivity"));
-  } else if (!isValidSensitivity(config.gameSensitivity)) {
-    reasons.push(t("keybindings.reasonSensitivityOutOfRange"));
-  }
-  // Raw Input ON なら Windows 側は無視される。OFF（未設定含む）でも
-  // WinSens・カスタム係数がともに未設定なら x1.0 とみなして計算するため理由にならない。
-  if (
-    config.rawInput !== true &&
-    (config.windowsSpeed != null || config.windowsSpeedMultiplier != null)
-  ) {
-    const reason = windowsMultiplierReason(t, config);
-    if (reason) reasons.push(reason);
-  }
-  return reasons;
-}
-
-/** カーソル速度（実効 DPI）が計算できない理由を、欠けている入力から導出する */
-function cursorSpeedMissingReasons(t: Translator, config: MouseSettingsSubset): string[] {
-  const reasons: string[] = [];
-  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
-  const reason = windowsMultiplierReason(t, config);
-  if (reason) reasons.push(reason);
-  return reasons;
 }
 
 /** Win Sens の値。係数テーブル（1〜20）外は x1.000 と断定せず警告を出す */

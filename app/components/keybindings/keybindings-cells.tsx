@@ -22,15 +22,18 @@ import {
 import {
   calculateCm360,
   calculateCursorSpeed,
-  getWindowsMultiplierOrNull,
   isValidSensitivity,
   toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+import {
+  cm360MissingReasons,
+  cursorSpeedMissingReasons,
+  joinMouseReasons,
+} from "@/lib/mouse-settings-reasons";
 import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import type { Translator } from "@/lib/messages";
 import { TriangleAlert } from "lucide-react";
 
 /** 走者列の最小データ */
@@ -358,57 +361,12 @@ function MissingValueCell({ reasons }: { reasons: string[] }) {
   }
   return (
     <HintTip
-      message={reasons.join(" / ")}
+      message={joinMouseReasons(reasons)}
       className="text-muted-foreground/60 text-sm"
     >
       <span className="underline decoration-dotted underline-offset-4">-</span>
     </HintTip>
   );
-}
-
-/** Windows 側の乗数が決まらない理由（未設定 / 係数不明）。決まるなら null */
-function windowsMultiplierReason(t: Translator, config: NonNullable<MouseConfig>) {
-  if (
-    getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) != null
-  ) {
-    return null;
-  }
-  return config.windowsSpeed == null && config.windowsSpeedMultiplier == null
-    ? t("keybindings.reasonNoWindowsSpeed")
-    : t("keybindings.reasonUnknownWindowsMultiplier");
-}
-
-/** 振り向き（cm/360）が計算できない理由を、欠けている入力から導出する */
-function cm360MissingReasons(t: Translator, config: NonNullable<MouseConfig>): string[] {
-  const reasons: string[] = [];
-  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
-  if (config.gameSensitivity == null) {
-    reasons.push(t("keybindings.reasonNoSensitivity"));
-  } else if (!isValidSensitivity(config.gameSensitivity)) {
-    reasons.push(t("keybindings.reasonSensitivityOutOfRange"));
-  }
-  // Raw Input ON なら Windows 側は無視される。OFF（未設定含む）でも
-  // WinSens・カスタム係数がともに未設定なら x1.0 とみなして計算するため理由にならない。
-  if (
-    config.rawInput !== true &&
-    (config.windowsSpeed != null || config.windowsSpeedMultiplier != null)
-  ) {
-    const reason = windowsMultiplierReason(t, config);
-    if (reason) reasons.push(reason);
-  }
-  return reasons;
-}
-
-/** Cursor Speed（実効 DPI）が計算できない理由を、欠けている入力から導出する */
-function cursorSpeedMissingReasons(
-  t: Translator,
-  config: NonNullable<MouseConfig>,
-): string[] {
-  const reasons: string[] = [];
-  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
-  const reason = windowsMultiplierReason(t, config);
-  if (reason) reasons.push(reason);
-  return reasons;
 }
 
 export function Cm360Cell({ config }: { config: MouseConfig }) {
