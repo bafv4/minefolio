@@ -241,6 +241,14 @@ export function StatsView({ data }: StatsViewProps) {
                   {sensitivityStats.average != null &&
                     ` / ${t("keybindingsStats.average", { value: `${sensitivityStats.average}%` })}`}
                 </CardDescription>
+                {/* 有効範囲外で母数から外した人数（いる場合だけ注記する） */}
+                {sensitivityStats.excludedCount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("keybindingsStats.excludedOutOfRange", {
+                      count: sensitivityStats.excludedCount,
+                    })}
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">

@@ -10,7 +10,9 @@ import { loader } from "../index";
 
 // 公開テンプレート一覧の可視性ゲートと並び替え。
 // 可視性ゲートはガイド側（689222d）で入ったがテンプレートには無く、
-// 人気順が非公開プロフィールの投稿を上位に押し上げるため本機能で追加した。その回帰テスト。
+// いいね数順が非公開プロフィールの投稿を上位に押し上げるため本機能で追加した。その回帰テスト。
+// ※ テンプレートの並び順は `?sort=likes`（旧 `?sort=popular`。ページビュー集計を持たないため
+//   ガイド専用の「人気順」とは基準が違い、ラベルどおり「いいね数順」に改名した）。
 
 const SHARED_URL = "file::memory:?cache=shared";
 
@@ -81,7 +83,7 @@ describe("並び替え", () => {
     expect(templates.map((t) => t.title)).toEqual(["new", "old"]);
   });
 
-  it("人気順はいいね数の降順（いいね数を各行に含める）", async () => {
+  it("いいね数順はいいね数の降順（いいね数を各行に含める）", async () => {
     const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
     const [liker1, liker2] = await Promise.all([
       seedUser(db, { slug: "l1" }),
@@ -94,13 +96,13 @@ describe("並び替え", () => {
     await seedTemplateLike(db, liker2.id, two.id);
     await seedTemplateLike(db, liker1.id, one.id);
 
-    const { templates } = await callLoader("?sort=popular");
+    const { templates } = await callLoader("?sort=likes");
 
     expect(templates.map((t) => t.title)).toEqual(["two-likes", "one-like", "zero-likes"]);
     expect(templates.map((t) => t.likeCount)).toEqual([2, 1, 0]);
   });
 
-  it("人気順は LIMIT より前に SQL で並べる（古くて人気の1件が先頭に来る）", async () => {
+  it("いいね数順は LIMIT より前に SQL で並べる（古くていいねの多い1件が先頭に来る）", async () => {
     const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
     const liker = await seedUser(db, { slug: "liker" });
 
@@ -118,7 +120,7 @@ describe("並び替え", () => {
     }
     await seedTemplateLike(db, liker.id, oldest.id);
 
-    const { templates } = await callLoader("?sort=popular");
+    const { templates } = await callLoader("?sort=likes");
 
     expect(templates[0]?.title).toBe("oldest-but-liked");
   });
@@ -130,8 +132,8 @@ describe("並び替え", () => {
       await seedSearchCraftTemplate(db, pub.id, { title: `tie-${i}`, createdAt: sameTime });
     }
 
-    const first = await callLoader("?sort=popular");
-    const second = await callLoader("?sort=popular");
+    const first = await callLoader("?sort=likes");
+    const second = await callLoader("?sort=likes");
 
     expect(first.templates.map((t) => t.id)).toEqual(second.templates.map((t) => t.id));
   });

@@ -66,9 +66,35 @@ export async function createTestDbAt(url: string): Promise<TestDb> {
 /**
  * まっさらな in-memory libSQL DB を作成し、現行スキーマの DDL を適用して返す。
  * `:memory:` は接続ごとに独立するため、テストごとに呼べば状態は隔離される。
+ *
+ * ※ 検証対象が `db.transaction()` を使う場合は createTransactionalTestDb() を使うこと
+ *   （理由はそちらのコメント参照）。
  */
 export async function createTestDb(): Promise<TestDb> {
   return createTestDbAt(":memory:");
+}
+
+/**
+ * 同一プロセス内で共有される in-memory DB の URL。
+ * createDb() を内部で呼ぶコード（別クライアントから同じ DB を見る必要がある）と、
+ * トランザクションを使うコードの検証で使う。
+ */
+export const SHARED_MEMORY_URL = "file::memory:?cache=shared";
+
+/**
+ * `db.transaction()` を含むコードの検証用 DB。
+ *
+ * @libsql/client のローカル実装は transaction() を開始した時点でクライアントの接続を手放し、
+ * 次のクエリで**新しい接続を遅延生成する**。素の `:memory:` は接続ごとに別の DB なので、
+ * トランザクションを 1 回通すと以降のクエリが「no such table」になる（＝テーブルどころか
+ * データごと消えたように見える）。shared cache の in-memory DB なら同一プロセス内の
+ * 全接続が同じ DB を指すため、本番と同じ挙動で検証できる。
+ *
+ * 同一 URL を共有するので、DDL を貼り直す createTestDbAt() 経由でテストごとに初期化する
+ * （Vitest はテストファイルごとに別プロセス・ファイル内は直列実行なので衝突しない）。
+ */
+export async function createTransactionalTestDb(): Promise<TestDb> {
+  return createTestDbAt(SHARED_MEMORY_URL);
 }
 
 /** N日前（小数可）の Date。時系列データのシード用 */
@@ -148,7 +174,7 @@ export async function seedSearchCraftTemplate(
 
 /**
  * guide_likes を 1 件挿入する（いいね済み状態を用意するショートカット）。
- * createdAt を渡すと「いつ付いたいいねか」を指定できる（おすすめ順の期間判定用）。
+ * createdAt を渡すと「いつ付いたいいねか」を指定できる。
  */
 export async function seedGuideLike(
   db: TestDb,
@@ -166,6 +192,34 @@ export async function seedTemplateLike(
   templateId: string,
 ): Promise<void> {
   await db.insert(schema.searchCraftTemplateLikes).values({ userId, templateId });
+}
+
+type PageViewStatRow = typeof schema.pageViewStats.$inferInsert;
+
+/**
+ * page_view_stats を 1 件挿入して返す（「人気順」のシード）。
+ * 集計窓（windowStart / windowEnd / fetchedAt）は cron 直後を模した既定値を入れるので、
+ * テスト側は対象と PV 数だけ渡せばよい。
+ */
+export async function seedPageViewStat(
+  db: TestDb,
+  targetType: "profile" | "guide",
+  targetId: string,
+  pageviews: number,
+  overrides: Partial<PageViewStatRow> = {},
+): Promise<typeof schema.pageViewStats.$inferSelect> {
+  const now = new Date();
+  const values: PageViewStatRow = {
+    targetType,
+    targetId,
+    pageviews,
+    windowStart: daysAgo(7),
+    windowEnd: now,
+    fetchedAt: now,
+    ...overrides,
+  };
+  const [row] = await db.insert(schema.pageViewStats).values(values).returning();
+  return row;
 }
 
 type PaceRow = typeof schema.pacemanPaces.$inferInsert;
@@ -224,6 +278,22 @@ export async function seedKeybinding(
     ...overrides,
   };
   const [row] = await db.insert(schema.keybindings).values(values).returning();
+  return row;
+}
+
+type PlayerConfigRow = typeof schema.playerConfigs.$inferInsert;
+
+/** player_configs を 1 件挿入して返す。userId は必須（seedUser の id）。1 user : 1 行の UNIQUE 制約あり。 */
+export async function seedPlayerConfig(
+  db: TestDb,
+  userId: string,
+  overrides: Partial<PlayerConfigRow> = {},
+): Promise<typeof schema.playerConfigs.$inferSelect> {
+  const values: PlayerConfigRow = {
+    userId,
+    ...overrides,
+  };
+  const [row] = await db.insert(schema.playerConfigs).values(values).returning();
   return row;
 }
 

@@ -54,6 +54,7 @@ export default [
       layout("routes/me/_layout.tsx", [
         index("routes/me/index.tsx"),
         route("edit", "routes/me/edit.tsx"),
+        route("playstyle", "routes/me/playstyle.tsx"),
         route("records", "routes/me/records.tsx"),
         route("keybindings", "routes/me/keybindings.tsx"),
         route("devices", "routes/me/devices.tsx"),
@@ -89,6 +90,7 @@ export default [
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/likes", "routes/api/likes.ts"),
+  route("api/profile-reactions", "routes/api/profile-reactions.ts"),
   route("api/set-locale", "routes/api/set-locale.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
@@ -106,6 +108,7 @@ export default [
   route("api/cron/twitch-update", "routes/api/cron/twitch-update.ts"),
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
   route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
+  route("api/cron/update-page-views", "routes/api/cron/update-page-views.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),

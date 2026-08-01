@@ -73,7 +73,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const lang = (url.searchParams.get("lang") ?? "").trim();
-  // テンプレートは「おすすめ順」を持たない（未対応の値は既定順へ落ちる）
+  // テンプレートは新着順・いいね数順のみ（未対応の値は既定順へ落ちる）
   const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), TEMPLATE_SORTS);
 
   // 言語はSQLで絞り込む（完全一致）
@@ -90,11 +90,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // craftCount / hasRemaps / likeCount はSQLで算出し、craftsData/remapsData 本体は転送・パースしない
   const likeCount = templateLikeCountSql();
 
-  // 人気順は必ず SQL の ORDER BY で行う。limit(100) が先に効くため、メモリ上で並べ替えると
-  // 「新しい100件を人気順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない。
+  // いいね数順は必ず SQL の ORDER BY で行う。limit(100) が先に効くため、メモリ上で並べ替えると
+  // 「新しい100件をいいね数順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない。
   // 同数（初日は全件0）で順序が不定にならないよう id まで含めて全順序にする。
   const orderBy =
-    sort === "popular"
+    sort === "likes"
       ? [desc(likeCount), desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)]
       : [desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)];
 
@@ -244,6 +244,7 @@ export default function TemplatesIndexPage() {
           onChange={handleSortChange}
           options={TEMPLATE_SORTS}
           newestLabel={t("contentSort.newest")}
+          descriptions={{ likes: t("contentSort.likesDesc") }}
         />
       </div>
 

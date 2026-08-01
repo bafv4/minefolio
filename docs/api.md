@@ -207,6 +207,7 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 | `mouse` | Player, DPI, Sensitivity (%), cm/360, Win Sens Multiplier, Cursor Speed, Raw Input, Mouse Accel |
 
 - `remaps` の Type 列はリマップ種別（小文字: `all` / `trigger` / `chat`、`unset` は空文字）。末尾列として追加
+- `mouse` の `cm/360` `Cursor Speed` は計算できない場合は空欄。`Win Sens Multiplier` も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` は有効範囲（0〜200%）外の値も生データのまま出力（詳細: [`docs/keybindings.md`](./keybindings.md)）
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
 - 公開プロフィールのみ対象

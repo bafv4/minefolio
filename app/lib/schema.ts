@@ -2,6 +2,8 @@ import { createId } from "@paralleldrive/cuid2";
 import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
+// プロフィールタブ値の単一情報源。schema はここから enum を参照する（詳細は profile-tabs.ts 冒頭コメント）
+import { PROFILE_TAB_VALUES } from "./profile-tabs";
 
 // ============================================
 // 1. users（ユーザー）
@@ -31,7 +33,9 @@ export const users = sqliteTable("users", {
   slimSkin: integer("slim_skin", { mode: "boolean" }).default(false),
   location: text("location"),
   pronouns: text("pronouns"),
-  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings"] }).default("keybindings"),
+  // 既定は「プロフィール」タブ。既存DBの列DDLには旧デフォルト（'keybindings'）が焼き付いているため、
+  // DB側デフォルトではなく $defaultFn（アプリ側 insert 時デフォルト）で新規ユーザーに 'profile' を入れる
+  defaultProfileTab: text("default_profile_tab", { enum: PROFILE_TAB_VALUES }).$defaultFn(() => "profile"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報
@@ -39,7 +43,9 @@ export const users = sqliteTable("users", {
   mainPlatform: text("main_platform", { enum: ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] }),
   role: text("role", { enum: ["viewer", "runner"] }),
   inputMethod: text("input_method", { enum: ["keyboard_mouse", "controller", "touch"] }),
-  inputMethodBadge: text("input_method_badge", { enum: ["keyboard_mouse", "controller", "touch"] }), // プロフィールバッジ用（inputMethodとは独立）
+  // @deprecated 未使用（inputMethod に一本化済み。プロフィールバッジも inputMethod を参照する）。
+  // DB列はドロップせず残置（本番DDLと schema.ts の乖離防止、gen:test-schema の出力を合わせるため）。
+  inputMethodBadge: text("input_method_badge", { enum: ["keyboard_mouse", "controller", "touch"] }),
   shortBio: text("short_bio"),
 
   // Speedrun.com連携
@@ -71,6 +77,9 @@ export const users = sqliteTable("users", {
   // run ID の配列だけを保持する。JSON配列: ピン留めする記録のrun ID
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   pinnedSpeedrunRecords: text("pinned_speedrun_records"),
+
+  // RTAを始めた年月（"YYYY-MM"形式の文字列、未回答はnull）。別プロジェクトmcsr-buttonのstarted_year_monthと同形式で、経過年数は表示時に算出する
+  rtaStartedYearMonth: text("rta_started_year_month"),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
@@ -467,6 +476,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [playerConfigs.userId],
   }),
+  playstyle: one(playstyles, {
+    fields: [users.id],
+    references: [playstyles.userId],
+  }),
   keybindings: many(keybindings),
   customKeys: many(customKeys),
   keyRemaps: many(keyRemaps),
@@ -487,6 +500,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   searchCraftTemplates: many(searchCraftTemplates),
   guideLikes: many(guideLikes),
   searchCraftTemplateLikes: many(searchCraftTemplateLikes),
+  profileReactionsReceived: many(profileReactions, { relationName: "profileReactionsReceived" }),
+  profileReactionsGiven: many(profileReactions, { relationName: "profileReactionsGiven" }),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -1143,6 +1158,73 @@ export type SearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferSele
 export type NewSearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferInsert;
 
 // ============================================
+// 26. profile_reactions（プロフィール絵文字リアクション）
+// ============================================
+// プロフィールへの Discord 風の固定8絵文字リアクション。常時有効の標準機能
+// （v1.14系まではフィーチャーフラグ FEATURE_PROFILE_REACTIONS 付きだったが撤去済み）。
+// デプロイ前に scripts/add-profile-reactions-table.ts --remote --apply の適用が必須
+// （テーブルが無いと profile loader が落ちる。詳細: docs/profile-reactions.md）。
+//
+// likes（25節）との設計上の差分:
+//   (a) 自分のプロフィールにも押せる（self 拒否なし）
+//   (b) 「同一人物が同じ対象に同じ絵文字を複数回」を防ぐ必要があるため、
+//       ユニークキーが3列（profileUserId, emoji, reactorUserId）になる
+//   (c) 可視性チェックは「private かつ reactor が本人以外」のみ拒否する
+//       （本人は自分のプロフィールが private でも押せる）
+//
+// 【索引設計】列順が重要（挿入時に決め打ちで変えない）:
+//   uniq(profileUserId, emoji, reactorUserId): 対象列（profileUserId）を先頭に置くことで、
+//     プロフィール1件のカウント集計（`where profile_user_id = ? group by emoji`）がこの索引
+//     だけで完結する（カバリング索引）。3列一致の一意性制約も兼ねる。
+//   idx(reactorUserId, profileUserId, emoji): 閲覧者自身の押下一覧取得・解除（delete）用。
+//     「自分（reactor）がどのプロフィールにどの絵文字を押したか」を reactorUserId 起点で
+//     引く経路のため、reactorUserId を先頭にする。
+export const profileReactions = sqliteTable(
+  "profile_reactions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    profileUserId: text("profile_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reactorUserId: text("reactor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("profile_reactions_profile_emoji_reactor_uniq").on(
+      table.profileUserId,
+      table.emoji,
+      table.reactorUserId,
+    ),
+    index("profile_reactions_reactor_idx").on(
+      table.reactorUserId,
+      table.profileUserId,
+      table.emoji,
+    ),
+  ],
+);
+
+// profileUserId・reactorUserId がともに users.id を参照するため、relationName で
+// 「プロフィール側（received）」と「押した側（given）」の2方向を区別する。
+export const profileReactionsRelations = relations(profileReactions, ({ one }) => ({
+  profileUser: one(users, {
+    fields: [profileReactions.profileUserId],
+    references: [users.id],
+    relationName: "profileReactionsReceived",
+  }),
+  reactorUser: one(users, {
+    fields: [profileReactions.reactorUserId],
+    references: [users.id],
+    relationName: "profileReactionsGiven",
+  }),
+}));
+
+export type ProfileReaction = typeof profileReactions.$inferSelect;
+export type NewProfileReaction = typeof profileReactions.$inferInsert;
+
+// ============================================
 // content_translations（利用者コンテンツの自動翻訳）
 // ============================================
 // ガイド本文・プロフィール文の機械翻訳を保存する。仕様は docs/translation.md。
@@ -1196,3 +1278,101 @@ export const contentTranslations = sqliteTable("content_translations", {
 
 export type ContentTranslation = typeof contentTranslations.$inferSelect;
 export type NewContentTranslation = typeof contentTranslations.$inferInsert;
+
+// ============================================
+// page_view_stats（Vercel Web Analytics のページビュー集計）
+// ============================================
+// Vercel Web Analytics API から取得した「直近ウィンドウの path 別 PV」を、Minefolio 側の
+// 対象（プロフィール / ガイド）へ解決して保存するスナップショット。ガイド一覧・走者一覧の
+// 「人気順」の並び替え軸として読む（app/lib/page-view-stats.server.ts）。
+//
+// 【整合性ポリシー】targetId は users.id / guides.id を指す多態の弱参照で、外部キーは張らない
+//   （targetType ごとに参照先が異なるため。content_translations と同じ方針）。対象が消えても
+//   孤児行が残るが、cron が targetType 単位で全置換するため次回同期で消える。読み手は必ず
+//   対象テーブル側を起点に相関サブクエリで引くので、孤児行が一覧へ漏れることはない。
+//
+// 【鮮度】cron（/api/cron/update-page-views）が数時間おきに全置換する。取得元の窓は
+//   windowStart / windowEnd に、取得時刻は fetchedAt に持たせ、後から鮮度を判断できるようにする。
+export const pageViewStats = sqliteTable("page_view_stats", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  /** 集計対象の種別（プロフィール＝/player/:slug、ガイド＝/guides/:authorSlug/:guideSlug） */
+  targetType: text("target_type", { enum: ["profile", "guide"] }).notNull(),
+  /** 対象の id（users.id / guides.id） */
+  targetId: text("target_id").notNull(),
+
+  /** 窓内のページビュー数（同一対象の大小文字違いパスは合算済み） */
+  pageviews: integer("pageviews").default(0).notNull(),
+
+  /** 集計窓の開始・終了 */
+  windowStart: integer("window_start", { mode: "timestamp" }).notNull(),
+  windowEnd: integer("window_end", { mode: "timestamp" }).notNull(),
+  /** この行を書き込んだ時刻（同期の鮮度確認用） */
+  fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+}, (table) => [
+  // 対象列を先頭に置く: 並び替えの相関サブクエリがこの索引で引ける＋1対象1行を保証する
+  uniqueIndex("page_view_stats_target_uniq").on(table.targetType, table.targetId),
+]);
+
+export type PageViewStat = typeof pageViewStats.$inferSelect;
+export type NewPageViewStat = typeof pageViewStats.$inferInsert;
+
+// ============================================
+// playstyles（プレイスタイル）
+// ============================================
+// 1 user : 1 playstyle（`.unique()` 修飾子で保証。player_configs と同じ方式）。
+// 全項目 nullable（未回答）。条件付き項目（KBM限定・Java RSG/Ranked限定・1.16+限定）は、
+// 表示条件を満たさなくなった後も値をクリアしない方針（データ保持方針）のため、
+// DB 側には表示条件に関する制約を持たせない。選択肢の定義・表示条件の判定ロジックは
+// app/lib/playstyle.ts（非 .server・編集UIとプロフィール表示で共用）を参照。
+export const playstyles = sqliteTable("playstyles", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+
+  // プレイするバージョン・カテゴリ（常時表示）
+  versions: text("versions"), // JSON文字列配列: VersionKey[]（"java:1_16_1_19" 形式のエディション:バージョン連結キー）
+  categories: text("categories"), // JSON文字列配列: CategoryKey[]
+  mainVersion: text("main_version"), // 選択済み versions から1つ。エディションが Java/Bedrock バッジを決める
+  mainCategory: text("main_category"), // 選択済み categories から1つ
+
+  // 操作系（常時表示）
+  hotbarSwitching: text("hotbar_switching", {
+    enum: ["hotkeys", "hotkeys_sometimes_wheel", "wheel_sometimes_hotkeys", "wheel"],
+  }), // ホットバー切替方法
+  searchCraft: text("search_craft", { enum: ["does", "does_a_little", "does_not"] }), // サーチクラフト度。"does_not" ならプロフィールのSCタブを非表示にする
+  halfShift: text("half_shift", {
+    enum: ["actively", "does", "sometimes", "rarely", "does_not"],
+  }), // 半シフトの頻度（5段階）
+  itemLayoutPolicy: text("item_layout_policy", { enum: ["strict", "rough", "mood"] }), // アイテム配置を決めているか
+
+  // 高CPSクリック・マウスパッド（KBM限定 = inputMethod === "keyboard_mouse" の場合のみ表示）
+  clickMethods: text("click_methods"), // JSON文字列配列: ClickMethod[]（["normal","jitter","butterfly","drag"] の部分集合）
+  dragTapeType: text("drag_tape_type"), // 自由入力。clickMethods に "drag" を含む場合のみ表示
+  usesMousepad: text("uses_mousepad", { enum: ["uses", "does_not_use"] }),
+  mousepadType: text("mousepad_type"), // 自由入力。usesMousepad === "uses" の場合のみ表示
+
+  // Java の RSG/Ranked 限定（versions に java:* を含み、かつ categories に "rsg" または "ranked" を含む場合のみ表示）
+  zeroCycle: text("zero_cycle", {
+    enum: ["actively", "does", "sometimes", "rarely", "does_not"],
+  }), // Zero Cycle の頻度（halfShift と同スケール）
+  groundZero: text("ground_zero", { enum: ["can", "cannot"] }),
+  oneshot: text("oneshot", { enum: ["can", "cannot"] }),
+
+  // 1.16+ のバージョン選択時のみ表示（java:1_16_1_19 / java:1_20_plus / bedrock:1_16 / bedrock:1_16_100_1_17 / bedrock:1_18）
+  favoriteBastion: text("favorite_bastion", {
+    enum: ["housing", "stables", "bridge", "treasure"],
+  }), // 好きな廃要塞の種類
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const playstylesRelations = relations(playstyles, ({ one }) => ({
+  user: one(users, {
+    fields: [playstyles.userId],
+    references: [users.id],
+  }),
+}));
+
+export type Playstyle = typeof playstyles.$inferSelect;
+export type NewPlaystyle = typeof playstyles.$inferInsert;

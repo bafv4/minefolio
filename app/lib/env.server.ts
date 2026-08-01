@@ -22,6 +22,9 @@ export function getEnv(): Env {
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     VERCEL_WEBHOOK_SECRET: process.env.VERCEL_WEBHOOK_SECRET,
     DISCORD_RELEASE_WEBHOOK_URL: process.env.DISCORD_RELEASE_WEBHOOK_URL,
+    VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
+    VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
+    VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
     DEV_AUTH: process.env.DEV_AUTH,
   };
 }

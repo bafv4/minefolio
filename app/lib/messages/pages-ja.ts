@@ -356,7 +356,9 @@ export const PAGES_JA = {
     ctaRandom: "ランダムで見る",
     profileTotal: "公開プロフィール総数",
     profileActive: "アクティブプロフィール数（7日）",
-    sectionProfiles: "最近更新されたプロフィール",
+    sectionProfiles: "プロフィール",
+    sectionRecentlyUpdated: "最近の更新",
+    sectionPopular: "注目（直近{days}日）",
     sectionPaces: "ペース",
     livePacesTitle: "ライブ",
     pastPacesTitle: "過去のペース",
@@ -373,7 +375,7 @@ export const PAGES_JA = {
     paceFeedLabel: "Pace Feed",
     videoFeedLabel: "Video Feed",
     guideFeedLabel: "Guides",
-    sectionGuides: "最近のガイド",
+    sectionGuides: "ガイド",
     rtaTime: "タイム",
     justWithinHour: "1時間以内",
     playEmbedded: "{title} をこの場で再生",
@@ -459,6 +461,8 @@ export const PAGES_JA = {
     sortUpdatedAt: "更新日順",
     sortMcid: "MCID順",
     sortDisplayName: "名前順",
+    /** 直近7日のプロフィール閲覧数が多い順（page_view_stats） */
+    sortPopular: "人気順",
     clearSearchAndFilters: "検索・フィルタをクリア",
     loadMore: "もっと読み込む",
     allShown: "すべての走者を表示しました（{count} 件）",
@@ -515,15 +519,42 @@ export const PAGES_JA = {
     loginToLike: "ログインしていいね",
     ownContent: "自分の投稿にはいいねできません",
   },
+  /** プロフィール絵文字リアクション（docs/profile-reactions.md）。emoji はピル・パレットの絵文字名 */
+  profileReactions: {
+    addLabel: "リアクションを追加",
+    loginToReact: "ログインしてリアクション",
+    /** aria-label（{emoji} は絵文字名、{count} は現在の件数） */
+    reactAria: "{emoji}でリアクションする（現在{count}件）",
+    unreactAria: "{emoji}のリアクションを取り消す（現在{count}件）",
+    /** 未ログイン時の静的ピルの aria-label（{emoji} は絵文字名、{count} は件数） */
+    pillAria: "{emoji}リアクション {count}件",
+    emoji: {
+      thumbsUp: "いいね",
+      heart: "ハート",
+      joy: "笑い",
+      wow: "驚き",
+      cry: "泣き",
+      tada: "クラッカー",
+      fire: "炎",
+      hundred: "100点",
+    },
+  },
   contentSort: {
     label: "並び替え",
     /** テンプレート一覧（createdAt 基準） */
     newest: "新着順",
     /** ガイド一覧（updatedAt 基準） */
     recentlyUpdated: "更新順",
+    /** ガイド一覧のみ。直近7日のページビューが多い順（page_view_stats） */
     popular: "人気順",
-    /** ガイド一覧のみ。直近のいいねが多い順（likes.server.ts の guideListOrderBy） */
-    recommended: "おすすめ順",
+    /** ガイド一覧・テンプレート一覧。総いいね数が多い順 */
+    likes: "いいね数順",
+    /** ガイド一覧のみ。累計閲覧数（guides.view_count）が多い順 */
+    views: "閲覧数順",
+    // 選択肢の下段に出す「何を基準に並ぶか」の説明（ContentSortSelect の descriptions に渡す）
+    likesDesc: "総いいね数",
+    viewsDesc: "累計閲覧数",
+    popularDesc: "直近{days}日でよく見られた順",
   },
   keybindings: {
     remapsHeading: "リマップ",
@@ -565,6 +596,20 @@ export const PAGES_JA = {
     clearSearch: "検索をクリア",
     customMultiplier: "カスタム係数",
     noValue: "値なし",
+    sensitivityOutOfRange:
+      "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます。統計の集計からも除外されます",
+    /** Windows ポインター速度が係数テーブル（1〜20）外のとき */
+    windowsSpeedUnknown:
+      "Windows ポインター速度 {value} は係数が不明なため、振り向き・Cursor Speed を計算できません",
+    /** 振り向き・Cursor Speed が「-」になる理由（欠けている入力） */
+    reasonNoDpi: "DPI が未設定です",
+    reasonNoSensitivity: "ゲーム内感度が未設定です",
+    reasonSensitivityOutOfRange: "ゲーム内感度が有効範囲（0〜200%）外です",
+    reasonNoWindowsSpeed: "Windows ポインター速度が未設定です",
+    reasonUnknownWindowsMultiplier:
+      "Windows ポインター速度の係数が不明です",
+    /** フィルタの感度レンジに常時出すヘルパーテキスト */
+    sensitivityRangeHint: "有効範囲: 0〜200%",
     countText: "{count}人の{suffix}",
     hotbarColumn: "ホットバー",
     noPlayers: "該当する走者がいません",
@@ -607,6 +652,8 @@ export const PAGES_JA = {
     f3DefaultInput: "F3キーでF3入力",
     f3WithKey: "{key}でF3入力",
     peoplePercent: "{count}人 ({percent}%)",
+    /** 感度分布カード: 有効範囲外で母数から外した人数 */
+    excludedOutOfRange: "範囲外のため除外: {count}人",
   },
   // リマップ種別（Trigger/Chat/All/未設定）の共通ラベル
   remapType: {
@@ -632,6 +679,7 @@ export const PAGES_JA = {
     devicesTab: "デバイス",
     itemLayoutsTab: "アイテム配置",
     searchCraftTab: "サーチクラフト",
+    playstyleTab: "プレイスタイル",
     guidesTab: "ガイド",
     remapViewLabel: "リマップ表示の切替",
     videos: "動画",
@@ -644,6 +692,24 @@ export const PAGES_JA = {
     presetLoading: "プリセットを読み込み中...",
     edit: "編集",
     compare: "比較",
+    /** RTA歴（経過期間 + 開始年月）。start はロケール依存（ja: "2020/6" / en: "Jun 2020"） */
+    rtaCareerYears: "RTA歴 {years}年（{start}〜）",
+    /** 英語の単数形用（日本語は単複同形なので同じ文言） */
+    rtaCareerYearsOne: "RTA歴 {years}年（{start}〜）",
+    rtaCareerMonths: "RTA歴 {months}か月（{start}〜）",
+    rtaCareerMonthsOne: "RTA歴 {months}か月（{start}〜）",
+    /** 年表示で切り捨てた端数月まで含む正確な経過（ヒントで補完する）。
+        years / months には下の Unit キーで組み立てた単位付き文字列が入る */
+    rtaCareerExact: "RTA歴 {years}{months}（{start}〜）",
+    /** 単位付きの年・月（英語の単複対応のため部品化。日本語は単複同形） */
+    rtaCareerYearsUnit: "{years}年",
+    rtaCareerYearsUnitOne: "{years}年",
+    rtaCareerMonthsUnit: "{months}か月",
+    rtaCareerMonthsUnitOne: "{months}か月",
+    /** 開始月と同じ月（経過 0 か月） */
+    rtaCareerJustStarted: "RTA歴 1か月未満（{start}〜）",
+    /** プロフィールのメタ情報行に出す更新日 */
+    lastUpdated: "最終更新 {date}",
     links: "リンク",
     bio: "自己紹介",
     subscribersCompact: "登録者 {count}人",
@@ -755,6 +821,32 @@ export const PAGES_JA = {
     noStatsDescription: "外部サービスからの統計データがありません。",
     slot: "スロット {num}",
     offhand: "オフハンド",
+    /** プレイスタイルタブ（playstyle.* は選択肢ラベル、ここは項目名・見出し・空状態） */
+    playstylePlayContent: "プレイ内容",
+    playstyleControls: "操作",
+    playstyleTechnique: "テクニック",
+    playstyleVersions: "プレイするバージョン",
+    playstyleMainSuffix: " (メイン)",
+    playstyleCategories: "カテゴリ",
+    playstyleInputMethod: "入力方法",
+    playstyleInputMethodKeyboardMouse: "キーボード/マウス",
+    playstyleInputMethodController: "コントローラー",
+    playstyleInputMethodTouch: "タッチ",
+    playstyleHotbarSwitching: "ホットバー切替方法",
+    playstyleHalfShift: "半シフト",
+    playstyleClickMethods: "高CPSクリック方法",
+    playstyleDragTapeType: "テープの種類",
+    playstyleMousepad: "マウスパッド",
+    playstyleMousepadType: "マウスパッドの種類",
+    playstyleItemLayoutPolicy: "アイテム配置",
+    playstyleSearchCraft: "サーチクラフト",
+    playstyleZeroCycle: "Zero Cycle",
+    playstyleGroundZero: "Ground Zero",
+    playstyleOneshot: "Oneshot",
+    playstyleFavoriteBastion: "好きな廃要塞の種類",
+    noPlaystyleTitle: "プレイスタイル未設定",
+    noPlaystyle: "この走者はまだプレイスタイルを設定していません。",
+    noPlaystyleEditLink: "プレイスタイルを設定する",
   },
   playerStats: {
     notFound: "走者が見つかりません",
@@ -815,6 +907,7 @@ export const PAGES_JA = {
     inGameSensitivity: "ゲーム内感度",
     mouseAcceleration: "マウス加速",
     dashToggle: "ダッシュ切替",
+    sensitivityExcludedNote: "範囲外のため除外: {count}人",
   },
   meEdit: {
     title: "プロフィール編集 - Minefolio",
@@ -843,6 +936,8 @@ export const PAGES_JA = {
     bioMax: "自己紹介は500文字以下にしてください",
     locationMax: "場所は100文字以下にしてください",
     shortBioMax: "ひとことは50文字以下にしてください",
+    rtaStartedBothOrNone: "年と月の両方を選択するか、両方未設定にしてください",
+    rtaStartedInvalid: "RTA歴の開始年月が不正です（2009年1月〜現在まで）",
     speedrunUsernameMax: "Speedrun.comユーザー名は50文字以下にしてください",
     socialDialogEditTitle: "リンクを編集",
     socialDialogAddTitle: "ソーシャルリンクを追加",
@@ -921,7 +1016,18 @@ export const PAGES_JA = {
     pronounsExample: "例: he/him",
     shortBio: "ひとこと",
     shortBioExample: "例: RSG日本記録保持者",
-    mainEdition: "エディション（メイン）",
+    rtaStarted: "RTA歴（開始年月）",
+    rtaStartedHint:
+      "任意。設定するとプロフィールに「RTA歴 6年（2020/6〜）」のように公開表示されます",
+    rtaStartedNone: "未設定",
+    rtaStartedClear: "クリア",
+    /** Label は年セレクトに紐付くため、各セレクトのアクセシブルネームを個別に持つ */
+    rtaStartedYearAria: "RTA歴（開始年）",
+    rtaStartedMonthAria: "RTA歴（開始月）",
+    rtaStartedYearPlaceholder: "年",
+    rtaStartedMonthPlaceholder: "月",
+    rtaStartedYearOption: "{year}年",
+    rtaStartedMonthOption: "{month}月",
     select: "選択...",
     mainPlatform: "プラットフォーム（メイン）",
     mobile: "スマホ",
@@ -930,13 +1036,7 @@ export const PAGES_JA = {
     roleRunner: "走者",
     roleViewer: "視聴者",
     role: "ロール",
-    inputMethod: "入力方法",
-    inputMethodKeyboardMouse: "キーボード/マウス",
-    inputMethodController: "コントローラー",
-    inputMethodTouch: "タッチ",
-    inputMethodHint: "デバイス設定/キー配置の切り替えに使用",
-    inputMethodBadge: "入力方法バッジ",
-    inputMethodBadgeHint: "プロフィールに表示するバッジ",
+    movedToPlaystyle: "エディション・入力方法は /me/playstyle（プレイスタイル）に移動しました",
     speedrunIntegration: "Speedrun.com 連携",
     speedrunIntegrationDesc: "Speedrun.comのユーザー名を設定すると、Statsタブに記録が表示されます。ソーシャルリンクでSpeedrun.comを追加すると自動的に設定されます。",
     speedrunUsername: "Speedrun.com ユーザー名",
@@ -972,6 +1072,7 @@ export const PAGES_JA = {
     defaultTabHint: "プロフィールを開いたときに最初に表示するタブ",
     tabProfile: "プロフィール",
     tabStats: "活動・記録",
+    tabPlaystyle: "プレイスタイル",
     tabKeybindings: "キー配置",
     tabDevices: "デバイス",
     tabItems: "アイテム配置",
@@ -1003,8 +1104,106 @@ export const PAGES_JA = {
     errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
     reloadPage: "ページをリロード",
   },
+  /**
+   * プレイスタイルの選択肢ラベル（app/lib/playstyle.ts の各 OPTIONS の labelKey が参照する）。
+   * 編集フォーム（/me/playstyle）とプロフィール表示（プレイスタイルタブ）の両方から共有される。
+   */
+  playstyle: {
+    categoryOther: "その他",
+    hotbarSwitching: {
+      hotkeys: "ホットキー",
+      hotkeysSometimesWheel: "ホットキー（時々ホイール）",
+      wheelSometimesHotkeys: "マウスホイール（時々ホットキー）",
+      wheel: "マウスホイール",
+    },
+    searchCraft: {
+      does: "する",
+      doesALittle: "少しだけする",
+      doesNot: "しない",
+    },
+    frequency: {
+      actively: "積極的にする",
+      does: "する",
+      sometimes: "たまにする",
+      rarely: "めったにしない",
+      doesNot: "しない",
+    },
+    itemLayoutPolicy: {
+      strict: "厳密に決めている",
+      rough: "ざっくり決めている",
+      mood: "気分",
+    },
+    clickMethod: {
+      normal: "ノーマル",
+      jitter: "ジッター",
+      butterfly: "バタフライ",
+      drag: "ドラッグ",
+    },
+    canCannot: {
+      can: "できる",
+      cannot: "できない",
+    },
+    usesMousepad: {
+      uses: "使う",
+      doesNot: "使わない",
+    },
+    bastion: {
+      housing: "ハウジング",
+      stables: "ステーブル",
+      bridge: "ブリッジ",
+      treasure: "トレジャー",
+    },
+  },
+  /** プレイスタイル編集ページ（routes/me/playstyle.tsx） */
+  mePlaystyle: {
+    title: "プレイスタイル - Minefolio",
+    userNotFound: "ユーザーが見つかりません",
+    pageTitle: "プレイスタイル",
+    pageDescription: "プレイするバージョン・カテゴリ、操作方法、テクニックなどプレイスタイルに関する情報を管理します。",
+    sectionPlayContent: "プレイ内容",
+    sectionControls: "操作",
+    sectionTechnique: "テクニック",
+    versions: "プレイするバージョン",
+    select: "選択...",
+    selectVersionsFirst: "先にバージョンを選択してください",
+    selectCategoriesFirst: "先にカテゴリを選択してください",
+    mainVersion: "メインバージョン",
+    categories: "カテゴリ",
+    mainCategory: "メインカテゴリ",
+    inputMethod: "入力方法",
+    inputMethodKeyboardMouse: "キーボード/マウス",
+    inputMethodController: "コントローラー",
+    inputMethodTouch: "タッチ",
+    inputMethodHint: "プロフィールのバッジと、/me/keybindings・/me/devices の編集モードに反映されます",
+    hotbarSwitching: "ホットバー切替方法",
+    halfShift: "半シフト",
+    clickMethods: "高CPSクリック方法",
+    dragTapeType: "テープの種類",
+    dragTapeTypePlaceholder: "例: メンディングテープ",
+    usesMousepad: "マウスパッドは使う？",
+    mousepadType: "マウスパッドの種類",
+    mousepadTypePlaceholder: "例: Artisan FX Zero",
+    itemLayoutPolicy: "アイテム配置は決めてる？",
+    searchCraft: "サーチクラフト",
+    searchCraftHint: "「しない」を選ぶと、プロフィールのサーチクラフトタブが非表示になります",
+    gameLanguageLink: "ゲーム言語は /me/devices で設定できます",
+    zeroCycle: "Zero Cycle",
+    groundZero: "Ground Zero",
+    oneshot: "Oneshot",
+    favoriteBastion: "好きな廃要塞の種類",
+    saveSuccess: "プレイスタイルを保存しました",
+    errorMainVersionInvalid: "メインバージョンは選択したバージョンから選んでください",
+    errorMainCategoryInvalid: "メインカテゴリは選択したカテゴリから選んでください",
+    errorInvalidOption: "不正な選択肢です",
+    errorDragTapeTypeTooLong: "テープの種類は100文字以下にしてください",
+    errorMousepadTypeTooLong: "マウスパッドの種類は100文字以下にしてください",
+    errorTitle: "エラーが発生しました",
+    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
+    reloadPage: "ページをリロード",
+  },
   meLayout: {
     editProfile: "プロフィール編集",
+    playstyle: "プレイスタイル",
     records: "記録",
     keybindings: "キー配置",
     devices: "デバイス",
@@ -1216,6 +1415,10 @@ export const PAGES_JA = {
     userNotFound: "ユーザーが見つかりません",
     copyNoData: "コピーするデータがありません",
     parseFailed: "データの解析に失敗しました",
+    invalidSensitivity: "ゲーム内感度は 0〜200%（0.0〜1.0）の範囲で入力してください",
+    invalidDpi: "DPI は正の整数で入力してください",
+    invalidWindowsSpeed: "Windows ポインター速度は 1〜20 で選択してください",
+    invalidWindowsSpeedMultiplier: "カスタム係数は 0 より大きい数値で入力してください",
     saveSuccess: "設定を保存しました",
     copiedFromPreset: "{name}からデバイス設定をコピーしました",
     deviceChangeHistory: "デバイス・設定を更新",
@@ -1955,6 +2158,10 @@ export const PAGES_JA = {
     pageTitle: "ガイド一覧",
     pageDesc: "Minefolioユーザーによる攻略・設定ガイド",
     noGuides: "公開されているガイドはまだありません",
+    /** 人気順を選んでも page_view_stats がまだ空のとき（cron 未稼働・集計前）の注記 */
+    popularPending: "閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています",
+    /** 一覧カードに出す直近{days}日のページビュー数の説明（人気順のときだけ表示） */
+    pageViews7d: "直近{days}日の閲覧数",
     searchPlaceholder: "タイトルや概要で検索...",
     tagAll: "すべて",
     tabGuides: "ガイド",

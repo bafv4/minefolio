@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { KeyCaptureButton } from "../key-capture-button";
+import { KeyCaptureButton, isKeyCaptureEscapeTarget } from "../key-capture-button";
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -125,6 +125,36 @@ describe("KeyCaptureButton", () => {
       mouseDown(4);
       mouseDown(3);
       expect(captured).toEqual([]);
+    });
+  });
+
+  describe("Escape キーのキャプチャ", () => {
+    it("リマップ先（allowModifiers=false）は Escape を通常のキーとして確定する", async () => {
+      await renderButton(false);
+      focus();
+      key("keydown", { code: "Escape", key: "Escape" });
+      expect(captured).toEqual(["Escape"]);
+    });
+
+    it("変更元（allowModifiers=true）は Escape を通常のキーとして確定する", async () => {
+      await renderButton(true);
+      focus();
+      key("keydown", { code: "Escape", key: "Escape" });
+      expect(captured).toEqual(["Escape"]);
+    });
+
+    it("isKeyCaptureEscapeTarget はキャプチャ中のボタンのみ true を返す（ダイアログの Escape クローズを止めるガード用）", async () => {
+      await renderButton(false);
+      expect(isKeyCaptureEscapeTarget(button())).toBe(false);
+      focus();
+      expect(isKeyCaptureEscapeTarget(button())).toBe(true);
+      key("keydown", { code: "Escape", key: "Escape" }); // 確定 → blur → キャプチャ終了
+      expect(isKeyCaptureEscapeTarget(button())).toBe(false);
+    });
+
+    it("isKeyCaptureEscapeTarget は null / 非要素 / 無関係の要素では false", () => {
+      expect(isKeyCaptureEscapeTarget(null)).toBe(false);
+      expect(isKeyCaptureEscapeTarget(document.createElement("div"))).toBe(false);
     });
   });
 });

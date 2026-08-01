@@ -19,6 +19,24 @@ const MOUSE_SIDE_BUTTON_CODES: Record<number, string> = {
   3: "Mouse4", // Back → サイド2
 };
 
+/**
+ * ダイアログ内でキーキャプチャ中に Escape を押しても Radix の Dialog が閉じないようにするガード。
+ * Radix の DismissableLayer は document のキャプチャフェーズ（bubble より前）で Escape を検知して
+ * onDismiss するため、KeyCaptureButton 自身の onKeyDown 内の e.preventDefault() は間に合わない。
+ * KeyCaptureButton をダイアログ内で使う箇所では、DialogContent に
+ * `onEscapeKeyDown={keyCaptureEscapeGuard}` を指定してダイアログの自動クローズを止める
+ * （つまりキャプチャ中は Escape も他のキーと同様に確定対象キーとして扱われる）。
+ * これを指定し忘れると Esc キャプチャが黙って壊れる（ダイアログが閉じてしまう）。
+ */
+export function isKeyCaptureEscapeTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.dataset.keyCapturing === "true";
+}
+
+/** DialogContent の onEscapeKeyDown にそのまま渡す完成品ハンドラ */
+export function keyCaptureEscapeGuard(event: KeyboardEvent): void {
+  if (isKeyCaptureEscapeTarget(event.target)) event.preventDefault();
+}
+
 /** イベントの修飾キー押下状態から表示順どおりの修飾キー配列を作る */
 function modifiersFromEvent(e: React.KeyboardEvent): string[] {
   const modifiers: string[] = [];
@@ -36,7 +54,8 @@ function modifiersFromEvent(e: React.KeyboardEvent): string[] {
  *   （"Ctrl+KeyA"）、そのまま離す → 修飾キー単独（"ControlLeft" 等）
  * - allowModifiers=false（リマップ先＝単一キーのみ）: 非修飾キー → その基底キー
  *   （押下中の修飾キーは無視）、修飾キーをそのまま離す → 修飾キー単独
- * 何も確定せずフォーカスを外せばキャンセル（元の値を維持）。
+ * 何も確定せずフォーカスを外せばキャンセル（元の値を維持）。Escape も通常のキーとして
+ * 確定対象になる（Minecraft のメニュー開閉等、リマップ先として実用的なため）。
  */
 export function KeyCaptureButton({
   value,
@@ -65,6 +84,7 @@ export function KeyCaptureButton({
   return (
     <button
       type="button"
+      data-key-capturing={isCapturing ? "true" : undefined}
       onFocus={() => setIsCapturing(true)}
       onBlur={() => {
         setIsCapturing(false);

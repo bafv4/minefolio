@@ -28,13 +28,14 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `slimSkin` | boolean | スリムスキン使用 |
 | `location` | text | 所在地 |
 | `pronouns` | text | 代名詞 |
-| `defaultProfileTab` | enum | デフォルト表示タブ |
+| `rtaStartedYearMonth` | text | RTAを始めた年月（`"YYYY-MM"` 形式、未回答は `null`）。別プロジェクトmcsr-buttonの `started_year_month` と同形式で、経過年数は表示時に算出する（下記「RTA歴」参照） |
+| `defaultProfileTab` | enum | デフォルト表示タブ（`profile` / `stats` / `keybindings` / `items` / `searchcraft` / `devices` / `settings` / `playstyle`。詳細は下記「プロフィール表示タブ」） |
 | `featuredVideoUrl` | text | 注目動画URL（レガシー。`profile_videos` が1件でもあればそちらを優先表示し、この値は無視される） |
-| `mainEdition` | enum | `java` / `bedrock` |
+| `mainEdition` | enum | `java` / `bedrock`。**`/me/playstyle` でメインバージョンを選ぶと自動決定される**（`/me/edit` の入力項目からは削除済み。詳細は下記「プレイスタイル」） |
 | `mainPlatform` | enum | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
 | `role` | enum | `viewer` / `runner` |
-| `inputMethod` | enum | `keyboard_mouse` / `controller` / `touch` |
-| `inputMethodBadge` | enum | バッジ用入力方法 (inputMethodとは独立) |
+| `inputMethod` | enum | `keyboard_mouse` / `controller` / `touch`。入力方法バッジ・`/browse` の `?input=` フィルタが参照する唯一のソース（`/me/playstyle` で編集） |
+| `inputMethodBadge` | enum | @deprecated **未使用**。`inputMethod` に一本化済み（バッジ表示・フィルタとも `inputMethod` を参照）。本番DDLと `schema.ts` の乖離を避けるため列は残置し、DBからはドロップしていない |
 | `speedruncomUsername` | text | Speedrun.comユーザー名 |
 | `speedruncomId` | text | Speedrun.com ID |
 | `profileViews` | integer | プロフィール閲覧数 |
@@ -101,17 +102,111 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 ## プロフィール表示タブ
 
-`defaultProfileTab` で設定可能なタブ:
+`/player/:slug` のタブ構成（サイドバー/モバイルドロワーの並び順）:
 
 | タブ | 説明 |
 |---|---|
-| `keybindings` | キーバインド設定 |
-| `profile` | プロフィール詳細 |
+| `profile` | プロフィール詳細（スキン・基本情報。先頭に固定、アバター付きの専用トリガーで `tabItems` 配列には含まれない） |
 | `stats` | スピードラン記録・統計 |
-| `items` | アイテム配置 (ホットバー等) |
-| `searchcraft` | サーチクラフト |
+| `playstyle` | プレイスタイル（下記「プレイスタイル」参照） |
+| `keybindings` | キーバインド設定 |
 | `devices` | デバイス設定 |
-| `settings` | ゲーム内設定 |
+| `items` | アイテム配置 (ホットバー等) |
+| `searchcraft` | サーチクラフト。**`playstyle.searchCraft === "does_not"` のとき非表示**（`hideSearchCraftTab`。未回答 `null` は表示する） |
+| `guides` | 投稿したガイド一覧 |
+
+- `defaultProfileTab`（`users` テーブル）はこの並びの初期表示タブを決める。値は上記の他に `settings` を enum として持つが、**UI 上に対応するタブは存在しない**（過去に存在したゲーム内設定タブの残置 enum 値）
+- 既定値は `profile`（新規ユーザーは insert 時に `$defaultFn(() => "profile")` で設定される）。未設定行（`null`）はアプリ側でも `profile` にフォールバックする
+- **サニタイズ**: `defaultProfileTab` が現在の有効タブ集合（上記 + `profile`）に含まれない場合（廃止された `settings` や、SC非表示中に保存されていた `searchcraft` など）は `profile` へフォールバックする。DB の `defaultProfileTab` 自体は書き換えない（サーチクラフトが再度「する」に変われば自然に復活する）
+- URL クエリ `?tab=` が唯一の直接指定手段。未指定・不正値のときに `defaultProfileTab`（サニタイズ後）へフォールバックする
+- 既存ユーザーの初期表示タブを `keybindings` から `profile` へ変更した際は、`scripts/set-default-profile-tab-profile.ts --apply` で DB 上の既存行（`defaultProfileTab = "keybindings"` のもの）を `profile` に更新した。リモート Turso への適用は別途 `--remote --apply` で実行する必要がある
+
+---
+
+## プレイスタイル
+
+プレイするバージョン・カテゴリ、操作方法、高CPSクリックやZero Cycleなどのテクニック系設定を自己申告で登録し、プロフィールの `playstyle` タブに表示する機能。編集は `/me/playstyle`。
+
+### `playstyles` テーブル
+
+`users` と 1:1（`userId` に `unique()` + FK cascade）。**全項目 nullable**（未回答を許容する）。項目追加は `pnpm db:push` を使わず、`scripts/` の dry-run既定 + `--apply` の一回限りスクリプト（前例: `scripts/add-playstyles-table.ts`）で手動DDLを適用する運用（詳細は `CLAUDE.md`「接続先の分離運用」）。
+
+| カラム | 型 | 説明 |
+|---|---|---|
+| `id` | text (PK) | CUID2 |
+| `userId` | text (FK, unique) | `users.id`（cascade削除） |
+| `versions` | text | JSON配列（`VersionKey[]`）。`"java:1_16_1_19"` のような `エディション:バージョン` 連結キー |
+| `categories` | text | JSON配列（`CategoryKey[]`） |
+| `mainVersion` | text | 選択済み `versions` から1つ |
+| `mainCategory` | text | 選択済み `categories` から1つ |
+| `hotbarSwitching` | enum | ホットバー切替方法（4値） |
+| `searchCraft` | enum | サーチクラフト度（3値） |
+| `halfShift` | enum | 半シフトの頻度（5段階） |
+| `itemLayoutPolicy` | enum | アイテム配置を決めているか（3値） |
+| `clickMethods` | text | JSON配列（`ClickMethod[]`）。高CPSクリック方法の複数選択 |
+| `dragTapeType` | text | 自由入力（テープの種類） |
+| `usesMousepad` | enum | マウスパッド使用有無（2値） |
+| `mousepadType` | text | 自由入力（マウスパッドの種類） |
+| `zeroCycle` | enum | Zero Cycle の頻度（`halfShift` と同スケール5段階） |
+| `groundZero` | enum | できる/できない（2値） |
+| `oneshot` | enum | できる/できない（2値） |
+| `favoriteBastion` | enum | 好きな廃要塞の種類（4値） |
+| `createdAt` / `updatedAt` | timestamp（秒） | |
+
+### 項目一覧（表示条件）
+
+条件付き項目（KBM限定・Java RSG/Ranked限定・1.16+限定）は、**条件を満たさなくなっても保存値をクリアしない**（データ保持方針）。編集フォーム（`/me/playstyle`）・プロフィール表示（`playstyle` タブ）の両方で、条件を満たすときだけその項目を出す。表示条件の判定ロジックは両者で共有（下記「選択肢定義」参照）。
+
+| 項目 | 形式 | 表示条件 |
+|---|---|---|
+| プレイするバージョン | エディション別チェックボックス複数選択 | 常時 |
+| カテゴリ | チップ複数選択 | 常時 |
+| メインバージョン / メインカテゴリ | 選択済みから各1つ | 常時（メインバージョンのエディション → プロフィールの Java/Bedrock バッジを決定） |
+| 入力方法 | 3値 Select（`users.inputMethod`。`/me/edit` から移管しバッジと一本化） | 常時 |
+| ホットバー切替方法 | 4値: ホットキー/ホットキー(時々ホイール)/マウスホイール(時々ホットキー)/マウスホイール | 常時 |
+| サーチクラフト | 3値: する/少しだけする/しない | 常時（「しない」でプロフィールのSCタブを非表示） |
+| ゲーム言語（読み取り表示） | `player_configs.gameLanguage`（`/me/devices` への誘導リンクのみ、この画面では編集不可） | サーチクラフト ≠ 「しない」 |
+| 半シフト | 頻度5段階: 積極的にする/する/たまにする/めったにしない/しない | 常時 |
+| アイテム配置は決めてる？ | 3値: 厳密に決めている/ざっくり決めている/気分 | 常時 |
+| 高CPSクリック方法 | 複数選択: ノーマル/ジッター/バタフライ/ドラッグ | **KBM限定**（`inputMethod === "keyboard_mouse"`） |
+| └ テープの種類 | 自由入力（100文字まで） | クリック方法に「ドラッグ」を含む場合 |
+| マウスパッドは使う？ | 2値: 使う/使わない | **KBM限定** |
+| └ 種類 | 自由入力（100文字まで） | 「使う」の場合 |
+| Zero Cycle | 頻度5段階（半シフトと同スケール） | **Java の RSG/Ranked をプレイする場合**（`versions` に `java:*` を含み、かつ `categories` に `rsg` か `ranked` を含む） |
+| Ground Zero | 2値: できる/できない | 同上 |
+| Oneshot | 2値: できる/できない | 同上 |
+| 好きな廃要塞の種類 | 4値: ハウジング/ステーブル/ブリッジ/トレジャー | **1.16+ のバージョンを1つ以上選択時**（`java:1_16_1_19` / `java:1_20_plus` / `bedrock:1_16` / `bedrock:1_16_100_1_17` / `bedrock:1_18`） |
+
+### 選択肢定義・共有ロジック（`app/lib/playstyle.ts`）
+
+`.server` ではない非サーバーモジュール。編集フォームとプロフィール表示の両方から import される、選択肢・型・ロジックの**単一情報源**:
+
+- 定数: `JAVA_VERSIONS` / `BEDROCK_VERSIONS`（speedrun.com 準拠のバージョン区分、ロケール非依存の直書きラベル）、`CATEGORIES`（RSG/SSG/AA/CE/MCSR Ranked/その他）、`HOTBAR_SWITCHING_OPTIONS` / `SEARCH_CRAFT_OPTIONS` / `FREQUENCY_OPTIONS`（半シフト・Zero Cycle 共用）/ `ITEM_LAYOUT_POLICY_OPTIONS` / `CLICK_METHOD_OPTIONS` / `CAN_CANNOT_OPTIONS` / `USES_MOUSEPAD_OPTIONS` / `BASTION_OPTIONS`
+- ヘルパー: `editionOfVersion` / `versionLabel` / `groupVersionsByEdition`
+- 破損JSON耐性パーサ: `parsePlaystyleVersions` / `parsePlaystyleCategories` / `parsePlaystyleClickMethods`（`app/lib/preset-read.ts` の `safeParseArray` と同方針。壊れたJSON・非配列・未知キーは例外を投げず黙って捨てる）
+- 表示条件ヘルパー: `isKbmPlaystyle(inputMethod)` / `playsJavaRsgOrRanked(versions, categories)` / `hasBastionVersions(versions)` / `hidesSearchCraft(searchCraft)`（`searchCraft === "does_not"`。SCタブ非表示・ゲーム言語行の表示条件で共用）
+- ラベル解決: `categoryLabel(t, value)` / `playstyleOptionLabel(t, options, value)`（編集フォーム・プロフィール表示の両方で共用）
+- バリデーション: `validatePlaystyle(input)`（既知キーのみ・重複除去・定義順正規化・`mainVersion`/`mainCategory` が選択済み集合に含まれるか検証・enum検証・自由入力2欄はtrim+最大100文字+空文字→null。条件外項目の値も受理する＝データ保持方針。違反時は `errorKey` を返す）
+
+### 編集ページ: `/me/playstyle`
+
+- 認証必須。プリセット非依存（`devices` タブの `saveInputMethod` と同様、`users` テーブルへの直接更新方式）
+- `me/_layout.tsx` のサイドバーに `Gamepad2` アイコンで登録（`/me/edit` の直後）
+- action は1回のトランザクション相当で2箇所を更新する:
+  1. `playstyles` を `onConflictDoUpdate({ target: playstyles.userId })` で upsert
+  2. `users` を1回の `update` で `inputMethod` を保存し、**`mainVersion` が指定されていれば** `mainEdition = editionOfVersion(mainVersion)` も同時に更新する。`mainVersion` が未設定（空文字）の場合は `mainEdition` に触れない（クリア手段は現状なし。仕様どおりのトレードオフ）
+- バージョン/カテゴリのチェックを外してメイン選択が対象から外れた場合、メイン選択は自動的にリセットされる
+- 条件付き項目（KBM限定群・Java RSG/Ranked群・廃要塞）はフォーム内の選択に動的に追従して表示/非表示が切り替わる。条件から外れても入力値はフォーム上もクリアされない
+
+### プロフィール表示（`playstyle` タブ）
+
+`app/routes/player/profile.tsx` の loader が `with: { playstyle: true }` で読み込む。表示は `/me/playstyle` 編集フォームと同じ3カードにグルーピング:
+
+- **プレイ内容**: バージョン（エディション別グループ表示 + メインは強調バッジ）/ カテゴリ（チップ + メイン強調）
+- **操作**: 入力方法 / ホットバー切替 / 半シフト / 高CPSクリック方法+テープの種類（KBM時のみ）/ マウスパッド+種類（KBM時のみ）
+- **テクニック**: アイテム配置 / サーチクラフト度 / ゲーム言語（条件を満たす場合のみ）/ Zero Cycle・Ground Zero・Oneshot（Java RSG/Ranked時のみ）/ 好きな廃要塞（1.16+選択時のみ）
+
+各項目は値が `null`（未回答）または表示条件を満たさない場合は行ごと非表示になる。全項目が未回答（`hasPlaystyleData` が false）の場合は EmptyState を表示し、本人閲覧時は `/me/playstyle` への誘導リンクを出す。
 
 ---
 
@@ -335,6 +430,12 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ## プロフィール表示ページのレイアウト
 
+### キャッシュ方針
+
+`app/routes/player/profile.tsx` は `headers()` export で `Cache-Control: private, no-store` を返す。isOwner・プリセット選択・絵文字リアクションなど閲覧者依存のデータを含むため、ブラウザ/CDN にキャッシュさせない。React Router のシングルフェッチはこの `headers()` を `.data` サブリクエスト（クライアント遷移時の JSON 取得）にも適用する。
+
+これが無いと、`ProfileFeedCard` 等の `prefetch="intent"` Link がホバー時に `/player/:slug.data` を `<link rel="prefetch">` で先読みし、その応答がブラウザの HTTP キャッシュに乗ってしまう。結果として「リアクション後に別ページへ移動し、ホームのカード等からプレフェッチ経由で再訪すると、反応前の古い状態が一瞬〜継続的に表示される」不具合になる（ハードリロードはブラウザキャッシュを無視するため直る＝原因の特定に使えた症状）。
+
 ### スキン表示
 
 `/player/:slug` ではスキン全身表示を **インタラクティブモード**（`interactive` + `showInteractiveHint`）で描画する。サイズはレスポンシブ：
@@ -347,6 +448,30 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 判定には `app/hooks/use-media-query.ts` の `useMediaQuery(query, ssrDefault)` フックを使用。SSR セーフ。
 
 スキンと右側の基本情報は `flex-col sm:flex-row sm:items-center` で、デスクトップ時は上下中央揃え。
+
+### RTA歴
+
+`rtaStartedYearMonth` を登録している場合のみ、基本情報のメタ情報行（居住地・代名詞と同じ並び）に History アイコン付きで表示する。文言の組み立ては `app/lib/rta-career.ts`（`rtaCareerView()` / `rtaCareerLabel()` / `rtaCareerExactLabel()`）に集約されており、プロフィール・比較ページ（[`docs/browse-compare.md`](./browse-compare.md#プレイヤー比較-compare)）の双方から共有する。
+
+- 開始年月の表示（`start`）はロケール依存: ja は `"2020/6"`、en は `"Jun 2020"`（`Intl.DateTimeFormat`、月だけタイムゾーンの影響を避けるため UTC 基準で整形）
+- 1年以上: `RTA歴 {years}年（{start}〜）`（`playerProfile.rtaCareerYears`、端数月は切り捨てて表示）。英語は単複で文言を分ける（`rtaCareerYears` / `rtaCareerYearsOne`）: `"Speedrunning for 6 years (since Jun 2020)"` / 1年なら `"Speedrunning for 1 year (since ...)"`
+  - **端数月がある場合**（`hasRtaCareerRemainder()`）は表示に下線を付け、`HintTip`（ホバー/フォーカス/タップ）で端数まで含めた正確な経過（`playerProfile.rtaCareerExact`、例: `"RTA歴 6年2か月（2020/6〜）"`）を補足する
+- 1年未満: `RTA歴 {months}か月（{start}〜）`（`playerProfile.rtaCareerMonths` / 単数は `rtaCareerMonthsOne`）
+- 開始月と同じ月（経過0か月）は「1か月未満」（`playerProfile.rtaCareerJustStarted`）と表示する。以前は「1か月」に切り上げていたが、実際の経過とずれるため文言を分けた
+- 経過期間は DB には保存せず、表示のたびに `app/lib/rta-career.ts` の `rtaCareerElapsed()` で開始年月と基準時刻から算出する（月単位、日は考慮しない）。基準時刻は loader が返す `now` を使い、SSR とハイドレーションで計算結果を一致させる
+- 更新日（`Calendar` アイコン）にも「最終更新」ラベルを付け（`playerProfile.lastUpdated`）、ロケールに応じた日付書式（`date-fns` の `format()` + `dateFormatPattern(locale)` / `dateFnsLocale(locale)`）で表示する（従来は `toLocaleDateString("ja-JP", ...)` 固定でロケールに関わらず日本語表記だった）
+
+### アクションボタン行・絵文字リアクション
+
+ヘッダーカードの基本情報カラム下部に、編集（本人のみ）/お気に入り/シェア/比較のアクションボタン行がある。**その直下**にプロフィール絵文字リアクションバー（常時表示、標準機能）を配置する。詳細は [`docs/profile-reactions.md`](./profile-reactions.md) を参照。
+
+### デバイスタブのマウス設定表示
+
+`devices` タブのマウス設定は、値が出せない/不正なケースでも行を消さず「-」+ 理由（または警告）を表示する。計算ロジック・警告UIは `/keybindings` 一覧と共有しており、詳細は [`docs/keybindings.md`](./keybindings.md#マウス設定)（振り向き・カーソル速度・バリデーション節）を参照:
+
+- **ゲーム内感度が有効範囲外**: 値はそのまま出しつつ警告アイコン + ヒント（共有コンポーネント `SensitivityWarning`、`app/components/sensitivity-warning.tsx`）を表示する
+- **Win Sens が係数テーブル（1〜20）外**: `x1.000` と断定せず警告アイコン + ヒント（`WinSensValue`）を表示する
+- **振り向き（cm/360）・カーソル速度が計算できない**: 行自体は残し、「-」+ 理由（DPI未設定・感度未設定・感度範囲外・Windows乗数未設定/不明など、`TurnDistanceValue` / `CursorSpeedValue`）を `HintTip` で表示する（以前は該当行そのものを非表示にしていた）
 
 ### モバイルタブ選択ドロワー
 
@@ -381,6 +506,21 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 ### パス: `/me/edit`
 
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
+
+「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
+
+### 代名詞（pronouns）の入力
+
+基本情報カードの「代名詞」は `Combobox`（`app/components/ui/combobox.tsx`、`allowCustomValue`）で、`he/him` / `she/her` / `they/them` / `he/they` / `she/they` / `any/all` のプリセットから選ぶか、任意の文字列を自由入力できる（ロケール非依存の英語表記のため値と表示ラベルは同一・翻訳キー無し）。空欄に戻すことも可能。保存経路（`users.pronouns`、自由文字列）は変更していない。
+
+### RTA歴（開始年月）の入力
+
+基本情報カードで、年（2009〜現在年、降順）・月の2連 Select として入力する（各先頭に「未設定」項目）。年・月は両方選択するか両方未選択のみ有効で、片方だけ選ぶと Select 直下にインラインエラー（`meEdit.rtaStartedBothOrNone`、`aria-invalid` 付き）を出す。サーバー側の action でも `isValidRtaStartedYearMonth`（`app/lib/rta-career.ts`）で `2009-01`〜現在年月の範囲を検証し、範囲外なら保存を拒否する。
+
+- **未来月を選択肢から除外**: 現在年を選んでいる間は、月の選択肢を現在月までに絞る（`rtaStartedMonthOptions`）。現在年に変更した結果、選択済みの月が未来になる場合はその月選択をクリアする
+- **連動クリア**: 年・月どちらかで「未設定」を選ぶと、もう片方も同時にクリアする（`clearRtaStarted()`）。入力欄の右には両方をまとめてクリアする X ボタンを表示する（どちらか一方でも値があれば表示）
+- **ライブプレビュー**: 年・月が両方揃うと、その場でプロフィールに表示される文言をそのままプレビューする（`rtaCareerExactLabel()` を使い端数月まで表示、例: 「RTA歴 6年2か月（2020/6〜）」）。未入力時のヒントテキスト（`meEdit.rtaStartedHint`）も「設定するとプロフィールに『RTA歴 6年（2020/6〜）』のように公開表示されます」と、保存後の見え方が事前に伝わる文言にしている
+- 各 Select には個別の `aria-label`（`meEdit.rtaStartedYearAria` / `rtaStartedMonthAria`）を持たせ、スクリーンリーダーで年・月を区別できるようにしている
 
 ---
 
@@ -432,9 +572,16 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/lib/slug.ts` | スラッグ生成ユーティリティ |
 | `app/routes/player/profile.tsx` | プロフィール表示ページ |
 | `app/routes/me/edit.tsx` | プロフィール編集ページ |
+| `app/routes/me/playstyle.tsx` | プレイスタイル編集ページ (`/me/playstyle`) |
+| `app/lib/playstyle.ts` | プレイスタイルの選択肢定義・型・表示条件ヘルパー・バリデーション（非 `.server`、編集/表示で共用） |
+| `scripts/add-playstyles-table.ts` | `playstyles` テーブルのDB反映スクリプト（`inputMethod` バックフィル同梱） |
 | `app/routes/og-image.tsx` | OGP画像生成API |
 | `app/components/minecraft-avatar.tsx` | 顔アイコンコンポーネント (2D) |
 | `app/components/minecraft-fullbody.tsx` | 全身コンポーネント (3D, skinview3d) |
 | `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
+| `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出・表示文言の組み立て（ロケール対応） |
+| `scripts/add-rta-started-column.ts` | `rta_started_year_month` 列のDB反映スクリプト |
+| `app/components/hint-tip.tsx` | 端数月の補足など、短い説明を出す共有トリガー（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |
+| `app/components/sensitivity-warning.tsx` | デバイスタブの感度警告表示（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |

@@ -43,6 +43,7 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 ### /stats — プラットフォーム全体統計
 
 - Minefolio全体の統合統計データを表示
+- 感度分布は `/keybindings/stats` の感度区分（0〜200%基準の10区分・有効範囲外は集計から除外）と揃えている。詳細は [`docs/keybindings.md`](./keybindings.md) の「感度分布（`SENSITIVITY_RANGES`）」を参照
 
 ### /keybindings/stats — キー配置統計
 

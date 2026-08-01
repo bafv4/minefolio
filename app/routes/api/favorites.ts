@@ -1,8 +1,8 @@
 import type { Route } from "./+types/favorites";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { getApiUser } from "@/lib/api-auth.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import {
@@ -23,26 +23,16 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-async function getCurrentUser(request: Request) {
-  const env = getEnv();
-  const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-  if (!session) return { db, user: null };
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
-  return { db, user };
-}
-
 /**
  * GET /api/favorites
  * - 認証済み: DB から slug 一覧を取得
  * - 未認証: 空配列を返す
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const { db, user } = await getCurrentUser(request);
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+  const user = await getApiUser(db, auth, request);
   if (!user) {
     return jsonResponse({ favorites: [] });
   }
@@ -58,7 +48,10 @@ export async function loader({ request }: Route.LoaderArgs) {
  *   → 認証必須、localStorage→DBの一括同期（重複は無視）
  */
 export async function action({ request }: Route.ActionArgs) {
-  const { db, user } = await getCurrentUser(request);
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+  const user = await getApiUser(db, auth, request);
   if (!user) {
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }

@@ -341,6 +341,17 @@ CREATE INDEX `idx_paceman_paces_timeline` ON `paceman_paces` (`timeline`);
 CREATE INDEX `idx_paceman_paces_is_nether_enter` ON `paceman_paces` (`is_nether_enter`);
 CREATE INDEX `idx_paceman_paces_is_2nd_structure_or_later` ON `paceman_paces` (`is_2nd_structure_or_later`);
 CREATE INDEX `idx_paceman_paces_run_id` ON `paceman_paces` (`paceman_run_id`);
+CREATE TABLE `page_view_stats` (
+	`id` text PRIMARY KEY NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text NOT NULL,
+	`pageviews` integer DEFAULT 0 NOT NULL,
+	`window_start` integer NOT NULL,
+	`window_end` integer NOT NULL,
+	`fetched_at` integer NOT NULL
+);
+
+CREATE UNIQUE INDEX `page_view_stats_target_uniq` ON `page_view_stats` (`target_type`,`target_id`);
 CREATE TABLE `player_configs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -398,6 +409,43 @@ CREATE INDEX `idx_player_rankings_type` ON `player_rankings` (`ranking_type`);
 CREATE INDEX `idx_player_rankings_category` ON `player_rankings` (`category_id`);
 CREATE INDEX `idx_player_rankings_time` ON `player_rankings` (`time_ms`);
 CREATE INDEX `idx_player_rankings_elo` ON `player_rankings` (`elo_rate`);
+CREATE TABLE `playstyles` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`versions` text,
+	`categories` text,
+	`main_version` text,
+	`main_category` text,
+	`hotbar_switching` text,
+	`search_craft` text,
+	`half_shift` text,
+	`item_layout_policy` text,
+	`click_methods` text,
+	`drag_tape_type` text,
+	`uses_mousepad` text,
+	`mousepad_type` text,
+	`zero_cycle` text,
+	`ground_zero` text,
+	`oneshot` text,
+	`favorite_bastion` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `playstyles_user_id_unique` ON `playstyles` (`user_id`);
+CREATE TABLE `profile_reactions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`profile_user_id` text NOT NULL,
+	`reactor_user_id` text NOT NULL,
+	`emoji` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`profile_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`reactor_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `profile_reactions_profile_emoji_reactor_uniq` ON `profile_reactions` (`profile_user_id`,`emoji`,`reactor_user_id`);
+CREATE INDEX `profile_reactions_reactor_idx` ON `profile_reactions` (`reactor_user_id`,`profile_user_id`,`emoji`);
 CREATE TABLE `profile_videos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -541,7 +589,7 @@ CREATE TABLE `users` (
 	`slim_skin` integer DEFAULT false,
 	`location` text,
 	`pronouns` text,
-	`default_profile_tab` text DEFAULT 'keybindings',
+	`default_profile_tab` text,
 	`featured_video_url` text,
 	`main_edition` text,
 	`main_platform` text,
@@ -565,7 +613,8 @@ CREATE TABLE `users` (
 	`custom_skin_updated_at` integer,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	`pinned_speedrun_records` text
+	`pinned_speedrun_records` text,
+	`rta_started_year_month` text
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);

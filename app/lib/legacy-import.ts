@@ -4,6 +4,7 @@ import type { Database } from "./db";
 import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, customActions } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
+import { isValidMouseDpi, isValidSensitivity } from "./mouse-settings";
 import { createPresetFromOnboarding } from "./preset-utils";
 
 // カスタムキーの型定義
@@ -298,13 +299,34 @@ export async function importFromLegacy(
         where: eq(playerConfigs.userId, userId),
       });
 
+      // 旧データは無検証で入ってくるため、数値項目は妥当性を確認する。
+      // 無効値はクランプせず取り込まない（null）方針。未設定（undefined）は従来どおり列を更新しない。
+      const importedMouseDpi =
+        settings.mouseDpi === undefined
+          ? undefined
+          : isValidMouseDpi(settings.mouseDpi)
+            ? settings.mouseDpi
+            : null;
+      const importedGameSensitivity =
+        settings.gameSensitivity === undefined
+          ? undefined
+          : isValidSensitivity(settings.gameSensitivity)
+            ? settings.gameSensitivity
+            : null;
+      const importedCm360 =
+        settings.cm360 === undefined
+          ? undefined
+          : Number.isFinite(settings.cm360) && settings.cm360 > 0
+            ? settings.cm360
+            : null;
+
       const configValues = {
         keyboardLayout: settings.keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | undefined,
         keyboardModel: settings.keyboardModel,
         mouseModel: settings.mouseModel,
-        mouseDpi: settings.mouseDpi,
-        gameSensitivity: settings.gameSensitivity,
-        cm360: settings.cm360,
+        mouseDpi: importedMouseDpi,
+        gameSensitivity: importedGameSensitivity,
+        cm360: importedCm360,
         toggleSprint: settings.toggleSprint,
         toggleSneak: settings.toggleSneak,
         autoJump: settings.autoJump,

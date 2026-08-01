@@ -41,7 +41,8 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 - 担当機能の外（DBスキーマの共有テーブル変更、他機能領域への波及）が必要になった場合は、
   勝手に広げず 呼び出し元（メイン）に報告して調整する。
 - 変更後は `pnpm typecheck`、関連テストがあれば `pnpm test` を実行してクリーンを確認。UI 変更は可能ならブラウザで動作確認する。
-- 仕様に影響する変更は `docs/` 配下・`app/content/changelog.md` も合わせて更新する。
+- 仕様に影響する変更は `docs/` 配下も合わせて更新する。changelog（`app/content/changelog.md`）は都度更新しない
+  （バージョンリリースの指示時にまとめて作成する。CLAUDE.md「バージョン管理・Changelog」参照）。
 - 破壊的な git 操作・コミット・プッシュは、明示的に指示されない限り行わない。
 
 ## 完了報告

@@ -45,6 +45,51 @@ const filledRow: KeybindingsRow = {
   } as KeybindingsRow["playerConfig"],
 };
 
+/** 感度が異常値（表示 201% 相当）の走者 */
+const overSensRow: KeybindingsRow = {
+  ...emptyRow,
+  id: "u3",
+  slug: "overSens",
+  playerConfig: {
+    mouseDpi: 800,
+    gameSensitivity: 1.5,
+    rawInput: true,
+    windowsSpeed: null,
+    windowsSpeedMultiplier: null,
+    keyboardLayout: "US",
+  } as KeybindingsRow["playerConfig"],
+};
+
+/** 感度が異常値（負値）の走者 */
+const negativeSensRow: KeybindingsRow = {
+  ...emptyRow,
+  id: "u4",
+  slug: "negativeSens",
+  playerConfig: {
+    mouseDpi: 800,
+    gameSensitivity: -0.1,
+    rawInput: true,
+    windowsSpeed: null,
+    windowsSpeedMultiplier: null,
+    keyboardLayout: "US",
+  } as KeybindingsRow["playerConfig"],
+};
+
+/** 感度は正常だが WinSens（windowsSpeed / windowsSpeedMultiplier）が未設定の走者 */
+const noWinRow: KeybindingsRow = {
+  ...emptyRow,
+  id: "u5",
+  slug: "noWin",
+  playerConfig: {
+    mouseDpi: 800,
+    gameSensitivity: 0.5,
+    rawInput: true,
+    windowsSpeed: null,
+    windowsSpeedMultiplier: null,
+    keyboardLayout: "US",
+  } as KeybindingsRow["playerConfig"],
+};
+
 const mouseColumns = columnPresets(t).mouse as ColumnDef<KeybindingsRow>[];
 
 const sortableColumns = mouseColumns.filter((col) => col.enableSorting);
@@ -126,5 +171,59 @@ describe("mouse 列の並び替え - 未設定は昇順・降順のどちらで�
     const result = sortedSlugs(rows, [{ id: "mouse.dpi", desc: true }]);
     expect(result.slice(0, 2)).toEqual(["dpi800", "dpi400"]);
     expect(result.slice(2).sort()).toEqual(["none", "nullDpi"]);
+  });
+});
+
+function columnById(id: string): ColumnDef<KeybindingsRow> {
+  const col = mouseColumns.find((c) => c.id === id);
+  if (!col) throw new Error(`column not found: ${id}`);
+  return col;
+}
+
+// 感度異常値（範囲外）は「未設定」と同じ扱いで末尾へ落とす（sensitivityPercent が null → forSort で undefined）。
+// cm360 も感度が無効なら calculateCm360 が null を返すため、同様に undefined になる。
+describe("mouse 列 - 感度異常値・WinSens 未設定のアクセサ挙動", () => {
+  it("感度が範囲外（201%相当）の走者は mouse.sensitivity / mouse.cm360 が undefined", () => {
+    expect(accessorOf(columnById("mouse.sensitivity"))(overSensRow, 0)).toBeUndefined();
+    expect(accessorOf(columnById("mouse.cm360"))(overSensRow, 0)).toBeUndefined();
+  });
+
+  it("感度が範囲外（負値）の走者は mouse.sensitivity / mouse.cm360 が undefined", () => {
+    expect(accessorOf(columnById("mouse.sensitivity"))(negativeSensRow, 0)).toBeUndefined();
+    expect(accessorOf(columnById("mouse.cm360"))(negativeSensRow, 0)).toBeUndefined();
+  });
+
+  it("WinSens 未設定の走者は mouse.cursorSpeed のみ undefined（cm360 は rawInput=true なので計算される）", () => {
+    expect(accessorOf(columnById("mouse.cursorSpeed"))(noWinRow, 0)).toBeUndefined();
+    expect(typeof accessorOf(columnById("mouse.cm360"))(noWinRow, 0)).toBe("number");
+    expect(accessorOf(columnById("mouse.dpi"))(noWinRow, 0)).toBe(800);
+  });
+});
+
+describe("mouse 列の並び替え - 感度異常値は未設定と同じく末尾グループ", () => {
+  const normalLow: KeybindingsRow = {
+    ...filledRow,
+    id: "e",
+    slug: "normalLow",
+    playerConfig: { ...filledRow.playerConfig!, gameSensitivity: 0.25 },
+  };
+  const normalHigh: KeybindingsRow = {
+    ...filledRow,
+    id: "f",
+    slug: "normalHigh",
+    playerConfig: { ...filledRow.playerConfig!, gameSensitivity: 0.75 },
+  };
+  const rows = [overSensRow, normalHigh, negativeSensRow, normalLow, emptyRow];
+
+  it("昇順では正常値が小さい順に並び、異常値と未設定は末尾グループ", () => {
+    const result = sortedSlugs(rows, [{ id: "mouse.sensitivity", desc: false }]);
+    expect(result.slice(0, 2)).toEqual(["normalLow", "normalHigh"]);
+    expect(result.slice(2).sort()).toEqual(["negativeSens", "overSens", "runner"]);
+  });
+
+  it("降順でも異常値と未設定は末尾グループのまま", () => {
+    const result = sortedSlugs(rows, [{ id: "mouse.sensitivity", desc: true }]);
+    expect(result.slice(0, 2)).toEqual(["normalHigh", "normalLow"]);
+    expect(result.slice(2).sort()).toEqual(["negativeSens", "overSens", "runner"]);
   });
 });

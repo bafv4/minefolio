@@ -27,24 +27,91 @@ export const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
 };
 
 /**
- * Windows ポインター速度の乗数を取得（カスタム係数優先）
+ * ゲーム内感度が有効な範囲かどうかを判定
+ * 内部値 0..1 が表示 0..200% に対応する（閉区間。ちょうど 0% / 200% は有効）。
+ * 範囲外（表示 201% 以上 / 0% 未満）や NaN は無効として扱い、
+ * 振り向き（cm/360）を計算しない。
  */
-export function getWindowsMultiplier(
+export function isValidSensitivity(
+  sensitivity: number | null | undefined,
+): sensitivity is number {
+  return sensitivity != null && sensitivity >= 0 && sensitivity <= 1;
+}
+
+/**
+ * 値は入っているが有効範囲外（統計の母数から除外してカウントする対象）
+ */
+export function isOutOfRangeSensitivity(
+  sensitivity: number | null | undefined,
+): boolean {
+  return sensitivity != null && !isValidSensitivity(sensitivity);
+}
+
+/**
+ * マウス DPI が有効な値（正の整数）かどうかを判定
+ */
+export function isValidMouseDpi(
+  dpi: number | null | undefined,
+): dpi is number {
+  return dpi != null && Number.isInteger(dpi) && dpi > 0;
+}
+
+/** 表示用パーセントの上限（Minecraft の設定画面と同じ 0〜200% 表記に揃える）。内部値 0..1 に対応 */
+export const SENSITIVITY_PERCENT_MAX = 200;
+
+/**
+ * 内部値（0..1）を表示用パーセント（0..200%）へ換算する。
+ * 係数は SENSITIVITY_PERCENT_MAX（200）。
+ * 有効範囲外の値も換算だけは行う（一覧では警告付きで表示するため）。
+ * 端数は切り捨て（Minecraft 本体の int キャストと同じ挙動に揃える。表示・CSV・統計で同じ整数になるよう統一）。
+ * 保存値は `fromSensitivityPercent()` 経由のため、整数% ちょうどの値でも `sensitivity * 200` が
+ * 浮動小数点誤差でわずかに下振れすることがある（例: 58% → 57.99999999999999）。
+ * floor 前に 6 桁へ丸めて誤差を吸収してから切り捨てる。
+ */
+export function toSensitivityPercent(
+  sensitivity: number | null | undefined,
+): number | null {
+  if (sensitivity == null || !Number.isFinite(sensitivity)) return null;
+  return Math.floor(Number((sensitivity * SENSITIVITY_PERCENT_MAX).toFixed(6)));
+}
+
+/**
+ * 表示用パーセント（0..200%）を内部値（0..1）へ逆変換する。
+ * フォーム保存値の正規形（小数4桁固定の文字列）。toSensitivityPercent の doc が
+ * 参照する保存値形式の実体。
+ */
+export function fromSensitivityPercent(percent: number): string {
+  return (percent / SENSITIVITY_PERCENT_MAX).toFixed(4);
+}
+
+/**
+ * Windows ポインター速度の乗数を取得（カスタム係数優先）
+ * WinSens もカスタム係数も未設定なら null を返す（フォールバックしない）。
+ */
+export function getWindowsMultiplierOrNull(
   windowsSpeed: number | null | undefined,
   windowsSpeedMultiplier: number | null | undefined,
-): number {
+): number | null {
   if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
     return windowsSpeedMultiplier;
   }
-  return windowsSpeed != null
-    ? (WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? 1.0)
-    : 1.0;
+  if (windowsSpeed != null) {
+    return WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? null;
+  }
+  return null;
 }
 
 /**
  * 振り向き距離（cm/360）を計算
  * 計算式: 6096 / (DPI * 8 * (0.6 * sensitivity + 0.2)^3) / 2
  * Raw Input が ON のときは Windows ポインター速度を無視
+ * ゲーム内感度が有効範囲（内部値 0..1）外なら計算しない
+ *
+ * Raw Input が OFF（未設定含む）のときの Windows 側の扱いは 2 通りに分ける:
+ * - WinSens もカスタム係数も**未設定** → 従来どおり 1.0 とみなして計算する
+ * - どちらかが**設定済みなのに係数が決まらない**（係数テーブル 1〜20 外の WinSens など）
+ *   → 不正値として計算しない（null）。x1.000 と断定すると Cursor Speed 列（同条件で「-」）と
+ *     食い違うため、振り向き側も計算不能に揃える
  */
 export function calculateCm360(
   dpi: number | null | undefined,
@@ -53,7 +120,7 @@ export function calculateCm360(
   windowsSpeed: number | null | undefined,
   windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
-  if (dpi == null || sensitivity == null) return null;
+  if (dpi == null || !isValidSensitivity(sensitivity)) return null;
 
   const f = 0.6 * sensitivity + 0.2;
   const cm360Base = 6096 / (dpi * 8 * f * f * f) / 2;
@@ -62,13 +129,21 @@ export function calculateCm360(
     return cm360Base;
   }
 
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return cm360Base / winMultiplier;
+  const winMultiplier = getWindowsMultiplierOrNull(windowsSpeed, windowsSpeedMultiplier);
+  if (winMultiplier != null) {
+    return cm360Base / winMultiplier;
+  }
+  // 未設定（両方 null）のみ 1.0 フォールバックを維持する
+  if (windowsSpeed == null && windowsSpeedMultiplier == null) {
+    return cm360Base;
+  }
+  return null;
 }
 
 /**
  * カーソル速度（実効 DPI）を計算
  * Raw Input の状態に関わらず DPI に Windows 速度の係数をかける
+ * WinSens もカスタム係数も未設定なら計算しない（DPI をそのまま出さない）
  */
 export function calculateCursorSpeed(
   dpi: number | null | undefined,
@@ -76,6 +151,75 @@ export function calculateCursorSpeed(
   windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
   if (dpi == null) return null;
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
+  const winMultiplier = getWindowsMultiplierOrNull(windowsSpeed, windowsSpeedMultiplier);
+  if (winMultiplier == null) return null;
   return Math.round(dpi * winMultiplier);
+}
+
+/**
+ * マウス設定フォームのバリデーション対象欄。action の返り値（field）と
+ * クライアント側検証で共有する。値は該当 Input の id と揃えている。
+ */
+export type MouseSettingsField =
+  | "gameSensitivity"
+  | "mouseDpi"
+  | "windowsSpeed"
+  | "windowsSpeedMultiplier";
+
+export type MouseSettingsValidationError = {
+  field: MouseSettingsField;
+  /** 呼び出し側が t()/useT() で翻訳する（サーバーは locale 付き t、クライアントは useT） */
+  messageKey:
+    | "meDevices.invalidSensitivity"
+    | "meDevices.invalidDpi"
+    | "meDevices.invalidWindowsSpeed"
+    | "meDevices.invalidWindowsSpeedMultiplier";
+};
+
+/** フォームの文字列4欄を数値へパースする（空文字は null、数値化失敗は NaN のまま返して validate で弾く） */
+export function parseMouseSettingsInput(values: {
+  mouseDpi: string;
+  gameSensitivity: string;
+  windowsSpeed: string;
+  windowsSpeedMultiplier: string;
+}): {
+  mouseDpi: number | null;
+  gameSensitivity: number | null;
+  windowsSpeed: number | null;
+  windowsSpeedMultiplier: number | null;
+} {
+  return {
+    mouseDpi: values.mouseDpi ? parseInt(values.mouseDpi) : null,
+    gameSensitivity: values.gameSensitivity ? parseFloat(values.gameSensitivity) : null,
+    windowsSpeed: values.windowsSpeed ? parseInt(values.windowsSpeed) : null,
+    windowsSpeedMultiplier: values.windowsSpeedMultiplier
+      ? parseFloat(values.windowsSpeedMultiplier)
+      : null,
+  };
+}
+
+/** パース済みマウス設定の妥当性検証。サーバー action・クライアント保存前チェックの単一の真実源 */
+export function validateMouseSettings(parsed: {
+  mouseDpi: number | null;
+  gameSensitivity: number | null;
+  windowsSpeed: number | null;
+  windowsSpeedMultiplier: number | null;
+}): MouseSettingsValidationError | null {
+  if (parsed.gameSensitivity !== null && !isValidSensitivity(parsed.gameSensitivity)) {
+    return { field: "gameSensitivity", messageKey: "meDevices.invalidSensitivity" };
+  }
+  if (parsed.mouseDpi !== null && !isValidMouseDpi(parsed.mouseDpi)) {
+    return { field: "mouseDpi", messageKey: "meDevices.invalidDpi" };
+  }
+  // WinSens の有効域は乗数テーブルのキー（1〜20 の整数）そのもの。数値リテラルで再表明しない
+  if (parsed.windowsSpeed !== null && WINDOWS_POINTER_MULTIPLIERS[parsed.windowsSpeed] == null) {
+    return { field: "windowsSpeed", messageKey: "meDevices.invalidWindowsSpeed" };
+  }
+  if (
+    parsed.windowsSpeedMultiplier !== null &&
+    (!Number.isFinite(parsed.windowsSpeedMultiplier) || parsed.windowsSpeedMultiplier <= 0)
+  ) {
+    return { field: "windowsSpeedMultiplier", messageKey: "meDevices.invalidWindowsSpeedMultiplier" };
+  }
+  return null;
 }

@@ -26,6 +26,7 @@
 | 値 | 説明 |
 |----|------|
 | `updatedAt` | 更新日時順（デフォルト） |
+| `popular` | 人気順（直近7日のページビュー降順 → `updatedAt` 降順） |
 | `mcid` | MCID昇順 |
 | `displayName` | 表示名昇順 |
 
@@ -33,6 +34,10 @@
 （`app/lib/sort-order.ts`）を ORDER BY の先頭キーに差し込んで打ち消している。
 MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ページ目を占有するのを防ぐ。
 お気に入り優先はこれより強く、お気に入りなら未設定でも先頭に来る。
+
+`popular` のページビューは `profilePageViewsSql()`（`app/lib/page-view-stats.server.ts`）が返す `page_view_stats` の相関サブクエリ（Vercel Web Analytics を cron で集計）。未集計・0件のプロフィールは `updatedAt` 降順へ自然に落ちる。集計の仕組みは [`docs/infrastructure.md`](./infrastructure.md#ページビュー集計vercel-web-analytics) を参照。
+
+`?sort=` は許可リスト（`BROWSE_SORTS` = 上記4値、`app/lib/browse-query.server.ts`）で検証し、未知の値は既定の `updatedAt` へ丸める（`parseBrowseSort()`）。ガイド・テンプレート一覧の `parseContentSort()` と同じ「不正な `sort` はエラーにせず既定へフォールバックする」方針を踏襲している。
 
 ### フィルタ（複数選択対応）
 
@@ -42,6 +47,8 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 | `edition` | FilterEdition | `java` / `bedrock` |
 | `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch` |
 | `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
+
+`input` フィルタの参照先は `users.inputMethod`（旧 `inputMethodBadge` は @deprecated・未使用。プロフィールのバッジ表示と同じ列に一本化されている。詳細は [`docs/profiles.md`](./profiles.md#プレイスタイル) の「プレイスタイル」参照）。URLパラメータ名・値は変更前と同じで既存URLと互換。
 
 ロールフィルタで何も選択していない時のみ視聴者ロールが除外される（前述）。「視聴者」を選択した場合はそのまま表示される。
 
@@ -83,6 +90,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - URLパラメータ `player1`, `player2` で比較対象のMCIDまたはslugを指定
 - 例: `/compare?player1=player_a&player2=player_b`
 - 画面上の検索フォームからプレイヤーを選択可能
+- 各プレイヤーのヘッダー（表示名・MCID の下）に RTA歴を1行で表示する（`rtaStartedYearMonth` を設定している走者のみ、未設定なら何も出さない）。文言・計算はプロフィールページと同じ `rtaCareerView()` / `rtaCareerLabel()`（`app/lib/rta-career.ts`）を共有し、経過期間の基準時刻は loader が返す `now` で SSR とハイドレーションを揃える（`RtaCareerLine`）
 
 ### 比較項目
 
@@ -178,6 +186,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 ### ライブラリ
 - `app/lib/users-filter.ts` - 視聴者ロール除外条件 `excludeViewersCondition`
+- `app/lib/page-view-stats.server.ts` - `popular` ソートで使うページビュー相関サブクエリ（`profilePageViewsSql`）
 - `app/lib/favorites.ts` - サーバー側 DB CRUD（`getFavoritesFromDb` / `addFavoriteToDb` / `removeFavoriteFromDb` / `syncLocalFavoritesToDb`）+ 旧 Cookie 削除ヘッダー生成
 - `app/lib/favorites-client.ts` - クライアント側 localStorage / sessionStorage 操作
 - `app/hooks/use-favorites.tsx` - `FavoritesProvider` + `useFavorites` フック

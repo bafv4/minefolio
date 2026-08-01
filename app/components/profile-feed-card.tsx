@@ -18,7 +18,6 @@ export interface ProfileFeedCardPlayer {
   mainEdition: "java" | "bedrock" | null;
   mainPlatform: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
   customSkinUrl?: string | null;
-  inputMethodBadge: "keyboard_mouse" | "controller" | "touch" | null;
   updatedAt: Date;
   shortBio: string | null;
 }
@@ -41,11 +40,6 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
           player.mainPlatform === "switch" ? "Switch" :
             player.mainPlatform === "mobile" ? "Mobile" :
               player.mainPlatform === "other" ? "Other" : null;
-  const inputMethodLabel =
-    player.inputMethodBadge === "keyboard_mouse" ? "KBM" :
-      player.inputMethodBadge === "controller" ? "Controller" :
-        player.inputMethodBadge === "touch" ? "Touch" : null;
-
   return (
     <Link
       to={`/player/${player.slug}`}

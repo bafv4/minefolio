@@ -5,7 +5,7 @@ import {
   BROWSE_ITEMS_PER_PAGE,
   type BrowseQueryArgs,
 } from "../browse-query.server";
-import { createTestDb, seedUser } from "./helpers/test-db";
+import { createTestDb, seedUser, seedPageViewStat } from "./helpers/test-db";
 
 // BrowseQueryArgs のデフォルト（各テストで必要な項目だけ上書き）
 function args(overrides: Partial<BrowseQueryArgs> = {}): BrowseQueryArgs {
@@ -111,7 +111,7 @@ describe("loadBrowsePage - フィルタ", () => {
       mcid: "M",
       role: "runner",
       mainEdition: "java",
-      inputMethodBadge: "keyboard_mouse",
+      inputMethod: "keyboard_mouse",
       mainPlatform: "pc_windows",
     });
     await seedUser(db, {
@@ -119,7 +119,7 @@ describe("loadBrowsePage - フィルタ", () => {
       mcid: "O",
       role: "runner",
       mainEdition: "bedrock",
-      inputMethodBadge: "controller",
+      inputMethod: "controller",
       mainPlatform: "switch",
     });
 
@@ -134,6 +134,36 @@ describe("loadBrowsePage - フィルタ", () => {
     expect(
       (await loadBrowsePage(db, args({ platforms: ["switch"] }), [])).players.map((p) => p.slug),
     ).toEqual(["other"]);
+  });
+
+  it("?input= は users.inputMethod 列のみを見る（廃止済みの inputMethodBadge 由来では絞られない）", async () => {
+    const db = await createTestDb();
+    // inputMethod が controller のユーザーだけが対象。inputMethodBadge の値は無視される。
+    await seedUser(db, {
+      slug: "by-input-method",
+      mcid: "ByInputMethod",
+      role: "runner",
+      inputMethod: "controller",
+      inputMethodBadge: null,
+    });
+    // inputMethodBadge にのみ controller が入っていて inputMethod が別値・未設定の場合はヒットしない。
+    await seedUser(db, {
+      slug: "badge-only",
+      mcid: "BadgeOnly",
+      role: "runner",
+      inputMethod: null,
+      inputMethodBadge: "controller",
+    });
+    await seedUser(db, {
+      slug: "badge-mismatch",
+      mcid: "BadgeMismatch",
+      role: "runner",
+      inputMethod: "keyboard_mouse",
+      inputMethodBadge: "controller",
+    });
+
+    const result = await loadBrowsePage(db, args({ inputMethods: ["controller"] }), []);
+    expect(result.players.map((p) => p.slug)).toEqual(["by-input-method"]);
   });
 });
 
@@ -196,6 +226,66 @@ describe("loadBrowsePage - ソート", () => {
 
     const result = await loadBrowsePage(db, args({ sort: "updatedAt" }), []);
     expect(result.players.map((p) => p.slug)).toEqual(["new", "mid", "old"]);
+  });
+});
+
+describe("loadBrowsePage - 人気順（popular）", () => {
+  it("直近のプロフィール閲覧数（page_view_stats）が多い順に並ぶ", async () => {
+    const db = await createTestDb();
+    // 更新日時は閲覧数と逆順にして、ページビューが第一キーであることを分かるようにする
+    const hot = await seedUser(db, {
+      slug: "hot",
+      mcid: "Hot",
+      role: "runner",
+      updatedAt: new Date("2020-01-01"),
+    });
+    const warm = await seedUser(db, {
+      slug: "warm",
+      mcid: "Warm",
+      role: "runner",
+      updatedAt: new Date("2023-01-01"),
+    });
+    await seedUser(db, {
+      slug: "cold",
+      mcid: "Cold",
+      role: "runner",
+      updatedAt: new Date("2026-01-01"),
+    });
+    await seedPageViewStat(db, "profile", hot.id, 100);
+    await seedPageViewStat(db, "profile", warm.id, 10);
+
+    const result = await loadBrowsePage(db, args({ sort: "popular" }), []);
+    expect(result.players.map((p) => p.slug)).toEqual(["hot", "warm", "cold"]);
+  });
+
+  it("集計がまだ無ければ（全件0）更新日時の新しい順へ落ちる（並びが破綻しない）", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "old", mcid: "Old", role: "runner", updatedAt: new Date("2020-01-01") });
+    await seedUser(db, { slug: "new", mcid: "New", role: "runner", updatedAt: new Date("2026-01-01") });
+    await seedUser(db, { slug: "mid", mcid: "Mid", role: "runner", updatedAt: new Date("2023-01-01") });
+
+    const result = await loadBrowsePage(db, args({ sort: "popular" }), []);
+    expect(result.players.map((p) => p.slug)).toEqual(["new", "mid", "old"]);
+  });
+
+  it("お気に入り優先は人気順より強い（閲覧数 0 でも先頭）", async () => {
+    const db = await createTestDb();
+    const hot = await seedUser(db, {
+      slug: "hot",
+      mcid: "Hot",
+      role: "runner",
+      updatedAt: new Date("2026-01-01"),
+    });
+    await seedUser(db, {
+      slug: "fav",
+      mcid: "Fav",
+      role: "runner",
+      updatedAt: new Date("2020-01-01"),
+    });
+    await seedPageViewStat(db, "profile", hot.id, 100);
+
+    const result = await loadBrowsePage(db, args({ sort: "popular" }), ["fav"]);
+    expect(result.players.map((p) => p.slug)).toEqual(["fav", "hot"]);
   });
 });
 
@@ -264,6 +354,14 @@ describe("parseBrowseSearchParams", () => {
     expect(parsed.sort).toBe("updatedAt");
     expect(parsed.page).toBe(1);
     expect(parsed.roles).toEqual([]);
+  });
+
+  it("許可リスト外の sort は既定（updatedAt）へ正規化する", () => {
+    const mk = (sort: string) => parseBrowseSearchParams(new URLSearchParams({ sort })).sort;
+    expect(mk("bogus")).toBe("updatedAt");
+    expect(mk("")).toBe("updatedAt");
+    // 許可済みの値はそのまま通る
+    expect(mk("popular")).toBe("popular");
   });
 
   it("page は 1 未満・非数値を 1 にクランプし、巨大値は上限で頭打ちにする", () => {

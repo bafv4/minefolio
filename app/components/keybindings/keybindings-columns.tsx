@@ -2,7 +2,12 @@
 // 4 つのサブタブ（actions / remaps / custom-actions / mouse）ごとに ColumnDef 配列を export。
 import type { ColumnDef } from "@tanstack/react-table";
 import { getActionLabel } from "@/lib/keybindings";
-import { calculateCm360, calculateCursorSpeed } from "@/lib/mouse-settings";
+import {
+  calculateCm360,
+  calculateCursorSpeed,
+  isValidSensitivity,
+  toSensitivityPercent,
+} from "@/lib/mouse-settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { Translator } from "@/lib/messages";
 import {
@@ -190,9 +195,13 @@ const customActionsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
  */
 const forSort = <T,>(value: T | null | undefined): T | undefined => value ?? undefined;
 
+/**
+ * ソート用の感度（%）。有効範囲（内部値 0..1 = 表示 0..200%）外は
+ * 未設定と同じ扱い（null → undefined）にして末尾へ落とす。
+ */
 const sensitivityPercent = (config: MouseConfig): number | null =>
-  config?.gameSensitivity != null
-    ? Math.floor(config.gameSensitivity * 200)
+  isValidSensitivity(config?.gameSensitivity)
+    ? toSensitivityPercent(config.gameSensitivity)
     : null;
 
 const windowsMultiplier = (config: MouseConfig): number | null => {

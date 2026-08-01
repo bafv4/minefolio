@@ -1,9 +1,32 @@
 {
   "permissions": {
     "allow": [
-      "Read(//private/tmp/claude/-Users-bafv4-dev-minefolio/tasks/**)",
+      "Bash(pnpm install:*)",
       "Bash(npm install:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm build:*)",
+      "PowerShell(pnpm typecheck:*)",
+      "PowerShell(pnpm test:*)",
+      "PowerShell(pnpm build:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
       "Bash(git worktree:*)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "cat \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/delegation-reminder.json\" 2>/dev/null || true"
+          }
+        ]
+      }
     ]
   }
 }

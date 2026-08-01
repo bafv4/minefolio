@@ -8,7 +8,7 @@ import {
   formatSort,
   type Tab,
 } from "@/lib/keybindings-search-params";
-import { calculateCm360 } from "@/lib/mouse-settings";
+import { calculateCm360, toSensitivityPercent } from "@/lib/mouse-settings";
 
 /** プレイヤー型（applyToPlayers が読み取る最小集合） */
 export type FilterablePlayer = {
@@ -51,7 +51,11 @@ export function useKeybindingsFilters() {
   };
   const clearUsers = () => setUsers([]);
 
-  const clearAll = () =>
+  /**
+   * 表示に効いているフィルタ（数値範囲 + ユーザー絞り込み）を一括解除する。
+   * 0件の空状態からの復帰用。ソート・タブは表示件数に影響しないので残す。
+   */
+  const clearFilters = () =>
     setParams({
       dpiMin: null,
       dpiMax: null,
@@ -59,7 +63,7 @@ export function useKeybindingsFilters() {
       sensMax: null,
       cm360Min: null,
       cm360Max: null,
-      sort: null,
+      users: null,
     });
 
   const activeFilterCount = useMemo(() => {
@@ -127,8 +131,9 @@ export function useKeybindingsFilters() {
 
       if (dpiMin != null && (dpi == null || dpi < dpiMin)) return false;
       if (dpiMax != null && (dpi == null || dpi > dpiMax)) return false;
-      // 感度は内部 0-1 値。UI 入力は % 想定なので比較も % で行う。
-      const sensPercent = sens != null ? sens * 100 : null;
+      // 感度は内部 0-1 値。UI 入力は一覧の表示と同じ 0〜200%（Minecraft 準拠）想定なので、
+      // 比較も一覧表示と同じ toSensitivityPercent（*200 + floor）のパーセント値で行う。
+      const sensPercent = toSensitivityPercent(sens);
       if (sensMin != null && (sensPercent == null || sensPercent < sensMin)) {
         return false;
       }
@@ -141,6 +146,9 @@ export function useKeybindingsFilters() {
     });
   }
 
+  /** 表示件数に効くフィルタが1つでも有効か（空状態の文言・クリア導線の出し分け用） */
+  const hasActiveFilters = activeFilterCount > 0 || params.users.length > 0;
+
   return {
     params,
     setParams,
@@ -150,8 +158,9 @@ export function useKeybindingsFilters() {
     setUsers,
     toggleUser,
     clearUsers,
-    clearAll,
+    clearFilters,
     activeFilterCount,
+    hasActiveFilters,
     sort,
     applyToPlayers,
   };

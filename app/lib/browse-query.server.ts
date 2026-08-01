@@ -6,6 +6,7 @@ import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
 import { getFavoritesFromDb } from "./favorites";
+import { profilePageViewsSql } from "./page-view-stats.server";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
 // ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
@@ -23,7 +24,19 @@ function parseBrowsePage(raw: string | null): number {
   return Math.min(p, MAX_BROWSE_PAGE);
 }
 
-export type BrowseSortOption = "updatedAt" | "mcid" | "displayName";
+/** popular は直近7日のプロフィール閲覧数（page_view_stats）。他は users の列で並べる */
+export const BROWSE_SORTS = ["updatedAt", "mcid", "displayName", "popular"] as const;
+
+export type BrowseSortOption = (typeof BROWSE_SORTS)[number];
+
+/** 既定のソート（不正な `sort` はここへ正規化する） */
+const DEFAULT_BROWSE_SORT: BrowseSortOption = "updatedAt";
+
+function parseBrowseSort(raw: string | null): BrowseSortOption {
+  return (BROWSE_SORTS as readonly string[]).includes(raw ?? "")
+    ? (raw as BrowseSortOption)
+    : DEFAULT_BROWSE_SORT;
+}
 
 export type BrowseFilterRole = "runner" | "viewer";
 export type BrowseFilterEdition = "java" | "bedrock";
@@ -49,7 +62,7 @@ export interface BrowseQueryArgs {
 export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQueryArgs {
   return {
     q: searchParams.get("q") ?? "",
-    sort: (searchParams.get("sort") as BrowseSortOption) || "updatedAt",
+    sort: parseBrowseSort(searchParams.get("sort")),
     page: parseBrowsePage(searchParams.get("page")),
     roles: searchParams.getAll("role") as BrowseFilterRole[],
     editions: searchParams.getAll("edition") as BrowseFilterEdition[],
@@ -69,7 +82,6 @@ const BROWSE_LIST_COLUMNS = {
   role: true,
   mainEdition: true,
   mainPlatform: true,
-  inputMethodBadge: true,
   updatedAt: true,
   shortBio: true,
   customSkinUrl: true,
@@ -106,7 +118,7 @@ function buildWhere(args: BrowseQueryArgs) {
   }
   if (args.inputMethods.length > 0) {
     conditions.push(
-      or(...args.inputMethods.map((i) => eq(users.inputMethodBadge, i)))!,
+      or(...args.inputMethods.map((i) => eq(users.inputMethod, i)))!,
     );
   }
   if (args.platforms.length > 0) {
@@ -140,6 +152,9 @@ export async function loadBrowsePage(
       ? [nullsLast(users.mcid), asc(users.mcid)]
       : args.sort === "displayName"
       ? [nullsLast(users.displayName), asc(users.displayName)]
+      : args.sort === "popular"
+      ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
+        [desc(profilePageViewsSql()), desc(users.updatedAt)]
       : // updatedAt は NOT NULL なので NULL 対策は不要
         [desc(users.updatedAt)];
 

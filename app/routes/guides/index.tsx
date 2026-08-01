@@ -6,8 +6,10 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
+import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
+import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,13 +67,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = resolveLocale(request);
 
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-  const viewer = session
-    ? await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      })
-    : null;
 
   const url = new URL(request.url);
   const tag = url.searchParams.get("tag") || "";
@@ -79,33 +74,53 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), GUIDE_SORTS);
 
   const likeCount = guideLikeCountSql();
-  // 並び順の定義（おすすめ順の重み付け含む）は likes.server.ts に集約している
+  // 並び順の定義（人気順=7日PVのフォールバック含む）は likes.server.ts に集約している
   const orderBy = guideListOrderBy(sort);
 
-  const allGuides = await db
-    .select({
-      guide: {
-        id: guides.id,
-        slug: guides.slug,
-        title: guides.title,
-        summary: guides.summary,
-        tags: guides.tags,
-        coverImageUrl: guides.coverImageUrl,
-        viewCount: guides.viewCount,
-        updatedAt: guides.updatedAt,
-      },
-      likeCount,
-      authorId: guides.authorId,
-      authorSlug: users.slug,
-      authorDisplayName: users.displayName,
-      authorDisplayNameAlphabet: users.displayNameAlphabet,
-      authorMcid: users.mcid,
-    })
-    .from(guides)
-    .innerJoin(users, eq(guides.authorId, users.id))
-    // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
-    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-    .orderBy(...orderBy);
+  const isPopular = sort === "popular";
+  // 人気順のときだけ根拠数値（直近7日PV）を取る。他の並びでは表示しないので、
+  // 相関サブクエリを走らせず定数に差し替える（select の形は変えず1本のクエリのまま）
+  const pageViews7d = isPopular ? guidePageViewsSql() : sql<number>`0`;
+  // 集計がまだ無いと人気順は「いいね数 → 更新日時」へ落ちるため、UI で注記を出す。
+  // 人気順以外では注記しないので問い合わせない（true = 注記不要）。
+  // 閲覧者の解決（session → users 行）は本体クエリと独立なので同じ Promise.all で並行する
+  const [viewer, hasPageViewData, allGuides] = await Promise.all([
+    (async () => {
+      const session = await getOptionalSession(request, auth);
+      return session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          })) ?? null)
+        : null;
+    })(),
+    isPopular ? hasPageViewStats(db, "guide") : Promise.resolve(true),
+    db
+      .select({
+        guide: {
+          id: guides.id,
+          slug: guides.slug,
+          title: guides.title,
+          summary: guides.summary,
+          tags: guides.tags,
+          coverImageUrl: guides.coverImageUrl,
+          viewCount: guides.viewCount,
+          updatedAt: guides.updatedAt,
+        },
+        likeCount,
+        pageViews7d,
+        authorId: guides.authorId,
+        authorSlug: users.slug,
+        authorDisplayName: users.displayName,
+        authorDisplayNameAlphabet: users.displayNameAlphabet,
+        authorMcid: users.mcid,
+      })
+      .from(guides)
+      .innerJoin(users, eq(guides.authorId, users.id))
+      // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
+      .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
+      .orderBy(...orderBy),
+  ]);
 
   // Filter in memory for tag/search (simple approach)
   let filtered = allGuides;
@@ -138,13 +153,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .map(([name]) => name);
 
   const appUrl = env.APP_URL || "https://minefolio.app";
-  return { guides: filtered, allTags, tag, q, sort, viewerId: viewer?.id ?? null, appUrl };
+  return {
+    guides: filtered,
+    allTags,
+    tag,
+    q,
+    sort,
+    hasPageViewData,
+    viewerId: viewer?.id ?? null,
+    appUrl,
+  };
 }
 
 export default function GuidesIndexPage() {
   const t = useT();
   const locale = useLocale();
-  const { guides: allGuides, allTags, tag, q, sort, viewerId } = useLoaderData<typeof loader>();
+  const {
+    guides: allGuides,
+    allTags,
+    tag,
+    q,
+    sort,
+    hasPageViewData,
+    viewerId,
+  } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
@@ -156,9 +188,11 @@ export default function GuidesIndexPage() {
   // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   // 型注釈にする（as キャストだと likeCount 等の取得漏れを型検査が見逃す）
   const guideItems: GuideItemWithAuthorSlug[] = allGuides.map(
-    ({ guide, likeCount, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid }) => ({
+    ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid }) => ({
       ...guide,
       likeCount: Number(likeCount),
+      // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）
+      pageViews7d: sort === "popular" ? Number(pageViews7d) : undefined,
       isOwn: !!viewerId && authorId === viewerId,
       authorName:
         pickDisplayName(
@@ -203,8 +237,9 @@ export default function GuidesIndexPage() {
 
       {/* Search + tag filter + toggle */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Form method="get" className="flex gap-2 flex-1">
+        {/* 狭い画面では縦積みにする（1行のままだと検索入力が潰れる。テンプレート一覧と同じ構成） */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <Form method="get" className="flex flex-col sm:flex-row gap-2 flex-1">
             {tag && <input type="hidden" name="tag" value={tag} />}
             {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
             {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
@@ -222,13 +257,21 @@ export default function GuidesIndexPage() {
               {t("common.search")}
             </Button>
           </Form>
-          <ContentSortSelect
-            value={sort}
-            onChange={handleSortChange}
-            options={GUIDE_SORTS}
-            newestLabel={t("contentSort.recentlyUpdated")}
-          />
-          <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+          <div className="flex items-center justify-end gap-2">
+            <ContentSortSelect
+              value={sort}
+              onChange={handleSortChange}
+              options={GUIDE_SORTS}
+              newestLabel={t("contentSort.recentlyUpdated")}
+              // 同じ「人気順」でも一覧ごとに基準が違うため、説明は呼び出し側で用意する
+              descriptions={{
+                likes: t("contentSort.likesDesc"),
+                views: t("contentSort.viewsDesc"),
+                popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
+              }}
+            />
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
         </div>
         {allTags.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -262,6 +305,12 @@ export default function GuidesIndexPage() {
           </div>
         )}
       </div>
+
+      {/* ページビュー集計がまだ無い間は人気順が「いいね数 → 更新日時」へ落ちるので、
+          並びが期待と違って見える理由を一覧の直上に出す */}
+      {sort === "popular" && !hasPageViewData && (
+        <p className="text-sm text-muted-foreground">{t("guides.popularPending")}</p>
+      )}
 
       {isNavigating ? (
         viewMode === "card" ? (

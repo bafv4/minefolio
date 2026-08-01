@@ -11,7 +11,7 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 
 ## 担当領域
 
-- `docs/` 配下の仕様ドキュメント更新、`app/content/changelog.md` へのチェンジログ記載
+- `docs/` 配下の仕様ドキュメント更新、`app/content/changelog.md` へのチェンジログ記載（バージョンリリースの指示時のみ）
 - `app/lib/messages/` への翻訳キー追加・修正（アクティブなのは `pages-ja.ts` の日本語のみ）
 - 軽微な設定ファイル変更、README的な記述整備
 - git依存パッケージ（例: `github:bafv4/mcitems`）の更新（`pnpm update` → **必ず開発サーバー再起動**、
@@ -28,8 +28,9 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
   （利用可能なら `ToolSearch` で読み込み）で実際に使用しているバージョン（`package.json` 参照、目安は
   `.claude/rules/README.md`「Context7 でのドキュメント確認」節）のドキュメントを確認する。
 - `CLAUDE.md` と `.claude/rules/general.md` / `.claude/rules/ui.md` の規約に従う。
-- 仕様変更・機能内容の追加変更が発生する場合は `docs/` 配下のドキュメントと `app/content/changelog.md` を
-  必ず合わせて更新する（CLAUDE.md の運用ルール）。
+- 仕様変更・機能内容の追加変更が発生する場合は `docs/` 配下のドキュメントを必ず合わせて更新する。
+  `app/content/changelog.md` は都度更新せず、バージョンリリースの指示があったときに `origin/main` と `dev` の
+  間のコミットを精査してまとめて作成する（CLAUDE.md「バージョン管理・Changelog」）。
 - UIテキストは翻訳キー経由にし、ハードコードしない。
 - 既存の実装パターンを踏襲し、指示されていない範囲のリファクタや抽象化は行わない。
 - 変更内容に応じて `pnpm typecheck` を実行し、クリーンであることを確認する。

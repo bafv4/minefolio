@@ -247,7 +247,10 @@ cm360_base = 6096 / (DPI * 8 * f^3) / 2
 ```
 
 - **Raw Input ON**: `cm360 = cm360_base`
-- **Raw Input OFF**: `cm360 = cm360_base / windowsMultiplier`
+- **Raw Input OFF**: `cm360 = cm360_base / windowsMultiplier`。`windowsMultiplier` は `getWindowsMultiplierOrNull()`（`windowsSpeed` / `windowsSpeedMultiplier` から解決。下記「Windowsポインター速度乗数テーブル」参照）で求め、結果に応じて次のように扱いを分ける
+  - `windowsSpeed` も `windowsSpeedMultiplier` も**未設定** → 乗数 `1.0` とみなして計算する（従来どおり）
+  - どちらかが**設定済みなのに乗数が決まらない**（例: `windowsSpeed` が係数テーブル 1〜20 の範囲外） → 不正値として `cm360` を計算しない（`null`）。`x1.000` と断定すると Cursor Speed 側（同条件で計算不能）と食い違うため、振り向き側も計算不能に揃える
+- **ゲーム内感度の有効範囲**: 内部値 `0..1`（表示 `0〜200%`、閉区間なので両端は有効）。範囲外（表示 `201%` 以上 / `0%` 未満）や `NaN` は無効値として扱い、`cm360` を計算しない（`null`）。判定は `isValidSensitivity()`（`app/lib/mouse-settings.ts`）
 
 ### Windowsポインター速度乗数テーブル
 
@@ -265,6 +268,40 @@ cm360_base = 6096 / (DPI * 8 * f^3) / 2
 | 10 | 1 | 20 | 3.5 |
 
 `windowsSpeedMultiplier` が設定されている場合はそちらを優先し、`windowsSpeed` からの自動変換は行わない。
+
+`windowsSpeed` が保存されていても、値が係数テーブル（1〜20）の範囲外（`/me/devices` は保存時に 1〜20 を強制するが、旧データインポート等では範囲外の値が残りうる）だと乗数は決まらない。この場合、一覧・プロフィールの Win Sens セルは値をそのまま表示しつつ `x1.000` と断定せず警告アイコン + ヒント（`keybindings.windowsSpeedUnknown`）で「乗数不明」を明示する（`WindowsSpeedCell` / `WinSensValue`）。
+
+### カーソル速度 (Cursor Speed)
+
+```
+cursorSpeed = round(DPI * windowsMultiplier)
+```
+
+Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗数をかけた実効DPIとして計算する。
+
+- **`windowsMultiplier` が決まらなければ計算しない**（`null`）。cm/360 の Raw Input OFF 経路は「両方未設定なら `1.0` にフォールバック」する救済があるのに対し、Cursor Speed（`getWindowsMultiplierOrNull()`）はこの救済を持たず、未設定・係数不明のいずれでも `null` になる。一覧セル・CSVとも未設定時は空欄になる。単位は `DPI`（一覧・プロフィールとも `CursorSpeedCell` / `CursorSpeedValue` が末尾に付与）
+- **一覧の「-」セル（cm/360・Cursor Speed）は理由をヒントで示す**。DPI未設定・感度未設定・感度範囲外・Windows乗数未設定/不明のうち該当するものを列挙し（`cm360MissingReasons` / `cursorSpeedMissingReasons`、`app/components/keybindings/keybindings-cells.tsx`）、`HintTip`（`app/components/hint-tip.tsx`）でホバー/フォーカス/タップから読める（理由が無い＝マウス設定自体が未登録の場合は素の「-」のまま）。プロフィールのデバイスカードも同じロジックを共有し、値が計算できない行を非表示にせず「-」+ 理由で残す（`app/routes/player/profile.tsx` の `TurnDistanceValue` / `CursorSpeedValue`）
+
+### 表示パーセントへの換算
+
+内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページ・`/me/devices` の編集フォーム（内部値欄↔パーセント欄の相互変換）のいずれも同じ整数%になる（以前はプロフィール・比較ページが四捨五入、`/me/devices` は独自の四捨五入ロジックを持っていたため、境界値で表示が1%ずれることがあった）。逆変換（表示%→内部値、フォーム保存値の正規形＝小数4桁固定の文字列）は `fromSensitivityPercent()` が担う。パーセントの上限は定数 `SENSITIVITY_PERCENT_MAX`（`= 200`）で持ち、フィルターダイアログの入力上限（`inputMax`）や感度ビン区分（`SENSITIVITY_PERCENT_BINS`、後述）もここから導出する。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
+
+### バリデーション
+
+マウス設定フォームの妥当性検証（パース・検証条件）は `app/lib/mouse-settings.ts` の `parseMouseSettingsInput()` / `validateMouseSettings()` に一本化されており、サーバー側 action・クライアント側の保存前チェックの両方がこれを呼ぶ（値は該当 Input の `id` と揃えた `MouseSettingsField` = `gameSensitivity` / `mouseDpi` / `windowsSpeed` / `windowsSpeedMultiplier` で返す）。
+
+- **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される。エラーは `{ error, field }` の形で返す
+
+  | 項目 | 条件 | 違反時のエラーキー | `field` |
+  |---|---|---|---|
+  | ゲーム内感度（`gameSensitivity`） | `isValidSensitivity()`（内部値 `0..1` ＝ 表示 `0〜200%`） | `meDevices.invalidSensitivity` | `gameSensitivity` |
+  | DPI（`mouseDpi`） | `isValidMouseDpi()`（正の整数） | `meDevices.invalidDpi` | `mouseDpi` |
+  | Windowsポインター速度（`windowsSpeed`） | 乗数テーブル（1〜20）のキー | `meDevices.invalidWindowsSpeed` | `windowsSpeed` |
+  | カスタム係数（`windowsSpeedMultiplier`） | 0 より大きい有限数 | `meDevices.invalidWindowsSpeedMultiplier` | `windowsSpeedMultiplier` |
+
+- **クライアント側の保存前検証（`app/routes/me/devices.tsx`）**: 上記と同じ `validateMouseSettings()` で事前チェックし、範囲外の値は送信せずその場で該当欄の直下にインラインエラー（`FieldErrorText`、`aria-invalid` / `aria-describedby` 付き）を表示して該当欄までスクロールする（`showFieldError()`）。サーバー側 action からの `field` 付きエラーも同じ表示経路（`fieldError` state）で扱うため、直接 POST 等でサーバー側だけが弾いたケースでも同様にハイライトされる。該当欄を編集するとエラー表示は消える（感度は内部値 `0..1` 欄・パーセント欄のどちらを編集しても解消扱い）
+
+- **旧データインポート（`app/lib/legacy-import.ts`、MCSRer Hotkeys からの `/me/import`）**: 無検証の値が入ってくるため、`mouseDpi` / `gameSensitivity` / `cm360` はそれぞれ上記相当の妥当性を確認する。無効な値は**クランプせず取り込まない**（`null` として保存）。未設定（`undefined`）の項目は従来どおり既存の列を更新しない
 
 ---
 
@@ -365,12 +402,17 @@ type ControllerSettings = {
 
 - **統合フィルターモーダル**（`FilterDialog`）: ユーザー絞り込みと数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
   - ユーザー絞り込み（`users` パラメータ）: 表示するユーザーを検索してリスト登録する横断フィルター（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
-  - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む
+  - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
+  - 各入力欄は number input の `min` / `max` 属性で有効範囲を示し（DPI: `min=1`、感度: `0〜200`、振り向き: `min=0`）、感度欄には有効範囲の補足テキスト（`keybindings.sensitivityRangeHint`）を常時表示する（`FilterRange` の `inputMin` / `inputMax` / `hint`）
+  - 「適用」時に **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
   - **未設定の行は昇順・降順のどちらでも末尾**。TanStack Table の `sortUndefined: "last"` は
     `undefined` のみを見る（`null` は素通りして通常比較に回り、昇順で先頭に来る）ため、
     ソート対象の `accessorFn` は未設定を必ず `undefined` で返す（`keybindings-columns.tsx` の `forSort()`）
+  - **ゲーム内感度が有効範囲外**（内部値 `0..1` ＝ 表示 `0〜200%` の外）の行は、感度ソートで未設定と同様に末尾へ落ちる（`sensitivityPercent()` が `null` を返し `forSort()` で `undefined` 化）。一覧セルには値をそのまま表示しつつ警告アイコン（`TriangleAlert`、`text-warning`）+ ヒント（`keybindings.sensitivityOutOfRange`）で理由を示す（`SensitivityCell` → 共有コンポーネント `SensitivityWarning`、`app/components/sensitivity-warning.tsx`）
+    - 警告・「-」理由の吹き出しは共有コンポーネント `HintTip`（`app/components/hint-tip.tsx`）が担う。ポインタ端末（マウス等）は Tooltip（ホバー/フォーカス）、タッチ端末（`pointer: coarse`）は Popover（タップ）に自動で出し分ける（`KeyInfoTrigger` と同じ方針）。SR 向けにトリガーは `<button aria-label="{説明文}">` で実装する
+  - **0件になったときの空状態**（`KeybindingsEmptyState`、表・カードビュー共通）: 有効なフィルタが1つでもある場合は理由が伝わる文言（`keybindings.emptyFiltered`）とその場でフィルタを一括解除できる「クリア」ボタン（`clearFilters()`、ソート・タブは維持）を出す。フィルタなしで0件（そもそも登録者がいない）なら従来どおり `keybindings.noPlayers`
 - プレイヤー名クリックでプロフィールページへ遷移
 - ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
@@ -381,6 +423,13 @@ type ControllerSettings = {
 
 「登録走者数」「キーバインド設定者数」「マウス設定者数」の集計からは視聴者ロールを除外している（v1.4.0〜）。
 
+#### 感度分布（`SENSITIVITY_RANGES`）
+
+- 表示・CSV・編集画面と同じ **0〜200%**（Minecraft準拠）基準の**10区分**（`< 20%`, `20-39%`, `40-59%`, `60-79%`, `80-99%`, `100-119%`, `120-139%`, `140-159%`, `160-179%`, `180-200%`）。区分は閉端（最終区分の `200%` を含む）で、換算は一覧・CSVと同じ `toSensitivityPercent()` を使う。数値境界の実体は `SENSITIVITY_PERCENT_BINS`（`app/lib/keybindings-stats-shared.ts`）で、`SENSITIVITY_RANGES` はそこからラベルを付けて導出する
+- **有効範囲（内部値 `0..1` ＝ 表示 `0〜200%`）外の感度は、分布・平均の母数から除外**する（`isValidSensitivity()` で判定。感度統計に中央値は無い）。感度ちょうど `0%` は含む
+- 除外した人数（感度は登録済みだが範囲外）はカード下に注記として表示する（`SensitivityStats.excludedCount`、`keybindingsStats.excludedOutOfRange`）。0人のときは注記自体を出さない
+- サイト全体統計（`/stats`、`app/routes/stats.tsx`）の感度分布も同じ `SENSITIVITY_PERCENT_BINS` から区分を組み立て（ラベルのみロケール対応で各自生成）、除外方針も共通の `isOutOfRangeSensitivity()` で揃えている。同様に除外人数の注記（`stats.sensitivityExcludedNote`）を分布カード下に表示する（未設定=`null`は元々対象外なので除外人数には含めない）
+
 ### CSVエクスポート
 
 `/developers/export` ページから出力項目と対象ユーザーを選んでダウンロードする（v1.4.0 でフッターから移動）。
@@ -389,6 +438,7 @@ type ControllerSettings = {
 - 対象ユーザー: 設定登録済みの全公開ユーザー（デフォルト）または個別指定（検索 UI）
 - API: `GET /api/keybindings-csv?sections=...&userSlugs=...`（`userSlugs` は任意、未指定なら全ユーザー）
 - キーバインドは各プレイヤーのキーボード配列に応じた表示ラベルで出力
+- `mouse` セクションの `cm/360` `Cursor Speed` は一覧と同じ計算関数（`calculateCm360` / `calculateCursorSpeed`）に統一されており、計算できない場合は空欄。`Win Sens Multiplier` 列も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` 列は有効範囲外の値も含め生データをそのまま出力する
 
 ---
 
@@ -435,6 +485,9 @@ type ControllerSettings = {
 | `app/components/keybindings/card-view.tsx` | ビジュアルカードビュー（`VirtualKeyboard` を読み取り専用で再利用） |
 | `app/components/keybindings/filter-dialog.tsx` | 統合フィルターモーダル（ユーザー絞り込み + 数値範囲、適用で反映） |
 | `app/components/keybindings/user-filter.tsx` | ユーザー検索・選択リスト（`UserSelectList`）と選択チップ（`UserFilterChips`、`users` パラメータ） |
+| `app/components/keybindings/keybindings-empty-state.tsx` | 0件表示（表・カードビュー共通）。フィルタ起因なら理由 + クリアボタンを出す |
+| `app/components/sensitivity-warning.tsx` | 感度が有効範囲外のときの警告表示（値 + 警告アイコン + ヒント）。一覧・プロフィール共通 |
+| `app/components/hint-tip.tsx` | 短い補足説明の共有トリガー（ポインタ端末は Tooltip、タッチ端末は Popover に自動で出し分ける） |
 | `app/routes/keybindings-stats.tsx` | キー配置の統計・傾向ページ |
 | `app/routes/me/keybindings.tsx` | 自分のキー配置編集ページ |
 | `app/routes/me/devices.tsx` | 自分のデバイス設定編集ページ |

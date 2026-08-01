@@ -87,6 +87,6 @@ API に触れる際は、**Context7 MCP tool が利用可能なら** `ToolSearch
 
 ## 変更時に更新するもの（忘れやすい）
 
-- **仕様・機能の追加変更** → `docs/` 配下の該当ドキュメント ＋ `app/content/changelog.md`（`/developers/changelog` で公開）
+- **仕様・機能の追加変更** → `docs/` 配下の該当ドキュメント（`app/content/changelog.md` は**都度更新しない**。リリース指示時にまとめて作成 — CLAUDE.md「バージョン管理・Changelog」参照）
 - **規約そのものの変更** → このディレクトリの `general.md` / `ui.md`（併せてこの索引の記述もずれていないか確認）
 - **UI 文言の追加** → `app/lib/messages/pages-ja.ts`（キー追加 → `t("...")` で参照）

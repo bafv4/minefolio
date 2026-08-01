@@ -19,6 +19,7 @@ import {
   type PresetKey,
 } from "./keybindings-columns";
 import { RunnerCell } from "./keybindings-cells";
+import { KeybindingsEmptyState } from "./keybindings-empty-state";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/hooks/use-locale";
@@ -256,11 +257,7 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
         })}
       </div>
 
-      {rowModel.rows.length === 0 && (
-        <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-          {t("keybindings.noPlayers")}
-        </div>
-      )}
+      {rowModel.rows.length === 0 && <KeybindingsEmptyState />}
     </div>
   );
 }

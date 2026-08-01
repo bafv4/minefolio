@@ -5,6 +5,8 @@ import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { SensitivityWarning } from "@/components/sensitivity-warning";
+import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import { cn } from "@/lib/utils";
 import {
   getKeyLabel,
@@ -20,8 +22,13 @@ import {
 import {
   calculateCm360,
   calculateCursorSpeed,
-  WINDOWS_POINTER_MULTIPLIERS,
+  isValidSensitivity,
+  toSensitivityPercent,
 } from "@/lib/mouse-settings";
+import {
+  cm360MissingReasons,
+  cursorSpeedMissingReasons,
+} from "@/lib/mouse-settings-reasons";
 import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -324,10 +331,15 @@ export function DpiCell({ config }: { config: MouseConfig }) {
 }
 
 export function SensitivityCell({ config }: { config: MouseConfig }) {
-  if (config?.gameSensitivity == null) {
+  const display = toSensitivityPercent(config?.gameSensitivity);
+  if (display == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
-  const display = Math.floor(config.gameSensitivity * 200);
+  // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
+  // 振り向きは計算されず、統計の集計からも外れ、ソートでも未設定として扱われる。
+  if (!isValidSensitivity(config?.gameSensitivity)) {
+    return <SensitivityWarning percent={display} />;
+  }
   return (
     <span className="font-mono text-sm">
       {display}
@@ -337,6 +349,7 @@ export function SensitivityCell({ config }: { config: MouseConfig }) {
 }
 
 export function Cm360Cell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
@@ -348,7 +361,7 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cm360 == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <MissingMouseValue reasons={cm360MissingReasons(t, config)} className="text-sm" />;
   }
   return (
     <span className="font-mono text-sm">
@@ -373,17 +386,7 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
     );
   }
   if (config?.windowsSpeed != null) {
-    return (
-      <span className="font-mono text-sm">
-        {config.windowsSpeed}
-        <span className="text-muted-foreground">
-          (x
-          {WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed]?.toFixed(3) ??
-            "1.000"}
-          )
-        </span>
-      </span>
-    );
+    return <WinSensValue windowsSpeed={config.windowsSpeed} className="font-mono text-sm" />;
   }
   return (
     <span className="text-muted-foreground/40">{t("keybindings.noValue")}</span>
@@ -391,6 +394,7 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
 }
 
 export function CursorSpeedCell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
@@ -400,9 +404,16 @@ export function CursorSpeedCell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cursor == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return (
+      <MissingMouseValue reasons={cursorSpeedMissingReasons(t, config)} className="text-sm" />
+    );
   }
-  return <span className="font-mono text-sm">{cursor}</span>;
+  return (
+    <span className="font-mono text-sm">
+      {cursor}
+      <span className="text-muted-foreground">DPI</span>
+    </span>
+  );
 }
 
 export function RawInputCell({ config }: { config: MouseConfig }) {

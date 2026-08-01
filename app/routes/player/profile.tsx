@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -32,11 +32,12 @@ import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbod
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { format, formatDistanceToNow } from "date-fns";
+import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
 import { decodePresetConfig } from "@/lib/preset-read";
@@ -45,8 +46,19 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
+import {
+  hasRtaCareerRemainder,
+  rtaCareerExactLabel,
+  rtaCareerLabel,
+  rtaCareerView,
+} from "@/lib/rta-career";
 import { safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
+import {
+  getProfileReactionCounts,
+  getViewerProfileReactions,
+} from "@/lib/profile-reactions.server";
+import type { ProfileReactionCount } from "@/lib/profile-reactions";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
@@ -179,6 +191,7 @@ import {
   Twitter,
   Pencil,
   Calendar,
+  History,
   Target,
   CheckCircle2,
   Video,
@@ -198,9 +211,15 @@ import {
   Maximize2,
   Languages,
   Pin,
+  Gamepad2,
+  Layers,
+  SlidersHorizontal,
+  Sparkles,
+  Speech,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import {
   Dialog,
   DialogContent,
@@ -212,8 +231,40 @@ import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cach
 import {
   calculateCm360,
   calculateCursorSpeed,
-  WINDOWS_POINTER_MULTIPLIERS,
+  isValidSensitivity,
+  toSensitivityPercent,
 } from "@/lib/mouse-settings";
+import {
+  cm360MissingReasons,
+  cursorSpeedMissingReasons,
+  type MouseReasonConfig,
+} from "@/lib/mouse-settings-reasons";
+import { HintTip } from "@/components/hint-tip";
+import { SensitivityWarning } from "@/components/sensitivity-warning";
+import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
+import {
+  HOTBAR_SWITCHING_OPTIONS,
+  SEARCH_CRAFT_OPTIONS,
+  FREQUENCY_OPTIONS,
+  ITEM_LAYOUT_POLICY_OPTIONS,
+  CLICK_METHOD_OPTIONS,
+  CAN_CANNOT_OPTIONS,
+  USES_MOUSEPAD_OPTIONS,
+  BASTION_OPTIONS,
+  versionLabel,
+  groupVersionsByEdition,
+  parsePlaystyleVersions,
+  parsePlaystyleCategories,
+  parsePlaystyleClickMethods,
+  isVersionKey,
+  isCategoryKey,
+  isKbmPlaystyle,
+  playsJavaRsgOrRanked,
+  hasBastionVersions,
+  hidesSearchCraft,
+  categoryLabel,
+  playstyleOptionLabel,
+} from "@/lib/playstyle";
 
 // bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
 // チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
@@ -227,6 +278,16 @@ const BioMarkdown = lazy(() =>
       ),
     })),
 );
+
+// isOwner・プリセット選択・絵文字リアクションなど閲覧者依存のデータを含むため、
+// ブラウザ/CDN にキャッシュさせない（React Router のシングルフェッチは `.data` サブ
+// リクエストにもこの headers() を適用する）。ProfileFeedCard 等の `prefetch="intent"`
+// Link がホバー時に `.data` を先読みするが、これがキャッシュされると「リアクション後に
+// 別ページへ行き、ホームのカードから再訪すると反応前の古い状態が表示される」不具合になる
+// （ハードリロードはキャッシュを無視するため直る＝症状と一致）。
+export function headers(_: Route.HeadersArgs) {
+  return { "Cache-Control": "private, no-store" };
+}
 
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
@@ -268,6 +329,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : sql`0 = 1`,
     with: {
       playerConfig: true,
+      playstyle: true,
       keybindings: {
         orderBy: [asc(keybindings.category), asc(keybindings.action)],
       },
@@ -341,20 +403,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     presets.find((p) => p.isActive) ??
     null;
 
-  let displayKeybindings = player.keybindings;
-  let displayPlayerConfig = player.playerConfig;
-  let displayKeyRemaps = player.keyRemaps;
-  let displayItemLayouts = player.itemLayouts;
-  let displaySearchCrafts = player.searchCrafts;
-  let displayCustomKeys = player.customKeys;
-  let displayCustomActions = player.customActions;
+  // Check if current user is viewing their own profile
+  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
+  const isOwner = session?.user?.id === player.discordId;
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
   // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
-  if (selectedPreset && !selectedPreset.isActive) {
+  const resolvePresetOverride = async () => {
+    if (!selectedPreset || selectedPreset.isActive) return null;
     const presetSnapshot = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, selectedPreset.id),
       columns: {
@@ -368,71 +427,110 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         customActionsData: true,
       },
     });
-    const decoded = decodePresetConfig(presetSnapshot ?? {}, player.id);
-    displayKeybindings = decoded.keybindings;
-    displayKeyRemaps = decoded.keyRemaps;
-    displayItemLayouts = decoded.itemLayouts;
-    displaySearchCrafts = decoded.searchCrafts;
-    displayCustomKeys = decoded.customKeys;
-    displayCustomActions = decoded.customActions;
-    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
-    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
-    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
-    displayPlayerConfig = (decoded.playerConfig
-      ? {
-          ...decoded.playerConfig,
-          fingerAssignments: decoded.fingerAssignments,
-        }
-      : null) as typeof player.playerConfig;
-  }
+    return decodePresetConfig(presetSnapshot ?? {}, player.id);
+  };
 
-  // Check if current user is viewing their own profile
-  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
-  const isOwner = session?.user?.id === player.discordId;
-
-  // プレイヤーの公開ガイドを取得
-  const playerGuides = await db.query.guides.findMany({
-    where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
-    // ピン留めを先頭に表示
-    orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
-    columns: {
-      id: true,
-      slug: true,
-      title: true,
-      summary: true,
-      tags: true,
-      coverImageUrl: true,
-      viewCount: true,
-      updatedAt: true,
-      isPinned: true,
-    },
-    extras: { likeCount: guideLikeCountSql().as("like_count") },
-  });
-
-  // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
-  const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
-  const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
+  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
+  const resolveProfileReactions = async (): Promise<{
+    counts: ProfileReactionCount[];
+    viewerReactions: string[];
+    viewerHasAccount: boolean;
+  }> => {
+    // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
+    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
+    const viewerUserId = isOwner
+      ? player.id
+      : session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          }))?.id ?? null)
+        : null;
+    const [counts, viewerReactions] = await Promise.all([
+      getProfileReactionCounts(db, player.id),
+      getViewerProfileReactions(db, player.id, viewerUserId),
+    ]);
+    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
+  };
 
   // PaceManの統計情報を取得（MCIDがある場合のみ）
-  let pacemanStats = null;
-  if (player.mcid) {
+  const resolvePacemanStats = async () => {
+    if (!player.mcid) return null;
     try {
       const [netherEnterCount, mainPaces] = await Promise.all([
         getNetherEnterCount(player.mcid),
         getRecentPacesForPlayer(player.mcid, 10),
       ]);
-      pacemanStats = {
-        netherEnterCount,
-        mainPaces,
-      };
+      return { netherEnterCount, mainPaces };
     } catch (error) {
       console.error("Failed to fetch PaceMan stats:", error);
+      return null;
     }
+  };
+
+  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計は
+  // 互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
+  // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
+  const [presetOverride, profileReactions, playerGuides, pacemanStats] = await Promise.all([
+    resolvePresetOverride(),
+    resolveProfileReactions(),
+    // プレイヤーの公開ガイドを取得
+    db.query.guides.findMany({
+      where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
+      // ピン留めを先頭に表示
+      orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
+      columns: {
+        id: true,
+        slug: true,
+        title: true,
+        summary: true,
+        tags: true,
+        coverImageUrl: true,
+        viewCount: true,
+        updatedAt: true,
+        isPinned: true,
+      },
+      extras: { likeCount: guideLikeCountSql().as("like_count") },
+    }),
+    resolvePacemanStats(),
+  ]);
+
+  let displayKeybindings = player.keybindings;
+  let displayPlayerConfig = player.playerConfig;
+  let displayKeyRemaps = player.keyRemaps;
+  let displayItemLayouts = player.itemLayouts;
+  let displaySearchCrafts = player.searchCrafts;
+  let displayCustomKeys = player.customKeys;
+  let displayCustomActions = player.customActions;
+
+  if (presetOverride) {
+    displayKeybindings = presetOverride.keybindings;
+    displayKeyRemaps = presetOverride.keyRemaps;
+    displayItemLayouts = presetOverride.itemLayouts;
+    displaySearchCrafts = presetOverride.searchCrafts;
+    displayCustomKeys = presetOverride.customKeys;
+    displayCustomActions = presetOverride.customActions;
+    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
+    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
+    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
+    displayPlayerConfig = (presetOverride.playerConfig
+      ? {
+          ...presetOverride.playerConfig,
+          fingerAssignments: presetOverride.fingerAssignments,
+        }
+      : null) as typeof player.playerConfig;
   }
+
+  // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
+  const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
+  const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
+    // RTA歴の経過計算の基準時刻。SSRとハイドレーションで new Date() を別々に評価すると
+    // 月替わり境界（TZ差）で表示がずれるため、サーバーの時刻を単一の基準にする
+    now: Date.now(),
     player: {
       ...player,
       keybindings: displayKeybindings,
@@ -444,6 +542,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       customActions: displayCustomActions,
     },
     isOwner,
+    profileReactions,
     hiddenSpeedrunRecords,
     pinnedSpeedrunRecords,
     pacemanStats,
@@ -464,11 +563,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  // Radix TabsContent は非アクティブ時に子要素を unmount するため、タブ切替で消える
+  // ProfileReactionBar 側ではなく、unmount されない親（このページ）で state を保持する
+  // （docs/profile-reactions.md 参照）
+  const { pills: reactionPills, toggle: toggleReaction } = useProfileReactions({
+    profileUserId: player.id,
+    initialCounts: profileReactions.counts,
+    initialViewerReactions: profileReactions.viewerReactions,
+  });
 
   // 英語表示ではアルファベット表記を優先する（未入力なら表示名にフォールバック）
   const playerName = getLocalizedDisplayName(player, locale);
@@ -639,6 +746,13 @@ export default function PlayerProfilePage() {
         ? [{ id: "legacy-featured", url: player.featuredVideoUrl, title: null, isPinned: false }]
         : [];
 
+  // RTA歴（経過期間 + 開始年月）。未回答・不正値のときは表示しない
+  // 基準時刻は loader の now（SSRとハイドレーションで計算結果を一致させる）
+  const rtaCareer = useMemo(
+    () => rtaCareerView(player.rtaStartedYearMonth, locale, new Date(now)),
+    [player.rtaStartedYearMonth, locale, now],
+  );
+
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
   const isTKL = keyboardLayout === "US_TKL" || keyboardLayout === "JIS_TKL";
@@ -651,13 +765,181 @@ export default function PlayerProfilePage() {
   const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
   const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
 
-  // タブ項目の定義（編集画面のメニュー順に合わせる）
+  // プレイスタイル: JSON列のパース・表示条件の判定（編集UI/me/playstyleと共有のヘルパーを使用）
+  const playstyleVersions = useMemo(
+    () => parsePlaystyleVersions(player.playstyle?.versions),
+    [player.playstyle?.versions],
+  );
+  const playstyleCategories = useMemo(
+    () => parsePlaystyleCategories(player.playstyle?.categories),
+    [player.playstyle?.categories],
+  );
+  const playstyleClickMethods = useMemo(
+    () => parsePlaystyleClickMethods(player.playstyle?.clickMethods),
+    [player.playstyle?.clickMethods],
+  );
+  const playstyleMainVersionRaw = player.playstyle?.mainVersion;
+  const playstyleMainVersion = isVersionKey(playstyleMainVersionRaw) ? playstyleMainVersionRaw : null;
+  const playstyleMainCategoryRaw = player.playstyle?.mainCategory;
+  const playstyleMainCategory = isCategoryKey(playstyleMainCategoryRaw) ? playstyleMainCategoryRaw : null;
+  const showPlaystyleClickMethods = isKbmPlaystyle(player.inputMethod) && playstyleClickMethods.length > 0;
+  const showPlaystyleMousepad = isKbmPlaystyle(player.inputMethod) && !!player.playstyle?.usesMousepad;
+  const showPlaystyleJavaRsgRanked = playsJavaRsgOrRanked(playstyleVersions, playstyleCategories);
+  const showPlaystyleBastion = hasBastionVersions(playstyleVersions) && !!player.playstyle?.favoriteBastion;
+  const showPlaystyleGameLanguage =
+    !hidesSearchCraft(player.playstyle?.searchCraft) && !!player.playerConfig?.gameLanguage;
+
+  // 各カードの行を { label, value } の配列として構築する。push 条件がそのままカードの表示条件
+  // （hasPlaystyleXxx は rows.length から導出）であり、JSX 側は rows.map で描画するだけにする
+  // （表示条件の二重管理を避ける。値・ラベル・並び順は元の JSX 条件と同一）。
+  const playstylePlayContentRows: { label: string; value: ReactNode }[] = [];
+  if (playstyleVersions.length > 0) {
+    playstylePlayContentRows.push({
+      label: t("playerProfile.playstyleVersions"),
+      value: (
+        <>
+          {(["java", "bedrock"] as const).map((edition) => {
+            const keys = groupVersionsByEdition(playstyleVersions)[edition];
+            if (keys.length === 0) return null;
+            return (
+              <div key={edition} className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground w-16 shrink-0">
+                  {edition === "java" ? "Java" : "Bedrock"}
+                </span>
+                {keys.map((v) => (
+                  <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
+                    {versionLabel(v)}
+                    {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
+                  </Badge>
+                ))}
+              </div>
+            );
+          })}
+        </>
+      ),
+    });
+  }
+  if (playstyleCategories.length > 0) {
+    playstylePlayContentRows.push({
+      label: t("playerProfile.playstyleCategories"),
+      value: (
+        <div className="flex flex-wrap gap-2">
+          {playstyleCategories.map((c) => (
+            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
+              {categoryLabel(t, c)}
+              {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
+            </Badge>
+          ))}
+        </div>
+      ),
+    });
+  }
+
+  const playstyleControlsRows: { label: string; value: ReactNode }[] = [];
+  if (player.inputMethod) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleInputMethod"),
+      value: inputMethodLabel(t, player.inputMethod),
+    });
+  }
+  if (player.playstyle?.hotbarSwitching) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleHotbarSwitching"),
+      value: playstyleOptionLabel(t, HOTBAR_SWITCHING_OPTIONS, player.playstyle.hotbarSwitching),
+    });
+  }
+  if (player.playstyle?.halfShift) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleHalfShift"),
+      value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift),
+    });
+  }
+  if (showPlaystyleClickMethods) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleClickMethods"),
+      value: playstyleClickMethods.map((m) => playstyleOptionLabel(t, CLICK_METHOD_OPTIONS, m)).join(" / "),
+    });
+  }
+  if (showPlaystyleClickMethods && playstyleClickMethods.includes("drag") && player.playstyle?.dragTapeType) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleDragTapeType"),
+      value: player.playstyle.dragTapeType,
+    });
+  }
+  if (showPlaystyleMousepad) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleMousepad"),
+      value: playstyleOptionLabel(t, USES_MOUSEPAD_OPTIONS, player.playstyle?.usesMousepad ?? ""),
+    });
+  }
+  if (showPlaystyleMousepad && player.playstyle?.usesMousepad === "uses" && player.playstyle?.mousepadType) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleMousepadType"),
+      value: player.playstyle.mousepadType,
+    });
+  }
+
+  const playstyleTechniqueRows: { label: string; value: ReactNode }[] = [];
+  if (player.playstyle?.itemLayoutPolicy) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleItemLayoutPolicy"),
+      value: playstyleOptionLabel(t, ITEM_LAYOUT_POLICY_OPTIONS, player.playstyle.itemLayoutPolicy),
+    });
+  }
+  if (player.playstyle?.searchCraft) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleSearchCraft"),
+      value: playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft),
+    });
+  }
+  if (showPlaystyleGameLanguage) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.gameLanguage"),
+      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleZeroCycle"),
+      value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.zeroCycle),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.groundZero) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleGroundZero"),
+      value: playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.groundZero),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.oneshot) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleOneshot"),
+      value: playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.oneshot),
+    });
+  }
+  if (showPlaystyleBastion) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleFavoriteBastion"),
+      value: playstyleOptionLabel(t, BASTION_OPTIONS, player.playstyle?.favoriteBastion ?? ""),
+    });
+  }
+
+  const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
+  const hasPlaystyleControls = playstyleControlsRows.length > 0;
+  const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
+  const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
+
+  // タブ項目の定義（編集画面のメニュー順に合わせる）。
+  // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
+  const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
   const tabItems = [
     { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
+    { value: "playstyle", icon: Gamepad2, label: t("playerProfile.playstyleTab") },
     { value: "keybindings", icon: Keyboard, label: t("playerProfile.keybindingsTab") },
     { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
     { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
-    { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
+    ...(hideSearchCraftTab
+      ? []
+      : [{ value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") }]),
     { value: "guides", icon: BookOpen, label: t("playerProfile.guidesTab") },
   ];
 
@@ -665,9 +947,13 @@ export default function PlayerProfilePage() {
   const validTabs = ["profile", ...tabItems.map((t) => t.value)];
 
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
-  // 不正値や未指定時は defaultProfileTab にフォールバック。
+  // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
+  // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "profile" に落とす
+  // （"profile" は tabItems の内容に関わらず validTabs に常に含まれるため安全）。
+  // DB の defaultProfileTab は書き換えない（SC再開等で条件を満たせば自然に復活する）
   const tabFromUrl = searchParams.get("tab");
-  const defaultTab = player.defaultProfileTab ?? "keybindings";
+  const defaultTabRaw = player.defaultProfileTab ?? "profile";
+  const defaultTab = validTabs.includes(defaultTabRaw) ? defaultTabRaw : "profile";
   const resolvedTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
 
   // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
@@ -982,11 +1268,11 @@ export default function PlayerProfilePage() {
                     {player.mainPlatform && (
                       <Badge variant="outline">{getPlatformLabel(t, player.mainPlatform)}</Badge>
                     )}
-                    {player.inputMethodBadge && (
+                    {player.inputMethod && (
                       <Badge variant="outline">
-                        {player.inputMethodBadge === "keyboard_mouse" && "KBM"}
-                        {player.inputMethodBadge === "controller" && "Controller"}
-                        {player.inputMethodBadge === "touch" && "Touch"}
+                        {player.inputMethod === "keyboard_mouse" && "KBM"}
+                        {player.inputMethod === "controller" && "Controller"}
+                        {player.inputMethod === "touch" && "Touch"}
                       </Badge>
                     )}
                   </div>
@@ -999,13 +1285,38 @@ export default function PlayerProfilePage() {
                         {player.location}
                       </span>
                     )}
-                    {player.pronouns && <span>{player.pronouns}</span>}
+                    {player.pronouns && (
+                      <span className="flex items-center gap-1">
+                        <Speech className="h-4 w-4" aria-hidden />
+                        {player.pronouns}
+                      </span>
+                    )}
+                    {rtaCareer &&
+                      // 年表示は端数月を切り捨てるので、その場合だけヒントで正確な経過を補う
+                      (hasRtaCareerRemainder(rtaCareer) ? (
+                        <HintTip
+                          message={rtaCareerExactLabel(t, rtaCareer)}
+                          className="text-sm"
+                        >
+                          <History className="h-4 w-4" aria-hidden />
+                          <span className="underline decoration-dotted underline-offset-4">
+                            {rtaCareerLabel(t, rtaCareer)}
+                          </span>
+                        </HintTip>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <History className="h-4 w-4" aria-hidden />
+                          {rtaCareerLabel(t, rtaCareer)}
+                        </span>
+                      ))}
                     <span className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      {new Date(player.updatedAt).toLocaleDateString("ja-JP", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
+                      <Calendar className="h-4 w-4" aria-hidden />
+                      {t("playerProfile.lastUpdated", {
+                        date: format(
+                          new Date(player.updatedAt),
+                          dateFormatPattern(locale),
+                          { locale: dateFnsLocale(locale) },
+                        ),
                       })}
                     </span>
                   </div>
@@ -1033,6 +1344,13 @@ export default function PlayerProfilePage() {
                       </Link>
                     </Button>
                   </div>
+
+                  {/* 絵文字リアクション */}
+                  <ProfileReactionBar
+                    pills={reactionPills}
+                    toggle={toggleReaction}
+                    isLoggedIn={profileReactions.viewerHasAccount}
+                  />
                 </div>
               </div>
             </CardContent>
@@ -1331,6 +1649,84 @@ export default function PlayerProfilePage() {
           />
         </TabsContent>
 
+        {/* Playstyle Tab */}
+        <TabsContent value="playstyle" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+          {hasPlaystyleData ? (
+            <>
+              {/* プレイ内容 */}
+              {hasPlaystylePlayContent && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Layers className="h-5 w-5" />
+                      {t("playerProfile.playstylePlayContent")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3 space-y-4">
+                    {playstylePlayContentRows.map((row, i) => (
+                      <div key={i} className="space-y-2">
+                        <p className="text-sm text-muted-foreground">{row.label}</p>
+                        {row.value}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 操作 */}
+              {hasPlaystyleControls && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <SlidersHorizontal className="h-5 w-5" />
+                      {t("playerProfile.playstyleControls")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    <div className="divide-y">
+                      {playstyleControlsRows.map((row, i) => (
+                        <DeviceRow key={i} label={row.label} value={row.value} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* テクニック */}
+              {hasPlaystyleTechnique && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Sparkles className="h-5 w-5" />
+                      {t("playerProfile.playstyleTechnique")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    <div className="divide-y">
+                      {playstyleTechniqueRows.map((row, i) => (
+                        <DeviceRow key={i} label={row.label} value={row.value} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <EmptyState
+              icon={<Gamepad2 className="h-12 w-12" />}
+              title={t("playerProfile.noPlaystyleTitle")}
+              description={t("playerProfile.noPlaystyle")}
+              action={
+                isOwner ? (
+                  <Button asChild size="sm" variant="outline" className="mt-4">
+                    <Link to="/me/playstyle">{t("playerProfile.noPlaystyleEditLink")}</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
+        </TabsContent>
+
         {/* Item Layouts Tab */}
         <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.itemLayouts.length > 0 ? (
@@ -1462,8 +1858,12 @@ export default function PlayerProfilePage() {
                         ) : player.playerConfig.windowsSpeed != null ? (
                           <DeviceRow
                             label={t("playerProfile.winSens")}
-                            value={player.playerConfig.windowsSpeed.toString()}
-                            unit={`(x${WINDOWS_POINTER_MULTIPLIERS[player.playerConfig.windowsSpeed]?.toFixed(3) ?? "1.000"})`}
+                            value={
+                              <WinSensValue
+                                windowsSpeed={player.playerConfig.windowsSpeed}
+                                multiplierClassName="text-muted-foreground ml-1"
+                              />
+                            }
                           />
                         ) : (
                           <DeviceRow
@@ -1478,14 +1878,24 @@ export default function PlayerProfilePage() {
                             value={player.playerConfig.mouseAcceleration ? t("common.on") : t("common.off")}
                           />
                         )}
-                        {/* ゲーム内感度 */}
-                        {player.playerConfig.gameSensitivity != null && (
-                          <DeviceRow
-                            label={t("playerProfile.inGameSensitivity")}
-                            value={Math.round(player.playerConfig.gameSensitivity * 200).toString()}
-                            unit="%"
-                          />
-                        )}
+                        {/* ゲーム内感度（有効範囲外は一覧と同じく警告付きで出す） */}
+                        {player.playerConfig.gameSensitivity != null &&
+                          (isValidSensitivity(player.playerConfig.gameSensitivity) ? (
+                            <DeviceRow
+                              label={t("playerProfile.inGameSensitivity")}
+                              value={String(toSensitivityPercent(player.playerConfig.gameSensitivity))}
+                              unit="%"
+                            />
+                          ) : (
+                            <DeviceRow
+                              label={t("playerProfile.inGameSensitivity")}
+                              value={
+                                <SensitivityWarning
+                                  percent={toSensitivityPercent(player.playerConfig.gameSensitivity)}
+                                />
+                              }
+                            />
+                          ))}
                         {/* Raw Input */}
                         {player.playerConfig.rawInput != null && (
                           <DeviceRow
@@ -1493,37 +1903,16 @@ export default function PlayerProfilePage() {
                             value={player.playerConfig.rawInput ? t("common.on") : t("common.off")}
                           />
                         )}
-                        {/* 振り向き */}
-                        {(() => {
-                          const cm360 = calculateCm360(
-                            player.playerConfig.mouseDpi,
-                            player.playerConfig.gameSensitivity,
-                            player.playerConfig.rawInput,
-                            player.playerConfig.windowsSpeed,
-                            player.playerConfig.windowsSpeedMultiplier
-                          );
-                          return cm360 != null ? (
-                            <DeviceRow
-                            label={t("playerProfile.turnDistance")}
-                              value={cm360.toFixed(2)}
-                              unit="cm"
-                            />
-                          ) : null;
-                        })()}
-                        {/* カーソル速度 */}
-                        {(() => {
-                          const cursorSpeed = calculateCursorSpeed(
-                            player.playerConfig.mouseDpi,
-                            player.playerConfig.windowsSpeed,
-                            player.playerConfig.windowsSpeedMultiplier
-                          );
-                          return cursorSpeed != null ? (
-                            <DeviceRow
-                              label={t("playerProfile.cursorSpeed")}
-                              value={cursorSpeed.toString()}
-                            />
-                          ) : null;
-                        })()}
+                        {/* 振り向き（計算できなければ行を消さず「-」+ 理由） */}
+                        <DeviceRow
+                          label={t("playerProfile.turnDistance")}
+                          value={<TurnDistanceValue config={player.playerConfig} />}
+                        />
+                        {/* カーソル速度（同上） */}
+                        <DeviceRow
+                          label={t("playerProfile.cursorSpeed")}
+                          value={<CursorSpeedValue config={player.playerConfig} />}
+                        />
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground py-2">
@@ -1765,6 +2154,20 @@ function getItemDisplayName(itemId: string): string {
 // ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
 // プラットフォーム表示名を取得
+/** 入力方法（users.inputMethod）の表示ラベル。プレイスタイルタブの行表示専用 */
+function inputMethodLabel(t: Translator, value: string): string {
+  switch (value) {
+    case "keyboard_mouse":
+      return t("playerProfile.playstyleInputMethodKeyboardMouse");
+    case "controller":
+      return t("playerProfile.playstyleInputMethodController");
+    case "touch":
+      return t("playerProfile.playstyleInputMethodTouch");
+    default:
+      return value;
+  }
+}
+
 function getPlatformLabel(t: Translator, platform: string): string {
   const labels: Record<string, string> = {
     pc_windows: t("playerProfile.platformPcWindows"),
@@ -2214,7 +2617,7 @@ function SocialLinkRichCard({
   );
 }
 
-function DeviceRow({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function DeviceRow({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
   return (
     <div className="flex justify-between items-center py-2.5">
       <span className="text-sm">{label}</span>
@@ -2223,6 +2626,47 @@ function DeviceRow({ label, value, unit }: { label: string; value: string; unit?
         {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
     </div>
+  );
+}
+
+/** 振り向き（cm/360）。計算できないときは行を消さず「-」+ 理由を出す */
+function TurnDistanceValue({ config }: { config: MouseReasonConfig }) {
+  const t = useT();
+  const cm360 = calculateCm360(
+    config.mouseDpi,
+    config.gameSensitivity,
+    config.rawInput,
+    config.windowsSpeed,
+    config.windowsSpeedMultiplier,
+  );
+  if (cm360 == null) {
+    return <MissingMouseValue reasons={cm360MissingReasons(t, config)} />;
+  }
+  return (
+    <>
+      {cm360.toFixed(2)}
+      <span className="text-muted-foreground ml-1">cm</span>
+    </>
+  );
+}
+
+/** カーソル速度（実効 DPI）。計算できないときは行を消さず「-」+ 理由を出す */
+function CursorSpeedValue({ config }: { config: MouseReasonConfig }) {
+  const t = useT();
+  const cursorSpeed = calculateCursorSpeed(
+    config.mouseDpi,
+    config.windowsSpeed,
+    config.windowsSpeedMultiplier,
+  );
+  if (cursorSpeed == null) {
+    return <MissingMouseValue reasons={cursorSpeedMissingReasons(t, config)} />;
+  }
+  // 一覧の CursorSpeedCell と同じく実効 DPI であることを単位で示す
+  return (
+    <>
+      {cursorSpeed}
+      <span className="ml-1 text-muted-foreground">DPI</span>
+    </>
   );
 }
 
@@ -2251,16 +2695,20 @@ function EmptyState({
   icon,
   title,
   description,
+  action,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  /** 空状態からの誘導リンク・ボタン等（省略可）。例: 本人閲覧時の編集ページへの誘導 */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
       <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <p className="text-lg font-medium">{title}</p>
       <p className="text-sm">{description}</p>
+      {action}
     </div>
   );
 }

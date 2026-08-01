@@ -14,6 +14,7 @@ import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug } from "@/lib/slug";
+import { sanitizeReturnTo } from "@/lib/return-to";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -61,9 +62,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     where: eq(users.discordId, session.user.id),
   });
 
+  const returnTo = sanitizeReturnTo(new URL(request.url).searchParams.get("returnTo"));
+
   if (existingUser) {
-    // Already onboarded, redirect to profile
-    return redirect(`/player/${existingUser.slug}`);
+    // Already onboarded — ログイン前にいたページ（returnTo）があればそこへ、なければプロフィールへ
+    return redirect(returnTo || `/player/${existingUser.slug}`);
   }
 
   return {
@@ -73,6 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       image: session.user.image,
     },
     appUrl: env.APP_URL || "https://minefolio.app",
+    returnTo,
   };
 }
 
@@ -86,6 +90,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const action = formData.get("_action") as string;
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
 
   if (action === "verify") {
     // Step 1: Verify MCID
@@ -178,7 +183,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     await createDefaultsForNewUser(db, userId);
 
-    return redirect(`/player/${slug}`);
+    return redirect(returnTo || `/player/${slug}`);
   }
 
   if (action === "skip") {
@@ -205,7 +210,7 @@ export async function action({ request }: Route.ActionArgs) {
     // Create defaults
     await createDefaultsForNewUser(db, userId);
 
-    return redirect(`/player/${slug}`);
+    return redirect(returnTo || `/player/${slug}`);
   }
 
   return { error: t("onboarding.errorInvalidAction") };
@@ -213,7 +218,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function OnboardingPage() {
   const t = useT();
-  const { discordUser } = useLoaderData<typeof loader>();
+  const { discordUser, returnTo } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -304,6 +309,7 @@ export default function OnboardingPage() {
             <div className="mt-4 pt-4 border-t">
               <fetcher.Form method="post">
                 <input type="hidden" name="_action" value="skip" />
+                {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
                 <Button
                   type="submit"
                   variant="ghost"
@@ -325,6 +331,7 @@ export default function OnboardingPage() {
               <input type="hidden" name="_action" value="complete" />
               <input type="hidden" name="mcid" value={data.mcid} />
               <input type="hidden" name="uuid" value={data.uuid} />
+              {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
               <div className="space-y-4">
                 <Alert className="border-green-500/50 bg-green-500/10">

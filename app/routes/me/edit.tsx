@@ -1,7 +1,7 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, redirect, useParams, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
@@ -9,6 +9,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
+import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, and, asc } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { isHttpUrl } from "@/lib/safe-url";
@@ -16,6 +17,13 @@ import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
+import {
+  isValidRtaStartedYearMonth,
+  parseRtaStartedYearMonth,
+  rtaCareerExactLabel,
+  rtaCareerView,
+  RTA_STARTED_MIN_YEAR,
+} from "@/lib/rta-career";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
 import { Button } from "@/components/ui/button";
@@ -24,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -62,10 +71,11 @@ import {
   Pin,
   ArrowUp,
   ArrowDown,
+  X,
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -562,13 +572,14 @@ export async function action({ request }: Route.ActionArgs) {
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
-  const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "keybindings" | "devices" | "items" | "searchcraft";
-  const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
+  // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
+  // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
+  const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
-  const inputMethod = (formData.get("inputMethod") as "keyboard_mouse" | "controller" | "touch") || null;
-  const inputMethodBadge = (formData.get("inputMethodBadge") as "keyboard_mouse" | "controller" | "touch") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
+  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
+  const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
   const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
   const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
   const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
@@ -606,6 +617,10 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
 
+  if (rtaStartedYearMonth && !isValidRtaStartedYearMonth(rtaStartedYearMonth)) {
+    return { error: t("meEdit.rtaStartedInvalid") };
+  }
+
   await db
     .update(users)
     .set({
@@ -618,12 +633,10 @@ export async function action({ request }: Route.ActionArgs) {
       profilePose,
       slimSkin,
       defaultProfileTab,
-      mainEdition,
       mainPlatform,
       role,
-      inputMethod,
-      inputMethodBadge,
       shortBio,
+      rtaStartedYearMonth,
       speedruncomUsername,
       showPacemanOnHome,
       showTwitchOnHome,
@@ -637,6 +650,20 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: true, action: "profile" };
 }
 
+// Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
+const RTA_STARTED_NONE = "none";
+
+// 代名詞のプリセット選択肢（値=表示。ロケール非依存の英語表記のため翻訳キーは持たない）。
+// Combobox の allowCustomValue により任意の自由記述も入力できる
+const pronounOptions = [
+  { value: "he/him", label: "he/him" },
+  { value: "she/her", label: "she/her" },
+  { value: "they/them", label: "they/them" },
+  { value: "he/they", label: "he/they" },
+  { value: "she/they", label: "she/they" },
+  { value: "any/all", label: "any/all" },
+];
+
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
   { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
@@ -644,6 +671,17 @@ const platformOptions = [
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
   { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
 ] as const;
+
+// 既定タブ Select のラベル。値の集合・順序は SELECTABLE_PROFILE_TABS（@/lib/profile-tabs）が単一情報源
+const DEFAULT_PROFILE_TAB_LABEL_KEYS: Record<SelectableProfileTabValue, MessageKey> = {
+  profile: "meEdit.tabProfile",
+  stats: "meEdit.tabStats",
+  playstyle: "meEdit.tabPlaystyle",
+  keybindings: "meEdit.tabKeybindings",
+  devices: "meEdit.tabDevices",
+  items: "meEdit.tabItems",
+  searchcraft: "meEdit.tabSearchcraft",
+};
 
 function getPlatformIcon(platform: string) {
   switch (platform) {
@@ -852,6 +890,7 @@ function VideoDialog({
 
 export default function EditProfilePage() {
   const t = useT();
+  const locale = useLocale();
   const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
@@ -873,8 +912,31 @@ export default function EditProfilePage() {
   );
   const [importCompleted, setImportCompleted] = useState(false);
 
+  // RTA歴（"YYYY-MM"）を年・月のセレクト値に分解する。未回答・不正値は両方 ""（未選択）
+  const initialRtaStarted = parseRtaStartedYearMonth(user.rtaStartedYearMonth ?? "");
+  const initialRtaStartedYear = initialRtaStarted ? String(initialRtaStarted.year) : "";
+  const initialRtaStartedMonth = initialRtaStarted ? String(initialRtaStarted.month) : "";
+
+  // 現在年月。未来の年月は保存できない（サーバー側でも弾く）ので、選択肢自体を出さない
+  const { currentYear, currentMonth } = useMemo(() => {
+    const today = new Date();
+    return { currentYear: today.getFullYear(), currentMonth: today.getMonth() + 1 };
+  }, []);
+
+  // 開始年の選択肢（現在年 → 2009 の降順）
+  const rtaStartedYearOptions = useMemo(
+    () =>
+      Array.from(
+        { length: currentYear - RTA_STARTED_MIN_YEAR + 1 },
+        (_, i) => currentYear - i,
+      ),
+    [currentYear],
+  );
+
   // フォームの値をトラッキングして変更を検出
-  const [formValues, setFormValues] = useState({
+  // buildFormValues は user + RTA初期値のスナップショットを1箇所にまとめる（me/playstyle.tsx と同じ
+  // パターン）。useState の初期化関数・useRef の初期値の両方から呼び、リテラルの二重管理を避ける
+  const buildFormValues = () => ({
     displayName: user.displayName ?? "",
     displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
@@ -883,13 +945,12 @@ export default function EditProfilePage() {
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
-    defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    mainEdition: user.mainEdition ?? "",
+    defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
-    inputMethod: user.inputMethod ?? "",
-    inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
+    rtaStartedYear: initialRtaStartedYear,
+    rtaStartedMonth: initialRtaStartedMonth,
     speedruncomUsername: user.speedruncomUsername ?? "",
     showPacemanOnHome: user.showPacemanOnHome ?? true,
     showTwitchOnHome: user.showTwitchOnHome ?? true,
@@ -898,29 +959,8 @@ export default function EditProfilePage() {
     showPacemanStats: user.showPacemanStats ?? true,
   });
 
-  const initialFormValues = useRef({
-    displayName: user.displayName ?? "",
-    displayNameAlphabet: user.displayNameAlphabet ?? "",
-    bio: user.bio ?? "",
-    location: user.location ?? "",
-    pronouns: user.pronouns ?? "",
-    profileVisibility: user.profileVisibility ?? "public",
-    profilePose: (user.profilePose as PoseName) ?? "waving",
-    slimSkin: user.slimSkin ?? false,
-    defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    mainEdition: user.mainEdition ?? "",
-    mainPlatform: user.mainPlatform ?? "",
-    role: user.role ?? "",
-    inputMethod: user.inputMethod ?? "",
-    inputMethodBadge: user.inputMethodBadge ?? "",
-    shortBio: user.shortBio ?? "",
-    speedruncomUsername: user.speedruncomUsername ?? "",
-    showPacemanOnHome: user.showPacemanOnHome ?? true,
-    showTwitchOnHome: user.showTwitchOnHome ?? true,
-    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
-    showRankedStats: user.showRankedStats ?? true,
-    showPacemanStats: user.showPacemanStats ?? true,
-  });
+  const [formValues, setFormValues] = useState(buildFormValues);
+  const initialFormValues = useRef(buildFormValues());
 
   // selectedPoseをformValuesに同期
   useEffect(() => {
@@ -938,6 +978,64 @@ export default function EditProfilePage() {
     setFormValues((prev) => ({ ...prev, [field]: value }));
   }, []);
 
+  // 開始月の選択肢。現在年を選んでいる間は未来の月を出さない
+  const rtaStartedMonthOptions = useMemo(() => {
+    const lastMonth =
+      formValues.rtaStartedYear === String(currentYear) ? currentMonth : 12;
+    return Array.from({ length: lastMonth }, (_, i) => i + 1);
+  }, [formValues.rtaStartedYear, currentYear, currentMonth]);
+
+  // 年・月は「両方設定」か「両方未設定」のみ有効なので、
+  // どちらかで「未設定」を選んだらもう片方も同時にクリアする
+  const clearRtaStarted = useCallback(() => {
+    setFormValues((prev) => ({ ...prev, rtaStartedYear: "", rtaStartedMonth: "" }));
+  }, []);
+
+  const handleRtaStartedYearChange = useCallback(
+    (value: string) => {
+      if (value === RTA_STARTED_NONE) {
+        clearRtaStarted();
+        return;
+      }
+      setFormValues((prev) => ({
+        ...prev,
+        rtaStartedYear: value,
+        // 現在年に変えた結果、選択済みの月が未来になるならその月は選べない
+        rtaStartedMonth:
+          value === String(currentYear) && Number(prev.rtaStartedMonth) > currentMonth
+            ? ""
+            : prev.rtaStartedMonth,
+      }));
+    },
+    [clearRtaStarted, currentYear, currentMonth],
+  );
+
+  const handleRtaStartedMonthChange = useCallback(
+    (value: string) => {
+      if (value === RTA_STARTED_NONE) {
+        clearRtaStarted();
+        return;
+      }
+      setFormValues((prev) => ({ ...prev, rtaStartedMonth: value }));
+    },
+    [clearRtaStarted],
+  );
+
+  // 片方だけ選択されている状態（保存できない）。セレクト直下にその場で出す
+  const isRtaStartedIncomplete =
+    Boolean(formValues.rtaStartedYear) !== Boolean(formValues.rtaStartedMonth);
+
+  // 両方選択済みなら、プロフィールに出る文言をそのままプレビューする
+  const { rtaStartedYear, rtaStartedMonth } = formValues;
+  const rtaCareerPreview = useMemo(() => {
+    if (!rtaStartedYear || !rtaStartedMonth) return null;
+    const view = rtaCareerView(
+      `${rtaStartedYear}-${rtaStartedMonth.padStart(2, "0")}`,
+      locale,
+    );
+    return view ? rtaCareerExactLabel(t, view) : null;
+  }, [rtaStartedYear, rtaStartedMonth, locale, t]);
+
   // フォームリセット
   const handleReset = useCallback(() => {
     setFormValues(initialFormValues.current);
@@ -946,6 +1044,13 @@ export default function EditProfilePage() {
 
   // 保存処理
   const handleSave = useCallback(() => {
+    const { rtaStartedYear, rtaStartedMonth } = formValues;
+    // RTA歴は年・月の両方を選ぶか、両方未選択（未回答）のみ有効
+    if (isRtaStartedIncomplete) {
+      toast.error(t("meEdit.rtaStartedBothOrNone"));
+      return;
+    }
+
     const formData = new FormData();
     formData.set("displayName", formValues.displayName);
     formData.set("displayNameAlphabet", formValues.displayNameAlphabet);
@@ -956,12 +1061,15 @@ export default function EditProfilePage() {
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("defaultProfileTab", formValues.defaultProfileTab);
-    formData.set("mainEdition", formValues.mainEdition);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
-    formData.set("inputMethod", formValues.inputMethod);
-    formData.set("inputMethodBadge", formValues.inputMethodBadge);
     formData.set("shortBio", formValues.shortBio);
+    formData.set(
+      "rtaStartedYearMonth",
+      rtaStartedYear && rtaStartedMonth
+        ? `${rtaStartedYear}-${rtaStartedMonth.padStart(2, "0")}`
+        : "",
+    );
     formData.set("speedruncomUsername", formValues.speedruncomUsername);
     formData.set("showPacemanOnHome", String(formValues.showPacemanOnHome));
     formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
@@ -969,7 +1077,7 @@ export default function EditProfilePage() {
     formData.set("showRankedStats", String(formValues.showRankedStats));
     formData.set("showPacemanStats", String(formValues.showPacemanStats));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues]);
+  }, [fetcher, formValues, isRtaStartedIncomplete, t]);
 
   // ポーズ変更を同期
   useEffect(() => {
@@ -1463,12 +1571,12 @@ export default function EditProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
-                <Input
-                  id="pronouns"
+                <Combobox
+                  options={pronounOptions}
                   value={formValues.pronouns}
-                  onChange={(e) => handleInputChange("pronouns", e.target.value)}
+                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, 20))}
                   placeholder={t("meEdit.pronounsExample")}
-                  maxLength={20}
+                  allowCustomValue={true}
                 />
               </div>
             </div>
@@ -1487,23 +1595,80 @@ export default function EditProfilePage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="mainEdition">{t("meEdit.mainEdition")}</Label>
-                <Select
-                  value={formValues.mainEdition}
-                  onValueChange={(value) => handleInputChange("mainEdition", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="java">Java</SelectItem>
-                    <SelectItem value="bedrock">Bedrock</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="rtaStartedYear">{t("meEdit.rtaStarted")}</Label>
+              <div className="flex items-center gap-2 sm:max-w-sm">
+                <div className="grid flex-1 grid-cols-2 gap-2">
+                  <Select
+                    value={formValues.rtaStartedYear}
+                    onValueChange={handleRtaStartedYearChange}
+                  >
+                    {/* Label は年セレクトに紐付くが、月と区別できるよう年側も明示する */}
+                    <SelectTrigger
+                      id="rtaStartedYear"
+                      className="w-full"
+                      aria-label={t("meEdit.rtaStartedYearAria")}
+                      aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedYear}
+                    >
+                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                      {rtaStartedYearOptions.map((year) => (
+                        <SelectItem key={year} value={String(year)}>
+                          {t("meEdit.rtaStartedYearOption", { year })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
+                  <Select
+                    value={formValues.rtaStartedMonth}
+                    onValueChange={handleRtaStartedMonthChange}
+                  >
+                    <SelectTrigger
+                      id="rtaStartedMonth"
+                      className="w-full"
+                      aria-label={t("meEdit.rtaStartedMonthAria")}
+                      aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedMonth}
+                    >
+                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                      {rtaStartedMonthOptions.map((month) => (
+                        <SelectItem key={month} value={String(month)}>
+                          {t("meEdit.rtaStartedMonthOption", { month })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(formValues.rtaStartedYear || formValues.rtaStartedMonth) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 shrink-0 text-muted-foreground"
+                    aria-label={t("meEdit.rtaStartedClear")}
+                    onClick={clearRtaStarted}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {isRtaStartedIncomplete ? (
+                <p className="text-xs text-destructive">
+                  {t("meEdit.rtaStartedBothOrNone")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {rtaCareerPreview ?? t("meEdit.rtaStartedHint")}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="mainPlatform">{t("meEdit.mainPlatform")}</Label>
                 <Select
@@ -1539,47 +1704,13 @@ export default function EditProfilePage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="inputMethod">{t("meEdit.inputMethod")}</Label>
-                <Select
-                  value={formValues.inputMethod}
-                  onValueChange={(value) => handleInputChange("inputMethod", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keyboard_mouse">{t("meEdit.inputMethodKeyboardMouse")}</SelectItem>
-                    <SelectItem value="controller">{t("meEdit.inputMethodController")}</SelectItem>
-                    <SelectItem value="touch">{t("meEdit.inputMethodTouch")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t("meEdit.inputMethodHint")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="inputMethodBadge">{t("meEdit.inputMethodBadge")}</Label>
-                <Select
-                  value={formValues.inputMethodBadge}
-                  onValueChange={(value) => handleInputChange("inputMethodBadge", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keyboard_mouse">KBM</SelectItem>
-                    <SelectItem value="controller">Controller</SelectItem>
-                    <SelectItem value="touch">Touch</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t("meEdit.inputMethodBadgeHint")}
-                </p>
-              </div>
             </div>
+
+            <p className="text-xs text-muted-foreground">
+              <Link to="/me/playstyle" className="underline underline-offset-2">
+                {t("meEdit.movedToPlaystyle")}
+              </Link>
+            </p>
           </CardContent>
         </Card>
 
@@ -1779,12 +1910,11 @@ export default function EditProfilePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="profile">{t("meEdit.tabProfile")}</SelectItem>
-                  <SelectItem value="stats">{t("meEdit.tabStats")}</SelectItem>
-                  <SelectItem value="keybindings">{t("meEdit.tabKeybindings")}</SelectItem>
-                  <SelectItem value="devices">{t("meEdit.tabDevices")}</SelectItem>
-                  <SelectItem value="items">{t("meEdit.tabItems")}</SelectItem>
-                  <SelectItem value="searchcraft">{t("meEdit.tabSearchcraft")}</SelectItem>
+                  {SELECTABLE_PROFILE_TABS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {t(DEFAULT_PROFILE_TAB_LABEL_KEYS[value])}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

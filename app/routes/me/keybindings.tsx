@@ -40,7 +40,7 @@ import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCi
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
-import { KeyCaptureButton } from "@/components/key-capture-button";
+import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
@@ -2622,6 +2622,7 @@ export default function KeybindingsPage() {
           onKeyDown={isCapturing ? handleKeyCapture : undefined}
           onMouseDown={isCapturing ? handleMouseCapture : undefined}
           onContextMenu={isCapturing ? (e) => e.preventDefault() : undefined}
+          onEscapeKeyDown={keyCaptureEscapeGuard}
         >
           <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
             <DialogTitle className="flex items-center gap-2">

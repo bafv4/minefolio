@@ -5,6 +5,8 @@ import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { keybindings, playerConfigs, users } from "@/lib/schema";
+import { isOutOfRangeSensitivity, isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
+import { SENSITIVITY_PERCENT_BINS } from "@/lib/keybindings-stats-shared";
 import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -239,35 +241,37 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // 感度分布（参考: mchotkeys）
+  // 感度分布（内部値 0..1 を表示 0〜200% に換算してから区分に振り分ける。
+  // 区分の実体は keybindings-stats-shared.ts の SENSITIVITY_PERCENT_BINS
+  // （キー配置統計の SENSITIVITY_RANGES と共有）。ラベルはこちらでロケールに合わせて生成する
   const sensitivityDistribution: Record<string, number> = {};
-  const sensRanges = [
-    { label: binUpTo("5%"), min: 0, max: 4 },
-    { label: binRange(5, "9%"), min: 5, max: 9 },
-    { label: binRange(10, "14%"), min: 10, max: 14 },
-    { label: binRange(15, "19%"), min: 15, max: 19 },
-    { label: binRange(20, "39%"), min: 20, max: 39 },
-    { label: binRange(40, "59%"), min: 40, max: 59 },
-    { label: binRange(60, "79%"), min: 60, max: 79 },
-    { label: binRange(80, "99%"), min: 80, max: 99 },
-    { label: "100%", min: 100, max: 100 },
-    { label: binFrom("101%"), min: 101, max: Infinity },
-  ];
+  const sensRanges = SENSITIVITY_PERCENT_BINS.map(({ min, max }) => ({
+    min,
+    max,
+    label: min === 0 ? binUpTo(`${max + 1}%`) : binRange(min, `${max}%`),
+  }));
 
   for (const range of sensRanges) {
     sensitivityDistribution[range.label] = 0;
   }
 
+  // 非null・範囲外（表示200%超 / 0%未満）だった人数。UIで「除外」の注記に使う
+  // （未設定=nullは元々対象外なのでここには含めない）
+  let sensitivityExcludedCount = 0;
+
   for (const config of mouseConfigs) {
-    if (config.gameSensitivity) {
-      for (const range of sensRanges) {
-        if (
-          config.gameSensitivity >= range.min &&
-          config.gameSensitivity <= range.max
-        ) {
-          sensitivityDistribution[range.label]++;
-          break;
-        }
+    // 範囲外（内部値 0..1 を外れる）感度は母数から除外する（キー配置統計と同じ方針）
+    if (!isValidSensitivity(config.gameSensitivity)) {
+      if (isOutOfRangeSensitivity(config.gameSensitivity)) sensitivityExcludedCount++;
+      continue;
+    }
+    const sensitivityPercent = toSensitivityPercent(config.gameSensitivity);
+    if (sensitivityPercent == null) continue;
+
+    for (const range of sensRanges) {
+      if (sensitivityPercent >= range.min && sensitivityPercent <= range.max) {
+        sensitivityDistribution[range.label]++;
+        break;
       }
     }
   }
@@ -330,6 +334,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       totalConfigs: mouseConfigs.length,
       dpiDistribution,
       sensitivityDistribution,
+      sensitivityExcludedCount,
       cm360Distribution,
       rawInput: { enabled: rawInputEnabled, disabled: rawInputDisabled },
       mouseAcceleration: {
@@ -456,9 +461,12 @@ function KeyToActionCard({
 function DistributionCard({
   title,
   distribution,
+  footnote,
 }: {
   title: string;
   distribution: Record<string, number>;
+  /** 分布の下に添える小さな補足（例: 範囲外として除外した件数の注記） */
+  footnote?: string;
 }) {
   const entries = Object.entries(distribution);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
@@ -481,6 +489,7 @@ function DistributionCard({
             maxCount={maxCount}
           />
         ))}
+        {footnote && <p className="pt-1 text-xs text-muted-foreground">{footnote}</p>}
       </CardContent>
     </Card>
   );
@@ -779,6 +788,13 @@ export default function StatsPage() {
             <DistributionCard
               title={t("stats.inGameSensitivity")}
               distribution={mouseStats.sensitivityDistribution}
+              footnote={
+                mouseStats.sensitivityExcludedCount > 0
+                  ? t("stats.sensitivityExcludedNote", {
+                      count: mouseStats.sensitivityExcludedCount,
+                    })
+                  : undefined
+              }
             />
             <DistributionCard
               title="cm/360"

@@ -3,15 +3,19 @@ import { eq } from "drizzle-orm";
 import type { Auth } from "./auth";
 import type { Database } from "./db";
 import { users } from "./schema";
+import { sanitizeReturnTo } from "./return-to";
 
-// セッション取得（認証必須）
+// セッション取得（認証必須）。未ログインなら /login?returnTo=<元のURL> へリダイレクトし、
+// ログイン後に元のページへ戻れるようにする（returnTo の検証は sanitizeReturnTo に集約）。
 export async function getSession(request: Request, auth: Auth) {
   const session = await auth.api.getSession({
     headers: request.headers,
   });
 
   if (!session) {
-    throw redirect("/login");
+    const url = new URL(request.url);
+    const returnTo = sanitizeReturnTo(`${url.pathname}${url.search}`);
+    throw redirect(returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login");
   }
 
   return session;
