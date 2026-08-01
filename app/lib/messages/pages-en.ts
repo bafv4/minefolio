@@ -1260,6 +1260,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     userNotFound: "User not found",
     copyNoData: "There is no data to copy",
     parseFailed: "Failed to parse the data",
+    invalidSensitivity:
+      "In-game sensitivity must be within 0-200% (0.0-1.0)",
+    invalidDpi: "DPI must be a positive integer",
+    invalidWindowsSpeed: "Windows pointer speed must be between 1 and 20",
+    invalidWindowsSpeedMultiplier:
+      "Custom multiplier must be a number greater than 0",
     saveSuccess: "Settings saved",
     copiedFromPreset: "Copied device settings from {name}",
     deviceChangeHistory: "Update devices & settings",

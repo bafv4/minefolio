@@ -10,6 +10,7 @@ import {
   calculateCm360,
   calculateCursorSpeed,
   getWindowsMultiplierOrNull,
+  toSensitivityPercent,
 } from "@/lib/mouse-settings";
 
 const KEYBOARD_ACTIONS = [
@@ -117,7 +118,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         ? calculateCursorSpeed(config.mouseDpi, config.windowsSpeed, config.windowsSpeedMultiplier)
         : null;
       // 感度は生データとして出力（有効範囲外の値もそのまま）
-      const sensPercent = config?.gameSensitivity != null ? Math.floor(config.gameSensitivity * 200) : null;
+      const sensPercent = toSensitivityPercent(config?.gameSensitivity);
       const winMultiplier = config ? getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) : null;
       csvBlocks.push([
         playerName(player),

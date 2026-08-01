@@ -277,6 +277,23 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 
 - **`windowsSpeed` / `windowsSpeedMultiplier` のどちらも未設定なら計算しない**（`null`）。cm/360 の Raw Input OFF 経路（`getWindowsMultiplier()`、未設定時は乗数 `x1.0` にフォールバック）とは異なり、Cursor Speed（`getWindowsMultiplierOrNull()`）はフォールバックしない。一覧セル・CSVとも未設定時は空欄になる
 
+### 表示パーセントへの換算
+
+内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページのいずれも同じ整数%になる（以前はプロフィール・比較ページのみ四捨五入していたため、境界値で表示が1%ずれることがあった）。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
+
+### バリデーション
+
+- **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される
+
+  | 項目 | 条件 | 違反時のエラーキー |
+  |---|---|---|
+  | ゲーム内感度（`gameSensitivity`） | `isValidSensitivity()`（内部値 `0..1` ＝ 表示 `0〜200%`） | `meDevices.invalidSensitivity` |
+  | DPI（`mouseDpi`） | 正の整数 | `meDevices.invalidDpi` |
+  | Windowsポインター速度（`windowsSpeed`） | 1〜20 の整数 | `meDevices.invalidWindowsSpeed` |
+  | カスタム係数（`windowsSpeedMultiplier`） | 0 より大きい有限数 | `meDevices.invalidWindowsSpeedMultiplier` |
+
+- **旧データインポート（`app/lib/legacy-import.ts`、MCSRer Hotkeys からの `/me/import`）**: 無検証の値が入ってくるため、`mouseDpi` / `gameSensitivity` / `cm360` はそれぞれ上記相当の妥当性を確認する。無効な値は**クランプせず取り込まない**（`null` として保存）。未設定（`undefined`）の項目は従来どおり既存の列を更新しない
+
 ---
 
 ## キーボード設定
@@ -376,7 +393,7 @@ type ControllerSettings = {
 
 - **統合フィルターモーダル**（`FilterDialog`）: ユーザー絞り込みと数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
   - ユーザー絞り込み（`users` パラメータ）: 表示するユーザーを検索してリスト登録する横断フィルター（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
-  - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む
+  - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
   - **未設定の行は昇順・降順のどちらでも末尾**。TanStack Table の `sortUndefined: "last"` は
@@ -392,6 +409,12 @@ type ControllerSettings = {
 キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。`loadKeybindingsStats`（`lib/keybindings-stats.server.ts`）の集計結果は60秒インメモリキャッシュされる（内部的には対象アクション分を `inArray` で1クエリにまとめて取得し、JS側で集計）。
 
 「登録走者数」「キーバインド設定者数」「マウス設定者数」の集計からは視聴者ロールを除外している（v1.4.0〜）。
+
+#### 感度分布（`SENSITIVITY_RANGES`）
+
+- 表示・CSV・編集画面と同じ **0〜200%**（Minecraft準拠）基準の**10区分**（`< 20%`, `20-39%`, `40-59%`, `60-79%`, `80-99%`, `100-119%`, `120-139%`, `140-159%`, `160-179%`, `180-200%`）。区分は閉端（最終区分の `200%` を含む）で、換算は一覧・CSVと同じ `toSensitivityPercent()` を使う
+- **有効範囲（内部値 `0..1` ＝ 表示 `0〜200%`）外の感度は、分布・平均の母数から除外**する（`isValidSensitivity()` で判定。感度統計に中央値は無い）。感度ちょうど `0%` は含む
+- サイト全体統計（`/stats`、`app/routes/stats.tsx`）の感度分布も同じ区分設計・除外方針で揃えている
 
 ### CSVエクスポート
 

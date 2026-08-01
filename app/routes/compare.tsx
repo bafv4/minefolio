@@ -14,6 +14,7 @@ import {
 } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
+import { toSensitivityPercent } from "@/lib/mouse-settings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -625,8 +626,8 @@ export default function ComparePage() {
                   />
                   <CompareRow
                     label={t("compare.inGameSensitivity")}
-                    value1={player1.playerConfig?.gameSensitivity ? `${Math.round(player1.playerConfig.gameSensitivity * 200)}%` : undefined}
-                    value2={player2.playerConfig?.gameSensitivity ? `${Math.round(player2.playerConfig.gameSensitivity * 200)}%` : undefined}
+                    value1={toSensitivityPercent(player1.playerConfig?.gameSensitivity) != null ? `${toSensitivityPercent(player1.playerConfig?.gameSensitivity)}%` : undefined}
+                    value2={toSensitivityPercent(player2.playerConfig?.gameSensitivity) != null ? `${toSensitivityPercent(player2.playerConfig?.gameSensitivity)}%` : undefined}
                   />
                   <CompareRow
                     label={t("compare.keyboardLayout")}

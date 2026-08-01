@@ -5,7 +5,11 @@ import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
-import { calculateCm360 } from "./mouse-settings";
+import {
+  calculateCm360,
+  isValidSensitivity,
+  toSensitivityPercent,
+} from "./mouse-settings";
 import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
 // 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
@@ -71,17 +75,20 @@ export const CM180_RANGES = [
   { min: 70, max: Infinity, label: "≥ 70 cm" },
 ];
 
-// ゲーム内感度区分（9段階）
+// ゲーム内感度区分（10段階）
+// 表示・CSV・編集画面と同じ 0〜200%（Minecraft 準拠）基準。max は DPI 区分と同じく閉端で、
+// 最終区分の 200% も含む（有効範囲外の感度は集計対象から除外しているため上限は 200% で足りる）。
 export const SENSITIVITY_RANGES = [
-  { min: 0, max: 5, label: "< 5%" },
-  { min: 5, max: 10, label: "5-9%" },
-  { min: 10, max: 15, label: "10-14%" },
-  { min: 15, max: 20, label: "15-19%" },
-  { min: 20, max: 40, label: "20-39%" },
-  { min: 40, max: 60, label: "40-59%" },
-  { min: 60, max: 80, label: "60-79%" },
-  { min: 80, max: 100, label: "80-99%" },
-  { min: 100, max: Infinity, label: "100%" },
+  { min: 0, max: 19, label: "< 20%" },
+  { min: 20, max: 39, label: "20-39%" },
+  { min: 40, max: 59, label: "40-59%" },
+  { min: 60, max: 79, label: "60-79%" },
+  { min: 80, max: 99, label: "80-99%" },
+  { min: 100, max: 119, label: "100-119%" },
+  { min: 120, max: 139, label: "120-139%" },
+  { min: 140, max: 159, label: "140-159%" },
+  { min: 160, max: 179, label: "160-179%" },
+  { min: 180, max: 200, label: "180-200%" },
 ];
 
 export interface PlayerInfo {
@@ -418,17 +425,24 @@ export async function loadKeybindingsStats(
   };
 
   // ゲーム内感度統計
+  // 有効範囲（内部値 0..1 = 表示 0..200%）外の感度は分布・平均を歪めるため、
+  // cm/360 が異常値を null にして除外するのと同様に母数から外す。
   const sensitivityConfigs = mouseConfigs
-    .filter((c) => c.gameSensitivity != null)
     .map((c) => ({
       ...c,
-      sensitivityPercent: Math.round(c.gameSensitivity! * 100),
-    }));
+      sensitivityPercent: isValidSensitivity(c.gameSensitivity)
+        ? toSensitivityPercent(c.gameSensitivity)
+        : null,
+    }))
+    .filter(
+      (c): c is typeof c & { sensitivityPercent: number } =>
+        c.sensitivityPercent != null,
+    );
 
   const sensitivityValues = sensitivityConfigs.map((c) => c.sensitivityPercent);
   const sensitivityRangeStats: RangeStatWithPlayers[] = SENSITIVITY_RANGES.map((range) => {
     const matching = sensitivityConfigs.filter(
-      (c) => c.sensitivityPercent >= range.min && c.sensitivityPercent < range.max,
+      (c) => c.sensitivityPercent >= range.min && c.sensitivityPercent <= range.max,
     );
     return {
       label: range.label,

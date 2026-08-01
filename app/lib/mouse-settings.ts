@@ -39,6 +39,22 @@ export function isValidSensitivity(
 }
 
 /**
+ * 内部値（0..1）を表示用パーセント（0..200%）へ換算する。
+ * Minecraft の設定画面と同じ 0〜200% 表記に揃えるため係数は 200。
+ * 有効範囲外の値も換算だけは行う（一覧では警告付きで表示するため）。
+ * 端数は切り捨て（Minecraft 本体の int キャストと同じ挙動に揃える。表示・CSV・統計で同じ整数になるよう統一）。
+ * 保存値は `(percent/200).toFixed(4)` 経由のため、整数% ちょうどの値でも `sensitivity * 200` が
+ * 浮動小数点誤差でわずかに下振れすることがある（例: 58% → 57.99999999999999）。
+ * floor 前に 6 桁へ丸めて誤差を吸収してから切り捨てる。
+ */
+export function toSensitivityPercent(
+  sensitivity: number | null | undefined,
+): number | null {
+  if (sensitivity == null || !Number.isFinite(sensitivity)) return null;
+  return Math.floor(Number((sensitivity * 200).toFixed(6)));
+}
+
+/**
  * Windows ポインター速度の乗数を取得（カスタム係数優先）
  * WinSens もカスタム係数も未設定なら null を返す（フォールバックしない）。
  */

@@ -212,6 +212,7 @@ import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cach
 import {
   calculateCm360,
   calculateCursorSpeed,
+  toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 
@@ -1482,7 +1483,7 @@ export default function PlayerProfilePage() {
                         {player.playerConfig.gameSensitivity != null && (
                           <DeviceRow
                             label={t("playerProfile.inGameSensitivity")}
-                            value={Math.round(player.playerConfig.gameSensitivity * 200).toString()}
+                            value={String(toSensitivityPercent(player.playerConfig.gameSensitivity))}
                             unit="%"
                           />
                         )}

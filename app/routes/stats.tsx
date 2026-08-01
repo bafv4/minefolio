@@ -5,6 +5,7 @@ import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { keybindings, playerConfigs, users } from "@/lib/schema";
+import { isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
 import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -239,19 +240,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // 感度分布（参考: mchotkeys）
+  // 感度分布（内部値 0..1 を表示 0〜200% に換算してから区分に振り分ける。
+  // 区分はキー配置統計の SENSITIVITY_RANGES（app/lib/keybindings-stats.server.ts）と揃える）
   const sensitivityDistribution: Record<string, number> = {};
   const sensRanges = [
-    { label: binUpTo("5%"), min: 0, max: 4 },
-    { label: binRange(5, "9%"), min: 5, max: 9 },
-    { label: binRange(10, "14%"), min: 10, max: 14 },
-    { label: binRange(15, "19%"), min: 15, max: 19 },
+    { label: binUpTo("20%"), min: 0, max: 19 },
     { label: binRange(20, "39%"), min: 20, max: 39 },
     { label: binRange(40, "59%"), min: 40, max: 59 },
     { label: binRange(60, "79%"), min: 60, max: 79 },
     { label: binRange(80, "99%"), min: 80, max: 99 },
-    { label: "100%", min: 100, max: 100 },
-    { label: binFrom("101%"), min: 101, max: Infinity },
+    { label: binRange(100, "119%"), min: 100, max: 119 },
+    { label: binRange(120, "139%"), min: 120, max: 139 },
+    { label: binRange(140, "159%"), min: 140, max: 159 },
+    { label: binRange(160, "179%"), min: 160, max: 179 },
+    { label: binRange(180, "200%"), min: 180, max: 200 },
   ];
 
   for (const range of sensRanges) {
@@ -259,15 +261,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   for (const config of mouseConfigs) {
-    if (config.gameSensitivity) {
-      for (const range of sensRanges) {
-        if (
-          config.gameSensitivity >= range.min &&
-          config.gameSensitivity <= range.max
-        ) {
-          sensitivityDistribution[range.label]++;
-          break;
-        }
+    // 範囲外（内部値 0..1 を外れる）感度は母数から除外する（キー配置統計と同じ方針）
+    if (!isValidSensitivity(config.gameSensitivity)) continue;
+    const sensitivityPercent = toSensitivityPercent(config.gameSensitivity);
+    if (sensitivityPercent == null) continue;
+
+    for (const range of sensRanges) {
+      if (sensitivityPercent >= range.min && sensitivityPercent <= range.max) {
+        sensitivityDistribution[range.label]++;
+        break;
       }
     }
   }

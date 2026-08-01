@@ -6,6 +6,7 @@ import {
   calculateCm360,
   calculateCursorSpeed,
   isValidSensitivity,
+  toSensitivityPercent,
 } from "@/lib/mouse-settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { Translator } from "@/lib/messages";
@@ -200,7 +201,7 @@ const forSort = <T,>(value: T | null | undefined): T | undefined => value ?? und
  */
 const sensitivityPercent = (config: MouseConfig): number | null =>
   isValidSensitivity(config?.gameSensitivity)
-    ? Math.floor(config.gameSensitivity * 200)
+    ? toSensitivityPercent(config.gameSensitivity)
     : null;
 
 const windowsMultiplier = (config: MouseConfig): number | null => {

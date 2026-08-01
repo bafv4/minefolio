@@ -281,6 +281,22 @@ export async function seedKeybinding(
   return row;
 }
 
+type PlayerConfigRow = typeof schema.playerConfigs.$inferInsert;
+
+/** player_configs を 1 件挿入して返す。userId は必須（seedUser の id）。1 user : 1 行の UNIQUE 制約あり。 */
+export async function seedPlayerConfig(
+  db: TestDb,
+  userId: string,
+  overrides: Partial<PlayerConfigRow> = {},
+): Promise<typeof schema.playerConfigs.$inferSelect> {
+  const values: PlayerConfigRow = {
+    userId,
+    ...overrides,
+  };
+  const [row] = await db.insert(schema.playerConfigs).values(values).returning();
+  return row;
+}
+
 type SpeedrunCategoryRow = typeof schema.speedrunCategories.$inferInsert;
 
 /** speedrun_categories を 1 件挿入して返す。 */

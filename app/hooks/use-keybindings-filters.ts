@@ -8,7 +8,7 @@ import {
   formatSort,
   type Tab,
 } from "@/lib/keybindings-search-params";
-import { calculateCm360 } from "@/lib/mouse-settings";
+import { calculateCm360, toSensitivityPercent } from "@/lib/mouse-settings";
 
 /** プレイヤー型（applyToPlayers が読み取る最小集合） */
 export type FilterablePlayer = {
@@ -127,8 +127,9 @@ export function useKeybindingsFilters() {
 
       if (dpiMin != null && (dpi == null || dpi < dpiMin)) return false;
       if (dpiMax != null && (dpi == null || dpi > dpiMax)) return false;
-      // 感度は内部 0-1 値。UI 入力は % 想定なので比較も % で行う。
-      const sensPercent = sens != null ? sens * 100 : null;
+      // 感度は内部 0-1 値。UI 入力は一覧の表示と同じ 0〜200%（Minecraft 準拠）想定なので、
+      // 比較も一覧表示と同じ toSensitivityPercent（*200 + floor）のパーセント値で行う。
+      const sensPercent = toSensitivityPercent(sens);
       if (sensMin != null && (sensPercent == null || sensPercent < sensMin)) {
         return false;
       }

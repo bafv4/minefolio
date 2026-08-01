@@ -37,6 +37,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { type ControllerSettings, DEFAULT_CONTROLLER_SETTINGS } from "@/lib/keybindings";
+import { isValidSensitivity } from "@/lib/mouse-settings";
 import {
   Dialog,
   DialogContent,
@@ -220,6 +221,38 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
+  // マウス設定の範囲チェック（フォーム外からの POST でも異常値が DB に入らないようにする）。
+  // NaN（"abc" のパース結果など）は Number.isInteger / isValidSensitivity がいずれも false になり拒否される。
+  // inputMethod の更新より前に検証し、エラー時に inputMethod だけ部分保存されるのを防ぐ。
+  const mouseDpiStr = formData.get("mouseDpi") as string;
+  const gameSensitivityStr = formData.get("gameSensitivity") as string;
+  const windowsSpeedStr = formData.get("windowsSpeed") as string;
+  const windowsSpeedMultiplierStr = formData.get("windowsSpeedMultiplier") as string;
+
+  const mouseDpi = mouseDpiStr ? parseInt(mouseDpiStr) : null;
+  const gameSensitivity = gameSensitivityStr ? parseFloat(gameSensitivityStr) : null;
+  const windowsSpeed = windowsSpeedStr ? parseInt(windowsSpeedStr) : null;
+  const windowsSpeedMultiplier = windowsSpeedMultiplierStr ? parseFloat(windowsSpeedMultiplierStr) : null;
+
+  if (gameSensitivity !== null && !isValidSensitivity(gameSensitivity)) {
+    return { error: t("meDevices.invalidSensitivity") };
+  }
+  if (mouseDpi !== null && (!Number.isInteger(mouseDpi) || mouseDpi <= 0)) {
+    return { error: t("meDevices.invalidDpi") };
+  }
+  if (
+    windowsSpeed !== null &&
+    (!Number.isInteger(windowsSpeed) || windowsSpeed < 1 || windowsSpeed > 20)
+  ) {
+    return { error: t("meDevices.invalidWindowsSpeed") };
+  }
+  if (
+    windowsSpeedMultiplier !== null &&
+    (!Number.isFinite(windowsSpeedMultiplier) || windowsSpeedMultiplier <= 0)
+  ) {
+    return { error: t("meDevices.invalidWindowsSpeedMultiplier") };
+  }
+
   // 入力方法の更新（users.inputMethod はプリセット非依存）
   const inputMethodValue = formData.get("inputMethod") as string | null;
   if (inputMethodValue !== null) {
@@ -241,10 +274,6 @@ export async function action({ request }: Route.ActionArgs) {
   const keyboardLayout = (formData.get("keyboardLayout") as string) || null;
   const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
   const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
-  const mouseDpiStr = formData.get("mouseDpi") as string;
-  const gameSensitivityStr = formData.get("gameSensitivity") as string;
-  const windowsSpeedStr = formData.get("windowsSpeed") as string;
-  const windowsSpeedMultiplierStr = formData.get("windowsSpeedMultiplier") as string;
   const toggleSprint = formData.get("toggleSprint") === "true";
   const toggleSneak = formData.get("toggleSneak") === "true";
   const autoJump = formData.get("autoJump") === "true";
@@ -259,10 +288,6 @@ export async function action({ request }: Route.ActionArgs) {
   const controllerSettingsJson = formData.get("controllerSettings") as string;
   const controllerSettings = controllerSettingsJson ? controllerSettingsJson : null;
 
-  const mouseDpi = mouseDpiStr ? parseInt(mouseDpiStr) : null;
-  const gameSensitivity = gameSensitivityStr ? parseFloat(gameSensitivityStr) : null;
-  const windowsSpeed = windowsSpeedStr ? parseInt(windowsSpeedStr) : null;
-  const windowsSpeedMultiplier = windowsSpeedMultiplierStr ? parseFloat(windowsSpeedMultiplierStr) : null;
   const fov = fovStr ? parseInt(fovStr) : null;
   const guiScale = guiScaleStr ? parseInt(guiScaleStr) : null;
 

@@ -2,6 +2,7 @@
 // - isValidSensitivity: 内部値 0..1（表示 0..200%）の閉区間外／NaN を無効とする
 // - getWindowsMultiplierOrNull: WinSens・カスタム係数がどちらも未設定なら null（フォールバックしない）
 // - calculateCm360 / calculateCursorSpeed: 感度異常値・DPI 未設定・WinSens 未設定で null を返す
+// - toSensitivityPercent: 内部値 0..1 → 表示 0..200% への換算（*200、floor）。範囲外も換算だけは行う
 import { describe, it, expect } from "vitest";
 import {
   isValidSensitivity,
@@ -9,6 +10,7 @@ import {
   calculateCursorSpeed,
   getWindowsMultiplierOrNull,
   getWindowsMultiplier,
+  toSensitivityPercent,
 } from "../mouse-settings";
 
 describe("isValidSensitivity", () => {
@@ -119,5 +121,36 @@ describe("getWindowsMultiplierOrNull", () => {
 describe("getWindowsMultiplier", () => {
   it("WinSens・カスタム係数がどちらも未設定なら 1.0 にフォールバックする（従来挙動維持の pin）", () => {
     expect(getWindowsMultiplier(null, null)).toBe(1.0);
+  });
+});
+
+describe("toSensitivityPercent", () => {
+  it("null・undefined・NaN・Infinity は null", () => {
+    expect(toSensitivityPercent(null)).toBeNull();
+    expect(toSensitivityPercent(undefined)).toBeNull();
+    expect(toSensitivityPercent(NaN)).toBeNull();
+    expect(toSensitivityPercent(Infinity)).toBeNull();
+    expect(toSensitivityPercent(-Infinity)).toBeNull();
+  });
+
+  it("既知値: 0 → 0%, 0.5 → 100%, 0.8 → 160%, 1.0 → 200%", () => {
+    expect(toSensitivityPercent(0)).toBe(0);
+    expect(toSensitivityPercent(0.5)).toBe(100);
+    expect(toSensitivityPercent(0.8)).toBe(160);
+    expect(toSensitivityPercent(1.0)).toBe(200);
+  });
+
+  it("端数は切り捨て（0.8975 → 179%、切り上げなら180になってしまう境界）", () => {
+    expect(toSensitivityPercent(0.8975)).toBe(179);
+  });
+
+  it("有効範囲（0..1）外でも換算だけは行う（警告付き表示用）", () => {
+    expect(toSensitivityPercent(1.5)).toBe(300);
+    expect(toSensitivityPercent(-0.1)).toBe(-20);
+  });
+
+  it("FP 回帰: (percent/200).toFixed(4) 由来の保存値は *200 で微小に下振れするが、6桁丸めで正しい整数%になる（修正前は 57 / 114 だった）", () => {
+    expect(toSensitivityPercent(0.29)).toBe(58);
+    expect(toSensitivityPercent(0.575)).toBe(115);
   });
 });

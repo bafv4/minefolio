@@ -21,6 +21,7 @@ import {
   calculateCm360,
   calculateCursorSpeed,
   isValidSensitivity,
+  toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import { truncateByVisualWidth } from "@/lib/text-width";
@@ -327,10 +328,10 @@ export function DpiCell({ config }: { config: MouseConfig }) {
 
 export function SensitivityCell({ config }: { config: MouseConfig }) {
   const t = useT();
-  if (config?.gameSensitivity == null) {
+  const display = toSensitivityPercent(config?.gameSensitivity);
+  if (display == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
-  const display = Math.floor(config.gameSensitivity * 200);
   const value = (
     <>
       {display}
@@ -339,7 +340,7 @@ export function SensitivityCell({ config }: { config: MouseConfig }) {
   );
   // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
   // 振り向きは計算されず、ソートでも未設定として扱われる。
-  if (!isValidSensitivity(config.gameSensitivity)) {
+  if (!isValidSensitivity(config?.gameSensitivity)) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
