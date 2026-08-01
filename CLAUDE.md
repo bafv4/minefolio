@@ -26,6 +26,32 @@ pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直�
 1. `pnpm update @bafv4/mcitems` で最新コミットを取得（lockfile がコミットにピン留めされる）。
 2. **更新後は必ず開発サーバーを再起動する**。Vite のプリバンドルキャッシュ（`node_modules/.vite/deps/`）が旧バージョンを保持したままだと、node/tsx では新版でもブラウザ側だけ旧挙動になる。表示が更新されない時はこのキャッシュを疑い、`node_modules/.vite` 削除または `--force` 付き起動で再バンドルさせる。
 
+## サブエージェント運用（重要）
+
+このリポジトリは機能ドメインごとに実装ワーカー（サブエージェント）を `.claude/agents/` に定義している。
+**実装タスクは原則としてメイン（トップレベルの Claude）が担当ワーカーへ委譲し、返ってきた diff をレビューする。**
+
+1. タスクの機能ドメインを判定する
+2. `.claude/rules/README.md` の「ワーカー別 必読マップ」で担当ワーカーを選び、Agent ツールで起動する
+3. 返ってきた差分をメインがレビューする（必要なら `director` に読み取り専用の計画/査読を依頼する）
+
+| ドメイン | ワーカー |
+|---|---|
+| キー配置・マウス・プリセット・アイテム/サーチクラフト | `keybindings-worker` |
+| プロフィール・me・お気に入り・閲覧/比較・スキン | `profiles-worker` |
+| ガイド記事（TipTap） | `guides-worker` |
+| ホーム・ペース/ライブ・ランキング・統計 | `rankings-worker` |
+| 認証・API/基盤・共通レイアウト・DBスキーマ | `platform-worker` |
+| ドキュメント/changelog/翻訳キー/雑務 | `chores-worker` |
+| Vitest テスト | `test-worker` |
+| コミット・PR作成 | `commit-worker` |
+| 調査・Web検索（読み取り専用） | `research-worker` |
+
+- **DBスキーマ（`app/lib/schema.ts`）の変更は `platform-worker` に集約する**（全機能で共有するため）
+- ワーカーはサブエージェントを起動できない。担当外へ波及したらメインに差し戻させ、メインが別ワーカーへ振り直す
+- 会話・質問への回答・調査のみで済むもの・1ファイルの軽微な修正は、委譲せずメインが直接実行してよい
+- 委譲の詳細な運用モデルとソース起点マップは `.claude/rules/README.md` が単一情報源
+
 ## 技術スタック
 
 - **フレームワーク**: React 19 + React Router 8（SSR、Vite）
@@ -97,6 +123,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 ### ドキュメント・ルールファイル
 
 - `docs/` — 機能ごとの仕様書（auth, profiles, keybindings, guides, rankings-stats 等）
+- `.claude/rules/README.md` — 規約索引・サブエージェントの運用モデル・担当マップ
 - `.claude/rules/general.md` — コーディング規約
 - `.claude/rules/ui.md` — UIデザイン規約
 

@@ -29,6 +29,9 @@ local.db-wal
 # Vercel クローン時に "Failed to fetch git submodules" 警告が出る）
 /.claude/worktrees/
 
+# Claude Code のローカル専用設定（個人の許可ルール・ローカルパスを含むため共有しない）
+/.claude/settings.local.json
+
 # ビルドログ等の一時ファイル
 /log.txt
 
