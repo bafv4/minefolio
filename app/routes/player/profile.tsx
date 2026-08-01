@@ -214,6 +214,7 @@ import {
   Layers,
   SlidersHorizontal,
   Sparkles,
+  Speech,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -796,11 +797,12 @@ export default function PlayerProfilePage() {
 
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
   // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
-  // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "keybindings" に落とす。
+  // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "profile" に落とす
+  // （"profile" は tabItems の内容に関わらず validTabs に常に含まれるため安全）。
   // DB の defaultProfileTab は書き換えない（SC再開等で条件を満たせば自然に復活する）
   const tabFromUrl = searchParams.get("tab");
-  const defaultTabRaw = player.defaultProfileTab ?? "keybindings";
-  const defaultTab = validTabs.includes(defaultTabRaw) ? defaultTabRaw : "keybindings";
+  const defaultTabRaw = player.defaultProfileTab ?? "profile";
+  const defaultTab = validTabs.includes(defaultTabRaw) ? defaultTabRaw : "profile";
   const resolvedTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
 
   // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
@@ -1132,7 +1134,12 @@ export default function PlayerProfilePage() {
                         {player.location}
                       </span>
                     )}
-                    {player.pronouns && <span>{player.pronouns}</span>}
+                    {player.pronouns && (
+                      <span className="flex items-center gap-1">
+                        <Speech className="h-4 w-4" aria-hidden />
+                        {player.pronouns}
+                      </span>
+                    )}
                     {rtaCareer &&
                       // 年表示は端数月を切り捨てるので、その場合だけヒントで正確な経過を補う
                       (hasRtaCareerRemainder(rtaCareer) ? (

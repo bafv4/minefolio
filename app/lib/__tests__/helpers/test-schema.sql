@@ -589,7 +589,7 @@ CREATE TABLE `users` (
 	`slim_skin` integer DEFAULT false,
 	`location` text,
 	`pronouns` text,
-	`default_profile_tab` text DEFAULT 'keybindings',
+	`default_profile_tab` text,
 	`featured_video_url` text,
 	`main_edition` text,
 	`main_platform` text,

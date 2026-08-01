@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -649,6 +650,17 @@ export async function action({ request }: Route.ActionArgs) {
 // Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
 const RTA_STARTED_NONE = "none";
 
+// 代名詞のプリセット選択肢（値=表示。ロケール非依存の英語表記のため翻訳キーは持たない）。
+// Combobox の allowCustomValue により任意の自由記述も入力できる
+const pronounOptions = [
+  { value: "he/him", label: "he/him" },
+  { value: "she/her", label: "she/her" },
+  { value: "they/them", label: "they/them" },
+  { value: "he/they", label: "he/they" },
+  { value: "she/they", label: "she/they" },
+  { value: "any/all", label: "any/all" },
+];
+
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
   { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
@@ -917,7 +929,7 @@ export default function EditProfilePage() {
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
-    defaultProfileTab: user.defaultProfileTab ?? "keybindings",
+    defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
@@ -940,7 +952,7 @@ export default function EditProfilePage() {
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
-    defaultProfileTab: user.defaultProfileTab ?? "keybindings",
+    defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
@@ -1563,12 +1575,12 @@ export default function EditProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
-                <Input
-                  id="pronouns"
+                <Combobox
+                  options={pronounOptions}
                   value={formValues.pronouns}
-                  onChange={(e) => handleInputChange("pronouns", e.target.value)}
+                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, 20))}
                   placeholder={t("meEdit.pronounsExample")}
-                  maxLength={20}
+                  allowCustomValue={true}
                 />
               </div>
             </div>

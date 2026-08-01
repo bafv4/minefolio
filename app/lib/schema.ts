@@ -31,7 +31,9 @@ export const users = sqliteTable("users", {
   slimSkin: integer("slim_skin", { mode: "boolean" }).default(false),
   location: text("location"),
   pronouns: text("pronouns"),
-  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings", "playstyle"] }).default("keybindings"),
+  // 既定は「プロフィール」タブ。既存DBの列DDLには旧デフォルト（'keybindings'）が焼き付いているため、
+  // DB側デフォルトではなく $defaultFn（アプリ側 insert 時デフォルト）で新規ユーザーに 'profile' を入れる
+  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings", "playstyle"] }).$defaultFn(() => "profile"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報

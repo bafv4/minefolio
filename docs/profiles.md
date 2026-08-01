@@ -116,8 +116,10 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `guides` | 投稿したガイド一覧 |
 
 - `defaultProfileTab`（`users` テーブル）はこの並びの初期表示タブを決める。値は上記の他に `settings` を enum として持つが、**UI 上に対応するタブは存在しない**（過去に存在したゲーム内設定タブの残置 enum 値）
-- **サニタイズ**: `defaultProfileTab` が現在の有効タブ集合（上記 + `profile`）に含まれない場合（廃止された `settings` や、SC非表示中に保存されていた `searchcraft` など）は `keybindings` へフォールバックする。DB の `defaultProfileTab` 自体は書き換えない（サーチクラフトが再度「する」に変われば自然に復活する）
+- 既定値は `profile`（新規ユーザーは insert 時に `$defaultFn(() => "profile")` で設定される）。未設定行（`null`）はアプリ側でも `profile` にフォールバックする
+- **サニタイズ**: `defaultProfileTab` が現在の有効タブ集合（上記 + `profile`）に含まれない場合（廃止された `settings` や、SC非表示中に保存されていた `searchcraft` など）は `profile` へフォールバックする。DB の `defaultProfileTab` 自体は書き換えない（サーチクラフトが再度「する」に変われば自然に復活する）
 - URL クエリ `?tab=` が唯一の直接指定手段。未指定・不正値のときに `defaultProfileTab`（サニタイズ後）へフォールバックする
+- 既存ユーザーの初期表示タブを `keybindings` から `profile` へ変更した際は、`scripts/set-default-profile-tab-profile.ts --apply` で DB 上の既存行（`defaultProfileTab = "keybindings"` のもの）を `profile` に更新した。リモート Turso への適用は別途 `--remote --apply` で実行する必要がある
 
 ---
 
@@ -499,6 +501,10 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
 
 「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
+
+### 代名詞（pronouns）の入力
+
+基本情報カードの「代名詞」は `Combobox`（`app/components/ui/combobox.tsx`、`allowCustomValue`）で、`he/him` / `she/her` / `they/them` / `he/they` / `she/they` / `any/all` のプリセットから選ぶか、任意の文字列を自由入力できる（ロケール非依存の英語表記のため値と表示ラベルは同一・翻訳キー無し）。空欄に戻すことも可能。保存経路（`users.pronouns`、自由文字列）は変更していない。
 
 ### RTA歴（開始年月）の入力
 
