@@ -44,7 +44,8 @@ tools: Read, Grep, Glob, Bash
 実装後に呼ばれたら、`git diff` で実際の変更を読み、計画・規約・品質の観点で査読する。
 
 - 報告を鵜呑みにせず、コードそのものを検証する。規約（CLAUDE.md / rules）逸脱、機能境界の逸脱、
-  抜けている検証・ドキュメント更新（`docs/` / `app/content/changelog.md`）を指摘する。
+  抜けている検証・ドキュメント更新（`docs/`）を指摘する（`app/content/changelog.md` は都度更新しない運用のため、
+  未更新は指摘対象外。CLAUDE.md「バージョン管理・Changelog」参照）。
 - 外部ライブラリの使い方が怪しい（非推奨API・バージョン不整合の疑い等）場合は、記憶だけで断定せず
   Context7（利用可能なら `ToolSearch` で読み込み）で実際のバージョンのドキュメントを確認するか、
   `research-worker` への確認依頼を提案する。

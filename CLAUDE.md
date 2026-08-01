@@ -52,6 +52,12 @@ pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直�
 - 会話・質問への回答・調査のみで済むもの・1ファイルの軽微な修正は、委譲せずメインが直接実行してよい
 - 委譲の詳細な運用モデルとソース起点マップは `.claude/rules/README.md` が単一情報源
 
+## バージョン管理・Changelog
+
+- **バージョン番号は指示があるまで変えない**（勝手に上げない）
+- **Changelog（`app/content/changelog.md`）も同様に、変更のたびにエントリを追加しない**。
+  バージョンリリースの指示があった段階で、`origin/main` と `dev` の間のコミットを精査してまとめて作成する
+
 ## 技術スタック
 
 - **フレームワーク**: React 19 + React Router 8（SSR、Vite）

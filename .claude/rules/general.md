@@ -86,4 +86,5 @@ const actionType = formData.get("_action") as string;
 - 仕様は`docs`配下にあります
 - 仕様変更・機能内容の追加変更が発生する場合：
   - `docs`配下のドキュメントを追加・修正する
-  - @app/content/changelog.md にチェンジログを記載する（`/developers/changelog` で公開される）
+  - チェンジログ（@app/content/changelog.md、`/developers/changelog` で公開される）は**都度記載しない**。
+    バージョン番号とともにリリース指示があった段階でまとめて作成する（CLAUDE.md「バージョン管理・Changelog」参照）
