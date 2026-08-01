@@ -49,7 +49,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       role: true,
       mainEdition: true,
       mainPlatform: true,
-      inputMethodBadge: true,
+      inputMethod: true,
       updatedAt: true,
       shortBio: true,
       customSkinUrl: true,

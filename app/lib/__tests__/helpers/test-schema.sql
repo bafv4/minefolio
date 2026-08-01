@@ -409,6 +409,31 @@ CREATE INDEX `idx_player_rankings_type` ON `player_rankings` (`ranking_type`);
 CREATE INDEX `idx_player_rankings_category` ON `player_rankings` (`category_id`);
 CREATE INDEX `idx_player_rankings_time` ON `player_rankings` (`time_ms`);
 CREATE INDEX `idx_player_rankings_elo` ON `player_rankings` (`elo_rate`);
+CREATE TABLE `playstyles` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`versions` text,
+	`categories` text,
+	`main_version` text,
+	`main_category` text,
+	`hotbar_switching` text,
+	`search_craft` text,
+	`half_shift` text,
+	`item_layout_policy` text,
+	`click_methods` text,
+	`drag_tape_type` text,
+	`uses_mousepad` text,
+	`mousepad_type` text,
+	`zero_cycle` text,
+	`ground_zero` text,
+	`oneshot` text,
+	`favorite_bastion` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `playstyles_user_id_unique` ON `playstyles` (`user_id`);
 CREATE TABLE `profile_videos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

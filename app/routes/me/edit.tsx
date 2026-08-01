@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, redirect, useParams, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
@@ -570,12 +570,9 @@ export async function action({ request }: Route.ActionArgs) {
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
-  const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "keybindings" | "devices" | "items" | "searchcraft";
-  const mainEdition = (formData.get("mainEdition") as "java" | "bedrock") || null;
+  const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "playstyle" | "keybindings" | "devices" | "items" | "searchcraft";
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
-  const inputMethod = (formData.get("inputMethod") as "keyboard_mouse" | "controller" | "touch") || null;
-  const inputMethodBadge = (formData.get("inputMethodBadge") as "keyboard_mouse" | "controller" | "touch") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
   // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
   const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
@@ -632,11 +629,8 @@ export async function action({ request }: Route.ActionArgs) {
       profilePose,
       slimSkin,
       defaultProfileTab,
-      mainEdition,
       mainPlatform,
       role,
-      inputMethod,
-      inputMethodBadge,
       shortBio,
       rtaStartedYearMonth,
       speedruncomUsername,
@@ -924,11 +918,8 @@ export default function EditProfilePage() {
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
-    inputMethod: user.inputMethod ?? "",
-    inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     rtaStartedYear: initialRtaStartedYear,
     rtaStartedMonth: initialRtaStartedMonth,
@@ -950,11 +941,8 @@ export default function EditProfilePage() {
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     defaultProfileTab: user.defaultProfileTab ?? "keybindings",
-    mainEdition: user.mainEdition ?? "",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
-    inputMethod: user.inputMethod ?? "",
-    inputMethodBadge: user.inputMethodBadge ?? "",
     shortBio: user.shortBio ?? "",
     rtaStartedYear: initialRtaStartedYear,
     rtaStartedMonth: initialRtaStartedMonth,
@@ -1065,11 +1053,8 @@ export default function EditProfilePage() {
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("defaultProfileTab", formValues.defaultProfileTab);
-    formData.set("mainEdition", formValues.mainEdition);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
-    formData.set("inputMethod", formValues.inputMethod);
-    formData.set("inputMethodBadge", formValues.inputMethodBadge);
     formData.set("shortBio", formValues.shortBio);
     formData.set(
       "rtaStartedYearMonth",
@@ -1675,23 +1660,7 @@ export default function EditProfilePage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="mainEdition">{t("meEdit.mainEdition")}</Label>
-                <Select
-                  value={formValues.mainEdition}
-                  onValueChange={(value) => handleInputChange("mainEdition", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="java">Java</SelectItem>
-                    <SelectItem value="bedrock">Bedrock</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="mainPlatform">{t("meEdit.mainPlatform")}</Label>
                 <Select
@@ -1727,47 +1696,13 @@ export default function EditProfilePage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="inputMethod">{t("meEdit.inputMethod")}</Label>
-                <Select
-                  value={formValues.inputMethod}
-                  onValueChange={(value) => handleInputChange("inputMethod", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keyboard_mouse">{t("meEdit.inputMethodKeyboardMouse")}</SelectItem>
-                    <SelectItem value="controller">{t("meEdit.inputMethodController")}</SelectItem>
-                    <SelectItem value="touch">{t("meEdit.inputMethodTouch")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t("meEdit.inputMethodHint")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="inputMethodBadge">{t("meEdit.inputMethodBadge")}</Label>
-                <Select
-                  value={formValues.inputMethodBadge}
-                  onValueChange={(value) => handleInputChange("inputMethodBadge", value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keyboard_mouse">KBM</SelectItem>
-                    <SelectItem value="controller">Controller</SelectItem>
-                    <SelectItem value="touch">Touch</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t("meEdit.inputMethodBadgeHint")}
-                </p>
-              </div>
             </div>
+
+            <p className="text-xs text-muted-foreground">
+              <Link to="/me/playstyle" className="underline underline-offset-2">
+                {t("meEdit.movedToPlaystyle")}
+              </Link>
+            </p>
           </CardContent>
         </Card>
 
@@ -1969,6 +1904,7 @@ export default function EditProfilePage() {
                 <SelectContent>
                   <SelectItem value="profile">{t("meEdit.tabProfile")}</SelectItem>
                   <SelectItem value="stats">{t("meEdit.tabStats")}</SelectItem>
+                  <SelectItem value="playstyle">{t("meEdit.tabPlaystyle")}</SelectItem>
                   <SelectItem value="keybindings">{t("meEdit.tabKeybindings")}</SelectItem>
                   <SelectItem value="devices">{t("meEdit.tabDevices")}</SelectItem>
                   <SelectItem value="items">{t("meEdit.tabItems")}</SelectItem>

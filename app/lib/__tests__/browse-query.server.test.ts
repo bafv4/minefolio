@@ -111,7 +111,7 @@ describe("loadBrowsePage - フィルタ", () => {
       mcid: "M",
       role: "runner",
       mainEdition: "java",
-      inputMethodBadge: "keyboard_mouse",
+      inputMethod: "keyboard_mouse",
       mainPlatform: "pc_windows",
     });
     await seedUser(db, {
@@ -119,7 +119,7 @@ describe("loadBrowsePage - フィルタ", () => {
       mcid: "O",
       role: "runner",
       mainEdition: "bedrock",
-      inputMethodBadge: "controller",
+      inputMethod: "controller",
       mainPlatform: "switch",
     });
 
@@ -134,6 +134,36 @@ describe("loadBrowsePage - フィルタ", () => {
     expect(
       (await loadBrowsePage(db, args({ platforms: ["switch"] }), [])).players.map((p) => p.slug),
     ).toEqual(["other"]);
+  });
+
+  it("?input= は users.inputMethod 列のみを見る（廃止済みの inputMethodBadge 由来では絞られない）", async () => {
+    const db = await createTestDb();
+    // inputMethod が controller のユーザーだけが対象。inputMethodBadge の値は無視される。
+    await seedUser(db, {
+      slug: "by-input-method",
+      mcid: "ByInputMethod",
+      role: "runner",
+      inputMethod: "controller",
+      inputMethodBadge: null,
+    });
+    // inputMethodBadge にのみ controller が入っていて inputMethod が別値・未設定の場合はヒットしない。
+    await seedUser(db, {
+      slug: "badge-only",
+      mcid: "BadgeOnly",
+      role: "runner",
+      inputMethod: null,
+      inputMethodBadge: "controller",
+    });
+    await seedUser(db, {
+      slug: "badge-mismatch",
+      mcid: "BadgeMismatch",
+      role: "runner",
+      inputMethod: "keyboard_mouse",
+      inputMethodBadge: "controller",
+    });
+
+    const result = await loadBrowsePage(db, args({ inputMethods: ["controller"] }), []);
+    expect(result.players.map((p) => p.slug)).toEqual(["by-input-method"]);
   });
 });
 

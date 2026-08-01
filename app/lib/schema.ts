@@ -31,7 +31,7 @@ export const users = sqliteTable("users", {
   slimSkin: integer("slim_skin", { mode: "boolean" }).default(false),
   location: text("location"),
   pronouns: text("pronouns"),
-  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings"] }).default("keybindings"),
+  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings", "playstyle"] }).default("keybindings"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報
@@ -39,7 +39,9 @@ export const users = sqliteTable("users", {
   mainPlatform: text("main_platform", { enum: ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] }),
   role: text("role", { enum: ["viewer", "runner"] }),
   inputMethod: text("input_method", { enum: ["keyboard_mouse", "controller", "touch"] }),
-  inputMethodBadge: text("input_method_badge", { enum: ["keyboard_mouse", "controller", "touch"] }), // プロフィールバッジ用（inputMethodとは独立）
+  // @deprecated 未使用（inputMethod に一本化済み。プロフィールバッジも inputMethod を参照する）。
+  // DB列はドロップせず残置（本番DDLと schema.ts の乖離防止、gen:test-schema の出力を合わせるため）。
+  inputMethodBadge: text("input_method_badge", { enum: ["keyboard_mouse", "controller", "touch"] }),
   shortBio: text("short_bio"),
 
   // Speedrun.com連携
@@ -469,6 +471,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   playerConfig: one(playerConfigs, {
     fields: [users.id],
     references: [playerConfigs.userId],
+  }),
+  playstyle: one(playstyles, {
+    fields: [users.id],
+    references: [playstyles.userId],
   }),
   keybindings: many(keybindings),
   customKeys: many(customKeys),
@@ -1237,3 +1243,63 @@ export const pageViewStats = sqliteTable("page_view_stats", {
 
 export type PageViewStat = typeof pageViewStats.$inferSelect;
 export type NewPageViewStat = typeof pageViewStats.$inferInsert;
+
+// ============================================
+// playstyles（プレイスタイル）
+// ============================================
+// 1 user : 1 playstyle（`.unique()` 修飾子で保証。player_configs と同じ方式）。
+// 全項目 nullable（未回答）。条件付き項目（KBM限定・Java RSG/Ranked限定・1.16+限定）は、
+// 表示条件を満たさなくなった後も値をクリアしない方針（データ保持方針）のため、
+// DB 側には表示条件に関する制約を持たせない。選択肢の定義・表示条件の判定ロジックは
+// app/lib/playstyle.ts（非 .server・編集UIとプロフィール表示で共用）を参照。
+export const playstyles = sqliteTable("playstyles", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+
+  // プレイするバージョン・カテゴリ（常時表示）
+  versions: text("versions"), // JSON文字列配列: VersionKey[]（"java:1_16_1_19" 形式のエディション:バージョン連結キー）
+  categories: text("categories"), // JSON文字列配列: CategoryKey[]
+  mainVersion: text("main_version"), // 選択済み versions から1つ。エディションが Java/Bedrock バッジを決める
+  mainCategory: text("main_category"), // 選択済み categories から1つ
+
+  // 操作系（常時表示）
+  hotbarSwitching: text("hotbar_switching", {
+    enum: ["hotkeys", "hotkeys_sometimes_wheel", "wheel_sometimes_hotkeys", "wheel"],
+  }), // ホットバー切替方法
+  searchCraft: text("search_craft", { enum: ["does", "does_a_little", "does_not"] }), // サーチクラフト度。"does_not" ならプロフィールのSCタブを非表示にする
+  halfShift: text("half_shift", {
+    enum: ["actively", "does", "sometimes", "rarely", "does_not"],
+  }), // 半シフトの頻度（5段階）
+  itemLayoutPolicy: text("item_layout_policy", { enum: ["strict", "rough", "mood"] }), // アイテム配置を決めているか
+
+  // 高CPSクリック・マウスパッド（KBM限定 = inputMethod === "keyboard_mouse" の場合のみ表示）
+  clickMethods: text("click_methods"), // JSON文字列配列: ClickMethod[]（["normal","jitter","butterfly","drag"] の部分集合）
+  dragTapeType: text("drag_tape_type"), // 自由入力。clickMethods に "drag" を含む場合のみ表示
+  usesMousepad: text("uses_mousepad", { enum: ["uses", "does_not_use"] }),
+  mousepadType: text("mousepad_type"), // 自由入力。usesMousepad === "uses" の場合のみ表示
+
+  // Java の RSG/Ranked 限定（versions に java:* を含み、かつ categories に "rsg" または "ranked" を含む場合のみ表示）
+  zeroCycle: text("zero_cycle", {
+    enum: ["actively", "does", "sometimes", "rarely", "does_not"],
+  }), // Zero Cycle の頻度（halfShift と同スケール）
+  groundZero: text("ground_zero", { enum: ["can", "cannot"] }),
+  oneshot: text("oneshot", { enum: ["can", "cannot"] }),
+
+  // 1.16+ のバージョン選択時のみ表示（java:1_16_1_19 / java:1_20_plus / bedrock:1_16 / bedrock:1_16_100_1_17 / bedrock:1_18）
+  favoriteBastion: text("favorite_bastion", {
+    enum: ["housing", "stables", "bridge", "treasure"],
+  }), // 好きな廃要塞の種類
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const playstylesRelations = relations(playstyles, ({ one }) => ({
+  user: one(users, {
+    fields: [playstyles.userId],
+    references: [users.id],
+  }),
+}));
+
+export type Playstyle = typeof playstyles.$inferSelect;
+export type NewPlaystyle = typeof playstyles.$inferInsert;

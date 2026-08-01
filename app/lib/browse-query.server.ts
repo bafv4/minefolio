@@ -82,7 +82,7 @@ const BROWSE_LIST_COLUMNS = {
   role: true,
   mainEdition: true,
   mainPlatform: true,
-  inputMethodBadge: true,
+  inputMethod: true,
   updatedAt: true,
   shortBio: true,
   customSkinUrl: true,
@@ -119,7 +119,7 @@ function buildWhere(args: BrowseQueryArgs) {
   }
   if (args.inputMethods.length > 0) {
     conditions.push(
-      or(...args.inputMethods.map((i) => eq(users.inputMethodBadge, i)))!,
+      or(...args.inputMethods.map((i) => eq(users.inputMethod, i)))!,
     );
   }
   if (args.platforms.length > 0) {

@@ -54,6 +54,7 @@ export default [
       layout("routes/me/_layout.tsx", [
         index("routes/me/index.tsx"),
         route("edit", "routes/me/edit.tsx"),
+        route("playstyle", "routes/me/playstyle.tsx"),
         route("records", "routes/me/records.tsx"),
         route("keybindings", "routes/me/keybindings.tsx"),
         route("devices", "routes/me/devices.tsx"),

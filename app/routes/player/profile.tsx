@@ -35,7 +35,7 @@ import { getLocalizedDisplayName } from "@/lib/slug";
 import { format, formatDistanceToNow } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
-import type { Translator } from "@/lib/messages";
+import type { Translator, MessageKey } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
@@ -205,6 +205,10 @@ import {
   Maximize2,
   Languages,
   Pin,
+  Gamepad2,
+  Layers,
+  SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -230,6 +234,28 @@ import {
 import { HintTip } from "@/components/hint-tip";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
+import {
+  CATEGORIES,
+  HOTBAR_SWITCHING_OPTIONS,
+  SEARCH_CRAFT_OPTIONS,
+  FREQUENCY_OPTIONS,
+  ITEM_LAYOUT_POLICY_OPTIONS,
+  CLICK_METHOD_OPTIONS,
+  CAN_CANNOT_OPTIONS,
+  USES_MOUSEPAD_OPTIONS,
+  BASTION_OPTIONS,
+  versionLabel,
+  groupVersionsByEdition,
+  parsePlaystyleVersions,
+  parsePlaystyleCategories,
+  parsePlaystyleClickMethods,
+  isVersionKey,
+  isCategoryKey,
+  isKbmPlaystyle,
+  playsJavaRsgOrRanked,
+  hasBastionVersions,
+  type CategoryKey,
+} from "@/lib/playstyle";
 
 // bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
 // チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
@@ -284,6 +310,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : sql`0 = 1`,
     with: {
       playerConfig: true,
+      playstyle: true,
       keybindings: {
         orderBy: [asc(keybindings.category), asc(keybindings.action)],
       },
@@ -677,13 +704,57 @@ export default function PlayerProfilePage() {
   const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
   const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
 
-  // タブ項目の定義（編集画面のメニュー順に合わせる）
+  // プレイスタイル: JSON列のパース・表示条件の判定（編集UI/me/playstyleと共有のヘルパーを使用）
+  const playstyleVersions = useMemo(
+    () => parsePlaystyleVersions(player.playstyle?.versions),
+    [player.playstyle?.versions],
+  );
+  const playstyleCategories = useMemo(
+    () => parsePlaystyleCategories(player.playstyle?.categories),
+    [player.playstyle?.categories],
+  );
+  const playstyleClickMethods = useMemo(
+    () => parsePlaystyleClickMethods(player.playstyle?.clickMethods),
+    [player.playstyle?.clickMethods],
+  );
+  const playstyleMainVersionRaw = player.playstyle?.mainVersion;
+  const playstyleMainVersion = isVersionKey(playstyleMainVersionRaw) ? playstyleMainVersionRaw : null;
+  const playstyleMainCategoryRaw = player.playstyle?.mainCategory;
+  const playstyleMainCategory = isCategoryKey(playstyleMainCategoryRaw) ? playstyleMainCategoryRaw : null;
+  const showPlaystyleClickMethods = isKbmPlaystyle(player.inputMethod) && playstyleClickMethods.length > 0;
+  const showPlaystyleMousepad = isKbmPlaystyle(player.inputMethod) && !!player.playstyle?.usesMousepad;
+  const showPlaystyleJavaRsgRanked = playsJavaRsgOrRanked(playstyleVersions, playstyleCategories);
+  const showPlaystyleBastion = hasBastionVersions(playstyleVersions) && !!player.playstyle?.favoriteBastion;
+  const showPlaystyleGameLanguage =
+    player.playstyle?.searchCraft !== "does_not" && !!player.playerConfig?.gameLanguage;
+  const hasPlaystylePlayContent = playstyleVersions.length > 0 || playstyleCategories.length > 0;
+  const hasPlaystyleControls =
+    !!player.inputMethod ||
+    !!player.playstyle?.hotbarSwitching ||
+    !!player.playstyle?.halfShift ||
+    showPlaystyleClickMethods ||
+    showPlaystyleMousepad;
+  const hasPlaystyleTechnique =
+    !!player.playstyle?.itemLayoutPolicy ||
+    !!player.playstyle?.searchCraft ||
+    showPlaystyleGameLanguage ||
+    (showPlaystyleJavaRsgRanked &&
+      (!!player.playstyle?.zeroCycle || !!player.playstyle?.groundZero || !!player.playstyle?.oneshot)) ||
+    showPlaystyleBastion;
+  const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
+
+  // タブ項目の定義（編集画面のメニュー順に合わせる）。
+  // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
+  const hideSearchCraftTab = player.playstyle?.searchCraft === "does_not";
   const tabItems = [
     { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
+    { value: "playstyle", icon: Gamepad2, label: t("playerProfile.playstyleTab") },
     { value: "keybindings", icon: Keyboard, label: t("playerProfile.keybindingsTab") },
     { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
     { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
-    { value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") },
+    ...(hideSearchCraftTab
+      ? []
+      : [{ value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") }]),
     { value: "guides", icon: BookOpen, label: t("playerProfile.guidesTab") },
   ];
 
@@ -691,9 +762,12 @@ export default function PlayerProfilePage() {
   const validTabs = ["profile", ...tabItems.map((t) => t.value)];
 
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
-  // 不正値や未指定時は defaultProfileTab にフォールバック。
+  // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
+  // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "keybindings" に落とす。
+  // DB の defaultProfileTab は書き換えない（SC再開等で条件を満たせば自然に復活する）
   const tabFromUrl = searchParams.get("tab");
-  const defaultTab = player.defaultProfileTab ?? "keybindings";
+  const defaultTabRaw = player.defaultProfileTab ?? "keybindings";
+  const defaultTab = validTabs.includes(defaultTabRaw) ? defaultTabRaw : "keybindings";
   const resolvedTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab;
 
   // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
@@ -1008,11 +1082,11 @@ export default function PlayerProfilePage() {
                     {player.mainPlatform && (
                       <Badge variant="outline">{getPlatformLabel(t, player.mainPlatform)}</Badge>
                     )}
-                    {player.inputMethodBadge && (
+                    {player.inputMethod && (
                       <Badge variant="outline">
-                        {player.inputMethodBadge === "keyboard_mouse" && "KBM"}
-                        {player.inputMethodBadge === "controller" && "Controller"}
-                        {player.inputMethodBadge === "touch" && "Touch"}
+                        {player.inputMethod === "keyboard_mouse" && "KBM"}
+                        {player.inputMethod === "controller" && "Controller"}
+                        {player.inputMethod === "touch" && "Touch"}
                       </Badge>
                     )}
                   </div>
@@ -1375,6 +1449,197 @@ export default function PlayerProfilePage() {
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             pacemanStats={pacemanStats}
           />
+        </TabsContent>
+
+        {/* Playstyle Tab */}
+        <TabsContent value="playstyle" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+          {hasPlaystyleData ? (
+            <>
+              {/* プレイ内容 */}
+              {hasPlaystylePlayContent && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Layers className="h-5 w-5" />
+                      {t("playerProfile.playstylePlayContent")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3 space-y-4">
+                    {playstyleVersions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">{t("playerProfile.playstyleVersions")}</p>
+                        {(["java", "bedrock"] as const).map((edition) => {
+                          const keys = groupVersionsByEdition(playstyleVersions)[edition];
+                          if (keys.length === 0) return null;
+                          return (
+                            <div key={edition} className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-16 shrink-0">
+                                {edition === "java" ? "Java" : "Bedrock"}
+                              </span>
+                              {keys.map((v) => (
+                                <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
+                                  {versionLabel(v)}
+                                  {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
+                                </Badge>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {playstyleCategories.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">{t("playerProfile.playstyleCategories")}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {playstyleCategories.map((c) => (
+                            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
+                              {categoryLabel(t, c)}
+                              {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 操作 */}
+              {hasPlaystyleControls && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <SlidersHorizontal className="h-5 w-5" />
+                      {t("playerProfile.playstyleControls")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    <div className="divide-y">
+                      {player.inputMethod && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleInputMethod")}
+                          value={inputMethodLabel(t, player.inputMethod)}
+                        />
+                      )}
+                      {player.playstyle?.hotbarSwitching && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleHotbarSwitching")}
+                          value={playstyleOptionLabel(t, HOTBAR_SWITCHING_OPTIONS, player.playstyle.hotbarSwitching)}
+                        />
+                      )}
+                      {player.playstyle?.halfShift && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleHalfShift")}
+                          value={playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift)}
+                        />
+                      )}
+                      {showPlaystyleClickMethods && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleClickMethods")}
+                          value={playstyleClickMethods
+                            .map((m) => playstyleOptionLabel(t, CLICK_METHOD_OPTIONS, m))
+                            .join(" / ")}
+                        />
+                      )}
+                      {showPlaystyleClickMethods &&
+                        playstyleClickMethods.includes("drag") &&
+                        player.playstyle?.dragTapeType && (
+                          <DeviceRow
+                            label={t("playerProfile.playstyleDragTapeType")}
+                            value={player.playstyle.dragTapeType}
+                          />
+                        )}
+                      {showPlaystyleMousepad && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleMousepad")}
+                          value={playstyleOptionLabel(t, USES_MOUSEPAD_OPTIONS, player.playstyle?.usesMousepad ?? "")}
+                        />
+                      )}
+                      {showPlaystyleMousepad &&
+                        player.playstyle?.usesMousepad === "uses" &&
+                        player.playstyle?.mousepadType && (
+                          <DeviceRow
+                            label={t("playerProfile.playstyleMousepadType")}
+                            value={player.playstyle.mousepadType}
+                          />
+                        )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* テクニック */}
+              {hasPlaystyleTechnique && (
+                <Card>
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Sparkles className="h-5 w-5" />
+                      {t("playerProfile.playstyleTechnique")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-3">
+                    <div className="divide-y">
+                      {player.playstyle?.itemLayoutPolicy && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleItemLayoutPolicy")}
+                          value={playstyleOptionLabel(t, ITEM_LAYOUT_POLICY_OPTIONS, player.playstyle.itemLayoutPolicy)}
+                        />
+                      )}
+                      {player.playstyle?.searchCraft && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleSearchCraft")}
+                          value={playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft)}
+                        />
+                      )}
+                      {showPlaystyleGameLanguage && (
+                        <DeviceRow
+                          label={t("playerProfile.gameLanguage")}
+                          value={getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? "")}
+                        />
+                      )}
+                      {showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleZeroCycle")}
+                          value={playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.zeroCycle)}
+                        />
+                      )}
+                      {showPlaystyleJavaRsgRanked && player.playstyle?.groundZero && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleGroundZero")}
+                          value={playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.groundZero)}
+                        />
+                      )}
+                      {showPlaystyleJavaRsgRanked && player.playstyle?.oneshot && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleOneshot")}
+                          value={playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.oneshot)}
+                        />
+                      )}
+                      {showPlaystyleBastion && (
+                        <DeviceRow
+                          label={t("playerProfile.playstyleFavoriteBastion")}
+                          value={playstyleOptionLabel(t, BASTION_OPTIONS, player.playstyle?.favoriteBastion ?? "")}
+                        />
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <EmptyState
+              icon={<Gamepad2 className="h-12 w-12" />}
+              title={t("playerProfile.noPlaystyleTitle")}
+              description={t("playerProfile.noPlaystyle")}
+              action={
+                isOwner ? (
+                  <Button asChild size="sm" variant="outline" className="mt-4">
+                    <Link to="/me/playstyle">{t("playerProfile.noPlaystyleEditLink")}</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
         </TabsContent>
 
         {/* Item Layouts Tab */}
@@ -1804,6 +2069,37 @@ function getItemDisplayName(itemId: string): string {
 // ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
 // プラットフォーム表示名を取得
+/** 入力方法（users.inputMethod）の表示ラベル。プレイスタイルタブの行表示専用 */
+function inputMethodLabel(t: Translator, value: string): string {
+  switch (value) {
+    case "keyboard_mouse":
+      return t("playerProfile.playstyleInputMethodKeyboardMouse");
+    case "controller":
+      return t("playerProfile.playstyleInputMethodController");
+    case "touch":
+      return t("playerProfile.playstyleInputMethodTouch");
+    default:
+      return value;
+  }
+}
+
+/** CATEGORIES の label（直書き）または labelKey（「その他」のみ）を解決する */
+function categoryLabel(t: Translator, value: CategoryKey): string {
+  const opt = CATEGORIES.find((c) => c.value === value);
+  if (!opt) return value;
+  return opt.label ?? t((opt.labelKey ?? "") as MessageKey);
+}
+
+/** `{ value, labelKey }` 形式の選択肢配列からラベルを解決する共通ヘルパー（playstyle.ts の各 OPTIONS 用） */
+function playstyleOptionLabel(
+  t: Translator,
+  options: readonly { value: string; labelKey: string }[],
+  value: string,
+): string {
+  const opt = options.find((o) => o.value === value);
+  return opt ? t(opt.labelKey as MessageKey) : value;
+}
+
 function getPlatformLabel(t: Translator, platform: string): string {
   const labels: Record<string, string> = {
     pc_windows: t("playerProfile.platformPcWindows"),
@@ -2331,16 +2627,20 @@ function EmptyState({
   icon,
   title,
   description,
+  action,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  /** 空状態からの誘導リンク・ボタン等（省略可）。例: 本人閲覧時の編集ページへの誘導 */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
       <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <p className="text-lg font-medium">{title}</p>
       <p className="text-sm">{description}</p>
+      {action}
     </div>
   );
 }

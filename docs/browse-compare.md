@@ -48,6 +48,8 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 | `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch` |
 | `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
 
+`input` フィルタの参照先は `users.inputMethod`（旧 `inputMethodBadge` は @deprecated・未使用。プロフィールのバッジ表示と同じ列に一本化されている。詳細は [`docs/profiles.md`](./profiles.md#プレイスタイル) の「プレイスタイル」参照）。URLパラメータ名・値は変更前と同じで既存URLと互換。
+
 ロールフィルタで何も選択していない時のみ視聴者ロールが除外される（前述）。「視聴者」を選択した場合はそのまま表示される。
 
 #### フィルタダイアログの動作

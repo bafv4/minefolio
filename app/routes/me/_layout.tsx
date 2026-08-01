@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { cn } from "@/lib/utils";
 import {
   Pencil,
+  Gamepad2,
   Trophy,
   Keyboard,
   Mouse,
@@ -45,6 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 // 主要なナビゲーション項目
 const mainNavItems = [
   { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil },
+  { to: "/me/playstyle", labelKey: "meLayout.playstyle" as const, icon: Gamepad2 },
   { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy },
   { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard },
   { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse },
