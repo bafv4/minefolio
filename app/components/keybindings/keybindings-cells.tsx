@@ -20,11 +20,13 @@ import {
 import {
   calculateCm360,
   calculateCursorSpeed,
+  isValidSensitivity,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { TriangleAlert } from "lucide-react";
 
 /** 走者列の最小データ */
 export type PlayerSummary = {
@@ -324,16 +326,33 @@ export function DpiCell({ config }: { config: MouseConfig }) {
 }
 
 export function SensitivityCell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config?.gameSensitivity == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
   const display = Math.floor(config.gameSensitivity * 200);
-  return (
-    <span className="font-mono text-sm">
+  const value = (
+    <>
       {display}
       <span className="text-muted-foreground">%</span>
-    </span>
+    </>
   );
+  // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
+  // 振り向きは計算されず、ソートでも未設定として扱われる。
+  if (!isValidSensitivity(config.gameSensitivity)) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 font-mono text-sm">
+            {value}
+            <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t("keybindings.sensitivityOutOfRange")}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return <span className="font-mono text-sm">{value}</span>;
 }
 
 export function Cm360Cell({ config }: { config: MouseConfig }) {

@@ -6,7 +6,11 @@ import { getLocalizedDisplayName } from "@/lib/slug";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
 import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
-import { calculateCm360, getWindowsMultiplier } from "@/lib/mouse-settings";
+import {
+  calculateCm360,
+  calculateCursorSpeed,
+  getWindowsMultiplierOrNull,
+} from "@/lib/mouse-settings";
 
 const KEYBOARD_ACTIONS = [
   "forward", "back", "left", "right", "sprint", "sneak",
@@ -109,11 +113,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     for (const player of players) {
       const config = player.playerConfig;
       const cm360 = config ? calculateCm360(config.mouseDpi, config.gameSensitivity, config.rawInput, config.windowsSpeed, config.windowsSpeedMultiplier) : null;
-      const cursorSpeed = config?.mouseDpi != null
-        ? Math.round(config.mouseDpi * getWindowsMultiplier(config.windowsSpeed, config.windowsSpeedMultiplier))
+      const cursorSpeed = config
+        ? calculateCursorSpeed(config.mouseDpi, config.windowsSpeed, config.windowsSpeedMultiplier)
         : null;
+      // 感度は生データとして出力（有効範囲外の値もそのまま）
       const sensPercent = config?.gameSensitivity != null ? Math.floor(config.gameSensitivity * 200) : null;
-      const winMultiplier = config ? getWindowsMultiplier(config.windowsSpeed, config.windowsSpeedMultiplier) : null;
+      const winMultiplier = config ? getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) : null;
       csvBlocks.push([
         playerName(player),
         config?.mouseDpi?.toString() ?? "",

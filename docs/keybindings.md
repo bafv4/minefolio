@@ -248,6 +248,7 @@ cm360_base = 6096 / (DPI * 8 * f^3) / 2
 
 - **Raw Input ON**: `cm360 = cm360_base`
 - **Raw Input OFF**: `cm360 = cm360_base / windowsMultiplier`
+- **ゲーム内感度の有効範囲**: 内部値 `0..1`（表示 `0〜200%`、閉区間なので両端は有効）。範囲外（表示 `201%` 以上 / `0%` 未満）や `NaN` は無効値として扱い、`cm360` を計算しない（`null`）。判定は `isValidSensitivity()`（`app/lib/mouse-settings.ts`）
 
 ### Windowsポインター速度乗数テーブル
 
@@ -265,6 +266,16 @@ cm360_base = 6096 / (DPI * 8 * f^3) / 2
 | 10 | 1 | 20 | 3.5 |
 
 `windowsSpeedMultiplier` が設定されている場合はそちらを優先し、`windowsSpeed` からの自動変換は行わない。
+
+### カーソル速度 (Cursor Speed)
+
+```
+cursorSpeed = round(DPI * windowsMultiplier)
+```
+
+Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗数をかけた実効DPIとして計算する。
+
+- **`windowsSpeed` / `windowsSpeedMultiplier` のどちらも未設定なら計算しない**（`null`）。cm/360 の Raw Input OFF 経路（`getWindowsMultiplier()`、未設定時は乗数 `x1.0` にフォールバック）とは異なり、Cursor Speed（`getWindowsMultiplierOrNull()`）はフォールバックしない。一覧セル・CSVとも未設定時は空欄になる
 
 ---
 
@@ -371,6 +382,7 @@ type ControllerSettings = {
   - **未設定の行は昇順・降順のどちらでも末尾**。TanStack Table の `sortUndefined: "last"` は
     `undefined` のみを見る（`null` は素通りして通常比較に回り、昇順で先頭に来る）ため、
     ソート対象の `accessorFn` は未設定を必ず `undefined` で返す（`keybindings-columns.tsx` の `forSort()`）
+  - **ゲーム内感度が有効範囲外**（内部値 `0..1` ＝ 表示 `0〜200%` の外）の行は、感度ソートで未設定と同様に末尾へ落ちる（`sensitivityPercent()` が `null` を返し `forSort()` で `undefined` 化）。一覧セルには値をそのまま表示しつつ警告アイコン（`TriangleAlert`、`text-warning`）+ Tooltip（`keybindings.sensitivityOutOfRange`）で理由を示す（`SensitivityCell`）
 - プレイヤー名クリックでプロフィールページへ遷移
 - ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
@@ -389,6 +401,7 @@ type ControllerSettings = {
 - 対象ユーザー: 設定登録済みの全公開ユーザー（デフォルト）または個別指定（検索 UI）
 - API: `GET /api/keybindings-csv?sections=...&userSlugs=...`（`userSlugs` は任意、未指定なら全ユーザー）
 - キーバインドは各プレイヤーのキーボード配列に応じた表示ラベルで出力
+- `mouse` セクションの `cm/360` `Cursor Speed` は一覧と同じ計算関数（`calculateCm360` / `calculateCursorSpeed`）に統一されており、計算できない場合は空欄。`Win Sens Multiplier` 列も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` 列は有効範囲外の値も含め生データをそのまま出力する
 
 ---
 

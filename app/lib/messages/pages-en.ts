@@ -601,6 +601,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     clearSearch: "Clear search",
     customMultiplier: "Custom multiplier",
     noValue: "No value",
+    sensitivityOutOfRange:
+      "In-game sensitivity is outside the valid range (0–200%), so turn distance is not calculated and this row sorts as unset",
     countText: "{count} {suffix}",
     hotbarColumn: "Hotbar",
     noPlayers: "No matching runners",

@@ -573,6 +573,8 @@ export const PAGES_JA = {
     clearSearch: "検索をクリア",
     customMultiplier: "カスタム係数",
     noValue: "値なし",
+    sensitivityOutOfRange:
+      "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます",
     countText: "{count}人の{suffix}",
     hotbarColumn: "ホットバー",
     noPlayers: "該当する走者がいません",

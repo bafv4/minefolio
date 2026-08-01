@@ -27,24 +27,50 @@ export const WINDOWS_POINTER_MULTIPLIERS: Record<number, number> = {
 };
 
 /**
+ * ゲーム内感度が有効な範囲かどうかを判定
+ * 内部値 0..1 が表示 0..200% に対応する（閉区間。ちょうど 0% / 200% は有効）。
+ * 範囲外（表示 201% 以上 / 0% 未満）や NaN は無効として扱い、
+ * 振り向き（cm/360）を計算しない。
+ */
+export function isValidSensitivity(
+  sensitivity: number | null | undefined,
+): sensitivity is number {
+  return sensitivity != null && sensitivity >= 0 && sensitivity <= 1;
+}
+
+/**
  * Windows ポインター速度の乗数を取得（カスタム係数優先）
+ * WinSens もカスタム係数も未設定なら null を返す（フォールバックしない）。
+ */
+export function getWindowsMultiplierOrNull(
+  windowsSpeed: number | null | undefined,
+  windowsSpeedMultiplier: number | null | undefined,
+): number | null {
+  if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
+    return windowsSpeedMultiplier;
+  }
+  if (windowsSpeed != null) {
+    return WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? null;
+  }
+  return null;
+}
+
+/**
+ * Windows ポインター速度の乗数を取得（カスタム係数優先）
+ * 未設定・未知の値は 1.0 にフォールバックする。
  */
 export function getWindowsMultiplier(
   windowsSpeed: number | null | undefined,
   windowsSpeedMultiplier: number | null | undefined,
 ): number {
-  if (windowsSpeedMultiplier != null && windowsSpeedMultiplier > 0) {
-    return windowsSpeedMultiplier;
-  }
-  return windowsSpeed != null
-    ? (WINDOWS_POINTER_MULTIPLIERS[windowsSpeed] ?? 1.0)
-    : 1.0;
+  return getWindowsMultiplierOrNull(windowsSpeed, windowsSpeedMultiplier) ?? 1.0;
 }
 
 /**
  * 振り向き距離（cm/360）を計算
  * 計算式: 6096 / (DPI * 8 * (0.6 * sensitivity + 0.2)^3) / 2
  * Raw Input が ON のときは Windows ポインター速度を無視
+ * ゲーム内感度が有効範囲（内部値 0..1）外なら計算しない
  */
 export function calculateCm360(
   dpi: number | null | undefined,
@@ -53,7 +79,7 @@ export function calculateCm360(
   windowsSpeed: number | null | undefined,
   windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
-  if (dpi == null || sensitivity == null) return null;
+  if (dpi == null || !isValidSensitivity(sensitivity)) return null;
 
   const f = 0.6 * sensitivity + 0.2;
   const cm360Base = 6096 / (dpi * 8 * f * f * f) / 2;
@@ -69,6 +95,7 @@ export function calculateCm360(
 /**
  * カーソル速度（実効 DPI）を計算
  * Raw Input の状態に関わらず DPI に Windows 速度の係数をかける
+ * WinSens もカスタム係数も未設定なら計算しない（DPI をそのまま出さない）
  */
 export function calculateCursorSpeed(
   dpi: number | null | undefined,
@@ -76,6 +103,7 @@ export function calculateCursorSpeed(
   windowsSpeedMultiplier: number | null | undefined = null,
 ): number | null {
   if (dpi == null) return null;
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
+  const winMultiplier = getWindowsMultiplierOrNull(windowsSpeed, windowsSpeedMultiplier);
+  if (winMultiplier == null) return null;
   return Math.round(dpi * winMultiplier);
 }
