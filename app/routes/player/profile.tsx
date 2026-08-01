@@ -205,7 +205,6 @@ import {
   Maximize2,
   Languages,
   Pin,
-  TriangleAlert,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -222,15 +221,15 @@ import {
   calculateCursorSpeed,
   isValidSensitivity,
   toSensitivityPercent,
-  WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import {
   cm360MissingReasons,
   cursorSpeedMissingReasons,
-  joinMouseReasons,
+  type MouseReasonConfig,
 } from "@/lib/mouse-settings-reasons";
 import { HintTip } from "@/components/hint-tip";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
+import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 
 // bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
 // チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
@@ -1509,7 +1508,12 @@ export default function PlayerProfilePage() {
                         ) : player.playerConfig.windowsSpeed != null ? (
                           <DeviceRow
                             label={t("playerProfile.winSens")}
-                            value={<WinSensValue windowsSpeed={player.playerConfig.windowsSpeed} />}
+                            value={
+                              <WinSensValue
+                                windowsSpeed={player.playerConfig.windowsSpeed}
+                                multiplierClassName="text-muted-foreground ml-1"
+                              />
+                            }
                           />
                         ) : (
                           <DeviceRow
@@ -2261,50 +2265,8 @@ function DeviceRow({ label, value, unit }: { label: string; value: ReactNode; un
   );
 }
 
-/** 振り向き・カーソル速度の計算に使うマウス設定（playerConfig の部分集合） */
-type MouseSettingsSubset = {
-  mouseDpi?: number | null;
-  gameSensitivity?: number | null;
-  rawInput?: boolean | null;
-  windowsSpeed?: number | null;
-  windowsSpeedMultiplier?: number | null;
-};
-
-/** 値が出せないときの「-」。理由があればヒントで示す（/keybindings の一覧と同じ体験）。
-    理由の導出は一覧セルと共有の @/lib/mouse-settings-reasons に集約している */
-function MissingDeviceValue({ reasons }: { reasons: string[] }) {
-  if (reasons.length === 0) {
-    return <span className="text-muted-foreground/40">-</span>;
-  }
-  return (
-    <HintTip message={joinMouseReasons(reasons)} className="text-muted-foreground/60">
-      <span className="underline decoration-dotted underline-offset-4">-</span>
-    </HintTip>
-  );
-}
-
-/** Win Sens の値。係数テーブル（1〜20）外は x1.000 と断定せず警告を出す */
-function WinSensValue({ windowsSpeed }: { windowsSpeed: number }) {
-  const t = useT();
-  const multiplier = WINDOWS_POINTER_MULTIPLIERS[windowsSpeed];
-  if (multiplier == null) {
-    return (
-      <HintTip message={t("keybindings.windowsSpeedUnknown", { value: windowsSpeed })}>
-        <span>{windowsSpeed}</span>
-        <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden />
-      </HintTip>
-    );
-  }
-  return (
-    <>
-      {windowsSpeed}
-      <span className="text-muted-foreground ml-1">(x{multiplier.toFixed(3)})</span>
-    </>
-  );
-}
-
 /** 振り向き（cm/360）。計算できないときは行を消さず「-」+ 理由を出す */
-function TurnDistanceValue({ config }: { config: MouseSettingsSubset }) {
+function TurnDistanceValue({ config }: { config: MouseReasonConfig }) {
   const t = useT();
   const cm360 = calculateCm360(
     config.mouseDpi,
@@ -2314,7 +2276,7 @@ function TurnDistanceValue({ config }: { config: MouseSettingsSubset }) {
     config.windowsSpeedMultiplier,
   );
   if (cm360 == null) {
-    return <MissingDeviceValue reasons={cm360MissingReasons(t, config)} />;
+    return <MissingMouseValue reasons={cm360MissingReasons(t, config)} />;
   }
   return (
     <>
@@ -2325,7 +2287,7 @@ function TurnDistanceValue({ config }: { config: MouseSettingsSubset }) {
 }
 
 /** カーソル速度（実効 DPI）。計算できないときは行を消さず「-」+ 理由を出す */
-function CursorSpeedValue({ config }: { config: MouseSettingsSubset }) {
+function CursorSpeedValue({ config }: { config: MouseReasonConfig }) {
   const t = useT();
   const cursorSpeed = calculateCursorSpeed(
     config.mouseDpi,
@@ -2333,7 +2295,7 @@ function CursorSpeedValue({ config }: { config: MouseSettingsSubset }) {
     config.windowsSpeedMultiplier,
   );
   if (cursorSpeed == null) {
-    return <MissingDeviceValue reasons={cursorSpeedMissingReasons(t, config)} />;
+    return <MissingMouseValue reasons={cursorSpeedMissingReasons(t, config)} />;
   }
   // 一覧の CursorSpeedCell と同じく実効 DPI であることを単位で示す
   return (

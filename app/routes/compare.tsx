@@ -337,6 +337,12 @@ function RtaCareerLine({ value, now }: { value: string | null; now: number }) {
   return <p className="text-xs text-muted-foreground">{rtaCareerLabel(t, view)}</p>;
 }
 
+/** ゲーム内感度の表示用ラベル（%表記）。計算できなければ undefined */
+function sensitivityLabel(sensitivity: number | null | undefined): string | undefined {
+  const percent = toSensitivityPercent(sensitivity);
+  return percent != null ? `${percent}%` : undefined;
+}
+
 export default function ComparePage() {
   const t = useT();
   const locale = useLocale();
@@ -646,8 +652,8 @@ export default function ComparePage() {
                   />
                   <CompareRow
                     label={t("compare.inGameSensitivity")}
-                    value1={toSensitivityPercent(player1.playerConfig?.gameSensitivity) != null ? `${toSensitivityPercent(player1.playerConfig?.gameSensitivity)}%` : undefined}
-                    value2={toSensitivityPercent(player2.playerConfig?.gameSensitivity) != null ? `${toSensitivityPercent(player2.playerConfig?.gameSensitivity)}%` : undefined}
+                    value1={sensitivityLabel(player1.playerConfig?.gameSensitivity)}
+                    value2={sensitivityLabel(player2.playerConfig?.gameSensitivity)}
                   />
                   <CompareRow
                     label={t("compare.keyboardLayout")}

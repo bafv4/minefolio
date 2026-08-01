@@ -4,9 +4,9 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { HintTip } from "@/components/hint-tip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
+import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import { cn } from "@/lib/utils";
 import {
   getKeyLabel,
@@ -24,17 +24,14 @@ import {
   calculateCursorSpeed,
   isValidSensitivity,
   toSensitivityPercent,
-  WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
 import {
   cm360MissingReasons,
   cursorSpeedMissingReasons,
-  joinMouseReasons,
 } from "@/lib/mouse-settings-reasons";
 import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { TriangleAlert } from "lucide-react";
 
 /** 走者列の最小データ */
 export type PlayerSummary = {
@@ -351,24 +348,6 @@ export function SensitivityCell({ config }: { config: MouseConfig }) {
   );
 }
 
-/**
- * 値なし（「-」）のセル。理由があればヒントで示し、無ければ素の「-」を出す。
- * 理由が無い＝そもそもマウス設定が未登録のケース（説明することが無い）。
- */
-function MissingValueCell({ reasons }: { reasons: string[] }) {
-  if (reasons.length === 0) {
-    return <span className="text-muted-foreground/40">-</span>;
-  }
-  return (
-    <HintTip
-      message={joinMouseReasons(reasons)}
-      className="text-muted-foreground/60 text-sm"
-    >
-      <span className="underline decoration-dotted underline-offset-4">-</span>
-    </HintTip>
-  );
-}
-
 export function Cm360Cell({ config }: { config: MouseConfig }) {
   const t = useT();
   if (config == null) {
@@ -382,7 +361,7 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cm360 == null) {
-    return <MissingValueCell reasons={cm360MissingReasons(t, config)} />;
+    return <MissingMouseValue reasons={cm360MissingReasons(t, config)} className="text-sm" />;
   }
   return (
     <span className="font-mono text-sm">
@@ -407,28 +386,7 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
     );
   }
   if (config?.windowsSpeed != null) {
-    const multiplier = WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed];
-    // 係数テーブル（1〜20）外の値は x1.000 と断定しない。
-    // 振り向き・Cursor Speed も計算されない（＝「-」）ので、その理由を示す。
-    if (multiplier == null) {
-      return (
-        <HintTip
-          message={t("keybindings.windowsSpeedUnknown", {
-            value: config.windowsSpeed,
-          })}
-          className="font-mono text-sm"
-        >
-          <span>{config.windowsSpeed}</span>
-          <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden />
-        </HintTip>
-      );
-    }
-    return (
-      <span className="font-mono text-sm">
-        {config.windowsSpeed}
-        <span className="text-muted-foreground">(x{multiplier.toFixed(3)})</span>
-      </span>
-    );
+    return <WinSensValue windowsSpeed={config.windowsSpeed} className="font-mono text-sm" />;
   }
   return (
     <span className="text-muted-foreground/40">{t("keybindings.noValue")}</span>
@@ -446,7 +404,9 @@ export function CursorSpeedCell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cursor == null) {
-    return <MissingValueCell reasons={cursorSpeedMissingReasons(t, config)} />;
+    return (
+      <MissingMouseValue reasons={cursorSpeedMissingReasons(t, config)} className="text-sm" />
+    );
   }
   return (
     <span className="font-mono text-sm">

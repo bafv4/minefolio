@@ -5,7 +5,8 @@ import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { keybindings, playerConfigs, users } from "@/lib/schema";
-import { isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
+import { isOutOfRangeSensitivity, isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
+import { SENSITIVITY_PERCENT_BINS } from "@/lib/keybindings-stats-shared";
 import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -241,20 +242,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   // 感度分布（内部値 0..1 を表示 0〜200% に換算してから区分に振り分ける。
-  // 区分はキー配置統計の SENSITIVITY_RANGES（app/lib/keybindings-stats.server.ts）と揃える）
+  // 区分の実体は keybindings-stats-shared.ts の SENSITIVITY_PERCENT_BINS
+  // （キー配置統計の SENSITIVITY_RANGES と共有）。ラベルはこちらでロケールに合わせて生成する
   const sensitivityDistribution: Record<string, number> = {};
-  const sensRanges = [
-    { label: binUpTo("20%"), min: 0, max: 19 },
-    { label: binRange(20, "39%"), min: 20, max: 39 },
-    { label: binRange(40, "59%"), min: 40, max: 59 },
-    { label: binRange(60, "79%"), min: 60, max: 79 },
-    { label: binRange(80, "99%"), min: 80, max: 99 },
-    { label: binRange(100, "119%"), min: 100, max: 119 },
-    { label: binRange(120, "139%"), min: 120, max: 139 },
-    { label: binRange(140, "159%"), min: 140, max: 159 },
-    { label: binRange(160, "179%"), min: 160, max: 179 },
-    { label: binRange(180, "200%"), min: 180, max: 200 },
-  ];
+  const sensRanges = SENSITIVITY_PERCENT_BINS.map(({ min, max }) => ({
+    min,
+    max,
+    label: min === 0 ? binUpTo(`${max + 1}%`) : binRange(min, `${max}%`),
+  }));
 
   for (const range of sensRanges) {
     sensitivityDistribution[range.label] = 0;
@@ -267,7 +262,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   for (const config of mouseConfigs) {
     // 範囲外（内部値 0..1 を外れる）感度は母数から除外する（キー配置統計と同じ方針）
     if (!isValidSensitivity(config.gameSensitivity)) {
-      if (config.gameSensitivity != null) sensitivityExcludedCount++;
+      if (isOutOfRangeSensitivity(config.gameSensitivity)) sensitivityExcludedCount++;
       continue;
     }
     const sensitivityPercent = toSensitivityPercent(config.gameSensitivity);

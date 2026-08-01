@@ -89,33 +89,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const pageViews7d = isPopular ? guidePageViewsSql() : sql<number>`0`;
   // 集計がまだ無いと人気順は「いいね数 → 更新日時」へ落ちるため、UI で注記を出す。
   // 人気順以外では注記しないので問い合わせない（true = 注記不要）
-  const hasPageViewData = isPopular ? await hasPageViewStats(db, "guide") : true;
-
-  const allGuides = await db
-    .select({
-      guide: {
-        id: guides.id,
-        slug: guides.slug,
-        title: guides.title,
-        summary: guides.summary,
-        tags: guides.tags,
-        coverImageUrl: guides.coverImageUrl,
-        viewCount: guides.viewCount,
-        updatedAt: guides.updatedAt,
-      },
-      likeCount,
-      pageViews7d,
-      authorId: guides.authorId,
-      authorSlug: users.slug,
-      authorDisplayName: users.displayName,
-      authorDisplayNameAlphabet: users.displayNameAlphabet,
-      authorMcid: users.mcid,
-    })
-    .from(guides)
-    .innerJoin(users, eq(guides.authorId, users.id))
-    // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
-    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-    .orderBy(...orderBy);
+  const [hasPageViewData, allGuides] = await Promise.all([
+    isPopular ? hasPageViewStats(db, "guide") : Promise.resolve(true),
+    db
+      .select({
+        guide: {
+          id: guides.id,
+          slug: guides.slug,
+          title: guides.title,
+          summary: guides.summary,
+          tags: guides.tags,
+          coverImageUrl: guides.coverImageUrl,
+          viewCount: guides.viewCount,
+          updatedAt: guides.updatedAt,
+        },
+        likeCount,
+        pageViews7d,
+        authorId: guides.authorId,
+        authorSlug: users.slug,
+        authorDisplayName: users.displayName,
+        authorDisplayNameAlphabet: users.displayNameAlphabet,
+        authorMcid: users.mcid,
+      })
+      .from(guides)
+      .innerJoin(users, eq(guides.authorId, users.id))
+      // 非公開・限定公開の著者のガイドは公開一覧（discovery）に出さない（browse-query と挙動を揃える）
+      .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
+      .orderBy(...orderBy),
+  ]);
 
   // Filter in memory for tag/search (simple approach)
   let filtered = allGuides;

@@ -108,70 +108,70 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
     await getUserData();
 
-  // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
-  const recentlyUpdatedUsers = await db.query.users.findMany({
-    where: and(
-      eq(users.profileVisibility, "public"),
-      excludeViewersCondition,
-    ),
-    columns: {
-      mcid: true,
-      uuid: true,
-      slug: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      pronouns: true,
-      role: true,
-      mainEdition: true,
-      mainPlatform: true,
-      inputMethodBadge: true,
-      updatedAt: true,
-      shortBio: true,
-      customSkinUrl: true,
-    },
-    orderBy: [desc(users.updatedAt)],
-    limit: 4,
-  });
-
-  // 人気のガイド（公開済み、直近7日PV順、最新4件）
-  const popularGuides = await db
-    .select({
-      id: guides.id,
-      slug: guides.slug,
-      title: guides.title,
-      summary: guides.summary,
-      tags: guides.tags,
-      coverImageUrl: guides.coverImageUrl,
-      viewCount: guides.viewCount,
-      likeCount: guideLikeCountSql(),
-      updatedAt: guides.updatedAt,
-      authorSlug: users.slug,
-      authorDisplayName: users.displayName,
-      authorDisplayNameAlphabet: users.displayNameAlphabet,
-      authorMcid: users.mcid,
-    })
-    .from(guides)
-    .innerJoin(users, eq(guides.authorId, users.id))
-    // 非公開・限定公開の著者のガイドはホームの人気一覧（discovery）に出さない
-    .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-    .orderBy(...guideListOrderBy("popular"))
-    .limit(4);
-
-  // 人気のガイドの基準（直近7日PV）が集計済みか。cron未稼働の環境ではPVが全件0のため
-  // いいね数→更新日時にフォールバックする（guideListOrderByのpopular参照）。
-  // UI側で「集計準備中」の注記を出し分けるために使う
-  const hasGuidePageViewStats = await hasPageViewStats(db, "guide");
-
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const [profileCounts] = await db
-    .select({
-      total: sql<number>`count(*)`,
-      active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
-    })
-    .from(users)
-    .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition));
+  const [recentlyUpdatedUsers, popularGuides, hasGuidePageViewStats, [profileCounts]] =
+    await Promise.all([
+      // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
+      db.query.users.findMany({
+        where: and(
+          eq(users.profileVisibility, "public"),
+          excludeViewersCondition,
+        ),
+        columns: {
+          mcid: true,
+          uuid: true,
+          slug: true,
+          displayName: true,
+          displayNameAlphabet: true,
+          pronouns: true,
+          role: true,
+          mainEdition: true,
+          mainPlatform: true,
+          inputMethodBadge: true,
+          updatedAt: true,
+          shortBio: true,
+          customSkinUrl: true,
+        },
+        orderBy: [desc(users.updatedAt)],
+        limit: 4,
+      }),
+      // 人気のガイド（公開済み、直近7日PV順、最新4件）
+      db
+        .select({
+          id: guides.id,
+          slug: guides.slug,
+          title: guides.title,
+          summary: guides.summary,
+          tags: guides.tags,
+          coverImageUrl: guides.coverImageUrl,
+          viewCount: guides.viewCount,
+          likeCount: guideLikeCountSql(),
+          updatedAt: guides.updatedAt,
+          authorSlug: users.slug,
+          authorDisplayName: users.displayName,
+          authorDisplayNameAlphabet: users.displayNameAlphabet,
+          authorMcid: users.mcid,
+        })
+        .from(guides)
+        .innerJoin(users, eq(guides.authorId, users.id))
+        // 非公開・限定公開の著者のガイドはホームの人気一覧（discovery）に出さない
+        .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
+        .orderBy(...guideListOrderBy("popular"))
+        .limit(4),
+      // 人気のガイドの基準（直近7日PV）が集計済みか。cron未稼働の環境ではPVが全件0のため
+      // いいね数→更新日時にフォールバックする（guideListOrderByのpopular参照）。
+      // UI側で「集計準備中」の注記を出し分けるために使う
+      hasPageViewStats(db, "guide"),
+      db
+        .select({
+          total: sql<number>`count(*)`,
+          active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
+        })
+        .from(users)
+        .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
+    ]);
   const totalPublicProfiles = profileCounts?.total ?? 0;
   const activePublicProfiles = profileCounts?.active ?? 0;
 

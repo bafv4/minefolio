@@ -1050,7 +1050,7 @@ export default function EditProfilePage() {
   const handleSave = useCallback(() => {
     const { rtaStartedYear, rtaStartedMonth } = formValues;
     // RTA歴は年・月の両方を選ぶか、両方未選択（未回答）のみ有効
-    if (Boolean(rtaStartedYear) !== Boolean(rtaStartedMonth)) {
+    if (isRtaStartedIncomplete) {
       toast.error(t("meEdit.rtaStartedBothOrNone"));
       return;
     }
@@ -1084,7 +1084,7 @@ export default function EditProfilePage() {
     formData.set("showRankedStats", String(formValues.showRankedStats));
     formData.set("showPacemanStats", String(formValues.showPacemanStats));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, t]);
+  }, [fetcher, formValues, isRtaStartedIncomplete, t]);
 
   // ポーズ変更を同期
   useEffect(() => {

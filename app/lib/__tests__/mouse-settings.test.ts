@@ -2,15 +2,21 @@
 // - isValidSensitivity: 内部値 0..1（表示 0..200%）の閉区間外／NaN を無効とする
 // - getWindowsMultiplierOrNull: WinSens・カスタム係数がどちらも未設定なら null（フォールバックしない）
 // - calculateCm360 / calculateCursorSpeed: 感度異常値・DPI 未設定・WinSens 未設定で null を返す
-// - toSensitivityPercent: 内部値 0..1 → 表示 0..200% への換算（*200、floor）。範囲外も換算だけは行う
+// - toSensitivityPercent / fromSensitivityPercent: 内部値 0..1 ↔ 表示 0..200% の相互変換
+// - isValidMouseDpi / isOutOfRangeSensitivity / parseMouseSettingsInput / validateMouseSettings:
+//   マウス設定フォームの共有バリデーション（action・クライアント保存前チェックの単一の真実源）
 import { describe, it, expect } from "vitest";
 import {
   isValidSensitivity,
+  isOutOfRangeSensitivity,
+  isValidMouseDpi,
   calculateCm360,
   calculateCursorSpeed,
   getWindowsMultiplierOrNull,
-  getWindowsMultiplier,
   toSensitivityPercent,
+  fromSensitivityPercent,
+  parseMouseSettingsInput,
+  validateMouseSettings,
 } from "../mouse-settings";
 
 describe("isValidSensitivity", () => {
@@ -133,12 +139,6 @@ describe("getWindowsMultiplierOrNull", () => {
   });
 });
 
-describe("getWindowsMultiplier", () => {
-  it("WinSens・カスタム係数がどちらも未設定なら 1.0 にフォールバックする（従来挙動維持の pin）", () => {
-    expect(getWindowsMultiplier(null, null)).toBe(1.0);
-  });
-});
-
 describe("toSensitivityPercent", () => {
   it("null・undefined・NaN・Infinity は null", () => {
     expect(toSensitivityPercent(null)).toBeNull();
@@ -167,5 +167,113 @@ describe("toSensitivityPercent", () => {
   it("FP 回帰: (percent/200).toFixed(4) 由来の保存値は *200 で微小に下振れするが、6桁丸めで正しい整数%になる（修正前は 57 / 114 だった）", () => {
     expect(toSensitivityPercent(0.29)).toBe(58);
     expect(toSensitivityPercent(0.575)).toBe(115);
+  });
+});
+
+describe("fromSensitivityPercent", () => {
+  it("既知値: 100 → 0.5000, 29 → 0.1450", () => {
+    expect(fromSensitivityPercent(100)).toBe("0.5000");
+    expect(fromSensitivityPercent(29)).toBe("0.1450");
+  });
+
+  it("toSensitivityPercent との往復で 29 が保たれる", () => {
+    const saved = fromSensitivityPercent(29);
+    expect(toSensitivityPercent(Number(saved))).toBe(29);
+  });
+});
+
+describe("isValidMouseDpi", () => {
+  it("正の整数は有効", () => {
+    expect(isValidMouseDpi(800)).toBe(true);
+  });
+
+  it("0・負値・小数・null は無効", () => {
+    expect(isValidMouseDpi(0)).toBe(false);
+    expect(isValidMouseDpi(-1)).toBe(false);
+    expect(isValidMouseDpi(1.5)).toBe(false);
+    expect(isValidMouseDpi(null)).toBe(false);
+  });
+});
+
+describe("isOutOfRangeSensitivity", () => {
+  it("値が入っていて有効範囲外なら true", () => {
+    expect(isOutOfRangeSensitivity(1.5)).toBe(true);
+    expect(isOutOfRangeSensitivity(-0.1)).toBe(true);
+  });
+
+  it("有効範囲内・未設定（null/undefined）は false", () => {
+    expect(isOutOfRangeSensitivity(0.5)).toBe(false);
+    expect(isOutOfRangeSensitivity(null)).toBe(false);
+    expect(isOutOfRangeSensitivity(undefined)).toBe(false);
+  });
+});
+
+describe("parseMouseSettingsInput", () => {
+  it("空文字はすべて null になる", () => {
+    expect(
+      parseMouseSettingsInput({
+        mouseDpi: "",
+        gameSensitivity: "",
+        windowsSpeed: "",
+        windowsSpeedMultiplier: "",
+      }),
+    ).toEqual({
+      mouseDpi: null,
+      gameSensitivity: null,
+      windowsSpeed: null,
+      windowsSpeedMultiplier: null,
+    });
+  });
+
+  it('"800" は数値の 800 にパースされる', () => {
+    const result = parseMouseSettingsInput({
+      mouseDpi: "800",
+      gameSensitivity: "0.5",
+      windowsSpeed: "10",
+      windowsSpeedMultiplier: "1.5",
+    });
+    expect(result).toEqual({
+      mouseDpi: 800,
+      gameSensitivity: 0.5,
+      windowsSpeed: 10,
+      windowsSpeedMultiplier: 1.5,
+    });
+  });
+});
+
+describe("validateMouseSettings", () => {
+  const empty = {
+    mouseDpi: null,
+    gameSensitivity: null,
+    windowsSpeed: null,
+    windowsSpeedMultiplier: null,
+  };
+
+  it("全て null なら null", () => {
+    expect(validateMouseSettings(empty)).toBeNull();
+  });
+
+  it("感度 1.5（表示 300% 相当）は gameSensitivity エラーを返す", () => {
+    expect(validateMouseSettings({ ...empty, gameSensitivity: 1.5 })?.field).toBe(
+      "gameSensitivity",
+    );
+  });
+
+  it("DPI 0 は mouseDpi エラーを返す", () => {
+    expect(validateMouseSettings({ ...empty, mouseDpi: 0 })?.field).toBe("mouseDpi");
+  });
+
+  it("windowsSpeed 21（テーブル外）は windowsSpeed エラーを返す", () => {
+    expect(validateMouseSettings({ ...empty, windowsSpeed: 21 })?.field).toBe("windowsSpeed");
+  });
+
+  it("係数 0 は windowsSpeedMultiplier エラーを返す", () => {
+    expect(
+      validateMouseSettings({ ...empty, windowsSpeedMultiplier: 0 })?.field,
+    ).toBe("windowsSpeedMultiplier");
+  });
+
+  it("windowsSpeed 10（テーブル内）は通る", () => {
+    expect(validateMouseSettings({ ...empty, windowsSpeed: 10 })).toBeNull();
   });
 });

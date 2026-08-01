@@ -51,17 +51,6 @@ export function useKeybindingsFilters() {
   };
   const clearUsers = () => setUsers([]);
 
-  const clearAll = () =>
-    setParams({
-      dpiMin: null,
-      dpiMax: null,
-      sensMin: null,
-      sensMax: null,
-      cm360Min: null,
-      cm360Max: null,
-      sort: null,
-    });
-
   /**
    * 表示に効いているフィルタ（数値範囲 + ユーザー絞り込み）を一括解除する。
    * 0件の空状態からの復帰用。ソート・タブは表示件数に影響しないので残す。
@@ -169,7 +158,6 @@ export function useKeybindingsFilters() {
     setUsers,
     toggleUser,
     clearUsers,
-    clearAll,
     clearFilters,
     activeFilterCount,
     hasActiveFilters,

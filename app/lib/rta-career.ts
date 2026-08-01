@@ -53,17 +53,12 @@ export function isValidRtaStartedYearMonth(value: string, now: Date = new Date()
   return parsed !== null && isInRange(parsed, now);
 }
 
-/**
- * 開始年月から現在までの経過期間を算出する。値が不正なら null。
- * 日は考慮せず月単位で数える（"2020-06" と 2026-08 なら 74 ヶ月 = 6年2ヶ月）。
- */
-export function rtaCareerElapsed(value: string, now: Date = new Date()): RtaCareerElapsed | null {
-  const parsed = parseRtaStartedYearMonth(value);
-  if (!parsed || !isInRange(parsed, now)) return null;
-
+/** パース済みの開始年月から現在までの経過期間を算出する（範囲検証は呼び出し側の責務） */
+function elapsedFrom(started: RtaStartedYearMonth, now: Date): RtaCareerElapsed {
   const totalMonths = Math.max(
     0,
-    toTotalMonths(now.getFullYear(), now.getMonth() + 1) - toTotalMonths(parsed.year, parsed.month),
+    toTotalMonths(now.getFullYear(), now.getMonth() + 1) -
+      toTotalMonths(started.year, started.month),
   );
 
   return {
@@ -71,6 +66,16 @@ export function rtaCareerElapsed(value: string, now: Date = new Date()): RtaCare
     years: Math.floor(totalMonths / 12),
     months: totalMonths % 12,
   };
+}
+
+/**
+ * 開始年月から現在までの経過期間を算出する。値が不正なら null。
+ * 日は考慮せず月単位で数える（"2020-06" と 2026-08 なら 74 ヶ月 = 6年2ヶ月）。
+ */
+export function rtaCareerElapsed(value: string, now: Date = new Date()): RtaCareerElapsed | null {
+  const parsed = parseRtaStartedYearMonth(value);
+  if (!parsed || !isInRange(parsed, now)) return null;
+  return elapsedFrom(parsed, now);
 }
 
 /** 表示用の RTA歴（経過期間 + ロケールに合わせて整形した開始年月） */
@@ -106,8 +111,8 @@ export function rtaCareerView(
 ): RtaCareerView | null {
   if (!value) return null;
   const started = parseRtaStartedYearMonth(value);
-  const elapsed = rtaCareerElapsed(value, now);
-  if (!started || !elapsed) return null;
+  if (!started || !isInRange(started, now)) return null;
+  const elapsed = elapsedFrom(started, now);
   return { ...elapsed, start: formatRtaStartedLabel(started, locale) };
 }
 

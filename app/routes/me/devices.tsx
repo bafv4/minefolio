@@ -1,4 +1,4 @@
-import { createTranslator, type Translator } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -37,7 +37,13 @@ import {
   Smartphone,
 } from "lucide-react";
 import { type ControllerSettings, DEFAULT_CONTROLLER_SETTINGS } from "@/lib/keybindings";
-import { isValidSensitivity } from "@/lib/mouse-settings";
+import {
+  fromSensitivityPercent,
+  parseMouseSettingsInput,
+  toSensitivityPercent,
+  validateMouseSettings,
+  type MouseSettingsField,
+} from "@/lib/mouse-settings";
 import {
   Dialog,
   DialogContent,
@@ -222,39 +228,25 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // マウス設定の範囲チェック（フォーム外からの POST でも異常値が DB に入らないようにする）。
-  // NaN（"abc" のパース結果など）は Number.isInteger / isValidSensitivity がいずれも false になり拒否される。
+  // NaN（"abc" のパース結果など）は各バリデーションがいずれも false になり拒否される。
   // inputMethod の更新より前に検証し、エラー時に inputMethod だけ部分保存されるのを防ぐ。
   const mouseDpiStr = formData.get("mouseDpi") as string;
   const gameSensitivityStr = formData.get("gameSensitivity") as string;
   const windowsSpeedStr = formData.get("windowsSpeed") as string;
   const windowsSpeedMultiplierStr = formData.get("windowsSpeedMultiplier") as string;
 
-  const mouseDpi = mouseDpiStr ? parseInt(mouseDpiStr) : null;
-  const gameSensitivity = gameSensitivityStr ? parseFloat(gameSensitivityStr) : null;
-  const windowsSpeed = windowsSpeedStr ? parseInt(windowsSpeedStr) : null;
-  const windowsSpeedMultiplier = windowsSpeedMultiplierStr ? parseFloat(windowsSpeedMultiplierStr) : null;
+  const parsed = parseMouseSettingsInput({
+    mouseDpi: mouseDpiStr ?? "",
+    gameSensitivity: gameSensitivityStr ?? "",
+    windowsSpeed: windowsSpeedStr ?? "",
+    windowsSpeedMultiplier: windowsSpeedMultiplierStr ?? "",
+  });
+  const { mouseDpi, gameSensitivity, windowsSpeed, windowsSpeedMultiplier } = parsed;
 
   // エラーはどの欄が弾かれたかを field で返す（クライアントが該当欄を強調・スクロールする）
-  if (gameSensitivity !== null && !isValidSensitivity(gameSensitivity)) {
-    return { error: t("meDevices.invalidSensitivity"), field: "gameSensitivity" as const };
-  }
-  if (mouseDpi !== null && (!Number.isInteger(mouseDpi) || mouseDpi <= 0)) {
-    return { error: t("meDevices.invalidDpi"), field: "mouseDpi" as const };
-  }
-  if (
-    windowsSpeed !== null &&
-    (!Number.isInteger(windowsSpeed) || windowsSpeed < 1 || windowsSpeed > 20)
-  ) {
-    return { error: t("meDevices.invalidWindowsSpeed"), field: "windowsSpeed" as const };
-  }
-  if (
-    windowsSpeedMultiplier !== null &&
-    (!Number.isFinite(windowsSpeedMultiplier) || windowsSpeedMultiplier <= 0)
-  ) {
-    return {
-      error: t("meDevices.invalidWindowsSpeedMultiplier"),
-      field: "windowsSpeedMultiplier" as const,
-    };
+  const validationError = validateMouseSettings(parsed);
+  if (validationError) {
+    return { error: t(validationError.messageKey), field: validationError.field };
   }
 
   // 入力方法の更新（users.inputMethod はプリセット非依存）
@@ -347,57 +339,7 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: true };
 }
 
-/**
- * バリデーションエラーの対象欄。action の返り値（field）とクライアント側検証で共有する。
- * 値は該当 Input の id と揃えている。
- */
-export type DeviceFieldError =
-  | "gameSensitivity"
-  | "mouseDpi"
-  | "windowsSpeed"
-  | "windowsSpeedMultiplier";
-
-type FieldErrorState = { field: DeviceFieldError; message: string };
-
-/**
- * 保存前のクライアント側検証。action と同じ条件・同じ文言で、
- * 範囲外の値は送信せずその場でインライン表示する（サーバー側の検証は残す）。
- */
-function validateMouseFields(
-  t: Translator,
-  values: {
-    mouseDpi: string;
-    gameSensitivity: string;
-    windowsSpeed: string;
-    windowsSpeedMultiplier: string;
-  },
-): FieldErrorState | null {
-  const gameSensitivity = values.gameSensitivity ? parseFloat(values.gameSensitivity) : null;
-  if (gameSensitivity !== null && !isValidSensitivity(gameSensitivity)) {
-    return { field: "gameSensitivity", message: t("meDevices.invalidSensitivity") };
-  }
-  const mouseDpi = values.mouseDpi ? parseInt(values.mouseDpi) : null;
-  if (mouseDpi !== null && (!Number.isInteger(mouseDpi) || mouseDpi <= 0)) {
-    return { field: "mouseDpi", message: t("meDevices.invalidDpi") };
-  }
-  const windowsSpeed = values.windowsSpeed ? parseInt(values.windowsSpeed) : null;
-  if (
-    windowsSpeed !== null &&
-    (!Number.isInteger(windowsSpeed) || windowsSpeed < 1 || windowsSpeed > 20)
-  ) {
-    return { field: "windowsSpeed", message: t("meDevices.invalidWindowsSpeed") };
-  }
-  const multiplier = values.windowsSpeedMultiplier
-    ? parseFloat(values.windowsSpeedMultiplier)
-    : null;
-  if (multiplier !== null && (!Number.isFinite(multiplier) || multiplier <= 0)) {
-    return {
-      field: "windowsSpeedMultiplier",
-      message: t("meDevices.invalidWindowsSpeedMultiplier"),
-    };
-  }
-  return null;
-}
+type FieldErrorState = { field: MouseSettingsField; message: string };
 
 /** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
 function FieldErrorText({ id, message }: { id: string; message: string | null }) {
@@ -466,7 +408,7 @@ export default function DevicesPage() {
       mouseModel: config?.mouseModel ?? "",
       mouseDpi: config?.mouseDpi?.toString() ?? "",
       gameSensitivity: config?.gameSensitivity?.toString() ?? "",
-      gameSensitivityPercent: config?.gameSensitivity != null ? Math.round(config.gameSensitivity * 200).toString() : "",
+      gameSensitivityPercent: config?.gameSensitivity != null ? (toSensitivityPercent(config.gameSensitivity)?.toString() ?? "") : "",
       windowsSpeed: config?.windowsSpeed?.toString() ?? "",
       windowsSpeedMultiplier: config?.windowsSpeedMultiplier?.toString() ?? "",
       toggleSprint: config?.toggleSprint ?? false,
@@ -500,8 +442,8 @@ export default function DevicesPage() {
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
   const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
-  const fieldRefs = useRef<Partial<Record<DeviceFieldError, HTMLDivElement | null>>>({});
-  const errorFor = (field: DeviceFieldError) =>
+  const fieldRefs = useRef<Partial<Record<MouseSettingsField, HTMLDivElement | null>>>({});
+  const errorFor = (field: MouseSettingsField) =>
     fieldError?.field === field ? fieldError.message : null;
 
   // エラー箇所を表示して該当欄までスクロールする（コントローラー表示中など、
@@ -541,14 +483,14 @@ export default function DevicesPage() {
       if (field === "gameSensitivity" && typeof value === "string") {
         const numVal = parseFloat(value);
         if (!isNaN(numVal)) {
-          newValues.gameSensitivityPercent = Math.round(numVal * 200).toString();
+          newValues.gameSensitivityPercent = toSensitivityPercent(numVal)?.toString() ?? "";
         } else if (value === "") {
           newValues.gameSensitivityPercent = "";
         }
       } else if (field === "gameSensitivityPercent" && typeof value === "string") {
         const numVal = parseInt(value);
         if (!isNaN(numVal)) {
-          newValues.gameSensitivity = (numVal / 200).toFixed(4);
+          newValues.gameSensitivity = fromSensitivityPercent(numVal);
         } else if (value === "") {
           newValues.gameSensitivity = "";
         }
@@ -577,10 +519,11 @@ export default function DevicesPage() {
     }
 
     // 範囲外の値は送信せず、その場で該当欄にインライン表示する（トーストは補助）
-    const validationError = validateMouseFields(t, formValues);
+    const validationError = validateMouseSettings(parseMouseSettingsInput(formValues));
     if (validationError) {
-      showFieldError(validationError);
-      toast.error(validationError.message);
+      const error = { field: validationError.field, message: t(validationError.messageKey) };
+      showFieldError(error);
+      toast.error(error.message);
       return;
     }
     setFieldError(null);
@@ -650,7 +593,7 @@ export default function DevicesPage() {
         mouseModel: configData.mouseModel ?? "",
         mouseDpi: configData.mouseDpi?.toString() ?? "",
         gameSensitivity: configData.gameSensitivity?.toString() ?? "",
-        gameSensitivityPercent: configData.gameSensitivity != null ? Math.round(configData.gameSensitivity * 200).toString() : "",
+        gameSensitivityPercent: configData.gameSensitivity != null ? (toSensitivityPercent(configData.gameSensitivity)?.toString() ?? "") : "",
         windowsSpeed: configData.windowsSpeed?.toString() ?? "",
         windowsSpeedMultiplier: configData.windowsSpeedMultiplier?.toString() ?? "",
         toggleSprint: configData.toggleSprint ?? false,

@@ -4,7 +4,7 @@ import type { Database } from "./db";
 import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, customActions } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
-import { isValidSensitivity } from "./mouse-settings";
+import { isValidMouseDpi, isValidSensitivity } from "./mouse-settings";
 import { createPresetFromOnboarding } from "./preset-utils";
 
 // カスタムキーの型定義
@@ -304,7 +304,7 @@ export async function importFromLegacy(
       const importedMouseDpi =
         settings.mouseDpi === undefined
           ? undefined
-          : Number.isInteger(settings.mouseDpi) && settings.mouseDpi > 0
+          : isValidMouseDpi(settings.mouseDpi)
             ? settings.mouseDpi
             : null;
       const importedGameSensitivity =

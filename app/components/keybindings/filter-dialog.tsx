@@ -2,6 +2,7 @@
 // - ユーザー絞り込み: 表示するユーザーを検索してリスト登録（即時反映）
 // - 数値フィルタ: DPI / 感度 / 振り向きの範囲（ドラフト → 適用で反映）
 import { useEffect, useState, type FormEvent } from "react";
+import { SENSITIVITY_PERCENT_MAX } from "@/lib/mouse-settings";
 import { SlidersHorizontal, X } from "lucide-react";
 import {
   Dialog,
@@ -167,10 +168,10 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               onMin={setDraftSensMin}
               onMax={setDraftSensMax}
               placeholderMin="0"
-              placeholderMax="200"
+              placeholderMax={String(SENSITIVITY_PERCENT_MAX)}
               suffix="%"
               inputMin={0}
-              inputMax={200}
+              inputMax={SENSITIVITY_PERCENT_MAX}
               hint={t("keybindings.sensitivityRangeHint")}
             />
             <FilterRange

@@ -284,20 +284,22 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 
 ### 表示パーセントへの換算
 
-内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページのいずれも同じ整数%になる（以前はプロフィール・比較ページのみ四捨五入していたため、境界値で表示が1%ずれることがあった）。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
+内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページ・`/me/devices` の編集フォーム（内部値欄↔パーセント欄の相互変換）のいずれも同じ整数%になる（以前はプロフィール・比較ページが四捨五入、`/me/devices` は独自の四捨五入ロジックを持っていたため、境界値で表示が1%ずれることがあった）。逆変換（表示%→内部値、フォーム保存値の正規形＝小数4桁固定の文字列）は `fromSensitivityPercent()` が担う。パーセントの上限は定数 `SENSITIVITY_PERCENT_MAX`（`= 200`）で持ち、フィルターダイアログの入力上限（`inputMax`）や感度ビン区分（`SENSITIVITY_PERCENT_BINS`、後述）もここから導出する。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
 
 ### バリデーション
 
-- **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される。エラーは `{ error, field }` の形で返し、`field` にどの項目が弾かれたかを識別子（`DeviceFieldError` = `gameSensitivity` / `mouseDpi` / `windowsSpeed` / `windowsSpeedMultiplier`）で載せる
+マウス設定フォームの妥当性検証（パース・検証条件）は `app/lib/mouse-settings.ts` の `parseMouseSettingsInput()` / `validateMouseSettings()` に一本化されており、サーバー側 action・クライアント側の保存前チェックの両方がこれを呼ぶ（値は該当 Input の `id` と揃えた `MouseSettingsField` = `gameSensitivity` / `mouseDpi` / `windowsSpeed` / `windowsSpeedMultiplier` で返す）。
+
+- **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される。エラーは `{ error, field }` の形で返す
 
   | 項目 | 条件 | 違反時のエラーキー | `field` |
   |---|---|---|---|
   | ゲーム内感度（`gameSensitivity`） | `isValidSensitivity()`（内部値 `0..1` ＝ 表示 `0〜200%`） | `meDevices.invalidSensitivity` | `gameSensitivity` |
-  | DPI（`mouseDpi`） | 正の整数 | `meDevices.invalidDpi` | `mouseDpi` |
-  | Windowsポインター速度（`windowsSpeed`） | 1〜20 の整数 | `meDevices.invalidWindowsSpeed` | `windowsSpeed` |
+  | DPI（`mouseDpi`） | `isValidMouseDpi()`（正の整数） | `meDevices.invalidDpi` | `mouseDpi` |
+  | Windowsポインター速度（`windowsSpeed`） | 乗数テーブル（1〜20）のキー | `meDevices.invalidWindowsSpeed` | `windowsSpeed` |
   | カスタム係数（`windowsSpeedMultiplier`） | 0 より大きい有限数 | `meDevices.invalidWindowsSpeedMultiplier` | `windowsSpeedMultiplier` |
 
-- **クライアント側の保存前検証（`app/routes/me/devices.tsx`）**: 上記と同じ条件・同じ文言を `validateMouseFields()` で事前チェックし、範囲外の値は送信せずその場で該当欄の直下にインラインエラー（`FieldErrorText`、`aria-invalid` / `aria-describedby` 付き）を表示して該当欄までスクロールする（`showFieldError()`）。サーバー側 action からの `field` 付きエラーも同じ表示経路（`fieldError` state）で扱うため、直接 POST 等でサーバー側だけが弾いたケースでも同様にハイライトされる。該当欄を編集するとエラー表示は消える（感度は内部値 `0..1` 欄・パーセント欄のどちらを編集しても解消扱い）
+- **クライアント側の保存前検証（`app/routes/me/devices.tsx`）**: 上記と同じ `validateMouseSettings()` で事前チェックし、範囲外の値は送信せずその場で該当欄の直下にインラインエラー（`FieldErrorText`、`aria-invalid` / `aria-describedby` 付き）を表示して該当欄までスクロールする（`showFieldError()`）。サーバー側 action からの `field` 付きエラーも同じ表示経路（`fieldError` state）で扱うため、直接 POST 等でサーバー側だけが弾いたケースでも同様にハイライトされる。該当欄を編集するとエラー表示は消える（感度は内部値 `0..1` 欄・パーセント欄のどちらを編集しても解消扱い）
 
 - **旧データインポート（`app/lib/legacy-import.ts`、MCSRer Hotkeys からの `/me/import`）**: 無検証の値が入ってくるため、`mouseDpi` / `gameSensitivity` / `cm360` はそれぞれ上記相当の妥当性を確認する。無効な値は**クランプせず取り込まない**（`null` として保存）。未設定（`undefined`）の項目は従来どおり既存の列を更新しない
 
@@ -423,10 +425,10 @@ type ControllerSettings = {
 
 #### 感度分布（`SENSITIVITY_RANGES`）
 
-- 表示・CSV・編集画面と同じ **0〜200%**（Minecraft準拠）基準の**10区分**（`< 20%`, `20-39%`, `40-59%`, `60-79%`, `80-99%`, `100-119%`, `120-139%`, `140-159%`, `160-179%`, `180-200%`）。区分は閉端（最終区分の `200%` を含む）で、換算は一覧・CSVと同じ `toSensitivityPercent()` を使う
+- 表示・CSV・編集画面と同じ **0〜200%**（Minecraft準拠）基準の**10区分**（`< 20%`, `20-39%`, `40-59%`, `60-79%`, `80-99%`, `100-119%`, `120-139%`, `140-159%`, `160-179%`, `180-200%`）。区分は閉端（最終区分の `200%` を含む）で、換算は一覧・CSVと同じ `toSensitivityPercent()` を使う。数値境界の実体は `SENSITIVITY_PERCENT_BINS`（`app/lib/keybindings-stats-shared.ts`）で、`SENSITIVITY_RANGES` はそこからラベルを付けて導出する
 - **有効範囲（内部値 `0..1` ＝ 表示 `0〜200%`）外の感度は、分布・平均の母数から除外**する（`isValidSensitivity()` で判定。感度統計に中央値は無い）。感度ちょうど `0%` は含む
 - 除外した人数（感度は登録済みだが範囲外）はカード下に注記として表示する（`SensitivityStats.excludedCount`、`keybindingsStats.excludedOutOfRange`）。0人のときは注記自体を出さない
-- サイト全体統計（`/stats`、`app/routes/stats.tsx`）の感度分布も同じ区分設計・除外方針で揃えており、同様に除外人数の注記（`stats.sensitivityExcludedNote`）を分布カード下に表示する（未設定=`null`は元々対象外なので除外人数には含めない）
+- サイト全体統計（`/stats`、`app/routes/stats.tsx`）の感度分布も同じ `SENSITIVITY_PERCENT_BINS` から区分を組み立て（ラベルのみロケール対応で各自生成）、除外方針も共通の `isOutOfRangeSensitivity()` で揃えている。同様に除外人数の注記（`stats.sensitivityExcludedNote`）を分布カード下に表示する（未設定=`null`は元々対象外なので除外人数には含めない）
 
 ### CSVエクスポート
 
