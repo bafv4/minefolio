@@ -1,8 +1,16 @@
 // プロフィール絵文字リアクションのクライアント状態（単一ページ用ローカルフック）。
 //
+// 呼び出し元は ProfileReactionBar 自身ではなく、`/player/:slug` の Tabs を描画する
+// 親ページコンポーネント（PlayerProfilePage）にすること。Radix TabsContent は非アクティブ
+// になると外枠の DOM ノードは維持したまま中の子要素を unmount する。ProfileReactionBar は
+// `<TabsContent value="profile">` の中にあるため、このフックをバー自身の中で呼ぶと
+// 別タブへ切替 → 戻る のたびにこの state（overrides）が失われ、タブ切替では loader が
+// 再実行されない（shouldRevalidate 最適化）ことと相まって、リアクション後の見た目が
+// ページ初回読み込み時点の古い値に巻き戻って見える（DB自体は正しい。ハードリロードで直る）。
+//
 // use-likes.tsx（LikesProvider）の戦訓を単一対象用に簡略化したもの:
-// - グローバル Provider にはしない（対象は常に1プロフィールのみで、`/player/:slug` の
-//   ページコンポーネント内で閉じるため、Context を挟む理由がない）
+// - グローバル Provider にはしない（対象は常に1プロフィールのみで、Tabs を描画する
+//   親ページコンポーネント内で閉じるため、Context を挟む理由がない）
 // - useFetcher は使わない。profile の loader は PaceMan 外部APIを叩く重い loader のため、
 //   送信のたびに全ローダーが再検証されるのを避け、素の fetch を使う
 // - オーバーライド・直列化チェーンのキーは `${profileUserId}:${emoji}`（use-likes.tsx の

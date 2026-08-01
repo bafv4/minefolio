@@ -131,6 +131,8 @@ Dev環境・本番の両方で先行有効化・展開が完了したため、�
 
 プロフィールページ（`/player/:slug`）1画面でのみ使う機能のため、いいね（`LikesProvider` によるグローバル状態）とは異なり **単一ページ用のローカルフックに簡略化**している。一覧・カードなど複数箇所に同じ状態を配る必要がなく、`_layout.tsx` にマウントするグローバル Provider を追加するコストに見合わないための判断。
 
+**フックの呼び出し位置は `ProfileReactionBar` 自身ではなく `PlayerProfilePage`（`app/routes/player/profile.tsx`、Tabs を描画する親コンポーネント）**にする。Radix `TabsContent` は非アクティブになると外枠の `role="tabpanel"` ノードは維持したまま中の子要素を unmount する。`ProfileReactionBar` は `<TabsContent value="profile">` の中にあるため、もしバー自身の中で `useProfileReactions()` を呼ぶと、別タブへ切替 → 「プロフィール」タブに戻る、のたびに state（`overrides`）が失われる。タブ切替では `?tab=` の更新のみで loader は再実行されない（`shouldRevalidate` による最適化）ため、remount 後は loader 初回読み込み時点の古い `initialCounts`/`initialViewerReactions` から再スタートしてしまい、直前に押したリアクションが外れて見える（DB自体は正しく、ハードリロードすれば直る）。`PlayerProfilePage` はタブ切替で re-render はされるが unmount はされないため、ここで state を保持すれば解決する。
+
 ### `useProfileReactions`（`app/hooks/use-profile-reactions.ts`）
 
 `use-likes.tsx` の戦訓を単一対象用に簡略化して継承している:
@@ -145,7 +147,7 @@ Dev環境・本番の両方で先行有効化・展開が完了したため、�
 
 ### `ProfileReactionBar`（`app/components/profile-reaction-bar.tsx`）
 
-Props: `profileUserId` / `initialCounts` / `initialViewerReactions` / `isLoggedIn` / `className?`
+**表示専用コンポーネント**で、内部で `useProfileReactions()` は呼ばない。Props: `pills`（`useProfileReactions()` の戻り値をそのまま渡す） / `toggle`（同） / `isLoggedIn` / `className?`
 
 - ピル: `count > 0` の絵文字のみ表示。**表示順は `PROFILE_REACTION_EMOJIS` 固定**（カウント順にすると押すたびに並びが入れ替わって視認性が悪い）。自分が押している絵文字はブランドトークン（`border-brand/40 bg-brand/10 text-brand`、`like-button` と同トークン）でハイライトする。`aria-pressed` / `aria-busy` / `aria-label`（`profileReactions.reactAria` / `unreactAria`）を付与
 - 追加ボタン: lucide `SmilePlus` + shadcn `Popover` 内に `grid grid-cols-4` の固定8絵文字パレット（8件全て表示、押下済みは `bg-brand/10`）。選択でトグルしてパレットを閉じる
@@ -155,6 +157,7 @@ Props: `profileUserId` / `initialCounts` / `initialViewerReactions` / `isLoggedI
 ### 組み込み（`app/routes/player/profile.tsx`）
 
 - loader は常に `getProfileReactionCounts` / `getViewerProfileReactions` を呼び、`profileReactions: { counts, viewerReactions, viewerHasAccount }`（非null）を返す。閲覧者が本人ならプロフィール対象の `player.id` をそのまま使い（追加クエリなし）、他人ログイン中は discordId → id を1回引く（未ログインは `null`）
+- **`useProfileReactions()` は `PlayerProfilePage`（Tabs を描画する親コンポーネント）のトップレベルで呼ぶ**（他の hooks と同じ並び、条件分岐の外）。戻り値の `pills`/`toggle` を `<ProfileReactionBar>` に props として渡す（理由は上の「`useProfileReactions`」節の呼び出し位置の説明を参照）
 - 表示はアクションボタン行（編集/お気に入り/シェア/比較）の**閉じタグ直後**。`isLoggedIn` プロップには `viewerHasAccount`（セッションはあるが `users` 行が無い＝未オンボーディングは false 扱い）を渡す
 - i18n: `pages-ja.ts` の `likes` 節近くに `profileReactions` 節（`addLabel` / `loginToReact` / `reactAria` / `unreactAria` / `pillAria`（未ログイン時の静的ピルの aria-label） + `emoji.thumbsUp`〜`emoji.hundred` の8種名）を持つ。`pages-en.ts` にも対訳あり
 

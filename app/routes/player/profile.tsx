@@ -37,6 +37,7 @@ import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
 import { decodePresetConfig } from "@/lib/preset-read";
@@ -557,6 +558,14 @@ export default function PlayerProfilePage() {
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  // Radix TabsContent は非アクティブ時に子要素を unmount するため、タブ切替で消える
+  // ProfileReactionBar 側ではなく、unmount されない親（このページ）で state を保持する
+  // （docs/profile-reactions.md 参照）
+  const { pills: reactionPills, toggle: toggleReaction } = useProfileReactions({
+    profileUserId: player.id,
+    initialCounts: profileReactions.counts,
+    initialViewerReactions: profileReactions.viewerReactions,
+  });
 
   // 英語表示ではアルファベット表記を優先する（未入力なら表示名にフォールバック）
   const playerName = getLocalizedDisplayName(player, locale);
@@ -1328,9 +1337,8 @@ export default function PlayerProfilePage() {
 
                   {/* 絵文字リアクション */}
                   <ProfileReactionBar
-                    profileUserId={player.id}
-                    initialCounts={profileReactions.counts}
-                    initialViewerReactions={profileReactions.viewerReactions}
+                    pills={reactionPills}
+                    toggle={toggleReaction}
                     isLoggedIn={profileReactions.viewerHasAccount}
                   />
                 </div>

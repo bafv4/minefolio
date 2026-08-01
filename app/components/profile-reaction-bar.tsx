@@ -4,23 +4,20 @@ import { cn } from "@/lib/utils";
 import {
   PROFILE_REACTION_EMOJI_KEYS,
   PROFILE_REACTION_EMOJIS,
-  type ProfileReactionCount,
   type ProfileReactionEmoji,
 } from "@/lib/profile-reactions";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useProfileReactions } from "@/hooks/use-profile-reactions";
+import type { ProfileReactionPill } from "@/hooks/use-profile-reactions";
 import { useT } from "@/hooks/use-locale";
 import { SmilePlus } from "lucide-react";
 import type { MessageKey } from "@/lib/messages";
 
 interface ProfileReactionBarProps {
-  /** リアクション先プロフィールの内部ユーザーID（player.id） */
-  profileUserId: string;
-  /** ローダー由来の絵文字別カウント（0件の絵文字は含まれない） */
-  initialCounts: ProfileReactionCount[];
-  /** ローダー由来の閲覧者の押下済み絵文字一覧 */
-  initialViewerReactions: string[];
+  /** PROFILE_REACTION_EMOJIS の並び順に固定した8件（呼び出し元の useProfileReactions() の返り値） */
+  pills: ProfileReactionPill[];
+  /** 絵文字リアクションのトグル（呼び出し元の useProfileReactions() の返り値） */
+  toggle: (emoji: ProfileReactionEmoji) => void;
   /** 閲覧者がログイン済み（かつオンボーディング済み）か */
   isLoggedIn: boolean;
   className?: string;
@@ -42,21 +39,21 @@ const EMOJI_NAME_KEY_BY_EMOJI = new Map<ProfileReactionEmoji, MessageKey>(
  * - 未ログイン時はピルを静的表示にし、追加ボタンは `/login` への導線にする
  * - カウントが1件も無く未ログインの場合はバーごと非表示にする
  *   （ログイン済みなら0件でも追加ボタンを出す必要があるため表示する）
+ * - `pills`/`toggle` は props で受け取るだけの表示コンポーネントで、内部で
+ *   `useProfileReactions()` は呼ばない。呼び出し元は `/player/:slug` の
+ *   タブを描画する親ページコンポーネント側にすること（対象は常に1プロフィールのみで
+ *   Context を挟む理由がない点は use-profile-reactions.ts のコメント通りだが、
+ *   Radix TabsContent は非アクティブ時に子要素を unmount するため、このバー自身の中で
+ *   state を持つとタブ切替のたびに楽観的更新が失われて見た目が古い値に戻ってしまう）
  */
 export function ProfileReactionBar({
-  profileUserId,
-  initialCounts,
-  initialViewerReactions,
+  pills,
+  toggle,
   isLoggedIn,
   className,
 }: ProfileReactionBarProps) {
   const t = useT();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const { pills, toggle } = useProfileReactions({
-    profileUserId,
-    initialCounts,
-    initialViewerReactions,
-  });
 
   const visiblePills = pills.filter((pill) => pill.count > 0);
 
