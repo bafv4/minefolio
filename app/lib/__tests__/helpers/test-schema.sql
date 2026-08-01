@@ -341,6 +341,17 @@ CREATE INDEX `idx_paceman_paces_timeline` ON `paceman_paces` (`timeline`);
 CREATE INDEX `idx_paceman_paces_is_nether_enter` ON `paceman_paces` (`is_nether_enter`);
 CREATE INDEX `idx_paceman_paces_is_2nd_structure_or_later` ON `paceman_paces` (`is_2nd_structure_or_later`);
 CREATE INDEX `idx_paceman_paces_run_id` ON `paceman_paces` (`paceman_run_id`);
+CREATE TABLE `page_view_stats` (
+	`id` text PRIMARY KEY NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text NOT NULL,
+	`pageviews` integer DEFAULT 0 NOT NULL,
+	`window_start` integer NOT NULL,
+	`window_end` integer NOT NULL,
+	`fetched_at` integer NOT NULL
+);
+
+CREATE UNIQUE INDEX `page_view_stats_target_uniq` ON `page_view_stats` (`target_type`,`target_id`);
 CREATE TABLE `player_configs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

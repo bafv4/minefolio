@@ -19,7 +19,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | データ | ソース | 条件 |
 |--------|--------|------|
 | 最近更新されたプロフィール | `users` テーブル | `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
-| 最近のガイド | `guides` テーブル + `users` JOIN | `isPublished = true`、`updatedAt` 降順、最大4件 |
+| 人気のガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`guideListOrderBy("popular")`（直近7日のページビュー → いいね数 → `updatedAt`）降順、最大4件 |
 | 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
 | アクティブプロフィール数 | `users` テーブル | 上記 + `updatedAt` が1週間以内 |
 

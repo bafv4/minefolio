@@ -144,36 +144,43 @@
 
 ---
 
-## 並び替え（人気順・おすすめ順）
+## 並び替え
 
 型と選択肢とパースは `app/lib/content-sort.ts`（React 非依存。ローダー側の `guideListOrderBy` と定義を共有するため）、UI は `ContentSortSelect`（`app/components/content-sort-select.tsx`）。`?sort=` で指定し、既定（`new`）ではパラメータを削除してURLを綺麗に保つ。
 
-**選択肢は一覧ごとに異なる**ので `parseContentSort(value, allowed)` の `allowed` は必須にしている。省略可にすると、テンプレート一覧が `?sort=recommended` を受理して「UI は新着順なのに実際の順序が違う」状態になる。
+**選択肢は一覧ごとに異なる**ので `parseContentSort(value, allowed)` の `allowed` は必須にしている。省略可にすると、テンプレート一覧が `?sort=views` を受理して「UI は新着順なのに実際の順序が違う」状態になる。許可されていない値（廃止済みの旧 `?sort=recommended` を含む）は既定の `new` へ丸められるため、旧URLをブックマークしていてもエラーにはならず新着順で表示される。
 
-| 一覧 | 選択肢 | 定数 |
+| 一覧 | 選択肢（表示順） | 定数 |
 |---|---|---|
-| ガイド | 更新順 / **おすすめ順** / 人気順 | `GUIDE_SORTS` |
+| ガイド | 更新順 / いいね数順 / 閲覧数順 / 人気順 | `GUIDE_SORTS` |
 | テンプレート | 新着順 / 人気順 | `TEMPLATE_SORTS` |
 
 - ラベルはリストで異なる: ガイドは `updatedAt` 基準で**更新順**、テンプレートは `createdAt` 基準で**新着順**
 - **並び替えは必ず SQL の `ORDER BY` で行う**。テンプレート一覧は `.limit(100)` が先に効くため、メモリ上で並べ替えると「新しい100件を人気順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない
-- タイブレークを必ず入れる（初日は全件0いいねで、無いと順序が不定になりページングも壊れる）:
-  - ガイド: `likeCount DESC, updatedAt DESC, id ASC`
-  - テンプレート: `likeCount DESC, createdAt DESC, id ASC`
+- タイブレークを必ず入れる（初日は全件0いいね・0PVで、無いと順序が不定になりページングも壊れる）
 - **GETフォームには `sort` の hidden input が必要**（GETフォームはクエリを総入れ替えするため、無いと検索のたびにソートが解除される。`tag` / `lang` と同じ対処）
 
-### おすすめ順（ガイドのみ）
+### ガイド一覧の並び順（`guideListOrderBy()`）
 
-`guideListOrderBy()`（`likes.server.ts`）が単一情報源。**直近のいいね数 → 総いいね数 → 更新日時 → id** の順に見る。
+`guideListOrderBy()`（`likes.server.ts`）が単一情報源。`sort` の値ごとに以下を返す（すべて末尾に `id ASC` を持ちタイブレークを完結させる）:
 
-```
-recentLikeCount DESC, likeCount DESC, updatedAt DESC, id ASC
-```
+| `sort` | 意味 | 並び順（タイブレーク込み） |
+|---|---|---|
+| `new`（既定） | 更新順 | `updatedAt DESC, id ASC` |
+| `likes` | いいね数順（総いいね数） | `likeCount DESC, updatedAt DESC, id ASC` |
+| `views` | 閲覧数順（`guides.viewCount` の累計） | `viewCount DESC, likeCount DESC, updatedAt DESC, id ASC` |
+| `popular` | 人気順（直近7日のページビュー） | `pageviews DESC, likeCount DESC, updatedAt DESC, id ASC` |
 
-- 「直近」は `RECENT_LIKE_WINDOW_DAYS = 30` 日。母数が小さいコミュニティでは 7 日だとほぼ毎日全件0になり実質「人気順」と変わらなくなる。30 日はいいねの動きを拾いつつ、数か月前に伸びたきりの記事を上位に固定しない長さとして選んでいる
-- 直近が全件0でも総いいね・更新日時へ素直に落ちるので、いいねが少ない時期でも並びが破綻しない
-- テンプレートには用意していない（必要なら同じ形で `recentTemplateLikeCountSql` を足せる）
-- `created_at` は `integer(mode:"timestamp")` ＝ **秒**。Date をそのまま束縛せず秒へ変換する。ミリ秒のまま比較すると条件が常に偽になり、**エラーを出さずに「人気順」へ退化する**
+- `popular` の `pageviews` は `guidePageViewsSql()`（`app/lib/page-view-stats.server.ts`）が返す `page_view_stats` の相関サブクエリ（likes と同じ「内側から `id` を消す」書き方を踏襲）。ページビュー集計がまだ無い・失敗している間は該当ガイドが全件0扱いになり、その場合は `likeCount → updatedAt` へ素直に落ちるので並びが破綻しない。集計の仕組み（Vercel Web Analytics・cron・テーブル定義）は [`docs/infrastructure.md`](./infrastructure.md#ページビュー集計vercel-web-analytics) を参照
+- テンプレート一覧のタイブレークは従来どおり `likeCount DESC, createdAt DESC, id ASC`
+
+### `popular` の意味はガイドとテンプレートで異なる（重要）
+
+ガイドの `popular` は**直近7日のページビュー**基準、テンプレートの `popular` は**総いいね数**基準（従来の人気順のまま）。テンプレートには個別ページのページビューが無い（`/guides/templates/:id` は `page-view-paths.ts` の解釈対象外）ため、この差が生じる。ラベル（`contentSort.popular`）はどちらも「人気順」を共用する — 利用者から見て「よく見られている／支持されている」という意味は共通のため、あえてキーを分けていない。
+
+### 廃止: おすすめ順（v1.11.0）
+
+v1.10.0 で追加した「おすすめ順」（`recommended`。直近30日のいいね数 → 総いいね数 → 更新日時 → id）は v1.11.0 で廃止した。`guideListOrderBy()` の `recommended` 分岐、`RECENT_LIKE_WINDOW_DAYS`（30日）、`recentGuideLikeCountSql`、`recentLikeCutoff` は削除済み。廃止後に届く `?sort=recommended` は前述のとおり `new`（更新順）へフォールバックする。
 
 ---
 
@@ -224,6 +231,7 @@ pnpm exec tsx scripts/add-like-tables.ts --remote --apply  # リモート適用�
 | `app/hooks/use-likes.tsx` | `LikesProvider` / `useLike` |
 | `app/components/like-button.tsx` | ボタン |
 | `app/components/content-sort-select.tsx` | 並び替えUI |
+| `app/lib/page-view-stats.server.ts` | `popular` で使うページビュー相関サブクエリ（詳細は [`docs/infrastructure.md`](./infrastructure.md#ページビュー集計vercel-web-analytics)） |
 | `scripts/add-like-tables.ts` | DB反映スクリプト |
 | `app/lib/__tests__/likes.server.test.ts` | サーバー層テスト |
 | `app/routes/api/__tests__/likes.test.ts` | APIルートテスト |

@@ -509,6 +509,7 @@ export default function BrowsePage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="updatedAt">{t("browse.sortUpdatedAt")}</SelectItem>
+                <SelectItem value="popular">{t("browse.sortPopular")}</SelectItem>
                 <SelectItem value="mcid">{t("browse.sortMcid")}</SelectItem>
                 <SelectItem value="displayName">{t("browse.sortDisplayName")}</SelectItem>
               </SelectContent>

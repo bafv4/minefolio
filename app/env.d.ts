@@ -22,6 +22,11 @@ export interface Env {
   // Release notification (Vercel Webhook → Discord)
   VERCEL_WEBHOOK_SECRET?: string;
   DISCORD_RELEASE_WEBHOOK_URL?: string;
+  // Vercel Web Analytics（人気ページ集計）。未設定なら同期ごと無効
+  VERCEL_API_TOKEN?: string;
+  VERCEL_PROJECT_ID?: string;
+  /** チームのプロジェクトのみ必要（個人アカウントでは未設定にする） */
+  VERCEL_TEAM_ID?: string;
   // ローカル開発専用: "1" で /dev/login の簡易ログインを有効化（本番では NODE_ENV ガードにより常に無効）
   DEV_AUTH?: string;
 }

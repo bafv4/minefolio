@@ -6,6 +6,7 @@ import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
 import { getFavoritesFromDb } from "./favorites";
+import { profilePageViewsSql } from "./page-view-stats.server";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
 // ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
@@ -23,7 +24,8 @@ function parseBrowsePage(raw: string | null): number {
   return Math.min(p, MAX_BROWSE_PAGE);
 }
 
-export type BrowseSortOption = "updatedAt" | "mcid" | "displayName";
+/** popular は直近7日のプロフィール閲覧数（page_view_stats）。他は users の列で並べる */
+export type BrowseSortOption = "updatedAt" | "mcid" | "displayName" | "popular";
 
 export type BrowseFilterRole = "runner" | "viewer";
 export type BrowseFilterEdition = "java" | "bedrock";
@@ -140,6 +142,9 @@ export async function loadBrowsePage(
       ? [nullsLast(users.mcid), asc(users.mcid)]
       : args.sort === "displayName"
       ? [nullsLast(users.displayName), asc(users.displayName)]
+      : args.sort === "popular"
+      ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
+        [desc(profilePageViewsSql()), desc(users.updatedAt)]
       : // updatedAt は NOT NULL なので NULL 対策は不要
         [desc(users.updatedAt)];
 

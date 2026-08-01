@@ -373,7 +373,7 @@ export const PAGES_JA = {
     paceFeedLabel: "Pace Feed",
     videoFeedLabel: "Video Feed",
     guideFeedLabel: "Guides",
-    sectionGuides: "最近のガイド",
+    sectionGuides: "人気のガイド",
     rtaTime: "タイム",
     justWithinHour: "1時間以内",
     playEmbedded: "{title} をこの場で再生",
@@ -459,6 +459,8 @@ export const PAGES_JA = {
     sortUpdatedAt: "更新日順",
     sortMcid: "MCID順",
     sortDisplayName: "名前順",
+    /** 直近7日のプロフィール閲覧数が多い順（page_view_stats） */
+    sortPopular: "人気順",
     clearSearchAndFilters: "検索・フィルタをクリア",
     loadMore: "もっと読み込む",
     allShown: "すべての走者を表示しました（{count} 件）",
@@ -521,9 +523,15 @@ export const PAGES_JA = {
     newest: "新着順",
     /** ガイド一覧（updatedAt 基準） */
     recentlyUpdated: "更新順",
+    /**
+     * ガイド一覧＝直近7日のページビューが多い順（page_view_stats）。
+     * テンプレート一覧＝総いいね数が多い順（ページビュー集計の対象外のため）。
+     */
     popular: "人気順",
-    /** ガイド一覧のみ。直近のいいねが多い順（likes.server.ts の guideListOrderBy） */
-    recommended: "おすすめ順",
+    /** ガイド一覧のみ。総いいね数が多い順 */
+    likes: "いいね数順",
+    /** ガイド一覧のみ。累計閲覧数（guides.view_count）が多い順 */
+    views: "閲覧数順",
   },
   keybindings: {
     remapsHeading: "リマップ",

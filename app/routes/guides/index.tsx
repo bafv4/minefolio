@@ -79,7 +79,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), GUIDE_SORTS);
 
   const likeCount = guideLikeCountSql();
-  // 並び順の定義（おすすめ順の重み付け含む）は likes.server.ts に集約している
+  // 並び順の定義（人気順=7日PVのフォールバック含む）は likes.server.ts に集約している
   const orderBy = guideListOrderBy(sort);
 
   const allGuides = await db

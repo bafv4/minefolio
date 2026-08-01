@@ -10,7 +10,7 @@ import { users, guides } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
-import { guideLikeCountSql } from "@/lib/likes.server";
+import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
@@ -132,8 +132,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     limit: 4,
   });
 
-  // 最近更新されたガイド（公開済み、最新4件）
-  const recentGuides = await db
+  // 人気のガイド（公開済み、直近7日PV順、最新4件）
+  const popularGuides = await db
     .select({
       id: guides.id,
       slug: guides.slug,
@@ -151,9 +151,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
-    // 非公開・限定公開の著者のガイドはホームの新着一覧（discovery）に出さない
+    // 非公開・限定公開の著者のガイドはホームの人気一覧（discovery）に出さない
     .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-    .orderBy(desc(guides.updatedAt))
+    .orderBy(...guideListOrderBy("popular"))
     .limit(4);
 
   const oneWeekAgo = new Date();
@@ -180,7 +180,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
-    recentGuides,
+    popularGuides,
     totalPublicProfiles,
     activePublicProfiles,
   };
@@ -355,7 +355,7 @@ export default function HomePage() {
     mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
-    recentGuides,
+    popularGuides,
     totalPublicProfiles,
     activePublicProfiles,
   } =
@@ -625,7 +625,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {recentGuides.length > 0 && (
+      {popularGuides.length > 0 && (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -636,14 +636,14 @@ export default function HomePage() {
               <h2 className="text-xl font-bold">{t("home.sectionGuides")}</h2>
             </div>
             <Button variant="ghost" size="sm" asChild className="ml-auto">
-              <Link to="/guides">
+              <Link to="/guides?sort=popular">
                 {t("home.viewAll")}
                 <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
             </Button>
           </div>
           <GuideCardGrid
-            guides={recentGuides.map(
+            guides={popularGuides.map(
               (g): GuideItemWithAuthorSlug => ({
                 ...g,
                 likeCount: Number(g.likeCount),

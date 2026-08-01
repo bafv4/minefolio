@@ -15,6 +15,7 @@ import {
   users,
 } from "./schema";
 import { publiclyReferencableCondition } from "./users-filter";
+import { guidePageViewsSql } from "./page-view-stats.server";
 import type { ContentSort } from "./content-sort";
 import type { Database } from "./db";
 
@@ -69,52 +70,30 @@ export function templateLikeCountSql(): SQL<number> {
 }
 
 /**
- * 「おすすめ順」が直近とみなす期間（日数）。
+ * ガイド一覧の並び順。各順序の定義はここが単一情報源。
  *
- * 母数が小さいコミュニティなので、7日だとほとんどの日が全件0になり
- * 実質「人気順」と変わらなくなる。30日はいいねの動きを拾いつつ、
- * 数か月前に伸びたきりの記事を上位に固定しない長さとして選んでいる。
- */
-export const RECENT_LIKE_WINDOW_DAYS = 30;
-
-/** 「直近」の起点。ここより後に付いたいいねを新しいものとして数える。 */
-export function recentLikeCutoff(now: Date = new Date()): Date {
-  return new Date(now.getTime() - RECENT_LIKE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-}
-
-/**
- * 直近（`since` 以降）に付いたガイドのいいね数を返す相関サブクエリ。
+ * - new: 更新日時
+ * - likes: 総いいね数 → 更新日時
+ * - views: 累計閲覧数（guides.view_count）→ 総いいね数 → 更新日時
+ * - popular: 直近7日のページビュー（page_view_stats）→ 総いいね数 → 更新日時
  *
- * created_at は integer(mode:"timestamp") ＝ **秒**で格納されるため、Date をそのまま
- * 束縛せず秒へ変換する。ミリ秒のまま比較すると条件が常に偽になり、「おすすめ順」が
- * 黙って「人気順」に退化する（エラーにならないので気づきにくい）。
- */
-export function recentGuideLikeCountSql(since: Date): SQL<number> {
-  const sinceSec = Math.floor(since.getTime() / 1000);
-  return sql<number>`(select count(*) from (select guide_id, created_at from ${guideLikes}) where guide_id = ${guides.id} and created_at >= ${sinceSec})`;
-}
-
-/**
- * ガイド一覧の並び順。「おすすめ順」の定義はここが単一情報源。
- *
- * おすすめ順は 直近のいいね → 総いいね → 更新日時 の順に見る。直近が全件0でも
- * 総いいね・更新日時へ素直に落ちるので、いいねが少ない時期でも並びが破綻しない。
+ * popular はページビュー集計がまだ無い間は全件0になるが、その場合は
+ * いいね数 → 更新日時へ素直に落ちるので並びが破綻しない。
  * どの順序でも最後に id を入れて全順序にする（同値で順序が不定になるとページ間で
  * 行が重複・欠落するため）。
  */
-export function guideListOrderBy(sort: ContentSort, now: Date = new Date()): SQL[] {
+export function guideListOrderBy(sort: ContentSort): SQL[] {
   const likeCount = guideLikeCountSql();
   const updated = desc(guides.updatedAt) as SQL;
   const tail = [updated, asc(guides.id) as SQL];
 
-  if (sort === "recommended") {
-    return [
-      desc(recentGuideLikeCountSql(recentLikeCutoff(now))) as SQL,
-      desc(likeCount) as SQL,
-      ...tail,
-    ];
+  if (sort === "likes") return [desc(likeCount) as SQL, ...tail];
+  if (sort === "views") {
+    return [desc(guides.viewCount) as SQL, desc(likeCount) as SQL, ...tail];
   }
-  if (sort === "popular") return [desc(likeCount) as SQL, ...tail];
+  if (sort === "popular") {
+    return [desc(guidePageViewsSql()) as SQL, desc(likeCount) as SQL, ...tail];
+  }
   return tail;
 }
 

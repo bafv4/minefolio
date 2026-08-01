@@ -106,6 +106,7 @@ export default [
   route("api/cron/twitch-update", "routes/api/cron/twitch-update.ts"),
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
   route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
+  route("api/cron/update-page-views", "routes/api/cron/update-page-views.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),

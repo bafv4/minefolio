@@ -1196,3 +1196,41 @@ export const contentTranslations = sqliteTable("content_translations", {
 
 export type ContentTranslation = typeof contentTranslations.$inferSelect;
 export type NewContentTranslation = typeof contentTranslations.$inferInsert;
+
+// ============================================
+// page_view_stats（Vercel Web Analytics のページビュー集計）
+// ============================================
+// Vercel Web Analytics API から取得した「直近ウィンドウの path 別 PV」を、Minefolio 側の
+// 対象（プロフィール / ガイド）へ解決して保存するスナップショット。ガイド一覧・走者一覧の
+// 「人気順」の並び替え軸として読む（app/lib/page-view-stats.server.ts）。
+//
+// 【整合性ポリシー】targetId は users.id / guides.id を指す多態の弱参照で、外部キーは張らない
+//   （targetType ごとに参照先が異なるため。content_translations と同じ方針）。対象が消えても
+//   孤児行が残るが、cron が targetType 単位で全置換するため次回同期で消える。読み手は必ず
+//   対象テーブル側を起点に相関サブクエリで引くので、孤児行が一覧へ漏れることはない。
+//
+// 【鮮度】cron（/api/cron/update-page-views）が数時間おきに全置換する。取得元の窓は
+//   windowStart / windowEnd に、取得時刻は fetchedAt に持たせ、後から鮮度を判断できるようにする。
+export const pageViewStats = sqliteTable("page_view_stats", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  /** 集計対象の種別（プロフィール＝/player/:slug、ガイド＝/guides/:authorSlug/:guideSlug） */
+  targetType: text("target_type", { enum: ["profile", "guide"] }).notNull(),
+  /** 対象の id（users.id / guides.id） */
+  targetId: text("target_id").notNull(),
+
+  /** 窓内のページビュー数（同一対象の大小文字違いパスは合算済み） */
+  pageviews: integer("pageviews").default(0).notNull(),
+
+  /** 集計窓の開始・終了 */
+  windowStart: integer("window_start", { mode: "timestamp" }).notNull(),
+  windowEnd: integer("window_end", { mode: "timestamp" }).notNull(),
+  /** この行を書き込んだ時刻（同期の鮮度確認用） */
+  fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+}, (table) => [
+  // 対象列を先頭に置く: 並び替えの相関サブクエリがこの索引で引ける＋1対象1行を保証する
+  uniqueIndex("page_view_stats_target_uniq").on(table.targetType, table.targetId),
+]);
+
+export type PageViewStat = typeof pageViewStats.$inferSelect;
+export type NewPageViewStat = typeof pageViewStats.$inferInsert;

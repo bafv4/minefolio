@@ -26,6 +26,7 @@
 | 値 | 説明 |
 |----|------|
 | `updatedAt` | 更新日時順（デフォルト） |
+| `popular` | 人気順（直近7日のページビュー降順 → `updatedAt` 降順） |
 | `mcid` | MCID昇順 |
 | `displayName` | 表示名昇順 |
 
@@ -33,6 +34,8 @@
 （`app/lib/sort-order.ts`）を ORDER BY の先頭キーに差し込んで打ち消している。
 MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ページ目を占有するのを防ぐ。
 お気に入り優先はこれより強く、お気に入りなら未設定でも先頭に来る。
+
+`popular` のページビューは `profilePageViewsSql()`（`app/lib/page-view-stats.server.ts`）が返す `page_view_stats` の相関サブクエリ（Vercel Web Analytics を cron で集計）。未集計・0件のプロフィールは `updatedAt` 降順へ自然に落ちる。集計の仕組みは [`docs/infrastructure.md`](./infrastructure.md#ページビュー集計vercel-web-analytics) を参照。
 
 ### フィルタ（複数選択対応）
 
@@ -178,6 +181,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 ### ライブラリ
 - `app/lib/users-filter.ts` - 視聴者ロール除外条件 `excludeViewersCondition`
+- `app/lib/page-view-stats.server.ts` - `popular` ソートで使うページビュー相関サブクエリ（`profilePageViewsSql`）
 - `app/lib/favorites.ts` - サーバー側 DB CRUD（`getFavoritesFromDb` / `addFavoriteToDb` / `removeFavoriteFromDb` / `syncLocalFavoritesToDb`）+ 旧 Cookie 削除ヘッダー生成
 - `app/lib/favorites-client.ts` - クライアント側 localStorage / sessionStorage 操作
 - `app/hooks/use-favorites.tsx` - `FavoritesProvider` + `useFavorites` フック

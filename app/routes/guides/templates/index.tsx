@@ -73,7 +73,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const lang = (url.searchParams.get("lang") ?? "").trim();
-  // テンプレートは「おすすめ順」を持たない（未対応の値は既定順へ落ちる）
+  // テンプレートは新着・人気順（総いいね）のみ（未対応の値は既定順へ落ちる）
   const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), TEMPLATE_SORTS);
 
   // 言語はSQLで絞り込む（完全一致）

@@ -34,7 +34,8 @@ export function ContentSortSelect({
   const t = useT();
   const label = (sort: ContentSort) => {
     if (sort === "new") return newestLabel;
-    if (sort === "recommended") return t("contentSort.recommended");
+    if (sort === "likes") return t("contentSort.likes");
+    if (sort === "views") return t("contentSort.views");
     return t("contentSort.popular");
   };
 

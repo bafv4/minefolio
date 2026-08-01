@@ -209,6 +209,9 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 | `LEGACY_API_URL` | レガシーAPI（MCSRer Hotkeys）のURL |
 | `VERCEL_WEBHOOK_SECRET` | Vercel Webhook の署名検証シークレット（リリース通知） |
 | `DISCORD_RELEASE_WEBHOOK_URL` | リリース通知先の Discord Webhook URL |
+| `VERCEL_API_TOKEN` | Vercel Web Analytics API のアクセストークン（ページビュー集計 → `/api/cron/update-page-views`） |
+| `VERCEL_PROJECT_ID` | ページビュー集計対象の Vercel プロジェクトID |
+| `VERCEL_TEAM_ID` | チームのプロジェクトのみ必要（個人アカウントのプロジェクトでは設定しない） |
 
 ### アクセス方法
 
@@ -244,6 +247,34 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 
 ---
 
+## ページビュー集計（Vercel Web Analytics）
+
+`/player/:slug`・`/guides/:authorSlug/:guideSlug` のページビューを Vercel Web Analytics から集計し、走者一覧（`/browse`）・ガイド一覧（`/guides`）の「人気順」ソートに使う。
+
+### 仕組み
+
+1. cron `/api/cron/update-page-views`（`20 */6 * * *`、6時間毎）が、他の cron と同じ `CRON_SECRET` で認証する（`app/lib/cron-auth.server.ts` の `requireCronAuth()`）
+2. `VERCEL_API_TOKEN` / `VERCEL_PROJECT_ID` が未設定なら 500 を返して終了する（`isPageViewSyncConfigured()`）。ローカル開発では通常未設定でよく、その場合は人気順が全件0扱いとなりいいね数・更新日時へ自然に落ちる
+3. Vercel Web Analytics API（`GET https://api.vercel.com/v1/query/web-analytics/visits/aggregate`）へ `/player/` と `/guides/` それぞれの接頭辞で問い合わせ、**直近7日**・**上位100パス**の requestPath 別ページビューを取得する（`app/lib/vercel-analytics.server.ts` の `fetchTopPaths()`）
+4. 取得した path を `parseAnalyticsPath()`（`app/lib/page-view-paths.ts`）でプロフィール / ガイドへ解釈し、slug から `users.id` / `guides.id` を引いて `page_view_stats` テーブルへ**種別（プロフィール / ガイド）ごとに全置換**保存する（`app/lib/page-view-stats.server.ts` の `syncPageViewStats()`）
+5. **片側（プロフィール or ガイド）の API 呼び出しが失敗しても、もう片側の更新は継続**する。失敗した種別は旧スナップショットを維持する（並びがいきなり更新順へ落ちるより、少し古い人気順の方が体験がよいため）
+
+### `page_view_stats` テーブル
+
+| カラム | 型 | 説明 |
+|---|---|---|
+| `targetType` | enum | `"profile"` \| `"guide"` |
+| `targetId` | text | `users.id` / `guides.id`（多態の弱参照、FKなし。対象が消えても次回同期の全置換で孤児行は消える） |
+| `pageviews` | integer | 集計窓内のページビュー数（大小文字違いのプロフィールURLは合算済み） |
+| `windowStart` / `windowEnd` | timestamp | 集計窓の開始・終了 |
+| `fetchedAt` | timestamp | この行を書き込んだ時刻（鮮度確認用） |
+
+索引: `page_view_stats_target_uniq(target_type, target_id)`（UNIQUE。対象1行を保証しつつ、人気順の相関サブクエリのカバリング索引を兼ねる）
+
+読み取り側は `guidePageViewsSql()` / `profilePageViewsSql()`（同ファイル）の相関サブクエリで、`likes.server.ts` と同じ理由（内側テーブルを `id` なしで包む）で書かれている。適用箇所の詳細は [`docs/likes.md`](./likes.md#ガイド一覧の並び順guidelistorderby)（ガイド一覧の `popular`）と [`docs/browse-compare.md`](./browse-compare.md#ソート)（走者一覧の `popular`）を参照。
+
+---
+
 ## 関連ファイル
 
 ### データベース
@@ -268,6 +299,12 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/api/webhooks/vercel.ts` - Vercel Webhook 受信エンドポイント
 - `app/lib/app-meta.server.ts` - app_meta テーブルの読み書きユーティリティ
 - `app/lib/changelog.ts` - changelog.md パースユーティリティ（What's New と共用）
+
+### ページビュー集計
+- `app/routes/api/cron/update-page-views.ts` - ページビュー集計Cron
+- `app/lib/vercel-analytics.server.ts` - Vercel Web Analytics APIクライアント（`fetchTopPaths`）
+- `app/lib/page-view-paths.ts` - Analytics の requestPath → 対象（プロフィール/ガイド）解釈（純粋関数）
+- `app/lib/page-view-stats.server.ts` - 同期処理（`syncPageViewStats`）＋人気順の相関サブクエリ（`guidePageViewsSql` / `profilePageViewsSql`）
 
 ### その他
 - `app/lib/env.server.ts` - サーバーサイド環境変数アクセス
