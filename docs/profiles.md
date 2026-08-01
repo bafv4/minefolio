@@ -452,6 +452,10 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 - 経過期間は DB には保存せず、表示のたびに `app/lib/rta-career.ts` の `rtaCareerElapsed()` で開始年月と基準時刻から算出する（月単位、日は考慮しない）。基準時刻は loader が返す `now` を使い、SSR とハイドレーションで計算結果を一致させる
 - 更新日（`Calendar` アイコン）にも「最終更新」ラベルを付け（`playerProfile.lastUpdated`）、ロケールに応じた日付書式（`date-fns` の `format()` + `dateFormatPattern(locale)` / `dateFnsLocale(locale)`）で表示する（従来は `toLocaleDateString("ja-JP", ...)` 固定でロケールに関わらず日本語表記だった）
 
+### アクションボタン行・絵文字リアクション
+
+ヘッダーカードの基本情報カラム下部に、編集（本人のみ）/お気に入り/シェア/比較のアクションボタン行がある。**その直下**にプロフィール絵文字リアクションバー（フィーチャーフラグ `FEATURE_PROFILE_REACTIONS` が有効な場合のみ表示）を配置する。詳細は [`docs/profile-reactions.md`](./profile-reactions.md) を参照。
+
 ### デバイスタブのマウス設定表示
 
 `devices` タブのマウス設定は、値が出せない/不正なケースでも行を消さず「-」+ 理由（または警告）を表示する。計算ロジック・警告UIは `/keybindings` 一覧と共有しており、詳細は [`docs/keybindings.md`](./keybindings.md#マウス設定)（振り向き・カーソル速度・バリデーション節）を参照:

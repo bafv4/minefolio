@@ -90,6 +90,7 @@ export default [
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/likes", "routes/api/likes.ts"),
+  route("api/profile-reactions", "routes/api/profile-reactions.ts"),
   route("api/set-locale", "routes/api/set-locale.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),

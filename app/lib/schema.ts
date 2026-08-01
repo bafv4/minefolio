@@ -496,6 +496,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   searchCraftTemplates: many(searchCraftTemplates),
   guideLikes: many(guideLikes),
   searchCraftTemplateLikes: many(searchCraftTemplateLikes),
+  profileReactionsReceived: many(profileReactions, { relationName: "profileReactionsReceived" }),
+  profileReactionsGiven: many(profileReactions, { relationName: "profileReactionsGiven" }),
 }));
 
 export const playerConfigsRelations = relations(playerConfigs, ({ one }) => ({
@@ -1150,6 +1152,74 @@ export const searchCraftTemplateLikesRelations = relations(searchCraftTemplateLi
 
 export type SearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferSelect;
 export type NewSearchCraftTemplateLike = typeof searchCraftTemplateLikes.$inferInsert;
+
+// ============================================
+// 26. profile_reactions（プロフィール絵文字リアクション）
+// ============================================
+// プロフィールへの Discord 風の固定8絵文字リアクション。フィーチャーフラグ
+// FEATURE_PROFILE_REACTIONS（app/lib/env.server.ts の isProfileReactionsEnabled()）が
+// OFF の間は API・profile loader ともにこのテーブルを一切参照しない設計にしており、
+// この節がデプロイされてもテーブル未作成のまま本番が安全に動く
+// （フラグ未設定＝いつでもデプロイ可能。マイグレーション適用前でも壊れない）。
+//
+// likes（25節）との設計上の差分:
+//   (a) 自分のプロフィールにも押せる（self 拒否なし）
+//   (b) 「同一人物が同じ対象に同じ絵文字を複数回」を防ぐ必要があるため、
+//       ユニークキーが3列（profileUserId, emoji, reactorUserId）になる
+//   (c) 可視性チェックは「private かつ reactor が本人以外」のみ拒否する
+//       （本人は自分のプロフィールが private でも押せる）
+//
+// 【索引設計】列順が重要（挿入時に決め打ちで変えない）:
+//   uniq(profileUserId, emoji, reactorUserId): 対象列（profileUserId）を先頭に置くことで、
+//     プロフィール1件のカウント集計（`where profile_user_id = ? group by emoji`）がこの索引
+//     だけで完結する（カバリング索引）。3列一致の一意性制約も兼ねる。
+//   idx(reactorUserId, profileUserId, emoji): 閲覧者自身の押下一覧取得・解除（delete）用。
+//     「自分（reactor）がどのプロフィールにどの絵文字を押したか」を reactorUserId 起点で
+//     引く経路のため、reactorUserId を先頭にする。
+export const profileReactions = sqliteTable(
+  "profile_reactions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    profileUserId: text("profile_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reactorUserId: text("reactor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("profile_reactions_profile_emoji_reactor_uniq").on(
+      table.profileUserId,
+      table.emoji,
+      table.reactorUserId,
+    ),
+    index("profile_reactions_reactor_idx").on(
+      table.reactorUserId,
+      table.profileUserId,
+      table.emoji,
+    ),
+  ],
+);
+
+// profileUserId・reactorUserId がともに users.id を参照するため、relationName で
+// 「プロフィール側（received）」と「押した側（given）」の2方向を区別する。
+export const profileReactionsRelations = relations(profileReactions, ({ one }) => ({
+  profileUser: one(users, {
+    fields: [profileReactions.profileUserId],
+    references: [users.id],
+    relationName: "profileReactionsReceived",
+  }),
+  reactorUser: one(users, {
+    fields: [profileReactions.reactorUserId],
+    references: [users.id],
+    relationName: "profileReactionsGiven",
+  }),
+}));
+
+export type ProfileReaction = typeof profileReactions.$inferSelect;
+export type NewProfileReaction = typeof profileReactions.$inferInsert;
 
 // ============================================
 // content_translations（利用者コンテンツの自動翻訳）

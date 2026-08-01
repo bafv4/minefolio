@@ -519,6 +519,26 @@ export const PAGES_JA = {
     loginToLike: "ログインしていいね",
     ownContent: "自分の投稿にはいいねできません",
   },
+  /** プロフィール絵文字リアクション（docs/profile-reactions.md）。emoji はピル・パレットの絵文字名 */
+  profileReactions: {
+    addLabel: "リアクションを追加",
+    loginToReact: "ログインしてリアクション",
+    /** aria-label（{emoji} は絵文字名、{count} は現在の件数） */
+    reactAria: "{emoji}でリアクションする（現在{count}件）",
+    unreactAria: "{emoji}のリアクションを取り消す（現在{count}件）",
+    /** 未ログイン時の静的ピルの aria-label（{emoji} は絵文字名、{count} は件数） */
+    pillAria: "{emoji}リアクション {count}件",
+    emoji: {
+      thumbsUp: "いいね",
+      heart: "ハート",
+      joy: "笑い",
+      wow: "驚き",
+      cry: "泣き",
+      tada: "クラッカー",
+      fire: "炎",
+      hundred: "100点",
+    },
+  },
   contentSort: {
     label: "並び替え",
     /** テンプレート一覧（createdAt 基準） */

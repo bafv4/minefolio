@@ -12,7 +12,7 @@ import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
-import { getEnv } from "@/lib/env.server";
+import { getEnv, isProfileReactionsEnabled } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
@@ -53,6 +53,11 @@ import {
 } from "@/lib/rta-career";
 import { safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
+import {
+  getProfileReactionCounts,
+  getViewerProfileReactions,
+} from "@/lib/profile-reactions.server";
+import type { ProfileReactionCount } from "@/lib/profile-reactions";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
@@ -212,6 +217,7 @@ import {
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import {
   Dialog,
   DialogContent,
@@ -433,6 +439,32 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
   const isOwner = session?.user?.id === player.discordId;
 
+  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
+  // フラグOFFのときは profileReactions を null のまま返し、profile_reactions テーブルへは
+  // 一切クエリを発行しない（テーブル未作成の本番でも安全に動作する）。
+  let profileReactions: {
+    counts: ProfileReactionCount[];
+    viewerReactions: string[];
+    viewerHasAccount: boolean;
+  } | null = null;
+  if (isProfileReactionsEnabled()) {
+    // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
+    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
+    const viewerUserId = isOwner
+      ? player.id
+      : session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          }))?.id ?? null)
+        : null;
+    const [counts, viewerReactions] = await Promise.all([
+      getProfileReactionCounts(db, player.id),
+      getViewerProfileReactions(db, player.id, viewerUserId),
+    ]);
+    profileReactions = { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
+  }
+
   // プレイヤーの公開ガイドを取得
   const playerGuides = await db.query.guides.findMany({
     where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
@@ -490,6 +522,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       customActions: displayCustomActions,
     },
     isOwner,
+    profileReactions,
     hiddenSpeedrunRecords,
     pinnedSpeedrunRecords,
     pacemanStats,
@@ -510,7 +543,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
@@ -1153,6 +1186,16 @@ export default function PlayerProfilePage() {
                       </Link>
                     </Button>
                   </div>
+
+                  {/* 絵文字リアクション（フラグOFF時は profileReactions が null でクエリ不発行） */}
+                  {profileReactions && (
+                    <ProfileReactionBar
+                      profileUserId={player.id}
+                      initialCounts={profileReactions.counts}
+                      initialViewerReactions={profileReactions.viewerReactions}
+                      isLoggedIn={profileReactions.viewerHasAccount}
+                    />
+                  )}
                 </div>
               </div>
             </CardContent>

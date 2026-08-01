@@ -434,6 +434,18 @@ CREATE TABLE `playstyles` (
 );
 
 CREATE UNIQUE INDEX `playstyles_user_id_unique` ON `playstyles` (`user_id`);
+CREATE TABLE `profile_reactions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`profile_user_id` text NOT NULL,
+	`reactor_user_id` text NOT NULL,
+	`emoji` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`profile_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`reactor_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `profile_reactions_profile_emoji_reactor_uniq` ON `profile_reactions` (`profile_user_id`,`emoji`,`reactor_user_id`);
+CREATE INDEX `profile_reactions_reactor_idx` ON `profile_reactions` (`reactor_user_id`,`profile_user_id`,`emoji`);
 CREATE TABLE `profile_videos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

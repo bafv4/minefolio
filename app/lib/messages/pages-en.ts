@@ -442,6 +442,23 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     loginToLike: "Log in to like",
     ownContent: "You cannot like your own post",
   },
+  profileReactions: {
+    addLabel: "Add a reaction",
+    loginToReact: "Log in to react",
+    reactAria: "React with {emoji} (currently {count})",
+    unreactAria: "Remove {emoji} reaction (currently {count})",
+    pillAria: "{emoji} reactions: {count}",
+    emoji: {
+      thumbsUp: "Thumbs up",
+      heart: "Heart",
+      joy: "Laughing",
+      wow: "Wow",
+      cry: "Crying",
+      tada: "Party popper",
+      fire: "Fire",
+      hundred: "100 points",
+    },
+  },
   contentSort: {
     label: "Sort",
     newest: "Newest",
