@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -9,6 +9,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
+import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, and, asc } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { isHttpUrl } from "@/lib/safe-url";
@@ -571,7 +572,9 @@ export async function action({ request }: Route.ActionArgs) {
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
-  const defaultProfileTab = formData.get("defaultProfileTab") as "profile" | "stats" | "playstyle" | "keybindings" | "devices" | "items" | "searchcraft";
+  // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
+  // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
+  const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
   const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
   const role = (formData.get("role") as "viewer" | "runner") || null;
   const shortBio = (formData.get("shortBio") as string)?.trim() || null;
@@ -668,6 +671,17 @@ const platformOptions = [
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
   { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
 ] as const;
+
+// 既定タブ Select のラベル。値の集合・順序は SELECTABLE_PROFILE_TABS（@/lib/profile-tabs）が単一情報源
+const DEFAULT_PROFILE_TAB_LABEL_KEYS: Record<SelectableProfileTabValue, MessageKey> = {
+  profile: "meEdit.tabProfile",
+  stats: "meEdit.tabStats",
+  playstyle: "meEdit.tabPlaystyle",
+  keybindings: "meEdit.tabKeybindings",
+  devices: "meEdit.tabDevices",
+  items: "meEdit.tabItems",
+  searchcraft: "meEdit.tabSearchcraft",
+};
 
 function getPlatformIcon(platform: string) {
   switch (platform) {
@@ -920,7 +934,9 @@ export default function EditProfilePage() {
   );
 
   // フォームの値をトラッキングして変更を検出
-  const [formValues, setFormValues] = useState({
+  // buildFormValues は user + RTA初期値のスナップショットを1箇所にまとめる（me/playstyle.tsx と同じ
+  // パターン）。useState の初期化関数・useRef の初期値の両方から呼び、リテラルの二重管理を避ける
+  const buildFormValues = () => ({
     displayName: user.displayName ?? "",
     displayNameAlphabet: user.displayNameAlphabet ?? "",
     bio: user.bio ?? "",
@@ -943,28 +959,8 @@ export default function EditProfilePage() {
     showPacemanStats: user.showPacemanStats ?? true,
   });
 
-  const initialFormValues = useRef({
-    displayName: user.displayName ?? "",
-    displayNameAlphabet: user.displayNameAlphabet ?? "",
-    bio: user.bio ?? "",
-    location: user.location ?? "",
-    pronouns: user.pronouns ?? "",
-    profileVisibility: user.profileVisibility ?? "public",
-    profilePose: (user.profilePose as PoseName) ?? "waving",
-    slimSkin: user.slimSkin ?? false,
-    defaultProfileTab: user.defaultProfileTab ?? "profile",
-    mainPlatform: user.mainPlatform ?? "",
-    role: user.role ?? "",
-    shortBio: user.shortBio ?? "",
-    rtaStartedYear: initialRtaStartedYear,
-    rtaStartedMonth: initialRtaStartedMonth,
-    speedruncomUsername: user.speedruncomUsername ?? "",
-    showPacemanOnHome: user.showPacemanOnHome ?? true,
-    showTwitchOnHome: user.showTwitchOnHome ?? true,
-    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
-    showRankedStats: user.showRankedStats ?? true,
-    showPacemanStats: user.showPacemanStats ?? true,
-  });
+  const [formValues, setFormValues] = useState(buildFormValues);
+  const initialFormValues = useRef(buildFormValues());
 
   // selectedPoseをformValuesに同期
   useEffect(() => {
@@ -1914,13 +1910,11 @@ export default function EditProfilePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="profile">{t("meEdit.tabProfile")}</SelectItem>
-                  <SelectItem value="stats">{t("meEdit.tabStats")}</SelectItem>
-                  <SelectItem value="playstyle">{t("meEdit.tabPlaystyle")}</SelectItem>
-                  <SelectItem value="keybindings">{t("meEdit.tabKeybindings")}</SelectItem>
-                  <SelectItem value="devices">{t("meEdit.tabDevices")}</SelectItem>
-                  <SelectItem value="items">{t("meEdit.tabItems")}</SelectItem>
-                  <SelectItem value="searchcraft">{t("meEdit.tabSearchcraft")}</SelectItem>
+                  {SELECTABLE_PROFILE_TABS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {t(DEFAULT_PROFILE_TAB_LABEL_KEYS[value])}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

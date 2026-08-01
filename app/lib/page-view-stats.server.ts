@@ -11,19 +11,22 @@
 
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { guides, pageViewStats, users, type NewPageViewStat } from "./schema";
-import { parseAnalyticsPath } from "./page-view-paths";
+import {
+  parseAnalyticsPath,
+  PAGE_VIEW_WINDOW_DAYS,
+  PROFILE_PATH_PREFIX,
+  GUIDE_PATH_PREFIX,
+} from "./page-view-paths";
 import { fetchTopPaths } from "./vercel-analytics.server";
 import type { Database } from "./db";
 import type { Env } from "../env";
 
-/** 「人気順」が見る窓（日数）。Analytics 側の保持期間より十分短くしておく */
-export const PAGE_VIEW_WINDOW_DAYS = 7;
+// 窓の日数・パス接頭辞の実体は page-view-paths.ts（`.server` ではない）にある。
+// 描画側（home.tsx 等）も同じ定数を import できるようにするため、ここでは re-export のみ行う。
+export { PAGE_VIEW_WINDOW_DAYS };
 
 /** 1 文で挿入する行数。libSQL の 1 リクエストが肥大化しないよう分割する */
 const INSERT_CHUNK_SIZE = 50;
-
-const PROFILE_PATH_PREFIX = "/player/";
-const GUIDE_PATH_PREFIX = "/guides/";
 
 // ============================================
 // 読み取り（一覧の並び替え用）
@@ -49,7 +52,7 @@ export function profilePageViewsSql(): SQL<number> {
 /**
  * 指定種別の PV スナップショットが 1 行でも存在するか。
  * cron 未稼働（Analytics 未設定）の環境では人気順がフォールバック順に劣化するため、
- * UI 側が「集計準備中」の注記を出す判定に使う（guides 一覧・ホーム）。
+ * UI 側が「集計準備中」の注記を出す判定に使う（guides 一覧のみ）。
  */
 export async function hasPageViewStats(
   db: Database,

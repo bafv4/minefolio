@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RemapRow, DialogRemapRow } from "@/components/remap-row";
-import { isKeyCaptureEscapeTarget } from "@/components/key-capture-button";
+import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
   SearchCraftListEditor,
@@ -321,12 +321,7 @@ export function SearchCraftWorkbench({
       <Dialog open={!!editingKeyCode} onOpenChange={(open) => !open && setEditingKeyCode(null)}>
         <DialogContent
           className="sm:max-w-md max-h-[80vh] overflow-y-auto"
-          onEscapeKeyDown={(e) => {
-            // ダイアログ内の KeyCaptureButton（リマップ先）がキャプチャ中は、
-            // Escape をリマップ先キーとして確定させたいのでダイアログを閉じない
-            // （Radix は document のキャプチャフェーズで検知するため、ここで止める）
-            if (isKeyCaptureEscapeTarget(e.target)) e.preventDefault();
-          }}
+          onEscapeKeyDown={keyCaptureEscapeGuard}
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

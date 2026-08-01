@@ -49,7 +49,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       role: true,
       mainEdition: true,
       mainPlatform: true,
-      inputMethod: true,
       updatedAt: true,
       shortBio: true,
       customSkinUrl: true,

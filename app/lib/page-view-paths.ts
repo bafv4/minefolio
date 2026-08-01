@@ -11,6 +11,20 @@
 // - 上位 N 件以外をまとめた集約行（`Others` のように `/` で始まらない）
 // これらをすべて「対象 or 対象外(null)」へ落とし込むのがこのモジュールの責務。
 
+/**
+ * 「人気順」が見る窓（日数）。Analytics 側の保持期間より十分短くしておく。
+ *
+ * 集計側（page-view-stats.server.ts）だけでなく、i18n 文言の補間（「直近{days}日」）にも
+ * 描画側（home.tsx・guide-list-views.tsx 等）から使うため、`.server` ではないここに置く。
+ */
+export const PAGE_VIEW_WINDOW_DAYS = 7;
+
+/** プロフィールの詳細ページのパス接頭辞。URL 形状の知識はここに集約する */
+export const PROFILE_PATH_PREFIX = "/player/";
+
+/** ガイドの詳細ページのパス接頭辞。URL 形状の知識はここに集約する */
+export const GUIDE_PATH_PREFIX = "/guides/";
+
 /** requestPath の解釈結果。どの一覧の並び替えに効くかで型を分ける */
 export type AnalyticsPathTarget =
   | { type: "profile"; slugLower: string }

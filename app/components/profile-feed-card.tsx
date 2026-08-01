@@ -18,7 +18,6 @@ export interface ProfileFeedCardPlayer {
   mainEdition: "java" | "bedrock" | null;
   mainPlatform: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
   customSkinUrl?: string | null;
-  inputMethod: "keyboard_mouse" | "controller" | "touch" | null;
   updatedAt: Date;
   shortBio: string | null;
 }

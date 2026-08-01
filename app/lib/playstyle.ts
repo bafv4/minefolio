@@ -1,20 +1,16 @@
 // プレイスタイル（バージョン/カテゴリ・入力操作・テクニック系の自己申告設定）関連の共有定義。
 // `.server` ではない（クライアント/サーバー共用）。DOM/リクエスト依存を持たず、
-// 編集フォーム（/me/playstyle）とプロフィール表示の両方から import される想定。
+// 編集フォーム（/me/playstyle）とプロフィール表示（プレイスタイルタブ）の両方から import される。
 //
 // テーブル定義: app/lib/schema.ts の `playstyles`（1 user : 1 行、全項目 nullable）。
-// UI 側の実装（/me/playstyle・profile.tsx のプレイスタイルタブ）は別フェーズで追加される。
+import type { MessageKey, Translator } from "./messages";
+import { safeParseArray } from "./preset-read";
 
 // ============================================
 // ラベルの i18n キー
 // ============================================
-// `playstyle.*` ネームスペース配下の文字列を想定するが、実体（翻訳文言）は
-// app/lib/messages/pages-ja.ts への追加を伴う別フェーズで用意する。
-// このモジュールは非 .server の基盤コードとして「キー名の約束」だけを確定させる。
-// そのため `@/lib/messages` の `MessageKey`（pages-ja.ts のキーから導出される厳密なユニオン型）
-// ではなく素の `string` を使う。翻訳追加後に呼び出し側で `t(labelKey as MessageKey)` のように
-// 解決する想定（`MessageKey` への差し替えは翻訳追加時に行う）。
-export type PlaystyleLabelKey = string;
+// `playstyle.*` ネームスペース配下の文字列（実体は app/lib/messages/pages-ja.ts）。
+export type PlaystyleLabelKey = MessageKey;
 
 // ============================================
 // バージョン・エディション
@@ -105,7 +101,7 @@ export const CATEGORIES: readonly CategoryOption[] = [
   { value: "other", label: null, labelKey: "playstyle.categoryOther" },
 ];
 
-const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.value);
+export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.value);
 const CATEGORY_KEY_SET = new Set<string>(CATEGORY_KEYS);
 
 export function isCategoryKey(value: unknown): value is CategoryKey {
@@ -113,7 +109,7 @@ export function isCategoryKey(value: unknown): value is CategoryKey {
 }
 
 // ============================================
-// 選択肢セット（labelKey 形式。実体は playstyle.* ネームスペースに別フェーズで追加）
+// 選択肢セット（labelKey 形式。実体は playstyle.* ネームスペース）
 // ============================================
 
 /** ホットバー切替方法。常時表示 */
@@ -195,10 +191,31 @@ export const BASTION_OPTIONS = [
   { value: "treasure", labelKey: "playstyle.bastion.treasure" },
 ] as const satisfies readonly { value: BastionType; labelKey: PlaystyleLabelKey }[];
 
-const CLICK_METHOD_KEYS: readonly ClickMethod[] = CLICK_METHOD_OPTIONS.map((o) => o.value);
+export const CLICK_METHOD_KEYS: readonly ClickMethod[] = CLICK_METHOD_OPTIONS.map((o) => o.value);
 
 function isClickMethod(value: unknown): value is ClickMethod {
   return typeof value === "string" && (CLICK_METHOD_KEYS as readonly string[]).includes(value);
+}
+
+// ============================================
+// ラベル解決（編集UI・プロフィール表示で共用）
+// ============================================
+
+/** CATEGORIES の label（直書き）または labelKey（「その他」のみ）を解決する */
+export function categoryLabel(t: Translator, value: CategoryKey): string {
+  const opt = CATEGORIES.find((c) => c.value === value);
+  if (!opt) return value;
+  return opt.label ?? t(opt.labelKey ?? ("" as MessageKey));
+}
+
+/** `{ value, labelKey }` 形式の選択肢配列からラベルを解決する共通ヘルパー（このファイルの各 OPTIONS 用） */
+export function playstyleOptionLabel(
+  t: Translator,
+  options: readonly { value: string; labelKey: PlaystyleLabelKey }[],
+  value: string,
+): string {
+  const opt = options.find((o) => o.value === value);
+  return opt ? t(opt.labelKey) : value;
 }
 
 // ============================================
@@ -206,26 +223,16 @@ function isClickMethod(value: unknown): value is ClickMethod {
 // ============================================
 // app/lib/preset-read.ts の safeParseArray と同じ方針: 破損JSON・非配列・未知キーは
 // 例外を投げず黙って捨てる（公開ページ/編集フォームを壊れたデータで落とさない）。
-function safeParseJsonArray(json: string | null | undefined): unknown[] {
-  if (!json) return [];
-  try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 export function parsePlaystyleVersions(json: string | null | undefined): VersionKey[] {
-  return safeParseJsonArray(json).filter(isVersionKey);
+  return (safeParseArray<unknown>(json) ?? []).filter(isVersionKey);
 }
 
 export function parsePlaystyleCategories(json: string | null | undefined): CategoryKey[] {
-  return safeParseJsonArray(json).filter(isCategoryKey);
+  return (safeParseArray<unknown>(json) ?? []).filter(isCategoryKey);
 }
 
 export function parsePlaystyleClickMethods(json: string | null | undefined): ClickMethod[] {
-  return safeParseJsonArray(json).filter(isClickMethod);
+  return (safeParseArray<unknown>(json) ?? []).filter(isClickMethod);
 }
 
 // ============================================
@@ -235,6 +242,11 @@ export function parsePlaystyleClickMethods(json: string | null | undefined): Cli
 /** KBM（キーボード/マウス）操作かどうか。高CPSクリック方法・マウスパッドの表示条件 */
 export function isKbmPlaystyle(inputMethod: string | null | undefined): boolean {
   return inputMethod === "keyboard_mouse";
+}
+
+/** サーチクラフトを「しない」と回答しているか。プロフィールのSCタブ非表示・ゲーム言語表示の条件 */
+export function hidesSearchCraft(level: string | null | undefined): boolean {
+  return level === "does_not";
 }
 
 /** Java の RSG または Ranked をプレイするか。Zero Cycle・Ground Zero・Oneshot の表示条件 */
@@ -259,6 +271,27 @@ const BASTION_VERSION_KEY_SET = new Set<VersionKey>(BASTION_VERSION_KEYS);
 
 export function hasBastionVersions(versions: readonly VersionKey[]): boolean {
   return versions.some((v) => BASTION_VERSION_KEY_SET.has(v));
+}
+
+// ============================================
+// 入力方法（users.inputMethod）のバリデーション
+// ============================================
+// プレイスタイルとは別テーブル（users）の項目だが、/me/playstyle でまとめて編集するため
+// ここに置く（/me/devices からも将来的に共有する想定）。
+
+export type InputMethod = "keyboard_mouse" | "controller" | "touch";
+
+const INPUT_METHOD_VALUES = ["keyboard_mouse", "controller", "touch", ""] as const;
+
+/** フォーム入力（文字列 or null/undefined/File 等の unknown）を検証する。空文字は null（未回答）として受理する */
+export function parseInputMethodInput(
+  value: unknown,
+): { ok: boolean; value: InputMethod | null } {
+  const raw = (value as string | null) ?? "";
+  if (!(INPUT_METHOD_VALUES as readonly string[]).includes(raw)) {
+    return { ok: false, value: null };
+  }
+  return { ok: true, value: raw === "" ? null : (raw as InputMethod) };
 }
 
 // ============================================
@@ -306,22 +339,9 @@ export interface ValidatedPlaystyle {
   favoriteBastion: BastionType | null;
 }
 
-/**
- * validatePlaystyle が返す errorKey の一覧（`mePlaystyle.*` ネームスペース）。
- * 文言の実体は別フェーズ（app/lib/messages/pages-ja.ts への追加）で用意する。
- *
- * - mePlaystyle.errorMainVersionInvalid  … mainVersion が versions（正規化後）に含まれていない
- * - mePlaystyle.errorMainCategoryInvalid … mainCategory が categories（正規化後）に含まれていない
- * - mePlaystyle.errorInvalidOption       … enum系フィールド（hotbarSwitching / searchCraft /
- *                                          halfShift / itemLayoutPolicy / usesMousepad /
- *                                          zeroCycle / groundZero / oneshot / favoriteBastion）
- *                                          に選択肢に無い値が渡された
- * - mePlaystyle.errorDragTapeTypeTooLong  … dragTapeType が trim 後100文字を超える
- * - mePlaystyle.errorMousepadTypeTooLong  … mousepadType が trim 後100文字を超える
- */
 export type PlaystyleValidationResult =
   | { ok: true; value: ValidatedPlaystyle }
-  | { ok: false; errorKey: string };
+  | { ok: false; errorKey: MessageKey };
 
 const INVALID = Symbol("invalid");
 
@@ -347,13 +367,13 @@ function normalizeMainSelection<T extends string>(
   return value;
 }
 
-/** 単一 enum フィールド。未指定は null、選択肢に無ければ INVALID */
+/** 単一 enum フィールド。未指定は null、選択肢（OPTIONS 配列）に無ければ INVALID */
 function normalizeEnum<T extends string>(
   value: unknown,
-  allowed: readonly T[],
+  options: readonly { value: T }[],
 ): T | null | typeof INVALID {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) return INVALID;
+  if (typeof value !== "string" || !options.some((o) => o.value === value)) return INVALID;
   return value as T;
 }
 
@@ -371,14 +391,6 @@ function normalizeFreeText(
   return { ok: true, value: trimmed };
 }
 
-const HOTBAR_SWITCHING_VALUES: readonly HotbarSwitching[] = HOTBAR_SWITCHING_OPTIONS.map((o) => o.value);
-const SEARCH_CRAFT_VALUES: readonly SearchCraftLevel[] = SEARCH_CRAFT_OPTIONS.map((o) => o.value);
-const FREQUENCY_VALUES: readonly FrequencyLevel[] = FREQUENCY_OPTIONS.map((o) => o.value);
-const ITEM_LAYOUT_POLICY_VALUES: readonly ItemLayoutPolicy[] = ITEM_LAYOUT_POLICY_OPTIONS.map((o) => o.value);
-const CAN_CANNOT_VALUES: readonly CanCannot[] = CAN_CANNOT_OPTIONS.map((o) => o.value);
-const USES_MOUSEPAD_VALUES: readonly UsesMousepad[] = USES_MOUSEPAD_OPTIONS.map((o) => o.value);
-const BASTION_VALUES: readonly BastionType[] = BASTION_OPTIONS.map((o) => o.value);
-
 const FREE_TEXT_MAX_LENGTH = 100;
 
 export function validatePlaystyle(input: PlaystyleInput): PlaystyleValidationResult {
@@ -392,31 +404,31 @@ export function validatePlaystyle(input: PlaystyleInput): PlaystyleValidationRes
   const mainCategory = normalizeMainSelection(input.mainCategory, categories, isCategoryKey);
   if (mainCategory === INVALID) return { ok: false, errorKey: "mePlaystyle.errorMainCategoryInvalid" };
 
-  const hotbarSwitching = normalizeEnum(input.hotbarSwitching, HOTBAR_SWITCHING_VALUES);
+  const hotbarSwitching = normalizeEnum(input.hotbarSwitching, HOTBAR_SWITCHING_OPTIONS);
   if (hotbarSwitching === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const searchCraft = normalizeEnum(input.searchCraft, SEARCH_CRAFT_VALUES);
+  const searchCraft = normalizeEnum(input.searchCraft, SEARCH_CRAFT_OPTIONS);
   if (searchCraft === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const halfShift = normalizeEnum(input.halfShift, FREQUENCY_VALUES);
+  const halfShift = normalizeEnum(input.halfShift, FREQUENCY_OPTIONS);
   if (halfShift === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const itemLayoutPolicy = normalizeEnum(input.itemLayoutPolicy, ITEM_LAYOUT_POLICY_VALUES);
+  const itemLayoutPolicy = normalizeEnum(input.itemLayoutPolicy, ITEM_LAYOUT_POLICY_OPTIONS);
   if (itemLayoutPolicy === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const usesMousepad = normalizeEnum(input.usesMousepad, USES_MOUSEPAD_VALUES);
+  const usesMousepad = normalizeEnum(input.usesMousepad, USES_MOUSEPAD_OPTIONS);
   if (usesMousepad === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const zeroCycle = normalizeEnum(input.zeroCycle, FREQUENCY_VALUES);
+  const zeroCycle = normalizeEnum(input.zeroCycle, FREQUENCY_OPTIONS);
   if (zeroCycle === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const groundZero = normalizeEnum(input.groundZero, CAN_CANNOT_VALUES);
+  const groundZero = normalizeEnum(input.groundZero, CAN_CANNOT_OPTIONS);
   if (groundZero === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const oneshot = normalizeEnum(input.oneshot, CAN_CANNOT_VALUES);
+  const oneshot = normalizeEnum(input.oneshot, CAN_CANNOT_OPTIONS);
   if (oneshot === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
-  const favoriteBastion = normalizeEnum(input.favoriteBastion, BASTION_VALUES);
+  const favoriteBastion = normalizeEnum(input.favoriteBastion, BASTION_OPTIONS);
   if (favoriteBastion === INVALID) return { ok: false, errorKey: "mePlaystyle.errorInvalidOption" };
 
   const dragTapeTypeResult = normalizeFreeText(input.dragTapeType, FREE_TEXT_MAX_LENGTH);

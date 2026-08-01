@@ -8,6 +8,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, pageViewStats } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
+import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
@@ -76,39 +77,25 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  // セッションをチェックしてユーザーが登録済みか確認
-  const session = await getOptionalSession(request, auth);
-  let isRegistered = false;
-  let currentUser: { mcid: string | null; showPacemanOnHome: boolean; showYoutubeOnHome: boolean; showTwitchOnHome: boolean } | null = null;
-  if (session) {
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: {
-        id: true,
-        mcid: true,
-        showPacemanOnHome: true,
-        showYoutubeOnHome: true,
-        showTwitchOnHome: true,
-      },
-    });
-    if (existingUser) {
-      isRegistered = true;
-      currentUser = {
-        mcid: existingUser.mcid,
-        showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
-        showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
-        showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
-      };
-    }
-  }
-
-  // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
-  // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
-  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
-    await getUserData();
-
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  // プロフィール一覧の select 列（更新順・PV順で共通。ProfileFeedCard が使わない
+  // inputMethod は含めない）
+  const profileFeedColumns = {
+    mcid: users.mcid,
+    uuid: users.uuid,
+    slug: users.slug,
+    displayName: users.displayName,
+    displayNameAlphabet: users.displayNameAlphabet,
+    pronouns: users.pronouns,
+    role: users.role,
+    mainEdition: users.mainEdition,
+    mainPlatform: users.mainPlatform,
+    updatedAt: users.updatedAt,
+    shortBio: users.shortBio,
+    customSkinUrl: users.customSkinUrl,
+  };
 
   // ガイド一覧の select 列（更新順・PV順で共通）
   const guideListColumns = {
@@ -127,99 +114,95 @@ export async function loader({ request }: Route.LoaderArgs) {
     authorMcid: users.mcid,
   };
 
-  const [
-    recentlyUpdatedUsers,
-    popularUsers,
-    recentlyUpdatedGuides,
-    popularGuides,
-    [profileCounts],
-  ] = await Promise.all([
-    // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
-    db.query.users.findMany({
-      where: and(
-        eq(users.profileVisibility, "public"),
-        excludeViewersCondition,
-      ),
-      columns: {
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        pronouns: true,
-        role: true,
-        mainEdition: true,
-        mainPlatform: true,
-        inputMethod: true,
-        updatedAt: true,
-        shortBio: true,
-        customSkinUrl: true,
-      },
-      orderBy: [desc(users.updatedAt)],
-      limit: 4,
-    }),
-    // よく見られているプロフィール（直近7日PV順、最新4件）。page_view_stats のスナップショット行を
-    // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）
-    db
-      .select({
-        mcid: users.mcid,
-        uuid: users.uuid,
-        slug: users.slug,
-        displayName: users.displayName,
-        displayNameAlphabet: users.displayNameAlphabet,
-        pronouns: users.pronouns,
-        role: users.role,
-        mainEdition: users.mainEdition,
-        mainPlatform: users.mainPlatform,
-        inputMethod: users.inputMethod,
-        updatedAt: users.updatedAt,
-        shortBio: users.shortBio,
-        customSkinUrl: users.customSkinUrl,
-      })
-      .from(pageViewStats)
-      .innerJoin(users, eq(pageViewStats.targetId, users.id))
-      .where(
-        and(
-          eq(pageViewStats.targetType, "profile"),
-          eq(users.profileVisibility, "public"),
-          excludeViewersCondition,
-        ),
-      )
-      .orderBy(desc(pageViewStats.pageviews))
-      .limit(4),
-    // 最近更新されたガイド（公開済み、更新日時順、最新4件）
-    db
-      .select(guideListColumns)
-      .from(guides)
-      .innerJoin(users, eq(guides.authorId, users.id))
-      // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない
-      .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-      .orderBy(desc(guides.updatedAt))
-      .limit(4),
-    // よく読まれているガイド（直近7日PV順、最新4件）。プロフィールと同様に page_view_stats
-    // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる
-    db
-      .select(guideListColumns)
-      .from(pageViewStats)
-      .innerJoin(guides, eq(pageViewStats.targetId, guides.id))
-      .innerJoin(users, eq(guides.authorId, users.id))
-      .where(
-        and(
-          eq(pageViewStats.targetType, "guide"),
-          eq(guides.isPublished, true),
-          eq(users.profileVisibility, "public"),
-        ),
-      )
-      .orderBy(desc(pageViewStats.pageviews))
-      .limit(4),
-    db
-      .select({
-        total: sql<number>`count(*)`,
-        active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
-      })
-      .from(users)
-      .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
-  ]);
+  // セッション確認（→登録ユーザー判定）、ユーザーデータキャッシュ取得、コンテンツ5クエリは
+  // 互いに独立なので並行して走らせる
+  const [currentUser, userData, [recentlyUpdatedUsers, popularUsers, recentlyUpdatedGuides, popularGuides, [profileCounts]]] =
+    await Promise.all([
+      // セッションをチェックしてユーザーが登録済みか確認
+      (async () => {
+        const session = await getOptionalSession(request, auth);
+        if (!session) return null;
+        const existingUser = await db.query.users.findFirst({
+          where: eq(users.discordId, session.user.id),
+          columns: {
+            id: true,
+            mcid: true,
+            showPacemanOnHome: true,
+            showYoutubeOnHome: true,
+            showTwitchOnHome: true,
+          },
+        });
+        if (!existingUser) return null;
+        return {
+          mcid: existingUser.mcid,
+          showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
+          showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+          showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
+        };
+      })(),
+      // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
+      // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
+      getUserData(),
+      Promise.all([
+        // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
+        db
+          .select(profileFeedColumns)
+          .from(users)
+          .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition))
+          .orderBy(desc(users.updatedAt))
+          .limit(4),
+        // よく見られているプロフィール（直近7日PV順、最新4件）。page_view_stats のスナップショット行を
+        // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）
+        db
+          .select(profileFeedColumns)
+          .from(pageViewStats)
+          .innerJoin(users, eq(pageViewStats.targetId, users.id))
+          .where(
+            and(
+              eq(pageViewStats.targetType, "profile"),
+              eq(users.profileVisibility, "public"),
+              excludeViewersCondition,
+            ),
+          )
+          .orderBy(desc(pageViewStats.pageviews))
+          .limit(4),
+        // 最近更新されたガイド（公開済み、更新日時順、最新4件）
+        db
+          .select(guideListColumns)
+          .from(guides)
+          .innerJoin(users, eq(guides.authorId, users.id))
+          // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない
+          .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
+          .orderBy(desc(guides.updatedAt))
+          .limit(4),
+        // よく読まれているガイド（直近7日PV順、最新4件）。プロフィールと同様に page_view_stats
+        // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる
+        db
+          .select(guideListColumns)
+          .from(pageViewStats)
+          .innerJoin(guides, eq(pageViewStats.targetId, guides.id))
+          .innerJoin(users, eq(guides.authorId, users.id))
+          .where(
+            and(
+              eq(pageViewStats.targetType, "guide"),
+              eq(guides.isPublished, true),
+              eq(users.profileVisibility, "public"),
+            ),
+          )
+          .orderBy(desc(pageViewStats.pageviews))
+          .limit(4),
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
+          })
+          .from(users)
+          .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
+      ]),
+    ]);
+  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
+    userData;
+  const isRegistered = currentUser != null;
   const totalPublicProfiles = profileCounts?.total ?? 0;
   const activePublicProfiles = profileCounts?.active ?? 0;
 
@@ -705,7 +688,9 @@ export default function HomePage() {
               <>
                 <div className="border-t border-border/70" />
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">{t("home.sectionPopular")}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {t("home.sectionPopular", { days: PAGE_VIEW_WINDOW_DAYS })}
+                  </p>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {popularUsers.map((user) => (
                       <ProfileFeedCard key={user.slug} player={user} />
@@ -756,7 +741,9 @@ export default function HomePage() {
             )}
             {popularGuides.length > 0 && (
               <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">{t("home.sectionPopular")}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {t("home.sectionPopular", { days: PAGE_VIEW_WINDOW_DAYS })}
+                </p>
                 <GuideCardGrid
                   guides={popularGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}

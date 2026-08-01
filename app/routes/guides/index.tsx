@@ -9,6 +9,7 @@ import { users, guides } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
 import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
+import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,13 +67,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = resolveLocale(request);
 
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-  const viewer = session
-    ? await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      })
-    : null;
 
   const url = new URL(request.url);
   const tag = url.searchParams.get("tag") || "";
@@ -88,8 +82,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // 相関サブクエリを走らせず定数に差し替える（select の形は変えず1本のクエリのまま）
   const pageViews7d = isPopular ? guidePageViewsSql() : sql<number>`0`;
   // 集計がまだ無いと人気順は「いいね数 → 更新日時」へ落ちるため、UI で注記を出す。
-  // 人気順以外では注記しないので問い合わせない（true = 注記不要）
-  const [hasPageViewData, allGuides] = await Promise.all([
+  // 人気順以外では注記しないので問い合わせない（true = 注記不要）。
+  // 閲覧者の解決（session → users 行）は本体クエリと独立なので同じ Promise.all で並行する
+  const [viewer, hasPageViewData, allGuides] = await Promise.all([
+    (async () => {
+      const session = await getOptionalSession(request, auth);
+      return session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          })) ?? null)
+        : null;
+    })(),
     isPopular ? hasPageViewStats(db, "guide") : Promise.resolve(true),
     db
       .select({
@@ -263,7 +267,7 @@ export default function GuidesIndexPage() {
               descriptions={{
                 likes: t("contentSort.likesDesc"),
                 views: t("contentSort.viewsDesc"),
-                popular: t("contentSort.popularDesc"),
+                popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
               }}
             />
             <ViewToggle viewMode={viewMode} onChange={setViewMode} />

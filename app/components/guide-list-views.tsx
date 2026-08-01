@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useLocale, useT } from "@/hooks/use-locale";
+import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -79,10 +80,11 @@ export function ViewToggle({
  */
 function PageViews7dMeta({ count }: { count: number }) {
   const t = useT();
+  const label = t("guides.pageViews7d", { days: PAGE_VIEW_WINDOW_DAYS });
   return (
-    <span className="flex items-center gap-1" title={t("guides.pageViews7d")}>
+    <span className="flex items-center gap-1" title={label}>
       <TrendingUp className="h-3 w-3" aria-hidden />
-      <span className="sr-only">{t("guides.pageViews7d")}</span>
+      <span className="sr-only">{label}</span>
       {count}
     </span>
   );

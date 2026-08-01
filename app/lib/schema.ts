@@ -2,6 +2,8 @@ import { createId } from "@paralleldrive/cuid2";
 import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
+// プロフィールタブ値の単一情報源。schema はここから enum を参照する（詳細は profile-tabs.ts 冒頭コメント）
+import { PROFILE_TAB_VALUES } from "./profile-tabs";
 
 // ============================================
 // 1. users（ユーザー）
@@ -33,7 +35,7 @@ export const users = sqliteTable("users", {
   pronouns: text("pronouns"),
   // 既定は「プロフィール」タブ。既存DBの列DDLには旧デフォルト（'keybindings'）が焼き付いているため、
   // DB側デフォルトではなく $defaultFn（アプリ側 insert 時デフォルト）で新規ユーザーに 'profile' を入れる
-  defaultProfileTab: text("default_profile_tab", { enum: ["profile", "stats", "keybindings", "items", "searchcraft", "devices", "settings", "playstyle"] }).$defaultFn(() => "profile"),
+  defaultProfileTab: text("default_profile_tab", { enum: PROFILE_TAB_VALUES }).$defaultFn(() => "profile"),
   featuredVideoUrl: text("featured_video_url"),
 
   // プレイヤー情報

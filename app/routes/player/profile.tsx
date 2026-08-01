@@ -35,7 +35,7 @@ import { getLocalizedDisplayName } from "@/lib/slug";
 import { format, formatDistanceToNow } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
-import type { Translator, MessageKey } from "@/lib/messages";
+import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
@@ -242,7 +242,6 @@ import { HintTip } from "@/components/hint-tip";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import {
-  CATEGORIES,
   HOTBAR_SWITCHING_OPTIONS,
   SEARCH_CRAFT_OPTIONS,
   FREQUENCY_OPTIONS,
@@ -261,7 +260,9 @@ import {
   isKbmPlaystyle,
   playsJavaRsgOrRanked,
   hasBastionVersions,
-  type CategoryKey,
+  hidesSearchCraft,
+  categoryLabel,
+  playstyleOptionLabel,
 } from "@/lib/playstyle";
 
 // bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
@@ -391,20 +392,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     presets.find((p) => p.isActive) ??
     null;
 
-  let displayKeybindings = player.keybindings;
-  let displayPlayerConfig = player.playerConfig;
-  let displayKeyRemaps = player.keyRemaps;
-  let displayItemLayouts = player.itemLayouts;
-  let displaySearchCrafts = player.searchCrafts;
-  let displayCustomKeys = player.customKeys;
-  let displayCustomActions = player.customActions;
+  // Check if current user is viewing their own profile
+  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
+  const isOwner = session?.user?.id === player.discordId;
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
   // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
-  if (selectedPreset && !selectedPreset.isActive) {
+  const resolvePresetOverride = async () => {
+    if (!selectedPreset || selectedPreset.isActive) return null;
     const presetSnapshot = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, selectedPreset.id),
       columns: {
@@ -418,37 +416,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         customActionsData: true,
       },
     });
-    const decoded = decodePresetConfig(presetSnapshot ?? {}, player.id);
-    displayKeybindings = decoded.keybindings;
-    displayKeyRemaps = decoded.keyRemaps;
-    displayItemLayouts = decoded.itemLayouts;
-    displaySearchCrafts = decoded.searchCrafts;
-    displayCustomKeys = decoded.customKeys;
-    displayCustomActions = decoded.customActions;
-    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
-    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
-    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
-    displayPlayerConfig = (decoded.playerConfig
-      ? {
-          ...decoded.playerConfig,
-          fingerAssignments: decoded.fingerAssignments,
-        }
-      : null) as typeof player.playerConfig;
-  }
-
-  // Check if current user is viewing their own profile
-  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
-  const isOwner = session?.user?.id === player.discordId;
+    return decodePresetConfig(presetSnapshot ?? {}, player.id);
+  };
 
   // プロフィール絵文字リアクション（docs/profile-reactions.md）。
-  // フラグOFFのときは profileReactions を null のまま返し、profile_reactions テーブルへは
+  // フラグOFFのときは null を返し、profile_reactions テーブルへは
   // 一切クエリを発行しない（テーブル未作成の本番でも安全に動作する）。
-  let profileReactions: {
+  const resolveProfileReactions = async (): Promise<{
     counts: ProfileReactionCount[];
     viewerReactions: string[];
     viewerHasAccount: boolean;
-  } | null = null;
-  if (isProfileReactionsEnabled()) {
+  } | null> => {
+    if (!isProfileReactionsEnabled()) return null;
     // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
     // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
     const viewerUserId = isOwner
@@ -463,48 +442,80 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       getProfileReactionCounts(db, player.id),
       getViewerProfileReactions(db, player.id, viewerUserId),
     ]);
-    profileReactions = { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
-  }
-
-  // プレイヤーの公開ガイドを取得
-  const playerGuides = await db.query.guides.findMany({
-    where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
-    // ピン留めを先頭に表示
-    orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
-    columns: {
-      id: true,
-      slug: true,
-      title: true,
-      summary: true,
-      tags: true,
-      coverImageUrl: true,
-      viewCount: true,
-      updatedAt: true,
-      isPinned: true,
-    },
-    extras: { likeCount: guideLikeCountSql().as("like_count") },
-  });
-
-  // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
-  const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
-  const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
+    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
+  };
 
   // PaceManの統計情報を取得（MCIDがある場合のみ）
-  let pacemanStats = null;
-  if (player.mcid) {
+  const resolvePacemanStats = async () => {
+    if (!player.mcid) return null;
     try {
       const [netherEnterCount, mainPaces] = await Promise.all([
         getNetherEnterCount(player.mcid),
         getRecentPacesForPlayer(player.mcid, 10),
       ]);
-      pacemanStats = {
-        netherEnterCount,
-        mainPaces,
-      };
+      return { netherEnterCount, mainPaces };
     } catch (error) {
       console.error("Failed to fetch PaceMan stats:", error);
+      return null;
     }
+  };
+
+  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計は
+  // 互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
+  // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
+  const [presetOverride, profileReactions, playerGuides, pacemanStats] = await Promise.all([
+    resolvePresetOverride(),
+    resolveProfileReactions(),
+    // プレイヤーの公開ガイドを取得
+    db.query.guides.findMany({
+      where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
+      // ピン留めを先頭に表示
+      orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
+      columns: {
+        id: true,
+        slug: true,
+        title: true,
+        summary: true,
+        tags: true,
+        coverImageUrl: true,
+        viewCount: true,
+        updatedAt: true,
+        isPinned: true,
+      },
+      extras: { likeCount: guideLikeCountSql().as("like_count") },
+    }),
+    resolvePacemanStats(),
+  ]);
+
+  let displayKeybindings = player.keybindings;
+  let displayPlayerConfig = player.playerConfig;
+  let displayKeyRemaps = player.keyRemaps;
+  let displayItemLayouts = player.itemLayouts;
+  let displaySearchCrafts = player.searchCrafts;
+  let displayCustomKeys = player.customKeys;
+  let displayCustomActions = player.customActions;
+
+  if (presetOverride) {
+    displayKeybindings = presetOverride.keybindings;
+    displayKeyRemaps = presetOverride.keyRemaps;
+    displayItemLayouts = presetOverride.itemLayouts;
+    displaySearchCrafts = presetOverride.searchCrafts;
+    displayCustomKeys = presetOverride.customKeys;
+    displayCustomActions = presetOverride.customActions;
+    // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
+    // playerConfig 無しのスナップショットは「設定なし」= null 表示 —
+    // ライブ設定行が無いユーザーと同じ扱いで、消費側は null 安全に書かれている）
+    displayPlayerConfig = (presetOverride.playerConfig
+      ? {
+          ...presetOverride.playerConfig,
+          fingerAssignments: presetOverride.fingerAssignments,
+        }
+      : null) as typeof player.playerConfig;
   }
+
+  // 非表示・ピン留め記録IDをパース（Speedrun.com記録はDBに行を持たないため、run IDの配列で管理）
+  const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
+  const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
@@ -760,26 +771,150 @@ export default function PlayerProfilePage() {
   const showPlaystyleJavaRsgRanked = playsJavaRsgOrRanked(playstyleVersions, playstyleCategories);
   const showPlaystyleBastion = hasBastionVersions(playstyleVersions) && !!player.playstyle?.favoriteBastion;
   const showPlaystyleGameLanguage =
-    player.playstyle?.searchCraft !== "does_not" && !!player.playerConfig?.gameLanguage;
-  const hasPlaystylePlayContent = playstyleVersions.length > 0 || playstyleCategories.length > 0;
-  const hasPlaystyleControls =
-    !!player.inputMethod ||
-    !!player.playstyle?.hotbarSwitching ||
-    !!player.playstyle?.halfShift ||
-    showPlaystyleClickMethods ||
-    showPlaystyleMousepad;
-  const hasPlaystyleTechnique =
-    !!player.playstyle?.itemLayoutPolicy ||
-    !!player.playstyle?.searchCraft ||
-    showPlaystyleGameLanguage ||
-    (showPlaystyleJavaRsgRanked &&
-      (!!player.playstyle?.zeroCycle || !!player.playstyle?.groundZero || !!player.playstyle?.oneshot)) ||
-    showPlaystyleBastion;
+    !hidesSearchCraft(player.playstyle?.searchCraft) && !!player.playerConfig?.gameLanguage;
+
+  // 各カードの行を { label, value } の配列として構築する。push 条件がそのままカードの表示条件
+  // （hasPlaystyleXxx は rows.length から導出）であり、JSX 側は rows.map で描画するだけにする
+  // （表示条件の二重管理を避ける。値・ラベル・並び順は元の JSX 条件と同一）。
+  const playstylePlayContentRows: { label: string; value: ReactNode }[] = [];
+  if (playstyleVersions.length > 0) {
+    playstylePlayContentRows.push({
+      label: t("playerProfile.playstyleVersions"),
+      value: (
+        <>
+          {(["java", "bedrock"] as const).map((edition) => {
+            const keys = groupVersionsByEdition(playstyleVersions)[edition];
+            if (keys.length === 0) return null;
+            return (
+              <div key={edition} className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground w-16 shrink-0">
+                  {edition === "java" ? "Java" : "Bedrock"}
+                </span>
+                {keys.map((v) => (
+                  <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
+                    {versionLabel(v)}
+                    {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
+                  </Badge>
+                ))}
+              </div>
+            );
+          })}
+        </>
+      ),
+    });
+  }
+  if (playstyleCategories.length > 0) {
+    playstylePlayContentRows.push({
+      label: t("playerProfile.playstyleCategories"),
+      value: (
+        <div className="flex flex-wrap gap-2">
+          {playstyleCategories.map((c) => (
+            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
+              {categoryLabel(t, c)}
+              {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
+            </Badge>
+          ))}
+        </div>
+      ),
+    });
+  }
+
+  const playstyleControlsRows: { label: string; value: ReactNode }[] = [];
+  if (player.inputMethod) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleInputMethod"),
+      value: inputMethodLabel(t, player.inputMethod),
+    });
+  }
+  if (player.playstyle?.hotbarSwitching) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleHotbarSwitching"),
+      value: playstyleOptionLabel(t, HOTBAR_SWITCHING_OPTIONS, player.playstyle.hotbarSwitching),
+    });
+  }
+  if (player.playstyle?.halfShift) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleHalfShift"),
+      value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift),
+    });
+  }
+  if (showPlaystyleClickMethods) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleClickMethods"),
+      value: playstyleClickMethods.map((m) => playstyleOptionLabel(t, CLICK_METHOD_OPTIONS, m)).join(" / "),
+    });
+  }
+  if (showPlaystyleClickMethods && playstyleClickMethods.includes("drag") && player.playstyle?.dragTapeType) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleDragTapeType"),
+      value: player.playstyle.dragTapeType,
+    });
+  }
+  if (showPlaystyleMousepad) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleMousepad"),
+      value: playstyleOptionLabel(t, USES_MOUSEPAD_OPTIONS, player.playstyle?.usesMousepad ?? ""),
+    });
+  }
+  if (showPlaystyleMousepad && player.playstyle?.usesMousepad === "uses" && player.playstyle?.mousepadType) {
+    playstyleControlsRows.push({
+      label: t("playerProfile.playstyleMousepadType"),
+      value: player.playstyle.mousepadType,
+    });
+  }
+
+  const playstyleTechniqueRows: { label: string; value: ReactNode }[] = [];
+  if (player.playstyle?.itemLayoutPolicy) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleItemLayoutPolicy"),
+      value: playstyleOptionLabel(t, ITEM_LAYOUT_POLICY_OPTIONS, player.playstyle.itemLayoutPolicy),
+    });
+  }
+  if (player.playstyle?.searchCraft) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleSearchCraft"),
+      value: playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft),
+    });
+  }
+  if (showPlaystyleGameLanguage) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.gameLanguage"),
+      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleZeroCycle"),
+      value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.zeroCycle),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.groundZero) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleGroundZero"),
+      value: playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.groundZero),
+    });
+  }
+  if (showPlaystyleJavaRsgRanked && player.playstyle?.oneshot) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleOneshot"),
+      value: playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.oneshot),
+    });
+  }
+  if (showPlaystyleBastion) {
+    playstyleTechniqueRows.push({
+      label: t("playerProfile.playstyleFavoriteBastion"),
+      value: playstyleOptionLabel(t, BASTION_OPTIONS, player.playstyle?.favoriteBastion ?? ""),
+    });
+  }
+
+  const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
+  const hasPlaystyleControls = playstyleControlsRows.length > 0;
+  const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
   const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
 
   // タブ項目の定義（編集画面のメニュー順に合わせる）。
   // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
-  const hideSearchCraftTab = player.playstyle?.searchCraft === "does_not";
+  const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
   const tabItems = [
     { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
     { value: "playstyle", icon: Gamepad2, label: t("playerProfile.playstyleTab") },
@@ -1515,41 +1650,12 @@ export default function PlayerProfilePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-3 space-y-4">
-                    {playstyleVersions.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">{t("playerProfile.playstyleVersions")}</p>
-                        {(["java", "bedrock"] as const).map((edition) => {
-                          const keys = groupVersionsByEdition(playstyleVersions)[edition];
-                          if (keys.length === 0) return null;
-                          return (
-                            <div key={edition} className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs text-muted-foreground w-16 shrink-0">
-                                {edition === "java" ? "Java" : "Bedrock"}
-                              </span>
-                              {keys.map((v) => (
-                                <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
-                                  {versionLabel(v)}
-                                  {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
-                                </Badge>
-                              ))}
-                            </div>
-                          );
-                        })}
+                    {playstylePlayContentRows.map((row, i) => (
+                      <div key={i} className="space-y-2">
+                        <p className="text-sm text-muted-foreground">{row.label}</p>
+                        {row.value}
                       </div>
-                    )}
-                    {playstyleCategories.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">{t("playerProfile.playstyleCategories")}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {playstyleCategories.map((c) => (
-                            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
-                              {categoryLabel(t, c)}
-                              {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    ))}
                   </CardContent>
                 </Card>
               )}
@@ -1565,54 +1671,9 @@ export default function PlayerProfilePage() {
                   </CardHeader>
                   <CardContent className="pt-0 pb-3">
                     <div className="divide-y">
-                      {player.inputMethod && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleInputMethod")}
-                          value={inputMethodLabel(t, player.inputMethod)}
-                        />
-                      )}
-                      {player.playstyle?.hotbarSwitching && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleHotbarSwitching")}
-                          value={playstyleOptionLabel(t, HOTBAR_SWITCHING_OPTIONS, player.playstyle.hotbarSwitching)}
-                        />
-                      )}
-                      {player.playstyle?.halfShift && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleHalfShift")}
-                          value={playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift)}
-                        />
-                      )}
-                      {showPlaystyleClickMethods && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleClickMethods")}
-                          value={playstyleClickMethods
-                            .map((m) => playstyleOptionLabel(t, CLICK_METHOD_OPTIONS, m))
-                            .join(" / ")}
-                        />
-                      )}
-                      {showPlaystyleClickMethods &&
-                        playstyleClickMethods.includes("drag") &&
-                        player.playstyle?.dragTapeType && (
-                          <DeviceRow
-                            label={t("playerProfile.playstyleDragTapeType")}
-                            value={player.playstyle.dragTapeType}
-                          />
-                        )}
-                      {showPlaystyleMousepad && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleMousepad")}
-                          value={playstyleOptionLabel(t, USES_MOUSEPAD_OPTIONS, player.playstyle?.usesMousepad ?? "")}
-                        />
-                      )}
-                      {showPlaystyleMousepad &&
-                        player.playstyle?.usesMousepad === "uses" &&
-                        player.playstyle?.mousepadType && (
-                          <DeviceRow
-                            label={t("playerProfile.playstyleMousepadType")}
-                            value={player.playstyle.mousepadType}
-                          />
-                        )}
+                      {playstyleControlsRows.map((row, i) => (
+                        <DeviceRow key={i} label={row.label} value={row.value} />
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -1629,48 +1690,9 @@ export default function PlayerProfilePage() {
                   </CardHeader>
                   <CardContent className="pt-0 pb-3">
                     <div className="divide-y">
-                      {player.playstyle?.itemLayoutPolicy && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleItemLayoutPolicy")}
-                          value={playstyleOptionLabel(t, ITEM_LAYOUT_POLICY_OPTIONS, player.playstyle.itemLayoutPolicy)}
-                        />
-                      )}
-                      {player.playstyle?.searchCraft && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleSearchCraft")}
-                          value={playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft)}
-                        />
-                      )}
-                      {showPlaystyleGameLanguage && (
-                        <DeviceRow
-                          label={t("playerProfile.gameLanguage")}
-                          value={getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? "")}
-                        />
-                      )}
-                      {showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleZeroCycle")}
-                          value={playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.zeroCycle)}
-                        />
-                      )}
-                      {showPlaystyleJavaRsgRanked && player.playstyle?.groundZero && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleGroundZero")}
-                          value={playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.groundZero)}
-                        />
-                      )}
-                      {showPlaystyleJavaRsgRanked && player.playstyle?.oneshot && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleOneshot")}
-                          value={playstyleOptionLabel(t, CAN_CANNOT_OPTIONS, player.playstyle.oneshot)}
-                        />
-                      )}
-                      {showPlaystyleBastion && (
-                        <DeviceRow
-                          label={t("playerProfile.playstyleFavoriteBastion")}
-                          value={playstyleOptionLabel(t, BASTION_OPTIONS, player.playstyle?.favoriteBastion ?? "")}
-                        />
-                      )}
+                      {playstyleTechniqueRows.map((row, i) => (
+                        <DeviceRow key={i} label={row.label} value={row.value} />
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -2131,23 +2153,6 @@ function inputMethodLabel(t: Translator, value: string): string {
     default:
       return value;
   }
-}
-
-/** CATEGORIES の label（直書き）または labelKey（「その他」のみ）を解決する */
-function categoryLabel(t: Translator, value: CategoryKey): string {
-  const opt = CATEGORIES.find((c) => c.value === value);
-  if (!opt) return value;
-  return opt.label ?? t((opt.labelKey ?? "") as MessageKey);
-}
-
-/** `{ value, labelKey }` 形式の選択肢配列からラベルを解決する共通ヘルパー（playstyle.ts の各 OPTIONS 用） */
-function playstyleOptionLabel(
-  t: Translator,
-  options: readonly { value: string; labelKey: string }[],
-  value: string,
-): string {
-  const opt = options.find((o) => o.value === value);
-  return opt ? t(opt.labelKey as MessageKey) : value;
 }
 
 function getPlatformLabel(t: Translator, platform: string): string {

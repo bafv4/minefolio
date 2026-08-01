@@ -1,6 +1,6 @@
-import { createTranslator, type MessageKey, type Translator } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/playstyle";
 import { createDb } from "@/lib/db";
@@ -30,6 +30,8 @@ import { useT } from "@/hooks/use-locale";
 import {
   ALL_VERSION_KEYS,
   CATEGORIES,
+  CATEGORY_KEYS,
+  CLICK_METHOD_KEYS,
   HOTBAR_SWITCHING_OPTIONS,
   SEARCH_CRAFT_OPTIONS,
   FREQUENCY_OPTIONS,
@@ -49,7 +51,10 @@ import {
   isKbmPlaystyle,
   playsJavaRsgOrRanked,
   hasBastionVersions,
+  hidesSearchCraft,
+  categoryLabel,
   validatePlaystyle,
+  parseInputMethodInput,
   type VersionKey,
   type CategoryKey,
   type HotbarSwitching,
@@ -60,6 +65,7 @@ import {
   type UsesMousepad,
   type CanCannot,
   type BastionType,
+  type PlaystyleLabelKey,
 } from "@/lib/playstyle";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -159,14 +165,12 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
 
   // 入力方法（users.inputMethod。プレイスタイルとは別テーブルだがこのページでまとめて編集する）。
-  // 検証は me/devices の saveInputMethod と同形
-  const inputMethodRaw = (formData.get("inputMethod") as string | null) ?? "";
-  const validInputMethods = ["keyboard_mouse", "controller", "touch", ""] as const;
-  if (!validInputMethods.includes(inputMethodRaw as (typeof validInputMethods)[number])) {
+  // 検証は me/devices の saveInputMethod と同形（共通ヘルパー parseInputMethodInput）
+  const inputMethodResult = parseInputMethodInput(formData.get("inputMethod"));
+  if (!inputMethodResult.ok) {
     return { error: t("mePlaystyle.errorInvalidOption") };
   }
-  const inputMethod =
-    inputMethodRaw === "" ? null : (inputMethodRaw as "keyboard_mouse" | "controller" | "touch");
+  const inputMethod = inputMethodResult.value;
 
   const result = validatePlaystyle({
     versions: formData.getAll("versions"),
@@ -188,7 +192,7 @@ export async function action({ request }: Route.ActionArgs) {
   });
 
   if (!result.ok) {
-    return { error: t(result.errorKey as MessageKey) };
+    return { error: t(result.errorKey) };
   }
 
   const v = result.value;
@@ -253,8 +257,6 @@ type PlaystyleFormValues = {
   favoriteBastion: BastionType | "";
 };
 
-const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.value);
-const CLICK_METHOD_KEYS: readonly ClickMethod[] = CLICK_METHOD_OPTIONS.map((o) => o.value);
 const { java: JAVA_VERSION_KEYS, bedrock: BEDROCK_VERSION_KEYS } = groupVersionsByEdition(ALL_VERSION_KEYS);
 
 /** 選択トグル。常に canonical な順序（order）に正規化して返す（サーバー側の正規化と揃える） */
@@ -268,21 +270,49 @@ function toggleInOrder<T extends string>(current: readonly T[], value: T, order:
   return order.filter((v) => next.has(v));
 }
 
-/** CATEGORIES の label（直書き）または labelKey（「その他」のみ）を解決する */
-function categoryLabel(t: Translator, value: CategoryKey): string {
-  const opt = CATEGORIES.find((c) => c.value === value);
-  if (!opt) return value;
-  return opt.label ?? t((opt.labelKey ?? "") as MessageKey);
-}
-
-/** `{ value, labelKey }` 形式の選択肢配列からラベルを解決する共通ヘルパー */
-function optionLabel(
-  t: Translator,
-  options: readonly { value: string; labelKey: string }[],
-  value: string,
-): string {
-  const opt = options.find((o) => o.value === value);
-  return opt ? t(opt.labelKey as MessageKey) : value;
+/**
+ * `{ label, Select, options.map(SelectItem) }` の定型を1つにまとめたローカルコンポーネント。
+ * value/onChange は呼び出し側（formValues/handleChange）から明示的に渡す。PlaystylePage の
+ * 内側にネストして定義すると、フォーム内の他の入力での再レンダーのたびに新しい関数コンポーネント
+ * として扱われて Select が再マウントされてしまう（開いているドロップダウンが閉じる等）ため、
+ * モジュールスコープの関数として定義する。
+ */
+function PlaystyleSelectField<T extends string>({
+  field,
+  labelKey,
+  options,
+  value,
+  onChange,
+  className = "w-full",
+  children,
+}: {
+  field: string;
+  labelKey: PlaystyleLabelKey;
+  options: readonly { value: T; labelKey: PlaystyleLabelKey }[];
+  value: T | "";
+  onChange: (value: T) => void;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={field}>{t(labelKey)}</Label>
+      <Select value={value} onValueChange={(v) => onChange(v as T)}>
+        <SelectTrigger id={field} className={className}>
+          <SelectValue placeholder={t("mePlaystyle.select")} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {t(opt.labelKey)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {children}
+    </div>
+  );
 }
 
 export default function PlaystylePage() {
@@ -367,23 +397,13 @@ export default function PlaystylePage() {
 
   const handleSave = useCallback(() => {
     const formData = new FormData();
-    formValues.versions.forEach((v) => formData.append("versions", v));
-    formValues.categories.forEach((c) => formData.append("categories", c));
-    formData.set("mainVersion", formValues.mainVersion);
-    formData.set("mainCategory", formValues.mainCategory);
-    formData.set("inputMethod", formValues.inputMethod);
-    formData.set("hotbarSwitching", formValues.hotbarSwitching);
-    formData.set("searchCraft", formValues.searchCraft);
-    formData.set("halfShift", formValues.halfShift);
-    formData.set("itemLayoutPolicy", formValues.itemLayoutPolicy);
-    formValues.clickMethods.forEach((c) => formData.append("clickMethods", c));
-    formData.set("dragTapeType", formValues.dragTapeType);
-    formData.set("usesMousepad", formValues.usesMousepad);
-    formData.set("mousepadType", formValues.mousepadType);
-    formData.set("zeroCycle", formValues.zeroCycle);
-    formData.set("groundZero", formValues.groundZero);
-    formData.set("oneshot", formValues.oneshot);
-    formData.set("favoriteBastion", formValues.favoriteBastion);
+    for (const [key, value] of Object.entries(formValues)) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => formData.append(key, v));
+      } else {
+        formData.set(key, value);
+      }
+    }
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues]);
 
@@ -425,40 +445,30 @@ export default function PlaystylePage() {
         <CardContent className="space-y-6">
           <div className="space-y-3">
             <Label>{t("mePlaystyle.versions")}</Label>
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Java</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {JAVA_VERSION_KEYS.map((key) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={formValues.versions.includes(key)}
-                      onCheckedChange={() => handleToggleVersion(key)}
-                    />
-                    {versionLabel(key)}
-                  </label>
-                ))}
+            {(
+              [
+                ["Java", JAVA_VERSION_KEYS],
+                ["Bedrock", BEDROCK_VERSION_KEYS],
+              ] as const
+            ).map(([editionLabel, keys]) => (
+              <div key={editionLabel} className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">{editionLabel}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {keys.map((key) => (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={formValues.versions.includes(key)}
+                        onCheckedChange={() => handleToggleVersion(key)}
+                      />
+                      {versionLabel(key)}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Bedrock</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {BEDROCK_VERSION_KEYS.map((key) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={formValues.versions.includes(key)}
-                      onCheckedChange={() => handleToggleVersion(key)}
-                    />
-                    {versionLabel(key)}
-                  </label>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="space-y-2">
@@ -565,43 +575,21 @@ export default function PlaystylePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="hotbarSwitching">{t("mePlaystyle.hotbarSwitching")}</Label>
-              <Select
-                value={formValues.hotbarSwitching}
-                onValueChange={(value) => handleChange("hotbarSwitching", value as HotbarSwitching)}
-              >
-                <SelectTrigger id="hotbarSwitching" className="w-full">
-                  <SelectValue placeholder={t("mePlaystyle.select")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {HOTBAR_SWITCHING_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {t(opt.labelKey as MessageKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PlaystyleSelectField
+              field="hotbarSwitching"
+              labelKey="mePlaystyle.hotbarSwitching"
+              options={HOTBAR_SWITCHING_OPTIONS}
+              value={formValues.hotbarSwitching}
+              onChange={(value) => handleChange("hotbarSwitching", value)}
+            />
 
-            <div className="space-y-2">
-              <Label htmlFor="halfShift">{t("mePlaystyle.halfShift")}</Label>
-              <Select
-                value={formValues.halfShift}
-                onValueChange={(value) => handleChange("halfShift", value as FrequencyLevel)}
-              >
-                <SelectTrigger id="halfShift" className="w-full">
-                  <SelectValue placeholder={t("mePlaystyle.select")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {FREQUENCY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {t(opt.labelKey as MessageKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PlaystyleSelectField
+              field="halfShift"
+              labelKey="mePlaystyle.halfShift"
+              options={FREQUENCY_OPTIONS}
+              value={formValues.halfShift}
+              onChange={(value) => handleChange("halfShift", value)}
+            />
           </div>
 
           {showKbmFields && (
@@ -615,7 +603,7 @@ export default function PlaystylePage() {
                         checked={formValues.clickMethods.includes(opt.value)}
                         onCheckedChange={() => handleToggleClickMethod(opt.value)}
                       />
-                      {t(opt.labelKey as MessageKey)}
+                      {t(opt.labelKey)}
                     </label>
                   ))}
                 </div>
@@ -634,23 +622,14 @@ export default function PlaystylePage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="usesMousepad">{t("mePlaystyle.usesMousepad")}</Label>
-                <Select
-                  value={formValues.usesMousepad}
-                  onValueChange={(value) => handleChange("usesMousepad", value as UsesMousepad)}
-                >
-                  <SelectTrigger id="usesMousepad" className="w-full sm:w-72">
-                    <SelectValue placeholder={t("mePlaystyle.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {USES_MOUSEPAD_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {t(opt.labelKey as MessageKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <PlaystyleSelectField
+                field="usesMousepad"
+                labelKey="mePlaystyle.usesMousepad"
+                options={USES_MOUSEPAD_OPTIONS}
+                value={formValues.usesMousepad}
+                onChange={(value) => handleChange("usesMousepad", value)}
+                className="w-full sm:w-72"
+              >
                 {formValues.usesMousepad === "uses" && (
                   <div className="space-y-2 pt-1">
                     <Label htmlFor="mousepadType">{t("mePlaystyle.mousepadType")}</Label>
@@ -664,7 +643,7 @@ export default function PlaystylePage() {
                     />
                   </div>
                 )}
-              </div>
+              </PlaystyleSelectField>
             </>
           )}
         </CardContent>
@@ -679,44 +658,25 @@ export default function PlaystylePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="itemLayoutPolicy">{t("mePlaystyle.itemLayoutPolicy")}</Label>
-            <Select
-              value={formValues.itemLayoutPolicy}
-              onValueChange={(value) => handleChange("itemLayoutPolicy", value as ItemLayoutPolicy)}
-            >
-              <SelectTrigger id="itemLayoutPolicy" className="w-full sm:w-72">
-                <SelectValue placeholder={t("mePlaystyle.select")} />
-              </SelectTrigger>
-              <SelectContent>
-                {ITEM_LAYOUT_POLICY_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {t(opt.labelKey as MessageKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <PlaystyleSelectField
+            field="itemLayoutPolicy"
+            labelKey="mePlaystyle.itemLayoutPolicy"
+            options={ITEM_LAYOUT_POLICY_OPTIONS}
+            value={formValues.itemLayoutPolicy}
+            onChange={(value) => handleChange("itemLayoutPolicy", value)}
+            className="w-full sm:w-72"
+          />
 
-          <div className="space-y-2">
-            <Label htmlFor="searchCraft">{t("mePlaystyle.searchCraft")}</Label>
-            <Select
-              value={formValues.searchCraft}
-              onValueChange={(value) => handleChange("searchCraft", value as SearchCraftLevel)}
-            >
-              <SelectTrigger id="searchCraft" className="w-full sm:w-72">
-                <SelectValue placeholder={t("mePlaystyle.select")} />
-              </SelectTrigger>
-              <SelectContent>
-                {SEARCH_CRAFT_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {t(opt.labelKey as MessageKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <PlaystyleSelectField
+            field="searchCraft"
+            labelKey="mePlaystyle.searchCraft"
+            options={SEARCH_CRAFT_OPTIONS}
+            value={formValues.searchCraft}
+            onChange={(value) => handleChange("searchCraft", value)}
+            className="w-full sm:w-72"
+          >
             <p className="text-xs text-muted-foreground">{t("mePlaystyle.searchCraftHint")}</p>
-            {formValues.searchCraft !== "does_not" && (
+            {!hidesSearchCraft(formValues.searchCraft) && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <ExternalLink className="h-3 w-3 shrink-0" />
                 <Link to="/me/devices" className="underline underline-offset-2">
@@ -724,86 +684,43 @@ export default function PlaystylePage() {
                 </Link>
               </p>
             )}
-          </div>
+          </PlaystyleSelectField>
 
           {showJavaRsgRankedFields && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="zeroCycle">{t("mePlaystyle.zeroCycle")}</Label>
-                <Select
-                  value={formValues.zeroCycle}
-                  onValueChange={(value) => handleChange("zeroCycle", value as FrequencyLevel)}
-                >
-                  <SelectTrigger id="zeroCycle" className="w-full">
-                    <SelectValue placeholder={t("mePlaystyle.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FREQUENCY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {t(opt.labelKey as MessageKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="groundZero">{t("mePlaystyle.groundZero")}</Label>
-                <Select
-                  value={formValues.groundZero}
-                  onValueChange={(value) => handleChange("groundZero", value as CanCannot)}
-                >
-                  <SelectTrigger id="groundZero" className="w-full">
-                    <SelectValue placeholder={t("mePlaystyle.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAN_CANNOT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {t(opt.labelKey as MessageKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="oneshot">{t("mePlaystyle.oneshot")}</Label>
-                <Select
-                  value={formValues.oneshot}
-                  onValueChange={(value) => handleChange("oneshot", value as CanCannot)}
-                >
-                  <SelectTrigger id="oneshot" className="w-full">
-                    <SelectValue placeholder={t("mePlaystyle.select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAN_CANNOT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {t(opt.labelKey as MessageKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <PlaystyleSelectField
+                field="zeroCycle"
+                labelKey="mePlaystyle.zeroCycle"
+                options={FREQUENCY_OPTIONS}
+                value={formValues.zeroCycle}
+                onChange={(value) => handleChange("zeroCycle", value)}
+              />
+              <PlaystyleSelectField
+                field="groundZero"
+                labelKey="mePlaystyle.groundZero"
+                options={CAN_CANNOT_OPTIONS}
+                value={formValues.groundZero}
+                onChange={(value) => handleChange("groundZero", value)}
+              />
+              <PlaystyleSelectField
+                field="oneshot"
+                labelKey="mePlaystyle.oneshot"
+                options={CAN_CANNOT_OPTIONS}
+                value={formValues.oneshot}
+                onChange={(value) => handleChange("oneshot", value)}
+              />
             </div>
           )}
 
           {showBastionField && (
-            <div className="space-y-2">
-              <Label htmlFor="favoriteBastion">{t("mePlaystyle.favoriteBastion")}</Label>
-              <Select
-                value={formValues.favoriteBastion}
-                onValueChange={(value) => handleChange("favoriteBastion", value as BastionType)}
-              >
-                <SelectTrigger id="favoriteBastion" className="w-full sm:w-72">
-                  <SelectValue placeholder={t("mePlaystyle.select")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {BASTION_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {t(opt.labelKey as MessageKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PlaystyleSelectField
+              field="favoriteBastion"
+              labelKey="mePlaystyle.favoriteBastion"
+              options={BASTION_OPTIONS}
+              value={formValues.favoriteBastion}
+              onChange={(value) => handleChange("favoriteBastion", value)}
+              className="w-full sm:w-72"
+            />
           )}
         </CardContent>
       </Card>

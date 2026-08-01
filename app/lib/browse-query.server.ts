@@ -82,7 +82,6 @@ const BROWSE_LIST_COLUMNS = {
   role: true,
   mainEdition: true,
   mainPlatform: true,
-  inputMethod: true,
   updatedAt: true,
   shortBio: true,
   customSkinUrl: true,

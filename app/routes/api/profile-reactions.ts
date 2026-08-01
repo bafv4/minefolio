@@ -12,65 +12,39 @@
 import type { Route } from "./+types/profile-reactions";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
 import { getEnv, isProfileReactionsEnabled } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { apiJsonResponse, getApiUser } from "@/lib/api-auth.server";
 import { isProfileReactionEmoji } from "@/lib/profile-reactions";
 import { setProfileReaction } from "@/lib/profile-reactions.server";
 
 /** profileUserId の長さ上限（CUID2 は 24〜32 文字。過大なボディを弾く） */
 const MAX_PROFILE_USER_ID_LENGTH = 64;
 
-function jsonResponse(body: unknown, init?: ResponseInit): Response {
-  const headers = new Headers(init?.headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  // 閲覧者ごとに異なる応答なので、CDN・ブラウザともにキャッシュさせない
-  headers.set("Cache-Control", "private, no-store");
-  return new Response(JSON.stringify(body), { ...init, headers });
-}
-
-/**
- * セッションから内部ユーザーIDを解決する（api/likes.ts の getCurrentUser と同型）。
- * session.user.id は Discord ID なので users.discordId で引き直す。
- * getSession は throw redirect("/login") するため使わない（fetch が302を追って
- * 「200 + ログインHTML」を返し、res.json() が壊れる）。
- */
-async function getCurrentUser(request: Request) {
-  const env = getEnv();
-  const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-  if (!session) return { db, user: null };
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
-  return { db, user };
-}
-
 export async function action({ request }: Route.ActionArgs) {
   // ①フラグOFF: 存在自体を隠すため、メソッド・認証の判定より前に404を返す。
   // ここで return するため profile_reactions テーブル・users テーブルのいずれにも触れない。
   if (!isProfileReactionsEnabled()) {
-    return jsonResponse({ error: "Not found" }, { status: 404 });
+    return apiJsonResponse({ error: "Not found" }, { status: 404 });
   }
 
   if (request.method.toUpperCase() !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+    return apiJsonResponse({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const { db, user } = await getCurrentUser(request);
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+  const user = await getApiUser(db, auth, request);
   // 未オンボーディング（セッションはあるが users 行が無い）も未ログイン扱い
   if (!user) {
-    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
+    return apiJsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { profileUserId?: unknown; emoji?: unknown; action?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
+    return apiJsonResponse({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const profileUserId = typeof body.profileUserId === "string" ? body.profileUserId : "";
@@ -83,7 +57,7 @@ export async function action({ request }: Route.ActionArgs) {
     !isProfileReactionEmoji(emoji) ||
     (actionType !== "react" && actionType !== "unreact")
   ) {
-    return jsonResponse({ error: "Invalid request" }, { status: 400 });
+    return apiJsonResponse({ error: "Invalid request" }, { status: 400 });
   }
 
   const result = await setProfileReaction(
@@ -96,8 +70,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (!result.ok) {
     // 不存在・非公開（本人以外）はすべて同一の応答にする（存在の列挙オラクルにしない）
-    return jsonResponse({ error: "Not found" }, { status: 404 });
+    return apiJsonResponse({ error: "Not found" }, { status: 404 });
   }
 
-  return jsonResponse({ reacted: result.reacted, count: result.count });
+  return apiJsonResponse({ reacted: result.reacted, count: result.count });
 }

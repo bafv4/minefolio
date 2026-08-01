@@ -44,6 +44,7 @@ import {
   validateMouseSettings,
   type MouseSettingsField,
 } from "@/lib/mouse-settings";
+import { parseInputMethodInput } from "@/lib/playstyle";
 import {
   Dialog,
   DialogContent,
@@ -249,15 +250,16 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t(validationError.messageKey), field: validationError.field };
   }
 
-  // 入力方法の更新（users.inputMethod はプリセット非依存）
+  // 入力方法の更新（users.inputMethod はプリセット非依存）。
+  // 許可リストと "" → null 変換は /me/playstyle と共有（app/lib/playstyle.ts）。
+  // フィールド欠落時は更新せず、不正値は従来どおり黙って無視する
   const inputMethodValue = formData.get("inputMethod") as string | null;
   if (inputMethodValue !== null) {
-    const validInputMethods = ["keyboard_mouse", "controller", "touch", ""] as const;
-    if (validInputMethods.includes(inputMethodValue as typeof validInputMethods[number])) {
-      const typedInputMethod = inputMethodValue === "" ? null : inputMethodValue as "keyboard_mouse" | "controller" | "touch";
+    const parsedInputMethod = parseInputMethodInput(inputMethodValue);
+    if (parsedInputMethod.ok) {
       await db
         .update(users)
-        .set({ inputMethod: typedInputMethod })
+        .set({ inputMethod: parsedInputMethod.value })
         .where(eq(users.id, user.id));
     }
   }

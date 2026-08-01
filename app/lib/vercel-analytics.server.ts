@@ -22,9 +22,6 @@ const TOP_PATHS_LIMIT = 100;
 /** 外部 API の応答待ち上限。cron 全体を巻き込んで固まらせない */
 const REQUEST_TIMEOUT_MS = 15000;
 
-/** 上位 N 件に入らなかったパスをまとめた集約行の名前（実在パスではない） */
-const OTHERS_ROW_KEY = "Others";
-
 /** エラーメッセージへ載せる本文・JSON の最大長 */
 const ERROR_BODY_MAX_CHARS = 300;
 
@@ -153,8 +150,8 @@ export async function fetchTopPaths(
       console.warn("[page-views] skipped unparsable analytics row:", truncate(JSON.stringify(row)));
       continue;
     }
-    // 上位以外をまとめた集約行は実在パスではないので落とす
-    if (path === OTHERS_ROW_KEY) continue;
+    // 上位以外をまとめた集約行（"Others" など）は "/" で始まらないため、
+    // 呼び出し側の parseAnalyticsPath（page-view-paths.ts）が実在パスと区別して落とす
 
     result.push({ path, pageviews });
   }

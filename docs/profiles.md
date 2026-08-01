@@ -184,7 +184,8 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 - 定数: `JAVA_VERSIONS` / `BEDROCK_VERSIONS`（speedrun.com 準拠のバージョン区分、ロケール非依存の直書きラベル）、`CATEGORIES`（RSG/SSG/AA/CE/MCSR Ranked/その他）、`HOTBAR_SWITCHING_OPTIONS` / `SEARCH_CRAFT_OPTIONS` / `FREQUENCY_OPTIONS`（半シフト・Zero Cycle 共用）/ `ITEM_LAYOUT_POLICY_OPTIONS` / `CLICK_METHOD_OPTIONS` / `CAN_CANNOT_OPTIONS` / `USES_MOUSEPAD_OPTIONS` / `BASTION_OPTIONS`
 - ヘルパー: `editionOfVersion` / `versionLabel` / `groupVersionsByEdition`
 - 破損JSON耐性パーサ: `parsePlaystyleVersions` / `parsePlaystyleCategories` / `parsePlaystyleClickMethods`（`app/lib/preset-read.ts` の `safeParseArray` と同方針。壊れたJSON・非配列・未知キーは例外を投げず黙って捨てる）
-- 表示条件ヘルパー: `isKbmPlaystyle(inputMethod)` / `playsJavaRsgOrRanked(versions, categories)` / `hasBastionVersions(versions)`
+- 表示条件ヘルパー: `isKbmPlaystyle(inputMethod)` / `playsJavaRsgOrRanked(versions, categories)` / `hasBastionVersions(versions)` / `hidesSearchCraft(searchCraft)`（`searchCraft === "does_not"`。SCタブ非表示・ゲーム言語行の表示条件で共用）
+- ラベル解決: `categoryLabel(t, value)` / `playstyleOptionLabel(t, options, value)`（編集フォーム・プロフィール表示の両方で共用）
 - バリデーション: `validatePlaystyle(input)`（既知キーのみ・重複除去・定義順正規化・`mainVersion`/`mainCategory` が選択済み集合に含まれるか検証・enum検証・自由入力2欄はtrim+最大100文字+空文字→null。条件外項目の値も受理する＝データ保持方針。違反時は `errorKey` を返す）
 
 ### 編集ページ: `/me/playstyle`

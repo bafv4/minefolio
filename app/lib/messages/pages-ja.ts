@@ -358,7 +358,7 @@ export const PAGES_JA = {
     profileActive: "アクティブプロフィール数（7日）",
     sectionProfiles: "プロフィール",
     sectionRecentlyUpdated: "最近の更新",
-    sectionPopular: "注目（直近7日）",
+    sectionPopular: "注目（直近{days}日）",
     sectionPaces: "ペース",
     livePacesTitle: "ライブ",
     pastPacesTitle: "過去のペース",
@@ -554,7 +554,7 @@ export const PAGES_JA = {
     // 選択肢の下段に出す「何を基準に並ぶか」の説明（ContentSortSelect の descriptions に渡す）
     likesDesc: "総いいね数",
     viewsDesc: "累計閲覧数",
-    popularDesc: "直近7日でよく見られた順",
+    popularDesc: "直近{days}日でよく見られた順",
   },
   keybindings: {
     remapsHeading: "リマップ",
@@ -2160,8 +2160,8 @@ export const PAGES_JA = {
     noGuides: "公開されているガイドはまだありません",
     /** 人気順を選んでも page_view_stats がまだ空のとき（cron 未稼働・集計前）の注記 */
     popularPending: "閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています",
-    /** 一覧カードに出す直近7日のページビュー数の説明（人気順のときだけ表示） */
-    pageViews7d: "直近7日の閲覧数",
+    /** 一覧カードに出す直近{days}日のページビュー数の説明（人気順のときだけ表示） */
+    pageViews7d: "直近{days}日の閲覧数",
     searchPlaceholder: "タイトルや概要で検索...",
     tagAll: "すべて",
     tabGuides: "ガイド",
