@@ -16,14 +16,20 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 #### サーバーサイドで取得（loader）
 
+「プロフィール」「ガイド」の各セクションは、**更新順**と**よく見られている／読まれている順（直近7日PV順）**の2段構成。それぞれ独立クエリで最大4件ずつ取得する。
+
 | データ | ソース | 条件 |
 |--------|--------|------|
 | 最近更新されたプロフィール | `users` テーブル | `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
-| 人気のガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`guideListOrderBy("popular")`（直近7日のページビュー → いいね数 → `updatedAt`）降順、最大4件 |
+| よく見られているプロフィール | `page_view_stats` テーブル + `users` JOIN | `targetType = "profile"`、対象ユーザーが `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
+| 最近更新されたガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
+| よく読まれているガイド | `page_view_stats` テーブル + `guides` + `users` JOIN | `targetType = "guide"`、`isPublished = true` かつ著者が `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
 | 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
 | アクティブプロフィール数 | `users` テーブル | 上記 + `updatedAt` が1週間以内 |
 
-「人気のガイド」見出しの下には、並びの基準を示すサブテキストを常時表示する。`hasPageViewStats(db, "guide")`（`app/lib/page-view-stats.server.ts`）で `page_view_stats` に1件でもデータがあるかを判定し、集計済みなら「直近7日でよく読まれたガイド」（`home.sectionGuidesHint`）、未集計（cron 未稼働・集計前）なら「閲覧データを収集中（現在はいいね・更新順）」（`home.sectionGuidesHintFallback`）に切り替える。/guides 一覧の `popularPending` 注記と同じ考え方（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
+「よく見られている」「よく読まれている」は、`guideListOrderBy("popular")` のような相関サブクエリ＋フォールバックではなく、`page_view_stats` のスナップショット行を起点に対象テーブルへ `innerJoin` する（`app/lib/schema.ts` の `pageViewStats`）。この形なら PV スナップショットが1件も無い環境（cron `update-page-views` 未稼働）では**結果が自然に0件**になるため、UI側は件数だけで「PV欄を出すか」を判定でき、集計未稼働を示す注記は不要（要件どおり注記は出さない）。/guides 一覧の「人気順」（`guideListOrderBy("popular")`。相関サブクエリ＋いいね数・更新日時へのフォールバック）とは実装方針が異なる点に注意（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
+
+UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`）」→ 水平線 → 「PV順（`home.sectionProfilesPopular` / `home.sectionGuidesPopular`）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
 
 #### クライアントサイドで遅延取得（/api/home-feed）
 

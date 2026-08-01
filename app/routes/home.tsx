@@ -6,19 +6,18 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides } from "@/lib/schema";
+import { users, guides, pageViewStats } from "@/lib/schema";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
-import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
-import { hasPageViewStats } from "@/lib/page-view-stats.server";
+import { guideLikeCountSql } from "@/lib/likes.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
 import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
-import { GuideCardGrid, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
+import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
@@ -111,67 +110,116 @@ export async function loader({ request }: Route.LoaderArgs) {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const [recentlyUpdatedUsers, popularGuides, hasGuidePageViewStats, [profileCounts]] =
-    await Promise.all([
-      // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
-      db.query.users.findMany({
-        where: and(
+  // ガイド一覧の select 列（更新順・PV順で共通）
+  const guideListColumns = {
+    id: guides.id,
+    slug: guides.slug,
+    title: guides.title,
+    summary: guides.summary,
+    tags: guides.tags,
+    coverImageUrl: guides.coverImageUrl,
+    viewCount: guides.viewCount,
+    likeCount: guideLikeCountSql(),
+    updatedAt: guides.updatedAt,
+    authorSlug: users.slug,
+    authorDisplayName: users.displayName,
+    authorDisplayNameAlphabet: users.displayNameAlphabet,
+    authorMcid: users.mcid,
+  };
+
+  const [
+    recentlyUpdatedUsers,
+    popularUsers,
+    recentlyUpdatedGuides,
+    popularGuides,
+    [profileCounts],
+  ] = await Promise.all([
+    // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
+    db.query.users.findMany({
+      where: and(
+        eq(users.profileVisibility, "public"),
+        excludeViewersCondition,
+      ),
+      columns: {
+        mcid: true,
+        uuid: true,
+        slug: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        pronouns: true,
+        role: true,
+        mainEdition: true,
+        mainPlatform: true,
+        inputMethodBadge: true,
+        updatedAt: true,
+        shortBio: true,
+        customSkinUrl: true,
+      },
+      orderBy: [desc(users.updatedAt)],
+      limit: 4,
+    }),
+    // よく見られているプロフィール（直近7日PV順、最新4件）。page_view_stats のスナップショット行を
+    // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）
+    db
+      .select({
+        mcid: users.mcid,
+        uuid: users.uuid,
+        slug: users.slug,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        pronouns: users.pronouns,
+        role: users.role,
+        mainEdition: users.mainEdition,
+        mainPlatform: users.mainPlatform,
+        inputMethodBadge: users.inputMethodBadge,
+        updatedAt: users.updatedAt,
+        shortBio: users.shortBio,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(pageViewStats)
+      .innerJoin(users, eq(pageViewStats.targetId, users.id))
+      .where(
+        and(
+          eq(pageViewStats.targetType, "profile"),
           eq(users.profileVisibility, "public"),
           excludeViewersCondition,
         ),
-        columns: {
-          mcid: true,
-          uuid: true,
-          slug: true,
-          displayName: true,
-          displayNameAlphabet: true,
-          pronouns: true,
-          role: true,
-          mainEdition: true,
-          mainPlatform: true,
-          inputMethodBadge: true,
-          updatedAt: true,
-          shortBio: true,
-          customSkinUrl: true,
-        },
-        orderBy: [desc(users.updatedAt)],
-        limit: 4,
-      }),
-      // 人気のガイド（公開済み、直近7日PV順、最新4件）
-      db
-        .select({
-          id: guides.id,
-          slug: guides.slug,
-          title: guides.title,
-          summary: guides.summary,
-          tags: guides.tags,
-          coverImageUrl: guides.coverImageUrl,
-          viewCount: guides.viewCount,
-          likeCount: guideLikeCountSql(),
-          updatedAt: guides.updatedAt,
-          authorSlug: users.slug,
-          authorDisplayName: users.displayName,
-          authorDisplayNameAlphabet: users.displayNameAlphabet,
-          authorMcid: users.mcid,
-        })
-        .from(guides)
-        .innerJoin(users, eq(guides.authorId, users.id))
-        // 非公開・限定公開の著者のガイドはホームの人気一覧（discovery）に出さない
-        .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-        .orderBy(...guideListOrderBy("popular"))
-        .limit(4),
-      // 人気のガイドの基準（直近7日PV）が集計済みか。cron未稼働の環境ではPVが全件0のため
-      // いいね数→更新日時にフォールバックする（guideListOrderByのpopular参照）。
-      // UI側で「集計準備中」の注記を出し分けるために使う
-      hasPageViewStats(db, "guide"),
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
-        })
-        .from(users)
-        .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
-    ]);
+      )
+      .orderBy(desc(pageViewStats.pageviews))
+      .limit(4),
+    // 最近更新されたガイド（公開済み、更新日時順、最新4件）
+    db
+      .select(guideListColumns)
+      .from(guides)
+      .innerJoin(users, eq(guides.authorId, users.id))
+      // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない
+      .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
+      .orderBy(desc(guides.updatedAt))
+      .limit(4),
+    // よく読まれているガイド（直近7日PV順、最新4件）。プロフィールと同様に page_view_stats
+    // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる
+    db
+      .select(guideListColumns)
+      .from(pageViewStats)
+      .innerJoin(guides, eq(pageViewStats.targetId, guides.id))
+      .innerJoin(users, eq(guides.authorId, users.id))
+      .where(
+        and(
+          eq(pageViewStats.targetType, "guide"),
+          eq(guides.isPublished, true),
+          eq(users.profileVisibility, "public"),
+        ),
+      )
+      .orderBy(desc(pageViewStats.pageviews))
+      .limit(4),
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
+      })
+      .from(users)
+      .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
+  ]);
   const totalPublicProfiles = profileCounts?.total ?? 0;
   const activePublicProfiles = profileCounts?.active ?? 0;
 
@@ -186,8 +234,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
+    popularUsers,
+    recentlyUpdatedGuides,
     popularGuides,
-    hasGuidePageViewStats,
     totalPublicProfiles,
     activePublicProfiles,
   };
@@ -362,8 +411,9 @@ export default function HomePage() {
     mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
     recentlyUpdatedUsers,
+    popularUsers,
+    recentlyUpdatedGuides,
     popularGuides,
-    hasGuidePageViewStats,
     totalPublicProfiles,
     activePublicProfiles,
   } =
@@ -546,6 +596,28 @@ export default function HomePage() {
     [mcidToSkinUrl, feed.mcidToSkinUrl]
   );
 
+  // ガイド一覧行（更新順・PV順で共通の select 形）を GuideCardGrid 用の型へ変換
+  const toGuideItem = useCallback(
+    (g: (typeof recentlyUpdatedGuides)[number]): GuideItemWithAuthorSlug => ({
+      ...g,
+      likeCount: Number(g.likeCount),
+      authorName:
+        pickDisplayName(
+          { displayName: g.authorDisplayName, displayNameAlphabet: g.authorDisplayNameAlphabet },
+          locale,
+        ) || g.authorMcid || g.authorSlug,
+      _authorSlug: g.authorSlug,
+    }),
+    [locale]
+  );
+  const guideLinkFn = useCallback(
+    (guide: GuideItem) => {
+      const item = guide as GuideItemWithAuthorSlug;
+      return `/guides/${item._authorSlug}/${guide.slug}`;
+    },
+    []
+  );
+
   return (
     <div className="relative flex-1 space-y-7 sm:space-y-8">
       <div
@@ -620,11 +692,29 @@ export default function HomePage() {
           </div>
         </div>
         {recentlyUpdatedUsers.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {recentlyUpdatedUsers.map((user) => (
-                <ProfileFeedCard key={user.slug} player={user} />
-              ))}
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">{t("home.sectionRecentlyUpdated")}</p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {recentlyUpdatedUsers.map((user) => (
+                  <ProfileFeedCard key={user.slug} player={user} />
+                ))}
+              </div>
             </div>
+            {popularUsers.length > 0 && (
+              <>
+                <div className="border-t border-border/70" />
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-muted-foreground">{t("home.sectionProfilesPopular")}</p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {popularUsers.map((user) => (
+                      <ProfileFeedCard key={user.slug} player={user} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
             <Users className="mx-auto mb-2 h-12 w-12 opacity-30" />
@@ -633,7 +723,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {popularGuides.length > 0 && (
+      {(recentlyUpdatedGuides.length > 0 || popularGuides.length > 0) && (
         <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -642,38 +732,39 @@ export default function HomePage() {
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.guideFeedLabel")}</p>
               <h2 className="text-xl font-bold">{t("home.sectionGuides")}</h2>
-              <p className="text-sm text-muted-foreground">
-                {hasGuidePageViewStats
-                  ? t("home.sectionGuidesHint")
-                  : t("home.sectionGuidesHintFallback")}
-              </p>
             </div>
             <Button variant="ghost" size="sm" asChild className="ml-auto">
-              <Link to="/guides?sort=popular">
+              <Link to="/guides">
                 {t("home.viewAll")}
                 <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
             </Button>
           </div>
-          <GuideCardGrid
-            guides={popularGuides.map(
-              (g): GuideItemWithAuthorSlug => ({
-                ...g,
-                likeCount: Number(g.likeCount),
-                authorName:
-                  pickDisplayName(
-                    { displayName: g.authorDisplayName, displayNameAlphabet: g.authorDisplayNameAlphabet },
-                    locale,
-                  ) || g.authorMcid || g.authorSlug,
-                _authorSlug: g.authorSlug,
-              }),
+          <div className="space-y-5">
+            {recentlyUpdatedGuides.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">{t("home.sectionRecentlyUpdated")}</p>
+                <GuideCardGrid
+                  guides={recentlyUpdatedGuides.map(toGuideItem)}
+                  linkFn={guideLinkFn}
+                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                />
+              </div>
             )}
-            linkFn={(guide) => {
-              const item = guide as GuideItemWithAuthorSlug;
-              return `/guides/${item._authorSlug}/${guide.slug}`;
-            }}
-            gridCols="md:grid-cols-2 lg:grid-cols-4"
-          />
+            {recentlyUpdatedGuides.length > 0 && popularGuides.length > 0 && (
+              <div className="border-t border-border/70" />
+            )}
+            {popularGuides.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">{t("home.sectionGuidesPopular")}</p>
+                <GuideCardGrid
+                  guides={popularGuides.map(toGuideItem)}
+                  linkFn={guideLinkFn}
+                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                />
+              </div>
+            )}
+          </div>
         </section>
       )}
 
