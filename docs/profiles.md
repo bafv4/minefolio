@@ -430,6 +430,12 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ## プロフィール表示ページのレイアウト
 
+### キャッシュ方針
+
+`app/routes/player/profile.tsx` は `headers()` export で `Cache-Control: private, no-store` を返す。isOwner・プリセット選択・絵文字リアクションなど閲覧者依存のデータを含むため、ブラウザ/CDN にキャッシュさせない。React Router のシングルフェッチはこの `headers()` を `.data` サブリクエスト（クライアント遷移時の JSON 取得）にも適用する。
+
+これが無いと、`ProfileFeedCard` 等の `prefetch="intent"` Link がホバー時に `/player/:slug.data` を `<link rel="prefetch">` で先読みし、その応答がブラウザの HTTP キャッシュに乗ってしまう。結果として「リアクション後に別ページへ移動し、ホームのカード等からプレフェッチ経由で再訪すると、反応前の古い状態が一瞬〜継続的に表示される」不具合になる（ハードリロードはブラウザキャッシュを無視するため直る＝原因の特定に使えた症状）。
+
 ### スキン表示
 
 `/player/:slug` ではスキン全身表示を **インタラクティブモード**（`interactive` + `showInteractiveHint`）で描画する。サイズはレスポンシブ：

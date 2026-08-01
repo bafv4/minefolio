@@ -279,6 +279,16 @@ const BioMarkdown = lazy(() =>
     })),
 );
 
+// isOwner・プリセット選択・絵文字リアクションなど閲覧者依存のデータを含むため、
+// ブラウザ/CDN にキャッシュさせない（React Router のシングルフェッチは `.data` サブ
+// リクエストにもこの headers() を適用する）。ProfileFeedCard 等の `prefetch="intent"`
+// Link がホバー時に `.data` を先読みするが、これがキャッシュされると「リアクション後に
+// 別ページへ行き、ホームのカードから再訪すると反応前の古い状態が表示される」不具合になる
+// （ハードリロードはキャッシュを無視するため直る＝症状と一致）。
+export function headers(_: Route.HeadersArgs) {
+  return { "Cache-Control": "private, no-store" };
+}
+
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
 // プリセット切替オーバーレイの誤表示を防ぐ）。パス変更・preset 切替などは通常通り。
