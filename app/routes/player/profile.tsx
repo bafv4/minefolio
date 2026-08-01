@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import {
   ViewToggle,
   GuideCardGrid,
@@ -32,8 +32,8 @@ import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbod
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { format, formatDistanceToNow } from "date-fns";
+import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -45,7 +45,12 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
-import { parseRtaStartedYearMonth, rtaCareerElapsed } from "@/lib/rta-career";
+import {
+  hasRtaCareerRemainder,
+  rtaCareerExactLabel,
+  rtaCareerLabel,
+  rtaCareerView,
+} from "@/lib/rta-career";
 import { safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import { YouTubeEmbed } from "@/components/youtube-embed";
@@ -200,6 +205,7 @@ import {
   Maximize2,
   Languages,
   Pin,
+  TriangleAlert,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -214,9 +220,13 @@ import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cach
 import {
   calculateCm360,
   calculateCursorSpeed,
+  getWindowsMultiplierOrNull,
+  isValidSensitivity,
   toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
 } from "@/lib/mouse-settings";
+import { HintTip } from "@/components/hint-tip";
+import { SensitivityWarning } from "@/components/sensitivity-warning";
 
 // bio の markdown 描画（react-markdown 一式）は Bio カード表示時にだけロードする。
 // チャンク取得に失敗した場合（再デプロイ後の旧タブ等）はページ全体をエラーに
@@ -647,14 +657,10 @@ export default function PlayerProfilePage() {
 
   // RTA歴（経過期間 + 開始年月）。未回答・不正値のときは表示しない
   // 基準時刻は loader の now（SSRとハイドレーションで計算結果を一致させる）
-  const rtaCareer = useMemo(() => {
-    const value = player.rtaStartedYearMonth;
-    if (!value) return null;
-    const elapsed = rtaCareerElapsed(value, new Date(now));
-    const started = parseRtaStartedYearMonth(value);
-    if (!elapsed || !started) return null;
-    return { ...elapsed, start: `${started.year}/${started.month}` };
-  }, [player.rtaStartedYearMonth, now]);
+  const rtaCareer = useMemo(
+    () => rtaCareerView(player.rtaStartedYearMonth, locale, new Date(now)),
+    [player.rtaStartedYearMonth, locale, now],
+  );
 
   // キーボードレイアウト判定
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -1017,26 +1023,32 @@ export default function PlayerProfilePage() {
                       </span>
                     )}
                     {player.pronouns && <span>{player.pronouns}</span>}
-                    {rtaCareer && (
-                      <span className="flex items-center gap-1">
-                        <History className="h-4 w-4" />
-                        {rtaCareer.years >= 1
-                          ? t("playerProfile.rtaCareerYears", {
-                              years: rtaCareer.years,
-                              start: rtaCareer.start,
-                            })
-                          : t("playerProfile.rtaCareerMonths", {
-                              months: Math.max(rtaCareer.totalMonths, 1),
-                              start: rtaCareer.start,
-                            })}
-                      </span>
-                    )}
+                    {rtaCareer &&
+                      // 年表示は端数月を切り捨てるので、その場合だけヒントで正確な経過を補う
+                      (hasRtaCareerRemainder(rtaCareer) ? (
+                        <HintTip
+                          message={rtaCareerExactLabel(t, rtaCareer)}
+                          className="text-sm"
+                        >
+                          <History className="h-4 w-4" aria-hidden />
+                          <span className="underline decoration-dotted underline-offset-4">
+                            {rtaCareerLabel(t, rtaCareer)}
+                          </span>
+                        </HintTip>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <History className="h-4 w-4" aria-hidden />
+                          {rtaCareerLabel(t, rtaCareer)}
+                        </span>
+                      ))}
                     <span className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      {new Date(player.updatedAt).toLocaleDateString("ja-JP", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
+                      <Calendar className="h-4 w-4" aria-hidden />
+                      {t("playerProfile.lastUpdated", {
+                        date: format(
+                          new Date(player.updatedAt),
+                          dateFormatPattern(locale),
+                          { locale: dateFnsLocale(locale) },
+                        ),
                       })}
                     </span>
                   </div>
@@ -1493,8 +1505,7 @@ export default function PlayerProfilePage() {
                         ) : player.playerConfig.windowsSpeed != null ? (
                           <DeviceRow
                             label={t("playerProfile.winSens")}
-                            value={player.playerConfig.windowsSpeed.toString()}
-                            unit={`(x${WINDOWS_POINTER_MULTIPLIERS[player.playerConfig.windowsSpeed]?.toFixed(3) ?? "1.000"})`}
+                            value={<WinSensValue windowsSpeed={player.playerConfig.windowsSpeed} />}
                           />
                         ) : (
                           <DeviceRow
@@ -1509,14 +1520,24 @@ export default function PlayerProfilePage() {
                             value={player.playerConfig.mouseAcceleration ? t("common.on") : t("common.off")}
                           />
                         )}
-                        {/* ゲーム内感度 */}
-                        {player.playerConfig.gameSensitivity != null && (
-                          <DeviceRow
-                            label={t("playerProfile.inGameSensitivity")}
-                            value={String(toSensitivityPercent(player.playerConfig.gameSensitivity))}
-                            unit="%"
-                          />
-                        )}
+                        {/* ゲーム内感度（有効範囲外は一覧と同じく警告付きで出す） */}
+                        {player.playerConfig.gameSensitivity != null &&
+                          (isValidSensitivity(player.playerConfig.gameSensitivity) ? (
+                            <DeviceRow
+                              label={t("playerProfile.inGameSensitivity")}
+                              value={String(toSensitivityPercent(player.playerConfig.gameSensitivity))}
+                              unit="%"
+                            />
+                          ) : (
+                            <DeviceRow
+                              label={t("playerProfile.inGameSensitivity")}
+                              value={
+                                <SensitivityWarning
+                                  percent={toSensitivityPercent(player.playerConfig.gameSensitivity)}
+                                />
+                              }
+                            />
+                          ))}
                         {/* Raw Input */}
                         {player.playerConfig.rawInput != null && (
                           <DeviceRow
@@ -1524,37 +1545,16 @@ export default function PlayerProfilePage() {
                             value={player.playerConfig.rawInput ? t("common.on") : t("common.off")}
                           />
                         )}
-                        {/* 振り向き */}
-                        {(() => {
-                          const cm360 = calculateCm360(
-                            player.playerConfig.mouseDpi,
-                            player.playerConfig.gameSensitivity,
-                            player.playerConfig.rawInput,
-                            player.playerConfig.windowsSpeed,
-                            player.playerConfig.windowsSpeedMultiplier
-                          );
-                          return cm360 != null ? (
-                            <DeviceRow
-                            label={t("playerProfile.turnDistance")}
-                              value={cm360.toFixed(2)}
-                              unit="cm"
-                            />
-                          ) : null;
-                        })()}
-                        {/* カーソル速度 */}
-                        {(() => {
-                          const cursorSpeed = calculateCursorSpeed(
-                            player.playerConfig.mouseDpi,
-                            player.playerConfig.windowsSpeed,
-                            player.playerConfig.windowsSpeedMultiplier
-                          );
-                          return cursorSpeed != null ? (
-                            <DeviceRow
-                              label={t("playerProfile.cursorSpeed")}
-                              value={cursorSpeed.toString()}
-                            />
-                          ) : null;
-                        })()}
+                        {/* 振り向き（計算できなければ行を消さず「-」+ 理由） */}
+                        <DeviceRow
+                          label={t("playerProfile.turnDistance")}
+                          value={<TurnDistanceValue config={player.playerConfig} />}
+                        />
+                        {/* カーソル速度（同上） */}
+                        <DeviceRow
+                          label={t("playerProfile.cursorSpeed")}
+                          value={<CursorSpeedValue config={player.playerConfig} />}
+                        />
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground py-2">
@@ -2245,7 +2245,7 @@ function SocialLinkRichCard({
   );
 }
 
-function DeviceRow({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function DeviceRow({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
   return (
     <div className="flex justify-between items-center py-2.5">
       <span className="text-sm">{label}</span>
@@ -2254,6 +2254,128 @@ function DeviceRow({ label, value, unit }: { label: string; value: string; unit?
         {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
     </div>
+  );
+}
+
+/** 振り向き・カーソル速度の計算に使うマウス設定（playerConfig の部分集合） */
+type MouseSettingsSubset = {
+  mouseDpi?: number | null;
+  gameSensitivity?: number | null;
+  rawInput?: boolean | null;
+  windowsSpeed?: number | null;
+  windowsSpeedMultiplier?: number | null;
+};
+
+/** 値が出せないときの「-」。理由があればヒントで示す（/keybindings の一覧と同じ体験） */
+function MissingDeviceValue({ reasons }: { reasons: string[] }) {
+  if (reasons.length === 0) {
+    return <span className="text-muted-foreground/40">-</span>;
+  }
+  return (
+    <HintTip message={reasons.join(" / ")} className="text-muted-foreground/60">
+      <span className="underline decoration-dotted underline-offset-4">-</span>
+    </HintTip>
+  );
+}
+
+/** Windows 側の乗数が決まらない理由（未設定 / 係数不明）。決まるなら null */
+function windowsMultiplierReason(t: Translator, config: MouseSettingsSubset) {
+  if (getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) != null) {
+    return null;
+  }
+  return config.windowsSpeed == null && config.windowsSpeedMultiplier == null
+    ? t("keybindings.reasonNoWindowsSpeed")
+    : t("keybindings.reasonUnknownWindowsMultiplier");
+}
+
+/** 振り向き（cm/360）が計算できない理由を、欠けている入力から導出する */
+function cm360MissingReasons(t: Translator, config: MouseSettingsSubset): string[] {
+  const reasons: string[] = [];
+  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
+  if (config.gameSensitivity == null) {
+    reasons.push(t("keybindings.reasonNoSensitivity"));
+  } else if (!isValidSensitivity(config.gameSensitivity)) {
+    reasons.push(t("keybindings.reasonSensitivityOutOfRange"));
+  }
+  // Raw Input ON なら Windows 側は無視される。OFF（未設定含む）でも
+  // WinSens・カスタム係数がともに未設定なら x1.0 とみなして計算するため理由にならない。
+  if (
+    config.rawInput !== true &&
+    (config.windowsSpeed != null || config.windowsSpeedMultiplier != null)
+  ) {
+    const reason = windowsMultiplierReason(t, config);
+    if (reason) reasons.push(reason);
+  }
+  return reasons;
+}
+
+/** カーソル速度（実効 DPI）が計算できない理由を、欠けている入力から導出する */
+function cursorSpeedMissingReasons(t: Translator, config: MouseSettingsSubset): string[] {
+  const reasons: string[] = [];
+  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
+  const reason = windowsMultiplierReason(t, config);
+  if (reason) reasons.push(reason);
+  return reasons;
+}
+
+/** Win Sens の値。係数テーブル（1〜20）外は x1.000 と断定せず警告を出す */
+function WinSensValue({ windowsSpeed }: { windowsSpeed: number }) {
+  const t = useT();
+  const multiplier = WINDOWS_POINTER_MULTIPLIERS[windowsSpeed];
+  if (multiplier == null) {
+    return (
+      <HintTip message={t("keybindings.windowsSpeedUnknown", { value: windowsSpeed })}>
+        <span>{windowsSpeed}</span>
+        <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden />
+      </HintTip>
+    );
+  }
+  return (
+    <>
+      {windowsSpeed}
+      <span className="text-muted-foreground ml-1">(x{multiplier.toFixed(3)})</span>
+    </>
+  );
+}
+
+/** 振り向き（cm/360）。計算できないときは行を消さず「-」+ 理由を出す */
+function TurnDistanceValue({ config }: { config: MouseSettingsSubset }) {
+  const t = useT();
+  const cm360 = calculateCm360(
+    config.mouseDpi,
+    config.gameSensitivity,
+    config.rawInput,
+    config.windowsSpeed,
+    config.windowsSpeedMultiplier,
+  );
+  if (cm360 == null) {
+    return <MissingDeviceValue reasons={cm360MissingReasons(t, config)} />;
+  }
+  return (
+    <>
+      {cm360.toFixed(2)}
+      <span className="text-muted-foreground ml-1">cm</span>
+    </>
+  );
+}
+
+/** カーソル速度（実効 DPI）。計算できないときは行を消さず「-」+ 理由を出す */
+function CursorSpeedValue({ config }: { config: MouseSettingsSubset }) {
+  const t = useT();
+  const cursorSpeed = calculateCursorSpeed(
+    config.mouseDpi,
+    config.windowsSpeed,
+    config.windowsSpeedMultiplier,
+  );
+  if (cursorSpeed == null) {
+    return <MissingDeviceValue reasons={cursorSpeedMissingReasons(t, config)} />;
+  }
+  // 一覧の CursorSpeedCell と同じく実効 DPI であることを単位で示す
+  return (
+    <>
+      {cursorSpeed}
+      <span className="ml-1 text-muted-foreground">DPI</span>
+    </>
   );
 }
 

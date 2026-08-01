@@ -260,9 +260,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     sensitivityDistribution[range.label] = 0;
   }
 
+  // 非null・範囲外（表示200%超 / 0%未満）だった人数。UIで「除外」の注記に使う
+  // （未設定=nullは元々対象外なのでここには含めない）
+  let sensitivityExcludedCount = 0;
+
   for (const config of mouseConfigs) {
     // 範囲外（内部値 0..1 を外れる）感度は母数から除外する（キー配置統計と同じ方針）
-    if (!isValidSensitivity(config.gameSensitivity)) continue;
+    if (!isValidSensitivity(config.gameSensitivity)) {
+      if (config.gameSensitivity != null) sensitivityExcludedCount++;
+      continue;
+    }
     const sensitivityPercent = toSensitivityPercent(config.gameSensitivity);
     if (sensitivityPercent == null) continue;
 
@@ -332,6 +339,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       totalConfigs: mouseConfigs.length,
       dpiDistribution,
       sensitivityDistribution,
+      sensitivityExcludedCount,
       cm360Distribution,
       rawInput: { enabled: rawInputEnabled, disabled: rawInputDisabled },
       mouseAcceleration: {
@@ -458,9 +466,12 @@ function KeyToActionCard({
 function DistributionCard({
   title,
   distribution,
+  footnote,
 }: {
   title: string;
   distribution: Record<string, number>;
+  /** 分布の下に添える小さな補足（例: 範囲外として除外した件数の注記） */
+  footnote?: string;
 }) {
   const entries = Object.entries(distribution);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
@@ -483,6 +494,7 @@ function DistributionCard({
             maxCount={maxCount}
           />
         ))}
+        {footnote && <p className="pt-1 text-xs text-muted-foreground">{footnote}</p>}
       </CardContent>
     </Card>
   );
@@ -781,6 +793,13 @@ export default function StatsPage() {
             <DistributionCard
               title={t("stats.inGameSensitivity")}
               distribution={mouseStats.sensitivityDistribution}
+              footnote={
+                mouseStats.sensitivityExcludedCount > 0
+                  ? t("stats.sensitivityExcludedNote", {
+                      count: mouseStats.sensitivityExcludedCount,
+                    })
+                  : undefined
+              }
             />
             <DistributionCard
               title="cm/360"

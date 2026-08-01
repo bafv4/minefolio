@@ -11,6 +11,7 @@ import { excludeViewersCondition } from "@/lib/users-filter";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
+import { hasPageViewStats } from "@/lib/page-view-stats.server";
 import { type CachedPace } from "@/components/recent-pace-card";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
@@ -156,6 +157,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     .orderBy(...guideListOrderBy("popular"))
     .limit(4);
 
+  // 人気のガイドの基準（直近7日PV）が集計済みか。cron未稼働の環境ではPVが全件0のため
+  // いいね数→更新日時にフォールバックする（guideListOrderByのpopular参照）。
+  // UI側で「集計準備中」の注記を出し分けるために使う
+  const hasGuidePageViewStats = await hasPageViewStats(db, "guide");
+
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -181,6 +187,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     popularGuides,
+    hasGuidePageViewStats,
     totalPublicProfiles,
     activePublicProfiles,
   };
@@ -356,6 +363,7 @@ export default function HomePage() {
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     popularGuides,
+    hasGuidePageViewStats,
     totalPublicProfiles,
     activePublicProfiles,
   } =
@@ -634,6 +642,11 @@ export default function HomePage() {
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.guideFeedLabel")}</p>
               <h2 className="text-xl font-bold">{t("home.sectionGuides")}</h2>
+              <p className="text-sm text-muted-foreground">
+                {hasGuidePageViewStats
+                  ? t("home.sectionGuidesHint")
+                  : t("home.sectionGuidesHintFallback")}
+              </p>
             </div>
             <Button variant="ghost" size="sm" asChild className="ml-auto">
               <Link to="/guides?sort=popular">

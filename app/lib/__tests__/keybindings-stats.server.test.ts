@@ -35,7 +35,7 @@ describe("loadKeybindingsStats - 感度統計（*200スケール）", () => {
     expect(stats.sensitivityStats.totalCount).toBe(1);
   });
 
-  it("内部1.5（表示300%相当、範囲外）は分布・平均の母数から除外される", async () => {
+  it("内部1.5（表示300%相当、範囲外）は分布・平均の母数から除外され、excludedCount に数えられる", async () => {
     const db = await createTestDb();
     const user = await seedUser(db, { slug: "runner" });
     await seedPlayerConfig(db, user.id, { gameSensitivity: 1.5 });
@@ -44,6 +44,7 @@ describe("loadKeybindingsStats - 感度統計（*200スケール）", () => {
 
     expect(stats.sensitivityStats.totalCount).toBe(0);
     expect(stats.sensitivityStats.average).toBeNull();
+    expect(stats.sensitivityStats.excludedCount).toBe(1);
     for (const range of stats.sensitivityStats.ranges) {
       expect(range.count).toBe(0);
     }
@@ -79,5 +80,19 @@ describe("loadKeybindingsStats - 感度統計（*200スケール）", () => {
     const rangeSum = stats.sensitivityStats.ranges.reduce((sum, r) => sum + r.count, 0);
     expect(rangeSum).toBe(validSensitivities.length);
     expect(stats.sensitivityStats.totalCount).toBe(validSensitivities.length);
+    expect(stats.sensitivityStats.excludedCount).toBe(1);
+  });
+
+  it("感度が未設定の走者は除外数に数えない（母数にも除外数にも入らない）", async () => {
+    const db = await createTestDb();
+    const withValue = await seedUser(db, { slug: "with-value" });
+    await seedPlayerConfig(db, withValue.id, { gameSensitivity: 0.5 });
+    const withoutValue = await seedUser(db, { slug: "without-value" });
+    await seedPlayerConfig(db, withoutValue.id, { gameSensitivity: null });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.sensitivityStats.totalCount).toBe(1);
+    expect(stats.sensitivityStats.excludedCount).toBe(0);
   });
 });

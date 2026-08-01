@@ -87,6 +87,12 @@ export function getWindowsMultiplier(
  * 計算式: 6096 / (DPI * 8 * (0.6 * sensitivity + 0.2)^3) / 2
  * Raw Input が ON のときは Windows ポインター速度を無視
  * ゲーム内感度が有効範囲（内部値 0..1）外なら計算しない
+ *
+ * Raw Input が OFF（未設定含む）のときの Windows 側の扱いは 2 通りに分ける:
+ * - WinSens もカスタム係数も**未設定** → 従来どおり 1.0 とみなして計算する
+ * - どちらかが**設定済みなのに係数が決まらない**（係数テーブル 1〜20 外の WinSens など）
+ *   → 不正値として計算しない（null）。x1.000 と断定すると Cursor Speed 列（同条件で「-」）と
+ *     食い違うため、振り向き側も計算不能に揃える
  */
 export function calculateCm360(
   dpi: number | null | undefined,
@@ -104,8 +110,15 @@ export function calculateCm360(
     return cm360Base;
   }
 
-  const winMultiplier = getWindowsMultiplier(windowsSpeed, windowsSpeedMultiplier);
-  return cm360Base / winMultiplier;
+  const winMultiplier = getWindowsMultiplierOrNull(windowsSpeed, windowsSpeedMultiplier);
+  if (winMultiplier != null) {
+    return cm360Base / winMultiplier;
+  }
+  // 未設定（両方 null）のみ 1.0 フォールバックを維持する
+  if (windowsSpeed == null && windowsSpeedMultiplier == null) {
+    return cm360Base;
+  }
+  return null;
 }
 
 /**

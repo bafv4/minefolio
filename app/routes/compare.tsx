@@ -15,6 +15,7 @@ import {
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
 import { toSensitivityPercent } from "@/lib/mouse-settings";
+import { rtaCareerLabel, rtaCareerView } from "@/lib/rta-career";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -145,6 +146,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   const url = new URL(request.url);
 
+  // RTA歴の経過計算の基準時刻（SSR とハイドレーションで結果を揃える）
+  const now = Date.now();
+
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
 
@@ -183,7 +187,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
 
     if (!player1Raw) {
-      return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
+      return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
     }
     const player1Data = applyMainPreset(player1Raw);
 
@@ -265,12 +269,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       player2: null,
       similarPlayers,
       appUrl,
+      now,
     };
   }
 
   // 両方指定されていない場合は選択画面のみ
   if (!p1 || !p2) {
-    return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl };
+    return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
   }
 
   // 両走者のデータを取得（slugで検索・メインプリセットのスナップショット優先）
@@ -316,13 +321,26 @@ export async function loader({ request }: Route.LoaderArgs) {
     player2: player2Data ?? null,
     similarPlayers: [],
     appUrl,
+    now,
   };
+}
+
+/**
+ * 比較ヘッダーに添える RTA歴（設定している走者のみ）。
+ * 文言はプロフィールと同じキーを共有し、密度に合わせて 1 行の小さめ表示にする。
+ */
+function RtaCareerLine({ value, now }: { value: string | null; now: number }) {
+  const t = useT();
+  const locale = useLocale();
+  const view = rtaCareerView(value, locale, new Date(now));
+  if (!view) return null;
+  return <p className="text-xs text-muted-foreground">{rtaCareerLabel(t, view)}</p>;
 }
 
 export default function ComparePage() {
   const t = useT();
   const locale = useLocale();
-  const { allPlayers, player1, player2, similarPlayers } = useLoaderData<typeof loader>();
+  const { allPlayers, player1, player2, similarPlayers, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search1, setSearch1] = useState("");
   const [search2, setSearch2] = useState("");
@@ -531,6 +549,7 @@ export default function ComparePage() {
                   <div>
                     <p className="font-bold">{getLocalizedDisplayName(player1, locale)}</p>
                     {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
+                    <RtaCareerLine value={player1.rtaStartedYearMonth} now={now} />
                   </div>
                 </div>
                 <div className="text-center px-6">
@@ -555,6 +574,7 @@ export default function ComparePage() {
                   <div>
                     <p className="font-bold">{getLocalizedDisplayName(player2, locale)}</p>
                     {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
+                    <RtaCareerLine value={player2.rtaStartedYearMonth} now={now} />
                   </div>
                 </div>
               </div>

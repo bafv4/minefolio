@@ -148,17 +148,18 @@
 
 型と選択肢とパースは `app/lib/content-sort.ts`（React 非依存。ローダー側の `guideListOrderBy` と定義を共有するため）、UI は `ContentSortSelect`（`app/components/content-sort-select.tsx`）。`?sort=` で指定し、既定（`new`）ではパラメータを削除してURLを綺麗に保つ。
 
-**選択肢は一覧ごとに異なる**ので `parseContentSort(value, allowed)` の `allowed` は必須にしている。省略可にすると、テンプレート一覧が `?sort=views` を受理して「UI は新着順なのに実際の順序が違う」状態になる。許可されていない値（廃止済みの旧 `?sort=recommended` を含む）は既定の `new` へ丸められるため、旧URLをブックマークしていてもエラーにはならず新着順で表示される。
+**選択肢は一覧ごとに異なる**ので `parseContentSort(value, allowed)` の `allowed` は必須にしている。省略可にすると、テンプレート一覧が `?sort=views` を受理して「UI は新着順なのに実際の順序が違う」状態になる。許可されていない値（廃止済みの旧 `?sort=recommended`、テンプレート一覧の旧 `?sort=popular` を含む）は既定の `new` へ丸められるため、旧URLをブックマークしていてもエラーにはならず新着順で表示される。
 
 | 一覧 | 選択肢（表示順） | 定数 |
 |---|---|---|
 | ガイド | 更新順 / いいね数順 / 閲覧数順 / 人気順 | `GUIDE_SORTS` |
-| テンプレート | 新着順 / 人気順 | `TEMPLATE_SORTS` |
+| テンプレート | 新着順 / いいね数順 | `TEMPLATE_SORTS` |
 
 - ラベルはリストで異なる: ガイドは `updatedAt` 基準で**更新順**、テンプレートは `createdAt` 基準で**新着順**
-- **並び替えは必ず SQL の `ORDER BY` で行う**。テンプレート一覧は `.limit(100)` が先に効くため、メモリ上で並べ替えると「新しい100件を人気順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない
+- **並び替えは必ず SQL の `ORDER BY` で行う**。テンプレート一覧は `.limit(100)` が先に効くため、メモリ上で並べ替えると「新しい100件をいいね数順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない
 - タイブレークを必ず入れる（初日は全件0いいね・0PVで、無いと順序が不定になりページングも壊れる）
 - **GETフォームには `sort` の hidden input が必要**（GETフォームはクエリを総入れ替えするため、無いと検索のたびにソートが解除される。`tag` / `lang` と同じ対処）
+- **選択肢の下段に「何を基準に並ぶか」の説明を表示**する（`ContentSortSelect` の `descriptions` プロパティ、翻訳キーは呼び出し側で指定）。同じ選択肢でも一覧によって基準の言い回しが変わりうるため（例: `likes` は両方とも「総いいね数」で共通だが、`popular` はガイド専用）、`content-sort.ts` にはキーを固定せず呼び出し側（`routes/guides/index.tsx` / `routes/guides/templates/index.tsx`）が `contentSort.likesDesc` 等を渡す。トリガー自体は常に1行ラベル（`SelectValue` に `children` で固定表示）のまま、開いたリストの各項目だけ2行になる
 
 ### ガイド一覧の並び順（`guideListOrderBy()`）
 
@@ -172,11 +173,12 @@
 | `popular` | 人気順（直近7日のページビュー） | `pageviews DESC, likeCount DESC, updatedAt DESC, id ASC` |
 
 - `popular` の `pageviews` は `guidePageViewsSql()`（`app/lib/page-view-stats.server.ts`）が返す `page_view_stats` の相関サブクエリ（likes と同じ「内側から `id` を消す」書き方を踏襲）。ページビュー集計がまだ無い・失敗している間は該当ガイドが全件0扱いになり、その場合は `likeCount → updatedAt` へ素直に落ちるので並びが破綻しない。集計の仕組み（Vercel Web Analytics・cron・テーブル定義）は [`docs/infrastructure.md`](./infrastructure.md#ページビュー集計vercel-web-analytics) を参照
+- `popular` を選んでいる間は、一覧カードに直近7日PV（`pageViews7d`、`TrendingUp` アイコン）を根拠数値として表示する（他の並びでは相関サブクエリを走らせないため表示しない）。`page_view_stats` がまだ1件も無い（cron 未稼働・集計前）環境では、並びが `likeCount → updatedAt` へフォールバックしている旨の注記（`guides.popularPending`）を一覧上部に出す。判定は `hasPageViewStats(db, "guide")`（`app/lib/page-view-stats.server.ts`）
 - テンプレート一覧のタイブレークは従来どおり `likeCount DESC, createdAt DESC, id ASC`
 
-### `popular` の意味はガイドとテンプレートで異なる（重要）
+### 廃止: テンプレートの「人気順」（v1.13.0）
 
-ガイドの `popular` は**直近7日のページビュー**基準、テンプレートの `popular` は**総いいね数**基準（従来の人気順のまま）。テンプレートには個別ページのページビューが無い（`/guides/templates/:id` は `page-view-paths.ts` の解釈対象外）ため、この差が生じる。ラベル（`contentSort.popular`）はどちらも「人気順」を共用する — 利用者から見て「よく見られている／支持されている」という意味は共通のため、あえてキーを分けていない。
+テンプレート一覧の `popular`（総いいね数基準）は廃止し、`likes`（いいね数順）に統一した。以前は「テンプレートには個別ページのページビューが無いため、`popular` ラベルのまま総いいね数で代替する」という設計だったが、ガイド一覧の `popular`（直近7日PV基準）とラベルは同じなのに基準が違うのは分かりにくいため、テンプレート側は実態どおり `likes`（いいね数順）で表示する。`TEMPLATE_SORTS` から `popular` を削除したため、廃止後に届く旧 `?sort=popular` は前述のとおり `new`（新着順）へフォールバックする。
 
 ### 廃止: おすすめ順（v1.11.0）
 

@@ -2,6 +2,7 @@
 // windowsSpeed / windowsSpeedMultiplier）の回帰テスト。
 // フォーム外からの POST（クライアントの number input の min/max をバイパスした場合）でも
 // 異常値が player_configs に書き込まれないことを実DBで検証する。
+// エラーは { error, field } を返す（field はクライアントが該当欄を強調・スクロールするのに使う）。
 //
 // セッションはモックし、ルート本体（プリセット前提条件・入力検証・DB書き込み）を実DBで検証する
 // （app/routes/api/__tests__/likes.test.ts と同じ方針）。
@@ -40,7 +41,9 @@ function makeRequest(formData: FormData): Request {
   });
 }
 
-async function callAction(formData: FormData): Promise<{ success?: boolean; error?: string }> {
+async function callAction(
+  formData: FormData,
+): Promise<{ success?: boolean; error?: string; field?: string }> {
   return action({ request: makeRequest(formData), params: {}, context: {} } as never) as never;
 }
 
@@ -106,7 +109,10 @@ describe("action - gameSensitivity の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { gameSensitivity: "1.005" }));
 
-    expect(res).toEqual({ error: "ゲーム内感度は 0〜200%（0.0〜1.0）の範囲で入力してください" });
+    expect(res).toEqual({
+      error: "ゲーム内感度は 0〜200%（0.0〜1.0）の範囲で入力してください",
+      field: "gameSensitivity",
+    });
     expect(await findConfig(user.id)).toBeUndefined();
   });
 
@@ -115,7 +121,10 @@ describe("action - gameSensitivity の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { gameSensitivity: "-0.1" }));
 
-    expect(res).toEqual({ error: "ゲーム内感度は 0〜200%（0.0〜1.0）の範囲で入力してください" });
+    expect(res).toEqual({
+      error: "ゲーム内感度は 0〜200%（0.0〜1.0）の範囲で入力してください",
+      field: "gameSensitivity",
+    });
   });
 
   it("境界値 0 と 1 は許可される", async () => {
@@ -137,7 +146,7 @@ describe("action - mouseDpi の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { mouseDpi: "-100" }));
 
-    expect(res).toEqual({ error: "DPI は正の整数で入力してください" });
+    expect(res).toEqual({ error: "DPI は正の整数で入力してください", field: "mouseDpi" });
   });
 
   it("数値でない文字列（parseInt が NaN を返す）は拒否する", async () => {
@@ -145,7 +154,7 @@ describe("action - mouseDpi の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { mouseDpi: "abc" }));
 
-    expect(res).toEqual({ error: "DPI は正の整数で入力してください" });
+    expect(res).toEqual({ error: "DPI は正の整数で入力してください", field: "mouseDpi" });
   });
 });
 
@@ -155,7 +164,10 @@ describe("action - windowsSpeed の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { windowsSpeed: "21" }));
 
-    expect(res).toEqual({ error: "Windows ポインター速度は 1〜20 で選択してください" });
+    expect(res).toEqual({
+      error: "Windows ポインター速度は 1〜20 で選択してください",
+      field: "windowsSpeed",
+    });
   });
 
   it("0は拒否する", async () => {
@@ -163,7 +175,10 @@ describe("action - windowsSpeed の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { windowsSpeed: "0" }));
 
-    expect(res).toEqual({ error: "Windows ポインター速度は 1〜20 で選択してください" });
+    expect(res).toEqual({
+      error: "Windows ポインター速度は 1〜20 で選択してください",
+      field: "windowsSpeed",
+    });
   });
 });
 
@@ -173,7 +188,10 @@ describe("action - windowsSpeedMultiplier の検証", () => {
 
     const res = await callAction(baseFormData(preset.id, { windowsSpeedMultiplier: "0" }));
 
-    expect(res).toEqual({ error: "カスタム係数は 0 より大きい数値で入力してください" });
+    expect(res).toEqual({
+      error: "カスタム係数は 0 より大きい数値で入力してください",
+      field: "windowsSpeedMultiplier",
+    });
   });
 
   it("正の値は許可される", async () => {

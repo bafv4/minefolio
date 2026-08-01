@@ -46,6 +46,23 @@ export function profilePageViewsSql(): SQL<number> {
   return sql<number>`coalesce((select pageviews from (select target_type, target_id, pageviews from ${pageViewStats}) where target_type = 'profile' and target_id = ${users.id}), 0)`;
 }
 
+/**
+ * 指定種別の PV スナップショットが 1 行でも存在するか。
+ * cron 未稼働（Analytics 未設定）の環境では人気順がフォールバック順に劣化するため、
+ * UI 側が「集計準備中」の注記を出す判定に使う（guides 一覧・ホーム）。
+ */
+export async function hasPageViewStats(
+  db: Database,
+  targetType: "profile" | "guide",
+): Promise<boolean> {
+  const [row] = await db
+    .select({ one: sql<number>`1` })
+    .from(pageViewStats)
+    .where(eq(pageViewStats.targetType, targetType))
+    .limit(1);
+  return row != null;
+}
+
 // ============================================
 // 同期（cron）
 // ============================================

@@ -19,6 +19,8 @@ import { generateSlug } from "@/lib/slug";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
+  rtaCareerExactLabel,
+  rtaCareerView,
   RTA_STARTED_MIN_YEAR,
 } from "@/lib/rta-career";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -67,10 +69,11 @@ import {
   Pin,
   ArrowUp,
   ArrowDown,
+  X,
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -651,7 +654,6 @@ export async function action({ request }: Route.ActionArgs) {
 
 // Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
 const RTA_STARTED_NONE = "none";
-const RTA_STARTED_MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
@@ -868,6 +870,7 @@ function VideoDialog({
 
 export default function EditProfilePage() {
   const t = useT();
+  const locale = useLocale();
   const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
@@ -894,14 +897,21 @@ export default function EditProfilePage() {
   const initialRtaStartedYear = initialRtaStarted ? String(initialRtaStarted.year) : "";
   const initialRtaStartedMonth = initialRtaStarted ? String(initialRtaStarted.month) : "";
 
-  // 開始年の選択肢（現在年 → 2009 の降順）
-  const rtaStartedYearOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    return Array.from(
-      { length: currentYear - RTA_STARTED_MIN_YEAR + 1 },
-      (_, i) => currentYear - i,
-    );
+  // 現在年月。未来の年月は保存できない（サーバー側でも弾く）ので、選択肢自体を出さない
+  const { currentYear, currentMonth } = useMemo(() => {
+    const today = new Date();
+    return { currentYear: today.getFullYear(), currentMonth: today.getMonth() + 1 };
   }, []);
+
+  // 開始年の選択肢（現在年 → 2009 の降順）
+  const rtaStartedYearOptions = useMemo(
+    () =>
+      Array.from(
+        { length: currentYear - RTA_STARTED_MIN_YEAR + 1 },
+        (_, i) => currentYear - i,
+      ),
+    [currentYear],
+  );
 
   // フォームの値をトラッキングして変更を検出
   const [formValues, setFormValues] = useState({
@@ -971,6 +981,64 @@ export default function EditProfilePage() {
   const handleInputChange = useCallback((field: keyof typeof formValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
   }, []);
+
+  // 開始月の選択肢。現在年を選んでいる間は未来の月を出さない
+  const rtaStartedMonthOptions = useMemo(() => {
+    const lastMonth =
+      formValues.rtaStartedYear === String(currentYear) ? currentMonth : 12;
+    return Array.from({ length: lastMonth }, (_, i) => i + 1);
+  }, [formValues.rtaStartedYear, currentYear, currentMonth]);
+
+  // 年・月は「両方設定」か「両方未設定」のみ有効なので、
+  // どちらかで「未設定」を選んだらもう片方も同時にクリアする
+  const clearRtaStarted = useCallback(() => {
+    setFormValues((prev) => ({ ...prev, rtaStartedYear: "", rtaStartedMonth: "" }));
+  }, []);
+
+  const handleRtaStartedYearChange = useCallback(
+    (value: string) => {
+      if (value === RTA_STARTED_NONE) {
+        clearRtaStarted();
+        return;
+      }
+      setFormValues((prev) => ({
+        ...prev,
+        rtaStartedYear: value,
+        // 現在年に変えた結果、選択済みの月が未来になるならその月は選べない
+        rtaStartedMonth:
+          value === String(currentYear) && Number(prev.rtaStartedMonth) > currentMonth
+            ? ""
+            : prev.rtaStartedMonth,
+      }));
+    },
+    [clearRtaStarted, currentYear, currentMonth],
+  );
+
+  const handleRtaStartedMonthChange = useCallback(
+    (value: string) => {
+      if (value === RTA_STARTED_NONE) {
+        clearRtaStarted();
+        return;
+      }
+      setFormValues((prev) => ({ ...prev, rtaStartedMonth: value }));
+    },
+    [clearRtaStarted],
+  );
+
+  // 片方だけ選択されている状態（保存できない）。セレクト直下にその場で出す
+  const isRtaStartedIncomplete =
+    Boolean(formValues.rtaStartedYear) !== Boolean(formValues.rtaStartedMonth);
+
+  // 両方選択済みなら、プロフィールに出る文言をそのままプレビューする
+  const { rtaStartedYear, rtaStartedMonth } = formValues;
+  const rtaCareerPreview = useMemo(() => {
+    if (!rtaStartedYear || !rtaStartedMonth) return null;
+    const view = rtaCareerView(
+      `${rtaStartedYear}-${rtaStartedMonth.padStart(2, "0")}`,
+      locale,
+    );
+    return view ? rtaCareerExactLabel(t, view) : null;
+  }, [rtaStartedYear, rtaStartedMonth, locale, t]);
 
   // フォームリセット
   const handleReset = useCallback(() => {
@@ -1536,53 +1604,75 @@ export default function EditProfilePage() {
 
             <div className="space-y-2">
               <Label htmlFor="rtaStartedYear">{t("meEdit.rtaStarted")}</Label>
-              <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
-                <Select
-                  value={formValues.rtaStartedYear}
-                  onValueChange={(value) =>
-                    handleInputChange("rtaStartedYear", value === RTA_STARTED_NONE ? "" : value)
-                  }
-                >
-                  <SelectTrigger id="rtaStartedYear" className="w-full">
-                    <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
-                    {rtaStartedYearOptions.map((year) => (
-                      <SelectItem key={year} value={String(year)}>
-                        {t("meEdit.rtaStartedYearOption", { year })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={formValues.rtaStartedMonth}
-                  onValueChange={(value) =>
-                    handleInputChange("rtaStartedMonth", value === RTA_STARTED_NONE ? "" : value)
-                  }
-                >
-                  {/* Label は年セレクトにのみ紐付くため、月側はアクセシブルネームを明示する */}
-                  <SelectTrigger
-                    id="rtaStartedMonth"
-                    className="w-full"
-                    aria-label={t("meEdit.rtaStartedMonthPlaceholder")}
+              <div className="flex items-center gap-2 sm:max-w-sm">
+                <div className="grid flex-1 grid-cols-2 gap-2">
+                  <Select
+                    value={formValues.rtaStartedYear}
+                    onValueChange={handleRtaStartedYearChange}
                   >
-                    <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
-                    {RTA_STARTED_MONTHS.map((month) => (
-                      <SelectItem key={month} value={String(month)}>
-                        {t("meEdit.rtaStartedMonthOption", { month })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    {/* Label は年セレクトに紐付くが、月と区別できるよう年側も明示する */}
+                    <SelectTrigger
+                      id="rtaStartedYear"
+                      className="w-full"
+                      aria-label={t("meEdit.rtaStartedYearAria")}
+                      aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedYear}
+                    >
+                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                      {rtaStartedYearOptions.map((year) => (
+                        <SelectItem key={year} value={String(year)}>
+                          {t("meEdit.rtaStartedYearOption", { year })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={formValues.rtaStartedMonth}
+                    onValueChange={handleRtaStartedMonthChange}
+                  >
+                    <SelectTrigger
+                      id="rtaStartedMonth"
+                      className="w-full"
+                      aria-label={t("meEdit.rtaStartedMonthAria")}
+                      aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedMonth}
+                    >
+                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
+                      {rtaStartedMonthOptions.map((month) => (
+                        <SelectItem key={month} value={String(month)}>
+                          {t("meEdit.rtaStartedMonthOption", { month })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(formValues.rtaStartedYear || formValues.rtaStartedMonth) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 shrink-0 text-muted-foreground"
+                    aria-label={t("meEdit.rtaStartedClear")}
+                    onClick={clearRtaStarted}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.rtaStartedHint")}
-              </p>
+              {isRtaStartedIncomplete ? (
+                <p className="text-xs text-destructive">
+                  {t("meEdit.rtaStartedBothOrNone")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {rtaCareerPreview ?? t("meEdit.rtaStartedHint")}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

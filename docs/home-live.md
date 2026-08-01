@@ -23,6 +23,8 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
 | アクティブプロフィール数 | `users` テーブル | 上記 + `updatedAt` が1週間以内 |
 
+「人気のガイド」見出しの下には、並びの基準を示すサブテキストを常時表示する。`hasPageViewStats(db, "guide")`（`app/lib/page-view-stats.server.ts`）で `page_view_stats` に1件でもデータがあるかを判定し、集計済みなら「直近7日でよく読まれたガイド」（`home.sectionGuidesHint`）、未集計（cron 未稼働・集計前）なら「閲覧データを収集中（現在はいいね・更新順）」（`home.sectionGuidesHintFallback`）に切り替える。/guides 一覧の `popularPending` 注記と同じ考え方（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
+
 #### クライアントサイドで遅延取得（/api/home-feed）
 
 | データ | キャッシュキー | CDNキャッシュ (s-maxage) | stale-while-revalidate |

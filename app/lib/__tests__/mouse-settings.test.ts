@@ -72,6 +72,21 @@ describe("calculateCm360", () => {
     const fallback = calculateCm360(800, 0.5, false, null, null);
     expect(fallback).toBe(base);
   });
+
+  it("rawInput=false + テーブル外の windowsSpeed（99）は計算しない（x1.000 と断定せず null）", () => {
+    expect(calculateCm360(800, 0.5, false, 99, null)).toBeNull();
+  });
+
+  it("rawInput=true ならテーブル外の windowsSpeed でも Windows 側を無視して計算する", () => {
+    const base = calculateCm360(800, 0.5, true, null);
+    expect(calculateCm360(800, 0.5, true, 99, null)).toBe(base);
+  });
+
+  it("テーブル外の windowsSpeed でもカスタム係数があればそれで計算する", () => {
+    const base = calculateCm360(800, 0.5, true, null);
+    const divided = calculateCm360(800, 0.5, false, 99, 2);
+    expect(divided).toBeCloseTo(base! / 2, 6);
+  });
 });
 
 describe("calculateCursorSpeed", () => {

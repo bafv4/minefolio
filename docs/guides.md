@@ -229,7 +229,10 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - **グリッド表示**: カード形式で表示。カバー画像がない場合はプレースホルダーを表示
 - **リスト表示**: リスト形式で表示。カバー画像を左端に表示
 - 表示切替が可能
-- **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」「いいね数順（総いいね数降順）」「閲覧数順（`guides.viewCount` 累計降順）」「人気順（直近7日のページビュー降順）」の4種を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、いずれも `updatedAt` → `id` でタイブレークする。人気順のページビューは Vercel Web Analytics を cron で集計した `page_view_stats` を参照し、未集計時はいいね数順へ自然に落ちる。検索フォームは hidden input で並び順を持ち越す。旧「おすすめ順」（`?sort=recommended`）は廃止済みで、更新順へフォールバックする。詳細は [`docs/likes.md`](./likes.md#並び替え)
+- **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」「いいね数順（総いいね数降順）」「閲覧数順（`guides.viewCount` 累計降順）」「人気順（直近7日のページビュー降順）」の4種を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、いずれも `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す。旧「おすすめ順」（`?sort=recommended`）は廃止済みで、更新順へフォールバックする。詳細は [`docs/likes.md`](./likes.md#並び替え)
+  - 選択肢を開くと、各項目の下段に「何を基準に並ぶか」の1行説明（例: いいね数順→「総いいね数」、人気順→「直近7日でよく見られた順」）が表示される（`ContentSortSelect` の `descriptions`）。トリガー自体は選択中の項目名のみの1行表示のまま
+  - 人気順のページビューは Vercel Web Analytics を cron で集計した `page_view_stats` を参照し、未集計時はいいね数順へ自然に落ちる。人気順を選んでいる間は、各カードに累計閲覧数の隣に直近7日PV（`TrendingUp` アイコン）を根拠数値として表示する。`page_view_stats` がまだ1件も無い（cron 未稼働・集計前）環境では、一覧上部に「閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています」の注記（`guides.popularPending`）を出す
+  - ツールバー（検索フォーム＋並び替え＋表示切替）は狭い画面では縦積みになる（`flex-col sm:flex-row`）。1行のままだと検索入力が潰れるため、テンプレート一覧と同じレイアウトに揃えている
 - **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
   - カード全体のクリックは**オーバーレイのリンク**（`absolute inset-0`）が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない
 

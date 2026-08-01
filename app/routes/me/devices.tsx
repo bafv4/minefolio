@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -234,23 +234,27 @@ export async function action({ request }: Route.ActionArgs) {
   const windowsSpeed = windowsSpeedStr ? parseInt(windowsSpeedStr) : null;
   const windowsSpeedMultiplier = windowsSpeedMultiplierStr ? parseFloat(windowsSpeedMultiplierStr) : null;
 
+  // エラーはどの欄が弾かれたかを field で返す（クライアントが該当欄を強調・スクロールする）
   if (gameSensitivity !== null && !isValidSensitivity(gameSensitivity)) {
-    return { error: t("meDevices.invalidSensitivity") };
+    return { error: t("meDevices.invalidSensitivity"), field: "gameSensitivity" as const };
   }
   if (mouseDpi !== null && (!Number.isInteger(mouseDpi) || mouseDpi <= 0)) {
-    return { error: t("meDevices.invalidDpi") };
+    return { error: t("meDevices.invalidDpi"), field: "mouseDpi" as const };
   }
   if (
     windowsSpeed !== null &&
     (!Number.isInteger(windowsSpeed) || windowsSpeed < 1 || windowsSpeed > 20)
   ) {
-    return { error: t("meDevices.invalidWindowsSpeed") };
+    return { error: t("meDevices.invalidWindowsSpeed"), field: "windowsSpeed" as const };
   }
   if (
     windowsSpeedMultiplier !== null &&
     (!Number.isFinite(windowsSpeedMultiplier) || windowsSpeedMultiplier <= 0)
   ) {
-    return { error: t("meDevices.invalidWindowsSpeedMultiplier") };
+    return {
+      error: t("meDevices.invalidWindowsSpeedMultiplier"),
+      field: "windowsSpeedMultiplier" as const,
+    };
   }
 
   // 入力方法の更新（users.inputMethod はプリセット非依存）
@@ -343,6 +347,68 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: true };
 }
 
+/**
+ * バリデーションエラーの対象欄。action の返り値（field）とクライアント側検証で共有する。
+ * 値は該当 Input の id と揃えている。
+ */
+export type DeviceFieldError =
+  | "gameSensitivity"
+  | "mouseDpi"
+  | "windowsSpeed"
+  | "windowsSpeedMultiplier";
+
+type FieldErrorState = { field: DeviceFieldError; message: string };
+
+/**
+ * 保存前のクライアント側検証。action と同じ条件・同じ文言で、
+ * 範囲外の値は送信せずその場でインライン表示する（サーバー側の検証は残す）。
+ */
+function validateMouseFields(
+  t: Translator,
+  values: {
+    mouseDpi: string;
+    gameSensitivity: string;
+    windowsSpeed: string;
+    windowsSpeedMultiplier: string;
+  },
+): FieldErrorState | null {
+  const gameSensitivity = values.gameSensitivity ? parseFloat(values.gameSensitivity) : null;
+  if (gameSensitivity !== null && !isValidSensitivity(gameSensitivity)) {
+    return { field: "gameSensitivity", message: t("meDevices.invalidSensitivity") };
+  }
+  const mouseDpi = values.mouseDpi ? parseInt(values.mouseDpi) : null;
+  if (mouseDpi !== null && (!Number.isInteger(mouseDpi) || mouseDpi <= 0)) {
+    return { field: "mouseDpi", message: t("meDevices.invalidDpi") };
+  }
+  const windowsSpeed = values.windowsSpeed ? parseInt(values.windowsSpeed) : null;
+  if (
+    windowsSpeed !== null &&
+    (!Number.isInteger(windowsSpeed) || windowsSpeed < 1 || windowsSpeed > 20)
+  ) {
+    return { field: "windowsSpeed", message: t("meDevices.invalidWindowsSpeed") };
+  }
+  const multiplier = values.windowsSpeedMultiplier
+    ? parseFloat(values.windowsSpeedMultiplier)
+    : null;
+  if (multiplier !== null && (!Number.isFinite(multiplier) || multiplier <= 0)) {
+    return {
+      field: "windowsSpeedMultiplier",
+      message: t("meDevices.invalidWindowsSpeedMultiplier"),
+    };
+  }
+  return null;
+}
+
+/** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
+function FieldErrorText({ id, message }: { id: string; message: string | null }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {message}
+    </p>
+  );
+}
+
 // コントローラー設定をパース
 function parseControllerSettings(json: string | null | undefined): ControllerSettings {
   if (!json) return DEFAULT_CONTROLLER_SETTINGS;
@@ -432,6 +498,24 @@ export default function DevicesPage() {
     initialFormValues.current = next;
   }, [buildFormValues]);
 
+  // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
+  const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
+  const fieldRefs = useRef<Partial<Record<DeviceFieldError, HTMLDivElement | null>>>({});
+  const errorFor = (field: DeviceFieldError) =>
+    fieldError?.field === field ? fieldError.message : null;
+
+  // エラー箇所を表示して該当欄までスクロールする（コントローラー表示中など、
+  // 対象欄が描画されていない場合はスクロールだけスキップする）
+  const showFieldError = useCallback((error: FieldErrorState) => {
+    setFieldError(error);
+    requestAnimationFrame(() => {
+      fieldRefs.current[error.field]?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    });
+  }, []);
+
   // コピー元プリセット選択ダイアログ
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
@@ -442,6 +526,14 @@ export default function DevicesPage() {
 
   // 入力変更ハンドラ
   const handleChange = useCallback(<K extends keyof typeof formValues>(field: K, value: typeof formValues[K]) => {
+    // 該当欄を編集したらインラインエラーを消す（感度は 0-1 / % のどちらの入力でも解消扱い）
+    setFieldError((prev) => {
+      if (!prev) return null;
+      const resolved =
+        prev.field === field ||
+        (prev.field === "gameSensitivity" && field === "gameSensitivityPercent");
+      return resolved ? null : prev;
+    });
     setFormValues((prev) => {
       const newValues = { ...prev, [field]: value };
 
@@ -469,6 +561,7 @@ export default function DevicesPage() {
   // フォームリセット
   const handleReset = useCallback(() => {
     setFormValues(initialFormValues.current);
+    setFieldError(null);
   }, []);
 
   // 保存処理
@@ -482,6 +575,15 @@ export default function DevicesPage() {
       fetcher.submit(formData, { method: "post" });
       return;
     }
+
+    // 範囲外の値は送信せず、その場で該当欄にインライン表示する（トーストは補助）
+    const validationError = validateMouseFields(t, formValues);
+    if (validationError) {
+      showFieldError(validationError);
+      toast.error(validationError.message);
+      return;
+    }
+    setFieldError(null);
 
     if (activePreset) {
       formData.set("presetId", activePreset.id);
@@ -511,7 +613,7 @@ export default function DevicesPage() {
       vibration: formValues.vibration,
     }));
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, activePreset, hasPresets]);
+  }, [fetcher, formValues, activePreset, hasPresets, t, showFieldError]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -579,10 +681,15 @@ export default function DevicesPage() {
     if ("success" in data && data.success) {
       toast.success(t("meDevices.saveSuccess"));
       initialFormValues.current = { ...formValues };
+      setFieldError(null);
     } else if ("error" in data) {
       toast.error(data.error);
+      // どの欄が弾かれたか分かるエラーはインライン表示＋該当欄へスクロール
+      if ("field" in data && data.field) {
+        showFieldError({ field: data.field, message: data.error });
+      }
     }
-  }, [data, formValues]);
+  }, [data, formValues, showFieldError]);
 
   return (
     <div className="space-y-6">
@@ -763,17 +870,32 @@ export default function DevicesPage() {
                   placeholder={t("meDevices.modelExampleMouse")}
                 />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.mouseDpi = el;
+                }}
+              >
                 <Label htmlFor="mouseDpi">DPI</Label>
                 <Input
                   id="mouseDpi"
                   type="number"
+                  min="1"
+                  step="1"
                   value={formValues.mouseDpi}
                   onChange={(e) => handleChange("mouseDpi", e.target.value)}
                   placeholder={t("meDevices.dpiExample")}
+                  aria-invalid={errorFor("mouseDpi") != null || undefined}
+                  aria-describedby={errorFor("mouseDpi") ? "mouseDpi-error" : undefined}
                 />
+                <FieldErrorText id="mouseDpi-error" message={errorFor("mouseDpi")} />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.gameSensitivity = el;
+                }}
+              >
                 <Label htmlFor="gameSensitivity">{t("meDevices.inGameSensitivity")}</Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
@@ -786,6 +908,10 @@ export default function DevicesPage() {
                       value={formValues.gameSensitivity}
                       onChange={(e) => handleChange("gameSensitivity", e.target.value)}
                       placeholder="0.50"
+                      aria-invalid={errorFor("gameSensitivity") != null || undefined}
+                      aria-describedby={
+                        errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                      }
                     />
                     <p className="text-xs text-muted-foreground mt-1">0.0~1.0</p>
                   </div>
@@ -801,20 +927,39 @@ export default function DevicesPage() {
                         onChange={(e) => handleChange("gameSensitivityPercent", e.target.value)}
                         placeholder="100"
                         className="pr-8"
+                        aria-invalid={errorFor("gameSensitivity") != null || undefined}
+                        aria-describedby={
+                          errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                        }
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">0~200%</p>
                   </div>
                 </div>
+                <FieldErrorText
+                  id="gameSensitivity-error"
+                  message={errorFor("gameSensitivity")}
+                />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.windowsSpeed = el;
+                }}
+              >
                 <Label htmlFor="windowsSpeed">{t("meDevices.windowsPointerSpeed")}</Label>
                 <Select
                   value={formValues.windowsSpeed}
                   onValueChange={(value) => handleChange("windowsSpeed", value)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger
+                    className="w-full"
+                    aria-invalid={errorFor("windowsSpeed") != null || undefined}
+                    aria-describedby={
+                      errorFor("windowsSpeed") ? "windowsSpeed-error" : undefined
+                    }
+                  >
                     <SelectValue placeholder={t("meDevices.select")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -825,8 +970,14 @@ export default function DevicesPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <FieldErrorText id="windowsSpeed-error" message={errorFor("windowsSpeed")} />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.windowsSpeedMultiplier = el;
+                }}
+              >
                 <Label htmlFor="windowsSpeedMultiplier">{t("meDevices.customMultiplier")}</Label>
                 <Input
                   id="windowsSpeedMultiplier"
@@ -836,6 +987,16 @@ export default function DevicesPage() {
                   value={formValues.windowsSpeedMultiplier}
                   onChange={(e) => handleChange("windowsSpeedMultiplier", e.target.value)}
                   placeholder={t("meDevices.customMultiplierPlaceholder")}
+                  aria-invalid={errorFor("windowsSpeedMultiplier") != null || undefined}
+                  aria-describedby={
+                    errorFor("windowsSpeedMultiplier")
+                      ? "windowsSpeedMultiplier-error"
+                      : undefined
+                  }
+                />
+                <FieldErrorText
+                  id="windowsSpeedMultiplier-error"
+                  message={errorFor("windowsSpeedMultiplier")}
                 />
                 <p className="text-xs text-muted-foreground">
                   {t("meDevices.customMultiplierHint")}

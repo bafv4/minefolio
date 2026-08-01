@@ -351,11 +351,23 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ### RTA歴
 
-`rtaStartedYearMonth` を登録している場合のみ、基本情報のメタ情報行（居住地・代名詞と同じ並び）に History アイコン付きで表示する。
+`rtaStartedYearMonth` を登録している場合のみ、基本情報のメタ情報行（居住地・代名詞と同じ並び）に History アイコン付きで表示する。文言の組み立ては `app/lib/rta-career.ts`（`rtaCareerView()` / `rtaCareerLabel()` / `rtaCareerExactLabel()`）に集約されており、プロフィール・比較ページ（[`docs/browse-compare.md`](./browse-compare.md#プレイヤー比較-compare)）の双方から共有する。
 
-- 1年以上: `RTA歴 {years}年（{開始年/月}〜）`（`playerProfile.rtaCareerYears`）。端数月は表示しない（6年2か月 → 「6年」）
-- 1年未満: `RTA歴 {months}か月（{開始年/月}〜）`（`playerProfile.rtaCareerMonths`）。今月開始（経過0か月）は「1か月」に切り上げて表示する
+- 開始年月の表示（`start`）はロケール依存: ja は `"2020/6"`、en は `"Jun 2020"`（`Intl.DateTimeFormat`、月だけタイムゾーンの影響を避けるため UTC 基準で整形）
+- 1年以上: `RTA歴 {years}年（{start}〜）`（`playerProfile.rtaCareerYears`、端数月は切り捨てて表示）。英語は単複で文言を分ける（`rtaCareerYears` / `rtaCareerYearsOne`）: `"Speedrunning for 6 years (since Jun 2020)"` / 1年なら `"Speedrunning for 1 year (since ...)"`
+  - **端数月がある場合**（`hasRtaCareerRemainder()`）は表示に下線を付け、`HintTip`（ホバー/フォーカス/タップ）で端数まで含めた正確な経過（`playerProfile.rtaCareerExact`、例: `"RTA歴 6年2か月（2020/6〜）"`）を補足する
+- 1年未満: `RTA歴 {months}か月（{start}〜）`（`playerProfile.rtaCareerMonths` / 単数は `rtaCareerMonthsOne`）
+- 開始月と同じ月（経過0か月）は「1か月未満」（`playerProfile.rtaCareerJustStarted`）と表示する。以前は「1か月」に切り上げていたが、実際の経過とずれるため文言を分けた
 - 経過期間は DB には保存せず、表示のたびに `app/lib/rta-career.ts` の `rtaCareerElapsed()` で開始年月と基準時刻から算出する（月単位、日は考慮しない）。基準時刻は loader が返す `now` を使い、SSR とハイドレーションで計算結果を一致させる
+- 更新日（`Calendar` アイコン）にも「最終更新」ラベルを付け（`playerProfile.lastUpdated`）、ロケールに応じた日付書式（`date-fns` の `format()` + `dateFormatPattern(locale)` / `dateFnsLocale(locale)`）で表示する（従来は `toLocaleDateString("ja-JP", ...)` 固定でロケールに関わらず日本語表記だった）
+
+### デバイスタブのマウス設定表示
+
+`devices` タブのマウス設定は、値が出せない/不正なケースでも行を消さず「-」+ 理由（または警告）を表示する。計算ロジック・警告UIは `/keybindings` 一覧と共有しており、詳細は [`docs/keybindings.md`](./keybindings.md#マウス設定)（振り向き・カーソル速度・バリデーション節）を参照:
+
+- **ゲーム内感度が有効範囲外**: 値はそのまま出しつつ警告アイコン + ヒント（共有コンポーネント `SensitivityWarning`、`app/components/sensitivity-warning.tsx`）を表示する
+- **Win Sens が係数テーブル（1〜20）外**: `x1.000` と断定せず警告アイコン + ヒント（`WinSensValue`）を表示する
+- **振り向き（cm/360）・カーソル速度が計算できない**: 行自体は残し、「-」+ 理由（DPI未設定・感度未設定・感度範囲外・Windows乗数未設定/不明など、`TurnDistanceValue` / `CursorSpeedValue`）を `HintTip` で表示する（以前は該当行そのものを非表示にしていた）
 
 ### モバイルタブ選択ドロワー
 
@@ -393,7 +405,12 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ### RTA歴（開始年月）の入力
 
-基本情報カードで、年（2009〜現在年、降順）・月の2連 Select として入力する（各先頭に「未設定」項目）。年・月は両方選択するか両方未選択のみ有効で、片方だけ選ぶとクライアントでエラートーストを出す。サーバー側の action でも `isValidRtaStartedYearMonth`（`app/lib/rta-career.ts`）で `2009-01`〜現在年月の範囲を検証し、範囲外なら保存を拒否する。
+基本情報カードで、年（2009〜現在年、降順）・月の2連 Select として入力する（各先頭に「未設定」項目）。年・月は両方選択するか両方未選択のみ有効で、片方だけ選ぶと Select 直下にインラインエラー（`meEdit.rtaStartedBothOrNone`、`aria-invalid` 付き）を出す。サーバー側の action でも `isValidRtaStartedYearMonth`（`app/lib/rta-career.ts`）で `2009-01`〜現在年月の範囲を検証し、範囲外なら保存を拒否する。
+
+- **未来月を選択肢から除外**: 現在年を選んでいる間は、月の選択肢を現在月までに絞る（`rtaStartedMonthOptions`）。現在年に変更した結果、選択済みの月が未来になる場合はその月選択をクリアする
+- **連動クリア**: 年・月どちらかで「未設定」を選ぶと、もう片方も同時にクリアする（`clearRtaStarted()`）。入力欄の右には両方をまとめてクリアする X ボタンを表示する（どちらか一方でも値があれば表示）
+- **ライブプレビュー**: 年・月が両方揃うと、その場でプロフィールに表示される文言をそのままプレビューする（`rtaCareerExactLabel()` を使い端数月まで表示、例: 「RTA歴 6年2か月（2020/6〜）」）。未入力時のヒントテキスト（`meEdit.rtaStartedHint`）も「設定するとプロフィールに『RTA歴 6年（2020/6〜）』のように公開表示されます」と、保存後の見え方が事前に伝わる文言にしている
+- 各 Select には個別の `aria-label`（`meEdit.rtaStartedYearAria` / `rtaStartedMonthAria`）を持たせ、スクリーンリーダーで年・月を区別できるようにしている
 
 ---
 
@@ -451,5 +468,7 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
-| `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出 |
+| `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出・表示文言の組み立て（ロケール対応） |
 | `scripts/add-rta-started-column.ts` | `rta_started_year_month` 列のDB反映スクリプト |
+| `app/components/hint-tip.tsx` | 端数月の補足など、短い説明を出す共有トリガー（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |
+| `app/components/sensitivity-warning.tsx` | デバイスタブの感度警告表示（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |

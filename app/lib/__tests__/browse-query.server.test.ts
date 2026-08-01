@@ -326,6 +326,14 @@ describe("parseBrowseSearchParams", () => {
     expect(parsed.roles).toEqual([]);
   });
 
+  it("許可リスト外の sort は既定（updatedAt）へ正規化する", () => {
+    const mk = (sort: string) => parseBrowseSearchParams(new URLSearchParams({ sort })).sort;
+    expect(mk("bogus")).toBe("updatedAt");
+    expect(mk("")).toBe("updatedAt");
+    // 許可済みの値はそのまま通る
+    expect(mk("popular")).toBe("popular");
+  });
+
   it("page は 1 未満・非数値を 1 にクランプし、巨大値は上限で頭打ちにする", () => {
     const mk = (page: string) => parseBrowseSearchParams(new URLSearchParams({ page })).page;
     expect(mk("0")).toBe(1);

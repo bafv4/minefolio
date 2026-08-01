@@ -49,7 +49,7 @@
 ### 公開ページ
 
 - **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` **かつ著者が公開プロフィール（`profileVisibility = "public"`）** のテンプレートを最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム内言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
-  - **並び替え**: `?sort=` で「新着順（既定、`createdAt` 降順）」と「人気順（いいね数降順）」を切り替えられる（`ContentSortSelect`）。`.limit(100)` より前に SQL の `ORDER BY` で並べる（メモリ上で並べ替えると「新しい100件を人気順に並べた」結果になるため）。同数時は `createdAt` → `id` でタイブレークする。
+  - **並び替え**: `?sort=` で「新着順（既定、`createdAt` 降順）」と「いいね数順（総いいね数降順）」を切り替えられる（`ContentSortSelect`、`TEMPLATE_SORTS = ["new", "likes"]`）。`.limit(100)` より前に SQL の `ORDER BY` で並べる（メモリ上で並べ替えると「新しい100件をいいね数順に並べた」結果になるため）。同数時は `createdAt` → `id` でタイブレークする。旧ラベル「人気順」（`?sort=popular`）は v1.13.0 で「いいね数順」（`likes`）に改名し、旧クエリ値は既定の新着順へフォールバックする（詳細は [`docs/likes.md`](./likes.md#並び替え)）
   - **いいね**: 各行にいいね数を表示し、ログイン中は行内のグッドボタンで直接いいねできる（自分のテンプレートは件数のみ）。詳細は `docs/likes.md`
   - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム内言語（`?lang=`、SQLで完全一致）で絞り込める。並び順は hidden input で持ち越す。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。絞り込み結果が0件の場合はリセットリンク付きの専用メッセージを表示。
 - **詳細 `/guides/templates/:templateId`**（`app/routes/guides/templates/view.tsx`）: テンプレートの内容（リマップ・サーチクラフト一覧）を表示。ゲーム内言語はバッジではなくヘッダー部に大きく表示する（サーチ文字列の前提となる最重要情報のため）。

@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useLocale } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,7 +9,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Eye, FileText, LayoutGrid, List, Pin } from "lucide-react";
+import { Eye, FileText, LayoutGrid, List, Pin, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
 import { formatDistanceToNow } from "date-fns";
@@ -25,6 +25,11 @@ export type GuideItem = {
   viewCount: number;
   /** いいね数。必須にして各ローダーの取得漏れを型検査で捕まえる */
   likeCount: number;
+  /**
+   * 直近7日のページビュー（page_view_stats）。人気順で並べたときの根拠数値。
+   * 任意（渡した一覧だけが表示する）。他の一覧では集計クエリを走らせないため未指定。
+   */
+  pageViews7d?: number;
   updatedAt: string | Date;
   /** Per-guide author display name (for multi-author listings) */
   authorName?: string;
@@ -65,6 +70,21 @@ export function ViewToggle({
         <List className="h-4 w-4" />
       </Button>
     </div>
+  );
+}
+
+/**
+ * 直近7日のページビュー（人気順の根拠数値）。累計閲覧数（Eye）の隣に出す。
+ * 0 でも表示する（なぜ下位にいるのかが分かるため）。
+ */
+function PageViews7dMeta({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <span className="flex items-center gap-1" title={t("guides.pageViews7d")}>
+      <TrendingUp className="h-3 w-3" aria-hidden />
+      <span className="sr-only">{t("guides.pageViews7d")}</span>
+      {count}
+    </span>
   );
 }
 
@@ -155,6 +175,9 @@ export function GuideCardGrid({
                     <Eye className="h-3 w-3" />
                     {guide.viewCount}
                   </span>
+                  {guide.pageViews7d !== undefined && (
+                    <PageViews7dMeta count={guide.pageViews7d} />
+                  )}
                   <LikeButton
                     variant="compact"
                     targetType="guide"
@@ -235,6 +258,9 @@ export function GuideListView({
                   <Eye className="h-3 w-3" />
                   {guide.viewCount}
                 </span>
+                {guide.pageViews7d !== undefined && (
+                  <PageViews7dMeta count={guide.pageViews7d} />
+                )}
                 <LikeButton
                   variant="compact"
                   targetType="guide"

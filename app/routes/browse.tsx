@@ -502,9 +502,9 @@ export default function BrowsePage() {
             </Dialog>
 
             {/* ソート */}
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
             <Select value={sortBy} onValueChange={handleSortChange}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px]" aria-label={t("contentSort.label")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

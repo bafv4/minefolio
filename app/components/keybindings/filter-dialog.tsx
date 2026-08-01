@@ -26,6 +26,18 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * min > max（入力の取り違え）は適用をブロックせず自動で入れ替えて救済する。
+ * 「0件になって理由が分からない」より、意図どおりの範囲で結果を出すほうが摩擦が少ないため。
+ */
+function orderedRange(
+  min: number | null,
+  max: number | null,
+): [number | null, number | null] {
+  if (min != null && max != null && min > max) return [max, min];
+  return [min, max];
+}
+
 export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
   const t = useT();
   const { params, setParams, activeFilterCount } = useKeybindingsFilters();
@@ -57,17 +69,23 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
       prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
     );
 
-  // 「適用」で初めて URL（クエリ）へ反映する
+  // 「適用」で初めて URL（クエリ）へ反映する。min > max は orderedRange で入れ替えて救済する
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    const [dpiMin, dpiMax] = orderedRange(parseNumber(draftDpiMin), parseNumber(draftDpiMax));
+    const [sensMin, sensMax] = orderedRange(parseNumber(draftSensMin), parseNumber(draftSensMax));
+    const [cm360Min, cm360Max] = orderedRange(
+      parseNumber(draftCm360Min),
+      parseNumber(draftCm360Max),
+    );
     setParams({
       users: draftUsers.length > 0 ? draftUsers : null,
-      dpiMin: parseNumber(draftDpiMin),
-      dpiMax: parseNumber(draftDpiMax),
-      sensMin: parseNumber(draftSensMin),
-      sensMax: parseNumber(draftSensMax),
-      cm360Min: parseNumber(draftCm360Min),
-      cm360Max: parseNumber(draftCm360Max),
+      dpiMin,
+      dpiMax,
+      sensMin,
+      sensMax,
+      cm360Min,
+      cm360Max,
     });
     setOpen(false);
   };
@@ -140,6 +158,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               onMax={setDraftDpiMax}
               placeholderMin="400"
               placeholderMax="3200"
+              inputMin={1}
             />
             <FilterRange
               label={t("keybindings.inGameSensitivityRange")}
@@ -150,6 +169,9 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               placeholderMin="0"
               placeholderMax="200"
               suffix="%"
+              inputMin={0}
+              inputMax={200}
+              hint={t("keybindings.sensitivityRangeHint")}
             />
             <FilterRange
               label={t("keybindings.turnDistanceRange")}
@@ -160,6 +182,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               placeholderMin="10"
               placeholderMax="60"
               suffix="cm"
+              inputMin={0}
             />
           </form>
         </div>
@@ -192,6 +215,9 @@ function FilterRange({
   placeholderMin,
   placeholderMax,
   suffix,
+  inputMin,
+  inputMax,
+  hint,
 }: {
   label: string;
   min: string;
@@ -201,6 +227,12 @@ function FilterRange({
   placeholderMin?: string;
   placeholderMax?: string;
   suffix?: string;
+  /** number input の min 属性（入力可能な下限） */
+  inputMin?: number;
+  /** number input の max 属性（入力可能な上限） */
+  inputMax?: number;
+  /** 入力欄の下に常時出す補足（有効範囲の案内など） */
+  hint?: string;
 }) {
   const t = useT();
   return (
@@ -211,6 +243,8 @@ function FilterRange({
           <Input
             type="number"
             inputMode="decimal"
+            min={inputMin}
+            max={inputMax}
             value={min}
             onChange={(e) => onMin(e.target.value)}
             placeholder={placeholderMin}
@@ -226,6 +260,8 @@ function FilterRange({
           <Input
             type="number"
             inputMode="decimal"
+            min={inputMin}
+            max={inputMax}
             value={max}
             onChange={(e) => onMax(e.target.value)}
             placeholder={placeholderMax}
@@ -237,6 +273,7 @@ function FilterRange({
           )}
         </div>
       </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

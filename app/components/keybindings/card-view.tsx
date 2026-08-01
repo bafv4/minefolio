@@ -20,6 +20,7 @@ import {
   SensitivityCell,
   Cm360Cell,
 } from "./keybindings-cells";
+import { KeybindingsEmptyState } from "./keybindings-empty-state";
 import type { KeybindingsRow } from "./keybindings-columns";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -47,11 +48,7 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
   );
 
   if (players.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground rounded-lg border bg-card">
-        {t("keybindings.noPlayers")}
-      </div>
-    );
+    return <KeybindingsEmptyState className="rounded-lg border bg-card" />;
   }
 
   // キーボードは原寸（baseSize 60）で描画し横はみ出しはカード内スクロールで吸収するため、

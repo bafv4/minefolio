@@ -4,7 +4,9 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { HintTip } from "@/components/hint-tip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { cn } from "@/lib/utils";
 import {
   getKeyLabel,
@@ -20,6 +22,7 @@ import {
 import {
   calculateCm360,
   calculateCursorSpeed,
+  getWindowsMultiplierOrNull,
   isValidSensitivity,
   toSensitivityPercent,
   WINDOWS_POINTER_MULTIPLIERS,
@@ -27,6 +30,7 @@ import {
 import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import type { Translator } from "@/lib/messages";
 import { TriangleAlert } from "lucide-react";
 
 /** 走者列の最小データ */
@@ -327,36 +331,88 @@ export function DpiCell({ config }: { config: MouseConfig }) {
 }
 
 export function SensitivityCell({ config }: { config: MouseConfig }) {
-  const t = useT();
   const display = toSensitivityPercent(config?.gameSensitivity);
   if (display == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
-  const value = (
-    <>
+  // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
+  // 振り向きは計算されず、統計の集計からも外れ、ソートでも未設定として扱われる。
+  if (!isValidSensitivity(config?.gameSensitivity)) {
+    return <SensitivityWarning percent={display} />;
+  }
+  return (
+    <span className="font-mono text-sm">
       {display}
       <span className="text-muted-foreground">%</span>
-    </>
+    </span>
   );
-  // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
-  // 振り向きは計算されず、ソートでも未設定として扱われる。
-  if (!isValidSensitivity(config?.gameSensitivity)) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-1 font-mono text-sm">
-            {value}
-            <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{t("keybindings.sensitivityOutOfRange")}</TooltipContent>
-      </Tooltip>
-    );
+}
+
+/**
+ * 値なし（「-」）のセル。理由があればヒントで示し、無ければ素の「-」を出す。
+ * 理由が無い＝そもそもマウス設定が未登録のケース（説明することが無い）。
+ */
+function MissingValueCell({ reasons }: { reasons: string[] }) {
+  if (reasons.length === 0) {
+    return <span className="text-muted-foreground/40">-</span>;
   }
-  return <span className="font-mono text-sm">{value}</span>;
+  return (
+    <HintTip
+      message={reasons.join(" / ")}
+      className="text-muted-foreground/60 text-sm"
+    >
+      <span className="underline decoration-dotted underline-offset-4">-</span>
+    </HintTip>
+  );
+}
+
+/** Windows 側の乗数が決まらない理由（未設定 / 係数不明）。決まるなら null */
+function windowsMultiplierReason(t: Translator, config: NonNullable<MouseConfig>) {
+  if (
+    getWindowsMultiplierOrNull(config.windowsSpeed, config.windowsSpeedMultiplier) != null
+  ) {
+    return null;
+  }
+  return config.windowsSpeed == null && config.windowsSpeedMultiplier == null
+    ? t("keybindings.reasonNoWindowsSpeed")
+    : t("keybindings.reasonUnknownWindowsMultiplier");
+}
+
+/** 振り向き（cm/360）が計算できない理由を、欠けている入力から導出する */
+function cm360MissingReasons(t: Translator, config: NonNullable<MouseConfig>): string[] {
+  const reasons: string[] = [];
+  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
+  if (config.gameSensitivity == null) {
+    reasons.push(t("keybindings.reasonNoSensitivity"));
+  } else if (!isValidSensitivity(config.gameSensitivity)) {
+    reasons.push(t("keybindings.reasonSensitivityOutOfRange"));
+  }
+  // Raw Input ON なら Windows 側は無視される。OFF（未設定含む）でも
+  // WinSens・カスタム係数がともに未設定なら x1.0 とみなして計算するため理由にならない。
+  if (
+    config.rawInput !== true &&
+    (config.windowsSpeed != null || config.windowsSpeedMultiplier != null)
+  ) {
+    const reason = windowsMultiplierReason(t, config);
+    if (reason) reasons.push(reason);
+  }
+  return reasons;
+}
+
+/** Cursor Speed（実効 DPI）が計算できない理由を、欠けている入力から導出する */
+function cursorSpeedMissingReasons(
+  t: Translator,
+  config: NonNullable<MouseConfig>,
+): string[] {
+  const reasons: string[] = [];
+  if (config.mouseDpi == null) reasons.push(t("keybindings.reasonNoDpi"));
+  const reason = windowsMultiplierReason(t, config);
+  if (reason) reasons.push(reason);
+  return reasons;
 }
 
 export function Cm360Cell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
@@ -368,7 +424,7 @@ export function Cm360Cell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cm360 == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <MissingValueCell reasons={cm360MissingReasons(t, config)} />;
   }
   return (
     <span className="font-mono text-sm">
@@ -393,15 +449,26 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
     );
   }
   if (config?.windowsSpeed != null) {
+    const multiplier = WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed];
+    // 係数テーブル（1〜20）外の値は x1.000 と断定しない。
+    // 振り向き・Cursor Speed も計算されない（＝「-」）ので、その理由を示す。
+    if (multiplier == null) {
+      return (
+        <HintTip
+          message={t("keybindings.windowsSpeedUnknown", {
+            value: config.windowsSpeed,
+          })}
+          className="font-mono text-sm"
+        >
+          <span>{config.windowsSpeed}</span>
+          <TriangleAlert className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden />
+        </HintTip>
+      );
+    }
     return (
       <span className="font-mono text-sm">
         {config.windowsSpeed}
-        <span className="text-muted-foreground">
-          (x
-          {WINDOWS_POINTER_MULTIPLIERS[config.windowsSpeed]?.toFixed(3) ??
-            "1.000"}
-          )
-        </span>
+        <span className="text-muted-foreground">(x{multiplier.toFixed(3)})</span>
       </span>
     );
   }
@@ -411,6 +478,7 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
 }
 
 export function CursorSpeedCell({ config }: { config: MouseConfig }) {
+  const t = useT();
   if (config == null) {
     return <span className="text-muted-foreground/40">-</span>;
   }
@@ -420,9 +488,14 @@ export function CursorSpeedCell({ config }: { config: MouseConfig }) {
     config.windowsSpeedMultiplier,
   );
   if (cursor == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <MissingValueCell reasons={cursorSpeedMissingReasons(t, config)} />;
   }
-  return <span className="font-mono text-sm">{cursor}</span>;
+  return (
+    <span className="font-mono text-sm">
+      {cursor}
+      <span className="text-muted-foreground">DPI</span>
+    </span>
+  );
 }
 
 export function RawInputCell({ config }: { config: MouseConfig }) {

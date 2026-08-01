@@ -138,6 +138,8 @@ export interface SensitivityStats {
   ranges: RangeStatWithPlayers[];
   average: number | null;
   totalCount: number;
+  /** 感度は登録済みだが有効範囲（0〜200%）外のため母数から外した人数 */
+  excludedCount: number;
 }
 
 export interface RawInputStats {
@@ -461,6 +463,11 @@ export async function loadKeybindingsStats(
     };
   });
 
+  // 除外した人数（感度は入っているが範囲外）。分布カードで「なぜ母数が少ないか」を示すために返す
+  const sensitivityExcludedCount = mouseConfigs.filter(
+    (c) => c.gameSensitivity != null && !isValidSensitivity(c.gameSensitivity),
+  ).length;
+
   const sensitivityStats: SensitivityStats = {
     ranges: sensitivityRangeStats,
     average: sensitivityValues.length > 0
@@ -469,6 +476,7 @@ export async function loadKeybindingsStats(
         )
       : null,
     totalCount: sensitivityValues.length,
+    excludedCount: sensitivityExcludedCount,
   };
 
   // Raw Input 統計

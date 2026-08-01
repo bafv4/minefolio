@@ -374,6 +374,8 @@ export const PAGES_JA = {
     videoFeedLabel: "Video Feed",
     guideFeedLabel: "Guides",
     sectionGuides: "人気のガイド",
+    sectionGuidesHint: "直近7日でよく読まれたガイド",
+    sectionGuidesHintFallback: "閲覧データを収集中（現在はいいね・更新順）",
     rtaTime: "タイム",
     justWithinHour: "1時間以内",
     playEmbedded: "{title} をこの場で再生",
@@ -523,15 +525,16 @@ export const PAGES_JA = {
     newest: "新着順",
     /** ガイド一覧（updatedAt 基準） */
     recentlyUpdated: "更新順",
-    /**
-     * ガイド一覧＝直近7日のページビューが多い順（page_view_stats）。
-     * テンプレート一覧＝総いいね数が多い順（ページビュー集計の対象外のため）。
-     */
+    /** ガイド一覧のみ。直近7日のページビューが多い順（page_view_stats） */
     popular: "人気順",
-    /** ガイド一覧のみ。総いいね数が多い順 */
+    /** ガイド一覧・テンプレート一覧。総いいね数が多い順 */
     likes: "いいね数順",
     /** ガイド一覧のみ。累計閲覧数（guides.view_count）が多い順 */
     views: "閲覧数順",
+    // 選択肢の下段に出す「何を基準に並ぶか」の説明（ContentSortSelect の descriptions に渡す）
+    likesDesc: "総いいね数",
+    viewsDesc: "累計閲覧数",
+    popularDesc: "直近7日でよく見られた順",
   },
   keybindings: {
     remapsHeading: "リマップ",
@@ -574,7 +577,19 @@ export const PAGES_JA = {
     customMultiplier: "カスタム係数",
     noValue: "値なし",
     sensitivityOutOfRange:
-      "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます",
+      "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます。統計の集計からも除外されます",
+    /** Windows ポインター速度が係数テーブル（1〜20）外のとき */
+    windowsSpeedUnknown:
+      "Windows ポインター速度 {value} は係数が不明なため、振り向き・Cursor Speed を計算できません",
+    /** 振り向き・Cursor Speed が「-」になる理由（欠けている入力） */
+    reasonNoDpi: "DPI が未設定です",
+    reasonNoSensitivity: "ゲーム内感度が未設定です",
+    reasonSensitivityOutOfRange: "ゲーム内感度が有効範囲（0〜200%）外です",
+    reasonNoWindowsSpeed: "Windows ポインター速度が未設定です",
+    reasonUnknownWindowsMultiplier:
+      "Windows ポインター速度の係数が不明です",
+    /** フィルタの感度レンジに常時出すヘルパーテキスト */
+    sensitivityRangeHint: "有効範囲: 0〜200%",
     countText: "{count}人の{suffix}",
     hotbarColumn: "ホットバー",
     noPlayers: "該当する走者がいません",
@@ -617,6 +632,8 @@ export const PAGES_JA = {
     f3DefaultInput: "F3キーでF3入力",
     f3WithKey: "{key}でF3入力",
     peoplePercent: "{count}人 ({percent}%)",
+    /** 感度分布カード: 有効範囲外で母数から外した人数 */
+    excludedOutOfRange: "範囲外のため除外: {count}人",
   },
   // リマップ種別（Trigger/Chat/All/未設定）の共通ラベル
   remapType: {
@@ -654,9 +671,24 @@ export const PAGES_JA = {
     presetLoading: "プリセットを読み込み中...",
     edit: "編集",
     compare: "比較",
-    /** RTA歴（経過期間 + 開始年月）。start は "2020/6" 形式 */
+    /** RTA歴（経過期間 + 開始年月）。start はロケール依存（ja: "2020/6" / en: "Jun 2020"） */
     rtaCareerYears: "RTA歴 {years}年（{start}〜）",
+    /** 英語の単数形用（日本語は単複同形なので同じ文言） */
+    rtaCareerYearsOne: "RTA歴 {years}年（{start}〜）",
     rtaCareerMonths: "RTA歴 {months}か月（{start}〜）",
+    rtaCareerMonthsOne: "RTA歴 {months}か月（{start}〜）",
+    /** 年表示で切り捨てた端数月まで含む正確な経過（ヒントで補完する）。
+        years / months には下の Unit キーで組み立てた単位付き文字列が入る */
+    rtaCareerExact: "RTA歴 {years}{months}（{start}〜）",
+    /** 単位付きの年・月（英語の単複対応のため部品化。日本語は単複同形） */
+    rtaCareerYearsUnit: "{years}年",
+    rtaCareerYearsUnitOne: "{years}年",
+    rtaCareerMonthsUnit: "{months}か月",
+    rtaCareerMonthsUnitOne: "{months}か月",
+    /** 開始月と同じ月（経過 0 か月） */
+    rtaCareerJustStarted: "RTA歴 1か月未満（{start}〜）",
+    /** プロフィールのメタ情報行に出す更新日 */
+    lastUpdated: "最終更新 {date}",
     links: "リンク",
     bio: "自己紹介",
     subscribersCompact: "登録者 {count}人",
@@ -828,6 +860,7 @@ export const PAGES_JA = {
     inGameSensitivity: "ゲーム内感度",
     mouseAcceleration: "マウス加速",
     dashToggle: "ダッシュ切替",
+    sensitivityExcludedNote: "範囲外のため除外: {count}人",
   },
   meEdit: {
     title: "プロフィール編集 - Minefolio",
@@ -937,8 +970,13 @@ export const PAGES_JA = {
     shortBio: "ひとこと",
     shortBioExample: "例: RSG日本記録保持者",
     rtaStarted: "RTA歴（開始年月）",
-    rtaStartedHint: "任意。年と月の両方を選ぶと表示されます",
+    rtaStartedHint:
+      "任意。設定するとプロフィールに「RTA歴 6年（2020/6〜）」のように公開表示されます",
     rtaStartedNone: "未設定",
+    rtaStartedClear: "クリア",
+    /** Label は年セレクトに紐付くため、各セレクトのアクセシブルネームを個別に持つ */
+    rtaStartedYearAria: "RTA歴（開始年）",
+    rtaStartedMonthAria: "RTA歴（開始月）",
     rtaStartedYearPlaceholder: "年",
     rtaStartedMonthPlaceholder: "月",
     rtaStartedYearOption: "{year}年",
@@ -1981,6 +2019,10 @@ export const PAGES_JA = {
     pageTitle: "ガイド一覧",
     pageDesc: "Minefolioユーザーによる攻略・設定ガイド",
     noGuides: "公開されているガイドはまだありません",
+    /** 人気順を選んでも page_view_stats がまだ空のとき（cron 未稼働・集計前）の注記 */
+    popularPending: "閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています",
+    /** 一覧カードに出す直近7日のページビュー数の説明（人気順のときだけ表示） */
+    pageViews7d: "直近7日の閲覧数",
     searchPlaceholder: "タイトルや概要で検索...",
     tagAll: "すべて",
     tabGuides: "ガイド",

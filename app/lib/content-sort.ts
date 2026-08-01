@@ -20,14 +20,16 @@ export const GUIDE_SORTS = ["new", "likes", "views", "popular"] as const satisfi
 
 /**
  * テンプレート一覧で使える並び順。
+ * - new: 作成日時
+ * - likes: 総いいね数
  *
- * ※ `popular` の意味は一覧ごとに異なる（ガイド＝直近7日のページビュー、
- *    テンプレート＝総いいね数）。ラベルはどちらも「人気順」で、利用者から見た
- *    「よく見られている / 支持されている」という意味は共通なので同じキーを使う。
- *    テンプレートにはページビュー集計が無い（個別ページの URL が
- *    /guides/templates/:id で page-view-paths.ts の対象外）ためこの差が生じる。
+ * ※ `popular`（＝直近7日のページビュー）はガイド専用。テンプレートには
+ *    ページビュー集計が無い（個別ページの URL が /guides/templates/:id で
+ *    page-view-paths.ts の対象外）ため、以前は同じ「人気順」ラベルのまま
+ *    総いいね数で並べていた。一覧ごとにラベルと基準が食い違うのを避けるため、
+ *    テンプレート側は基準どおり `likes`（いいね数順）を出す。
  */
-export const TEMPLATE_SORTS = ["new", "popular"] as const satisfies readonly ContentSort[];
+export const TEMPLATE_SORTS = ["new", "likes"] as const satisfies readonly ContentSort[];
 
 /**
  * URLクエリ文字列から並び順を解釈する。

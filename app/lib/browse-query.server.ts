@@ -25,7 +25,18 @@ function parseBrowsePage(raw: string | null): number {
 }
 
 /** popular は直近7日のプロフィール閲覧数（page_view_stats）。他は users の列で並べる */
-export type BrowseSortOption = "updatedAt" | "mcid" | "displayName" | "popular";
+export const BROWSE_SORTS = ["updatedAt", "mcid", "displayName", "popular"] as const;
+
+export type BrowseSortOption = (typeof BROWSE_SORTS)[number];
+
+/** 既定のソート（不正な `sort` はここへ正規化する） */
+const DEFAULT_BROWSE_SORT: BrowseSortOption = "updatedAt";
+
+function parseBrowseSort(raw: string | null): BrowseSortOption {
+  return (BROWSE_SORTS as readonly string[]).includes(raw ?? "")
+    ? (raw as BrowseSortOption)
+    : DEFAULT_BROWSE_SORT;
+}
 
 export type BrowseFilterRole = "runner" | "viewer";
 export type BrowseFilterEdition = "java" | "bedrock";
@@ -51,7 +62,7 @@ export interface BrowseQueryArgs {
 export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQueryArgs {
   return {
     q: searchParams.get("q") ?? "",
-    sort: (searchParams.get("sort") as BrowseSortOption) || "updatedAt",
+    sort: parseBrowseSort(searchParams.get("sort")),
     page: parseBrowsePage(searchParams.get("page")),
     roles: searchParams.getAll("role") as BrowseFilterRole[],
     editions: searchParams.getAll("edition") as BrowseFilterEdition[],
