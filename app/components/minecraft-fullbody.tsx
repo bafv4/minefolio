@@ -47,6 +47,26 @@ function setCachedImage(key: string, value: string): void {
   }
 }
 
+// 「表示中の静止画像が現在の props に対応するリクエストと一致するか」判定専用のキー。
+// getCacheKey（メモリキャッシュ用、width/height を含む）とは別物で、こちらは
+// initViewer を再実行させる依存配列（width/height を含まない）に合わせて意図的に width/height を含めない。
+// これにより skinIdentifier 等が変わった瞬間に古い画像を無効化でき、遷移直後に
+// 前ユーザーの静止画が残留する状態を防ぐ。
+function getRequestKey(
+  identifier: string,
+  pose: string,
+  angle: number,
+  elevation: number,
+  zoom: number,
+  background: string | undefined,
+  walk: boolean,
+  run: boolean,
+  rotate: boolean,
+  slim: boolean
+): string {
+  return [identifier, pose, angle, elevation, zoom, background ?? "", walk, run, rotate, slim].join("|");
+}
+
 export type PoseName =
   | "standing"
   | "walking"
@@ -165,11 +185,16 @@ const MinecraftFullBodyComponent = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [imageEntry, setImageEntry] = useState<{ requestKey: string; src: string } | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
 
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
+
+  const requestKey = getRequestKey(skinIdentifier, pose, angle, elevation, zoom, background, walk, run, rotate, slim);
+  // imageEntry が現在の props に対応していない場合（uuid/skinUrl 変更直後など）は無効化し、
+  // 前ユーザーの静止画をそのまま表示し続けないようにする
+  const imageSrc = effectiveAsImage && imageEntry?.requestKey === requestKey ? imageEntry.src : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -179,7 +204,7 @@ const MinecraftFullBodyComponent = ({
       const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
       const cachedImage = getCachedImage(cacheKey);
       if (cachedImage) {
-        setImageSrc(cachedImage);
+        setImageEntry({ requestKey, src: cachedImage });
         setIsLoading(false);
         return;
       }
@@ -208,6 +233,17 @@ const MinecraftFullBodyComponent = ({
 
         viewerRef.current = viewer;
 
+        // disposed（＝この effect が古くなった）後にこの viewer が canvas への描画や state 書き込みを
+        // 続けないためのガード。cleanup は基本的に viewerRef.current 経由で自分自身を dispose 済みのはずだが、
+        // 念のため viewer.disposed を確認してから dispose し、viewerRef.current が既に別の（新しい）viewer に
+        // 差し替わっている場合はそちらを壊さないよう参照が一致する場合のみ null に戻す。
+        const disposeIfStale = (): boolean => {
+          if (!disposed) return false;
+          if (!viewer.disposed) viewer.dispose();
+          if (viewerRef.current === viewer) viewerRef.current = null;
+          return true;
+        };
+
         // スキンURLを決定（カスタムスキンURL > UUID > Steve）
         const skinModel = slim ? "slim" : "default";
         const skinUrlToLoad = skinUrl || (uuid ? `/api/skin?uuid=${uuid}` : `/api/skin?uuid=${STEVE_UUID}`);
@@ -218,6 +254,10 @@ const MinecraftFullBodyComponent = ({
           const steveUrl = `/api/skin?uuid=${STEVE_UUID}`;
           await viewer.loadSkin(steveUrl, { model: skinModel });
         }
+
+        // loadSkin 待ち中に uuid/skinUrl が変わっていたら、ここで打ち切って共有 canvas への
+        // 古いスキンの描画を防ぐ（同一 canvas を新しい viewer と共有しているため）
+        if (disposeIfStale()) return;
 
         // Set camera angle
         const angleRad = (angle * Math.PI) / 180;
@@ -284,6 +324,10 @@ const MinecraftFullBodyComponent = ({
         if (effectiveAsImage) {
           // toDataURL がレンダリング完了後の正しいフレームを拾えるよう一拍置く
           await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // 待機中に uuid/skinUrl が変わっていたら打ち切る（古いスキンの静止画をキャッシュ/表示しない）
+          if (disposeIfStale()) return;
+
           viewer.render();
 
           const dataUrl = canvas.toDataURL("image/png");
@@ -291,16 +335,16 @@ const MinecraftFullBodyComponent = ({
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
           setCachedImage(cacheKey, dataUrl);
 
-          setImageSrc(dataUrl);
+          setImageEntry({ requestKey, src: dataUrl });
 
           viewer.dispose();
-          viewerRef.current = null;
+          if (viewerRef.current === viewer) viewerRef.current = null;
         }
 
         setIsLoading(false);
       } catch (error) {
         console.error("Failed to initialize skinview3d:", error);
-        setIsLoading(false);
+        if (!disposed) setIsLoading(false);
       }
     };
 
@@ -313,7 +357,8 @@ const MinecraftFullBodyComponent = ({
         viewerRef.current = null;
       }
     };
-    // skinIdentifier は uuid/skinUrl から派生、interactive は effectiveAsImage に内包されるので除外。
+    // skinIdentifier / requestKey は uuid/skinUrl 等（すべて依存配列に列挙済み）から派生する値なので除外。
+    // interactive は effectiveAsImage に内包されるので除外。
     // width/height は別 effect で setSize() を呼んで再初期化を回避するため依存に含めない。
   }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim]);
 
@@ -379,33 +424,35 @@ const MinecraftFullBodyComponent = ({
     </div>
   );
 
-  // 静止画像モードの場合
-  if (effectiveAsImage && imageSrc) {
+  // 静止画像モードの場合。imageSrc の有無に関わらず canvas は常にマウントしておく。
+  // （imageSrc がある間だけ canvas を外すと、props 変更後の effect が canvasRef を取得できず
+  //   `if (!canvas) return;` で即座に打ち切られ、新しいスキンを読み込めないまま前ユーザーの
+  //   静止画が残留し続けるバグになる）
+  if (effectiveAsImage) {
     return (
-      <img
-        src={imageSrc}
-        alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
-        width={width}
-        height={height}
-        className={className}
-        style={{
-          width,
-          height,
-          imageRendering: "auto",
-        }}
-      />
-    );
-  }
-
-  // asImageモードでローディング中はスケルトン + 非表示canvas
-  if (effectiveAsImage && isLoading) {
-    return (
-      <div className={className} style={{ position: "relative", width, height }}>
-        {skeleton}
+      <div style={{ position: "relative", width, height }}>
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
+            width={width}
+            height={height}
+            className={className}
+            style={{
+              width,
+              height,
+              imageRendering: "auto",
+            }}
+          />
+        ) : (
+          skeleton
+        )}
         <canvas
           ref={canvasRef}
           style={{
             position: "absolute",
+            top: 0,
+            left: 0,
             opacity: 0,
             pointerEvents: "none",
           }}
