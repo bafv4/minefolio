@@ -29,7 +29,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 「よく見られている」「よく読まれている」は、`guideListOrderBy("popular")` のような相関サブクエリ＋フォールバックではなく、`page_view_stats` のスナップショット行を起点に対象テーブルへ `innerJoin` する（`app/lib/schema.ts` の `pageViewStats`）。この形なら PV スナップショットが1件も無い環境（cron `update-page-views` 未稼働）では**結果が自然に0件**になるため、UI側は件数だけで「PV欄を出すか」を判定でき、集計未稼働を示す注記は不要（要件どおり注記は出さない）。/guides 一覧の「人気順」（`guideListOrderBy("popular")`。相関サブクエリ＋いいね数・更新日時へのフォールバック）とは実装方針が異なる点に注意（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
 
-UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`）」→ 水平線 → 「PV順（`home.sectionProfilesPopular` / `home.sectionGuidesPopular`）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
+UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`＝「最近の更新」）」→ 水平線 → 「PV順（`home.sectionPopular`＝「注目（直近7日）」。プロフィール・ガイド共通）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
 
 #### クライアントサイドで遅延取得（/api/home-feed）
 

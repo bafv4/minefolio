@@ -705,7 +705,7 @@ export default function HomePage() {
               <>
                 <div className="border-t border-border/70" />
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">{t("home.sectionProfilesPopular")}</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("home.sectionPopular")}</p>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {popularUsers.map((user) => (
                       <ProfileFeedCard key={user.slug} player={user} />
@@ -756,7 +756,7 @@ export default function HomePage() {
             )}
             {popularGuides.length > 0 && (
               <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">{t("home.sectionGuidesPopular")}</p>
+                <p className="text-sm font-medium text-muted-foreground">{t("home.sectionPopular")}</p>
                 <GuideCardGrid
                   guides={popularGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
