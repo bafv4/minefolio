@@ -76,7 +76,7 @@ API に触れる際は、**Context7 MCP tool が利用可能なら** `ToolSearch
 各ワーカーは会話履歴を持たないため、迷ったらここから辿る。
 
 - **環境変数**: `getEnv()` → `app/lib/env.server.ts`（`process.env` の型付きラッパ）
-- **DB**: `createDb()` → `app/lib/db.ts` ／ スキーマ → `app/lib/schema.ts` ／ クエリは `db.query.*` ＋ `with`（別クエリにしない）
+- **DB**: `createDb()` → `app/lib/db.ts` ／ スキーマ → `app/lib/schema.ts`（全体像・ER図 → `docs/database.md`）／ クエリは `db.query.*` ＋ `with`（別クエリにしない）
 - **認証**: `createAuth()` → `app/lib/auth.ts` ／ セッション → `app/lib/session.ts`（`getSession` / `getOptionalSession` ほか）
 - **i18n**: コンポーネントは `useT()`（`@/hooks/use-locale`）／ ローダー・meta は `t(key, params, locale)` ／ 文言実体 → `app/lib/messages/pages-ja.ts`（日本語・全キー）と `pages-en.ts`（英語・部分集合、未翻訳は ja へフォールバック）／ ロケール検出 → `@/lib/locale`。詳細は `docs/i18n.md`
 - **テーマ／トークン**: `app/app.css`（oklch の CSS 変数）／ 切替 UI → `app/components/layout/theme-toggle.tsx`（`THEME_OPTIONS`、`light` / `dark` / `ultra-dark`）

@@ -101,6 +101,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 ### データベース
 
 - スキーマ: `app/lib/schema.ts`（Drizzle ORM、SQLite/Turso方言）
+- 全体像（テーブル一覧・ER図・整合性ポリシー）: `docs/database.md`
 - マイグレーション: `drizzle/` ディレクトリ、`pnpm db:generate` + `pnpm db:migrate` で管理
 - ID生成: `@paralleldrive/cuid2` によるCUID2
 - 設定: `drizzle.config.ts` = ローカル用（`.env` を読み込み。リモートURLならエラーで中断）、
