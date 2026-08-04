@@ -63,24 +63,9 @@ API に触れる際は、**Context7 MCP tool が利用可能なら** `ToolSearch
 最新ドキュメントを確認してから実装する。未接続の場合はこのステップを省いてよいが、`package.json` のバージョンと
 既存コードのパターンを最優先の正とする。
 
-対象バージョンは `package.json` を都度確認するのが正だが、目安（2026-07 時点）:
-
-| ライブラリ | バージョン | 主な担当 |
-|---|---|---|
-| react / react-dom | 19.2.x | 全ワーカー |
-| react-router / @react-router/dev,node,serve | 8.2.0 | 全ワーカー（ルーティング・loader/action） |
-| @vercel/react-router | 1.3.x | platform-worker |
-| tailwindcss / @tailwindcss/vite | 4.3.x | UI を書く全ワーカー |
-| radix-ui / @radix-ui/react-* | 1.6.x / 各種 | UI を書く全ワーカー（shadcn/ui 経由） |
-| drizzle-orm / drizzle-kit | 0.45.x / 0.31.x | platform-worker（スキーマ）、各機能ワーカー（クエリ） |
-| @libsql/client | 0.15.x | platform-worker |
-| better-auth | 1.6.x | platform-worker |
-| @tiptap/* | 3.27.x | guides-worker |
-| zod | 4.4.x | フォーム/バリデーションを書く全ワーカー |
-| @tanstack/react-table, react-virtual | 8.21.x / 3.14.x | keybindings-worker |
-| @dnd-kit/* | 6.3.x / 10.x / 3.2.x | keybindings-worker |
-| vite / vitest | 8.1.x / 4.1.x | test-worker、全ワーカーの実行環境 |
-| typescript | 7.0.x | 全ワーカー |
+**対象バージョンは `package.json` を都度読む**（ここに転記した一覧は古くなるため置かない）。
+主要スタックは React 19 + React Router 8 / Tailwind 4 + shadcn(Radix) / Drizzle + libSQL / better-auth /
+TipTap / zod / Vite + Vitest / TypeScript。
 
 ## ソース起点マップ（cold start 用）
 
