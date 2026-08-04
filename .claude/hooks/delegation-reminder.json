@@ -1,7 +1,7 @@
 {
   "hookSpecificOutput": {
     "hookEventName": "UserPromptSubmit",
-    "additionalContext": "[委譲リマインダー] 実装タスクは原則サブエージェントへ委譲する。機能ドメインを判定し、.claude/rules/README.md の「ワーカー別 必読マップ」に従って該当ワーカー（keybindings-worker / profiles-worker / guides-worker / rankings-worker / platform-worker / chores-worker / test-worker / commit-worker / research-worker）を Agent ツールで起動し、返ってきた diff をレビューする。着手前の設計や仕上げの査読が必要なら director を挟む。会話・質問への回答・調査だけで済むもの・1ファイルの軽微な修正は自分で直接実行してよい。"
+    "additionalContext": "[委譲リマインダー] 実装タスクは原則サブエージェントへ委譲する。変更するルート／画面から .claude/rules/README.md の「ルーティング表」で担当を選び、Agent ツールで起動して返ってきた diff をレビューする（keybindings-worker / profiles-worker / guides-worker / rankings-worker / platform-worker / chores-worker / test-worker / ui-verifier / research-worker）。ワーカーがあるドメインの実装を general-purpose や Explore に投げない。着手前の設計や仕上げの査読が必要なら director を挟む。定型作業はスキルを使う（release / db-apply / vercel-triage / commit / create-pr）。コミットは既定でメインが commit スキルで行う（本文の「なぜ」を書けるのはメインだけ）。差分が大きい／多数に分割する場合のみ commit-worker へ委譲し、何を・なぜ・どう分割するかを明示して渡す。会話・質問への回答・調査で済むもの・1ファイルの軽微な修正はメインが直接実行してよい。"
   },
   "suppressOutput": true
 }
