@@ -26,8 +26,8 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 - **基盤ロジック/共有**: `app/lib/env.server.ts`, `db.ts`, `db-url.ts`, `schema.ts`(共有スキーマ), `auth.ts`,
   `auth-client.ts`, `session.ts`, `email.server.ts`, `release-notify.server.ts`, `app-meta.server.ts`, `cache.ts`,
   `feedback-schema.ts`, `game-languages.ts`, `changelog.ts`, `i18n.ts`, `messages/`, `utils.ts`
-- **仕様書**: `docs/auth.md`, `docs/api.md`, `docs/infrastructure.md`, `docs/developers.md`, `docs/whats-new.md`,
-  `docs/tech-stack.md`, `docs/local-development.md`
+- **仕様書**: `docs/auth.md`, `docs/api.md`, `docs/infrastructure.md`, `docs/database.md`, `docs/developers.md`,
+  `docs/whats-new.md`, `docs/tech-stack.md`, `docs/local-development.md`
 
 ## DBスキーマの調整役
 

@@ -32,31 +32,42 @@ pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直�
 **実装タスクは原則としてメイン（トップレベルの Claude）が担当ワーカーへ委譲し、返ってきた diff をレビューする。**
 
 1. タスクの機能ドメインを判定する
-2. `.claude/rules/README.md` の「ワーカー別 必読マップ」で担当ワーカーを選び、Agent ツールで起動する
+2. `.claude/rules/README.md` の「ルーティング表」で担当ワーカーを選び、Agent ツールで起動する
 3. 返ってきた差分をメインがレビューする（必要なら `director` に読み取り専用の計画/査読を依頼する）
 
-| ドメイン | ワーカー |
-|---|---|
-| キー配置・マウス・プリセット・アイテム/サーチクラフト | `keybindings-worker` |
-| プロフィール・me・お気に入り・閲覧/比較・スキン | `profiles-worker` |
-| ガイド記事（TipTap） | `guides-worker` |
-| ホーム・ペース/ライブ・ランキング・統計 | `rankings-worker` |
-| 認証・API/基盤・共通レイアウト・DBスキーマ | `platform-worker` |
-| ドキュメント/changelog/翻訳キー/雑務 | `chores-worker` |
-| Vitest テスト | `test-worker` |
-| コミット・PR作成 | `commit-worker` |
-| 調査・Web検索（読み取り専用） | `research-worker` |
+担当の一覧（どのルート／画面をどのワーカーが持つか）は `.claude/rules/README.md`「ルーティング表」が単一情報源。
+ここには転記しない。
 
 - **DBスキーマ（`app/lib/schema.ts`）の変更は `platform-worker` に集約する**（全機能で共有するため）
 - ワーカーはサブエージェントを起動できない。担当外へ波及したらメインに差し戻させ、メインが別ワーカーへ振り直す
 - 会話・質問への回答・調査のみで済むもの・1ファイルの軽微な修正は、委譲せずメインが直接実行してよい
 - 委譲の詳細な運用モデルとソース起点マップは `.claude/rules/README.md` が単一情報源
 
+## 定型作業（スキル）
+
+手順が決まっている作業は `.claude/skills/` のスキルを使う（`~/.claude/skills/` のものは全プロジェクト共通）。
+
+| 依頼 | スキル |
+|---|---|
+| バージョンリリース（changelog 作成 + version 更新） | `release` |
+| DBスキーマのローカル/リモート反映、`db:push` の TRUNCATE 回避 | `db-apply` |
+| Vercel でだけ落ちる（ERR_REQUIRE_ESM / FUNCTION_INVOCATION_FAILED 等） | `vercel-triage` |
+| フォルダ型タブの改修・タブ周りの表示崩れ | `ui-tabs` |
+| コミットの作成・分割コミット（**既定はこちら**） | `commit`（ユーザーレベル） |
+| Pull Request の作成 | `create-pr`（ユーザーレベル） |
+
+> **コミットは既定でメインが `commit` スキルで行う。** コミット本文の「なぜ」（原因・判断根拠）を
+> 書けるのは、実装の文脈を持っているメインだけ。`commit-worker` は会話履歴を持たないため、
+> 丸投げすると diff から復元できる範囲まで本文が痩せる。
+> `commit-worker` へ委譲するのは**差分が大きい／多数のコミットに分割する**ときに限り、
+> その場合はメインが「何を・なぜ・どう分割するか」をプロンプトで明示的に渡す。
+
 ## バージョン管理・Changelog
 
 - **バージョン番号は指示があるまで変えない**（勝手に上げない）
 - **Changelog（`app/content/changelog.md`）も同様に、変更のたびにエントリを追加しない**。
   バージョンリリースの指示があった段階で、`origin/main` と `dev` の間のコミットを精査してまとめて作成する
+- リリース作業の具体的な手順（差分精査の範囲・記載フォーマット・書き方の基準）は `release` スキル
 
 ## 技術スタック
 
@@ -101,6 +112,7 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 ### データベース
 
 - スキーマ: `app/lib/schema.ts`（Drizzle ORM、SQLite/Turso方言）
+- 全体像（テーブル一覧・ER図・整合性ポリシー）: `docs/database.md`
 - マイグレーション: `drizzle/` ディレクトリ、`pnpm db:generate` + `pnpm db:migrate` で管理
 - ID生成: `@paralleldrive/cuid2` によるCUID2
 - 設定: `drizzle.config.ts` = ローカル用（`.env` を読み込み。リモートURLならエラーで中断）、
@@ -109,22 +121,16 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 #### 接続先の分離運用（重要）
 
 - **`.env` は常に `file:local.db` 固定**。リモートTursoの接続情報は `.env.remote`（gitignore済み）に分離する
-- `.env` を一時的にリモートURLへ書き換える運用は**禁止**（起動中のdevサーバーや別スクリプトが巻き添えでリモートDBに接続する事故のもと）
-- リモートへの反映: `pnpm db:push:remote`、または `scripts/` の一回限りスクリプトに `--remote` フラグ
-  （共通ローダー `scripts/lib/db-env.ts` が `.env.remote` を読み込み、URLスキームを検証して取り違えを中断する）
-- `pnpm db:push` はfalsyデフォルトの新規NOT NULL列で**TRUNCATE（データ損失）を提案する**ことがある。
-  その場合はpushせず、`scripts/` に dry-run既定 + `--apply` フラグの一回限りtsxスクリプトを作って手動DDLで適用する
-- ガード: `.env` にリモートURLが入ると `drizzle.config.ts`・各スクリプト・`/dev/login`（`isDevAuthEnabled()`）がすべて拒否する
+- **`.env` を一時的にリモートURLへ書き換える運用は禁止**（起動中のdevサーバーや別スクリプトが巻き添えでリモートDBに接続する事故のもと）
+- 反映手順（ルート判定・`db:push` の TRUNCATE 回避・一回限りスクリプトの型・ガードの仕組み）は **`db-apply` スキル**
 
 ### i18n（国際化）
 
 日本語（既定）と英語に対応。**英語は主要導線から段階的**に広げており、未翻訳キーは日本語へフォールバックする。
 
-- 文言: `app/lib/messages/`（ドットパスキー + `{param}` 補間）。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
-- コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる
-- ロケール検出: `app/lib/locale.ts` の `resolveLocale()` — Cookie（`minefolio_locale`）→ Accept-Language（q値順）→ 既定 `ja`
-- 切替UIはヘッダー。`/api/set-locale` に Cookie を保存して再検証する
-- 詳細: `docs/i18n.md`
+- 文言実体は `app/lib/messages/`。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
+- **コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる**
+- 書き方の規約は `.claude/rules/general.md`「翻訳（i18n）」、ロケール検出などの詳細は `docs/i18n.md`
 
 ### ドキュメント・ルールファイル
 
