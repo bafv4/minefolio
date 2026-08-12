@@ -23,11 +23,19 @@
   - テーマは `next-themes`（`themes={["light","dark","ultra-dark"]}`）で管理し、選択は localStorage（key: `theme`）に永続化。`system` のダーク解決先は通常ダーク（Slate）
   - 切替UIは `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS` に集約（デスクトップのドロップダウン / モバイルのセグメント切替で共有）
 
+## 角丸（2層ルール）
+- 個別のカード・アイテム・ボックス: `rounded-xl`（14px）
+- ページ内の大型セクションパネル（ホームのセクション枠など、複数カードを包む面）: `rounded-2xl`（18px）
+- `rounded-3xl` 以上はコンテナには使わない（装飾要素は除く）
+
 ## カラーシステム
 - テーマカラーは **oklch** 形式でCSS変数に定義
 - セマンティックカラー: `--success`, `--warning`, `--info`, `--destructive`
-- ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`
+- ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）
 - コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
+- 意味を持つ色（成功・警告・情報・エラー/破壊的）は必ずセマンティックトークン（`text-success` / `text-warning` / `text-info` / `text-destructive` と各 `bg-*/10` 等）を使う。`green-500` などのパレット直指定・生 hex は禁止
+- `dark:` バリアントは使わない。3テーマ（light / dark / ultra-dark）はトークン側で吸収する（タブ節の既存方針の一般化）
+- inline style で色を書く場合もトークンをそのまま参照する（例: `var(--muted)`）。`hsl(var(--token))` で包むのは oklch 定義のため無効色になるので禁止
 
 ## フォント
 - 本文: `Zen Kaku Gothic New`, `Inter`（sans-serif）
@@ -40,6 +48,7 @@
 ## アイコン
 - `lucide-react` を統一使用
 - サイズは用途に合わせる（フッター: `h-3 w-3`、ボタン内: `h-4 w-4`、空状態: `h-12 w-12`）
+- `Button` コンポーネント内の svg は基底の `[&_svg:not([class*='size-'])]:size-4` により 16px に強制される。16px 以外にしたい場合は `h-5 w-5` ではなく **`size-5` / `size-6` クラス**を使う（`h-*` 指定は上記セレクタに拾われず死にクラスになる）
 
 ### Minecraft アイテムアイコン
 - **`ItemIcon`（`app/components/item-icon.tsx`）を使う**。`@bafv4/mcitems` の `MinecraftItemIcon` を直接呼ばない
@@ -61,6 +70,15 @@
   - `shadow` / `border` / `background` のホバー変化は重ね合わせコンテキストを作らないので、`Card` 側でよい
 - カード内の操作要素（`LikeButton` など）は `relative z-10` でオーバーレイより手前に出す
 - 変更したら**実際にホバーしてからクリック**して遷移を確認する
+
+## 空状態
+- ページ・セクションの空状態は共有コンポーネント `EmptyState`（`app/components/empty-state.tsx`、props: `icon` / `title` / `description` / `action?`）を使う。破線ボーダー + アイコン `h-12 w-12` + タイトル + 説明（+ 任意の導線）のカード型
+- 独自の空状態マークアップを新規に書かない
+
+## 公開一覧ページのヘッダ
+- フィード/データ系の公開一覧ページ（`/paces` `/videos` `/rankings` `/stats`）のページヘッダは「丸背景アイコンチップ（`rounded-xl bg-primary/10 p-2` + アイコン）+ `h1`（`text-2xl font-bold`）+ 件数バッジ」の構造
+- 英大文字の eyebrow ラベルは既存ページ（ホーム・`/paces`・`/videos`）のみ。新規ページに新設しない
+- ページタイトル `h1` のサイト標準は `text-2xl font-bold`（ホームの hero とガイド記事タイトルは例外）
 
 ## ダイアログ・モーダル
 - shadcn/ui の `Dialog` コンポーネントを使用

@@ -218,6 +218,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - `.guide-content.prose` CSSクラスを適用
 - Tailwind CSS の `prose` クラスベースのタイポグラフィスタイリング
+- **本文の行長制限**: 段落・見出し（h1〜h6）・リスト・引用は読みやすさのため `max-width: 65ch` + 中央寄せ。`app/app.css` の Guide content セクションの `.guide-content.prose :where(p, h1…h6, ul, ol, blockquote)` ルールで定義され、閲覧ページ（`guides/view.tsx`）とエディタ（`guide-editor/index.tsx`）は同じ `.guide-content.prose` クラスを共有するため WYSIWYG が保たれる。画像・表（`.table-scroll-wrapper`）・埋め込み（`.not-prose`）・コードブロック（`pre`）はこの制限の対象外で、コンテナ幅（`article` 側の `max-w-5xl`）いっぱいまで広く使える
 
 ---
 

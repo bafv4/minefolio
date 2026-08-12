@@ -158,14 +158,12 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 ### 遅延ロード・無限スクロール
 
 - loader（SSR）は先頭60件と総件数のみ返す
-- スクロールで `IntersectionObserver` が `/api/paces?offset=N&limit=60`（+検索条件）を呼び、順次追加
-- 追加読み込み中に一覧がずれた場合は `pacemanRunId` で重複除去
-- 検索条件の変更時は一覧の状態をリセット（`key` による再マウント）
-- 読み込み失敗時は「再試行」ボタンを表示
+- 追加ロードは /videos と共通の `use-infinite-scroll` フック（`/api/paces?page=N` + 検索条件、
+  レスポンスは `{ items, page, hasMore }` 規約）。検索条件の変更はフックの `resetDeps` でリセット
 
 ### /api/paces
 
-ページング+検索用APIエンドポイント。`{ paces, total, hasMore }` を返す。`limit` は最大100。レスポンスは `getPublicPaceFeed()` のみを使いセッション非依存（「自分のペースを隠す」フィルタは適用しない）のため、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300` を付与しCDNキャッシュ可能にしている。
+ページング+検索用APIエンドポイント。`{ items, page, total, hasMore }` を返す（`page` は1始まり、1ページ60件）。レスポンスは `getPublicPaceFeed()` のみを使いセッション非依存（「自分のペースを隠す」フィルタは適用しない）のため、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300` を付与しCDNキャッシュ可能にしている。
 
 ---
 
@@ -322,6 +320,5 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/components/feed-video-card.tsx` - 動画フィードカード（YouTube/Twitch VOD統一・埋め込み再生対応）
 - `app/components/live-pace-list.tsx` - ライブラン一覧（ホームのペースフィード内で使用）
 - `app/components/pace-feed-card.tsx` - ペースフィードカード（ホーム・ペース一覧で共用）
-- `app/components/recent-pace-card.tsx` - PaceManペースカード
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード
 - `app/components/paceman-split-mark.tsx` - PaceManスプリットマーク

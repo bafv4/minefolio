@@ -155,8 +155,8 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 ### 表示
 
-- `PlayerCard` コンポーネントでプレイヤーカード表示
-- お気に入りが空の場合、案内メッセージ表示
+- `ProfileFeedCard`（`/browse` と共通）でプレイヤーカード表示。role/edition/platform バッジ付き
+- お気に入りが空の場合、`EmptyState` で案内メッセージ + `/browse` への導線を表示
 - `FavoriteButton` コンポーネントで各プレイヤーカードにお気に入りトグルボタンを表示（v1.4.0 から `slug` プロップを受け取る）
 
 ---
@@ -193,7 +193,6 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - `app/lib/keybindings.ts` - キーバインドのラベル変換（`getActionLabel`, `getKeyLabel`, `normalizeKeyCode`）
 
 ### コンポーネント
-- `app/components/player-card.tsx` - プレイヤーカード
-- `app/components/profile-feed-card.tsx` - プロフィールフィードカード（カード/リスト表示切替対応）
+- `app/components/profile-feed-card.tsx` - プロフィールフィードカード（`/browse` `/favorites` 共通。カード/リスト表示切替対応）
 - `app/components/favorite-button.tsx` - お気に入りボタン（slug ベース）
 - `app/components/minecraft-avatar.tsx` - Minecraftアバター表示
