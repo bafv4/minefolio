@@ -27,9 +27,9 @@ import { EmptyState } from "@/components/empty-state";
 // 1〜3位のメダル色（3テーブルで共通）。2位は素のグレーだとライトテーマでコントラスト不足のため
 // text-muted-foreground を使う
 function rankMedalClass(rank: number): string {
-  if (rank === 1) return "text-yellow-500";
+  if (rank === 1) return "text-gold";
   if (rank === 2) return "text-muted-foreground";
-  if (rank === 3) return "text-amber-600";
+  if (rank === 3) return "text-bronze";
   return "";
 }
 
@@ -124,7 +124,7 @@ export default function RankingsPage() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{t("rankings.pageTitle")}</h1>
           </div>
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
             <Trophy className="h-3.5 w-3.5" />
             {t("rankings.count", { count: items.length })}
           </span>
@@ -236,7 +236,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -342,7 +342,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -399,7 +399,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -451,7 +451,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
 function RankingsTableSkeleton() {
   const t = useT();
   return (
-    <div className="relative border rounded-lg overflow-hidden">
+    <div className="relative border rounded-xl overflow-hidden">
       <table className="w-full caption-bottom text-sm">
         <TableHeader>
           <TableRow>

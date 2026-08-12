@@ -16,7 +16,7 @@ export function TabContentSkeleton({
     return (
       <div className="space-y-3" aria-busy="true">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 rounded-xl border p-4">
+          <div key={i} className="flex items-center gap-4 rounded-xl border border-border/70 bg-background/80 p-4">
             <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-1/3" />
               <Skeleton className="h-3 w-1/2" />
@@ -40,7 +40,7 @@ export function TabContentSkeleton({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="overflow-hidden rounded-xl border">
+        <div key={i} className="overflow-hidden rounded-xl border border-border/70 bg-background/80">
           <Skeleton className="h-36 w-full" />
           <div className="space-y-2 p-4">
             <Skeleton className="h-5 w-3/4" />

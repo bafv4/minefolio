@@ -3,13 +3,6 @@ import { useLocale, useT } from "@/hooks/use-locale";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Eye, FileText, Pin, TrendingUp } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
 import { formatDistanceToNow } from "date-fns";
@@ -50,7 +43,7 @@ function PageViews7dMeta({ count }: { count: number }) {
   const t = useT();
   const label = t("guides.pageViews7d", { days: PAGE_VIEW_WINDOW_DAYS });
   return (
-    <span className="flex items-center gap-1" title={label}>
+    <span className="flex shrink-0 items-center gap-1" title={label}>
       <TrendingUp className="h-3 w-3" aria-hidden />
       <span className="sr-only">{label}</span>
       {count}
@@ -95,9 +88,9 @@ export function GuideCardGrid({
               className="absolute inset-0 z-0 rounded-xl"
               aria-label={guide.title}
             />
-            <Card
+            <div
               className={cn(
-                "h-full pt-0 overflow-hidden transition-all group-hover:shadow-sm group-hover:border-primary/40",
+                "flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all group-hover:border-primary/40 group-hover:shadow-md",
                 guide.isPinned && "border-primary/40",
               )}
             >
@@ -117,20 +110,18 @@ export function GuideCardGrid({
                   <FileText className="h-8 w-8 text-muted-foreground/30" />
                 </div>
               )}
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base line-clamp-2 group-hover:text-primary transition-colors flex items-start gap-1.5">
+              <div className="flex flex-1 flex-col p-4">
+                <h3 className="flex items-start gap-1.5 text-base font-semibold leading-none line-clamp-2 transition-colors group-hover:text-primary">
                   {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
                   {guide.title}
-                </CardTitle>
+                </h3>
                 {guide.summary && (
-                  <CardDescription className="line-clamp-2 text-xs">
+                  <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
                     {guide.summary}
-                  </CardDescription>
+                  </p>
                 )}
-              </CardHeader>
-              <CardContent className="pt-0">
                 {tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
+                  <div className="mt-3 flex flex-wrap gap-1">
                     {tags.slice(0, 3).map((tag) => (
                       <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
                         {tag}
@@ -138,10 +129,15 @@ export function GuideCardGrid({
                     ))}
                   </div>
                 )}
-                {/* justify-between は子3つ前提で崩れるため gap + ml-auto に統一（リスト表示と同じ） */}
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {guide.authorName && <span className="truncate">{guide.authorName}</span>}
-                  <span className="flex items-center gap-1">
+                {/* 伸縮スペーサー: タイトル行数等の差を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
+                <div className="flex-1" />
+                {/* 狭幅（グリッドが詰まった時）でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。
+                    時刻は ml-auto shrink-0 で折り返し後も行内右端に揃える */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                  {guide.authorName && (
+                    <span className="min-w-0 truncate">{guide.authorName}</span>
+                  )}
+                  <span className="flex shrink-0 items-center gap-1">
                     <Eye className="h-3 w-3" />
                     {guide.viewCount}
                   </span>
@@ -154,6 +150,7 @@ export function GuideCardGrid({
                     targetId={guide.id}
                     likeCount={guide.likeCount}
                     isOwn={guide.isOwn}
+                    className="shrink-0"
                   />
                   {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
                   <span className="ml-auto shrink-0" suppressHydrationWarning>
@@ -163,8 +160,8 @@ export function GuideCardGrid({
                     })}
                   </span>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         );
       })}
@@ -197,12 +194,16 @@ export function GuideListView({
               className="absolute inset-0 z-0 rounded"
               aria-label={guide.title}
             />
-            {guide.coverImageUrl && (
+            {guide.coverImageUrl ? (
               <img
                 src={guide.coverImageUrl}
                 alt={guide.title}
                 className="w-20 h-14 object-cover rounded-md shrink-0"
               />
+            ) : (
+              <div className="w-20 h-14 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
+                <FileText className="h-5 w-5 text-muted-foreground/30" />
+              </div>
             )}
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1 flex items-center gap-1.5">

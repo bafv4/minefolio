@@ -38,25 +38,28 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
     <Link
       to={`/player/${player.slug}`}
       prefetch="intent"
-      className="group rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+      className="group flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
     >
-      <div className="flex items-start gap-3">
+      {/* flex-1 でヘッダー側が余白を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
+      <div className="flex flex-1 items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
           {player.uuid ? (
             <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm font-semibold text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-semibold text-muted-foreground">
               {displayName[0]?.toUpperCase() ?? "?"}
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
+        {/* min-h-12 keeps header block height == avatar height, so rows stay aligned across cards
+            even when optional fields (@mcid / bio) are missing */}
+        <div className="flex min-h-12 min-w-0 flex-1 flex-col justify-center">
           <p className="truncate font-semibold">{displayName}</p>
           {player.mcid && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <p>@{player.mcid}</p>
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <p className="min-w-0 truncate">@{player.mcid}</p>
               {player.pronouns && (
-                <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] leading-none">
+                <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] leading-none">
                   {player.pronouns}
                 </span>
               )}
@@ -67,26 +70,27 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        {/* min-h-5: バッジ（約20px）の有無でフッター高が変わり、罫線位置が兄弟カードとずれるのを防ぐ */}
+        <div className="flex min-h-5 min-w-0 flex-wrap items-center gap-1.5">
           {userRoleLabel && (
-            <Badge variant="secondary" className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="secondary" className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px]">
               <User className="h-3 w-3 shrink-0" />
               {userRoleLabel}
             </Badge>
           )}
           {editionLabel && (
-            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
               {editionLabel}
             </Badge>
           )}
           {platformText && (
-            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
               {platformText}
             </Badge>
           )}
         </div>
-        <span className="inline-flex items-center gap-1 shrink-0">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           <Clock3 className="h-3 w-3" />
           {formatRelativeDate(t, player.updatedAt)}
         </span>

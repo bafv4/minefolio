@@ -8,7 +8,7 @@ export function PinnedBadge({ className }: { className?: string }) {
   const t = useT();
   return (
     <Badge variant="outline" className={cn("text-xs border-primary/40 text-primary", className)}>
-      <Pin className="h-3 w-3 mr-1" />
+      <Pin className="h-3 w-3" />
       {t("common.pinned")}
     </Badge>
   );

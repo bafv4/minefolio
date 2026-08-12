@@ -54,9 +54,18 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
     (isYouTube ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg` : null);
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:border-primary/40 hover:shadow-sm">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+      {/* カード全体のクリックで動画の視聴ページへ（外部リンク）。
+          サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる */}
+      <a
+        href={watchUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={video.title}
+        className="absolute inset-0 z-0 rounded-xl"
+      />
       {/* サムネイル / 埋め込みプレイヤー */}
-      <div className="relative aspect-video overflow-hidden bg-muted">
+      <div className="relative z-10 aspect-video overflow-hidden bg-muted">
         {isPlaying ? (
           <iframe
             className="h-full w-full"
@@ -88,7 +97,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             {/* プラットフォームバッジ */}
             <span
               className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-white ${
-                isYouTube ? "bg-red-600/90" : "bg-purple-600/90"
+                isYouTube ? "bg-youtube/90" : "bg-twitch/90"
               }`}
             >
               {isYouTube ? <Youtube className="h-3 w-3" /> : <Twitch className="h-3 w-3" />}
@@ -96,7 +105,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             </span>
             {/* 配信時間（Twitch VOD） */}
             {video.durationSeconds != null && video.durationSeconds > 0 && (
-              <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
+              <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
                 {formatDuration(video.durationSeconds)}
               </span>
             )}
@@ -104,24 +113,29 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
         )}
       </div>
 
-      <div className="space-y-3 p-4">
+      <div className="flex flex-1 flex-col p-4">
         {/* タイトル: プラットフォームの視聴ページへ */}
         <a
           href={watchUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          className="relative z-10 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug transition-colors hover:text-primary">
             {video.title}
           </h3>
         </a>
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        {/* 伸縮スペーサー: タイトル1〜2行の差を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
+        <div className="flex-1" />
+        {/* 狭幅でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。時刻+外部リンクは
+            ml-auto shrink-0 で折り返し後も行内右端に揃える。行自体はオーバーレイの下のまま
+            にして空白部分のクリックはカード全体のリンクに渡し、実際のリンク要素だけ z-10 で持ち上げる */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           {video.slug ? (
             <Link
               to={`/player/${video.slug}`}
               prefetch="intent"
-              className="inline-flex min-w-0 items-center gap-2 transition-colors hover:text-primary"
+              className="relative z-10 inline-flex min-w-0 items-center gap-2 transition-colors hover:text-primary"
             >
               {video.uuid ? (
                 <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
@@ -133,16 +147,16 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
               <span className="truncate">{showName}</span>
             </Link>
           ) : (
-            <span className="truncate">{showName}</span>
+            <span className="min-w-0 truncate">{showName}</span>
           )}
-          <span className="flex shrink-0 items-center gap-2">
+          <span className="ml-auto flex shrink-0 items-center gap-2">
             {formatRelativeTimeInHours(t, video.publishedAt)}
             <a
               href={watchUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={t("home.openOnPlatform", { platform: platformName })}
-              className="transition-colors hover:text-primary"
+              className="relative z-10 transition-colors hover:text-primary"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>

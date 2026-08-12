@@ -25,3 +25,15 @@ export function formatRelativeTimeInHours(t: Translator, date: Date | string): s
   if (hoursAgo < 24) return t("playerStats.hoursAgo", { count: hoursAgo });
   return t("playerStats.daysAgo", { count: Math.floor(hoursAgo / 24) });
 }
+
+/** 分単位の相対表記（たった今 / N分前 / N時間前 / N日前）。PaceMan統計カード等、分単位の精度が要る用途向け。 */
+export function formatRelativeTimeInMinutes(t: Translator, date: Date | string): string {
+  const diffMs = Date.now() - new Date(date).getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffMinutes < 1) return t("playerStats.justNow");
+  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
+  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
+  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
+}

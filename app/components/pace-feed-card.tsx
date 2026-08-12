@@ -67,7 +67,7 @@ export function PaceFeedCard({
   return (
     <div
       className={cn(
-        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
+        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
         isFinished && "border-info/60 bg-info/5"
       )}
     >
@@ -100,17 +100,19 @@ export function PaceFeedCard({
       </div>
 
       <div className="mt-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
+        {/* 狭幅でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。バッジは
+            ml-auto shrink-0 で折り返し後も行内右端に揃える */}
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+          <div className="min-w-0">
             <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
             <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
           </div>
-          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+          <Badge variant="secondary" className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs">
             <PaceManSplitMark timeline={run.timeline} size={13} />
           </Badge>
         </div>
 
-        <div className="mt-3 flex items-center border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
             {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}

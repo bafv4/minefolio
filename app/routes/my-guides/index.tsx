@@ -160,7 +160,7 @@ export default function MyGuidesPage() {
           {userGuides.map((guide) => {
             const tags = JSON.parse(guide.tags) as string[];
             return (
-              <Card key={guide.id}>
+              <Card key={guide.id} className="py-0">
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -181,12 +181,12 @@ export default function MyGuidesPage() {
                       )}
                       {guide.isPublished ? (
                         <Badge variant="default" className="shrink-0 text-xs">
-                          <Globe className="h-3 w-3 mr-1" />
+                          <Globe className="h-3 w-3" />
                           {t("meGuides.statusPublished")}
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="shrink-0 text-xs">
-                          <Lock className="h-3 w-3 mr-1" />
+                          <Lock className="h-3 w-3" />
                           {t("meGuides.statusDraft")}
                         </Badge>
                       )}
@@ -211,12 +211,13 @@ export default function MyGuidesPage() {
                       {tags.length > 0 && (
                         <div className="flex gap-1 flex-wrap">
                           {tags.map((tag) => (
-                            <span
+                            <Badge
                               key={tag}
-                              className="bg-muted px-1.5 py-0.5 rounded text-xs"
+                              variant="secondary"
+                              className="rounded-full px-2 py-0.5 text-[11px]"
                             >
                               {tag}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       )}
@@ -252,7 +253,7 @@ export default function MyGuidesPage() {
                         </Link>
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="ghost" size="sm" asChild>
                       <Link
                         to={`/my-guides/${guide.slug}/edit`}
                         aria-label={t("guideEditor.edit")}

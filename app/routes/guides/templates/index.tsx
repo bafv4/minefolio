@@ -298,17 +298,17 @@ export default function TemplatesIndexPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
                   <span>{t("templates.byAuthor", { name: template.authorName })}</span>
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-1">
                     <Search className="h-3 w-3" />
                     {t("templates.craftCount", { count: template.craftCount })}
                   </span>
                   {template.hasRemaps && (
-                    <span className="flex items-center gap-0.5">
+                    <span className="flex items-center gap-1">
                       <Keyboard className="h-3 w-3" />
                       {t("templates.includesRemaps")}
                     </span>
                   )}
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" />
                     {template.applyCount}
                   </span>
@@ -319,8 +319,9 @@ export default function TemplatesIndexPage() {
                     likeCount={template.likeCount}
                     isOwn={template.isOwn}
                   />
-                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
-                  <span suppressHydrationWarning>
+                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制。ガイド系一覧と
+                      同様に右端固定（ml-auto shrink-0）にする */}
+                  <span className="ml-auto shrink-0" suppressHydrationWarning>
                     {formatDistanceToNow(new Date(template.createdAt), {
                       addSuffix: true,
                       locale: dateFnsLocale(locale),

@@ -359,10 +359,8 @@ const HOME_VIDEO_DISPLAY_COUNT = 6;
 
 // セクション全体のローディングスケルトン（memo化）
 const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
-  const gridColsClass =
-    columns === 3 ? "lg:grid-cols-3" :
-      columns === 4 ? "lg:grid-cols-4" :
-        "lg:grid-cols-4";
+  // 実セクションと同じグリッド段階に揃える（4カラムは xl 以上、3カラムは lg 以上）
+  const gridColsClass = columns === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4";
 
   return (
     <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
@@ -373,7 +371,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
           <Skeleton className="h-6 w-40 rounded" />
         </div>
       </div>
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-4`}>
+      <div className={`grid grid-cols-1 gap-4 ${gridColsClass}`}>
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
@@ -616,7 +614,7 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_40%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--border)_35%,transparent)_1px,transparent_1px)] bg-[size:26px_26px] opacity-25" />
         <div className="relative grid gap-7 lg:grid-cols-[1.3fr_1fr] lg:items-end">
           <div className="space-y-5">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               {t("home.heroBadge")}
             </span>
@@ -685,7 +683,7 @@ export default function HomePage() {
           <div className="space-y-5">
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground">{t("home.sectionRecentlyUpdated")}</p>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {recentlyUpdatedUsers.map((user) => (
                   <ProfileFeedCard key={user.slug} player={user} />
                 ))}
@@ -698,7 +696,7 @@ export default function HomePage() {
                   <p className="text-sm font-medium text-muted-foreground">
                     {t("home.sectionPopular", { days: PAGE_VIEW_WINDOW_DAYS })}
                   </p>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {popularUsers.map((user) => (
                       <ProfileFeedCard key={user.slug} player={user} />
                     ))}
@@ -740,7 +738,7 @@ export default function HomePage() {
                 <GuideCardGrid
                   guides={recentlyUpdatedGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
-                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                  gridCols="sm:grid-cols-2 xl:grid-cols-4"
                 />
               </div>
             )}
@@ -755,7 +753,7 @@ export default function HomePage() {
                 <GuideCardGrid
                   guides={popularGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
-                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                  gridCols="sm:grid-cols-2 xl:grid-cols-4"
                 />
               </div>
             )}
@@ -825,7 +823,7 @@ export default function HomePage() {
                 <History className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold">{t("home.pastPacesTitle")}</h3>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-24 rounded-xl" />
                 ))}
@@ -843,7 +841,7 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {sortedRecentPaces.map((run) => (
                   <PaceFeedCard
                     key={`${run.mcid}-${run.time}-${run.timeline}`}

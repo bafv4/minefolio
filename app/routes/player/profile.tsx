@@ -20,7 +20,6 @@ import {
   fetchMCSRRankedStats,
   checkPaceManPlayer,
   fetchSpeedrunComStats,
-  getSpeedrunComVideoEmbedUrl,
 } from "@/lib/external-stats";
 import {
   formatItemName,
@@ -29,7 +28,13 @@ import {
 import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { EloRateGraph } from "@/components/elo-rate-graph";
+import {
+  MCSRRankedCard,
+  PaceManLinkCard,
+  PaceManStatsCard,
+  SpeedrunComCard,
+  StatsServiceLoadingCard,
+} from "@/components/player-stats-cards";
 import { platformLabel } from "@/lib/platform-label";
 import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -169,7 +174,6 @@ export function HydrateFallback() {
 import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
-import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -204,8 +208,6 @@ import {
   Package,
   Search,
   BarChart3,
-  Swords,
-  Timer,
   GitCompare,
   Save,
   User,
@@ -1217,8 +1219,8 @@ export default function PlayerProfilePage() {
         {/* Profile Tab */}
         <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
-          <Card className="py-4">
-            <CardContent className="px-4">
+          <Card className="py-5">
+            <CardContent className="px-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                 {/* Skin - only show when uuid exists */}
                 {player.uuid && (() => {
@@ -1404,11 +1406,11 @@ export default function PlayerProfilePage() {
 
           {/* Bio */}
           {player.bio && (
-            <Card className="gap-2 py-4">
-              <CardHeader className="px-4">
+            <Card className="gap-3 py-5">
+              <CardHeader className="px-5">
                 <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
               </CardHeader>
-              <CardContent className="px-4">
+              <CardContent className="px-5">
                 <Suspense
                   fallback={
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -1424,14 +1426,14 @@ export default function PlayerProfilePage() {
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <Card className="gap-2 py-4">
-              <CardHeader className="px-4">
+            <Card className="gap-3 py-5">
+              <CardHeader className="px-5">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Video className="h-5 w-5" />
                   {t("playerProfile.videos")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-4 space-y-4">
+              <CardContent className="px-5 space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
                   <VideoEmbed video={displayVideos[0]} size="large" />
@@ -1461,8 +1463,8 @@ export default function PlayerProfilePage() {
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
-              <Card>
-                <CardHeader className="py-3">
+              <Card className="gap-3 py-5">
+                <CardHeader className="px-5">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
                     <div className="flex flex-wrap items-center gap-3">
@@ -1493,7 +1495,7 @@ export default function PlayerProfilePage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-0 pb-4">
+                <CardContent className="px-5">
                   <div className="flex flex-col items-start gap-4">
                     {/* メインキーボード */}
                     <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
@@ -1549,13 +1551,13 @@ export default function PlayerProfilePage() {
                   if (bindings.length === 0) return null;
 
                   return (
-                    <Card key={group.key}>
-                      <CardHeader className="py-2">
-                        <CardTitle className={`text-base font-semibold ${group.colorClass}`}>
+                    <Card key={group.key} className="gap-3 py-5">
+                      <CardHeader className="px-5">
+                        <CardTitle className={`text-base ${group.colorClass}`}>
                           {group.label}
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="pt-0 pb-3">
+                      <CardContent className="px-5">
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -1576,13 +1578,13 @@ export default function PlayerProfilePage() {
 
                 {/* カスタムアクション（登録されている場合のみ） */}
                 {player.customActions.length > 0 && (
-                  <Card>
-                    <CardHeader className="py-2">
-                      <CardTitle className="text-base font-semibold">
+                  <Card className="gap-3 py-5">
+                    <CardHeader className="px-5">
+                      <CardTitle className="text-base">
                         {t("playerProfile.customActions")}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 pb-3">
+                    <CardContent className="px-5">
                       <div className="divide-y">
                         {player.customActions.map((ca) => {
                           const chips = resolveKeyCombinationChips(ca.triggerKey);
@@ -1598,7 +1600,7 @@ export default function PlayerProfilePage() {
                                     {i > 0 && (
                                       <span className="text-muted-foreground text-xs">+</span>
                                     )}
-                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
                                       {label}
                                     </kbd>
                                   </span>
@@ -1614,13 +1616,13 @@ export default function PlayerProfilePage() {
 
                 {/* リマップ（登録されている場合のみ） */}
                 {player.keyRemaps.length > 0 && (
-                  <Card>
-                    <CardHeader className="py-2">
-                      <CardTitle className="text-base font-semibold">
+                  <Card className="gap-3 py-5">
+                    <CardHeader className="px-5">
+                      <CardTitle className="text-base">
                         {t("playerProfile.remaps")}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 pb-3">
+                    <CardContent className="px-5">
                       <div className="divide-y">
                         {player.keyRemaps.map((remap) => {
                           const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
@@ -1644,7 +1646,7 @@ export default function PlayerProfilePage() {
                                   {i > 0 && (
                                     <span className="text-muted-foreground text-xs">+</span>
                                   )}
-                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-12 text-center">
+                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
                                     {label}
                                   </kbd>
                                 </span>
@@ -1696,14 +1698,14 @@ export default function PlayerProfilePage() {
             <>
               {/* プレイ内容 */}
               {hasPlaystylePlayContent && (
-                <Card>
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Card className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <Layers className="h-5 w-5" />
                       {t("playerProfile.playstylePlayContent")}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 pb-3 space-y-4">
+                  <CardContent className="px-5 space-y-4">
                     {playstylePlayContentRows.map((row, i) => (
                       <div key={i} className="space-y-2">
                         <p className="text-sm text-muted-foreground">{row.label}</p>
@@ -1716,14 +1718,14 @@ export default function PlayerProfilePage() {
 
               {/* 操作 */}
               {hasPlaystyleControls && (
-                <Card>
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Card className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <SlidersHorizontal className="h-5 w-5" />
                       {t("playerProfile.playstyleControls")}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 pb-3">
+                  <CardContent className="px-5">
                     <div className="divide-y">
                       {playstyleControlsRows.map((row, i) => (
                         <DeviceRow key={i} label={row.label} value={row.value} />
@@ -1735,14 +1737,14 @@ export default function PlayerProfilePage() {
 
               {/* テクニック */}
               {hasPlaystyleTechnique && (
-                <Card>
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Card className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <Sparkles className="h-5 w-5" />
                       {t("playerProfile.playstyleTechnique")}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 pb-3">
+                  <CardContent className="px-5">
                     <div className="divide-y">
                       {playstyleTechniqueRows.map((row, i) => (
                         <DeviceRow key={i} label={row.label} value={row.value} />
@@ -1855,14 +1857,14 @@ export default function PlayerProfilePage() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Keyboard */}
-                <Card>
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Card className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <Keyboard className="h-5 w-5" />
                       {t("playerProfile.keyboard")}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 pb-3">
+                  <CardContent className="px-5">
                     {player.playerConfig.keyboardModel || player.playerConfig.keyboardLayout ? (
                       <div className="divide-y">
                         {player.playerConfig.keyboardModel && (
@@ -1887,14 +1889,14 @@ export default function PlayerProfilePage() {
                 </Card>
 
                 {/* Mouse */}
-                <Card>
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Card className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <Mouse className="h-5 w-5" />
                       {t("playerProfile.mouse")}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 pb-3">
+                  <CardContent className="px-5">
                     {player.playerConfig.mouseModel || player.playerConfig.mouseDpi ? (
                       <div className="divide-y">
                         {/* モデル */}
@@ -1986,14 +1988,14 @@ export default function PlayerProfilePage() {
               </div>
 
               {/* Game Settings */}
-              <Card>
-                <CardHeader className="py-2">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Card className="gap-3 py-5">
+                <CardHeader className="px-5">
+                  <CardTitle className="text-base flex items-center gap-2">
                     <Settings className="h-5 w-5" />
                     {t("playerProfile.inGameSettings")}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 pb-3">
+                <CardContent className="px-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                     <div className="divide-y">
                       {player.playerConfig.toggleSprint != null && (
@@ -2137,11 +2139,11 @@ function ItemLayoutCard({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg">{layout.segment}</CardTitle>
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="text-base">{layout.segment}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5">
         <div className="space-y-4">
           {/* ホットバー */}
           <div className="custom-scrollbar overflow-x-auto pb-2">
@@ -2280,8 +2282,8 @@ function RecordCard({
   const locale = useLocale();
   return (
     // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
-    <Card className={cn(record.isPinned && "md:col-span-2 border-primary/40")}>
-      <CardHeader className="pb-2">
+    <Card className={cn("gap-3 py-5", record.isPinned && "md:col-span-2 border-primary/40")}>
+      <CardHeader className="px-5">
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-base flex items-center gap-1.5">
@@ -2294,7 +2296,7 @@ function RecordCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="px-5 space-y-2">
         {record.personalBest && (
           <div className="flex items-baseline gap-2">
             <span className={cn("font-mono font-bold", record.isPinned ? "text-3xl" : "text-2xl")}>
@@ -2438,11 +2440,11 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
   }, [slug, hasRichLinks]);
 
   return (
-    <Card className="gap-2 py-4">
-      <CardHeader className="px-4">
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
       </CardHeader>
-      <CardContent className="px-4 space-y-2">
+      <CardContent className="px-5 space-y-2">
         {hasRichLinks && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {richLinks.map((link) => (
@@ -2538,7 +2540,7 @@ function SocialLinkRichCard({
           </span>
           <span className="truncate text-sm text-muted-foreground">{link.identifier}</span>
           {isLive && (
-            <Badge className="shrink-0 gap-1 border-transparent bg-red-600 px-1.5 text-white">
+            <Badge className="shrink-0 gap-1 border-transparent bg-destructive px-1.5 text-white">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
               {t("playerProfile.liveNow")}
             </Badge>
@@ -2780,76 +2782,12 @@ function StatsTabContent({
   );
 }
 
-function LoadingProgressRing() {
-  return (
-    <div className="relative h-10 w-10 shrink-0">
-      <div className="absolute inset-0 rounded-full border-4 border-muted" />
-      <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-    </div>
-  );
-}
-
-function StatsServiceLoadingCard({
-  title,
-  description,
-  state,
-}: {
-  title: string;
-  description: string;
-  state: "loading" | "done" | "error";
-}) {
-  const t = useT();
-  const locale = useLocale();
-  const isLoading = state === "loading";
-  const isError = state === "error";
-
-  return (
-    <Card>
-      <CardContent>
-        <div className="flex items-center gap-4">
-          {isLoading ? (
-            <LoadingProgressRing />
-          ) : isError ? (
-            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center">
-              <span className="text-destructive text-sm font-bold">!</span>
-            </div>
-          ) : (
-            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-primary/40 flex items-center justify-center">
-              <Loader2 className="h-4 w-4 text-primary" />
-            </div>
-          )}
-          <div>
-            <p className="font-medium">{title}</p>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete")}
-            </p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function filterWeeklyMainPaces(mainPaces: any[]): any[] {
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   return mainPaces.filter((pace) => {
     const date = pace?.date ? new Date(pace.date).getTime() : NaN;
     return Number.isFinite(date) && date >= oneWeekAgo;
   });
-}
-
-function formatRelativeDateTime(t: Translator, dateStr: string): string {
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffMinutes < 1) return t("playerStats.justNow");
-  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
-  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
-  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
 }
 
 // Stats タブのコンテンツ
@@ -2873,7 +2811,6 @@ function StatsContent({
   };
 }) {
   const t = useT();
-  const locale = useLocale();
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
@@ -2896,120 +2833,10 @@ function StatsContent({
         />
       )}
       {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Swords className="h-5 w-5" />
-              MCSR Ranked
-            </CardTitle>
-            <CardDescription>
-              {t("playerProfile.rankedDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {externalStats.ranked.user?.eloRate && (
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <p className="text-2xl font-bold">{externalStats.ranked.user.eloRate}</p>
-                  <p className="text-xs text-muted-foreground">{t("playerProfile.eloRate")}</p>
-                </div>
-              )}
-              {externalStats.ranked.user?.eloRank && (
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <p className="text-2xl font-bold">#{externalStats.ranked.user.eloRank}</p>
-                  <p className="text-xs text-muted-foreground">{t("playerProfile.ranking")}</p>
-                </div>
-              )}
-              {externalStats.ranked.seasonData && (
-                <>
-                  <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                    <p className="text-2xl font-bold">
-                      {externalStats.ranked.seasonData.records.win}W - {externalStats.ranked.seasonData.records.lose}L
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t("playerProfile.seasonRecord")}</p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* PB表示（全期間 / 今シーズン） */}
-            {externalStats.ranked.seasonData && (
-              typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" ||
-              typeof externalStats.ranked.seasonData.bestTime === "number"
-            ) ? (
-              <div className="grid grid-cols-2 gap-4">
-                {typeof externalStats.ranked.seasonData.bestTimeAllTime === "number" && (
-                  <div className="p-3 bg-secondary/30 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">{t("playerProfile.allTimePb")}</p>
-                    <p className="text-xl font-mono font-bold">
-                      {formatTime(externalStats.ranked.seasonData.bestTimeAllTime)}
-                    </p>
-                  </div>
-                )}
-                {typeof externalStats.ranked.seasonData.bestTime === "number" && (
-                  <div className="p-3 bg-secondary/30 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">{t("playerProfile.seasonPb")}</p>
-                    <p className="text-xl font-mono font-bold">
-                      {formatTime(externalStats.ranked.seasonData.bestTime)}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {/* Eloレートグラフ */}
-            {externalStats.ranked.recentMatches.length > 1 && (
-              <EloRateGraph matches={externalStats.ranked.recentMatches} />
-            )}
-
-            {/* 最近のマッチ */}
-            {externalStats.ranked.recentMatches.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.recentMatches")}</h4>
-                <div className="space-y-1">
-                  {externalStats.ranked.recentMatches.slice(0, 5).map((match) => (
-                    <div
-                      key={match.id}
-                      className={cn(
-                        "flex items-center justify-between p-2 rounded text-sm",
-                        match.result === "win" && "bg-success/10",
-                        match.result === "lose" && "bg-destructive/10",
-                        match.result === "draw" && "bg-warning/10"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
-                          className="w-12 justify-center"
-                        >
-                          {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
-                        </Badge>
-                        <span>vs {match.opponentNickname}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {match.time && (
-                          <span className="font-mono text-muted-foreground">
-                            {formatTime(match.time)}
-                          </span>
-                        )}
-                        <span className={cn(
-                          "font-medium",
-                          match.eloChange > 0 && "text-success",
-                          match.eloChange < 0 && "text-destructive"
-                        )}>
-                          {match.eloChange > 0 ? "+" : ""}{match.eloChange}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <MCSRRankedCard ranked={externalStats.ranked} />
       )}
 
-      {/* PaceMan Section - リンクのみ */}
+      {/* PaceMan Section - リンクのみ（週間統計とは独立にロード状態を持つため別カード） */}
       {loadState.paceman !== "done" && (
         <StatsServiceLoadingCard
           title="PaceMan"
@@ -3017,126 +2844,13 @@ function StatsContent({
           state={loadState.paceman}
         />
       )}
-      {externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Timer className="h-5 w-5" />
-              PaceMan Stats
-            </CardTitle>
-            <CardDescription>
-              {t("playerProfile.pacemanSummary")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="outline" className="w-full">
-              <a
-                href={`https://paceman.gg/stats/player/${encodeURIComponent(player.mcid)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                {t("playerProfile.pacemanOpenDetails")}
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
+      {externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && player.mcid && (
+        <PaceManLinkCard mcid={player.mcid} />
       )}
 
-      {/* PaceMan 過去1週間の統計 */}
+      {/* PaceMan 過去1週間の統計（loader取得済みのためロード状態に依存しない） */}
       {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Timer className="h-5 w-5" />
-              {t("playerProfile.weeklyActivityPaceman")}
-            </CardTitle>
-            <CardDescription>
-              {t("playerProfile.weeklyActivityDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* ネザーイン回数 */}
-            {pacemanStats.netherEnterCount > 0 && (
-              <div className="p-3 bg-secondary/50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">{t("playerProfile.netherEntryCount")}</span>
-                  <span className="text-2xl font-bold">{pacemanStats.netherEnterCount}</span>
-                </div>
-              </div>
-            )}
-
-            {/* 主なペース（2nd Structure以降） */}
-            {weeklyMainPaces.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.mainPacesSince2nd")}</h4>
-                <div className="space-y-1">
-                  {weeklyMainPaces.map((pace: any, idx: number) => (
-                    (() => {
-                      const timeline = pace?.latestSplit?.timeline ?? pace?.timeline;
-                      const rta = pace?.latestSplit?.rta ?? pace?.rta;
-                      if (!timeline || typeof rta !== "number") return null;
-
-                      const runUrl = pace?.pacemanRunId
-                        ? `https://paceman.gg/stats/run/${pace.pacemanRunId}`
-                        : null;
-                      const relativeDate = pace?.date ? formatRelativeDateTime(t, pace.date) : "";
-                      const dateLabel = pace?.date ? new Date(pace.date).toLocaleString() : null;
-
-                      return runUrl ? (
-                        <Tooltip key={`run-${pace.pacemanRunId}`}>
-                          <TooltipTrigger asChild>
-                            <a
-                              href={runUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={cn(
-                                "flex items-center justify-between p-2 rounded text-sm transition-colors",
-                                timeline === "Finish"
-                                  ? "border border-cyan-400/60 bg-cyan-500/10 hover:bg-cyan-500/15"
-                                  : "bg-secondary/30 hover:bg-secondary/50"
-                              )}
-                            >
-                              <div className="min-w-0">
-                                <PaceManSplitMark timeline={timeline} className="font-medium" />
-                                {relativeDate && (
-                                  <p className="text-xs text-muted-foreground">{relativeDate}</p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono">{formatTime(rta)}</span>
-                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                              </div>
-                            </a>
-                          </TooltipTrigger>
-                          {dateLabel && <TooltipContent>{dateLabel}</TooltipContent>}
-                        </Tooltip>
-                      ) : (
-                        <div
-                          key={`${timeline}-${idx}`}
-                          className={cn(
-                            "flex items-center justify-between p-2 rounded text-sm",
-                            timeline === "Finish"
-                              ? "border border-cyan-400/60 bg-cyan-500/10"
-                              : "bg-secondary/30"
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <PaceManSplitMark timeline={timeline} className="font-medium" />
-                            {relativeDate && (
-                              <p className="text-xs text-muted-foreground">{relativeDate}</p>
-                            )}
-                          </div>
-                          <span className="font-mono">{formatTime(rta)}</span>
-                        </div>
-                      );
-                    })()
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <PaceManStatsCard netherEnterCount={pacemanStats.netherEnterCount} mainPaces={weeklyMainPaces} />
       )}
 
       {/* Speedrun.com Section */}
@@ -3148,89 +2862,24 @@ function StatsContent({
         />
       )}
       {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5" />
-              Speedrun.com
-            </CardTitle>
-            <CardDescription>
-              {t("playerProfile.officialRecords")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {externalStats.speedruncom.personalBests
-                .filter((pb) => !hiddenSet.has(pb.run.id))
-                // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
-                .sort((a, b) => Number(pinnedSet.has(b.run.id)) - Number(pinnedSet.has(a.run.id)))
-                .slice(0, 6)
-                .map((pb) => {
-                  const isPinned = pinnedSet.has(pb.run.id);
-                  const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
-                  return (
-                    <div
-                      key={pb.run.id}
-                      className={cn(
-                        "p-3 bg-secondary/50 rounded-lg space-y-1",
-                        isPinned && "md:col-span-2 border border-primary/40"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm truncate flex items-center gap-1.5">
-                          {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                          {pb.category?.data?.name ?? t("common.unknown")}
-                        </span>
-                        <Badge variant="outline" className="shrink-0">
-                          #{pb.place}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {pb.game?.data?.names?.international ?? t("common.unknownGame")}
-                      </p>
-                      {(pb.platformName || pb.versionName) && (
-                        <p className="text-xs text-muted-foreground">
-                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                        </p>
-                      )}
-                      <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
-                        {formatTime(pb.run.times.primary_t * 1000)}
-                      </p>
-                      {videoEmbedUrl && (
-                        <YouTubeEmbed
-                          embedUrl={videoEmbedUrl}
-                          title={pb.category?.data?.name ?? "Speedrun video"}
-                        />
-                      )}
-                      {pb.run.weblink && (
-                        <a
-                          href={pb.run.weblink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline flex items-center gap-1"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          {t("playerProfile.viewRecord")}
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          </CardContent>
-        </Card>
+        <SpeedrunComCard
+          speedruncom={externalStats.speedruncom}
+          hiddenRunIds={hiddenSet}
+          pinnedRunIds={pinnedSet}
+          showVideoEmbed
+        />
       )}
 
       {/* カスタム記録 */}
       {player.categoryRecords.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="gap-3 py-5">
+          <CardHeader className="px-5">
+            <CardTitle className="text-base flex items-center gap-2">
               <Target className="h-5 w-5" />
               {t("playerProfile.customRecords")}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-5">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {player.categoryRecords.map((record: any) => (
                 <RecordCard key={record.id} record={record} />
