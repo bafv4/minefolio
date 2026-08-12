@@ -10,9 +10,10 @@ import {
 import { Analytics } from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
+import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
+import { buttonVariants } from "@/components/ui/button";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
-import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 import { useT } from "@/hooks/use-locale";
 import "./app.css";
 
@@ -103,10 +104,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
             </pre>
           )}
           <div className="pt-4">
-            <a
-              href="/"
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4"
-            >
+            <a href="/" className={buttonVariants()}>
               {t("common.backToHome")}
             </a>
           </div>

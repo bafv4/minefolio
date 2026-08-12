@@ -57,8 +57,8 @@ export default function DevelopersHubPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Code className="h-7 w-7" />
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Code className="h-6 w-6" />
           {t("developers.heading")}
         </h1>
         <p className="text-muted-foreground">

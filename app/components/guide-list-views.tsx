@@ -10,8 +10,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Eye, FileText, LayoutGrid, List, Pin, TrendingUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Eye, FileText, Pin, TrendingUp } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
@@ -42,37 +41,6 @@ export type GuideItem = {
 
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
-
-type ViewMode = "card" | "list";
-
-export function ViewToggle({
-  viewMode,
-  onChange,
-}: {
-  viewMode: ViewMode;
-  onChange: (mode: ViewMode) => void;
-}) {
-  return (
-    <div className="flex border rounded-md">
-      <Button
-        variant={viewMode === "card" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-r-none"
-        onClick={() => onChange("card")}
-      >
-        <LayoutGrid className="h-4 w-4" />
-      </Button>
-      <Button
-        variant={viewMode === "list" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-l-none"
-        onClick={() => onChange("list")}
-      >
-        <List className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
 
 /**
  * 直近7日のページビュー（人気順の根拠数値）。累計閲覧数（Eye）の隣に出す。

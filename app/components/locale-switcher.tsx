@@ -20,7 +20,7 @@ export function LocaleSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={t("nav.changeLanguage")}>
-          <Languages className="h-5 w-5" aria-hidden />
+          <Languages aria-hidden />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -92,7 +92,7 @@ export function KeybindingsListLayout({
   };
 
   return (
-    <div className="flex-1 flex flex-col space-y-5">
+    <div className="flex-1 flex flex-col space-y-6">
       <KeybindingsPageTitle />
 
       {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}

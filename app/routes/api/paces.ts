@@ -1,5 +1,6 @@
 // ペース一覧（/paces）の遅延ロード・無限スクロール用API
-// クエリパラメータ: offset, limit（ページング）, q, split, from, to, maxTime（検索条件）
+// クエリパラメータ: page（1始まりのページ番号。use-infinite-scroll フックの規約）,
+// q, split, from, to, maxTime（検索条件）
 // レスポンスはユーザー非依存（「自分のペースを隠す」設定はクライアント側で適用）。
 // CDNキャッシュ（s-maxage + stale-while-revalidate）でエッジ配信し、オリジン到達を最小化する。
 
@@ -7,26 +8,25 @@ import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { getPublicPaceFeed, parsePaceSearchParams } from "@/lib/paces-feed.server";
 
-const DEFAULT_LIMIT = 60;
-const MAX_LIMIT = 100;
+export const PACES_PAGE_SIZE = 60;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
 
   const url = new URL(request.url);
-  const offset = Math.max(0, Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0);
-  const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
-  const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? DEFAULT_LIMIT : rawLimit, 1), MAX_LIMIT);
+  const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
   const filters = parsePaceSearchParams(url.searchParams);
 
-  const { items } = await getPublicPaceFeed(db, filters);
-  const paces = items.slice(offset, offset + limit);
+  const { items: allItems } = await getPublicPaceFeed(db, filters);
+  const start = (page - 1) * PACES_PAGE_SIZE;
+  const items = allItems.slice(start, start + PACES_PAGE_SIZE);
 
   return Response.json(
     {
-      paces,
-      total: items.length,
-      hasMore: offset + paces.length < items.length,
+      items,
+      page,
+      total: allItems.length,
+      hasMore: start + items.length < allItems.length,
     },
     {
       headers: {

@@ -172,7 +172,7 @@ function ItemSelectDialog({
                 >
                   <ItemIcon itemId={itemId} size={16} />
                   {formatItemName(itemId)}
-                  <span className="ml-1 text-muted-foreground">×</span>
+                  <X className="ml-1 h-3 w-3 text-muted-foreground" />
                 </Badge>
               ))}
             </div>
@@ -268,6 +268,8 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
           <button
             {...attributes}
             {...listeners}
+            type="button"
+            aria-label={t("meSearchCraft.dragHandle")}
             className="flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
           >
             <GripVertical className="h-5 w-5" />
@@ -290,8 +292,9 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                 <span className="text-sm">{formatItemName(itemId)}</span>
                 <button
                   type="button"
+                  aria-label={t("meSearchCraft.removeItem")}
                   onClick={() => removeItem(itemIndex)}
-                  className="text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                  className="p-1.5 rounded text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
                 >
                   <X className="h-3 w-3" />
                 </button>

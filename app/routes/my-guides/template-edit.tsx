@@ -24,6 +24,7 @@ import {
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { TemplateEditorForm } from "@/components/template-editor";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -180,13 +181,12 @@ export default function TemplateEditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          to="/my-guides/templates"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("meTemplates.backToManagement")}
-        </Link>
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link to="/my-guides/templates">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {t("meTemplates.backToManagement")}
+          </Link>
+        </Button>
       </div>
       <div>
         <h1 className="text-2xl font-bold">{t("meTemplates.editorEditTitle")}</h1>

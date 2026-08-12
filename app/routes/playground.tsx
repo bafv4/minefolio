@@ -604,10 +604,10 @@ export default function PlaygroundPage() {
   }, [basePresetId, crafts, loops, effectiveRemaps, newPresetDescription, newPresetName, saveFetcher, saveIncludeRemaps, saveTarget, t, targetPresetId]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FlaskConical className="h-6 w-6 text-primary" />
+          <FlaskConical className="h-6 w-6" />
           {t("playground.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground max-w-3xl">
@@ -616,266 +616,268 @@ export default function PlaygroundPage() {
       </div>
 
       {/* データ読み込み・保存バー */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
-        <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
-        {loadedLabel && (
-          <Badge variant="secondary" className="text-xs">
-            {loadedLabel}
-          </Badge>
-        )}
-        <div className="flex flex-wrap items-center gap-2 ml-auto">
-          {templateData && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                loadData(
-                  templateData,
-                  t("playground.loadedTemplate", { title: templateData.title }),
-                )
-              }
-            >
-              <RotateCcw className="mr-2 h-3.5 w-3.5" />
-              {t("playground.reloadTemplate")}
-            </Button>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+          <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
+          {loadedLabel && (
+            <Badge variant="secondary" className="text-xs">
+              {loadedLabel}
+            </Badge>
           )}
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            {templateData && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  loadData(
+                    templateData,
+                    t("playground.loadedTemplate", { title: templateData.title }),
+                  )
+                }
+              >
+                <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                {t("playground.reloadTemplate")}
+              </Button>
+            )}
 
-          {isLoggedIn && myPresets.length > 0 && (
-            <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <User className="mr-2 h-3.5 w-3.5" />
-                  {t("playground.loadMySettings")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
-                  <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {myPresets.map((preset) => (
-                    <Button
-                      key={preset.id}
-                      variant="outline"
-                      className="w-full justify-start h-auto py-3"
-                      onClick={() => {
-                        loadData(preset, t("playground.loadedPreset", { name: preset.name }));
-                        setLoadDialogOpen(false);
-                      }}
-                    >
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="font-medium flex items-center gap-2">
-                          {preset.name}
-                          {preset.isActive && (
-                            <Badge variant="outline" className="text-xs">
-                              {t("mePresets.active")}
-                            </Badge>
-                          )}
-                        </span>
-                        <div className="flex gap-1 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">
-                            {t("templates.craftCount", { count: preset.crafts.length })}
-                          </Badge>
-                          {preset.remaps.length > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {t("templates.remapCount", { count: preset.remaps.length })}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setRemaps([]);
-              setCrafts([]);
-              setLoops([]);
-              setLoadedLabel(null);
-            }}
-          >
-            <X className="mr-2 h-3.5 w-3.5" />
-            {t("playground.clearAll")}
-          </Button>
-
-          {isLoggedIn && (
-            <>
-              <div className="h-4 w-px bg-border mx-1" />
-              <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
+            {isLoggedIn && myPresets.length > 0 && (
+              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm">
-                    <Save className="mr-2 h-3.5 w-3.5" />
-                    {t("mePresets.save")}
+                  <Button variant="outline" size="sm">
+                    <User className="mr-2 h-3.5 w-3.5" />
+                    {t("playground.loadMySettings")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>{t("playground.saveDialogTitle")}</DialogTitle>
-                    <DialogDescription>{t("playground.saveDialogDescription")}</DialogDescription>
+                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
+                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <RadioGroup
-                      value={saveTarget}
-                      onValueChange={(v) => setSaveTarget(v as "new" | "existing")}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="new" id="save-target-new" />
-                        <Label htmlFor="save-target-new" className="cursor-pointer font-normal">
-                          {t("playground.saveAsNewOption")}
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem
-                          value="existing"
-                          id="save-target-existing"
-                          disabled={realPresets.length === 0}
-                        />
-                        <Label
-                          htmlFor="save-target-existing"
-                          className={cn(
-                            "cursor-pointer font-normal",
-                            realPresets.length === 0 && "text-muted-foreground",
-                          )}
-                        >
-                          {t("playground.saveToExistingOption")}
-                        </Label>
-                      </div>
-                    </RadioGroup>
-
-                    {saveTarget === "new" ? (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="save-new-name">{t("mePresets.presetName")}</Label>
-                          <Input
-                            id="save-new-name"
-                            value={newPresetName}
-                            onChange={(e) => setNewPresetName(e.target.value)}
-                            placeholder={t("mePresets.presetNamePlaceholder")}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="save-new-description">
-                            {t("mePresets.descriptionOptional")}
-                          </Label>
-                          <Textarea
-                            id="save-new-description"
-                            value={newPresetDescription}
-                            onChange={(e) => setNewPresetDescription(e.target.value)}
-                            placeholder={t("mePresets.descriptionPlaceholder")}
-                            rows={3}
-                          />
-                        </div>
-                        {realPresets.length > 0 && (
-                          <div className="space-y-2">
-                            <Label htmlFor="save-base-preset">
-                              {t("playground.basePresetLabel")}
-                            </Label>
-                            <Select value={basePresetId} onValueChange={setBasePresetId}>
-                              <SelectTrigger id="save-base-preset">
-                                <SelectValue placeholder={t("playground.basePresetNone")} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none">
-                                  {t("playground.basePresetNone")}
-                                </SelectItem>
-                                {realPresets.map((preset) => (
-                                  <SelectItem key={preset.id} value={preset.id}>
-                                    <div className="flex items-center gap-2">
-                                      {preset.name}
-                                      {preset.isActive && (
-                                        <Badge variant="outline" className="text-xs ml-1">
-                                          {t("mePresets.active")}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                              {t("playground.basePresetHint")}
-                            </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {myPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => {
+                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
+                          setLoadDialogOpen(false);
+                        }}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium flex items-center gap-2">
+                            {preset.name}
+                            {preset.isActive && (
+                              <Badge variant="outline" className="text-xs">
+                                {t("mePresets.active")}
+                              </Badge>
+                            )}
+                          </span>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">
+                              {t("templates.craftCount", { count: preset.crafts.length })}
+                            </Badge>
+                            {preset.remaps.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {t("templates.remapCount", { count: preset.remaps.length })}
+                              </Badge>
+                            )}
                           </div>
-                        )}
-                      </>
-                    ) : realPresets.length > 0 ? (
-                      <div className="space-y-2">
-                        <Label htmlFor="save-target-preset">{t("playground.targetPresetLabel")}</Label>
-                        <Select value={targetPresetId} onValueChange={setTargetPresetId}>
-                          <SelectTrigger id="save-target-preset">
-                            <SelectValue placeholder={t("mePresets.selectPreset")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {realPresets.map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id}>
-                                <div className="flex items-center gap-2">
-                                  {preset.name}
-                                  {preset.isActive && (
-                                    <Badge variant="outline" className="text-xs ml-1">
-                                      {t("mePresets.active")}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {t("playground.noPresetsToOverwrite")}
-                      </p>
-                    )}
-
-                    {effectiveRemaps.length > 0 && (
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          id="save-include-remaps"
-                          checked={saveIncludeRemaps}
-                          onCheckedChange={(checked) => setSaveIncludeRemaps(checked === true)}
-                        />
-                        <div className="grid gap-1 leading-none">
-                          <Label htmlFor="save-include-remaps" className="text-sm">
-                            {t("playground.saveIncludeRemapsLabel", { count: effectiveRemaps.length })}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("playground.saveIncludeRemapsHint")}
-                          </p>
                         </div>
-                      </div>
-                    )}
+                      </Button>
+                    ))}
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-                      {t("templates.cancel")}
-                    </Button>
-                    <Button
-                      onClick={handleSave}
-                      disabled={
-                        isSaving ||
-                        (saveTarget === "new" && !newPresetName.trim()) ||
-                        (saveTarget === "existing" && !targetPresetId)
-                      }
-                    >
-                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {t("mePresets.save")}
-                    </Button>
-                  </DialogFooter>
                 </DialogContent>
               </Dialog>
-            </>
-          )}
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRemaps([]);
+                setCrafts([]);
+                setLoops([]);
+                setLoadedLabel(null);
+              }}
+            >
+              <X className="mr-2 h-3.5 w-3.5" />
+              {t("playground.clearAll")}
+            </Button>
+
+            {isLoggedIn && (
+              <>
+                <div className="h-4 w-px bg-border mx-1" />
+                <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Save className="mr-2 h-3.5 w-3.5" />
+                      {t("mePresets.save")}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{t("playground.saveDialogTitle")}</DialogTitle>
+                      <DialogDescription>{t("playground.saveDialogDescription")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <RadioGroup
+                        value={saveTarget}
+                        onValueChange={(v) => setSaveTarget(v as "new" | "existing")}
+                        className="space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="new" id="save-target-new" />
+                          <Label htmlFor="save-target-new" className="cursor-pointer font-normal">
+                            {t("playground.saveAsNewOption")}
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="existing"
+                            id="save-target-existing"
+                            disabled={realPresets.length === 0}
+                          />
+                          <Label
+                            htmlFor="save-target-existing"
+                            className={cn(
+                              "cursor-pointer font-normal",
+                              realPresets.length === 0 && "text-muted-foreground",
+                            )}
+                          >
+                            {t("playground.saveToExistingOption")}
+                          </Label>
+                        </div>
+                      </RadioGroup>
+
+                      {saveTarget === "new" ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="save-new-name">{t("mePresets.presetName")}</Label>
+                            <Input
+                              id="save-new-name"
+                              value={newPresetName}
+                              onChange={(e) => setNewPresetName(e.target.value)}
+                              placeholder={t("mePresets.presetNamePlaceholder")}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="save-new-description">
+                              {t("mePresets.descriptionOptional")}
+                            </Label>
+                            <Textarea
+                              id="save-new-description"
+                              value={newPresetDescription}
+                              onChange={(e) => setNewPresetDescription(e.target.value)}
+                              placeholder={t("mePresets.descriptionPlaceholder")}
+                              rows={3}
+                            />
+                          </div>
+                          {realPresets.length > 0 && (
+                            <div className="space-y-2">
+                              <Label htmlFor="save-base-preset">
+                                {t("playground.basePresetLabel")}
+                              </Label>
+                              <Select value={basePresetId} onValueChange={setBasePresetId}>
+                                <SelectTrigger id="save-base-preset">
+                                  <SelectValue placeholder={t("playground.basePresetNone")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none">
+                                    {t("playground.basePresetNone")}
+                                  </SelectItem>
+                                  {realPresets.map((preset) => (
+                                    <SelectItem key={preset.id} value={preset.id}>
+                                      <div className="flex items-center gap-2">
+                                        {preset.name}
+                                        {preset.isActive && (
+                                          <Badge variant="outline" className="text-xs ml-1">
+                                            {t("mePresets.active")}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground">
+                                {t("playground.basePresetHint")}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      ) : realPresets.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="save-target-preset">{t("playground.targetPresetLabel")}</Label>
+                          <Select value={targetPresetId} onValueChange={setTargetPresetId}>
+                            <SelectTrigger id="save-target-preset">
+                              <SelectValue placeholder={t("mePresets.selectPreset")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {realPresets.map((preset) => (
+                                <SelectItem key={preset.id} value={preset.id}>
+                                  <div className="flex items-center gap-2">
+                                    {preset.name}
+                                    {preset.isActive && (
+                                      <Badge variant="outline" className="text-xs ml-1">
+                                        {t("mePresets.active")}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {t("playground.noPresetsToOverwrite")}
+                        </p>
+                      )}
+
+                      {effectiveRemaps.length > 0 && (
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            id="save-include-remaps"
+                            checked={saveIncludeRemaps}
+                            onCheckedChange={(checked) => setSaveIncludeRemaps(checked === true)}
+                          />
+                          <div className="grid gap-1 leading-none">
+                            <Label htmlFor="save-include-remaps" className="text-sm">
+                              {t("playground.saveIncludeRemapsLabel", { count: effectiveRemaps.length })}
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              {t("playground.saveIncludeRemapsHint")}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+                        {t("templates.cancel")}
+                      </Button>
+                      <Button
+                        onClick={handleSave}
+                        disabled={
+                          isSaving ||
+                          (saveTarget === "new" && !newPresetName.trim()) ||
+                          (saveTarget === "existing" && !targetPresetId)
+                        }
+                      >
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {t("mePresets.save")}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
       </div>
-      <p className="text-xs text-muted-foreground -mt-6">{t("playground.autosaveHint")}</p>
 
       {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
       <SearchCraftWorkbench

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { ProfileFeedCard, ProfileFeedListItem, PlayerViewToggle } from "@/components/profile-feed-card";
+import { ProfileFeedCard, ProfileFeedListItem } from "@/components/profile-feed-card";
+import { ViewToggle } from "@/components/view-toggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +40,8 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
+import { platformLabel } from "@/lib/platform-label";
+import { EmptyState } from "@/components/empty-state";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -100,17 +103,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+// ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）
 function PlayerCardSkeleton() {
-  const t = useT();
   return (
-    <div className="border border-border/70 rounded-xl p-3">
-      <div className="flex items-center gap-3">
-        <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
+    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3.5 w-24" />
           <Skeleton className="h-3 w-40" />
         </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <Skeleton className="h-5 w-16 rounded-full" />
+        <Skeleton className="h-3 w-12" />
       </div>
     </div>
   );
@@ -131,14 +138,6 @@ const INPUT_METHOD_LABELS: Record<string, string> = {
   controller: "Controller",
   touch: "Touch",
 };
-const platformLabels = (t: Translator): Record<string, string> => ({
-  pc_windows: "Windows",
-  pc_mac: "Mac",
-  pc_linux: "Linux",
-  switch: "Switch",
-  mobile: "Mobile",
-  other: t("browse.platformOther"),
-});
 
 export default function BrowsePage() {
   const t = useT();
@@ -514,7 +513,7 @@ export default function BrowsePage() {
                 <SelectItem value="displayName">{t("browse.sortDisplayName")}</SelectItem>
               </SelectContent>
             </Select>
-            <PlayerViewToggle viewMode={viewMode} onChange={setViewMode} />
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
 
@@ -526,7 +525,8 @@ export default function BrowsePage() {
                 {roleLabels(t)[role]}
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
-                  className="ml-1 hover:text-destructive"
+                  aria-label={t("browse.removeFilterAria", { label: roleLabels(t)[role] })}
+                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -537,7 +537,8 @@ export default function BrowsePage() {
                 {EDITION_LABELS[edition]}
                 <button
                   onClick={() => handleFilterChange("edition", edition, false)}
-                  className="ml-1 hover:text-destructive"
+                  aria-label={t("browse.removeFilterAria", { label: EDITION_LABELS[edition] })}
+                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -545,10 +546,11 @@ export default function BrowsePage() {
             ))}
             {filters.platforms.map((platform) => (
               <Badge key={platform} variant="secondary" className="gap-1">
-                {platformLabels(t)[platform]}
+                {platformLabel(t, platform, "short")}
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
-                  className="ml-1 hover:text-destructive"
+                  aria-label={t("browse.removeFilterAria", { label: platformLabel(t, platform, "short") ?? platform })}
+                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -559,7 +561,8 @@ export default function BrowsePage() {
                 {INPUT_METHOD_LABELS[inputMethod]}
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
-                  className="ml-1 hover:text-destructive"
+                  aria-label={t("browse.removeFilterAria", { label: INPUT_METHOD_LABELS[inputMethod] })}
+                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -605,29 +608,37 @@ export default function BrowsePage() {
           </div>
         )
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p className="text-lg mb-2">
-            {searchQuery || activeFilterCount > 0
+        <EmptyState
+          icon={<Users className="h-12 w-12" />}
+          title={
+            searchQuery || activeFilterCount > 0
               ? t("browse.emptyFiltered")
-              : t("browse.emptyAll")}
-          </p>
-          {(searchQuery || activeFilterCount > 0) && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setInputValue("");
-                const newParams = new URLSearchParams();
-                if (sortBy !== "updatedAt") {
-                  newParams.set("sort", sortBy);
-                }
-                setSearchParams(newParams);
-              }}
-            >
-              {t("browse.clearSearchAndFilters")}
-            </Button>
-          )}
-        </div>
+              : t("browse.emptyAll")
+          }
+          description={
+            searchQuery || activeFilterCount > 0
+              ? t("browse.emptyFilteredHint")
+              : t("browse.emptyAllHint")
+          }
+          action={
+            (searchQuery || activeFilterCount > 0) && (
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setInputValue("");
+                  const newParams = new URLSearchParams();
+                  if (sortBy !== "updatedAt") {
+                    newParams.set("sort", sortBy);
+                  }
+                  setSearchParams(newParams);
+                }}
+              >
+                {t("browse.clearSearchAndFilters")}
+              </Button>
+            )
+          }
+        />
       )}
 
       {/* スクリーンリーダー向け追加読み込み通知 */}

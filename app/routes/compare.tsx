@@ -561,11 +561,11 @@ export default function ComparePage() {
                 <div className="text-center px-6">
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-green-500">{stats.same}</p>
+                      <p className="text-2xl font-bold text-success">{stats.same}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.same")}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-red-500">{stats.different}</p>
+                      <p className="text-2xl font-bold text-destructive">{stats.different}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.different")}</p>
                     </div>
                   </div>
@@ -608,13 +608,13 @@ export default function ComparePage() {
                           key={item.action}
                           className={cn(
                             "flex items-center justify-between py-2 px-2 -mx-2",
-                            isSame && "bg-green-500/5",
-                            isDifferent && "bg-red-500/5"
+                            isSame && "bg-success/5",
+                            isDifferent && "bg-destructive/5"
                           )}
                         >
                           <div className="flex items-center gap-2 flex-1">
-                            {isSame && <Check className="h-4 w-4 text-green-500" />}
-                            {isDifferent && <X className="h-4 w-4 text-red-500" />}
+                            {isSame && <Check className="h-4 w-4 text-success" />}
+                            {isDifferent && <X className="h-4 w-4 text-destructive" />}
                             <span className="text-sm">{getActionLabel(t, item.action)}</span>
                           </div>
                           <div className="flex items-center gap-4">
@@ -707,8 +707,8 @@ function CompareRow({
       <div
         className={cn(
           "text-sm text-center py-1 rounded",
-          isSame && "bg-green-500/10",
-          isDifferent && "bg-red-500/10"
+          isSame && "bg-success/10",
+          isDifferent && "bg-destructive/10"
         )}
       >
         {value1 ?? "-"}
@@ -716,8 +716,8 @@ function CompareRow({
       <div
         className={cn(
           "text-sm text-center py-1 rounded",
-          isSame && "bg-green-500/10",
-          isDifferent && "bg-red-500/10"
+          isSame && "bg-success/10",
+          isDifferent && "bg-destructive/10"
         )}
       >
         {value2 ?? "-"}
@@ -765,7 +765,7 @@ function SimilarPlayersSection({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="font-bold text-green-500">
+                    <p className="font-bold text-success">
                       {Math.round(player.similarity * 100)}%
                     </p>
                     <p className="text-xs text-muted-foreground">

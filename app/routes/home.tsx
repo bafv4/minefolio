@@ -12,7 +12,7 @@ import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
-import { type CachedPace } from "@/components/recent-pace-card";
+import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
 import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video";
@@ -364,7 +365,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
         "lg:grid-cols-4";
 
   return (
-    <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+    <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
       <div className="flex items-center gap-3">
         <Skeleton className="h-9 w-9 rounded-xl" />
         <div className="space-y-2">
@@ -611,7 +612,7 @@ export default function HomePage() {
         }}
       />
 
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_40%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--border)_35%,transparent)_1px,transparent_1px)] bg-[size:26px_26px] opacity-25" />
         <div className="relative grid gap-7 lg:grid-cols-[1.3fr_1fr] lg:items-end">
           <div className="space-y-5">
@@ -652,11 +653,11 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
               <p className="text-xs text-muted-foreground">{t("home.profileTotal")}</p>
               <p className="mt-2 text-2xl font-bold">{totalPublicProfiles}</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
               <p className="text-xs text-muted-foreground">{t("home.profileActive")}</p>
               <p className="mt-2 text-2xl font-bold">{activePublicProfiles}</p>
             </div>
@@ -664,7 +665,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+      <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary/10 p-2">
             <UserCheck className="h-5 w-5 text-primary" />
@@ -673,6 +674,12 @@ export default function HomePage() {
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.profilesLabel")}</p>
             <h2 className="text-xl font-bold">{t("home.sectionProfiles")}</h2>
           </div>
+          <Button variant="ghost" size="sm" asChild className="ml-auto">
+            <Link to="/browse">
+              {t("home.viewAll")}
+              <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            </Link>
+          </Button>
         </div>
         {recentlyUpdatedUsers.length > 0 ? (
           <div className="space-y-5">
@@ -701,15 +708,16 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
-            <Users className="mx-auto mb-2 h-12 w-12 opacity-30" />
-            <p>{t("home.noProfiles")}</p>
-          </div>
+          <EmptyState
+            icon={<Users className="h-12 w-12" />}
+            title={t("home.noProfiles")}
+            description={t("home.noProfilesDescription")}
+          />
         )}
       </section>
 
       {(recentlyUpdatedGuides.length > 0 || popularGuides.length > 0) && (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
               <BookOpen className="h-5 w-5 text-primary" />
@@ -760,7 +768,7 @@ export default function HomePage() {
       {feed.loading.paces && feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
       ) : sortedLiveRuns.length > 0 || sortedRecentPaces.length > 0 || feed.loading.paces || feed.loading.liveRuns ? (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
               <History className="h-5 w-5 text-primary" />
@@ -858,10 +866,10 @@ export default function HomePage() {
       {feed.loading.videos || feed.loading.twitchVods ? (
         <SectionSkeleton columns={3} />
       ) : sortedRecentVideos.length > 0 ? (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-red-500/10 p-2">
-              <Play className="h-5 w-5 text-red-600" />
+            <div className="rounded-xl bg-primary/10 p-2">
+              <Play className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.videoFeedLabel")}</p>

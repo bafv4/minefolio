@@ -15,6 +15,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Globe,
   LayoutTemplate,
   Search,
   Keyboard,
@@ -231,12 +233,12 @@ export default function MyTemplatesPage() {
                         {template.title}
                       </Link>
                       {template.isPublished ? (
-                        <Badge variant="secondary" className="text-xs">
-                          <Eye className="h-3 w-3 mr-1" />
+                        <Badge variant="default" className="text-xs">
+                          <Globe className="h-3 w-3 mr-1" />
                           {t("meTemplates.published")}
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Badge variant="secondary" className="text-xs">
                           <EyeOff className="h-3 w-3 mr-1" />
                           {t("meTemplates.unpublished")}
                         </Badge>
@@ -338,21 +340,19 @@ export default function MyTemplatesPage() {
           ))}
         </div>
       ) : (
-        <Card>
-          <CardContent className="text-center py-12">
-            <LayoutTemplate className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">{t("meTemplates.emptyTitle")}</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("meTemplates.emptyDescription")}
-            </p>
-            <Button asChild>
+        <EmptyState
+          icon={<LayoutTemplate className="h-12 w-12" />}
+          title={t("meTemplates.emptyTitle")}
+          description={t("meTemplates.emptyDescription")}
+          action={
+            <Button asChild size="sm" className="mt-4">
               <Link to="/my-guides/templates/new">
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meTemplates.create")}
               </Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       )}
       </>
       )}

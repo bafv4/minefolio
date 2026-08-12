@@ -54,7 +54,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
     (isYouTube ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg` : null);
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-background/80 transition-all hover:border-primary/40 hover:shadow-sm">
+    <div className="group relative overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:border-primary/40 hover:shadow-sm">
       {/* サムネイル / 埋め込みプレイヤー */}
       <div className="relative aspect-video overflow-hidden bg-muted">
         {isPlaying ? (

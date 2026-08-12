@@ -46,8 +46,8 @@ export default function ChangelogPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <History className="h-7 w-7" />
-        <h1 className="text-3xl font-bold">{t("developers.changelogTitle")}</h1>
+        <History className="h-6 w-6" />
+        <h1 className="text-2xl font-bold">{t("developers.changelogTitle")}</h1>
       </div>
 
       <article className="prose prose-sm dark:prose-invert max-w-none">

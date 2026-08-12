@@ -92,7 +92,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     where: eq(users.discordId, session.user.id),
   });
   if (!user) {
-    return { error: "Unauthorized" };
+    return { error: t("meGuides.errorUnauthorized") };
   }
 
   const guide = await db.query.guides.findFirst({
@@ -102,7 +102,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     ),
   });
   if (!guide) {
-    return { error: "Not found" };
+    return { error: t("meGuides.errorNotFound") };
   }
 
   const formData = await request.formData();

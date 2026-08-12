@@ -168,7 +168,7 @@ export function WhatsNew() {
           aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
         >
           {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
-          <Sparkles className="h-5 w-5" aria-hidden />
+          <Sparkles aria-hidden />
           {hasUnread && (
             <span
               className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"

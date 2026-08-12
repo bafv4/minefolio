@@ -373,13 +373,12 @@ export default function TemplateViewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          to="/guides/templates"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("templates.backToList")}
-        </Link>
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link to="/guides/templates">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {t("templates.backToList")}
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-3">

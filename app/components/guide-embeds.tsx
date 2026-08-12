@@ -25,6 +25,7 @@ import {
   timingLabelById,
 } from "@/components/search-craft-template-view";
 import { useT, useLocale } from "@/hooks/use-locale";
+import type { Locale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { ArrowRight } from "lucide-react";
 
@@ -263,7 +264,9 @@ export function KeybindEmbedView({
 // サーチクラフト表示コンポーネント
 // ========================================
 
-function getItemDisplayName(itemId: string): string {
+// アイテム名の表示（player/profile.tsx の同名ヘルパーと同じロケール分岐）
+function getItemDisplayName(itemId: string, locale: Locale): string {
+  if (locale === "en") return formatItemName(itemId, "en_us");
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
@@ -397,7 +400,7 @@ export function SearchCraftEmbedView({
             {items.map((itemId: string, idx: number) => (
               <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
                 <ItemIcon itemId={itemId} size={28} />
-                <span className="text-base">{getItemDisplayName(itemId)}</span>
+                <span className="text-base">{getItemDisplayName(itemId, locale)}</span>
               </div>
             ))}
           </div>
@@ -414,7 +417,7 @@ export function SearchCraftEmbedView({
                 <div className="flex flex-wrap items-center gap-1">
                   {withShift && (
                     <kbd
-                      className="px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
+                      className="px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
                       title={t("playerProfile.withShiftTooltip")}
                     >
                       ⇧ Shift

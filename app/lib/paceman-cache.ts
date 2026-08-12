@@ -261,6 +261,18 @@ export interface PaceFeedEntry {
   pacemanRunId: number;
 }
 
+// クライアント表示用に整形されたペース（PaceFeedEntry + nickname・Unix秒のtime）。
+// /api/home-feed の recent-paces レスポンス、ホームのFeed状態（home.tsx）で使用する型
+export interface CachedPace {
+  mcid: string;
+  nickname: string;
+  timeline: string;
+  rta: number;
+  time: number; // Unix秒
+  date: Date;
+  pacemanRunId: number;
+}
+
 // 1ランの全スプリット（タイムラインモーダル用）
 export interface PaceTimelineEntry {
   timeline: string;

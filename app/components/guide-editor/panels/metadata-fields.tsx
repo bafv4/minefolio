@@ -91,13 +91,17 @@ export function MetadataFields({
                 alt={t("guideEditor.ui.thumbnailAlt")}
                 className="h-20 rounded-lg object-cover aspect-2/1 border"
               />
+              {/* この2ボタンはアップロード済みの任意の画像の上に重ねるオーバーレイのため、
+                  背景はテーマトークンに追従させず常に白で固定する（暗い画像 × ダークテーマ等でも
+                  一定のコントラストを保つための意図的な固定色）。文字色もその白背景を前提に、
+                  変更ボタンは中立色、削除ボタンはセマンティックな破壊色で揃える。 */}
               <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
-                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-gray-700 rounded-md text-xs"
+                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-black/70 rounded-md text-xs hover:bg-white transition-colors"
                     >
                       <ImagePlus className="h-3.5 w-3.5" />
                     </button>
@@ -109,7 +113,7 @@ export function MetadataFields({
                     <button
                       type="button"
                       onClick={onCoverRemove}
-                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-destructive rounded-md text-xs"
+                      className="h-7 w-7 flex items-center justify-center bg-white/90 text-destructive rounded-md text-xs hover:bg-white transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

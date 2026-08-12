@@ -38,6 +38,13 @@ import {
   type EmbedUserData,
 } from "@/components/guide-embeds";
 
+// コードブロックのコピーボタンに innerHTML で挿入する lucide アイコン（Copy / Check）。
+// stroke="currentColor" のため、ボタンの text-muted-foreground / hover 色がそのまま反映される。
+const COPY_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+const CHECK_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
 export function meta({
   loaderData,
   matches,
@@ -364,15 +371,15 @@ export default function GuideViewPage() {
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
       btn.title = t("guideView.copy");
-      btn.textContent = "📋";
+      btn.innerHTML = COPY_ICON_SVG;
       const controller = new AbortController();
       controllers.push(controller);
       btn.addEventListener("click", () => {
         const code = pre.querySelector("code");
         const text = code?.textContent ?? pre.textContent ?? "";
         navigator.clipboard.writeText(text).then(() => {
-          btn.textContent = "✓";
-          const tid = setTimeout(() => { btn.textContent = "📋"; }, 1500);
+          btn.innerHTML = CHECK_ICON_SVG;
+          const tid = setTimeout(() => { btn.innerHTML = COPY_ICON_SVG; }, 1500);
           timeouts.push(tid);
         });
       }, { signal: controller.signal });
@@ -389,8 +396,11 @@ export default function GuideViewPage() {
     };
   }, []);
 
+  // モバイルの左右パディングは main（_layout.tsx）側の px-4 と二重にならないよう、
+  // article 側は 0 にする（sm 以上は main と article の両方で加算する既存の見た目を維持）。
+  // GuideTocMobile 側の -mx-* もこの調整に合わせている（guide-toc-nav.tsx 参照）。
   return (
-    <article className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="relative w-full max-w-5xl mx-auto px-0 sm:px-6 lg:px-8">
       {/* デスクトップ目次: 本文幅は削らず、中央寄せ本文の左余白（ガター）に固定表示する。
           左端はヘッダーのロゴ始点（コンテナ左端）と揃える。2xl ではガター幅が w-56 と一致し、
           right-full（右端＝本文パディング左端）と合わせて左端がコンテナ左端になる。

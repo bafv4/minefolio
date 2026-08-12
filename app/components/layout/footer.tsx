@@ -44,7 +44,7 @@ export function Footer() {
               aria-label="Ofuse"
             >
               <Heart className="h-3 w-3" />
-              <span>Donate Me!</span>
+              <span>{t("nav.donate")}</span>
             </a>
             <Link
               to="/developers"

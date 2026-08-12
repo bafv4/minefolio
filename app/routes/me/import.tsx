@@ -12,7 +12,7 @@ import { ImportDialog } from "@/components/import-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Keyboard, Settings, Info } from "lucide-react";
+import { Keyboard, Settings, Info } from "lucide-react";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
@@ -362,10 +362,7 @@ export default function ImportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Upload className="h-6 w-6" />
-          {t("meImport.pageTitle")}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("meImport.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("meImport.pageDescription")}
         </p>

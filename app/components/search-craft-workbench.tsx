@@ -396,8 +396,8 @@ export function SearchCraftWorkbench({
                   ])
                 }
               >
-                <Plus className="mr-1 h-3 w-3" />
-                追加
+                <Plus className="mr-2 h-4 w-4" />
+                {t("meKeybindings.add")}
               </Button>
             </div>
 
@@ -417,7 +417,7 @@ export function SearchCraftWorkbench({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">
-                {t("meKeybindings.remapsTitle")}が設定されていません
+                {t("meKeybindings.remapsNotConfigured")}
               </p>
             )}
           </div>

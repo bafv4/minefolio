@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2 } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
@@ -925,6 +925,107 @@ type CustomKeyEntry = {
 
 // キーキャプチャボタンは @/components/key-capture-button、
 // リマップ行（RemapRow / DialogRemapRow）は @/components/remap-row に抽出済み
+
+// キーバインド行コンポーネント（フォーカス状態をローカルで持つため独立コンポーネントに分割。
+// .map() コールバック内での useState 呼び出しは Rules of Hooks 違反になるため避ける）
+function KeybindingRow({
+  kb,
+  isControllerMode,
+  updateKeybindingKey,
+  getKeyLabelWithCustom,
+}: {
+  kb: { id: string; action: string; keyCode: string };
+  isControllerMode: boolean;
+  updateKeybindingKey: (keybindingId: string, newKeyCode: string) => void;
+  getKeyLabelWithCustom: (keyCode: string) => string;
+}) {
+  const t = useT();
+  const [isFocused, setIsFocused] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-2 py-2.5">
+      <span className="text-sm">{getActionLabel(t, kb.action)}</span>
+      <div className="flex items-center gap-1">
+        {isControllerMode ? (
+          /* コントローラーモード: ドロップダウンでボタン選択 */
+          <Select
+            value={kb.keyCode || ""}
+            onValueChange={(value) => updateKeybindingKey(kb.id, value)}
+          >
+            <SelectTrigger className="w-32 h-8">
+              <SelectValue placeholder={t("meKeybindings.unassigned")}>
+                {isUnbound(kb.keyCode) ? (
+                  <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
+                ) : kb.keyCode ? (
+                  getKeyLabel(t, kb.keyCode)
+                ) : (
+                  <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNBOUND_KEY}>{t("meKeybindings.notUsed")}</SelectItem>
+              {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3", "GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => (
+                <SelectItem key={keyCode} value={keyCode}>
+                  {getKeyLabel(t, keyCode)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          /* キーボード/マウスモード: キーキャプチャ */
+          <button
+            type="button"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                // ESCキーで不使用に設定
+                e.preventDefault();
+                updateKeybindingKey(kb.id, UNBOUND_KEY);
+                (e.target as HTMLElement).blur();
+              } else if (!["Tab", "Enter"].includes(e.key)) {
+                e.preventDefault();
+                updateKeybindingKey(kb.id, e.code);
+                (e.target as HTMLElement).blur();
+              }
+            }}
+            className={cn(
+              "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
+              "bg-secondary/50 hover:bg-secondary/70",
+              "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+              isFocused ? "border-primary" : "border-input"
+            )}
+          >
+            {isFocused ? (
+              <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyToAssign")}</span>
+            ) : isUnbound(kb.keyCode) ? (
+              <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
+            ) : kb.keyCode ? (
+              <span className="font-medium">{getKeyLabelWithCustom(kb.keyCode)}</span>
+            ) : (
+              <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
+            )}
+          </button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("meKeybindings.unassignAction")}
+          title={t("meKeybindings.unassignAction")}
+          onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
+          disabled={!kb.keyCode || isUnbound(kb.keyCode)}
+          className={cn(
+            "h-8 w-8 shrink-0 text-destructive hover:text-destructive",
+            (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
+          )}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // カスタムアクション行コンポーネント
 function CustomActionRow({
@@ -2073,7 +2174,7 @@ export default function KeybindingsPage() {
   }, [customKeyFetcher, localCustomKeys, activePreset]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meKeybindings.pageTitle")}</h1>
@@ -2314,93 +2415,15 @@ export default function KeybindingsPage() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="divide-y">
-                      {bindings.map((kb) => {
-                        const [isFocused, setIsFocused] = useState(false);
-                        return (
-                          <div key={kb.id} className="flex items-center justify-between gap-2 py-2.5">
-                            <span className="text-sm">{getActionLabel(t, kb.action)}</span>
-                            <div className="flex items-center gap-1">
-                            {isControllerMode ? (
-                              /* コントローラーモード: ドロップダウンでボタン選択 */
-                              <Select
-                                value={kb.keyCode || ""}
-                                onValueChange={(value) => updateKeybindingKey(kb.id, value)}
-                              >
-                                <SelectTrigger className="w-32 h-8">
-                                  <SelectValue placeholder={t("meKeybindings.unassigned")}>
-                                    {isUnbound(kb.keyCode) ? (
-                                      <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
-                                    ) : kb.keyCode ? (
-                                      getKeyLabel(t, kb.keyCode)
-                                    ) : (
-                                      <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
-                                    )}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={UNBOUND_KEY}>{t("meKeybindings.notUsed")}</SelectItem>
-                                  {["GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadLB", "GamepadRB", "GamepadLT", "GamepadRT", "GamepadL3", "GamepadR3", "GamepadDpadUp", "GamepadDpadDown", "GamepadDpadLeft", "GamepadDpadRight", "GamepadStart", "GamepadSelect"].map((keyCode) => (
-                                    <SelectItem key={keyCode} value={keyCode}>
-                                      {getKeyLabel(t, keyCode)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              /* キーボード/マウスモード: キーキャプチャ */
-                              <button
-                                type="button"
-                                onFocus={() => setIsFocused(true)}
-                                onBlur={() => setIsFocused(false)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Escape") {
-                                    // ESCキーで不使用に設定
-                                    e.preventDefault();
-                                    updateKeybindingKey(kb.id, UNBOUND_KEY);
-                                    (e.target as HTMLElement).blur();
-                                  } else if (!["Tab", "Enter"].includes(e.key)) {
-                                    e.preventDefault();
-                                    updateKeybindingKey(kb.id, e.code);
-                                    (e.target as HTMLElement).blur();
-                                  }
-                                }}
-                                className={cn(
-                                  "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
-                                  "bg-secondary/50 hover:bg-secondary/70",
-                                  "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-                                  isFocused ? "border-primary" : "border-input"
-                                )}
-                              >
-                                {isFocused ? (
-                                  <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyToAssign")}</span>
-                                ) : isUnbound(kb.keyCode) ? (
-                                  <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
-                                ) : kb.keyCode ? (
-                                  <span className="font-medium">{getKeyLabelWithCustom(kb.keyCode)}</span>
-                                ) : (
-                                  <span className="text-muted-foreground">{t("meKeybindings.unassigned")}</span>
-                                )}
-                              </button>
-                            )}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("meKeybindings.unassignAction")}
-                              title={t("meKeybindings.unassignAction")}
-                              onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
-                              disabled={!kb.keyCode || isUnbound(kb.keyCode)}
-                              className={cn(
-                                "h-8 w-8 shrink-0 text-destructive hover:text-destructive",
-                                (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
-                              )}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {bindings.map((kb) => (
+                        <KeybindingRow
+                          key={kb.id}
+                          kb={kb}
+                          isControllerMode={isControllerMode}
+                          updateKeybindingKey={updateKeybindingKey}
+                          getKeyLabelWithCustom={getKeyLabelWithCustom}
+                        />
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -2444,7 +2467,7 @@ export default function KeybindingsPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  {t("meKeybindings.remapsTitle")}が設定されていません
+                  {t("meKeybindings.remapsNotConfigured")}
                 </p>
               )}
               <Button
@@ -2455,7 +2478,7 @@ export default function KeybindingsPage() {
                 onClick={() => addRemap("")}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                {t("meKeybindings.tabRemaps")}を追加
+                {t("meKeybindings.addRemap")}
               </Button>
             </CardContent>
           </Card>
@@ -2677,8 +2700,9 @@ export default function KeybindingsPage() {
                               >
                                 {getActionLabel(t, kb.action)}
                                 {isAssignedToOtherKey && (
-                                  <span className="ml-2 text-xs text-amber-500">
-                                    ⚠ {t("meKeybindings.assignedToOtherKey", {
+                                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
+                                    <TriangleAlert className="h-3.5 w-3.5" />
+                                    {t("meKeybindings.assignedToOtherKey", {
                                       key: getKeyLabelWithCustom(assignedTo),
                                     })}
                                   </span>
@@ -2743,7 +2767,7 @@ export default function KeybindingsPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">
-                  {t("meKeybindings.remapsTitle")}が設定されていません
+                  {t("meKeybindings.remapsNotConfigured")}
                 </p>
               )}
             </div>

@@ -177,7 +177,7 @@ export function KeyBadge({
               ? fingerClass
               : "bg-secondary/50 border-border/50 text-muted-foreground",
             isRemapped && "ring-1 ring-primary ring-offset-1",
-            needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
+            needsShift && !isRemapped && "border-warning/50 bg-warning/10"
           )}
         >
           {label}
@@ -194,7 +194,7 @@ export function ShiftCraftBadge() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <span className="inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
           ⇧ Shift
         </span>
       </TooltipTrigger>
@@ -268,7 +268,7 @@ export function KeyBadgeLegend({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-amber-500/50 bg-amber-500/10 px-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
+        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-[9px] font-semibold text-warning">
           ⇧
         </span>
         <span className="text-[11px] text-muted-foreground">

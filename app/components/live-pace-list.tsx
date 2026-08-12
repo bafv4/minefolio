@@ -86,9 +86,9 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                   )}
                 </td>
                 <td className="py-2 px-3">
-                  <span className="text-xs bg-secondary px-2 py-0.5 rounded">
+                  <Badge variant="outline" className="text-xs">
                     {run.gameVersion}
-                  </span>
+                  </Badge>
                 </td>
                 <td className="py-2 px-3">
                   {latestSplit && (

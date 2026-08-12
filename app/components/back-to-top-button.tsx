@@ -5,6 +5,7 @@ import { useT } from "@/hooks/use-locale";
 import { ArrowUp } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useCookieConsent } from "@/components/cookie-consent";
 
 interface Props {
   /** 表示し始める縦スクロール量（px） */
@@ -13,6 +14,9 @@ interface Props {
 
 export function BackToTopButton({ threshold = 200 }: Props) {
   const t = useT();
+  // Cookie 同意バナー（fixed bottom-4 right-4）と同じ位置に重なるため、
+  // 未回答（バナー表示中）の間はこのボタンを描画しない
+  const { hasConsent } = useCookieConsent();
   const [visible, setVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -45,6 +49,10 @@ export function BackToTopButton({ threshold = 200 }: Props) {
       behavior: prefersReducedMotion ? "auto" : "smooth",
     });
   };
+
+  // 未回答（hasConsent === null）の間は Cookie 同意バナーが表示されるため、
+  // 同じ右下の位置に重ならないよう描画自体をやめる
+  if (hasConsent === null) return null;
 
   return (
     <Tooltip>

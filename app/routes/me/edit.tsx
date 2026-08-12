@@ -1218,7 +1218,7 @@ export default function EditProfilePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold">{t("meEdit.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -1856,7 +1856,7 @@ export default function EditProfilePage() {
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                <Video className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <Video className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">{t("meEdit.noVideos")}</p>
                 <p className="text-xs mt-1">
                   {user.featuredVideoUrl
@@ -2083,7 +2083,7 @@ export default function EditProfilePage() {
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              <Share2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <Share2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
               <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
             </div>

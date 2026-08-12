@@ -1,11 +1,11 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { User, Clock3, LayoutGrid, List } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { User, Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { platformLabel } from "@/lib/platform-label";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -33,18 +33,12 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
         ? t("common.viewer")
         : null;
   const editionLabel = player.mainEdition === "java" ? "Java" : player.mainEdition === "bedrock" ? "Bedrock" : null;
-  const platformLabel =
-    player.mainPlatform === "pc_windows" ? "Windows" :
-      player.mainPlatform === "pc_mac" ? "Mac" :
-        player.mainPlatform === "pc_linux" ? "Linux" :
-          player.mainPlatform === "switch" ? "Switch" :
-            player.mainPlatform === "mobile" ? "Mobile" :
-              player.mainPlatform === "other" ? "Other" : null;
+  const platformText = platformLabel(t, player.mainPlatform, "short");
   return (
     <Link
       to={`/player/${player.slug}`}
       prefetch="intent"
-      className="group rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+      className="group rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
     >
       <div className="flex items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
@@ -86,9 +80,9 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
               {editionLabel}
             </Badge>
           )}
-          {platformLabel && (
+          {platformText && (
             <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
-              {platformLabel}
+              {platformText}
             </Badge>
           )}
         </div>
@@ -162,31 +156,3 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
   );
 }
 
-export function PlayerViewToggle({
-  viewMode,
-  onChange,
-}: {
-  viewMode: "card" | "list";
-  onChange: (mode: "card" | "list") => void;
-}) {
-  return (
-    <div className="flex border rounded-md">
-      <Button
-        variant={viewMode === "card" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-r-none"
-        onClick={() => onChange("card")}
-      >
-        <LayoutGrid className="h-4 w-4" />
-      </Button>
-      <Button
-        variant={viewMode === "list" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-l-none"
-        onClick={() => onChange("list")}
-      >
-        <List className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}

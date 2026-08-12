@@ -8,10 +8,11 @@ const MAX_SLUGS = 100;
 /**
  * POST /api/users/by-slugs
  * Body: { slugs: string[] }
- * Response: { users: Array<{ slug, mcid, uuid, displayName, displayNameAlphabet, shortBio, location, updatedAt }> }
+ * Response: { users: Array<{ slug, mcid, uuid, displayName, displayNameAlphabet, pronouns, role,
+ *   mainEdition, mainPlatform, shortBio, location, updatedAt, customSkinUrl, slimSkin }> }
  *
- * 未ログインユーザーがlocalStorageのslug一覧から走者カードを取得するためのエンドポイント。
- * SSR表示で必要な最低限のフィールドのみ返す。
+ * 未ログインユーザーがlocalStorageのslug一覧から走者カード（ProfileFeedCard）を取得するための
+ * エンドポイント。SSR表示で必要な最低限のフィールドのみ返す。
  */
 export async function action({ request }: ActionFunctionArgs) {
   if (request.method.toUpperCase() !== "POST") {
@@ -51,6 +52,10 @@ export async function action({ request }: ActionFunctionArgs) {
       uuid: true,
       displayName: true,
       displayNameAlphabet: true,
+      pronouns: true,
+      role: true,
+      mainEdition: true,
+      mainPlatform: true,
       shortBio: true,
       location: true,
       updatedAt: true,

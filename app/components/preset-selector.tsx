@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { useFetcher, useRevalidator, Link } from "react-router";
 import { Settings, Copy, Check, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
@@ -213,13 +212,9 @@ export function PresetSelector({
           </TooltipProvider>
         )}
         <Link to="/me/presets" className="shrink-0">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" aria-label={t("mePresets.managePresets")}>
             <span className="hidden sm:inline">{t("mePresets.managePresets")}</span>
-            <span className="sm:hidden">
-              <Badge variant="outline" className="text-xs">
-                ⚙
-              </Badge>
-            </span>
+            <Settings className="h-4 w-4 sm:hidden" />
           </Button>
         </Link>
       </div>

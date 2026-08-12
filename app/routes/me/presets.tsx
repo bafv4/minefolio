@@ -1316,10 +1316,10 @@ export default function PresetsPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Save className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>{t("mePresets.emptyTitle")}</p>
-              <p className="text-sm mt-1">
+            <div className="text-center py-12">
+              <Save className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <p className="text-lg font-medium">{t("mePresets.emptyTitle")}</p>
+              <p className="text-sm text-muted-foreground mt-1">
                 {t("mePresets.emptyDescription")}
               </p>
             </div>

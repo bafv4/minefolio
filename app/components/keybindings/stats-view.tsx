@@ -15,6 +15,7 @@ import {
 import { getKeyLabel } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { MOUSE_KEY_BADGE_CLASS } from "@/components/keybindings/keybindings-cells";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 // 値は非 .server モジュールから取る（.server はクライアントバンドルに入れられない）
@@ -554,8 +555,7 @@ function StatRow({
                 variant="secondary"
                 className={cn(
                   "font-mono text-xs px-2 min-w-0 max-w-full overflow-hidden",
-                  isMouse &&
-                    "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                  isMouse && MOUSE_KEY_BADGE_CLASS,
                 )}
               >
                 <span className="truncate">{label}</span>

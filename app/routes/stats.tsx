@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
-import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
+import { Keyboard, Mouse, ArrowRight, Users, BarChart3 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -552,7 +552,18 @@ export default function StatsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">{t("stats.title")}</h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">{t("stats.title")}</h1>
+          </div>
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            {t("stats.headerCount", { count: totalUsers })}
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           {t("stats.headingDescription")}
         </p>

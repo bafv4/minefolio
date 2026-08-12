@@ -10,6 +10,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
@@ -680,7 +681,7 @@ export default function SearchCraftPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
+      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
       {crafts.length > 0 ? (
         <Card>
           <CardContent className="py-1">

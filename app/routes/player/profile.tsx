@@ -1,9 +1,9 @@
 import { createTranslator } from "@/lib/messages";
-import { resolveLocale, localeFromMatches } from "@/lib/locale";
+import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
 import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
+import { ViewToggle } from "@/components/view-toggle";
 import {
-  ViewToggle,
   GuideCardGrid,
   GuideListView,
   type GuideItem,
@@ -21,7 +21,6 @@ import {
   checkPaceManPlayer,
   fetchSpeedrunComStats,
   getSpeedrunComVideoEmbedUrl,
-  type MCSRRankedMatch,
 } from "@/lib/external-stats";
 import {
   formatItemName,
@@ -30,6 +29,8 @@ import {
 import { ItemIcon } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { EloRateGraph } from "@/components/elo-rate-graph";
+import { platformLabel } from "@/lib/platform-label";
 import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { format, formatDistanceToNow } from "date-fns";
@@ -226,6 +227,7 @@ import {
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";
+import { EmptyState } from "@/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -1305,7 +1307,7 @@ export default function PlayerProfilePage() {
                       <Badge variant="outline">{player.mainEdition === "java" ? "Java" : "Bedrock"}</Badge>
                     )}
                     {player.mainPlatform && (
-                      <Badge variant="outline">{getPlatformLabel(t, player.mainPlatform)}</Badge>
+                      <Badge variant="outline">{platformLabel(t, player.mainPlatform) ?? player.mainPlatform}</Badge>
                     )}
                     {player.inputMethod && (
                       <Badge variant="outline">
@@ -1425,7 +1427,7 @@ export default function PlayerProfilePage() {
             <Card className="gap-2 py-4">
               <CardHeader className="px-4">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Video className="h-4 w-4" />
+                  <Video className="h-5 w-5" />
                   {t("playerProfile.videos")}
                 </CardTitle>
               </CardHeader>
@@ -2086,128 +2088,12 @@ export default function PlayerProfilePage() {
   );
 }
 
-// Eloレートグラフコンポーネント
-function EloRateGraph({ matches }: { matches: MCSRRankedMatch[] }) {
-  const t = useT();
-  const locale = useLocale();
-  // Eloレートが0のマッチを除外してから古い順に並べ替え（グラフ表示用）
-  const validMatches = matches.filter((m) => m.eloAfter > 0);
-  const sortedMatches = [...validMatches].reverse();
-
-  if (sortedMatches.length < 2) return null;
-
-  // Eloレートの配列を作成
-  const eloHistory = sortedMatches.map((m) => m.eloAfter);
-  const minElo = Math.min(...eloHistory);
-  const maxElo = Math.max(...eloHistory);
-  const range = maxElo - minElo || 100; // 変動がない場合のデフォルト
-
-  // グラフのサイズ
-  const width = 300;
-  const height = 80;
-  const padding = { top: 10, bottom: 20, left: 0, right: 0 };
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
-
-  // ポイントの計算
-  const points = eloHistory.map((elo, i) => {
-    const x = padding.left + (i / (eloHistory.length - 1)) * graphWidth;
-    const y = padding.top + graphHeight - ((elo - minElo) / range) * graphHeight;
-    return { x, y, elo };
-  });
-
-  // SVGパスの作成
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-
-  // グラデーション用のエリアパス
-  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`;
-
-  // 最初と最後のEloの変化
-  const eloChange = eloHistory[eloHistory.length - 1] - eloHistory[0];
-  const isPositive = eloChange >= 0;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-muted-foreground">{t("playerProfile.eloTrend", { count: sortedMatches.length })}</h4>
-        <span className={cn(
-          "text-sm font-medium",
-          isPositive ? "text-green-500" : "text-red-500"
-        )}>
-          {isPositive ? "+" : ""}{eloChange}
-        </span>
-      </div>
-      <div className="bg-secondary/30 rounded-lg p-3">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-auto"
-          style={{ maxHeight: "100px" }}
-        >
-          {/* グラデーションの定義 */}
-          <defs>
-            <linearGradient id="eloGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor={isPositive ? "#22c55e" : "#ef4444"} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={isPositive ? "#22c55e" : "#ef4444"} stopOpacity="0.05" />
-            </linearGradient>
-          </defs>
-
-          {/* エリア塗りつぶし */}
-          <path d={areaPath} fill="url(#eloGradient)" />
-
-          {/* ライン */}
-          <path
-            d={linePath}
-            fill="none"
-            stroke={isPositive ? "#22c55e" : "#ef4444"}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* ポイント（最初と最後のみ） */}
-          <circle
-            cx={points[0].x}
-            cy={points[0].y}
-            r="3"
-            fill={isPositive ? "#22c55e" : "#ef4444"}
-          />
-          <circle
-            cx={points[points.length - 1].x}
-            cy={points[points.length - 1].y}
-            r="4"
-            fill={isPositive ? "#22c55e" : "#ef4444"}
-          />
-
-          {/* 最小・最大ラベル */}
-          <text
-            x={padding.left}
-            y={height - 4}
-            fontSize="10"
-            fill="currentColor"
-            className="text-muted-foreground"
-          >
-            {eloHistory[0]}
-          </text>
-          <text
-            x={width - padding.right}
-            y={height - 4}
-            fontSize="10"
-            fill="currentColor"
-            className="text-muted-foreground"
-            textAnchor="end"
-          >
-            {eloHistory[eloHistory.length - 1]}
-          </text>
-        </svg>
-      </div>
-    </div>
-  );
-}
-
 // mcitemsのテクスチャベースURL
 
-// アイテム名を日本語で取得するヘルパー
-function getItemDisplayName(itemId: string): string {
+// アイテム名をロケールに合わせて取得するヘルパー。英語ロケールは formatItemName の
+// 英語表記を優先し、日本語ロケールは和名（getItemNameJa）優先 → 無ければ英語にフォールバック
+function getItemDisplayName(itemId: string, locale: Locale): string {
+  if (locale === "en") return formatItemName(itemId, "en_us");
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
@@ -2226,18 +2112,6 @@ function inputMethodLabel(t: Translator, value: string): string {
     default:
       return value;
   }
-}
-
-function getPlatformLabel(t: Translator, platform: string): string {
-  const labels: Record<string, string> = {
-    pc_windows: t("playerProfile.platformPcWindows"),
-    pc_mac: t("playerProfile.platformPcMac"),
-    pc_linux: t("playerProfile.platformPcLinux"),
-    switch: "Switch",
-    mobile: "Mobile",
-    other: "Other",
-  };
-  return labels[platform] || platform;
 }
 
 function ItemLayoutCard({
@@ -2295,7 +2169,7 @@ function ItemLayoutCard({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {items.map(getItemDisplayName).join(", ") || t("playerProfile.slot", { num: slotNum })}
+                      {items.map((item) => getItemDisplayName(item, locale)).join(", ") || t("playerProfile.slot", { num: slotNum })}
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -2321,7 +2195,7 @@ function ItemLayoutCard({
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                {offhand.map(getItemDisplayName).join(", ") || t("playerProfile.offhand")}
+                {offhand.map((item) => getItemDisplayName(item, locale)).join(", ") || t("playerProfile.offhand")}
               </TooltipContent>
             </Tooltip>
             </div>
@@ -2339,7 +2213,7 @@ function ItemLayoutCard({
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
                     <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getItemDisplayName(item)}</span>
+                    <span className="text-xs">{getItemDisplayName(item, locale)}</span>
                   </span>
                 ))}
               </div>
@@ -2354,7 +2228,7 @@ function ItemLayoutCard({
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
                     <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getItemDisplayName(item)}</span>
+                    <span className="text-xs">{getItemDisplayName(item, locale)}</span>
                   </span>
                 ))}
               </div>
@@ -2410,7 +2284,7 @@ function RecordCard({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-lg flex items-center gap-1.5">
+            <CardTitle className="text-base flex items-center gap-1.5">
               {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
               {record.categoryDisplayName}
             </CardTitle>
@@ -2434,7 +2308,7 @@ function RecordCard({
             <Target className="h-4 w-4 text-muted-foreground" />
             <span>{t("playerProfile.target")}: {formatTime(record.targetTime)}</span>
             {record.achieved && (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
             )}
           </div>
         )}
@@ -2525,10 +2399,12 @@ type SocialStatsData = {
   twitch: TwitchChannelStats | null;
 };
 
-// 1万以上は「1.2万」等のコンパクト表記、それ未満は桁区切り（例: 2,170）
-function formatCompactCount(count: number): string {
-  if (count < 10000) return count.toLocaleString("ja-JP");
-  return new Intl.NumberFormat("ja-JP", {
+// 日本語は「1.2万」等のコンパクト表記（1万以上）、英語は "1.2K" 等（Intl compact）。
+// いずれも閾値未満は桁区切り（例: 2,170）
+function formatCompactCount(count: number, locale: Locale): string {
+  const intlLocale = locale === "en" ? "en-US" : "ja-JP";
+  if (count < 10000) return count.toLocaleString(intlLocale);
+  return new Intl.NumberFormat(intlLocale, {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(count);
@@ -2619,7 +2495,7 @@ function SocialLinkRichCard({
       const yt = stats as YouTubeChannelStats;
       if (yt.subscriberCount != null) {
         statParts.push(
-          t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount) }),
+          t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount, locale) }),
         );
       }
       if (yt.latestVideoAt) {
@@ -2634,7 +2510,7 @@ function SocialLinkRichCard({
       isLive = tw.isLive;
       if (tw.followerCount != null) {
         statParts.push(
-          t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount) }),
+          t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount, locale) }),
         );
       }
       if (!tw.isLive && tw.lastStreamAt) {
@@ -2748,28 +2624,6 @@ function SettingBadge({
         {enabled ? t("common.on") : t("common.off")}
       </Badge>
       <span className="text-sm">{label}</span>
-    </div>
-  );
-}
-
-function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  /** 空状態からの誘導リンク・ボタン等（省略可）。例: 本人閲覧時の編集ページへの誘導 */
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
-      <div className="mb-4 flex justify-center opacity-50">{icon}</div>
-      <p className="text-lg font-medium">{title}</p>
-      <p className="text-sm">{description}</p>
-      {action}
     </div>
   );
 }
@@ -3024,6 +2878,9 @@ function StatsContent({
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
     && loadState.speedruncom !== "loading";
+  const hasExternalError = loadState.ranked === "error"
+    || loadState.paceman === "error"
+    || loadState.speedruncom === "error";
   // Speedrun.com PBの絞り込み・並び替え用（sort比較関数内でのArray.includes連発を避ける）
   const hiddenSet = new Set(hiddenSpeedrunRecords);
   const pinnedSet = new Set(pinnedSpeedrunRecords);
@@ -3031,7 +2888,7 @@ function StatsContent({
   return (
     <>
       {/* MCSR Ranked Section */}
-      {player.showRankedStats !== false && loadState.ranked === "loading" && (
+      {player.showRankedStats !== false && loadState.ranked !== "done" && (
         <StatsServiceLoadingCard
           title="MCSR Ranked"
           description={t("loading.rankedStats")}
@@ -3115,9 +2972,9 @@ function StatsContent({
                       key={match.id}
                       className={cn(
                         "flex items-center justify-between p-2 rounded text-sm",
-                        match.result === "win" && "bg-green-500/10",
-                        match.result === "lose" && "bg-red-500/10",
-                        match.result === "draw" && "bg-yellow-500/10"
+                        match.result === "win" && "bg-success/10",
+                        match.result === "lose" && "bg-destructive/10",
+                        match.result === "draw" && "bg-warning/10"
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -3137,8 +2994,8 @@ function StatsContent({
                         )}
                         <span className={cn(
                           "font-medium",
-                          match.eloChange > 0 && "text-green-500",
-                          match.eloChange < 0 && "text-red-500"
+                          match.eloChange > 0 && "text-success",
+                          match.eloChange < 0 && "text-destructive"
                         )}>
                           {match.eloChange > 0 ? "+" : ""}{match.eloChange}
                         </span>
@@ -3153,7 +3010,7 @@ function StatsContent({
       )}
 
       {/* PaceMan Section - リンクのみ */}
-      {loadState.paceman === "loading" && (
+      {loadState.paceman !== "done" && (
         <StatsServiceLoadingCard
           title="PaceMan"
           description={t("loading.pacemanStats")}
@@ -3283,7 +3140,7 @@ function StatsContent({
       )}
 
       {/* Speedrun.com Section */}
-      {player.speedruncomUsername && loadState.speedruncom === "loading" && (
+      {player.speedruncomUsername && loadState.speedruncom !== "done" && (
         <StatsServiceLoadingCard
           title="Speedrun.com"
           description={t("loading.speedruncomStats")}
@@ -3383,8 +3240,8 @@ function StatsContent({
         </Card>
       )}
 
-      {/* データがない場合 */}
-      {allExternalResolved && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
+      {/* データがない場合（外部サービスがエラーの場合は各セクションのエラー表示に任せ、ここでは出さない） */}
+      {allExternalResolved && !hasExternalError && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}

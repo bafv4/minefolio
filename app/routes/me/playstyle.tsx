@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Gamepad2, Layers, SlidersHorizontal, Sparkles, AlertCircle, ExternalLink } from "lucide-react";
+import { Layers, SlidersHorizontal, Sparkles, AlertCircle, ExternalLink } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import {
   ALL_VERSION_KEYS,
@@ -427,10 +427,7 @@ export default function PlaystylePage() {
   return (
     <div className="space-y-6 pb-24">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Gamepad2 className="h-6 w-6" />
-          {t("mePlaystyle.pageTitle")}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("mePlaystyle.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("mePlaystyle.pageDescription")}</p>
       </div>
 

@@ -445,6 +445,7 @@ function LoopEditorRow<T extends SearchCraftLoopDraft>({
           {...attributes}
           {...listeners}
           type="button"
+          aria-label={t("meSearchCraft.dragHandle")}
           className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
         >
           <GripVertical className="h-5 w-5" />
@@ -522,9 +523,10 @@ function LoopEditorRow<T extends SearchCraftLoopDraft>({
               />
               <button
                 type="button"
+                aria-label={t("meSearchCraft.removeStep")}
                 onClick={() => handleRemoveStep(stepIndex)}
                 disabled={loop.steps.length <= 2}
-                className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                className="shrink-0 p-1.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
               >
                 <X className="h-4 w-4" />
               </button>

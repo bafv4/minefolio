@@ -204,14 +204,14 @@ export default function ExportPage() {
         <Button variant="ghost" size="sm" asChild className="-ml-2">
           <Link to="/developers">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Developers
+            {t("developers.heading")}
           </Link>
         </Button>
       </div>
 
       <div className="flex items-center gap-2">
-        <Download className="h-7 w-7" />
-        <h1 className="text-3xl font-bold">{t("developers.exportTitle")}</h1>
+        <Download className="h-6 w-6" />
+        <h1 className="text-2xl font-bold">{t("developers.exportTitle")}</h1>
       </div>
 
       <p className="text-sm text-muted-foreground">

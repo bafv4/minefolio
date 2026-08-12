@@ -13,9 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
-import { type CachedPace } from "@/components/recent-pace-card";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
-import type { PaceTimelineEntry } from "@/lib/paceman-cache";
+import type { CachedPace, PaceTimelineEntry } from "@/lib/paceman-cache";
 import { Clock3, ExternalLink, Loader2 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
@@ -68,8 +67,8 @@ export function PaceFeedCard({
   return (
     <div
       className={cn(
-        "group relative block rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
-        isFinished && "border-cyan-400/60 bg-cyan-500/5"
+        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
+        isFinished && "border-info/60 bg-info/5"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
@@ -77,7 +76,7 @@ export function PaceFeedCard({
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="absolute inset-0 z-0 rounded-2xl cursor-pointer"
+        className="absolute inset-0 z-0 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${displayName || run.nickname || run.mcid}: ${t("home.viewTimeline")}`}
       />
       <div className="flex items-center gap-3">

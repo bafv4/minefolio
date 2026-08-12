@@ -1,6 +1,6 @@
 // 相対日付の表示ユーティリティ（日単位・時間単位）。
 // player-card / profile-feed-card に重複していた実装を集約。
-// ※ ライブペース等の分単位表示は用途が異なるため別実装（recent-pace-card 等）。
+// ※ ライブペース等の分単位表示は用途が異なるため別実装（pace-feed-card 等）。
 
 import type { Translator } from "@/lib/messages";
 
