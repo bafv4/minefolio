@@ -1,26 +1,25 @@
 import { Fragment, useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ItemIcon } from "@/components/item-icon";
 import {
-  KeyBadge,
   ActualKeyBadges,
-  SearchStringText,
   TIMING_META,
   timingLabel,
 } from "@/components/search-craft-template-view";
 import {
   resolveLoopSteps,
+  typedCharSegments,
   type LoopStepData,
   type LoopKeyOp,
   type ResolvedLoopStep,
+  type TypedCharSegment,
 } from "@/lib/search-craft-loops";
 import type { UiRemapInfo, RemapInfo } from "@/lib/remap-utils";
-import type { FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import { AlertTriangle, ChevronRight, Hammer } from "lucide-react";
+import { AlertTriangle, ChevronRight, Hammer, Repeat } from "lucide-react";
 
 /**
  * サーチクラフトの「繋ぎ方（Loop）」表示コンポーネント群。
@@ -44,12 +43,60 @@ export type SearchCraftLoopRowData = {
 };
 
 // ============================================
+// セグメント分割された文字列表示
+// ============================================
+
+/**
+ * 半角スペースを ␣（U+2423）として可視化しつつテキスト片を描画する
+ * （search-craft-template-view.tsx の SearchStringText と同じロジック。全角スペースは対象外）。
+ */
+function renderVisibleSpaces(text: string, spaceClassName: string) {
+  const parts = text.split(/( +)/);
+  return parts.map((part, i) =>
+    part.length > 0 && part[0] === " " ? (
+      <span key={i} className={spaceClassName}>
+        {"␣".repeat(part.length)}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
+/**
+ * typedCharSegments() の結果を描画する。そのステップで実際にタイプしない
+ * （前ステップから検索欄に残存するだけの）セグメントは text-muted-foreground/70 で薄く表示する
+ * （SearchStringText のスペース可視化と同じトーン）。半角スペースの ␣ 可視化はセグメント内でも維持する。
+ * 読み上げ用に元の文字列全体を aria-label で渡し、セグメント描画自体は aria-hidden にする
+ * （SearchStringText と同じ方針）。
+ */
+function SegmentedSearchString({
+  value,
+  segments,
+}: {
+  value: string;
+  segments: TypedCharSegment[];
+}) {
+  const DIM_CLASS = "text-muted-foreground/70";
+  return (
+    <span aria-label={value}>
+      {segments.map((segment, i) => (
+        <span key={i} aria-hidden="true" className={segment.typed ? undefined : DIM_CLASS}>
+          {renderVisibleSpaces(segment.text, DIM_CLASS)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ============================================
 // 制御キーバッジ
 // ============================================
 
 /**
  * 制御キー（Backspace / ArrowLeft / Home / Shift+Home）のバッジ。
- * getActualKeyInfos は文字列専用のため KeyBadge を直接再利用する。
+ * 文字入力キー（KeyBadge、secondary系の塗り）と区別できるよう info トーンで表示する
+ * （⇧ Shift バッジ=warning・クラフト実行マーカー=破線チップと同じ「役割ごとに色調を変える」規則）。
  * BS×n / ←×n はバッジを n 個並べず、右肩に ×n を併記する（モバイル幅対策）。
  * ← のラベルは app/lib/keybindings.ts の KEY_LABELS.ArrowLeft と同じ "←" を使う。
  */
@@ -61,12 +108,23 @@ export function ControlKeyBadge({
   /** backspace / arrowLeft のときのみ意味を持つ。2以上のときだけ右肩に ×n を表示する */
   count?: number;
 }) {
+  const t = useT();
   const keyCode =
     kind === "backspace" ? "Backspace" : kind === "arrowLeft" ? "ArrowLeft" : kind === "home" ? "Home" : "Shift+Home";
   const label = kind === "backspace" ? "BS" : kind === "arrowLeft" ? "←" : kind === "home" ? "Home" : "⇧Home";
+  const tooltipText = keyCode.includes("+")
+    ? getKeyCombinationLabel(t, keyCode)
+    : getKeyLabel(t, keyCode);
   return (
     <span className="relative inline-flex">
-      <KeyBadge keyCode={keyCode} label={label} />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded border-2 border-info/50 bg-info/10 px-1.5 font-mono text-sm font-semibold text-info">
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltipText}</TooltipContent>
+      </Tooltip>
       {(kind === "backspace" || kind === "arrowLeft") && (count ?? 0) > 1 && (
         // aria-hidden を付けない: スクリーンリーダーにも「BS ×2」のように回数が伝わるようにする
         <span className="absolute -top-1.5 -right-1.5 rounded-full bg-muted-foreground px-1 py-0.5 text-[9px] font-semibold leading-none text-background">
@@ -92,16 +150,31 @@ function InvalidSegmentBadge() {
   );
 }
 
-/** クラフト実行マーカー（ItemIcon＋Hammer の破線チップ） */
-function CraftMarker({ craft }: { craft: LoopCraftInfo | undefined }) {
+/**
+ * クラフト実行マーカー（ItemIcon＋Hammer の破線チップ）。
+ * そのステップのサーチ文字列を ItemIcon の後ろに小さく表示する（typedCharSegments() の
+ * 結果を渡すと、実際にタイプしない残存部分は薄く表示される）。
+ */
+function CraftMarker({
+  craft,
+  segments,
+}: {
+  craft: LoopCraftInfo | undefined;
+  segments: TypedCharSegment[];
+}) {
   const t = useT();
   const itemId = craft?.items[0];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded border border-dashed border-border bg-secondary/20 px-1.5">
+        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-dashed border-border bg-secondary/20 px-2">
           <Hammer className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          {itemId && <ItemIcon itemId={itemId} size={18} />}
+          {itemId && <ItemIcon itemId={itemId} size={20} />}
+          {craft?.searchStr && (
+            <code className="font-mono text-sm">
+              <SegmentedSearchString value={craft.searchStr} segments={segments} />
+            </code>
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent>{t("playerProfile.loopCraftMarker")}</TooltipContent>
@@ -169,6 +242,12 @@ export function LoopKeySequence({
     <div className="flex flex-wrap items-center gap-1.5">
       {steps.map((step, idx) => {
         const craft = getCraft(step.craftId);
+        const prevCraft = idx > 0 ? getCraft(steps[idx - 1].craftId) : undefined;
+        const segments = typedCharSegments(
+          idx > 0 ? (prevCraft?.searchStr ?? null) : null,
+          craft?.searchStr ?? "",
+          step.transition,
+        );
         return (
           <Fragment key={idx}>
             {idx === 0 ? (
@@ -190,7 +269,7 @@ export function LoopKeySequence({
             ) : (
               <InvalidSegmentBadge />
             )}
-            <CraftMarker craft={craft} />
+            <CraftMarker craft={craft} segments={segments} />
             {idx < steps.length - 1 && (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
@@ -205,17 +284,24 @@ export function LoopKeySequence({
 // Loop 一覧
 // ============================================
 
-/** Loop 1件分の行（サマリー＋キー操作列＋コメント） */
+/**
+ * Loop 1件分の行。キー操作列（LoopKeySequence）単体に統合された1行表示で、
+ * 各ステップのアイテム＋サーチ文字列はクラフト実行マーカー内に表示される
+ * （独立したステップ連鎖サマリー行は持たない）。
+ */
 export function SearchCraftLoopRow({
   loop,
   crafts,
   remaps,
   fingerAssignments,
+  showTiming = true,
 }: {
   loop: SearchCraftLoopRowData;
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** タイミンググループカード内に埋め込む場合は false（グループ見出しと重複するため） */
+  showTiming?: boolean;
 }) {
   const t = useT();
   const craftsById = useMemo(() => new Map(crafts.map((c) => [c.id, c])), [crafts]);
@@ -231,6 +317,7 @@ export function SearchCraftLoopRow({
 
   return (
     <div className="py-3 space-y-2">
+      {/* キー操作列に統合された1行表示（アイテム＋文字列はクラフト実行マーカー内に表示される） */}
       <div className="flex flex-wrap items-center gap-2">
         {!resolved.valid && (
           <Tooltip>
@@ -241,49 +328,65 @@ export function SearchCraftLoopRow({
           </Tooltip>
         )}
 
-        {/* ステップ連鎖サマリー */}
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          {resolved.steps.map((step, idx) => {
-            const craft = craftsById.get(step.craftId);
-            return (
-              <Fragment key={idx}>
-                <span className="inline-flex items-center gap-1 rounded bg-secondary/50 px-1.5 py-0.5">
-                  {craft?.items[0] && <ItemIcon itemId={craft.items[0]} size={18} />}
-                  <code className="font-mono text-xs">
-                    {craft?.searchStr ? <SearchStringText value={craft.searchStr} /> : "—"}
-                  </code>
-                </span>
-                {idx < resolved.steps.length - 1 && (
-                  <ChevronRight
-                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                )}
-              </Fragment>
-            );
-          })}
+        <div className="min-w-0 flex-1">
+          <LoopKeySequence
+            steps={resolved.steps}
+            getCraft={(id) => craftsById.get(id)}
+            remaps={remaps}
+            fingerAssignments={fingerAssignments}
+          />
         </div>
 
-        {timingMeta && (
+        {showTiming && timingMeta && (
           <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <span className={cn("h-2 w-2 rounded-full", timingMeta.dot)} />
             {timingLabel(t, timingMeta)}
           </span>
         )}
-
-        <Badge variant="secondary" className="ml-auto shrink-0 text-xs sm:ml-0">
-          {t("playerProfile.loopStepCount", { count: loop.steps.length })}
-        </Badge>
       </div>
 
-      <LoopKeySequence
-        steps={resolved.steps}
-        getCraft={(id) => craftsById.get(id)}
-        remaps={remaps}
-        fingerAssignments={fingerAssignments}
-      />
-
       {loop.comment && <p className="text-sm text-muted-foreground">{loop.comment}</p>}
+    </div>
+  );
+}
+
+/**
+ * タイミンググループカード内に埋め込む Loop サブセクション（Card なし）。
+ * SearchCraftGroupedList の renderGroupExtra から呼ぶ想定で、見出し（Repeat アイコン＋
+ * 「繋ぎ方（Loop）」）＋行リストを描画する。グループ見出しと重複するため各行の
+ * timing 表記は出さない。loops が空なら何も描画しない。
+ */
+export function SearchCraftLoopGroupSection({
+  loops,
+  crafts,
+  remaps,
+  fingerAssignments,
+}: {
+  loops: SearchCraftLoopRowData[];
+  crafts: LoopCraftInfo[];
+  remaps: UiRemapInfo[] | RemapInfo[];
+  fingerAssignments?: Record<string, FingerType[]>;
+}) {
+  const t = useT();
+  if (loops.length === 0) return null;
+  return (
+    <div className="border-t border-border/60 pt-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Repeat className="h-3.5 w-3.5" />
+        {t("playerProfile.loopSectionTitle")}
+      </div>
+      <div className="divide-y">
+        {loops.map((loop) => (
+          <SearchCraftLoopRow
+            key={loop.id}
+            loop={loop}
+            crafts={crafts}
+            remaps={remaps}
+            fingerAssignments={fingerAssignments}
+            showTiming={false}
+          />
+        ))}
+      </div>
     </div>
   );
 }

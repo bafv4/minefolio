@@ -49,7 +49,7 @@ import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo }
 import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import {
-  SearchCraftLoopList,
+  SearchCraftLoopGroupSection,
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
@@ -224,7 +224,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Speech,
-  Repeat,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -730,6 +729,22 @@ export default function PlayerProfilePage() {
         items: JSON.parse(craft.items) as string[],
       })),
     [player.searchCrafts],
+  );
+
+  // 繋ぎ方（Loop）を timing ごとにグループ化。SearchCraftGroupedList の
+  // renderGroupExtra から各タイミンググループカード内に埋め込むため
+  const searchCraftLoopsByTiming = useMemo(() => {
+    const map = new Map<string | null, SearchCraftLoopRowData[]>();
+    for (const loop of player.searchCraftLoops) {
+      const key = loop.timing;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(loop);
+    }
+    return map;
+  }, [player.searchCraftLoops]);
+  const searchCraftLoopTimings = useMemo(
+    () => Array.from(searchCraftLoopsByTiming.keys()),
+    [searchCraftLoopsByTiming],
   );
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
@@ -1822,25 +1837,19 @@ export default function PlayerProfilePage() {
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
                 gameLanguage={player.playerConfig?.gameLanguage}
+                extraTimings={searchCraftLoopTimings}
+                renderGroupExtra={(timing) => {
+                  const groupLoops = searchCraftLoopsByTiming.get(timing) ?? [];
+                  return groupLoops.length > 0 ? (
+                    <SearchCraftLoopGroupSection
+                      loops={groupLoops}
+                      crafts={parsedSearchCrafts}
+                      remaps={player.keyRemaps}
+                      fingerAssignments={userFingerAssignments}
+                    />
+                  ) : null;
+                }}
               />
-
-              {/* 繋ぎ方（Loop） */}
-              {player.searchCraftLoops.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Repeat className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="text-lg font-semibold">
-                      {t("playerProfile.loopSectionTitle")}
-                    </h2>
-                  </div>
-                  <SearchCraftLoopList
-                    loops={player.searchCraftLoops}
-                    crafts={parsedSearchCrafts}
-                    remaps={player.keyRemaps}
-                    fingerAssignments={userFingerAssignments}
-                  />
-                </div>
-              )}
             </>
           ) : (
             <EmptyState

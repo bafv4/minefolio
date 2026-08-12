@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,26 +21,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Plus, Minus, X, Trash2, GripVertical } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
-import { ActualKeyBadges, TIMING_META, timingLabel } from "@/components/search-craft-template-view";
+import { ActualKeyBadges } from "@/components/search-craft-template-view";
 import {
   ControlKeyBadge,
   LoopKeySequence,
@@ -64,7 +49,9 @@ import type { Translator } from "@/lib/messages";
 
 /**
  * サーチクラフトの「繋ぎ方（Loop）」編集UI（/me/search-craft・ワークベンチ・テンプレートエディタで共通）。
- * SearchCraftListEditor と同じ dnd-kit パターン（ドラッグ&ドロップ並べ替え）を踏襲する。
+ * 行単体（LoopEditorRow）は app/components/search-craft-editor.tsx の
+ * SearchCraftTimingBoard（タイミングブロック型エディタ）から再利用される。
+ * timing の変更はブロック間D&Dで行うため、行ヘッダーに timing Select は持たない。
  */
 
 /** 編集UIが必要とする最小のLoop形状 */
@@ -113,6 +100,27 @@ function resetTransitionCountAt(steps: LoopStepData[], idx: number, entries: Loo
     return result;
   }
   return steps;
+}
+
+/**
+ * 指定 craftId に隣接する（前後いずれかのステップが参照する）全遷移の回数を、
+ * 現在の searchStr に基づく最小値へリセットする。エントリのサーチ文字列を編集した直後に、
+ * SearchCraftTimingBoard 側から呼ぶ（エントリ選択変更時の resetTransitionCountAt と同じ趣旨。
+ * BS/← の回数は常に「最小回数を初期表示」し、ユーザーがそこから調整する）。
+ * 変更が無ければ元の配列をそのまま返す。
+ */
+export function resetTransitionCountsForCraft(
+  steps: LoopStepData[],
+  craftId: string,
+  entries: LoopEditorEntry[],
+): LoopStepData[] {
+  let result = steps;
+  for (let i = 1; i < steps.length; i++) {
+    if (steps[i - 1].craftId === craftId || steps[i].craftId === craftId) {
+      result = resetTransitionCountAt(result, i, entries);
+    }
+  }
+  return result;
 }
 
 /** 先頭ステップの transition は常に null という不変条件を保つ */
@@ -368,7 +376,7 @@ function TransitionRow({
 // Loop 1件分の編集行
 // ============================================
 
-function LoopEditorRow<T extends SearchCraftLoopDraft>({
+export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   loop,
   index,
   entries,
@@ -453,30 +461,6 @@ function LoopEditorRow<T extends SearchCraftLoopDraft>({
         <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground/60">
           {index + 1}
         </span>
-
-        <div className="flex items-center gap-2">
-          <Select
-            value={loop.timing ?? "__none"}
-            onValueChange={(value) =>
-              onUpdate({
-                ...loop,
-                timing: value === "__none" ? null : (value as SearchCraftTiming),
-              })
-            }
-          >
-            <SelectTrigger className="h-8 w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none">{t("meSearchCraft.timingNone")}</SelectItem>
-              {TIMING_META.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {timingLabel(t, m)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -564,68 +548,3 @@ function LoopEditorRow<T extends SearchCraftLoopDraft>({
     </div>
   );
 }
-
-// ============================================
-// Loop リストエディタ（ドラッグ&ドロップ並べ替え対応）
-// ============================================
-
-export function SearchCraftLoopListEditor<T extends SearchCraftLoopDraft>({
-  loops,
-  entries,
-  remaps,
-  onUpdate,
-  onDelete,
-  onReorder,
-}: {
-  loops: T[];
-  /** ステップのエントリ選択で参照可能なサーチクラフトエントリ一覧 */
-  entries: LoopEditorEntry[];
-  /** 指定すると各行のプレビューに入力キーのライブプレビューを表示する */
-  remaps?: RemapInfo[];
-  onUpdate: (index: number, updated: T) => void;
-  onDelete: (index: number) => void;
-  onReorder: (oldIndex: number, newIndex: number) => void;
-}) {
-  const dndContextId = useId();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      const oldIndex = loops.findIndex((l) => l.id === active.id);
-      const newIndex = loops.findIndex((l) => l.id === over.id);
-      onReorder(oldIndex, newIndex);
-    }
-  };
-
-  return (
-    <DndContext
-      id={dndContextId}
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={loops.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-        <div className="divide-y">
-          {loops.map((loop, index) => (
-            <LoopEditorRow
-              key={loop.id}
-              loop={loop}
-              index={index}
-              entries={entries}
-              remaps={remaps}
-              onUpdate={(updated) => onUpdate(index, updated)}
-              onDelete={() => onDelete(index)}
-            />
-          ))}
-        </div>
-      </SortableContext>
-    </DndContext>
-  );
-}
-
-export { arrayMove };

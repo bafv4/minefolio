@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -307,16 +307,35 @@ export function SearchCraftGroupedList({
   remaps,
   fingerAssignments,
   gameLanguage,
+  renderGroupExtra,
+  extraTimings,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
+  /**
+   * 各グループカードの行リストの後（CardContent 内）に追加コンテンツを描画するフック
+   * （繋ぎ方 Loop 表示などを疎結合に差し込むための拡張点。search-craft-loop-view.tsx を
+   * ここから直接 import しない ＝ 循環 import 回避のため render prop 方式にしている）。
+   * タイミングなしの1枚カード表示のときも renderGroupExtra(null) を呼ぶ。
+   */
+  renderGroupExtra?: (timing: string | null) => ReactNode;
+  /**
+   * crafts 側に存在しない timing でもグループカードを出すための補助
+   * （例: Loop だけがその timing を持ち、crafts は全て timing なし、というケースで
+   * Loop のグループが表示から漏れるのを防ぐ）。該当カードは crafts が0件なら行リストを省略し、
+   * renderGroupExtra の内容だけを描画する。
+   */
+  extraTimings?: (string | null)[];
 }) {
   const t = useT();
   const lang = useItemLang(gameLanguage);
-  const hasAnyTiming = crafts.some((c) => c.timing);
+
+  const timingsFromCrafts = new Set(crafts.map((c) => c.timing));
+  const extraOnlyTimings = (extraTimings ?? []).filter((timing) => !timingsFromCrafts.has(timing));
+  const hasAnyTiming = crafts.some((c) => c.timing) || extraOnlyTimings.length > 0;
 
   if (!hasAnyTiming) {
     return (
@@ -325,6 +344,7 @@ export function SearchCraftGroupedList({
         remaps={remaps}
         fingerAssignments={fingerAssignments}
         lang={lang}
+        extra={renderGroupExtra?.(null)}
       />
     );
   }
@@ -335,6 +355,10 @@ export function SearchCraftGroupedList({
     const key = craft.timing;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(craft);
+  }
+  // extraTimings のうち crafts 側に無いものは、空のグループとして追加する
+  for (const timing of extraOnlyTimings) {
+    if (!grouped.has(timing)) grouped.set(timing, []);
   }
 
   // ソート: 指定なし(null) → OW → Bastion → Bastion→Fort → Fortress → Blinded → その他
@@ -355,13 +379,14 @@ export function SearchCraftGroupedList({
           remaps={remaps}
           fingerAssignments={fingerAssignments}
           lang={lang}
+          extra={renderGroupExtra?.(timing)}
         />
       ))}
     </div>
   );
 }
 
-/** タイミンググループ1つ分のカード（行リスト + デスクトップ用の列ヘッダー） */
+/** タイミンググループ1つ分のカード（行リスト + デスクトップ用の列ヘッダー + 任意の追加コンテンツ） */
 function SearchCraftGroupCard({
   title,
   dotClass,
@@ -369,6 +394,7 @@ function SearchCraftGroupCard({
   remaps,
   fingerAssignments,
   lang,
+  extra,
 }: {
   title?: string;
   dotClass?: string;
@@ -376,8 +402,13 @@ function SearchCraftGroupCard({
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
   lang: string;
+  extra?: ReactNode;
 }) {
   const t = useT();
+  // タイミング未設定のみの1枚カード（title未設定）は crafts=[] でも従来どおり行リストの枠を出す。
+  // タイミング別グループカード（title あり）は、extraTimings 由来で crafts=0件のことがあるため、
+  // その場合は行リスト（列ヘッダー含む）を省略し extra だけを描画する。
+  const showList = title === undefined || crafts.length > 0;
   return (
     <Card>
       {title && (
@@ -392,28 +423,33 @@ function SearchCraftGroupCard({
         </CardHeader>
       )}
       <CardContent className={cn("pb-3", title ? "pt-0" : "pt-4")}>
-        {/* 列ヘッダー（デスクトップのみ） */}
-        <div
-          className={cn(
-            "hidden pb-2 border-b text-xs text-muted-foreground",
-            SEARCH_CRAFT_GRID_COLS,
-          )}
-        >
-          <span>{t("playerProfile.colItems")}</span>
-          <span>{t("playerProfile.colSearchStr")}</span>
-          <span>{t("playerProfile.colInputKeys")}</span>
-        </div>
-        <div className="divide-y">
-          {crafts.map((craft) => (
-            <SearchCraftRow
-              key={craft.id}
-              craft={craft}
-              remaps={remaps}
-              fingerAssignments={fingerAssignments}
-              lang={lang}
-            />
-          ))}
-        </div>
+        {showList && (
+          <>
+            {/* 列ヘッダー（デスクトップのみ） */}
+            <div
+              className={cn(
+                "hidden pb-2 border-b text-xs text-muted-foreground",
+                SEARCH_CRAFT_GRID_COLS,
+              )}
+            >
+              <span>{t("playerProfile.colItems")}</span>
+              <span>{t("playerProfile.colSearchStr")}</span>
+              <span>{t("playerProfile.colInputKeys")}</span>
+            </div>
+            <div className="divide-y">
+              {crafts.map((craft) => (
+                <SearchCraftRow
+                  key={craft.id}
+                  craft={craft}
+                  remaps={remaps}
+                  fingerAssignments={fingerAssignments}
+                  lang={lang}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {extra && <div className={showList ? "mt-3" : undefined}>{extra}</div>}
       </CardContent>
     </Card>
   );

@@ -207,6 +207,77 @@ export function deriveTransition(
   }
 }
 
+/** 文字列表示用のセグメント。typed: false は「そのステップで実際にはタイプしない（前ステップから検索欄に残存する）文字」を表す */
+export type TypedCharSegment = { text: string; typed: boolean };
+
+/**
+ * ステップの文字列表示（サマリーチップ・クラフト実行マーカー内の文字列）を、
+ * 「実際にタイプする文字」と「前ステップから検索欄に残存するだけの文字」に分割する。
+ * 空セグメントは結果に含めない。
+ *
+ * - transition === null（先頭ステップ）: 全部 typed: true
+ * - prev が null/空、または deriveTransition(prev, next, transition) が invalid: 全部 typed: true
+ *   （判定不能時は薄くしない。この関数は表示専用の補助であり、無効判定自体は resolveLoopSteps /
+ *   deriveTransition が別途担う）
+ * - backspace(bsCount): 残存接頭辞（false）+ 続き（true）
+ * - arrowLeft(arrowCount): 残存接頭辞（false）+ 挿入部（true）+ 残存接尾辞（false）
+ * - selectAll: 全部 true（全選択して打ち直すため残存部分がない）
+ * - home: 先頭追記部（true）+ 末尾に残る prev 部分（false）
+ *
+ * typed 部分の文字列は deriveTransition() が返す typed をそのまま使う（重複計算による
+ * 食い違いを避けるため）。
+ */
+export function typedCharSegments(
+  prev: string | null,
+  next: string,
+  transition: LoopTransition | null,
+): TypedCharSegment[] {
+  const segments: TypedCharSegment[] = [];
+  const push = (text: string, typed: boolean) => {
+    if (text !== "") segments.push({ text, typed });
+  };
+
+  if (transition === null || !prev) {
+    push(next, true);
+    return segments;
+  }
+
+  const derived = deriveTransition(prev, next, transition);
+  if (!derived.valid) {
+    push(next, true);
+    return segments;
+  }
+
+  switch (transition.type) {
+    case "backspace": {
+      const remaining = prev.slice(0, prev.length - transition.bsCount);
+      push(remaining, false);
+      push(derived.typed, true);
+      break;
+    }
+    case "arrowLeft": {
+      const remainingLength = prev.length - transition.arrowCount;
+      const prefix = prev.slice(0, remainingLength);
+      const suffix = prev.slice(remainingLength);
+      push(prefix, false);
+      push(derived.typed, true);
+      push(suffix, false);
+      break;
+    }
+    case "selectAll": {
+      push(derived.typed, true);
+      break;
+    }
+    case "home": {
+      push(derived.typed, true);
+      push(prev, false);
+      break;
+    }
+  }
+
+  return segments;
+}
+
 /** 参照解決済みの1ステップ */
 export type ResolvedLoopStep = {
   craftId: string;

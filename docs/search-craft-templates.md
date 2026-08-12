@@ -60,7 +60,7 @@ type TemplateLoop = {
 - `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `toggle-publish` / `delete` のみ（いいねは `/api/likes` が担当）。
 - **作成 `/my-guides/templates/new`**（`app/routes/my-guides/template-new.tsx`）・**編集 `/my-guides/templates/:templateId/edit`**（`app/routes/my-guides/template-edit.tsx`）: テンプレートエディタでテンプレートの内容そのものを直接編集する。**プリセットや現在の設定を経由せずゼロから作成できる**。
   - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（バーチャルキーボード → キーリマップ編集 → サーチクラフト編集。タイピングテストはバーチャルキーボードカード右上のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
-  - サーチクラフト編集部の `SearchCraftListEditor` は行形式（ドラッグハンドル + 順番 + アイテムチップ + サーチ文字列 + タイミング + 「Shiftを押しながら」チェックボックス + コメント常時表示）。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。
+  - サーチクラフト＋繋ぎ方（Loop）編集部は **`SearchCraftTimingBoard`**（`app/components/search-craft-editor.tsx`）によるタイミングブロック型UI（「指定なし」+ 6種のタイミング、計7ブロックを常時表示。timing の変更はブロック間D&D）。クラフト行はアイテムチップ + サーチ文字列 + 「Shiftを押しながら」チェックボックス + コメント常時表示。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」を参照。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
   - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。作成時は `isPublished: true` で公開される。
 - `/me/search-craft` の「テンプレートとして公開」ボタンから `/my-guides/templates` へ遷移できる。
@@ -152,8 +152,7 @@ type TemplateLoop = {
 
 1. **バーチャルキーボード**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。**キーをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキーを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
 2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapOutputType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
-3. **サーチクラフト編集**: `SearchCraftListEditor` によるアイテムごとの登録・編集（アイテム選択ダイアログ・タイミング・コメント・並べ替え・削除）。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。
-4. **繋ぎ方（Loop）編集**: `SearchCraftLoopListEditor`（`app/components/search-craft-loop-editor.tsx`）によるステップの追加・並べ替え・削除。サーチクラフト行の削除に連動して、削除された `craftId` を参照する Loop ステップを自動除去する（生存参照は温存、2件未満になった Loop は自動除去。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」参照）。
+3. **サーチクラフト＋繋ぎ方（Loop）編集**: `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`）によるタイミングブロック型エディタ。「指定なし」+ 6種のタイミング、計7ブロックを常時表示し、各ブロック内でアイテムごとの登録・編集（アイテム選択ダイアログ・コメント・並べ替え・削除）と、その下の「繋ぎ方（Loop）」サブセクション（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` から再利用）でのステップ追加・並べ替え・削除を行う。timing の変更はブロック間D&D。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。サーチクラフト行の削除に連動して、削除された `craftId` を参照する Loop ステップを自動除去する（生存参照は温存、2件未満になった Loop は自動除去。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」「繋ぎ方（Loop）」参照）。
 
 このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
 
@@ -176,13 +175,13 @@ type TemplateLoop = {
 
 | コンポーネント | 説明 |
 |---|---|
-| `SearchCraftGroupedList` | サーチクラフト一覧の正典表示。タイミング別グループカード（色ドット + 件数）+ 3カラム表形式（アイテム / サーチ文字列 / 入力キー、lg未満は縦積み）。シーケンス番号・サーチ文字列のクリックコピー・コメント表示付き。`fingerAssignments` は任意（プロフィールのみ渡す） |
+| `SearchCraftGroupedList` | サーチクラフト一覧の正典表示。タイミング別グループカード（色ドット + 件数）+ 3カラム表形式（アイテム / サーチ文字列 / 入力キー、lg未満は縦積み）。シーケンス番号・サーチ文字列のクリックコピー・コメント表示付き。`fingerAssignments` は任意（プロフィールのみ渡す）。任意 prop `renderGroupExtra?: (timing: string \| null) => ReactNode` で各グループカードの行リスト後に追加コンテンツを描画できる（タイミングなしの1枚カードでも `renderGroupExtra(null)` を呼ぶ）。任意 prop `extraTimings?: (string \| null)[]` は crafts に存在しない timing でも空のグループカードを出すための補助（該当カードは行リストを省略し `renderGroupExtra` の内容だけを描画）。`search-craft-loop-view.tsx` を直接 import しない疎結合設計（render prop 方式。循環 import 回避） |
 | `KeyBadge` / `ActualKeyBadges` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ）。`ActualKeyBadges` はサーチ文字列から `getActualKeyInfos()` で導出 |
 | `KeyBadgeLegend` | キーバッジ装飾の凡例（`showFingers` で指割り当て凡例を表示、`showCraftMarker` で Loop のクラフト実行マーカーの凡例を表示） |
 
 テンプレート詳細のリマップ表示はチップ一覧ではなく **`VirtualKeyboard`（`showRemaps`）** で行い、閲覧者がレイアウト（US / JIS / US_TKL / JIS_TKL）を切り替えられる。
 
-繋ぎ方（Loop）は `app/components/search-craft-loop-view.tsx` の `SearchCraftLoopList`（プロフィール・テンプレート詳細で共用）で表示する。テンプレート詳細では `parseTemplateLoops(template.loopsData, crafts.length)` で `craftIndex` を `craft-${idx}` 形式の合成 id へ解決してから渡す。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」を参照。
+繋ぎ方（Loop）はプロフィールと同じく、独立セクションを持たずタイミング別グループカード内のサブセクションとして表示する（`app/components/search-craft-loop-view.tsx` の `SearchCraftLoopGroupSection`）。テンプレート詳細では `parseTemplateLoops(template.loopsData, crafts.length)` で `craftIndex` を `craft-${idx}` 形式の合成 id へ解決し、`timing` ごとにグループ化した上で `SearchCraftGroupedList` の `renderGroupExtra(timing)` から該当グループの `SearchCraftLoopGroupSection` を返す。`extraTimings` には Loop が持つ timing の distinct 値を渡し、その timing のクラフトが0件でも Loop 用のグループカードが漏れないようにする。サーチクラフトのセクション見出し行に Loop 件数バッジ（`templates.loopCount`、0件なら非表示）を移設し、`KeyBadgeLegend` の `showCraftMarker` は Loop が1件以上ある場合のみ有効にする。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」を参照。
 
 ## 関連ファイル
 
@@ -196,9 +195,9 @@ type TemplateLoop = {
 | `app/routes/my-guides/templates.tsx` | テンプレート管理（一覧・公開切替・削除） |
 | `app/routes/my-guides/template-new.tsx` / `template-edit.tsx` | テンプレート作成・編集ページ |
 | `app/components/template-editor.tsx` | テンプレートエディタフォーム（作成・編集で共通） |
-| `app/components/search-craft-workbench.tsx` | 編集ワークベンチ（Playground とテンプレートエディタで共通の4セクション構成） |
-| `app/components/search-craft-editor.tsx` | サーチクラフト編集UI（`/me/search-craft` とワークベンチで共通） |
-| `app/components/search-craft-loop-editor.tsx` | 繋ぎ方（Loop）編集UI（`SearchCraftLoopListEditor`） |
+| `app/components/search-craft-workbench.tsx` | 編集ワークベンチ（Playground とテンプレートエディタで共通の3セクション構成。3セクション目がタイミングブロック型のサーチクラフト＋Loop編集） |
+| `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`。`/me/search-craft` とワークベンチで共通） |
+| `app/components/search-craft-loop-editor.tsx` | 繋ぎ方（Loop）行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
 | `app/components/search-craft-loop-view.tsx` | 繋ぎ方（Loop）表示UI（`SearchCraftLoopList` 等） |
 | `app/lib/game-languages.ts` | ゲーム内言語リスト（日本語名併記、例: `Svenska（スウェーデン語）`） |
 | `app/components/content-tabs.tsx` | タブナビゲーション（汎用 `ContentTabs` + `MyContentTabs` / `GuidesContentTabs`） |

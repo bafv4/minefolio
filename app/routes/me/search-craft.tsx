@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -27,15 +27,13 @@ import {
 import { toast } from "sonner";
 import {
   Search,
-  Plus,
   AlertCircle,
   Settings,
   Copy,
   Share2,
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { SearchCraftListEditor, arrayMove } from "@/components/search-craft-editor";
-import { SearchCraftLoopListEditor } from "@/components/search-craft-loop-editor";
+import { SearchCraftTimingBoard, reorderByBlock } from "@/components/search-craft-editor";
 import { toUiRemaps } from "@/lib/remap-utils";
 import { parseTemplateCrafts, parseTemplateLoops } from "@/lib/search-craft-templates";
 import { parseLoopSteps, isValidLoopStepsShape, remapLoopSteps, type LoopStepData } from "@/lib/search-craft-loops";
@@ -475,22 +473,14 @@ export default function SearchCraftPage() {
     );
   }, [crafts, initialCrafts, loops, initialLoops]);
 
-  const handleUpdateCraft = useCallback((index: number, updated: SearchCraftItem) => {
+  // SearchCraftTimingBoard からの crafts 更新（D&D・行の更新・削除を含む）。
+  // 消えた craftId があれば、それを参照する Loop ステップを連動して除去する
+  // （生存参照は温存、remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）
+  const handleCraftsChange = useCallback((next: SearchCraftItem[]) => {
     setCrafts((prev) => {
-      const newCrafts = [...prev];
-      newCrafts[index] = updated;
-      return newCrafts;
-    });
-  }, []);
-
-  const handleDeleteCraft = useCallback((index: number) => {
-    setCrafts((prev) => {
-      const craftId = prev[index]?.id;
-      const nextCrafts = prev.filter((_, i) => i !== index);
-      if (craftId) {
-        // 削除された craftId への参照だけをステップから除去する（生存参照は温存）。
-        // remapLoopSteps は先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う
-        const idMap = new Map(nextCrafts.map((c) => [c.id, c.id]));
+      const removedIds = prev.filter((c) => !next.some((n) => n.id === c.id)).map((c) => c.id);
+      if (removedIds.length > 0) {
+        const idMap = new Map(next.map((c) => [c.id, c.id]));
         setLoops((prevLoops) =>
           prevLoops
             .map((loop) => {
@@ -500,8 +490,12 @@ export default function SearchCraftPage() {
             .filter((loop): loop is SearchCraftLoopItem => loop !== null),
         );
       }
-      return nextCrafts;
+      return next;
     });
+  }, []);
+
+  const handleLoopsChange = useCallback((next: SearchCraftLoopItem[]) => {
+    setLoops(next);
   }, []);
 
   // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
@@ -513,7 +507,7 @@ export default function SearchCraftPage() {
     [loops, t],
   );
 
-  const handleAddCraft = useCallback(() => {
+  const handleAddCraft = useCallback((timing: SearchCraftItem["timing"]) => {
     const newCraft: SearchCraftItem = {
       id: `new-${crypto.randomUUID()}`,
       sequence: crafts.length + 1,
@@ -521,34 +515,13 @@ export default function SearchCraftPage() {
       keys: [],
       searchStr: null,
       comment: null,
-      timing: null,
+      timing,
       withShift: false,
     };
-    setCrafts((prev) => [...prev, newCraft]);
+    setCrafts((prev) => reorderByBlock([...prev, newCraft]));
   }, [crafts.length]);
 
-  const handleReorder = useCallback((oldIndex: number, newIndex: number) => {
-    setCrafts((prev) => arrayMove(prev, oldIndex, newIndex));
-  }, []);
-
-  // Loop（繋ぎ方）の編集ハンドラ
-  const handleUpdateLoop = useCallback((index: number, updated: SearchCraftLoopItem) => {
-    setLoops((prev) => {
-      const next = [...prev];
-      next[index] = updated;
-      return next;
-    });
-  }, []);
-
-  const handleDeleteLoop = useCallback((index: number) => {
-    setLoops((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleReorderLoop = useCallback((oldIndex: number, newIndex: number) => {
-    setLoops((prev) => arrayMove(prev, oldIndex, newIndex));
-  }, []);
-
-  const handleAddLoop = useCallback(() => {
+  const handleAddLoop = useCallback((timing: SearchCraftLoopItem["timing"]) => {
     if (crafts.length < 2) return;
     const newLoop: SearchCraftLoopItem = {
       id: `new-${crypto.randomUUID()}`,
@@ -557,9 +530,9 @@ export default function SearchCraftPage() {
         { craftId: "", transition: { type: "backspace", bsCount: 0 } },
       ],
       comment: null,
-      timing: null,
+      timing,
     };
-    setLoops((prev) => [...prev, newLoop]);
+    setLoops((prev) => reorderByBlock([...prev, newLoop]));
   }, [crafts.length]);
 
   const handleSave = useCallback(() => {
@@ -682,73 +655,16 @@ export default function SearchCraftPage() {
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
       <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
-      {crafts.length > 0 ? (
-        <Card>
-          <CardContent className="py-1">
-            <SearchCraftListEditor
-              crafts={crafts}
-              remaps={remaps}
-              onUpdate={handleUpdateCraft}
-              onDelete={handleDeleteCraft}
-              onReorder={handleReorder}
-              getDeleteWarning={getLoopDeleteWarning}
-            />
-            <Button variant="outline" size="sm" className="my-3" onClick={handleAddCraft}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.addCraft")}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">{t("meSearchCraft.emptyTitle")}</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("meSearchCraft.emptyDescription")}
-            </p>
-            <Button onClick={handleAddCraft}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.addCraft")}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 繋ぎ方（Loop） */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{t("meSearchCraft.loopSectionTitle")}</CardTitle>
-          <CardDescription>{t("meSearchCraft.loopSectionDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="py-1">
-          {loops.length > 0 && (
-            <SearchCraftLoopListEditor
-              loops={loops}
-              entries={crafts.map((c) => ({ id: c.id, items: c.items, searchStr: c.searchStr }))}
-              remaps={remaps}
-              onUpdate={handleUpdateLoop}
-              onDelete={handleDeleteLoop}
-              onReorder={handleReorderLoop}
-            />
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="my-3"
-            onClick={handleAddLoop}
-            disabled={crafts.length < 2}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t("meSearchCraft.addLoop")}
-          </Button>
-          {crafts.length < 2 && (
-            <p className="text-xs text-muted-foreground">
-              {t("meSearchCraft.loopNeedTwoEntries")}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <SearchCraftTimingBoard
+        crafts={crafts}
+        onCraftsChange={handleCraftsChange}
+        loops={loops}
+        onLoopsChange={handleLoopsChange}
+        remaps={remaps}
+        getDeleteWarning={getLoopDeleteWarning}
+        onAddCraft={handleAddCraft}
+        onAddLoop={handleAddLoop}
+      />
       </div>
       </PresetSwitchLock>
 

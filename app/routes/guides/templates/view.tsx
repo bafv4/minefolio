@@ -56,7 +56,7 @@ import {
   KeyBadgeLegend,
 } from "@/components/search-craft-template-view";
 import {
-  SearchCraftLoopList,
+  SearchCraftLoopGroupSection,
   type LoopCraftInfo,
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
@@ -369,6 +369,37 @@ export default function TemplateViewPage() {
     }
     fetcher.submit(formData, { method: "post" });
   };
+
+  // サーチクラフト（グループカード表示・Loop 参照解決の両方で使うため合成 id を一度だけ振る）
+  const parsedSearchCrafts = crafts.map((craft, idx) => ({
+    ...craft,
+    id: `craft-${idx}`,
+    sequence: idx + 1,
+  }));
+  const loopCraftRefs: LoopCraftInfo[] = crafts.map((craft, idx) => ({
+    id: `craft-${idx}`,
+    items: craft.items,
+    searchStr: craft.searchStr,
+  }));
+
+  // 繋ぎ方（Loop）を timing ごとにグループ化。SearchCraftGroupedList の
+  // renderGroupExtra から各タイミンググループカード内に埋め込むため（プロフィールと同じパターン）
+  const searchCraftLoopsByTiming = new Map<string | null, SearchCraftLoopRowData[]>();
+  loops.forEach((loop, idx) => {
+    const row: SearchCraftLoopRowData = {
+      id: `loop-${idx}`,
+      steps: loop.steps.map((s) => ({
+        craftId: `craft-${s.craftIndex}`,
+        transition: s.transition,
+      })),
+      comment: loop.comment,
+      timing: loop.timing,
+    };
+    const key = loop.timing;
+    if (!searchCraftLoopsByTiming.has(key)) searchCraftLoopsByTiming.set(key, []);
+    searchCraftLoopsByTiming.get(key)!.push(row);
+  });
+  const searchCraftLoopTimings = Array.from(searchCraftLoopsByTiming.keys());
 
   return (
     <div className="space-y-6">
@@ -691,55 +722,36 @@ export default function TemplateViewPage() {
         </section>
       )}
 
-      {/* サーチクラフト */}
+      {/* サーチクラフト（繋ぎ方〈Loop〉はタイミンググループカード内のサブセクションとして表示） */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">{t("templates.craftSection")}</h2>
-          <KeyBadgeLegend />
+          <div className="flex flex-wrap items-center gap-2">
+            {loops.length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {t("templates.loopCount", { count: loops.length })}
+              </Badge>
+            )}
+            <KeyBadgeLegend showCraftMarker={loops.length > 0} />
+          </div>
         </div>
         <SearchCraftGroupedList
-          crafts={crafts.map((craft, idx) => ({
-            ...craft,
-            id: `craft-${idx}`,
-            sequence: idx + 1,
-          }))}
+          crafts={parsedSearchCrafts}
           remaps={remaps}
           gameLanguage={template.gameLanguage}
+          extraTimings={searchCraftLoopTimings}
+          renderGroupExtra={(timing) => {
+            const groupLoops = searchCraftLoopsByTiming.get(timing) ?? [];
+            return groupLoops.length > 0 ? (
+              <SearchCraftLoopGroupSection
+                loops={groupLoops}
+                crafts={loopCraftRefs}
+                remaps={remaps}
+              />
+            ) : null;
+          }}
         />
       </section>
-
-      {/* 繋ぎ方（Loop） */}
-      {loops.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">{t("templates.loopSection")}</h2>
-            <Badge variant="secondary" className="text-xs">
-              {t("templates.loopCount", { count: loops.length })}
-            </Badge>
-          </div>
-          <SearchCraftLoopList
-            loops={loops.map(
-              (loop, idx): SearchCraftLoopRowData => ({
-                id: `loop-${idx}`,
-                steps: loop.steps.map((s) => ({
-                  craftId: `craft-${s.craftIndex}`,
-                  transition: s.transition,
-                })),
-                comment: loop.comment,
-                timing: loop.timing,
-              }),
-            )}
-            crafts={crafts.map(
-              (craft, idx): LoopCraftInfo => ({
-                id: `craft-${idx}`,
-                items: craft.items,
-                searchStr: craft.searchStr,
-              }),
-            )}
-            remaps={remaps}
-          />
-        </section>
-      )}
     </div>
   );
 }

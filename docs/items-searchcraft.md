@@ -142,12 +142,18 @@ import {
   - 非リマップの記号は `SHIFT_CHAR_MAP` の逆引きで物理キーに解決する（例: `_` → `Minus`）。ただしそのキー自体がリマップで奪われている（単一キーソース or `Shift+同キー` ソースがある）場合は使わない。英字は大文字が出力されるが Minecraft の検索は大文字小文字を区別しないため基底キーをそのまま押す
   - 上記で解決できない文字（Shift 押下中に出せない数字等）は文字そのままの基底キーにフォールバックする
 
-### 編集UI
+### 編集UI（タイミングブロック型）
 
-- `@dnd-kit` によるドラッグ&ドロップでエントリの並べ替え
-- `@bafv4/mcitems` の `getCraftableItems()` / `getCraftableItemsByCategory()` でクラフト可能アイテムをフィルタリング
-- アイテム検索・カテゴリ別選択
-- サーチクラフトエントリの追加・削除・複製
+編集UIは `app/components/search-craft-editor.tsx` の **`SearchCraftTimingBoard`** に統合されている（サーチクラフトと繋ぎ方〈Loop〉の両方を1つのボードで編集する）。`/me/search-craft` とワークベンチ（`SearchCraftWorkbench`、Playground・テンプレートエディタ共用）で共通。
+
+- **ブロック構成**: 「指定なし」+ `TIMING_META`（`search-craft-template-view.tsx`）の6種、計7ブロックを常時この順で縦に表示する。ブロックヘッダは色ドット（指定なしはドットなし）+ ラベル + 件数
+- **クラフト行**: アイテムチップ + 追加ボタン、サーチ文字列 `Input`、「Shiftを押しながら」チェックボックス、入力キーのライブプレビュー（`remaps` 指定時）、コメント、削除（`AlertDialog`）。行UI自体に timing の選択コントロールは無い（timing はブロック帰属で決まる）
+- **タイミングの変更＝ブロック間D&D**: `@dnd-kit` のマルチコンテナ Sortable パターン（単一 `DndContext` + ブロックごとの `SortableContext` + 空ブロック用 `useDroppable` ゾーン）。ブロック間へドロップすると対象クラフトの `timing` が移動先ブロックの値に更新される。クラフトと繋ぎ方（Loop）は同一 `DndContext` を共有し、`collisionDetection` をドラッグ中の対象と同じドメイン（craft/loop）に絞り込むことで互いの干渉を防ぐ（`useDraggable`/`useDroppable` は最も近い祖先の `DndContext` にしか束縛できないため、ブロックカード内でクラフト行と Loop 行を同居させたまま完全に別の `DndContext` に分離することはできない）
+- **繋ぎ方（Loop）サブセクション**: 各ブロック内、クラフトリストの下に配置。Loop 行の編集UI（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` からエクスポート）はステップ選択・遷移行・プレビュー・コメント・削除を持つが、行ヘッダーに timing Select は無い（timing の変更はやはりブロック間D&D）。0件のブロックでは通常サブセクション自体を出さず、**Loop のドラッグ中のみ**全ブロックに破線のドロップゾーンを表示する
+- **ブロック内の追加ボタン**: 各ブロックに「クラフトを追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満なら disabled）を配置
+- **空ブロック**: クラフト0件のブロックは破線のプレースホルダを表示し、そのままドロップ先として機能する
+- 保存時の `sequence` は「ブロック表示順にグループを連結したフラット配列」になる。ユーザー操作（D&D・追加・削除・更新）のたびに正規化される（初期ロード時点では再emitしないため、ブロック順に並んでいない既存データを開いてもそれだけでは変更扱いにならない）
+- `@bafv4/mcitems` の `getCraftableItems()` / `getCraftableItemsByCategory()` でクラフト可能アイテムをフィルタリング、アイテム検索・カテゴリ別選択
 - `FloatingSaveBar` による変更の一括保存
 - プリセット機能（`configPresets` テーブルと連携）
 
@@ -221,14 +227,18 @@ type LoopStepData = {
 | `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする |
 | `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用） |
 | `remapLoopSteps(steps, idMap)` | craftId を idMap（旧id→新id）で引き換える。マップに存在しない craftId（削除済みエントリへの参照）を持つステップは除去し、残りが2件未満になった場合は Loop ごと `null` を返す |
+| `typedCharSegments(prev, next, transition)` | 表示専用の補助。`next` を「実際にタイプする文字（`typed: true`）」と「前ステップから検索欄に残存するだけの文字（`typed: false`）」の `TypedCharSegment[]`（`{ text, typed }`、空セグメントは含めない）に分割する。先頭ステップ（`transition === null`）・`prev` が null/空・`deriveTransition()` が invalid のいずれかなら全部 `typed: true`（判定不能時は薄くしない）。方式ごとの区切り方は `backspace`＝残存接頭辞(false)+続き(true)、`arrowLeft`＝残存接頭辞(false)+挿入部(true)+残存接尾辞(false)、`selectAll`＝全部true、`home`＝先頭追記部(true)+末尾に残る `prev` 部分(false)。`typed` 部分の文字列は `deriveTransition()` の `typed` をそのまま使い、重複計算による食い違いを避ける |
 
 ### 編集UI
 
-- `app/components/search-craft-loop-editor.tsx` の `SearchCraftLoopListEditor`（`SearchCraftListEditor` と同じ `@dnd-kit` ドラッグ&ドロップパターンを踏襲）
-- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・timing Select・削除の AlertDialog）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
-- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。遷移方式や前後エントリの変更時は `bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする（範囲外になった既存値自体は保持したまま invalid 表示に倒す）
+Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`、上記「[編集UI（タイミングブロック型）](#編集ui)」参照）に統合されている。各タイミングブロック内、クラフトリストの下に「繋ぎ方（Loop）」サブセクションとして表示・編集する。
+
+- 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
+- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
+- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
-- **エントリ削除時の連動**: `SearchCraftListEditor` の `getDeleteWarning?: (craftId: string) => string | null` プロップで、削除対象エントリを参照する Loop があれば削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される
+- Loop の timing 変更はブロック間D&D（`SearchCraftTimingBoard` 内、クラフトとは別ドメインとして扱う `DndContext`）で行う。ドラッグ中のみ、Loop が0件のブロックにも破線のドロップゾーンが表示される
+- **エントリ削除時の連動**: `SearchCraftTimingBoard` の `getDeleteWarning?: (craftId: string) => string | null` プロップで、削除対象エントリを参照する Loop があれば削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される
 
 ### 表示
 
@@ -236,11 +246,14 @@ type LoopStepData = {
 
 | コンポーネント | 説明 |
 |---|---|
-| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。`KeyBadge` を再利用。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策） |
-| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon＋Hammer の破線チップ、Tooltip 付き）を `ChevronRight` を挟んで交互に描画。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用） |
-| `SearchCraftLoopList` / `SearchCraftLoopRow` | Loop 一覧のカード表示。1行＝①ステップ連鎖サマリー（アイテムアイコン＋サーチ文字列→連結）＋timing色ドット＋ステップ数バッジ ②`LoopKeySequence` ③コメント。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
+| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系）と区別できるよう info トーン（`border-info/50 bg-info/10 text-info`）で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策） |
+| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon＋Hammer の破線チップ＋サーチ文字列、Tooltip 付き）を `ChevronRight` を挟んで交互に描画。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用）。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
+| `SearchCraftLoopList` / `SearchCraftLoopRow` | Loop 一覧のカード表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
+| `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
 
-プレイヤープロフィールのサーチクラフトタブでは、`SearchCraftGroupedList` の後に独立した Loop セクション（`Repeat` アイコン見出し、`playerProfile.loopSectionTitle`）として表示する。サマリーバーに Loop 件数バッジ（0件なら非表示）、凡例（`KeyBadgeLegend`）にクラフトマーカーの説明を Loop がある場合のみ追加する。
+サーチ文字列の「実際にタイプしない文字（前ステップから検索欄に残存する部分）」の薄表示は、ファイル内のローカルヘルパー `SegmentedSearchString`（`typedCharSegments()` の結果を描画）が担う。`typed: false` のセグメントは `text-muted-foreground/70`（`SearchStringText` の半角スペース可視化と同じトーン）で表示し、セグメント内でも半角スペースは `SearchStringText` と同じ「␣」可視化を維持する。読み上げ用にラッパーへ元の文字列全体を `aria-label` で渡し、セグメント自体は `aria-hidden` にする（`SearchStringText` と同じ方針）。編集UI（`SearchCraftTimingBoard` 内の Loop 全体プレビュー）も `LoopKeySequence` を共用するため、この表示は自動的に反映される。
+
+プレイヤープロフィールのサーチクラフトタブでは、独立した Loop セクションを持たず、`SearchCraftGroupedList` の `renderGroupExtra` / `extraTimings` を使って各タイミンググループカード内のサブセクションとして Loop を表示する（Loop を timing ごとにグループ化し、`renderGroupExtra(timing)` で該当グループの `SearchCraftLoopGroupSection` を返す。`extraTimings` には Loop が持つ timing の distinct 値を渡し、その timing のクラフトが0件でも Loop 用のグループカードが漏れなく出るようにする）。サマリーバーに Loop 件数バッジ（0件なら非表示）、凡例（`KeyBadgeLegend`）にクラフトマーカーの説明を Loop がある場合のみ追加するのは変更なし。
 
 ### saveAll での id リマップと後方互換
 
@@ -297,7 +310,8 @@ type LoopStepData = {
 | `app/routes/player/profile.tsx` | プロフィールページ（表示側。Loop セクションも含む） |
 | `app/lib/remap-utils.ts` | サーチクラフトのキーリマップ連携（`getActualKeyInfos()`） |
 | `app/lib/search-craft-loops.ts` | Loop の共有ロジック（遷移導出・参照解決・パース・idリマップ） |
-| `app/components/search-craft-loop-editor.tsx` | Loop 編集UI（`SearchCraftLoopListEditor`） |
+| `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`） |
+| `app/components/search-craft-loop-editor.tsx` | Loop 行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
 | `app/components/search-craft-loop-view.tsx` | Loop 表示UI（`SearchCraftLoopList` 等） |
 | `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様（Loop の craftIndex 参照も含む） |
 | `docs/presets.md` | プリセットスナップショット仕様（Loop の craftSeq 参照も含む） |
