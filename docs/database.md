@@ -965,3 +965,27 @@ cron（`/api/cron/update-page-views`）が数時間おきに `target_type` 単�
 - **falsy デフォルトの NOT NULL 列**を既存テーブルへ追加すると `db:push` が TRUNCATE を提案することがある。
   その場合は push せず、`scripts/` に dry-run 既定 + `--apply` フラグの一回限り tsx スクリプトを作って手動 DDL で適用する
 - 式インデックス（`lower(mcid)` 等）は drizzle-kit push が差分検出できない。手動 DDL スクリプトで適用する
+
+### 運用ノート: ローカル `db:push` が式インデックスで恒常的に失敗する
+
+現行の **drizzle-kit 0.31.10**（`package.json` 参照）には、式インデックス `idx_paceman_paces_mcid_lower`（`paceman_paces` の `lower(mcid)`）が絡む push で
+**テーブル再構築時の index 一括再列挙経路が式を列名としてクォートしてしまうバグ**があり、ローカル `local.db` への
+`pnpm db:push` は `SQLITE_ERROR: no such column: lower("mcid")` で恒常的に中断する（upstream の 0.x 系に修正は入っていない。
+drizzle-kit v1 の RC ではパーサが書き直されており、この経路のバグ自体は解消されている見込みだが、本リポジトリは
+まだ 0.x 系のため回避が必要）。
+
+このため、**ローカル DDL 反映は `pnpm db:push` ではなく `scripts/` の一回限りスクリプトが信頼できる経路**になっている
+（式インデックスに限らず、`local.db` の index 命名ドリフト全般が push を巻き込んで中断させるため）。今回の Loop 機能
+追加を含む一連の対応で、以下のスクリプトが `scripts/` に追加・整備された:
+
+| スクリプト | 目的 |
+|---|---|
+| `add-search-craft-loops.ts` | `search_craft_loops` テーブル＋ `config_presets.search_craft_loops_data` / `search_craft_templates.loops_data` 列を追加（本機能の DDL） |
+| `fix-unique-index-names.ts` | inline `.unique()` 列の named unique index（14件）を補完（SQLite の自動 index のみで named index が無いテーブルが push を中断させる） |
+| `fix-missing-indexes.ts` | schema.ts が定義する index 全件（98件）を対象に、欠けているものだけ補完する汎用版（`fix-unique-index-names.ts` の対象を包含） |
+| `add-player-rankings-table.ts` | `local.db` に存在しなかった `player_rankings` テーブル＋ index を追加（drift の是正） |
+| `add-app-meta-table.ts` | `local.db` に存在しなかった `app_meta` テーブルを追加（drift の是正） |
+| `drop-orphan-favorites-index.ts` | 旧カラム名時代の孤立 index `idx_favorites_user_mcid` を削除（現行は `idx_favorites_user_slug`） |
+| `fix-paceman-expression-index.ts` | `idx_paceman_paces_mcid_lower` を drizzle-kit が期待する SQL テキスト表記（バッククォート識別子・ダブルクォート列参照）で張り替える（上記バグの直接的な回避） |
+
+いずれも `scripts/lib/db-env.ts` の `loadDbEnv()` で接続先を分離し、`IF NOT EXISTS` / 事前存在チェック付きの dry-run 既定スクリプト（[`db-apply` スキル](../.claude/skills/db-apply/SKILL.md)の作法に準拠）。新規テーブル・nullable 列の追加や index の張り替えのみで、既存の行データは変更しない。
