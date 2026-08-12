@@ -28,10 +28,39 @@
 - ページ内の大型セクションパネル（ホームのセクション枠など、複数カードを包む面）: `rounded-2xl`（18px）
 - `rounded-3xl` 以上はコンテナには使わない（装飾要素は除く）
 
+## カードシステム
+カードは用途に応じて次の3レシピのいずれかに従う。
+
+- **インタラクティブカード**（遷移先のある一覧アイテム。走者/ペース/動画/ガイドカード）: `rounded-xl border border-border/70 bg-background/80`。ホバーは外側ラッパーに `-translate-y-0.5` ＋ `border-primary/40` ＋ `shadow-md`。カード全面クリックは上記「カード全体をクリック可能にする（オーバーレイリンク）」の構成に従う
+- **静的セクションカード**（情報グルーピング）: shadcn Card を `<Card className="gap-3 py-5">` ＋ `CardHeader`/`CardContent className="px-5"` で使う（外側余白 20px。カード面が大きいため 16px では窮屈になる）。**現行 `card.tsx` 基底は gap 方式のため、旧 API 前提の `pt-0` / `pb-3` / `py-2` は無効または逆効果（禁止）**
+- **リスト行**: `divide-y` 区切り＋`hover:bg-muted/50`（行がリンクの場合のみ。クリック不能な行にホバー背景を付けない）
+
+### グリッドカードの内部文法
+①メディア帯/ヘッダー行 → ②タイトル（`text-base font-semibold`。リスト行は `text-sm font-medium`）＋説明（`text-xs` muted）→ ③タグ行（Badge secondary、`rounded-full px-2 py-0.5 text-[11px]`・最大3個）→ ④フッターメタ行 `mt-3 border-t border-border/60 pt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground`、左＝著者/件数系（`truncate`/`min-w-0`）、右端＝`ml-auto shrink-0` で `Clock3 h-3 w-3` ＋相対時刻。**折返し耐性（`flex-wrap`＋`ml-auto`＋`shrink-0`＋`min-w-0`）は必須**。**フッターは下端固定**: カードを `flex flex-col` にし、フッター直前に伸縮スペーサー `<div className="flex-1" />`（またはヘッダー行に `flex-1`）を置いて、タイトル行数や任意項目の差があっても水平線位置が兄弟カード間で揃うようにする
+
+### 透明度の規格
+- border: カード外枠 `/70`・カード内区切り `/60` の2値
+- `bg-secondary`: タイル・面 `/50`、kbd チップ `/80`、リンク行 `/30`（hover `/60`）
+- 意味色ティント: `/10`
+
+### kbd チップ
+`bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center`
+
+### 丸ピル（バッジピル・件数ピル）
+`inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
+
+### カード内アイコン
+- セクション見出し（CardTitle）先頭: `h-5 w-5`
+- メタ行: `h-3 w-3`（テキストとは `gap-1`）
+- タイトル内の状態マーカー（Pin 等）: `h-4 w-4`
+
+### グリッド段階
+セクションに常に4件表示するグリッドは `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4`（中間幅で3+1の孤立を作らない。4カラムは `xl` 以上）
+
 ## カラーシステム
 - テーマカラーは **oklch** 形式でCSS変数に定義
 - セマンティックカラー: `--success`, `--warning`, `--info`, `--destructive`
-- ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）
+- ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）、`--youtube` / `--twitch` / `--gold` / `--bronze`
 - コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
 - 意味を持つ色（成功・警告・情報・エラー/破壊的）は必ずセマンティックトークン（`text-success` / `text-warning` / `text-info` / `text-destructive` と各 `bg-*/10` 等）を使う。`green-500` などのパレット直指定・生 hex は禁止
 - `dark:` バリアントは使わない。3テーマ（light / dark / ultra-dark）はトークン側で吸収する（タブ節の既存方針の一般化）
