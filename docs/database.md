@@ -4,7 +4,7 @@ Minefolio の DB スキーマ全体を俯瞰するためのドキュメント。
 
 - DBMS: **libSQL（Turso）／ SQLite 方言**、ORM は **Drizzle ORM**
 - 主キーは原則 `text` の **CUID2**（`@paralleldrive/cuid2` の `createId()`）。例外は `app_meta`（`key` が PK）と better-auth 管理テーブル
-- テーブル数: **38**
+- テーブル数: **39**
 - スキーマ変更の反映手順は [CLAUDE.md](../CLAUDE.md) の「データベース」節（`db:push` / `db:push:remote`）を参照
 
 ## 凡例
@@ -45,6 +45,7 @@ erDiagram
     users ||--o{ external_tools : user_id
     users ||--o{ item_layouts : user_id
     users ||--o{ search_crafts : user_id
+    users ||--o{ search_craft_loops : user_id
 
     users ||--o{ social_links : user_id
     users ||--o{ profile_videos : user_id
@@ -116,34 +117,35 @@ erDiagram
 | 8 | [`external_tools`](#external_tools) | 8 | 外部ツール連携 | 1 : N |
 | 9 | [`item_layouts`](#item_layouts) | 9 | アイテム配置 | 1 : N |
 | 10 | [`search_crafts`](#search_crafts) | 11 | サーチクラフト | 1 : N |
-| 11 | [`social_links`](#social_links) | 9 | ソーシャルリンク | 1 : N |
-| 12 | [`profile_videos`](#profile_videos) | 8 | プロフィールの動画欄 | 1 : N |
-| 13 | [`category_records`](#category_records) | 22 | 記録・目標 | 1 : N |
-| 14 | [`custom_fields`](#custom_fields) | 8 | カスタム項目 | 1 : N |
-| 15 | [`external_stats`](#external_stats) | 7 | 外部サービス統計キャッシュ | 1 : N |
-| 16 | [`favorites`](#favorites) | 4 | お気に入りプレイヤー | 1 : N |
-| 17 | [`config_presets`](#config_presets) | 16 | 設定プリセット | 1 : N |
-| 18 | [`config_history`](#config_history) | 8 | 設定変更履歴 | 1 : N |
-| 19 | [`speedrun_categories`](#speedrun_categories) | 12 | スピードランカテゴリ（マスタ） | なし |
-| 20 | [`player_rankings`](#player_rankings) | 19 | プレイヤーランキング | 1 : N |
-| 21 | [`rankings_cache`](#rankings_cache) | 8 | リーダーボードのキャッシュ | なし |
-| 22 | [`paceman_paces`](#paceman_paces) | 11 | PaceMan ペース履歴 | 1 : N（set null） |
-| 23 | [`guides`](#guides) | 19 | ガイド記事 | 1 : N |
-| 24 | [`guide_likes`](#guide_likes) | 4 | ガイドのいいね | 1 : N |
-| 25 | [`search_craft_templates`](#search_craft_templates) | 11 | 公開サーチクラフトテンプレート | 1 : N |
-| 26 | [`search_craft_template_likes`](#search_craft_template_likes) | 4 | テンプレートのいいね | 1 : N |
-| 27 | [`profile_reactions`](#profile_reactions) | 5 | プロフィールの絵文字リアクション | 1 : N ×2 |
-| 28 | [`auth_users`](#auth_users) | 7 | better-auth ユーザー | なし |
-| 29 | [`auth_sessions`](#auth_sessions) | 8 | better-auth セッション | なし |
-| 30 | [`auth_accounts`](#auth_accounts) | 13 | better-auth OAuth 連携 | なし（弱参照） |
-| 31 | [`auth_verifications`](#auth_verifications) | 6 | better-auth 検証トークン | なし |
-| 32 | [`api_cache`](#api_cache) | 7 | 汎用 API キャッシュ | なし |
-| 33 | [`youtube_video_cache`](#youtube_video_cache) | 13 | YouTube 動画キャッシュ | なし（弱参照） |
-| 34 | [`youtube_live_cache`](#youtube_live_cache) | 15 | YouTube ライブ配信キャッシュ | なし（弱参照） |
-| 35 | [`twitch_vod_cache`](#twitch_vod_cache) | 12 | Twitch アーカイブキャッシュ | なし（弱参照） |
-| 36 | [`content_translations`](#content_translations) | 15 | 利用者コンテンツの自動翻訳 | なし（弱参照） |
-| 37 | [`page_view_stats`](#page_view_stats) | 7 | ページビュー集計スナップショット | なし（弱参照） |
-| 38 | [`app_meta`](#app_meta) | 3 | アプリ全体の key-value | なし |
+| 11 | [`search_craft_loops`](#search_craft_loops) | 8 | サーチクラフトの繋ぎ方（Loop） | 1 : N |
+| 12 | [`social_links`](#social_links) | 9 | ソーシャルリンク | 1 : N |
+| 13 | [`profile_videos`](#profile_videos) | 8 | プロフィールの動画欄 | 1 : N |
+| 14 | [`category_records`](#category_records) | 22 | 記録・目標 | 1 : N |
+| 15 | [`custom_fields`](#custom_fields) | 8 | カスタム項目 | 1 : N |
+| 16 | [`external_stats`](#external_stats) | 7 | 外部サービス統計キャッシュ | 1 : N |
+| 17 | [`favorites`](#favorites) | 4 | お気に入りプレイヤー | 1 : N |
+| 18 | [`config_presets`](#config_presets) | 17 | 設定プリセット | 1 : N |
+| 19 | [`config_history`](#config_history) | 8 | 設定変更履歴 | 1 : N |
+| 20 | [`speedrun_categories`](#speedrun_categories) | 12 | スピードランカテゴリ（マスタ） | なし |
+| 21 | [`player_rankings`](#player_rankings) | 19 | プレイヤーランキング | 1 : N |
+| 22 | [`rankings_cache`](#rankings_cache) | 8 | リーダーボードのキャッシュ | なし |
+| 23 | [`paceman_paces`](#paceman_paces) | 11 | PaceMan ペース履歴 | 1 : N（set null） |
+| 24 | [`guides`](#guides) | 19 | ガイド記事 | 1 : N |
+| 25 | [`guide_likes`](#guide_likes) | 4 | ガイドのいいね | 1 : N |
+| 26 | [`search_craft_templates`](#search_craft_templates) | 12 | 公開サーチクラフトテンプレート | 1 : N |
+| 27 | [`search_craft_template_likes`](#search_craft_template_likes) | 4 | テンプレートのいいね | 1 : N |
+| 28 | [`profile_reactions`](#profile_reactions) | 5 | プロフィールの絵文字リアクション | 1 : N ×2 |
+| 29 | [`auth_users`](#auth_users) | 7 | better-auth ユーザー | なし |
+| 30 | [`auth_sessions`](#auth_sessions) | 8 | better-auth セッション | なし |
+| 31 | [`auth_accounts`](#auth_accounts) | 13 | better-auth OAuth 連携 | なし（弱参照） |
+| 32 | [`auth_verifications`](#auth_verifications) | 6 | better-auth 検証トークン | なし |
+| 33 | [`api_cache`](#api_cache) | 7 | 汎用 API キャッシュ | なし |
+| 34 | [`youtube_video_cache`](#youtube_video_cache) | 13 | YouTube 動画キャッシュ | なし（弱参照） |
+| 35 | [`youtube_live_cache`](#youtube_live_cache) | 15 | YouTube ライブ配信キャッシュ | なし（弱参照） |
+| 36 | [`twitch_vod_cache`](#twitch_vod_cache) | 12 | Twitch アーカイブキャッシュ | なし（弱参照） |
+| 37 | [`content_translations`](#content_translations) | 15 | 利用者コンテンツの自動翻訳 | なし（弱参照） |
+| 38 | [`page_view_stats`](#page_view_stats) | 7 | ページビュー集計スナップショット | なし（弱参照） |
+| 39 | [`app_meta`](#app_meta) | 3 | アプリ全体の key-value | なし |
 
 ---
 
@@ -413,6 +415,25 @@ erDiagram
 
 索引: **UNIQUE** `(user_id, sequence)`
 
+#### `search_craft_loops`
+
+サーチクラフトの繋ぎ方（Loop）。作業台を閉じずに連続クラフトするキー操作列（BS / 全選択 / Home + 打鍵）を、既存の `search_crafts` 行を id 参照で順に繋いで表す。
+
+| カラム | 型 | 制約・参照 |
+|---|---|---|
+| `id` | text | PK |
+| `user_id` | text | → `users.id` (cascade) |
+| `sequence` | int | |
+| `steps` | json | `LoopStepData[]`。`craftId`（`search_crafts.id` への参照。DB制約なし、アプリ層で管理）＋遷移メタ |
+| `comment` | text? | |
+| `timing` | enum? | `ow` / `bastion` / `bastion_fort` / `fortress` / `blinded` / `other`（null = 区分なし） |
+| `created_at` | ts | |
+| `updated_at` | ts | |
+
+索引: **UNIQUE** `(user_id, sequence)`
+
+仕様詳細（`LoopStepData` の形・遷移3方式のセマンティクス・プリセット/テンプレートスナップショットでの `craftSeq` 参照）は [items-searchcraft.md](./items-searchcraft.md) の「繋ぎ方（Loop）」を参照。
+
 ---
 
 ### プロフィール表示
@@ -545,6 +566,7 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 | `finger_assignments_data` | json? | |
 | `item_layouts_data` | json? | |
 | `search_crafts_data` | json? | |
+| `search_craft_loops_data` | json? | 繋ぎ方（Loop）のスナップショット。`craftSeq`（同一スナップショット内 crafts の `sequence` 値）でステップの参照先を表す（スナップショットは行 id を保持しないため） |
 | `custom_keys_data` | json? | |
 | `custom_actions_data` | json? | |
 | `created_at` | ts | |
@@ -720,6 +742,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `created_at` | ts | |
 | `updated_at` | ts | |
 | `game_language` | text? | 想定するゲーム内言語（例: `ja_jp`） |
+| `loops_data` | json? | 繋ぎ方（Loop）のスナップショット。`config_presets.search_craft_loops_data` と同一形式（`craftSeq = craftIndex + 1` が恒等） |
 
 索引: `(user_id)` / `(is_published, created_at)`
 

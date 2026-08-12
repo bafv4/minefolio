@@ -13,7 +13,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
@@ -42,6 +42,11 @@ import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
 import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
+import {
+  SearchCraftLoopList,
+  type SearchCraftLoopRowData,
+} from "@/components/search-craft-loop-view";
+import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
@@ -216,6 +221,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Speech,
+  Repeat,
 } from "lucide-react";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -351,6 +357,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       searchCrafts: {
         orderBy: [asc(searchCrafts.sequence)],
       },
+      searchCraftLoops: {
+        orderBy: [asc(searchCraftLoops.sequence)],
+      },
       keyRemaps: true,
       customKeys: {
         orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
@@ -423,6 +432,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         fingerAssignmentsData: true,
         itemLayoutsData: true,
         searchCraftsData: true,
+        searchCraftLoopsData: true,
         customKeysData: true,
         customActionsData: true,
       },
@@ -500,6 +510,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let displayKeyRemaps = player.keyRemaps;
   let displayItemLayouts = player.itemLayouts;
   let displaySearchCrafts = player.searchCrafts;
+  // Loop（繋ぎ方）: crafts と必ず同一ソースから解決する（ライブ crafts × スナップショット loops の
+  // 混在は craftId 参照が壊れるため厳禁）。ライブ行は steps（JSON列）を parseLoopSteps でパースする
+  let displaySearchCraftLoops: SearchCraftLoopRowData[] = player.searchCraftLoops.map((loop) => ({
+    id: loop.id,
+    steps: parseLoopSteps(loop.steps),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
   let displayCustomKeys = player.customKeys;
   let displayCustomActions = player.customActions;
 
@@ -508,6 +526,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     displayKeyRemaps = presetOverride.keyRemaps;
     displayItemLayouts = presetOverride.itemLayouts;
     displaySearchCrafts = presetOverride.searchCrafts;
+    // presetOverride.searchCraftLoops は decodePresetSearchCraftLoops が既に craftId を
+    // 合成 id（preset-craft-${idx}）へ解決済み。displaySearchCrafts と同じスナップショットから
+    // 導出されているため参照は必ず解決できる
+    displaySearchCraftLoops = presetOverride.searchCraftLoops.map((loop) => ({
+      id: loop.id,
+      steps: loop.steps,
+      comment: loop.comment,
+      timing: loop.timing ?? null,
+    }));
     displayCustomKeys = presetOverride.customKeys;
     displayCustomActions = presetOverride.customActions;
     // 表示専用のためライブ行の型にキャストする（id 等の DB 固有列は表示では未使用。
@@ -538,6 +565,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       keyRemaps: displayKeyRemaps,
       itemLayouts: displayItemLayouts,
       searchCrafts: displaySearchCrafts,
+      searchCraftLoops: displaySearchCraftLoops,
       customKeys: displayCustomKeys,
       customActions: displayCustomActions,
     },
@@ -688,6 +716,17 @@ export default function PlayerProfilePage() {
       return {};
     }
   }, [player.playerConfig?.fingerAssignments]);
+
+  // サーチクラフト（items JSON列をパース）。SearchCraftGroupedList・Loop 表示のクラフト
+  // 参照解決の両方で使うため一度だけ計算する
+  const parsedSearchCrafts = useMemo(
+    () =>
+      player.searchCrafts.map((craft) => ({
+        ...craft,
+        items: JSON.parse(craft.items) as string[],
+      })),
+    [player.searchCrafts],
+  );
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
   // （all/unset のみなら両文脈で表示が同一のため "trigger" 固定でよい）
@@ -1763,20 +1802,41 @@ export default function PlayerProfilePage() {
                   <Badge variant="outline" className="text-muted-foreground">
                     {t("playerProfile.searchCraftCount", { count: player.searchCrafts.length })}
                   </Badge>
+                  {player.searchCraftLoops.length > 0 && (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      {t("playerProfile.loopCount", { count: player.searchCraftLoops.length })}
+                    </Badge>
+                  )}
                 </div>
                 <KeyBadgeLegend
                   showFingers={Object.keys(userFingerAssignments).length > 0}
+                  showCraftMarker={player.searchCraftLoops.length > 0}
                 />
               </div>
               <SearchCraftGroupedList
-                crafts={player.searchCrafts.map((craft) => ({
-                  ...craft,
-                  items: JSON.parse(craft.items) as string[],
-                }))}
+                crafts={parsedSearchCrafts}
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
                 gameLanguage={player.playerConfig?.gameLanguage}
               />
+
+              {/* 繋ぎ方（Loop） */}
+              {player.searchCraftLoops.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="h-5 w-5 text-muted-foreground" />
+                    <h2 className="text-lg font-semibold">
+                      {t("playerProfile.loopSectionTitle")}
+                    </h2>
+                  </div>
+                  <SearchCraftLoopList
+                    loops={player.searchCraftLoops}
+                    crafts={parsedSearchCrafts}
+                    remaps={player.keyRemaps}
+                    fingerAssignments={userFingerAssignments}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <EmptyState
@@ -2608,8 +2668,9 @@ function SocialLinkRichCard({
             </Badge>
           )}
         </div>
+        {/* statPartsに相対時刻（latestVideoAgo/lastStreamAgo）を含む場合があり、SSRとhydrationで基準時刻がずれるため警告を抑制 */}
         {statParts.length > 0 && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{statParts.join(" · ")}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>{statParts.join(" · ")}</p>
         )}
       </div>
       <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />

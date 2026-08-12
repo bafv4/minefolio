@@ -187,7 +187,8 @@ export function GuideCardGrid({
                     likeCount={guide.likeCount}
                     isOwn={guide.isOwn}
                   />
-                  <span className="ml-auto shrink-0">
+                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+                  <span className="ml-auto shrink-0" suppressHydrationWarning>
                     {formatDistanceToNow(guide.updatedAt, {
                       addSuffix: true,
                       locale: dateFnsLocale(locale),
@@ -270,7 +271,7 @@ export function GuideListView({
                   likeCount={guide.likeCount}
                   isOwn={guide.isOwn}
                 />
-                <span className="ml-auto shrink-0">
+                <span className="ml-auto shrink-0" suppressHydrationWarning>
                   {formatDistanceToNow(guide.updatedAt, {
                     addSuffix: true,
                     locale: dateFnsLocale(locale),

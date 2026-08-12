@@ -165,7 +165,8 @@ export default function MyGuidesPage() {
                       {guide.isPinned && <PinnedBadge className="shrink-0" />}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span>
+                      {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+                      <span suppressHydrationWarning>
                         {t("common.updatedAgo", {
                           time: formatDistanceToNow(guide.updatedAt, {
                             addSuffix: true,

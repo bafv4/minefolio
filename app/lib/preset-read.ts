@@ -11,12 +11,15 @@
 // 合成する行の id は `preset-<kind>-<idx>` 形式（表示専用。DB の行 id とは無関係)。
 // 並び順はライブテーブル取得時の orderBy と揃える。
 import { normalizeKeyRemapType } from "./remap-utils";
+import { isValidLoopTransitionValue, type LoopStepData } from "./search-craft-loops";
 import type {
   PresetKeybindingData,
   PresetPlayerConfigData,
   PresetRemapData,
   PresetItemLayoutData,
   PresetSearchCraftData,
+  PresetSearchCraftLoopData,
+  PresetLoopStepData,
   PresetCustomKeyData,
   PresetCustomActionData,
 } from "./preset-utils";
@@ -28,6 +31,7 @@ export type PresetSnapshot = {
   fingerAssignmentsData?: string | null;
   itemLayoutsData?: string | null;
   searchCraftsData?: string | null;
+  searchCraftLoopsData?: string | null;
   customKeysData?: string | null;
   customActionsData?: string | null;
 };
@@ -156,6 +160,66 @@ export function decodePresetSearchCrafts(json: string | null | undefined, userId
     .sort((a, b) => a.sequence - b.sequence);
 }
 
+/**
+ * サーチクラフトLoop（繋ぎ方）のスナップショットを表示用にデコードする。
+ * ステップの craftSeq は decodedCrafts（decodePresetSearchCrafts の結果）の
+ * sequence フィールドで突合し、合成 id（`preset-craft-${idx}`）へ解決する
+ * （decodedCrafts は sequence でソート済みのため、配列位置とは無関係に突合する）。
+ * 解決できないステップ（参照切れ）は除去し、残りが2件未満になった Loop は除去する。
+ * 破損 JSON・要素の型不正は空配列にフォールバックする（公開ページの SSR を落とさないため）。
+ */
+export function decodePresetSearchCraftLoops(
+  json: string | null | undefined,
+  decodedCrafts: { id: string; sequence: number }[],
+) {
+  const rows = safeParseArray<PresetSearchCraftLoopData>(json);
+  if (!rows) return [];
+
+  const seqToId = new Map(decodedCrafts.map((c) => [c.sequence, c.id]));
+
+  const result: {
+    id: string;
+    sequence: number;
+    steps: LoopStepData[];
+    comment: string | null;
+    timing: PresetSearchCraftLoopData["timing"];
+  }[] = [];
+
+  rows.forEach((loop, idx) => {
+    if (!loop || !Array.isArray(loop.steps)) return;
+
+    // craftSeq が解決できないステップに加え、transition が構造的に不正なステップも除去する
+    // （null は先頭のみ許可 = isValidLoopStepsShape と同じ規則。除去は逐次構築のため、
+    // 生存した最初のステップが常に「先頭」として null に上書きされる）
+    const steps: LoopStepData[] = [];
+    for (const rawStep of loop.steps) {
+      if (!rawStep || typeof rawStep !== "object") continue;
+      const craftId = seqToId.get((rawStep as PresetLoopStepData).craftSeq);
+      if (craftId === undefined) continue;
+
+      if (steps.length === 0) {
+        // 先頭は transition の形を問わず null に統一する
+        steps.push({ craftId, transition: null });
+        continue;
+      }
+      const transition = (rawStep as PresetLoopStepData).transition ?? null;
+      if (!isValidLoopTransitionValue(transition)) continue;
+      steps.push({ craftId, transition });
+    }
+    if (steps.length < 2) return;
+
+    result.push({
+      id: `preset-loop-${idx}`,
+      sequence: loop.sequence,
+      steps,
+      comment: loop.comment ?? null,
+      timing: loop.timing ?? null,
+    });
+  });
+
+  return result.sort((a, b) => a.sequence - b.sequence);
+}
+
 export function decodePresetCustomKeys(json: string | null | undefined, userId: string) {
   const rows = safeParseArray<PresetCustomKeyData>(json);
   if (!rows) return null;
@@ -224,13 +288,15 @@ export function shouldUsePresetSnapshot<T extends { isActive: boolean }>(
  * playerConfig / fingerAssignments のみ null があり得る（設定なし）。
  */
 export function decodePresetConfig(preset: PresetSnapshot, userId: string) {
+  const searchCrafts = decodePresetSearchCrafts(preset.searchCraftsData, userId) ?? [];
   return {
     keybindings: decodePresetKeybindings(preset.keybindingsData, userId) ?? [],
     keyRemaps: decodePresetRemaps(preset.remapsData, userId) ?? [],
     playerConfig: decodePresetPlayerConfig(preset.playerConfigData),
     fingerAssignments: preset.fingerAssignmentsData ?? null,
     itemLayouts: decodePresetItemLayouts(preset.itemLayoutsData, userId) ?? [],
-    searchCrafts: decodePresetSearchCrafts(preset.searchCraftsData, userId) ?? [],
+    searchCrafts,
+    searchCraftLoops: decodePresetSearchCraftLoops(preset.searchCraftLoopsData, searchCrafts),
     customKeys: decodePresetCustomKeys(preset.customKeysData, userId) ?? [],
     customActions: decodePresetCustomActions(preset.customActionsData, userId) ?? [],
   };

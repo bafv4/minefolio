@@ -131,6 +131,7 @@ CREATE TABLE `config_presets` (
 	`custom_actions_data` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
+	`search_craft_loops_data` text,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
@@ -476,6 +477,19 @@ CREATE INDEX `idx_rankings_cache_key` ON `rankings_cache` (`cache_key`);
 CREATE INDEX `idx_rankings_cache_type` ON `rankings_cache` (`cache_type`);
 CREATE INDEX `idx_rankings_cache_expires` ON `rankings_cache` (`expires_at`);
 CREATE INDEX `idx_rankings_cache_category` ON `rankings_cache` (`category_id`);
+CREATE TABLE `search_craft_loops` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`sequence` integer NOT NULL,
+	`steps` text NOT NULL,
+	`comment` text,
+	`timing` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `idx_search_craft_loops_user_sequence` ON `search_craft_loops` (`user_id`,`sequence`);
 CREATE TABLE `search_craft_template_likes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`template_id` text NOT NULL,
@@ -499,6 +513,7 @@ CREATE TABLE `search_craft_templates` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	`game_language` text,
+	`loops_data` text,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 

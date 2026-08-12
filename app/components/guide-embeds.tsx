@@ -7,7 +7,17 @@ import {
 import { ItemIcon } from "@/components/item-icon";
 import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
-import { coerceStringArray } from "@/lib/preset-read";
+import { coerceStringArray, safeParseArray } from "@/lib/preset-read";
+import type { PresetSearchCraftLoopData, PresetLoopStepData } from "@/lib/preset-utils";
+import {
+  resolveLoopSteps,
+  isValidLoopTransitionValue,
+  type LoopStepData,
+  type LoopTransition,
+  type LoopKeyOp,
+  type ResolvedLoop,
+  type ResolvedLoopStep,
+} from "@/lib/search-craft-loops";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
   SearchStringText,
@@ -16,6 +26,7 @@ import {
 } from "@/components/search-craft-template-view";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { ArrowRight } from "lucide-react";
 
 // ========================================
 // 共通型
@@ -33,6 +44,7 @@ export type EmbedUserData = {
     remapsData: string | null;
     playerConfigData: string | null;
     searchCraftsData: string | null;
+    searchCraftLoopsData: string | null;
   }>;
   keybindings: Array<{ action: string; keyCode: string; category: string }>;
   keyRemaps: Array<{
@@ -57,6 +69,14 @@ export type EmbedUserData = {
     timing: string | null;
     /** Shiftを押しながらクラフトするか（プリセットJSON由来の場合は存在しないことがある） */
     withShift?: boolean;
+  }>;
+  /** サーチクラフトの繋ぎ方（Loop）。ライブ行の craftId は searchCrafts[].id を参照する */
+  searchCraftLoops: Array<{
+    id: string;
+    sequence: number;
+    steps: LoopStepData[];
+    comment: string | null;
+    timing: string | null;
   }>;
 };
 
@@ -251,6 +271,40 @@ function getItemDisplayName(itemId: string): string {
 // （独自定義だと新タイミング追加時に該当クラフトが黙って非表示になる）
 const TIMING_ORDER = TIMING_META.map((m) => m.id);
 
+// ========================================
+// Loop（繋ぎ方）表示 — 軽量レンダラ
+// ========================================
+// search-craft-loop-view.tsx（KeyBadge / ActualKeyBadges を使うリマップ対応の共有コンポーネント）は
+// 意図的に import しない。ここでは resolveLoopSteps の導出結果だけを、既存の素の kbd スタイルで描画する。
+
+type EmbedLoopRow = {
+  id: string;
+  timing: string | null;
+  comment: string | null;
+  resolved: ResolvedLoop;
+};
+
+/**
+ * 破損データ由来の transition 値を安全な形へ矯正する。
+ * resolveLoopSteps 内部の deriveTransition は LoopTransition として構造妥当でない
+ * 値に対応する分岐を持たない（呼び出し側で妥当性を保証する契約）ため、サニタイズせずに
+ * 渡すと壊れた JSON（プリセットスナップショット由来）で SSR が落ちうる。
+ * 判定は search-craft-loops.ts の isValidLoopTransitionValue に委譲する（型追加時に
+ * ここを個別更新しなくても自動的に追従する）。構造妥当でない値は null に倒す
+ * （resolveLoopSteps は非先頭ステップの transition null を「無効だが例外にはしない」形で扱う）。
+ */
+function toSafeLoopTransition(value: unknown): LoopTransition | null {
+  return isValidLoopTransitionValue(value) ? value : null;
+}
+
+/** steps 全体を「先頭のみ transition null・以降は安全な transition」の形へ矯正する */
+function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
+  return steps.map((step, i) => ({
+    craftId: step.craftId,
+    transition: i === 0 ? null : toSafeLoopTransition(step.transition),
+  }));
+}
+
 export function SearchCraftEmbedView({
   userData,
   presetName,
@@ -264,6 +318,9 @@ export function SearchCraftEmbedView({
 
   let crafts = userData.searchCrafts;
   let remapsRaw = userData.keyRemaps;
+  // presetName 指定時のみ使う。プリセットスナップショットは行 id を保持しないため、
+  // このスナップショット内 crafts との突合は sequence フィールドで行う（配列位置は不可）
+  let rawLoopsData: string | null = null;
 
   if (presetName) {
     const preset = userData.presets.find((p) => p.name === presetName);
@@ -273,6 +330,7 @@ export function SearchCraftEmbedView({
     if (preset?.remapsData) {
       remapsRaw = JSON.parse(preset.remapsData);
     }
+    rawLoopsData = preset?.searchCraftLoopsData ?? null;
   }
 
   const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
@@ -286,6 +344,42 @@ export function SearchCraftEmbedView({
   }
 
   const hasAnyTiming = crafts.some((c) => c.timing);
+
+  // Loop（繋ぎ方）の craft 参照解決キー。presetName 指定時は同スナップショット内の
+  // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
+  // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
+  const craftLookup = new Map<string, { items: string; searchStr: string | null }>(
+    crafts.map((c) => [presetName ? String(c.sequence) : c.id, c]),
+  );
+  const getCraft = (craftId: string) => {
+    const craft = craftLookup.get(craftId);
+    return craft ? { searchStr: craft.searchStr } : undefined;
+  };
+
+  const loops: EmbedLoopRow[] = presetName
+    ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
+        const rawSteps = loop && Array.isArray(loop.steps) ? loop.steps : [];
+        const steps: LoopStepData[] = rawSteps.map((rawStep) => {
+          const step = rawStep as Partial<PresetLoopStepData> | null | undefined;
+          const craftSeq = step && typeof step === "object" ? step.craftSeq : undefined;
+          return {
+            craftId: typeof craftSeq === "number" ? String(craftSeq) : "",
+            transition: step?.transition ?? null,
+          };
+        });
+        return {
+          id: `preset-loop-embed-${idx}`,
+          timing: (loop && typeof loop === "object" ? (loop.timing ?? null) : null),
+          comment: (loop && typeof loop === "object" ? (loop.comment ?? null) : null),
+          resolved: resolveLoopSteps(toSafeLoopSteps(steps), getCraft),
+        };
+      })
+    : userData.searchCraftLoops.map((loop) => ({
+        id: loop.id,
+        timing: loop.timing,
+        comment: loop.comment,
+        resolved: resolveLoopSteps(toSafeLoopSteps(loop.steps), getCraft),
+      }));
 
   const renderCraft = (craft: typeof crafts[0]) => {
     // craft.items は JSON 文字列（ライブ/プリセットスナップショット由来）だが、破損・非配列だと
@@ -368,6 +462,145 @@ export function SearchCraftEmbedView({
     );
   };
 
+  // Loop（繋ぎ方）の1操作を kbd で描画する。BS は連続回数を「BS ×n」で1個にまとめる
+  // （n個並べない — モバイル幅対策。search-craft-loop-view.tsx と同じ方針）
+  const renderLoopOp = (op: LoopKeyOp, key: number) => {
+    switch (op.kind) {
+      case "backspace":
+        return (
+          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+            BS{op.count > 1 ? ` ×${op.count}` : ""}
+          </kbd>
+        );
+      case "arrowLeft":
+        return (
+          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+            ←{op.count > 1 ? ` ×${op.count}` : ""}
+          </kbd>
+        );
+      case "selectAll":
+        return (
+          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+            ⇧Home
+          </kbd>
+        );
+      case "home":
+        return (
+          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+            Home
+          </kbd>
+        );
+      case "type":
+        return (
+          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+            <SearchStringText value={op.text} />
+          </kbd>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // 先頭ステップ（idx===0）で最初に打つ文字列。先頭は遷移(derived)を持たないため、
+  // craftLookup から直接 searchStr を引き、type セグメント（renderLoopOp）と同じ流儀
+  // （kbd + SearchStringText でスペース␣表示）で描画する。search-craft-loop-view.tsx の
+  // LoopKeySequence（idx===0 で ActualKeyBadges）と対称になるようにする。
+  // craft 未解決（参照切れ）・searchStr が空の場合は既存の invalid 表現に倒す
+  const renderLoopFirstStepKeys = (craftId: string) => {
+    const craft = craftLookup.get(craftId);
+    if (!craft || !craft.searchStr) {
+      return (
+        <kbd
+          className="px-1.5 py-0.5 rounded border border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
+          title={t("playerProfile.loopInvalidTransition")}
+        >
+          ?
+        </kbd>
+      );
+    }
+    return (
+      <kbd className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+        <SearchStringText value={craft.searchStr} />
+      </kbd>
+    );
+  };
+
+  // ステップ間の遷移（先頭以外）。参照切れ・導出失敗（無効な遷移）は「?」kbd に留める
+  const renderLoopStepOps = (step: ResolvedLoopStep) => {
+    if (!step.derived || !step.derived.valid) {
+      return (
+        <kbd
+          className="px-1.5 py-0.5 rounded border border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
+          title={t("playerProfile.loopInvalidTransition")}
+        >
+          ?
+        </kbd>
+      );
+    }
+    return (
+      <span className="flex flex-wrap items-center gap-1">
+        {step.derived.ops.map((op, i) => renderLoopOp(op, i))}
+      </span>
+    );
+  };
+
+  // クラフト実行マーカー。ItemIcon＋→ のインライン表現（SearchCraftGroupedList 等の
+  // Hammer/Tooltip 付きチップは使わない — 軽量レンダラ方針）
+  const renderLoopCraftMarker = (craftId: string, key: number) => {
+    const craft = craftLookup.get(craftId);
+    if (!craft) {
+      return (
+        <kbd
+          key={key}
+          className="px-1.5 py-0.5 rounded border border-dashed border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
+          title={t("playerProfile.loopInvalidTransition")}
+        >
+          ?
+        </kbd>
+      );
+    }
+    const items = coerceStringArray(craft.items);
+    const firstItem = items[0];
+    return (
+      <span
+        key={key}
+        className="inline-flex items-center gap-1 rounded border border-dashed border-border bg-secondary/30 px-1.5 py-0.5"
+        title={t("playerProfile.loopCraftMarker")}
+      >
+        {firstItem ? (
+          <ItemIcon itemId={firstItem} size={18} />
+        ) : (
+          <span className="text-xs text-muted-foreground">?</span>
+        )}
+        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+      </span>
+    );
+  };
+
+  const renderLoop = (loop: EmbedLoopRow) => {
+    const { resolved } = loop;
+    return (
+      <div key={loop.id} className="rounded-md bg-muted/30 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
+          <span>{t("playerProfile.loopStepCount", { count: resolved.steps.length })}</span>
+          {loop.timing && <span>{timingLabelById(t, loop.timing)}</span>}
+          {!resolved.valid && (
+            <span className="text-destructive">{t("playerProfile.loopInvalidTransition")}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {resolved.steps.map((step, idx) => (
+            <span key={idx} className="flex flex-wrap items-center gap-1.5">
+              {idx === 0 ? renderLoopFirstStepKeys(step.craftId) : renderLoopStepOps(step)}
+              {renderLoopCraftMarker(step.craftId, idx)}
+            </span>
+          ))}
+        </div>
+        {loop.comment && <p className="mt-2 text-sm text-muted-foreground">{loop.comment}</p>}
+      </div>
+    );
+  };
+
   return (
     <div className="my-4 not-prose">
       <div className="rounded-lg border bg-card overflow-hidden">
@@ -384,6 +617,14 @@ export function SearchCraftEmbedView({
         <div className="p-4">
           {hasAnyTiming ? renderGrouped() : (
             <div className="space-y-3">{crafts.map(renderCraft)}</div>
+          )}
+          {loops.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
+                {t("playerProfile.loopSectionTitle")}
+              </h4>
+              <div className="space-y-3">{loops.map(renderLoop)}</div>
+            </div>
           )}
         </div>
       </div>

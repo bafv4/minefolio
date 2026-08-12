@@ -9,8 +9,9 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
+import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
@@ -178,6 +179,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
         playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
         searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+        searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
         configPresets: {
           columns: {
             name: true,
@@ -188,6 +190,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             playerConfigData: true,
             fingerAssignmentsData: true,
             searchCraftsData: true,
+            searchCraftLoopsData: true,
           },
         },
       },
@@ -211,6 +214,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
           playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
           searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+          searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
           configPresets: {
             columns: {
               name: true,
@@ -221,6 +225,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               playerConfigData: true,
               fingerAssignmentsData: true,
               searchCraftsData: true,
+              searchCraftLoopsData: true,
             },
           },
         },
@@ -235,7 +240,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       const mainPreset = u.configPresets.find((p) => p.isMain);
       let display: Pick<
         EmbedUserData,
-        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
+        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts" | "searchCraftLoops"
       >;
       if (shouldUsePresetSnapshot(mainPreset)) {
         const decoded = decodePresetConfig(mainPreset, u.id);
@@ -249,6 +254,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               }
             : null,
           searchCrafts: decoded.searchCrafts,
+          // decodePresetSearchCraftLoops は既に craftId をこのスナップショットの
+          // searchCrafts（合成id）へ解決済み。timing はスナップショットに欠落していると
+          // undefined になり得るため null へ正規化する
+          searchCraftLoops: decoded.searchCraftLoops.map((l) => ({
+            id: l.id,
+            sequence: l.sequence,
+            steps: l.steps,
+            comment: l.comment,
+            timing: l.timing ?? null,
+          })),
         };
       } else {
         display = {
@@ -256,6 +271,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           keyRemaps: u.keyRemaps,
           playerConfig: u.playerConfig,
           searchCrafts: u.searchCrafts,
+          searchCraftLoops: u.searchCraftLoops.map((row) => ({
+            id: row.id,
+            sequence: row.sequence,
+            steps: parseLoopSteps(row.steps),
+            comment: row.comment,
+            timing: row.timing,
+          })),
         };
       }
       const data: EmbedUserData = {
@@ -272,6 +294,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           remapsData: p.remapsData,
           playerConfigData: p.playerConfigData,
           searchCraftsData: p.searchCraftsData,
+          searchCraftLoopsData: p.searchCraftLoopsData,
         })),
         ...display,
       };

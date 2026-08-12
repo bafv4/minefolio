@@ -7,16 +7,19 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, searchCraftTemplates } from "@/lib/schema";
+import { users, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
-import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
+import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
 import { filterRemapsForChat } from "@/lib/remap-utils";
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
+  parseTemplateLoops,
   parseEditorSubmission,
   toEditorCrafts,
   toEditorRemaps,
+  toSubmittableLoops,
+  draftId,
   MAX_TEMPLATES_PER_USER,
 } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
@@ -41,6 +44,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     where: eq(users.discordId, session.user.id),
     with: {
       searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+      searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
       keyRemaps: true,
       playerConfig: { columns: { gameLanguage: true, keyboardLayout: true } },
     },
@@ -50,11 +54,28 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("meTemplates.userNotFound"), { status: 404 });
   }
 
+  const currentCrafts = toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts)));
+  // ライブの Loop（craftId 参照）を、いったんプリセットと同一の craftSeq 形式に変換してから
+  // craftIndex 形式へデコードし、現在の crafts の draft id へ解決する
+  const currentLoops = parseTemplateLoops(
+    serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts),
+    currentCrafts.length,
+  ).map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: currentCrafts[s.craftIndex].id,
+      transition: s.transition,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+
   return {
     currentSettings: {
-      crafts: toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts))),
+      crafts: currentCrafts,
       // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
       remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
+      loops: currentLoops,
     },
     defaultGameLanguage: user.playerConfig?.gameLanguage ?? "",
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
@@ -98,6 +119,7 @@ export async function action({ request }: Route.ActionArgs) {
     gameLanguage: submission.gameLanguage,
     craftsData: submission.craftsData,
     remapsData: submission.remapsData,
+    loopsData: submission.loopsData,
     isPublished: true,
     createdAt: now,
     updatedAt: now,
@@ -149,6 +171,7 @@ export default function TemplateNewPage() {
           gameLanguage: defaultGameLanguage,
           crafts: [],
           remaps: [],
+          loops: [],
         }}
         currentSettings={currentSettings}
         keyboardLayout={keyboardLayout}
@@ -160,6 +183,7 @@ export default function TemplateNewPage() {
           formData.set("gameLanguage", data.gameLanguage);
           formData.set("crafts", JSON.stringify(data.crafts));
           formData.set("remaps", JSON.stringify(data.remaps));
+          formData.set("loops", JSON.stringify(toSubmittableLoops(data.crafts, data.loops)));
           fetcher.submit(formData, { method: "post" });
         }}
       />

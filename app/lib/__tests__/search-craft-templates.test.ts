@@ -10,7 +10,12 @@ import {
   serializeTemplateCrafts,
   serializeTemplateRemaps,
   parseEditorSubmission,
+  parseTemplateLoops,
+  serializeTemplateLoops,
+  MAX_TEMPLATE_LOOPS,
+  MAX_LOOP_STEPS,
   type TemplateCraft,
+  type TemplateLoop,
 } from "../search-craft-templates";
 
 describe("parseTemplateCrafts", () => {
@@ -279,5 +284,184 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect(
       parseEditorSubmission(t, buildForm({ title: "a", crafts: "oops", remaps: "[]" })),
     ).toHaveProperty("error");
+  });
+});
+
+describe("serializeTemplateLoops / parseTemplateLoops", () => {
+  it("serializeTemplateLoops → parseTemplateLoops で内容が往復する", () => {
+    const loops: TemplateLoop[] = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null },
+          { craftIndex: 1, transition: { type: "backspace", bsCount: 1 } },
+        ],
+        comment: "メモ",
+        timing: "bastion",
+      },
+    ];
+    const roundTripped = parseTemplateLoops(serializeTemplateLoops(loops), 2);
+    expect(roundTripped).toEqual(loops);
+  });
+
+  it("serializeTemplateLoops → parseTemplateLoops で arrowLeft transition も往復する", () => {
+    const loops: TemplateLoop[] = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null },
+          { craftIndex: 1, transition: { type: "arrowLeft", arrowCount: 2 } },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ];
+    const roundTripped = parseTemplateLoops(serializeTemplateLoops(loops), 2);
+    expect(roundTripped).toEqual(loops);
+  });
+
+  it("craftSeq が crafts の範囲外を指すステップは除去し、2件未満になった Loop は除去する", () => {
+    const loopsData = JSON.stringify([
+      {
+        sequence: 1,
+        steps: [
+          { craftSeq: 1, transition: null },
+          { craftSeq: 5, transition: { type: "backspace", bsCount: 1 } }, // craftCount=2 なので範囲外
+        ],
+        comment: null,
+        timing: null,
+      },
+      {
+        sequence: 2,
+        steps: [
+          { craftSeq: 1, transition: null },
+          { craftSeq: 2, transition: { type: "selectAll" } },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ]);
+    const loops = parseTemplateLoops(loopsData, 2);
+    // 1件目は範囲外ステップ除去で1件になり丸ごと除去され、2件目のみ残る
+    expect(loops).toHaveLength(1);
+    expect(loops[0].steps).toEqual([
+      { craftIndex: 0, transition: null },
+      { craftIndex: 1, transition: { type: "selectAll" } },
+    ]);
+  });
+
+  it("loopsData が null・破損JSONの場合は空配列を返す", () => {
+    expect(parseTemplateLoops(null, 2)).toEqual([]);
+    expect(parseTemplateLoops("not json", 2)).toEqual([]);
+    expect(parseTemplateLoops('{"a":1}', 2)).toEqual([]);
+  });
+});
+
+describe("parseEditorSubmission - loops（繋ぎ方）", () => {
+  const twoCrafts = JSON.stringify([
+    { items: ["minecraft:blaze_powder"], searchStr: "er", comment: null, timing: null },
+    { items: ["minecraft:ender_eye"], searchStr: "en", comment: null, timing: null },
+  ]);
+
+  const buildLoopForm = (fields: Record<string, string>) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+    return fd;
+  };
+
+  it("正常な loops をDB保存形式（craftSeq参照）に変換する", () => {
+    const loops = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null },
+          { craftIndex: 1, transition: { type: "backspace", bsCount: 1 } },
+        ],
+        comment: "コメント",
+        timing: null,
+      },
+    ];
+    const result = parseEditorSubmission(t,
+      buildLoopForm({
+        title: "テスト",
+        crafts: twoCrafts,
+        remaps: "[]",
+        loops: JSON.stringify(loops),
+      }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    expect(result.loopsData).not.toBeNull();
+    expect(parseTemplateLoops(result.loopsData, 2)).toEqual(loops);
+  });
+
+  it("loops フィールド省略時は loopsData が null", () => {
+    const result = parseEditorSubmission(t,
+      buildLoopForm({ title: "テスト", crafts: twoCrafts, remaps: "[]" }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    expect(result.loopsData).toBeNull();
+  });
+
+  it("loops が非配列の場合は拒否する", () => {
+    const result = parseEditorSubmission(t,
+      buildLoopForm({
+        title: "テスト",
+        crafts: twoCrafts,
+        remaps: "[]",
+        loops: JSON.stringify({ not: "array" }),
+      }),
+    );
+    expect(result).toHaveProperty("error");
+  });
+
+  it("steps の craftIndex が範囲外の場合は拒否する", () => {
+    const badLoops = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null },
+          { craftIndex: 99, transition: { type: "selectAll" } },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ];
+    const result = parseEditorSubmission(t,
+      buildLoopForm({ title: "テスト", crafts: twoCrafts, remaps: "[]", loops: JSON.stringify(badLoops) }),
+    );
+    expect(result).toHaveProperty("error");
+  });
+
+  it("MAX_TEMPLATE_LOOPS を超えるループ数は拒否する", () => {
+    const tooManyLoops = Array.from({ length: MAX_TEMPLATE_LOOPS + 1 }, () => ({
+      steps: [
+        { craftIndex: 0, transition: null },
+        { craftIndex: 1, transition: { type: "selectAll" } },
+      ],
+      comment: null,
+      timing: null,
+    }));
+    const result = parseEditorSubmission(t,
+      buildLoopForm({ title: "テスト", crafts: twoCrafts, remaps: "[]", loops: JSON.stringify(tooManyLoops) }),
+    );
+    expect(result).toHaveProperty("error");
+  });
+
+  it("MAX_LOOP_STEPS を超えるステップ数は拒否する", () => {
+    const tooManySteps = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null },
+          ...Array.from({ length: MAX_LOOP_STEPS }, () => ({
+            craftIndex: 1,
+            transition: { type: "selectAll" },
+          })),
+        ],
+        comment: null,
+        timing: null,
+      },
+    ];
+    const result = parseEditorSubmission(t,
+      buildLoopForm({ title: "テスト", crafts: twoCrafts, remaps: "[]", loops: JSON.stringify(tooManySteps) }),
+    );
+    expect(result).toHaveProperty("error");
   });
 });

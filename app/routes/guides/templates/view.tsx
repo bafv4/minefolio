@@ -19,6 +19,7 @@ import {
   parseTemplateCrafts,
   parseTemplateRemapData,
   parseTemplateRemaps,
+  parseTemplateLoops,
   MAX_TEMPLATE_CRAFTS,
 } from "@/lib/search-craft-templates";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -54,6 +55,11 @@ import {
   SearchCraftGroupedList,
   KeyBadgeLegend,
 } from "@/components/search-craft-template-view";
+import {
+  SearchCraftLoopList,
+  type LoopCraftInfo,
+  type SearchCraftLoopRowData,
+} from "@/components/search-craft-loop-view";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
   ArrowLeft,
@@ -153,6 +159,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const appUrl = env.APP_URL || "https://minefolio.app";
   const likeCount = await getTemplateLikeCount(db, template.id);
 
+  const crafts = parseTemplateCrafts(template.craftsData);
+
   return {
     template: {
       id: template.id,
@@ -165,8 +173,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       createdAt: template.createdAt.toISOString(),
       updatedAt: template.updatedAt.toISOString(),
     },
-    crafts: parseTemplateCrafts(template.craftsData),
+    crafts,
     remaps: parseTemplateRemaps(template.remapsData),
+    loops: parseTemplateLoops(template.loopsData, crafts.length),
     author: {
       slug: template.user.slug,
       name: getLocalizedDisplayName(template.user, resolveLocale(request)),
@@ -219,6 +228,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   const input = {
     crafts,
     remaps: applyRemaps ? parseTemplateRemapData(template.remapsData) : null,
+    // crafts と同じタイミングで常に適用する（テンプレートの loops は適用可否を選べない）
+    loops: parseTemplateLoops(template.loopsData, crafts.length),
   };
 
   const now = new Date();
@@ -292,7 +303,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function TemplateViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { template, crafts, remaps, author, myPresets, isOwner, isLoggedIn, appUrl } =
+  const { template, crafts, remaps, loops, author, myPresets, isOwner, isLoggedIn, appUrl } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -387,10 +398,13 @@ export default function TemplateViewPage() {
             {author.name}
           </Link>
           <span className="mx-2">·</span>
-          {formatDistanceToNow(new Date(template.createdAt), {
-            addSuffix: true,
-            locale: dateFnsLocale(locale),
-          })}
+          {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+          <span suppressHydrationWarning>
+            {formatDistanceToNow(new Date(template.createdAt), {
+              addSuffix: true,
+              locale: dateFnsLocale(locale),
+            })}
+          </span>
         </p>
         {template.description && (
           <p className="text-sm whitespace-pre-wrap">{template.description}</p>
@@ -694,6 +708,39 @@ export default function TemplateViewPage() {
           gameLanguage={template.gameLanguage}
         />
       </section>
+
+      {/* 繋ぎ方（Loop） */}
+      {loops.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">{t("templates.loopSection")}</h2>
+            <Badge variant="secondary" className="text-xs">
+              {t("templates.loopCount", { count: loops.length })}
+            </Badge>
+          </div>
+          <SearchCraftLoopList
+            loops={loops.map(
+              (loop, idx): SearchCraftLoopRowData => ({
+                id: `loop-${idx}`,
+                steps: loop.steps.map((s) => ({
+                  craftId: `craft-${s.craftIndex}`,
+                  transition: s.transition,
+                })),
+                comment: loop.comment,
+                timing: loop.timing,
+              }),
+            )}
+            crafts={crafts.map(
+              (craft, idx): LoopCraftInfo => ({
+                id: `craft-${idx}`,
+                items: craft.items,
+                searchStr: craft.searchStr,
+              }),
+            )}
+            remaps={remaps}
+          />
+        </section>
+      )}
     </div>
   );
 }

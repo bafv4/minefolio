@@ -256,6 +256,26 @@ export const searchCrafts = sqliteTable("search_crafts", {
 ]);
 
 // ============================================
+// 8b. search_craft_loops（サーチクラフトの繋ぎ方 / Loop）
+// ============================================
+// 作業台を閉じずに連続クラフトするキー操作列。既存の search_crafts 行を id 参照で順に繋ぐ
+export const searchCraftLoops = sqliteTable("search_craft_loops", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sequence: integer("sequence").notNull(),
+  steps: text("steps").notNull(), // JSON: LoopStepData[]（search_crafts.id への参照＋遷移メタ。整合性はアプリ層で管理）
+  comment: text("comment"),
+  timing: text("timing", {
+    enum: ["ow", "bastion", "bastion_fort", "fortress", "blinded", "other"],
+  }), // クラフトタイミング（null=区分なし）
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idx_search_craft_loops_user_sequence").on(table.userId, table.sequence),
+]);
+
+// ============================================
 // 9. social_links（ソーシャルリンク）
 // ============================================
 export const socialLinks = sqliteTable("social_links", {
@@ -486,6 +506,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   externalTools: many(externalTools),
   itemLayouts: many(itemLayouts),
   searchCrafts: many(searchCrafts),
+  searchCraftLoops: many(searchCraftLoops),
   socialLinks: many(socialLinks),
   profileVideos: many(profileVideos),
   categoryRecords: many(categoryRecords),
@@ -553,6 +574,13 @@ export const searchCraftsRelations = relations(searchCrafts, ({ one }) => ({
   }),
 }));
 
+export const searchCraftLoopsRelations = relations(searchCraftLoops, ({ one }) => ({
+  user: one(users, {
+    fields: [searchCraftLoops.userId],
+    references: [users.id],
+  }),
+}));
+
 export const socialLinksRelations = relations(socialLinks, ({ one }) => ({
   user: one(users, {
     fields: [socialLinks.userId],
@@ -602,6 +630,7 @@ export type KeyRemap = typeof keyRemaps.$inferSelect;
 export type ExternalTool = typeof externalTools.$inferSelect;
 export type ItemLayout = typeof itemLayouts.$inferSelect;
 export type SearchCraft = typeof searchCrafts.$inferSelect;
+export type SearchCraftLoop = typeof searchCraftLoops.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type ProfileVideo = typeof profileVideos.$inferSelect;
 export type CategoryRecord = typeof categoryRecords.$inferSelect;
@@ -634,6 +663,9 @@ export const configPresets = sqliteTable("config_presets", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  // JSON: PresetSearchCraftLoopData[]（サーチクラフトの繋ぎ方のスナップショット。craftSeq で同スナップショット内 crafts の sequence を参照）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  searchCraftLoopsData: text("search_craft_loops_data"),
 }, (table) => [
   index("idx_config_presets_user_id").on(table.userId),
   index("idx_config_presets_is_active").on(table.isActive),
@@ -1064,6 +1096,9 @@ export const searchCraftTemplates = sqliteTable("search_craft_templates", {
   // 想定するゲーム内言語（サーチ文字列は言語に依存する）。言語コード（例: "ja_jp"）
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   gameLanguage: text("game_language"),
+  // JSON: config_presets.search_craft_loops_data と同一形式（craftsData と同様のスナップショット。craftSeq = craftIndex + 1 が恒等）
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  loopsData: text("loops_data"),
 }, (table) => [
   index("idx_search_craft_templates_user_id").on(table.userId),
   index("idx_search_craft_templates_published_created").on(table.isPublished, table.createdAt),

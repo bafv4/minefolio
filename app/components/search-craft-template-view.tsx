@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { Copy, Hammer } from "lucide-react";
 
 /**
  * サーチクラフトの公開表示コンポーネント群。
@@ -249,8 +249,15 @@ export function ActualKeyBadges({
   );
 }
 
-/** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
-export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean }) {
+/** キーバッジ装飾（リマップ/Shift/指割り当て/クラフト実行マーカー）の凡例 */
+export function KeyBadgeLegend({
+  showFingers = false,
+  showCraftMarker = false,
+}: {
+  showFingers?: boolean;
+  /** Loop（繋ぎ方）表示があるページでのみ、クラフト実行マーカーの説明を追加する */
+  showCraftMarker?: boolean;
+}) {
   const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -268,6 +275,16 @@ export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean 
           {t("playerProfile.legendWithShift")}
         </span>
       </div>
+      {showCraftMarker && (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex h-3.5 items-center justify-center rounded border border-dashed border-border bg-secondary/20 px-0.5">
+            <Hammer className="h-2.5 w-2.5 text-muted-foreground" aria-hidden="true" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("playerProfile.legendCraftMarker")}
+          </span>
+        </div>
+      )}
       {showFingers && <FingerLegend />}
     </div>
   );

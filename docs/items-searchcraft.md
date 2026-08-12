@@ -1,6 +1,6 @@
 # アイテム配置・サーチクラフト 仕様書
 
-Minefolioにおけるアイテム配置（ホットバー構成）とサーチクラフト（クラフト検索文字列）の仕様を定義する。
+Minefolioにおけるアイテム配置（ホットバー構成）とサーチクラフト（クラフト検索文字列）・その繋ぎ方（Loop）の仕様を定義する。
 
 ---
 
@@ -153,6 +153,109 @@ import {
 
 ---
 
+## 繋ぎ方（Loop）
+
+Loop は、既存のサーチクラフトエントリ（`search_crafts` 行）を **ID 参照で順に繋ぎ**、作業台を閉じずに連続クラフトするキー操作列（BS×n / ←×n 挿入 / Shift+Home 全選択 / Home 先頭追記＋打鍵）を前後エントリの `searchStr` から自動導出して編集・表示する機能。
+
+例: `er` と打つ→ブレイズパウダーをクラフト→（チャットキーで入力欄を再活性化）→Backspace→`n`→エンダーアイをクラフト。
+
+### テーブル: `search_craft_loops`
+
+| カラム | 型 | 説明 |
+|---|---|---|
+| id | text (PK) | CUID2 |
+| userId | text (FK → users, cascade) | ユーザーID |
+| sequence | integer | シーケンス番号（順序管理） |
+| steps | text (JSON配列) | ステップ列（`LoopStepData[]`、下記） |
+| comment | text (nullable) | コメント |
+| timing | text (nullable) | クラフトタイミング（`search_crafts` と同じ enum） |
+| createdAt / updatedAt | timestamp | 作成・更新日時 |
+
+- ユニーク制約: `(userId, sequence)` の組み合わせ
+- `steps` は JSON 列（子テーブルは不採用。ループは常に丸ごと読み書きし、保存経路が全削除→全挿入のため行 FK が成立しない）。`craftId` は `search_crafts.id` への参照だが、DB の FK 制約はなくアプリ層で整合性を管理する
+
+### 共有ロジック: `app/lib/search-craft-loops.ts`
+
+`.server` にはしない純粋関数モジュール（Playground・ライブプレビュー・全表示箇所のクライアント側から直接呼ぶため。`app/lib/remap-utils.ts` と同じ位置付け）。**モジュール内で `searchStr` の trim・正規化は一切行わない**（先頭・末尾スペースがスペースキー入力として意味を持つ既存仕様を踏襲する）。
+
+#### steps（`LoopStepData[]`）の形
+
+```typescript
+type LoopTransition =
+  | { type: "backspace"; bsCount: number }
+  | { type: "arrowLeft"; arrowCount: number }
+  | { type: "selectAll" }
+  | { type: "home" };
+
+type LoopStepData = {
+  craftId: string;                    // search_crafts.id への参照
+  transition: LoopTransition | null;  // 先頭ステップのみ null
+};
+```
+
+#### 遷移4方式のセマンティクス
+
+前後ステップの `searchStr`（`prev` → `next`）から `deriveTransition()` がキー操作列を導出する。
+
+| 方式 | 操作 | 妥当条件 |
+|---|---|---|
+| `backspace` | BS を `bsCount` 回押してから続きを打つ | `bsCount` が整数で `0 <= bsCount <= prev.length`、かつ `next` が残存接頭辞 `prev.slice(0, prev.length - bsCount)` から始まる |
+| `arrowLeft` | ← を `arrowCount` 回押してカーソルを末尾から `arrowCount` 文字戻し、その位置に文字列を挿入する（削除は伴わない） | `arrowCount` が整数で `1 <= arrowCount <= prev.length`（0 は「末尾に追記」＝backspace(0) と等価のため範囲外）、かつ `next.length > prev.length`、かつ `next` が残存接頭辞 `prev.slice(0, prev.length - arrowCount)` から始まり、残存接尾辞 `prev.slice(prev.length - arrowCount)` で終わる（= `next` が `prev` 前半 + 挿入文字列 + `prev` 後半 `arrowCount` 文字の形になっている） |
+| `selectAll` | Shift+Home で全選択→打ち直す | 常に妥当 |
+| `home` | Home で先頭へ戻り、先頭に打ち足す | `next.endsWith(prev)` かつ `next.length > prev.length` |
+
+- 方式選択 UI のラベルは `meSearchCraft.loopTransitionBackspace` / `loopTransitionArrowLeft` / `loopTransitionSelectAll` / `loopTransitionHome`（`app/lib/messages/pages-ja.ts`）。回数ステッパーのラベルは `loopBsCountLabel` / `loopArrowCountLabel`、無効理由の表示文言は `loopInvalidBsRange` / `loopInvalidArrowRange` / `loopInvalidArrowLeft` / `loopInvalidHome` 等
+- `minBs`（`minBackspaceCount(prev, next)` = `prev.length - 共通接頭辞長`）と `maxBs`（= `prev.length`）は4方式共通で常に算出される（arrowLeft/selectAll/home でも「BS 方式に切り替えた場合の目安」として提示する）
+- 回数（`bsCount` / `arrowCount`）は UTF-16 コード単位で数える。サロゲートペア（非BMP文字）は1文字が2カウントになり実キー押下数と乖離するが、実運用のサーチ文字列（ASCII・かな漢字＝BMP）では影響しない
+- `arrowLeft` の既定値（Select で方式を切り替えた直後の初期 `arrowCount`）は `minArrowLeftCount(prev, next)`（妥当な最小 `k`）。妥当な `k` は連続しているとは限らない（周期的な文字列など、途中の `k` だけ有効なことがある）ため `k=1〜prev.length` を総当たりし、1件も見つからなければ `null`（呼び出し側は既定値 `1` のまま invalid 表示に倒す）
+- 妥当性は `DerivedTransition`（`{ valid: true, ops, typed, minBs, maxBs }` または `{ valid: false, reason }`）で表現する。`reason` は `bs_out_of_range` / `prefix_mismatch` / `arrow_out_of_range` / `not_insertion` / `not_extension` / `missing_search_str`（`arrow_out_of_range` は `arrowCount` が範囲外、`not_insertion` は挿入として成立しない場合）
+- **意味的に無効な遷移（BS範囲外・←範囲外・挿入不成立・home不成立・参照切れによる searchStr 欠落等）は警告表示のみで、保存自体は拒否しない**。保存後も `searchStr` は編集できるため、事後的に矛盾が生じうることを前提にした仕様（`resolveLoopSteps()` が全ステップの妥当性を集約して Loop 全体の `valid` を返すが、これは表示上の警告用の値であり保存条件ではない）
+- 一方、**構造的な不正（steps が2件未満・先頭以外の transition が null・bsCount / arrowCount が非負整数でない等）は `isValidLoopStepsShape()` で拒否**する（保存action側の受け口の検証）
+
+#### 参照解決・パース関数
+
+| 関数 | 説明 |
+|---|---|
+| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口） |
+| `minArrowLeftCount(prev, next)` | `arrowLeft` 方式で `prev` → `next` に遷移できる、妥当な最小の `k`。見つからなければ `null` |
+| `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする |
+| `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用） |
+| `remapLoopSteps(steps, idMap)` | craftId を idMap（旧id→新id）で引き換える。マップに存在しない craftId（削除済みエントリへの参照）を持つステップは除去し、残りが2件未満になった場合は Loop ごと `null` を返す |
+
+### 編集UI
+
+- `app/components/search-craft-loop-editor.tsx` の `SearchCraftLoopListEditor`（`SearchCraftListEditor` と同じ `@dnd-kit` ドラッグ&ドロップパターンを踏襲）
+- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・timing Select・削除の AlertDialog）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
+- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。遷移方式や前後エントリの変更時は `bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする（範囲外になった既存値自体は保持したまま invalid 表示に倒す）
+- 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
+- **エントリ削除時の連動**: `SearchCraftListEditor` の `getDeleteWarning?: (craftId: string) => string | null` プロップで、削除対象エントリを参照する Loop があれば削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される
+
+### 表示
+
+`app/components/search-craft-loop-view.tsx`:
+
+| コンポーネント | 説明 |
+|---|---|
+| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。`KeyBadge` を再利用。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策） |
+| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon＋Hammer の破線チップ、Tooltip 付き）を `ChevronRight` を挟んで交互に描画。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用） |
+| `SearchCraftLoopList` / `SearchCraftLoopRow` | Loop 一覧のカード表示。1行＝①ステップ連鎖サマリー（アイテムアイコン＋サーチ文字列→連結）＋timing色ドット＋ステップ数バッジ ②`LoopKeySequence` ③コメント。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
+
+プレイヤープロフィールのサーチクラフトタブでは、`SearchCraftGroupedList` の後に独立した Loop セクション（`Repeat` アイコン見出し、`playerProfile.loopSectionTitle`）として表示する。サマリーバーに Loop 件数バッジ（0件なら非表示）、凡例（`KeyBadgeLegend`）にクラフトマーカーの説明を Loop がある場合のみ追加する。
+
+### saveAll での id リマップと後方互換
+
+`/me/search-craft` の `saveAll` アクション（`app/routes/me/search-craft.tsx`）は crafts・loops を毎回全削除→全挿入する。
+
+1. crafts の submittedId→finalId マップを**挿入前に**構築する（`new-` 始まりの id のみ `createId()` で新規採番）。Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングでは id を振り直せない
+2. `remapLoopSteps()` で loops の craftId を最終idへ引き換える。削除済みエントリへの参照はステップ除去、残りが2件未満になった Loop は破棄する（保存自体は拒否しない安全網）
+3. トランザクション内で `loops 削除 → crafts 削除 → crafts 挿入 → loops 挿入`（sequence は挿入順の連番）の順に実行する
+
+**後方互換**: フォームの `loops` フィールド自体が**未送信（`null`）**の場合は、Loop 機能追加前の古いクライアントからの保存とみなし、DB の既存 loops をそのまま温存する（明示的に空配列 `"[]"` が送信された場合＝新しいクライアントでの全削除は従来どおり尊重する）。これにより、保存のたびに既存 Loop が無警告で全消去される事故を防いでいる。
+
+`syncActivePresetSnapshot(db, userId, ["searchCrafts"])` の呼び出し自体は変更していない。同期処理の内部で crafts・loops 両方のスナップショット列を同時に書くよう拡張されている（詳細は [`docs/presets.md`](presets.md)）。
+
+---
+
 ## プロフィールページでの表示
 
 `app/routes/player/profile.tsx` でプレイヤーのプロフィールページにアイテム配置とサーチクラフトを表示する。
@@ -163,6 +266,7 @@ import {
   - **タイミング別グループカード**: Bastion（金）/ Fortress（赤）/ その他（青）/ 指定なし の順に、色ドット + 件数付きヘッダーのカードでグループ表示。タイミング未設定のみの場合はヘッダーなしの1枚のカード
   - **行リスト**: カード内は `divide-y` の行リスト。デスクトップ（lg以上）は「アイテム / サーチ文字列 / 入力キー」の3カラム表（列ヘッダー付き）、モバイルは縦積み + インラインラベル
   - 各行: シーケンス番号、アイテムチップ、サーチ文字列（クリックでコピー、`navigator.clipboard` + toast）、実入力キーバッジ（指割り当て色・リマップring・Shift琥珀色、ツールチップ付き）、コメント
+  - **繋ぎ方（Loop）セクション**: Loop が1件以上ある場合のみ、行リストの後に独立表示する（詳細は「[繋ぎ方（Loop）](#繋ぎ方loop)」参照）
 - 複数プリセットがある場合はプリセット切替ドロップダウンが表示される
 
 ---
@@ -187,10 +291,14 @@ import {
 
 | ファイル | 役割 |
 |---|---|
-| `app/lib/schema.ts` | DBスキーマ定義（itemLayouts, searchCrafts, searchCraftTemplates） |
+| `app/lib/schema.ts` | DBスキーマ定義（itemLayouts, searchCrafts, searchCraftLoops, searchCraftTemplates） |
 | `app/routes/me/items.tsx` | アイテム配置編集ページ |
-| `app/routes/me/search-craft.tsx` | サーチクラフト編集ページ |
-| `app/routes/player/profile.tsx` | プロフィールページ（表示側） |
+| `app/routes/me/search-craft.tsx` | サーチクラフト編集ページ（Loop の saveAll も含む） |
+| `app/routes/player/profile.tsx` | プロフィールページ（表示側。Loop セクションも含む） |
 | `app/lib/remap-utils.ts` | サーチクラフトのキーリマップ連携（`getActualKeyInfos()`） |
-| `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様 |
+| `app/lib/search-craft-loops.ts` | Loop の共有ロジック（遷移導出・参照解決・パース・idリマップ） |
+| `app/components/search-craft-loop-editor.tsx` | Loop 編集UI（`SearchCraftLoopListEditor`） |
+| `app/components/search-craft-loop-view.tsx` | Loop 表示UI（`SearchCraftLoopList` 等） |
+| `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様（Loop の craftIndex 参照も含む） |
+| `docs/presets.md` | プリセットスナップショット仕様（Loop の craftSeq 参照も含む） |
 | `@bafv4/mcitems` | Minecraft 1.16アイテムアイコン・検索パッケージ |

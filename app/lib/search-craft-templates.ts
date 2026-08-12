@@ -1,12 +1,16 @@
 import { createId } from "@paralleldrive/cuid2";
-import type { PresetRemapData, PresetSearchCraftData } from "./preset-utils";
+import type { PresetRemapData, PresetSearchCraftData, PresetSearchCraftLoopData, PresetLoopStepData } from "./preset-utils";
 import { normalizeKeyRemapType, toUiRemaps, type UiRemapInfo } from "./remap-utils";
+import { isValidLoopStepsShape, type LoopTransition } from "./search-craft-loops";
 import type { Translator } from "./messages";
 
 /**
  * サーチクラフトテンプレート共有ユーティリティ。
  * craftsData / remapsData は config_presets のスナップショット
  * （PresetSearchCraftData[] / PresetRemapData[]）と同一のJSON形式で保存する。
+ * loopsData も同様に config_presets.search_craft_loops_data と同一形式で保存する
+ * （craftSeq = craftIndex + 1 が恒等であることを利用し、プリセットと同じ
+ * PresetSearchCraftLoopData[] 形式をそのまま流用する）。
  */
 
 /**
@@ -21,6 +25,9 @@ export const TEMPLATE_TITLE_MAX = 100;
 export const TEMPLATE_DESCRIPTION_MAX = 500;
 export const MAX_TEMPLATES_PER_USER = 20;
 export const MAX_TEMPLATE_CRAFTS = 100;
+/** JSON爆弾対策のサニティ上限（意味的な仕様上限ではない） */
+export const MAX_TEMPLATE_LOOPS = 50;
+export const MAX_LOOP_STEPS = 100;
 
 /** 表示・編集用にデコードしたサーチクラフトエントリ */
 /** サーチクラフトのタイミング区分（表示順に定義） */
@@ -149,6 +156,142 @@ export function serializeTemplateRemaps(
 }
 
 // ============================================
+// Loop（繋ぎ方）
+// ============================================
+
+/**
+ * テンプレート・Playground用のLoop（繋ぎ方）表現。
+ * crafts 配列内の位置（craftIndex、0始まり）でステップの参照先を表す
+ * （テンプレート/Playgroundは crafts に安定した行 id を持たないため）。
+ * 保存形式は config_presets.search_craft_loops_data と同一の PresetSearchCraftLoopData[]
+ * （craftSeq = craftIndex + 1 が恒等）。
+ */
+export type TemplateLoop = {
+  steps: { craftIndex: number; transition: LoopTransition | null }[];
+  comment: string | null;
+  timing: SearchCraftTiming | null;
+};
+
+/** isValidLoopStepsShape で構造検証するための仮の craftId 変換（craftIndex を文字列化するだけ） */
+function toShapeCheckSteps(
+  steps: { craftIndex: number; transition: LoopTransition | null }[],
+): { craftId: string; transition: LoopTransition | null }[] {
+  return steps.map((s) => ({ craftId: String(s.craftIndex), transition: s.transition }));
+}
+
+/**
+ * loopsData（PresetSearchCraftLoopData[] のJSON、craftSeq = craftIndex + 1）を
+ * 表示・編集用にデコードする。craftSeq が crafts の範囲外を指すステップは除去し、
+ * 残りが2件未満になった Loop は除去する。不正なJSON・要素は捨てる（例外を投げない）。
+ *
+ * craftSeq は 1..n の連番前提（craftIndex = craftSeq - 1）。プリセット由来のスナップショットも
+ * この前提が成立する（全書き込み経路が crafts の sequence を i+1 で振り直すため）。
+ */
+export function parseTemplateLoops(loopsData: string | null, craftCount: number): TemplateLoop[] {
+  if (!loopsData) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(loopsData);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+
+  const result: TemplateLoop[] = [];
+  for (const rawLoop of (raw as unknown[]).slice(0, MAX_TEMPLATE_LOOPS) as PresetSearchCraftLoopData[]) {
+    if (!rawLoop || !Array.isArray(rawLoop.steps)) continue;
+
+    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
+    for (const rawStep of rawLoop.steps.slice(0, MAX_LOOP_STEPS)) {
+      if (!rawStep || typeof rawStep !== "object") continue;
+      const craftIndex = (rawStep as PresetLoopStepData).craftSeq - 1;
+      if (!Number.isInteger(craftIndex) || craftIndex < 0 || craftIndex >= craftCount) continue;
+      steps.push({ craftIndex, transition: (rawStep as PresetLoopStepData).transition ?? null });
+    }
+    if (steps.length < 2) continue;
+    // 除去でズレる場合に備え、先頭ステップの transition は常に null に統一する
+    steps[0] = { ...steps[0], transition: null };
+
+    if (!isValidLoopStepsShape(toShapeCheckSteps(steps))) continue;
+
+    result.push({
+      steps,
+      comment: typeof rawLoop.comment === "string" ? rawLoop.comment : null,
+      timing: normalizeTiming(rawLoop.timing),
+    });
+  }
+
+  return result;
+}
+
+/** Loop配列を PresetSearchCraftLoopData[] のJSON文字列にシリアライズする（parseTemplateLoops の逆変換） */
+export function serializeTemplateLoops(loops: TemplateLoop[]): string {
+  const data: PresetSearchCraftLoopData[] = loops.map((loop, index) => ({
+    sequence: index + 1,
+    steps: loop.steps.map((s) => ({ craftSeq: s.craftIndex + 1, transition: s.transition })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+  return JSON.stringify(data);
+}
+
+/**
+ * フォームの loops フィールド（TemplateLoop[] 形状、craftIndex 参照）を検証する。
+ * 構造不正（非配列・craftIndex 範囲外・bsCount 非負整数でない等）は { error: true } を返す。
+ * timing の不正値は既存の normalizeTiming と同じ流儀で null に正規化する（エラーにはしない）。
+ */
+export function parseLoopsField(
+  formData: FormData,
+  craftCount: number,
+): TemplateLoop[] | { error: true } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse((formData.get("loops") as string | null) || "[]");
+  } catch {
+    return { error: true };
+  }
+  if (!Array.isArray(raw) || raw.length > MAX_TEMPLATE_LOOPS) {
+    return { error: true };
+  }
+
+  const loops: TemplateLoop[] = [];
+  for (const rawLoop of raw as Array<Partial<TemplateLoop>>) {
+    if (!rawLoop || !Array.isArray(rawLoop.steps) || rawLoop.steps.length > MAX_LOOP_STEPS) {
+      return { error: true };
+    }
+
+    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
+    for (const rawStep of rawLoop.steps as Array<{ craftIndex?: unknown; transition?: unknown }>) {
+      if (!rawStep || typeof rawStep !== "object") {
+        return { error: true };
+      }
+      const craftIndex = rawStep.craftIndex;
+      if (
+        typeof craftIndex !== "number" ||
+        !Number.isInteger(craftIndex) ||
+        craftIndex < 0 ||
+        craftIndex >= craftCount
+      ) {
+        return { error: true };
+      }
+      steps.push({ craftIndex, transition: (rawStep.transition ?? null) as LoopTransition | null });
+    }
+
+    if (!isValidLoopStepsShape(toShapeCheckSteps(steps))) {
+      return { error: true };
+    }
+
+    loops.push({
+      steps,
+      comment: typeof rawLoop.comment === "string" && rawLoop.comment.trim() ? rawLoop.comment : null,
+      timing: normalizeTiming(rawLoop.timing),
+    });
+  }
+
+  return loops;
+}
+
+// ============================================
 // テンプレートエディタ（作成・編集ページ）用ヘルパー
 // ============================================
 
@@ -157,6 +300,41 @@ export const TEMPLATE_LANGUAGE_MAX = 32;
 /** パース済みデータにエディタ用のIDを振る（クラフト） */
 export function toEditorCrafts(crafts: TemplateCraft[]): (TemplateCraft & { id: string })[] {
   return crafts.map((c) => ({ ...c, id: draftId("craft") }));
+}
+
+/**
+ * 編集用の Loop（SearchCraftLoopDraft 相当、craftId 参照）を、フォーム送信用の
+ * TemplateLoop[]（craftIndex 参照）へ変換する。/me/search-craft の saveAll と異なり、
+ * テンプレート・Playground は crafts に安定した行 id を持たないため、送信直前に
+ * 現在の crafts 配列内の位置（index）へ変換する。
+ * crafts に見つからない craftId を含むステップがあれば、その Loop ごと除外する
+ * （エディタは保存前に「未選択ステップ」を拒否しているため通常は到達しない想定の安全網）。
+ */
+export function toSubmittableLoops(
+  crafts: { id: string }[],
+  loops: {
+    steps: { craftId: string; transition: LoopTransition | null }[];
+    comment: string | null;
+    timing: SearchCraftTiming | null;
+  }[],
+): TemplateLoop[] {
+  const indexById = new Map(crafts.map((c, idx) => [c.id, idx]));
+  const result: TemplateLoop[] = [];
+  for (const loop of loops) {
+    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
+    let allResolved = true;
+    for (const step of loop.steps) {
+      const craftIndex = indexById.get(step.craftId);
+      if (craftIndex === undefined) {
+        allResolved = false;
+        break;
+      }
+      steps.push({ craftIndex, transition: step.transition });
+    }
+    if (!allResolved || steps.length < 2) continue;
+    result.push({ steps, comment: loop.comment, timing: loop.timing });
+  }
+  return result;
 }
 
 /** パース済みデータにエディタ用のIDを振る（リマップ） */
@@ -172,6 +350,7 @@ export type EditorSubmission = {
   gameLanguage: string | null;
   craftsData: string;
   remapsData: string | null;
+  loopsData: string | null;
 };
 
 /**
@@ -252,11 +431,17 @@ export function parseEditorSubmission(
     remaps.push({ sourceKey: raw.sourceKey, targetKey: raw.targetKey as string | null });
   }
 
+  const loopsResult = parseLoopsField(formData, crafts.length);
+  if ("error" in loopsResult) {
+    return { error: t("templates.invalidTemplateData") };
+  }
+
   return {
     title,
     description: description || null,
     gameLanguage: gameLanguage || null,
     craftsData: serializeTemplateCrafts(crafts),
     remapsData: remaps.length > 0 ? serializeTemplateRemaps(remaps) : null,
+    loopsData: loopsResult.length > 0 ? serializeTemplateLoops(loopsResult) : null,
   };
 }

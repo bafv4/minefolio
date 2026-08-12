@@ -6,11 +6,17 @@ import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
+import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetSearchCraftLoopData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
+import {
+  parseLoopSteps,
+  remapLoopSteps,
+  isValidLoopTransitionValue,
+  type LoopStepData,
+} from "@/lib/search-craft-loops";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -155,6 +161,66 @@ async function restorePlayerConfigFromSnapshot(
   });
 }
 
+/**
+ * スナップショット（searchCraftLoopsData JSON）からライブテーブルへ Loop（繋ぎ方）を復元する。
+ * ステップの craftSeq を seqToNewCraftId（挿入直後の crafts の sequence→新id マップ）で
+ * craftId に解決する。参照切れステップ・transition が構造的に不正なステップ（null は先頭のみ許可。
+ * decodePresetSearchCraftLoops と同じ規則）は除去し、残りが2件未満になった Loop は書き込まない
+ * （安全側。スナップショット自体は serializeSearchCraftLoops の時点で既に整合済みのはずだが、
+ * 破損データでもトランザクションを失敗させないための保険）。
+ *
+ * sequence はスナップショット値をそのまま使わず、実際に挿入した順の連番（1始まり）で振り直す。
+ * スナップショット由来の sequence が重複していると (userId, sequence) の unique index に
+ * 違反してトランザクション全体が失敗し、プリセット切替そのものが恒久的にできなくなるため。
+ */
+async function restoreSearchCraftLoopsFromSnapshot(
+  tx: DbTransaction,
+  userId: string,
+  searchCraftLoopsData: string | null,
+  seqToNewCraftId: Map<number, string>,
+  now: Date,
+) {
+  if (!searchCraftLoopsData) return;
+  let rows: PresetSearchCraftLoopData[];
+  try {
+    rows = JSON.parse(searchCraftLoopsData) as PresetSearchCraftLoopData[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(rows)) return;
+
+  let nextSequence = 1;
+  for (const loop of rows) {
+    if (!loop || !Array.isArray(loop.steps)) continue;
+
+    const steps: LoopStepData[] = [];
+    for (const step of loop.steps) {
+      const craftId = seqToNewCraftId.get(step.craftSeq);
+      if (craftId === undefined) continue;
+
+      if (steps.length === 0) {
+        // 先頭は transition の形を問わず null に統一する
+        steps.push({ craftId, transition: null });
+        continue;
+      }
+      if (!isValidLoopTransitionValue(step.transition)) continue;
+      steps.push({ craftId, transition: step.transition });
+    }
+    if (steps.length < 2) continue;
+
+    await tx.insert(searchCraftLoops).values({
+      id: createId(),
+      userId,
+      sequence: nextSequence++,
+      steps: JSON.stringify(steps),
+      comment: loop.comment,
+      timing: loop.timing ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -214,6 +280,9 @@ export async function action({ request }: Route.ActionArgs) {
       keyRemaps: true,
       itemLayouts: true,
       searchCrafts: true,
+      searchCraftLoops: {
+        orderBy: [asc(searchCraftLoops.sequence)],
+      },
       customKeys: true,
       customActions: true,
     },
@@ -266,6 +335,7 @@ export async function action({ request }: Route.ActionArgs) {
       await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
       await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
       await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+      await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
       await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
       await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
       await tx.delete(customActions).where(eq(customActions.userId, user.id));
@@ -277,6 +347,7 @@ export async function action({ request }: Route.ActionArgs) {
       let fingerAssignmentsData: string | null = null;
       let itemLayoutsData: string | null = null;
       let searchCraftsData: string | null = null;
+      let searchCraftLoopsData: string | null = null;
       let customKeysData: string | null = null;
       let customActionsData: string | null = null;
 
@@ -288,6 +359,7 @@ export async function action({ request }: Route.ActionArgs) {
         fingerAssignmentsData = sourcePreset.fingerAssignmentsData;
         itemLayoutsData = sourcePreset.itemLayoutsData;
         searchCraftsData = sourcePreset.searchCraftsData;
+        searchCraftLoopsData = sourcePreset.searchCraftLoopsData;
         customKeysData = sourcePreset.customKeysData;
         customActionsData = sourcePreset.customActionsData;
 
@@ -326,9 +398,13 @@ export async function action({ request }: Route.ActionArgs) {
         }
         if (searchCraftsData) {
           const craftData = JSON.parse(searchCraftsData) as PresetSearchCraftData[];
+          // Loop 復元用に sequence→新id を記録する（プリセットスナップショットは行 id を持たないため）
+          const seqToNewCraftId = new Map<number, string>();
           for (const craft of craftData) {
+            const newCraftId = createId();
+            seqToNewCraftId.set(craft.sequence, newCraftId);
             await tx.insert(searchCrafts).values({
-              id: createId(),
+              id: newCraftId,
               userId: user.id,
               sequence: craft.sequence,
               items: craft.items,
@@ -341,6 +417,7 @@ export async function action({ request }: Route.ActionArgs) {
               updatedAt: now,
             });
           }
+          await restoreSearchCraftLoopsFromSnapshot(tx, user.id, searchCraftLoopsData, seqToNewCraftId, now);
         }
         if (customKeysData) {
           const ckData = JSON.parse(customKeysData) as PresetCustomKeyData[];
@@ -393,6 +470,8 @@ export async function action({ request }: Route.ActionArgs) {
         fingerAssignmentsData = user.playerConfig?.fingerAssignments ?? null;
         itemLayoutsData = user.itemLayouts.length > 0 ? serializeItemLayouts(user.itemLayouts) : null;
         searchCraftsData = user.searchCrafts.length > 0 ? serializeSearchCrafts(user.searchCrafts) : null;
+        // 元の（削除前の）searchCrafts をそのまま渡す — craftId→sequence の突合は削除前の行 id で行う
+        searchCraftLoopsData = serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts);
         customKeysData = user.customKeys.length > 0 ? serializeCustomKeys(user.customKeys) : null;
         customActionsData = user.customActions.length > 0 ? serializeCustomActions(user.customActions) : null;
 
@@ -463,9 +542,13 @@ export async function action({ request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
+        // Loop 復元用に旧craftId→新craftId を記録する（ライブ再挿入は毎回新idを振るため）
+        const oldToNewCraftId = new Map<string, string>();
         for (const craft of user.searchCrafts) {
+          const newCraftId = createId();
+          oldToNewCraftId.set(craft.id, newCraftId);
           await tx.insert(searchCrafts).values({
-            id: createId(),
+            id: newCraftId,
             userId: user.id,
             sequence: craft.sequence,
             items: craft.items,
@@ -474,6 +557,20 @@ export async function action({ request }: Route.ActionArgs) {
             comment: craft.comment,
             timing: craft.timing,
             withShift: craft.withShift,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        for (const loop of user.searchCraftLoops) {
+          const remappedSteps = remapLoopSteps(parseLoopSteps(loop.steps), oldToNewCraftId);
+          if (!remappedSteps) continue;
+          await tx.insert(searchCraftLoops).values({
+            id: createId(),
+            userId: user.id,
+            sequence: loop.sequence,
+            steps: JSON.stringify(remappedSteps),
+            comment: loop.comment,
+            timing: loop.timing,
             createdAt: now,
             updatedAt: now,
           });
@@ -574,6 +671,7 @@ export async function action({ request }: Route.ActionArgs) {
         fingerAssignmentsData,
         itemLayoutsData,
         searchCraftsData,
+        searchCraftLoopsData,
         customKeysData,
         customActionsData,
         createdAt: now,
@@ -635,6 +733,7 @@ export async function action({ request }: Route.ActionArgs) {
         await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
         await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
         await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+        await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
         await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
         await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
         await tx.delete(customActions).where(eq(customActions.userId, user.id));
@@ -723,6 +822,7 @@ export async function action({ request }: Route.ActionArgs) {
       await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
       await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
       await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
+      await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
       await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
       await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
       await tx.delete(customActions).where(eq(customActions.userId, user.id));
@@ -777,9 +877,13 @@ export async function action({ request }: Route.ActionArgs) {
       // サーチクラフトを復元
       if (preset.searchCraftsData) {
         const craftsFromPreset = JSON.parse(preset.searchCraftsData) as PresetSearchCraftData[];
+        // Loop 復元用に sequence→新id を記録する（プリセットスナップショットは行 id を持たないため）
+        const seqToNewCraftId = new Map<number, string>();
         for (const craftData of craftsFromPreset) {
+          const newCraftId = createId();
+          seqToNewCraftId.set(craftData.sequence, newCraftId);
           await tx.insert(searchCrafts).values({
-            id: createId(),
+            id: newCraftId,
             userId: user.id,
             sequence: craftData.sequence,
             items: craftData.items,
@@ -792,6 +896,13 @@ export async function action({ request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
+        await restoreSearchCraftLoopsFromSnapshot(
+          tx,
+          user.id,
+          preset.searchCraftLoopsData,
+          seqToNewCraftId,
+          now,
+        );
       }
 
       // カスタムキー定義を復元
@@ -1142,7 +1253,8 @@ export default function PresetsPage() {
                           )}
                         </div>
 
-                        <p className="text-xs text-muted-foreground mt-2">
+                        {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制（pace-feed-card と同じ対処） */}
+                        <p className="text-xs text-muted-foreground mt-2" suppressHydrationWarning>
                           {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
                         </p>
                       </div>
@@ -1239,7 +1351,7 @@ export default function PresetsPage() {
                       <Badge variant="outline" className="text-xs">
                         {changeTypeLabels[entry.changeType] ?? entry.changeType}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground" suppressHydrationWarning>
                         {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
                       </span>
                     </div>

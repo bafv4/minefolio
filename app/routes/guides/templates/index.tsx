@@ -304,7 +304,8 @@ export default function TemplatesIndexPage() {
                     likeCount={template.likeCount}
                     isOwn={template.isOwn}
                   />
-                  <span>
+                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+                  <span suppressHydrationWarning>
                     {formatDistanceToNow(new Date(template.createdAt), {
                       addSuffix: true,
                       locale: dateFnsLocale(locale),

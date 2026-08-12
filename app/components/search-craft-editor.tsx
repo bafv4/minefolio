@@ -221,12 +221,15 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   remaps,
   onUpdate,
   onDelete,
+  getDeleteWarning,
 }: {
   craft: T;
   index: number;
   remaps?: RemapInfo[];
   onUpdate: (updated: T) => void;
   onDelete: () => void;
+  /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
+  getDeleteWarning?: (craftId: string) => string | null;
 }) {
   const t = useT();
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
@@ -395,7 +398,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
             <AlertDialogHeader>
               <AlertDialogTitle>{t("meSearchCraft.deleteCraftTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                {t("meSearchCraft.deleteCraftDescription")}
+                {getDeleteWarning?.(craft.id) ?? t("meSearchCraft.deleteCraftDescription")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -423,6 +426,7 @@ export function SearchCraftListEditor<T extends SearchCraftDraft>({
   onUpdate,
   onDelete,
   onReorder,
+  getDeleteWarning,
 }: {
   crafts: T[];
   /** 指定すると各行に入力キーのライブプレビューを表示する */
@@ -430,6 +434,8 @@ export function SearchCraftListEditor<T extends SearchCraftDraft>({
   onUpdate: (index: number, updated: T) => void;
   onDelete: (index: number) => void;
   onReorder: (oldIndex: number, newIndex: number) => void;
+  /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
+  getDeleteWarning?: (craftId: string) => string | null;
 }) {
   const dndContextId = useId();
 
@@ -474,6 +480,7 @@ export function SearchCraftListEditor<T extends SearchCraftDraft>({
               remaps={remaps}
               onUpdate={(updated) => onUpdate(index, updated)}
               onDelete={() => onDelete(index)}
+              getDeleteWarning={getDeleteWarning}
             />
           ))}
         </div>

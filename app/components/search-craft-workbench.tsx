@@ -25,12 +25,17 @@ import {
   type SearchCraftDraft,
 } from "@/components/search-craft-editor";
 import {
+  SearchCraftLoopListEditor,
+  type SearchCraftLoopDraft,
+} from "@/components/search-craft-loop-editor";
+import {
   simulateRemapOutput,
   type RemapInfo,
   type SimulatedKeyOutput,
 } from "@/lib/remap-utils";
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
+import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
 
@@ -191,6 +196,8 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
 export function SearchCraftWorkbench({
   crafts,
   onCraftsChange,
+  loops,
+  onLoopsChange,
   remaps,
   onRemapsChange,
   layout,
@@ -198,6 +205,8 @@ export function SearchCraftWorkbench({
 }: {
   crafts: SearchCraftDraft[];
   onCraftsChange: (next: SearchCraftDraft[]) => void;
+  loops: SearchCraftLoopDraft[];
+  onLoopsChange: (next: SearchCraftLoopDraft[]) => void;
   remaps: WorkbenchRemap[];
   onRemapsChange: (next: WorkbenchRemap[]) => void;
   layout: KeyboardLayoutOption;
@@ -205,6 +214,44 @@ export function SearchCraftWorkbench({
 }) {
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
+
+  // サーチクラフト行の削除に連動して、削除された craftId を参照する Loop ステップを除去する
+  // （生存参照は温存、<2 になった Loop は自動除去。/me/search-craft の handleDeleteCraft と同じ規則）
+  const handleDeleteCraftAt = useCallback(
+    (index: number) => {
+      const craftId = crafts[index]?.id;
+      onCraftsChange(crafts.filter((_, i) => i !== index));
+      if (!craftId) return;
+      const idMap = new Map(
+        crafts.filter((_, i) => i !== index).map((c) => [c.id, c.id]),
+      );
+      onLoopsChange(
+        loops
+          .map((loop) => {
+            const steps = remapLoopSteps(loop.steps, idMap);
+            return steps ? { ...loop, steps } : null;
+          })
+          .filter((loop): loop is SearchCraftLoopDraft => loop !== null),
+      );
+    },
+    [crafts, loops, onCraftsChange, onLoopsChange],
+  );
+
+  const handleAddLoop = useCallback(() => {
+    if (crafts.length < 2) return;
+    onLoopsChange([
+      ...loops,
+      {
+        id: draftId("loop"),
+        steps: [
+          { craftId: "", transition: null },
+          { craftId: "", transition: { type: "backspace", bsCount: 0 } },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ]);
+  }, [crafts.length, loops, onLoopsChange]);
 
   const updateRemapAt = useCallback(
     (index: number, updates: Partial<WorkbenchRemap>) => {
@@ -402,10 +449,16 @@ export function SearchCraftWorkbench({
               onUpdate={(index, updated) =>
                 onCraftsChange(crafts.map((c, i) => (i === index ? updated : c)))
               }
-              onDelete={(index) => onCraftsChange(crafts.filter((_, i) => i !== index))}
+              onDelete={handleDeleteCraftAt}
               onReorder={(oldIndex, newIndex) =>
                 onCraftsChange(arrayMove(crafts, oldIndex, newIndex))
               }
+              getDeleteWarning={(craftId) => {
+                const count = loops.filter((loop) =>
+                  loop.steps.some((s) => s.craftId === craftId),
+                ).length;
+                return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
+              }}
             />
           ) : (
             <p className="text-sm text-muted-foreground text-center py-4">
@@ -426,6 +479,43 @@ export function SearchCraftWorkbench({
             <Plus className="mr-2 h-4 w-4" />
             {t("playground.addCraft")}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* 繋ぎ方（Loop）編集 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">{t("meSearchCraft.loopSectionTitle")}</CardTitle>
+          <CardDescription>{t("meSearchCraft.loopSectionDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loops.length > 0 && (
+            <SearchCraftLoopListEditor
+              loops={loops}
+              entries={crafts.map((c) => ({ id: c.id, items: c.items, searchStr: c.searchStr }))}
+              remaps={effectiveRemaps}
+              onUpdate={(index, updated) =>
+                onLoopsChange(loops.map((l, i) => (i === index ? updated : l)))
+              }
+              onDelete={(index) => onLoopsChange(loops.filter((_, i) => i !== index))}
+              onReorder={(oldIndex, newIndex) => onLoopsChange(arrayMove(loops, oldIndex, newIndex))}
+            />
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={handleAddLoop}
+            disabled={crafts.length < 2}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t("meSearchCraft.addLoop")}
+          </Button>
+          {crafts.length < 2 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {t("meSearchCraft.loopNeedTwoEntries")}
+            </p>
+          )}
         </CardContent>
       </Card>
     </>

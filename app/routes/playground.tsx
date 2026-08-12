@@ -10,13 +10,14 @@ import { getEnv } from "@/lib/env.server";
 import {
   users,
   searchCrafts as searchCraftsTable,
+  searchCraftLoops as searchCraftLoopsTable,
   configHistory,
   searchCraftTemplates,
 } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { filterRemapsForChat, type UiRemapInfo } from "@/lib/remap-utils";
-import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
+import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
 import {
   applyCraftsToExistingPreset,
   createPresetWithCrafts,
@@ -24,10 +25,15 @@ import {
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
+  parseTemplateLoops,
+  parseLoopsField,
+  toSubmittableLoops,
   draftId,
   MAX_TEMPLATE_CRAFTS,
   type TemplateCraft,
+  type TemplateLoop,
 } from "@/lib/search-craft-templates";
+import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +67,7 @@ import {
   type KeyboardLayoutOption,
 } from "@/components/search-craft-workbench";
 import type { SearchCraftDraft } from "@/components/search-craft-editor";
+import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
 import { cn } from "@/lib/utils";
 import {
   FlaskConical,
@@ -104,6 +111,8 @@ export const meta = ({
 type PlaygroundData = {
   crafts: TemplateCraft[];
   remaps: UiRemapInfo[];
+  /** craftIndex 参照（crafts 配列内の位置）。Playground は crafts に安定した行 id を持たない */
+  loops: TemplateLoop[];
 };
 
 type MyPresetOption = PlaygroundData & {
@@ -133,10 +142,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       where: eq(users.discordId, session.user.id),
       with: {
         searchCrafts: { orderBy: [asc(searchCraftsTable.sequence)] },
+        searchCraftLoops: { orderBy: [asc(searchCraftLoopsTable.sequence)] },
         keyRemaps: true,
         playerConfig: { columns: { keyboardLayout: true } },
         configPresets: {
-          columns: { id: true, name: true, isActive: true, searchCraftsData: true, remapsData: true },
+          columns: {
+            id: true,
+            name: true,
+            isActive: true,
+            searchCraftsData: true,
+            searchCraftLoopsData: true,
+            remapsData: true,
+          },
         },
       },
     });
@@ -145,20 +162,35 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       // ワークベンチは chat 用途のため、trigger 専用リマップは取り込まない
       if (me.configPresets.length > 0) {
-        myPresets = me.configPresets.map((p) => ({
-          id: p.id,
-          name: p.name,
-          isActive: p.isActive,
-          crafts: parseTemplateCrafts(p.searchCraftsData),
-          remaps: filterRemapsForChat(parseTemplateRemaps(p.remapsData)),
-        }));
+        myPresets = me.configPresets.map((p) => {
+          const crafts = parseTemplateCrafts(p.searchCraftsData);
+          return {
+            id: p.id,
+            name: p.name,
+            isActive: p.isActive,
+            crafts,
+            remaps: filterRemapsForChat(parseTemplateRemaps(p.remapsData)),
+            loops: parseTemplateLoops(p.searchCraftLoopsData, crafts.length),
+          };
+        });
       } else {
         // プリセット未作成ユーザー向けフォールバック：ライブテーブルの内容をそのまま選択肢にする
         const crafts = parseTemplateCrafts(serializeSearchCrafts(me.searchCrafts));
         const remaps = filterRemapsForChat(parseTemplateRemaps(serializeRemaps(me.keyRemaps)));
+        const loops = parseTemplateLoops(
+          serializeSearchCraftLoops(me.searchCraftLoops, me.searchCrafts),
+          crafts.length,
+        );
         if (crafts.length > 0 || remaps.length > 0) {
           myPresets = [
-            { id: LIVE_PRESET_ID, name: t("playground.currentSettingsLabel"), isActive: true, crafts, remaps },
+            {
+              id: LIVE_PRESET_ID,
+              name: t("playground.currentSettingsLabel"),
+              isActive: true,
+              crafts,
+              remaps,
+              loops,
+            },
           ];
         }
       }
@@ -176,11 +208,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       template &&
       (template.isPublished || (myDiscordId !== null && template.user.discordId === myDiscordId))
     ) {
+      const crafts = parseTemplateCrafts(template.craftsData);
       templateData = {
         id: template.id,
         title: template.title,
-        crafts: parseTemplateCrafts(template.craftsData),
+        crafts,
         remaps: parseTemplateRemaps(template.remapsData),
+        loops: parseTemplateLoops(template.loopsData, crafts.length),
       };
     }
   }
@@ -230,6 +264,12 @@ export async function action({ request }: Route.ActionArgs) {
   // クライアント由来のJSONのため withShift は boolean に正規化する
   crafts = crafts.map((c) => ({ ...c, withShift: c.withShift === true }));
 
+  // loops フィールドはフォーム未送信なら [] 扱い（craftIndex は crafts の並び順を参照する）
+  const loopsResult = parseLoopsField(formData, crafts.length);
+  if ("error" in loopsResult) {
+    return { error: t("playground.saveFailed") };
+  }
+
   const now = new Date();
   // リマップ: includeRemaps=false のときは変更しない（null）
   const remapInput = includeRemaps
@@ -255,7 +295,7 @@ export async function action({ request }: Route.ActionArgs) {
       db,
       user.id,
       { name, description: description || null, basePresetId },
-      { crafts, remaps: remapInput },
+      { crafts, remaps: remapInput, loops: loopsResult },
     );
     if (!result.ok) {
       return { error: t("mePresets.sourcePresetNotFound"), action: "save-new-preset" };
@@ -282,6 +322,7 @@ export async function action({ request }: Route.ActionArgs) {
     const result = await applyCraftsToExistingPreset(db, user.id, presetId, {
       crafts,
       remaps: remapInput,
+      loops: loopsResult,
     });
     if (!result.ok) {
       return { error: t("mePresets.presetNotFound"), action: "save-to-preset" };
@@ -331,6 +372,20 @@ function toPlaygroundCrafts(crafts: TemplateCraft[]): SearchCraftDraft[] {
   }));
 }
 
+/**
+ * TemplateLoop[]（craftIndex 参照）を、既に draft id を割り当て済みの crafts に合わせて
+ * SearchCraftLoopDraft[]（craftId 参照）へ変換する。呼び出し側は必ず、この loops の
+ * 元になった crafts 配列と同じ順序で toPlaygroundCrafts した結果を渡すこと。
+ */
+function toPlaygroundLoops(loops: TemplateLoop[], crafts: SearchCraftDraft[]): SearchCraftLoopDraft[] {
+  return loops.map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({ craftId: crafts[s.craftIndex].id, transition: s.transition })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+}
+
 // ============================================
 // ブラウザローカルストレージへの仮保存
 // ============================================
@@ -340,6 +395,7 @@ const DRAFT_STORAGE_KEY = "minefolio.playground.draft.v1";
 type PlaygroundDraft = {
   remaps: WorkbenchRemap[];
   crafts: SearchCraftDraft[];
+  loops: SearchCraftLoopDraft[];
   layout: KeyboardLayoutOption;
 };
 
@@ -352,6 +408,8 @@ function loadDraftFromStorage(): PlaygroundDraft | null {
     return {
       remaps: parsed.remaps,
       crafts: parsed.crafts,
+      // loops フィールドが無い旧形式の下書き（Loop機能追加前）は [] として扱う
+      loops: Array.isArray(parsed.loops) ? parsed.loops : [],
       layout: normalizeLayout(parsed.layout),
     };
   } catch {
@@ -383,13 +441,17 @@ export default function PlaygroundPage() {
   );
   const realPresets = useMemo(() => myPresets.filter((p) => p.id !== LIVE_PRESET_ID), [myPresets]);
 
-  const initialData: PlaygroundData = templateData ?? activeMyPreset ?? { crafts: [], remaps: [] };
+  const initialData: PlaygroundData = templateData ?? activeMyPreset ?? { crafts: [], remaps: [], loops: [] };
 
   const [remaps, setRemaps] = useState<WorkbenchRemap[]>(() =>
     toPlaygroundRemaps(initialData.remaps),
   );
   const [crafts, setCrafts] = useState<SearchCraftDraft[]>(() =>
     toPlaygroundCrafts(initialData.crafts),
+  );
+  // crafts が確定した直後（同一レンダー内）に、その draft id を使って loops を解決する
+  const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(() =>
+    toPlaygroundLoops(initialData.loops, crafts),
   );
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() => normalizeLayout(keyboardLayout));
   const [loadedLabel, setLoadedLabel] = useState<string | null>(() =>
@@ -410,8 +472,24 @@ export default function PlaygroundPage() {
     const draft = loadDraftFromStorage();
     if (draft) {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
-      // 旧形式の下書きには withShift がないため boolean に正規化する
-      setCrafts(draft.crafts.map((c) => ({ ...c, withShift: c.withShift === true, id: draftId("craft") })));
+      // 旧形式の下書きには withShift がないため boolean に正規化する。
+      // crafts の draft id を振り直すため、Loop の craftId 参照も新 id へ再解決する
+      // （旧id→新id の写像を remapLoopSteps に通し、参照切れは自動除去・<2 の Loop は破棄）
+      const idMap = new Map<string, string>();
+      const restoredCrafts = draft.crafts.map((c) => {
+        const newId = draftId("craft");
+        idMap.set(c.id, newId);
+        return { ...c, withShift: c.withShift === true, id: newId };
+      });
+      setCrafts(restoredCrafts);
+      setLoops(
+        draft.loops
+          .map((loop) => {
+            const steps = remapLoopSteps(loop.steps, idMap);
+            return steps ? { ...loop, id: draftId("loop"), steps } : null;
+          })
+          .filter((loop): loop is SearchCraftLoopDraft => loop !== null),
+      );
       setLayout(draft.layout);
       setLoadedLabel(t("playground.loadedDraft"));
     }
@@ -423,15 +501,17 @@ export default function PlaygroundPage() {
   // 変更のたびにブラウザへ仮保存する
   useEffect(() => {
     if (!isHydrated) return;
-    saveDraftToStorage({ remaps, crafts, layout });
-  }, [isHydrated, remaps, crafts, layout]);
+    saveDraftToStorage({ remaps, crafts, loops, layout });
+  }, [isHydrated, remaps, crafts, loops, layout]);
 
   // 保存ペイロード用の有効なリマップ（ワークベンチ内の表示と同じ導出）
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
   const loadData = useCallback((data: PlaygroundData, label: string) => {
+    const nextCrafts = toPlaygroundCrafts(data.crafts);
     setRemaps(toPlaygroundRemaps(data.remaps));
-    setCrafts(toPlaygroundCrafts(data.crafts));
+    setCrafts(nextCrafts);
+    setLoops(toPlaygroundLoops(data.loops, nextCrafts));
     setLoadedLabel(label);
   }, []);
 
@@ -482,21 +562,34 @@ export default function PlaygroundPage() {
   }, []);
 
   const handleSave = useCallback(() => {
-    const craftsPayload: TemplateCraft[] = crafts
-      .filter((c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim())
-      .map((c) => ({
-        items: c.items,
-        // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
-        searchStr: c.searchStr?.trim() ? c.searchStr : null,
-        comment: c.comment,
-        timing: c.timing,
-        withShift: c.withShift === true,
-      }));
+    if (loops.some((loop) => loop.steps.length < 2)) {
+      toast.error(t("meSearchCraft.loopStepsRequired"));
+      return;
+    }
+    if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
+      toast.error(t("meSearchCraft.loopEntryRequired"));
+      return;
+    }
+
+    // 空行は送信対象から外れるため、Loop の craftIndex もこの並び（フィルタ後）基準で解決する
+    const survivingCrafts = crafts.filter(
+      (c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim(),
+    );
+    const craftsPayload: TemplateCraft[] = survivingCrafts.map((c) => ({
+      items: c.items,
+      // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+      searchStr: c.searchStr?.trim() ? c.searchStr : null,
+      comment: c.comment,
+      timing: c.timing,
+      withShift: c.withShift === true,
+    }));
+    const loopsPayload = toSubmittableLoops(survivingCrafts, loops);
 
     const formData = new FormData();
     formData.set("_action", saveTarget === "new" ? "save-new-preset" : "save-to-preset");
     formData.set("includeRemaps", saveIncludeRemaps ? "1" : "0");
     formData.set("crafts", JSON.stringify(craftsPayload));
+    formData.set("loops", JSON.stringify(loopsPayload));
     formData.set("remaps", JSON.stringify(effectiveRemaps));
     if (saveTarget === "new") {
       formData.set("name", newPresetName.trim());
@@ -508,7 +601,7 @@ export default function PlaygroundPage() {
       formData.set("presetId", targetPresetId);
     }
     saveFetcher.submit(formData, { method: "post" });
-  }, [basePresetId, crafts, effectiveRemaps, newPresetDescription, newPresetName, saveFetcher, saveIncludeRemaps, saveTarget, targetPresetId]);
+  }, [basePresetId, crafts, loops, effectiveRemaps, newPresetDescription, newPresetName, saveFetcher, saveIncludeRemaps, saveTarget, t, targetPresetId]);
 
   return (
     <div className="space-y-8">
@@ -604,6 +697,7 @@ export default function PlaygroundPage() {
             onClick={() => {
               setRemaps([]);
               setCrafts([]);
+              setLoops([]);
               setLoadedLabel(null);
             }}
           >
@@ -783,10 +877,12 @@ export default function PlaygroundPage() {
       </div>
       <p className="text-xs text-muted-foreground -mt-6">{t("playground.autosaveHint")}</p>
 
-      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト） */}
+      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
       <SearchCraftWorkbench
         crafts={crafts}
         onCraftsChange={setCrafts}
+        loops={loops}
+        onLoopsChange={setLoops}
         remaps={remaps}
         onRemapsChange={setRemaps}
         layout={layout}

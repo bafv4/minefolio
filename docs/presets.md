@@ -2,7 +2,7 @@
 
 ## 概要
 
-プレイヤーの操作設定（キーバインド、デバイス設定、リマップ、指割り当て、アイテム配置、サーチクラフト、カスタムキー、カスタムアクション）をプリセットとして保存・切替できる機能。複数の設定を名前付きで管理し、アクティブなプリセットをプロフィール表示に反映する。
+プレイヤーの操作設定（キーバインド、デバイス設定、リマップ、指割り当て、アイテム配置、サーチクラフト、サーチクラフトの繋ぎ方（Loop）、カスタムキー、カスタムアクション）をプリセットとして保存・切替できる機能。複数の設定を名前付きで管理し、アクティブなプリセットをプロフィール表示に反映する。
 
 ---
 
@@ -24,6 +24,7 @@
 | `fingerAssignmentsData` | text (JSON) | 指割り当て |
 | `itemLayoutsData` | text (JSON) | アイテム配置のスナップショット |
 | `searchCraftsData` | text (JSON) | サーチクラフトのスナップショット |
+| `searchCraftLoopsData` | text (JSON) | サーチクラフトの繋ぎ方（Loop）のスナップショット（`PresetSearchCraftLoopData[]`、下記） |
 | `customKeysData` | text (JSON) | カスタムキー定義のスナップショット |
 | `customActionsData` | text (JSON) | カスタムアクションのスナップショット |
 | `createdAt` | timestamp | 作成日時 |
@@ -104,6 +105,19 @@
 }
 ```
 
+#### PresetSearchCraftLoopData
+
+```typescript
+{
+  sequence: number;
+  steps: { craftSeq: number; transition: LoopTransition | null }[];
+  comment: string | null;
+  timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+}
+```
+
+プリセットスナップショットは行 id を保持しない（本ドキュメント末尾を参照）ため、ステップの参照先を **`craftSeq`（同一スナップショット内 `searchCraftsData` の `sequence` 値）** で表す。`LoopTransition` の型は `app/lib/search-craft-loops.ts` を参照（`{ type: "backspace"; bsCount: number } | { type: "selectAll" } | { type: "home" }`）。詳細な遷移方式のセマンティクスは [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」参照。
+
 #### PresetCustomKeyData
 
 ```typescript
@@ -144,10 +158,11 @@
 
 #### isActive（編集中）の管理
 
-- プリセット作成時: `createPreset` が既存のアクティブプリセットを自動で非アクティブ化してから、新規プリセットを `isActive = true` で作成する。レガシーインポート経由の作成でも、全データ種別（キーバインド／プレイヤー設定／リマップ／指割り当て／アイテム配置／サーチクラフト／カスタムキー／カスタムアクション）をスナップショットに含める。
-- プリセット切替時: `apply-preset` がトランザクション内で、プリセット対象の**全データ種別（`keybindings` / `playerConfigs` / `keyRemaps` / `fingerAssignments` / `itemLayouts` / `searchCrafts` / `customKeys` / `customActions`）を対称に「ライブテーブル全削除→スナップショットから復元」**し、既存のアクティブプリセットを `false` にしてから新しいプリセットを `true` に設定する。
+- プリセット作成時: `createPreset` が既存のアクティブプリセットを自動で非アクティブ化してから、新規プリセットを `isActive = true` で作成する。レガシーインポート経由の作成でも、全データ種別（キーバインド／プレイヤー設定／リマップ／指割り当て／アイテム配置／サーチクラフト／繋ぎ方（Loop）／カスタムキー／カスタムアクション）をスナップショットに含める。
+- プリセット切替時: `apply-preset` がトランザクション内で、プリセット対象の**全データ種別（`keybindings` / `playerConfigs` / `keyRemaps` / `fingerAssignments` / `itemLayouts` / `searchCrafts` / `searchCraftLoops` / `customKeys` / `customActions`）を対称に「ライブテーブル全削除→スナップショットから復元」**し、既存のアクティブプリセットを `false` にしてから新しいプリセットを `true` に設定する。
   - スナップショットが `null` の種別は削除のみ行われ、ライブテーブルは空になる（切替前のデータが残留しない）。
   - `fingerAssignments` は `fingerAssignmentsData` から、`playerConfigData` とは独立に復元される。
+  - **`searchCraftLoops` だけは他種別と対称ではなく、`searchCrafts` の復元に従属する**（`searchCraftsData` が非 null のときのみ試みる）。プリセットスナップショットは行 id を持たないため、crafts を `sequence → 新 craftId` のマップに記録しながら挿入し、その場でこのマップを使って `searchCraftLoopsData` の `craftSeq` 参照を新しい `craftId` へ解決する（`restoreSearchCraftLoopsFromSnapshot`）。参照切れ・構造不正なステップは除去し、残り2件未満の Loop は書き込まない。`sequence` はスナップショット値をそのまま使わず、実際に挿入した順の連番（1始まり）に振り直す（スナップショット由来の重複 `sequence` が `(userId, sequence)` の unique index に違反してトランザクション全体が失敗し、プリセット切替自体が恒久的にできなくなる事故を避けるため）。
 - アクティブプリセット = 「現在編集中のプリセット = ライブテーブル」というモデル。`/me/keybindings` 等の編集ページの保存時には `syncActivePresetSnapshot` がアクティブプリセットの該当 `*Data` を最新化する（書き込みスルー）。
 
 #### isMain（メイン・公開用）の管理
@@ -160,6 +175,18 @@
   - スナップショットを使う場合（メインが非アクティブ）、**`null` の種別は「空」であり、編集中のライブデータへフォールバックしてはならない**（編集内容の漏出になるため）。
 - メイン ＝ 編集中（既定状態）のときは、保存が書き込みスルーでスナップショットへ同期され、表示もライブ基準のため、公開面は即時更新される（従来どおりの体験）。
 
+#### 繋ぎ方（Loop）の id 復元（3経路）
+
+プリセットスナップショットは行 id を保持しない（`PresetSearchCraftData` に `id` フィールドが無い）ため、`/me/presets`（`app/routes/me/presets.tsx`）がライブテーブルへスナップショットを展開する3つの経路すべてで、**crafts を挿入するたびに新しい `craftId` を採番し、その対応表で Loop の参照を書き換える**という同じパターンを踏む。
+
+| 経路（`intent`） | crafts の新id採番元 | 対応表 | Loop の変換 |
+|---|---|---|---|
+| `apply-preset`（編集対象の切替） | スナップショット（`preset.searchCraftsData`）から挿入時に採番 | `sequence → 新craftId` | `restoreSearchCraftLoopsFromSnapshot()` が `searchCraftLoopsData` の `craftSeq` をこの対応表で解決 |
+| `create-preset`（既存プリセットをコピー） | 同上（`sourcePreset.searchCraftsData`） | `sequence → 新craftId` | 同上（コピー先プリセットの `searchCraftLoopsData` は `sourcePreset.searchCraftLoopsData` をそのまま複写し、ライブ展開時に対応表で解決） |
+| `create-preset`（現在のライブ設定から作成） | 削除前のライブ `search_crafts` 行を再挿入する際に採番 | `旧craftId → 新craftId`（`Map<string, string>`） | `remapLoopSteps()`（`app/lib/search-craft-loops.ts`）で `searchCraftLoops` 行の `steps` をこの対応表で書き換える。参照切れステップは除去、2件未満になった Loop は破棄 |
+
+いずれの経路も、対応表に無い参照（削除済みエントリ・破損データ）を持つステップは安全側で除去し、除去の結果2件未満になった Loop は書き込まない。
+
 ### シリアライズ関数
 
 `app/lib/preset-utils.ts` で提供:
@@ -171,11 +198,16 @@
 | `serializeRemaps(remaps)` | `KeyRemap[]` → `PresetRemapData[]` のJSON文字列 |
 | `serializeItemLayouts(layouts)` | `ItemLayout[]` → `PresetItemLayoutData[]` のJSON文字列 |
 | `serializeSearchCrafts(crafts)` | `SearchCraft[]` → `PresetSearchCraftData[]` のJSON文字列 |
+| `serializeSearchCraftLoops(loops, crafts)` | `SearchCraftLoop[]` → `PresetSearchCraftLoopData[]` のJSON文字列。`craftId` を同一スナップショット内 `crafts` の `sequence` 値（`craftSeq`）へ変換する。参照切れステップは除去、2件未満になった Loop は除去、0件なら `null` |
 | `serializeCustomKeys(keys)` | `CustomKey[]` → `PresetCustomKeyData[]` のJSON文字列 |
 | `serializeCustomActions(actions)` | `CustomAction[]` → `PresetCustomActionData[]` のJSON文字列 |
-| `createPreset(db, options)` | プリセットをDBに作成 |
+| `createPreset(db, options)` | プリセットをDBに作成（`options.searchCraftLoops` を渡すと `searchCraftLoopsData` も生成する） |
 | `syncActivePresetSnapshot(db, userId, kinds)` | ライブテーブルの内容をアクティブプリセットの `*Data` に反映 |
 | `assertPresetIsActive(db, userId, presetId)` | フォーム送信時の `presetId` がアクティブプリセットと一致するか検証（不一致なら `PresetMismatchError`） |
+
+デコード側は `app/lib/preset-read.ts` の `decodePresetSearchCraftLoops(json, decodedCrafts)`。`craftSeq` を `decodePresetSearchCrafts()` の結果（`sequence` フィールド）で突合し、合成 id（`preset-craft-${idx}`）へ解決する（`decodedCrafts` は `sequence` でソート済みのため、配列位置ではなく `sequence` フィールドで突合する）。解決できないステップ（参照切れ）・構造的に不正な `transition` は除去し、残り2件未満の Loop は除去する。`decodePresetConfig()` の返り値に `searchCraftLoops`（既定 `[]`）として含まれる。
+
+**`syncActivePresetSnapshot` に `searchCraftLoops` 専用の kind は無い**。`PresetSyncKind` の `"searchCrafts"` ケースが `searchCraftsData` と `searchCraftLoopsData` の**両列を常に同時に書く**よう拡張されている（`crafts` と `loops` のスキュー — 片方だけ古くなって参照が壊れること — を構造的に防ぐため）。そのため `/me/search-craft` の保存など、既存の `syncActivePresetSnapshot(db, userId, ["searchCrafts"])` 呼び出しはコード変更なしで Loop の同期も付いてくる。
 
 ---
 
@@ -295,9 +327,11 @@
 
 ## 関連ファイル
 
-- `app/routes/me/presets.tsx` - プリセット管理画面（CRUD操作）
+- `app/routes/me/presets.tsx` - プリセット管理画面（CRUD操作。繋ぎ方（Loop）の id リマップもここに集約）
 - `app/routes/me/keybindings.tsx` / `devices.tsx` / `items.tsx` / `search-craft.tsx` - 編集ページ（PresetSelectorと保存→同期の呼び出し）
 - `app/components/preset-selector.tsx` - 編集中プリセットの表示・切替コンポーネント
-- `app/lib/preset-utils.ts` - プリセットのシリアライズ／同期／競合検証ユーティリティ
+- `app/lib/preset-utils.ts` - プリセットのシリアライズ／同期／競合検証ユーティリティ（`serializeSearchCraftLoops` 含む）
+- `app/lib/preset-read.ts` - スナップショットのデコードユーティリティ（`decodePresetSearchCraftLoops` 含む） / `shouldUsePresetSnapshot()`
+- `app/lib/search-craft-loops.ts` - 繋ぎ方（Loop）の共有ロジック（遷移導出・参照解決・idリマップ。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md)）
 - `app/lib/schema.ts` - `configPresets`, `configHistory` テーブル定義
 - `app/routes/player/profile.tsx` - プロフィール表示時のプリセット適用ロジック

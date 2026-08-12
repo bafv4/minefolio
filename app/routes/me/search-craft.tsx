@@ -8,12 +8,12 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, configPresets } from "@/lib/schema";
+import { users, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -34,8 +34,10 @@ import {
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftListEditor, arrayMove } from "@/components/search-craft-editor";
+import { SearchCraftLoopListEditor } from "@/components/search-craft-loop-editor";
 import { toUiRemaps } from "@/lib/remap-utils";
-import { parseTemplateCrafts } from "@/lib/search-craft-templates";
+import { parseTemplateCrafts, parseTemplateLoops } from "@/lib/search-craft-templates";
+import { parseLoopSteps, isValidLoopStepsShape, remapLoopSteps, type LoopStepData } from "@/lib/search-craft-loops";
 import { useT } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -75,6 +77,13 @@ type SearchCraftItem = {
   withShift: boolean;
 };
 
+type SearchCraftLoopItem = {
+  id: string;
+  steps: LoopStepData[];
+  comment: string | null;
+  timing: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+};
+
 
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
@@ -90,6 +99,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       searchCrafts: {
         orderBy: [asc(searchCrafts.sequence)],
       },
+      searchCraftLoops: {
+        orderBy: [asc(searchCraftLoops.sequence)],
+      },
       keyRemaps: true,
       configPresets: {
         columns: {
@@ -98,6 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           isActive: true,
           isMain: true,
           searchCraftsData: true,
+          searchCraftLoopsData: true,
         },
       },
     },
@@ -119,6 +132,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     withShift: craft.withShift,
   }));
 
+  const loops: SearchCraftLoopItem[] = user.searchCraftLoops.map((loop) => ({
+    id: loop.id,
+    steps: parseLoopSteps(loop.steps),
+    comment: loop.comment,
+    timing: loop.timing ?? null,
+  }));
+
   // 全プリセットを取得（コピー機能用）
   const allPresets = user.configPresets;
 
@@ -128,6 +148,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     userId: user.id,
     crafts,
+    loops,
     // 入力キーのライブプレビュー用（表示専用）
     remaps: toUiRemaps(user.keyRemaps),
     activePreset: activePreset ? { id: activePreset.id, name: activePreset.name } : null,
@@ -139,6 +160,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       isMain: p.isMain,
       hasSearchCrafts: !!p.searchCraftsData,
       searchCraftsData: p.searchCraftsData,
+      searchCraftLoopsData: p.searchCraftLoopsData,
     })),
   };
 }
@@ -235,6 +257,11 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (actionType === "saveAll") {
     const craftsJson = formData.get("crafts") as string;
+    // loops フィールド自体が未送信（null）＝ Loop 機能追加前の古いタブ等からの保存。
+    // これを "[]" 相当に倒すと、保存のたびに既存 Loop が無警告で全消去されてしまうため、
+    // フィールドが本当に存在しない場合は DB の既存 loops をフォールバックとして採用する
+    // （明示的に "[]" が送信された場合＝新しいクライアントでの全削除は、従来どおり尊重する）。
+    const loopsField = formData.get("loops") as string | null;
 
     try {
       const crafts = JSON.parse(craftsJson) as SearchCraftItem[];
@@ -252,16 +279,79 @@ export async function action({ request }: Route.ActionArgs) {
         return { error: t("meSearchCraft.invalidCraftData") };
       }
 
+      let loops: SearchCraftLoopItem[];
+      if (loopsField === null) {
+        const existingLoops = await db.query.searchCraftLoops.findMany({
+          where: eq(searchCraftLoops.userId, user.id),
+          orderBy: [asc(searchCraftLoops.sequence)],
+        });
+        loops = existingLoops.map((loop) => ({
+          id: loop.id,
+          steps: parseLoopSteps(loop.steps),
+          comment: loop.comment,
+          timing: loop.timing ?? null,
+        }));
+      } else {
+        let loopsRaw: unknown;
+        try {
+          loopsRaw = JSON.parse(loopsField);
+        } catch {
+          return { error: t("meSearchCraft.invalidCraftData") };
+        }
+        // 構造検証（2ステップ以上・先頭のみ transition null・bsCount 非負整数等）は
+        // isValidLoopStepsShape に委ねる。参照する craftId が実在するかはここでは検証しない
+        // （削除済みエントリの参照はこの後 remapLoopSteps の安全網で除去する）。
+        if (
+          !Array.isArray(loopsRaw) ||
+          loopsRaw.some(
+            (loop) =>
+              !loop ||
+              typeof loop !== "object" ||
+              typeof (loop as { id?: unknown }).id !== "string" ||
+              !(loop as { id: string }).id ||
+              !isValidLoopStepsShape((loop as { steps?: unknown }).steps),
+          )
+        ) {
+          return { error: t("meSearchCraft.invalidCraftData") };
+        }
+        loops = loopsRaw as SearchCraftLoopItem[];
+      }
+
+      // crafts の submittedId→finalId マップを挿入前に確定する（"new-" 始まりのみ新規採番）。
+      // Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングで id を振り直せない。
+      const craftIdMap = new Map<string, string>();
+      const finalCrafts = crafts.map((craft) => {
+        const finalId = craft.id.startsWith("new-") ? createId() : craft.id;
+        craftIdMap.set(craft.id, finalId);
+        return { ...craft, id: finalId };
+      });
+
+      // Loop の craftId を最終idへ引き換える。削除済みエントリの参照はステップ除去、
+      // 残り2件未満になった Loop は破棄する（安全網。保存自体は拒否しない）
+      const finalLoops = loops
+        .map((loop) => {
+          const steps = remapLoopSteps(loop.steps, craftIdMap);
+          if (!steps) return null;
+          return {
+            id: loop.id.startsWith("new-") ? createId() : loop.id,
+            steps,
+            comment: loop.comment,
+            timing: loop.timing,
+          };
+        })
+        .filter((loop): loop is NonNullable<typeof loop> => loop !== null);
+
       const now = new Date();
       await db.transaction(async (tx) => {
-        // 既存のサーチクラフトを全削除
+        // 既存のサーチクラフト・Loopを全削除
+        await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
         await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
 
         // 新しいサーチクラフトを挿入
-        for (let i = 0; i < crafts.length; i++) {
-          const craft = crafts[i];
+        for (let i = 0; i < finalCrafts.length; i++) {
+          const craft = finalCrafts[i];
           await tx.insert(searchCrafts).values({
-            id: craft.id.startsWith("new-") ? createId() : craft.id,
+            id: craft.id,
             userId: user.id,
             sequence: i + 1,
             items: JSON.stringify(craft.items),
@@ -274,9 +364,24 @@ export async function action({ request }: Route.ActionArgs) {
             updatedAt: now,
           });
         }
+
+        // 新しいLoopを挿入
+        for (let i = 0; i < finalLoops.length; i++) {
+          const loop = finalLoops[i];
+          await tx.insert(searchCraftLoops).values({
+            id: loop.id,
+            userId: user.id,
+            sequence: i + 1,
+            steps: JSON.stringify(loop.steps),
+            comment: loop.comment || null,
+            timing: loop.timing || null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       });
 
-      // アクティブプリセットスナップショット同期
+      // アクティブプリセットスナップショット同期（crafts・loops 両方が同期される）
       await syncActivePresetSnapshot(db, user.id, ["searchCrafts"]);
 
       // 変更履歴を記録
@@ -321,9 +426,17 @@ function PresetRequiredNotice() {
 
 export default function SearchCraftPage() {
   const t = useT();
-  const { crafts: initialCrafts, remaps, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
+  const {
+    crafts: initialCrafts,
+    loops: initialLoops,
+    remaps,
+    activePreset,
+    hasPresets,
+    presets,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
+  const [loops, setLoops] = useState<SearchCraftLoopItem[]>(initialLoops);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
@@ -334,7 +447,8 @@ export default function SearchCraftPage() {
   // loaderデータが更新されたらローカル状態も更新
   useEffect(() => {
     setCrafts(initialCrafts);
-  }, [initialCrafts]);
+    setLoops(initialLoops);
+  }, [initialCrafts, initialLoops]);
 
   // 保存結果の処理
   useEffect(() => {
@@ -351,9 +465,14 @@ export default function SearchCraftPage() {
 
   // 変更検知
   const hasChanges = useMemo(() => {
-    if (crafts.length !== initialCrafts.length) return true;
-    return JSON.stringify(crafts) !== JSON.stringify(initialCrafts);
-  }, [crafts, initialCrafts]);
+    if (crafts.length !== initialCrafts.length || loops.length !== initialLoops.length) {
+      return true;
+    }
+    return (
+      JSON.stringify(crafts) !== JSON.stringify(initialCrafts) ||
+      JSON.stringify(loops) !== JSON.stringify(initialLoops)
+    );
+  }, [crafts, initialCrafts, loops, initialLoops]);
 
   const handleUpdateCraft = useCallback((index: number, updated: SearchCraftItem) => {
     setCrafts((prev) => {
@@ -364,12 +483,38 @@ export default function SearchCraftPage() {
   }, []);
 
   const handleDeleteCraft = useCallback((index: number) => {
-    setCrafts((prev) => prev.filter((_, i) => i !== index));
+    setCrafts((prev) => {
+      const craftId = prev[index]?.id;
+      const nextCrafts = prev.filter((_, i) => i !== index);
+      if (craftId) {
+        // 削除された craftId への参照だけをステップから除去する（生存参照は温存）。
+        // remapLoopSteps は先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う
+        const idMap = new Map(nextCrafts.map((c) => [c.id, c.id]));
+        setLoops((prevLoops) =>
+          prevLoops
+            .map((loop) => {
+              const steps = remapLoopSteps(loop.steps, idMap);
+              return steps ? { ...loop, steps } : null;
+            })
+            .filter((loop): loop is SearchCraftLoopItem => loop !== null),
+        );
+      }
+      return nextCrafts;
+    });
   }, []);
+
+  // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
+  const getLoopDeleteWarning = useCallback(
+    (craftId: string): string | null => {
+      const count = loops.filter((loop) => loop.steps.some((s) => s.craftId === craftId)).length;
+      return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
+    },
+    [loops, t],
+  );
 
   const handleAddCraft = useCallback(() => {
     const newCraft: SearchCraftItem = {
-      id: `new-${Date.now()}`,
+      id: `new-${crypto.randomUUID()}`,
       sequence: crafts.length + 1,
       items: [],
       keys: [],
@@ -385,8 +530,39 @@ export default function SearchCraftPage() {
     setCrafts((prev) => arrayMove(prev, oldIndex, newIndex));
   }, []);
 
+  // Loop（繋ぎ方）の編集ハンドラ
+  const handleUpdateLoop = useCallback((index: number, updated: SearchCraftLoopItem) => {
+    setLoops((prev) => {
+      const next = [...prev];
+      next[index] = updated;
+      return next;
+    });
+  }, []);
+
+  const handleDeleteLoop = useCallback((index: number) => {
+    setLoops((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleReorderLoop = useCallback((oldIndex: number, newIndex: number) => {
+    setLoops((prev) => arrayMove(prev, oldIndex, newIndex));
+  }, []);
+
+  const handleAddLoop = useCallback(() => {
+    if (crafts.length < 2) return;
+    const newLoop: SearchCraftLoopItem = {
+      id: `new-${crypto.randomUUID()}`,
+      steps: [
+        { craftId: "", transition: null },
+        { craftId: "", transition: { type: "backspace", bsCount: 0 } },
+      ],
+      comment: null,
+      timing: null,
+    };
+    setLoops((prev) => [...prev, newLoop]);
+  }, [crafts.length]);
+
   const handleSave = useCallback(() => {
-    // バリデーション
+    // バリデーション（サーチクラフト）
     const emptyCrafts = crafts.filter((c) => c.items.length === 0);
     if (emptyCrafts.length > 0) {
       toast.error(t("meSearchCraft.selectAtLeastOneItem"));
@@ -399,18 +575,30 @@ export default function SearchCraftPage() {
       return;
     }
 
+    // バリデーション（Loop）
+    if (loops.some((loop) => loop.steps.length < 2)) {
+      toast.error(t("meSearchCraft.loopStepsRequired"));
+      return;
+    }
+    if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
+      toast.error(t("meSearchCraft.loopEntryRequired"));
+      return;
+    }
+
     const formData = new FormData();
     formData.set("_action", "saveAll");
     formData.set("crafts", JSON.stringify(crafts));
+    formData.set("loops", JSON.stringify(loops));
     if (activePreset) {
       formData.set("presetId", activePreset.id);
     }
     fetcher.submit(formData, { method: "post" });
-  }, [crafts, fetcher, activePreset]);
+  }, [crafts, loops, fetcher, activePreset, t]);
 
   const handleReset = useCallback(() => {
     setCrafts(initialCrafts);
-  }, [initialCrafts]);
+    setLoops(initialLoops);
+  }, [initialCrafts, initialLoops]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -427,8 +615,13 @@ export default function SearchCraftPage() {
       toast.error(t("meSearchCraft.copyNoData"));
       return;
     }
+
+    // コピー後の draft id を crafts と同じ順序で確定してから、
+    // Loop の craftIndex 参照（parseTemplateLoops）をその draft id へ解決する
+    const timestamp = Date.now();
+    const newCraftIds = parsedCrafts.map((_, idx) => `new-${timestamp}-${idx}`);
     setCrafts(parsedCrafts.map((craft, idx) => ({
-      id: `new-${Date.now()}-${idx}`,
+      id: newCraftIds[idx],
       sequence: idx + 1,
       items: craft.items,
       keys: [],
@@ -437,6 +630,18 @@ export default function SearchCraftPage() {
       timing: craft.timing,
       withShift: craft.withShift,
     })));
+
+    const parsedLoops = parseTemplateLoops(preset.searchCraftLoopsData, parsedCrafts.length);
+    setLoops(parsedLoops.map((loop, idx) => ({
+      id: `new-${timestamp}-loop-${idx}`,
+      steps: loop.steps.map((s) => ({
+        craftId: newCraftIds[s.craftIndex],
+        transition: s.transition,
+      })),
+      comment: loop.comment,
+      timing: loop.timing,
+    })));
+
     toast.success(t("meSearchCraft.copiedFromPreset", { name: preset.name }));
 
     setCopyDialogOpen(false);
@@ -485,6 +690,7 @@ export default function SearchCraftPage() {
               onUpdate={handleUpdateCraft}
               onDelete={handleDeleteCraft}
               onReorder={handleReorder}
+              getDeleteWarning={getLoopDeleteWarning}
             />
             <Button variant="outline" size="sm" className="my-3" onClick={handleAddCraft}>
               <Plus className="mr-2 h-4 w-4" />
@@ -507,6 +713,41 @@ export default function SearchCraftPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* 繋ぎ方（Loop） */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">{t("meSearchCraft.loopSectionTitle")}</CardTitle>
+          <CardDescription>{t("meSearchCraft.loopSectionDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="py-1">
+          {loops.length > 0 && (
+            <SearchCraftLoopListEditor
+              loops={loops}
+              entries={crafts.map((c) => ({ id: c.id, items: c.items, searchStr: c.searchStr }))}
+              remaps={remaps}
+              onUpdate={handleUpdateLoop}
+              onDelete={handleDeleteLoop}
+              onReorder={handleReorderLoop}
+            />
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="my-3"
+            onClick={handleAddLoop}
+            disabled={crafts.length < 2}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t("meSearchCraft.addLoop")}
+          </Button>
+          {crafts.length < 2 && (
+            <p className="text-xs text-muted-foreground">
+              {t("meSearchCraft.loopNeedTwoEntries")}
+            </p>
+          )}
+        </CardContent>
+      </Card>
       </div>
       </PresetSwitchLock>
 

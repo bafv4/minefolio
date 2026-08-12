@@ -268,7 +268,8 @@ export default function MyTemplatesPage() {
                         <Download className="h-3 w-3" />
                         {t("meTemplates.applyCount", { count: template.applyCount })}
                       </span>
-                      <span>
+                      {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+                      <span suppressHydrationWarning>
                         {formatDistanceToNow(new Date(template.createdAt), {
                           addSuffix: true,
                           locale: dateFnsLocale(locale),
