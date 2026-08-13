@@ -829,7 +829,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     loopCraftMarker: "Craft",
     loopInvalidTransition: "This transition doesn't match the current search strings",
     controlKeyActualTooltip: "{key} — inputs {op}",
-    legendCraftMarker: "Craft",
     legendControlKey: "Control keys (BS/←/Home, etc.)",
     noRemaps: "No remaps have been set.",
     remapTab: "Remaps",

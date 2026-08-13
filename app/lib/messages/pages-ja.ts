@@ -813,7 +813,6 @@ export const PAGES_JA = {
     loopCraftMarker: "クラフト実行",
     loopInvalidTransition: "この遷移は現在のサーチ文字列と整合していません",
     controlKeyActualTooltip: "{key} — {op}を入力",
-    legendCraftMarker: "クラフト実行",
     legendControlKey: "制御キー（BS/←/Home等）",
     noRemaps: "リマップが設定されていません。",
     remapTab: "リマップ",

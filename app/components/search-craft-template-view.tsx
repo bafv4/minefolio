@@ -259,13 +259,13 @@ export function ActualKeyBadges({
   );
 }
 
-/** キーバッジ装飾（リマップ/Shift/指割り当て/クラフト実行マーカー）の凡例 */
+/** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
 export function KeyBadgeLegend({
   showFingers = false,
   showCraftMarker = false,
 }: {
   showFingers?: boolean;
-  /** Loop（繋ぎ方）表示があるページでのみ、制御キー（BS/←/Home/⇧Home）バッジとクラフト実行マーカーの説明を追加する */
+  /** Loop（繋ぎ方）表示があるページでのみ、制御キー（BS/←/Home/⇧Home）バッジの説明を追加する */
   showCraftMarker?: boolean;
 }) {
   const t = useT();
@@ -286,25 +286,14 @@ export function KeyBadgeLegend({
         </span>
       </div>
       {showCraftMarker && (
-        <>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-1 font-mono text-[10px] font-semibold text-info">
-              BS
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {t("playerProfile.legendControlKey")}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* マーカー本体（CraftMarker）と同じ「アイテムチップ」のミニチュア。代表アイコンとして作業台を使う */}
-            <span className="inline-flex h-3.5 items-center justify-center rounded bg-secondary/50 px-0.5">
-              <ItemIcon itemId="minecraft:crafting_table" size={12} />
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {t("playerProfile.legendCraftMarker")}
-            </span>
-          </div>
-        </>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-1 font-mono text-[10px] font-semibold text-info">
+            BS
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("playerProfile.legendControlKey")}
+          </span>
+        </div>
       )}
       {showFingers && <FingerLegend />}
     </div>
