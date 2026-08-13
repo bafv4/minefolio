@@ -661,7 +661,7 @@ export default function PlaygroundPage() {
                   )
                 }
               >
-                <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                <RotateCcw className="mr-2 size-3.5" />
                 {t("playground.reloadTemplate")}
               </Button>
             )}
@@ -670,7 +670,7 @@ export default function PlaygroundPage() {
               <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
-                    <User className="mr-2 h-3.5 w-3.5" />
+                    <User className="mr-2 size-3.5" />
                     {t("playground.loadMySettings")}
                   </Button>
                 </DialogTrigger>
@@ -727,7 +727,7 @@ export default function PlaygroundPage() {
                 setLoadedLabel(null);
               }}
             >
-              <X className="mr-2 h-3.5 w-3.5" />
+              <X className="mr-2 size-3.5" />
               {t("playground.clearAll")}
             </Button>
 
@@ -737,7 +737,7 @@ export default function PlaygroundPage() {
                 <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
                   <DialogTrigger asChild>
                     <Button size="sm">
-                      <Save className="mr-2 h-3.5 w-3.5" />
+                      <Save className="mr-2 size-3.5" />
                       {t("mePresets.save")}
                     </Button>
                   </DialogTrigger>

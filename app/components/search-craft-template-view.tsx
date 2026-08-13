@@ -255,7 +255,7 @@ export function KeyBadgeLegend({
   showCraftMarker = false,
 }: {
   showFingers?: boolean;
-  /** Loop（繋ぎ方）表示があるページでのみ、クラフト実行マーカーの説明を追加する */
+  /** Loop（繋ぎ方）表示があるページでのみ、制御キー（BS/←/Home/⇧Home）バッジとクラフト実行マーカーの説明を追加する */
   showCraftMarker?: boolean;
 }) {
   const t = useT();
@@ -268,7 +268,7 @@ export function KeyBadgeLegend({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-[9px] font-semibold text-warning">
+        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-[10px] font-semibold text-warning">
           ⇧
         </span>
         <span className="text-[11px] text-muted-foreground">
@@ -276,14 +276,24 @@ export function KeyBadgeLegend({
         </span>
       </div>
       {showCraftMarker && (
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex h-3.5 items-center justify-center rounded border border-dashed border-border bg-secondary/20 px-0.5">
-            <Hammer className="h-2.5 w-2.5 text-muted-foreground" aria-hidden="true" />
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            {t("playerProfile.legendCraftMarker")}
-          </span>
-        </div>
+        <>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-info/50 bg-info/10 px-0.5 font-mono text-[10px] font-semibold text-info">
+              BS
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {t("playerProfile.legendControlKey")}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex h-3.5 items-center justify-center rounded border border-dashed border-border bg-secondary/30 px-0.5">
+              <Hammer className="h-2.5 w-2.5 text-muted-foreground" aria-hidden="true" />
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {t("playerProfile.legendCraftMarker")}
+            </span>
+          </div>
+        </>
       )}
       {showFingers && <FingerLegend />}
     </div>
@@ -410,9 +420,9 @@ function SearchCraftGroupCard({
   // その場合は行リスト（列ヘッダー含む）を省略し extra だけを描画する。
   const showList = title === undefined || crafts.length > 0;
   return (
-    <Card>
+    <Card className="gap-3 py-5">
       {title && (
-        <CardHeader className="py-2">
+        <CardHeader className="px-5">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
             {title}
@@ -422,7 +432,7 @@ function SearchCraftGroupCard({
           </CardTitle>
         </CardHeader>
       )}
-      <CardContent className={cn("pb-3", title ? "pt-0" : "pt-4")}>
+      <CardContent className="px-5">
         {showList && (
           <>
             {/* 列ヘッダー（デスクトップのみ） */}

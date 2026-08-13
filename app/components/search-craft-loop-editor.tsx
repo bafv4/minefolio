@@ -335,7 +335,7 @@ function TransitionRow({
               disabled={bounds !== null && transition.bsCount <= bounds.minBs}
               onClick={() => handleBsChange(Math.max(0, transition.bsCount - 1))}
             >
-              <Minus className="h-3 w-3" />
+              <Minus className="size-3" />
             </Button>
             <span className="w-6 text-center font-mono text-sm">{transition.bsCount}</span>
             <Button
@@ -346,7 +346,7 @@ function TransitionRow({
               disabled={bounds !== null && transition.bsCount >= bounds.maxBs}
               onClick={() => handleBsChange(transition.bsCount + 1)}
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="size-3" />
             </Button>
           </div>
         )}
@@ -363,7 +363,7 @@ function TransitionRow({
               disabled={transition.arrowCount <= 1}
               onClick={() => handleArrowChange(Math.max(1, transition.arrowCount - 1))}
             >
-              <Minus className="h-3 w-3" />
+              <Minus className="size-3" />
             </Button>
             <span className="w-6 text-center font-mono text-sm">{transition.arrowCount}</span>
             <Button
@@ -374,7 +374,7 @@ function TransitionRow({
               disabled={bounds !== null && transition.arrowCount >= bounds.maxArrow}
               onClick={() => handleArrowChange(transition.arrowCount + 1)}
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="size-3" />
             </Button>
           </div>
         )}
@@ -487,7 +487,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
       )}
     >
       {/* ヘッダ */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1">
         <button
           {...attributes}
           {...listeners}
@@ -559,7 +559,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
         ))}
 
         <Button type="button" variant="outline" size="sm" className="h-7" onClick={handleAddStep}>
-          <Plus className="mr-1 h-3 w-3" />
+          <Plus className="mr-1 size-3" />
           {t("meSearchCraft.loopAddStep")}
         </Button>
       </div>

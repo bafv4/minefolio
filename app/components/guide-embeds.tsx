@@ -607,7 +607,7 @@ export function SearchCraftEmbedView({
         title={t("playerProfile.loopCraftMarker")}
       >
         {firstItem ? (
-          <ItemIcon itemId={firstItem} size={18} />
+          <ItemIcon itemId={firstItem} size={20} />
         ) : (
           <span className="text-xs text-muted-foreground">?</span>
         )}

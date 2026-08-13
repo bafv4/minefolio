@@ -1,5 +1,4 @@
 import { Fragment, useMemo } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ItemIcon } from "@/components/item-icon";
 import {
@@ -129,7 +128,7 @@ export function ControlKeyBadge({
       </Tooltip>
       {(kind === "backspace" || kind === "arrowLeft") && (count ?? 0) > 1 && (
         // aria-hidden を付けない: スクリーンリーダーにも「BS ×2」のように回数が伝わるようにする
-        <span className="absolute -top-1.5 -right-1.5 rounded-full bg-muted-foreground px-1 py-0.5 text-[9px] font-semibold leading-none text-background">
+        <span className="absolute -top-1.5 -right-1.5 rounded-full bg-muted-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background">
           ×{count}
         </span>
       )}
@@ -172,7 +171,7 @@ function CraftMarker({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-dashed border-border bg-secondary/20 px-2">
+        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-dashed border-border bg-secondary/30 px-2">
           <Hammer className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
           {itemId && <ItemIcon itemId={itemId} size={20} />}
           {searchStr && (
@@ -347,7 +346,7 @@ export function SearchCraftLoopRow({
 
         {showTiming && timingMeta && (
           <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className={cn("h-2 w-2 rounded-full", timingMeta.dot)} />
+            <span className={cn("h-2.5 w-2.5 rounded-full", timingMeta.dot)} />
             {timingLabel(t, timingMeta)}
           </span>
         )}
@@ -378,7 +377,7 @@ export function SearchCraftLoopGroupSection({
   const t = useT();
   if (loops.length === 0) return null;
   return (
-    <div className="border-t border-border/60 pt-3">
+    <div className="space-y-2 border-t border-border/60 pt-3">
       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Repeat className="h-3.5 w-3.5" />
         {t("playerProfile.loopSectionTitle")}
@@ -396,37 +395,5 @@ export function SearchCraftLoopGroupSection({
         ))}
       </div>
     </div>
-  );
-}
-
-/** Loop 一覧（カード形式）。loops が空なら何も描画しない */
-export function SearchCraftLoopList({
-  loops,
-  crafts,
-  remaps,
-  fingerAssignments,
-}: {
-  loops: SearchCraftLoopRowData[];
-  crafts: LoopCraftInfo[];
-  remaps: UiRemapInfo[] | RemapInfo[];
-  fingerAssignments?: Record<string, FingerType[]>;
-}) {
-  if (loops.length === 0) return null;
-  return (
-    <Card>
-      <CardContent className="pt-4 pb-3">
-        <div className="divide-y">
-          {loops.map((loop) => (
-            <SearchCraftLoopRow
-              key={loop.id}
-              loop={loop}
-              crafts={crafts}
-              remaps={remaps}
-              fingerAssignments={fingerAssignments}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

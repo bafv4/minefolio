@@ -341,7 +341,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
               className="h-7"
               onClick={() => setIsItemDialogOpen(true)}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="size-3 mr-1" />
               {t("meSearchCraft.add")}
             </Button>
           </div>
@@ -356,12 +356,27 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                     <Label className="text-xs text-muted-foreground shrink-0">
                       {t("meSearchCraft.searchLabel")}
                     </Label>
-                    <Input
-                      value={variation.str}
-                      onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
-                      placeholder="scr"
-                      className="font-mono h-8 w-32"
-                    />
+                    {/* Input＋削除ボタンは同じ折返し単位にまとめる（削除ボタンだけが
+                        次行に孤立してどのバリエーションのものか分からなくなるのを防ぐ） */}
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={variation.str}
+                        onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
+                        placeholder="scr"
+                        className="font-mono h-8 w-32"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                        disabled={craft.variations.length <= 1}
+                        onClick={() => removeVariation(variationIndex)}
+                        aria-label={t("meSearchCraft.removeVariation")}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   {/* Shiftを押しながらクラフトするか（バリエーションごと） */}
                   <div className="flex items-center gap-2">
@@ -392,17 +407,6 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
                       />
                     </div>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
-                    disabled={craft.variations.length <= 1}
-                    onClick={() => removeVariation(variationIndex)}
-                    aria-label={t("meSearchCraft.removeVariation")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               );
             })}
@@ -414,7 +418,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
               disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
               onClick={addVariation}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="size-3 mr-1" />
               {t("meSearchCraft.addVariation")}
             </Button>
           </div>
@@ -564,7 +568,7 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
         <span className="text-xs text-muted-foreground">{crafts.length}</span>
       </div>
 
-      <div className="space-y-3 p-3">
+      <div className="space-y-3 px-4 py-3">
         {/* クラフト一覧（並べ替え・ブロック間移動） */}
         <div ref={setCraftZoneRef}>
           <SortableContext items={crafts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
@@ -585,7 +589,7 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
             ) : (
               <div
                 className={cn(
-                  "rounded-lg border border-dashed border-border/70 py-4 text-center text-xs text-muted-foreground transition-colors",
+                  "rounded-lg border border-dashed border-border/70 py-3 text-center text-xs text-muted-foreground transition-colors",
                   isCraftZoneOver && "border-primary bg-primary/5 text-primary",
                 )}
               >

@@ -139,33 +139,33 @@ export function HydrateFallback() {
         <div className="flex flex-col items-center lg:items-start">
           {/* Skin Skeleton */}
           <div className="w-40 h-60 flex items-center justify-center">
-            <div className="w-12 h-40 bg-muted rounded-lg animate-pulse" />
+            <Skeleton className="w-12 h-40 rounded-lg" />
           </div>
 
           <div className="mt-4 text-center lg:text-left w-full space-y-2">
-            <div className="h-8 w-32 bg-muted rounded animate-pulse mx-auto lg:mx-0" />
-            <div className="h-5 w-24 bg-muted rounded animate-pulse mx-auto lg:mx-0" />
+            <Skeleton className="h-8 w-32 mx-auto lg:mx-0" />
+            <Skeleton className="h-5 w-24 mx-auto lg:mx-0" />
           </div>
         </div>
 
         {/* Bio Skeleton */}
         <div className="space-y-2">
-          <div className="h-4 w-16 bg-muted rounded animate-pulse" />
-          <div className="h-20 w-full bg-muted rounded animate-pulse" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-20 w-full" />
         </div>
       </aside>
 
       {/* Main Content Skeleton */}
       <main className="flex-1 min-w-0 space-y-6">
         {/* Tabs Skeleton */}
-        <div className="h-10 w-80 bg-muted rounded animate-pulse" />
+        <Skeleton className="h-10 w-80" />
 
         {/* Content Skeleton */}
         <div className="space-y-4">
-          <div className="h-64 w-full bg-muted rounded-lg animate-pulse" />
+          <Skeleton className="h-64 w-full rounded-lg" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="h-40 bg-muted rounded-lg animate-pulse" />
-            <div className="h-40 bg-muted rounded-lg animate-pulse" />
+            <Skeleton className="h-40 rounded-lg" />
+            <Skeleton className="h-40 rounded-lg" />
           </div>
         </div>
       </main>
@@ -182,6 +182,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
@@ -1813,7 +1814,7 @@ export default function PlayerProfilePage() {
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
-              <div className="rounded-lg border bg-card px-4 py-3 space-y-2.5">
+              <div className="rounded-xl border border-border/70 bg-card px-4 py-3 space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                   {player.playerConfig?.gameLanguage && (
                     <div className="flex items-center gap-1.5 text-muted-foreground">

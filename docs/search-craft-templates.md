@@ -193,7 +193,7 @@ type TemplateLoop = {
 |---|---|
 | `SearchCraftGroupedList` | サーチクラフト一覧の正典表示。タイミング別グループカード（色ドット + 件数）+ 3カラム表形式（アイテム / サーチ文字列 / 入力キー、lg未満は縦積み）。シーケンス番号・サーチ文字列のクリックコピー・コメント表示付き。`fingerAssignments` は任意（プロフィールのみ渡す）。任意 prop `renderGroupExtra?: (timing: string \| null) => ReactNode` で各グループカードの行リスト後に追加コンテンツを描画できる（タイミングなしの1枚カードでも `renderGroupExtra(null)` を呼ぶ）。任意 prop `extraTimings?: (string \| null)[]` は crafts に存在しない timing でも空のグループカードを出すための補助（該当カードは行リストを省略し `renderGroupExtra` の内容だけを描画）。`search-craft-loop-view.tsx` を直接 import しない疎結合設計（render prop 方式。循環 import 回避） |
 | `KeyBadge` / `ActualKeyBadges` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ）。`ActualKeyBadges` はサーチ文字列から `getActualKeyInfos()` で導出 |
-| `KeyBadgeLegend` | キーバッジ装飾の凡例（`showFingers` で指割り当て凡例を表示、`showCraftMarker` で Loop のクラフト実行マーカーの凡例を表示） |
+| `KeyBadgeLegend` | キーバッジ装飾の凡例（`showFingers` で指割り当て凡例を表示、`showCraftMarker` で Loop の制御キー（BS/←/Home/⇧Home、infoトーン）バッジとクラフト実行マーカーの凡例を表示） |
 
 テンプレート詳細のリマップ表示はチップ一覧ではなく **`VirtualKeyboard`（`showRemaps`）** で行い、閲覧者がレイアウト（US / JIS / US_TKL / JIS_TKL）を切り替えられる。
 
@@ -214,7 +214,7 @@ type TemplateLoop = {
 | `app/components/search-craft-workbench.tsx` | 編集ワークベンチ（Playground とテンプレートエディタで共通の3セクション構成。3セクション目がタイミングブロック型のサーチクラフト＋Loop編集） |
 | `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`。`/me/search-craft` とワークベンチで共通） |
 | `app/components/search-craft-loop-editor.tsx` | 繋ぎ方（Loop）行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
-| `app/components/search-craft-loop-view.tsx` | 繋ぎ方（Loop）表示UI（`SearchCraftLoopList` 等） |
+| `app/components/search-craft-loop-view.tsx` | 繋ぎ方（Loop）表示UI（`SearchCraftLoopRow` / `SearchCraftLoopGroupSection` 等） |
 | `app/lib/game-languages.ts` | ゲーム内言語リスト（日本語名併記、例: `Svenska（スウェーデン語）`） |
 | `app/components/content-tabs.tsx` | タブナビゲーション（汎用 `ContentTabs` + `MyContentTabs` / `GuidesContentTabs`） |
 | `app/routes/guides/templates/index.tsx` | 公開テンプレート一覧 |

@@ -277,12 +277,12 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 |---|---|
 | `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系）と区別できるよう info トーン（`border-info/50 bg-info/10 text-info`）で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策） |
 | `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon＋Hammer の破線チップ＋サーチ文字列、Tooltip 付き）を `ChevronRight` を挟んで交互に描画。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用）。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
-| `SearchCraftLoopList` / `SearchCraftLoopRow` | Loop 一覧のカード表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
-| `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
+| `SearchCraftLoopRow` | Loop 一覧の行表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`h-2.5 w-2.5`、`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
+| `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。見出しと行リストの間は `space-y-2`（8px）で区切る。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
 
-サーチ文字列の「実際にタイプしない文字（前ステップから検索欄に残存する部分）」の薄表示は、ファイル内のローカルヘルパー `SegmentedSearchString`（`typedCharSegments()` の結果を描画）が担う。`typed: false` のセグメントは `text-muted-foreground/70`（`SearchStringText` の半角スペース可視化と同じトーン）で表示し、セグメント内でも半角スペースは `SearchStringText` と同じ「␣」可視化を維持する。読み上げ用にラッパーへ元の文字列全体を `aria-label` で渡し、セグメント自体は `aria-hidden` にする（`SearchStringText` と同じ方針）。編集UI（`SearchCraftTimingBoard` 内の Loop 全体プレビュー）も `LoopKeySequence` を共用するため、この表示は自動的に反映される。
+サーチ文字列の「実際にタイプしない文字（前ステップから検索欄に残存する部分）」の薄表示は、ファイル内のローカルヘルパー `SegmentedSearchString`（`typedCharSegments()` の結果を描画）が担う。`typed: false` のセグメントは `text-muted-foreground/70`（`SearchStringText` の半角スペース可視化と同じトーン）で表示し、セグメント内でも半角スペースは `SearchStringText` と同じ「␣」可視化を維持する。読み上げ用にラッパーへ元の文字列全体を `aria-label` で渡し、セグメント自体は `aria-hidden` にする（`SearchStringText` と同じ方針）。編集UI（`SearchCraftTimingBoard` 内の Loop 全体プレビュー）も `LoopKeySequence` を共用するため、この表示は自動的に反映される。クラフト実行マーカー（`CraftMarker`）の背景は `bg-secondary/30`（凡例のマーカースワッチと同値）。
 
-プレイヤープロフィールのサーチクラフトタブでは、独立した Loop セクションを持たず、`SearchCraftGroupedList` の `renderGroupExtra` / `extraTimings` を使って各タイミンググループカード内のサブセクションとして Loop を表示する（Loop を timing ごとにグループ化し、`renderGroupExtra(timing)` で該当グループの `SearchCraftLoopGroupSection` を返す。`extraTimings` には Loop が持つ timing の distinct 値を渡し、その timing のクラフトが0件でも Loop 用のグループカードが漏れなく出るようにする）。サマリーバーに Loop 件数バッジ（0件なら非表示）、凡例（`KeyBadgeLegend`）にクラフトマーカーの説明を Loop がある場合のみ追加するのは変更なし。
+プレイヤープロフィールのサーチクラフトタブでは、独立した Loop セクションを持たず、`SearchCraftGroupedList` の `renderGroupExtra` / `extraTimings` を使って各タイミンググループカード内のサブセクションとして Loop を表示する（Loop を timing ごとにグループ化し、`renderGroupExtra(timing)` で該当グループの `SearchCraftLoopGroupSection` を返す。`extraTimings` には Loop が持つ timing の distinct 値を渡し、その timing のクラフトが0件でも Loop 用のグループカードが漏れなく出るようにする）。サマリーバーに Loop 件数バッジ（0件なら非表示）、凡例（`KeyBadgeLegend`）に制御キー（BS/←/Home/⇧Home、infoトーン）バッジとクラフトマーカーの説明を Loop がある場合のみ追加するのは変更なし。
 
 ### saveAll での id リマップと後方互換
 
@@ -341,7 +341,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 | `app/lib/search-craft-loops.ts` | Loop の共有ロジック（遷移導出・参照解決・パース・idリマップ） |
 | `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`） |
 | `app/components/search-craft-loop-editor.tsx` | Loop 行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
-| `app/components/search-craft-loop-view.tsx` | Loop 表示UI（`SearchCraftLoopList` 等） |
+| `app/components/search-craft-loop-view.tsx` | Loop 表示UI（`SearchCraftLoopRow` / `SearchCraftLoopGroupSection` 等） |
 | `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様（Loop の craftIndex 参照も含む） |
 | `docs/presets.md` | プリセットスナップショット仕様（Loop の craftSeq 参照も含む） |
 | `@bafv4/mcitems` | Minecraft 1.16アイテムアイコン・検索パッケージ |

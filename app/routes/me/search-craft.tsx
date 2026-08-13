@@ -178,9 +178,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// ローディング中に表示するスケルトンUI（ナビゲーション時用）
+// ローディング中に表示するスケルトンUI（ナビゲーション時用）。
+// 現行のタイミングブロック型レイアウト（PresetSelector 帯 + SearchCraftTimingBoard の
+// ブロックカード群）に合わせた骨組みにする（旧フラット行UIの骨組みは使わない）。
 export function HydrateFallback() {
-  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -190,35 +191,24 @@ export function HydrateFallback() {
         </div>
         <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
-      {/* 説明カード */}
-      <div className="rounded-lg border border-dashed bg-secondary/30 p-4">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4 mt-1" />
+
+      {/* PresetSelector 相当の帯 */}
+      <div className="rounded-lg border bg-card p-3 sm:p-4 shadow-sm">
+        <Skeleton className="h-10 w-full sm:w-80" />
       </div>
-      {/* クラフトカード */}
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="rounded-lg border bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-0.5">
-                <Skeleton className="h-6 w-6" />
-                <Skeleton className="h-6 w-6" />
-              </div>
-              <div className="flex-1 space-y-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="flex items-center gap-1">
-                      <Skeleton className="h-8 w-24" />
-                      {j < 2 && <Skeleton className="h-3 w-3" />}
-                    </div>
-                  ))}
-                </div>
-                <Skeleton className="h-4 w-32" />
-              </div>
-              <div className="flex gap-1">
-                <Skeleton className="h-8 w-8" />
-                <Skeleton className="h-8 w-8" />
-              </div>
+
+      {/* タイミングブロックカード */}
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-border/70 bg-background/80">
+            <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
+              <Skeleton className="h-2.5 w-2.5 rounded-full" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <div className="space-y-3 px-4 py-3">
+              <Skeleton className="h-14 w-full" />
+              {i === 0 && <Skeleton className="h-14 w-full" />}
+              <Skeleton className="h-8 w-28" />
             </div>
           </div>
         ))}
@@ -725,8 +715,8 @@ export default function SearchCraftPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+          <div className="space-y-4 py-2">
+            <div className="space-y-2 max-h-72 overflow-y-auto">
               {presets
                 .filter((p) => p.id !== activePreset?.id)
                 .map((preset) => (
