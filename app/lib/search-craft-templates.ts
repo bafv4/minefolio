@@ -1,7 +1,13 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { PresetRemapData, PresetSearchCraftData, PresetSearchCraftLoopData, PresetLoopStepData } from "./preset-utils";
 import { normalizeKeyRemapType, toUiRemaps, type UiRemapInfo } from "./remap-utils";
-import { isValidLoopStepsShape, type LoopTransition } from "./search-craft-loops";
+import { isValidLoopStepsShape, normalizeVariationIndex, type LoopTransition } from "./search-craft-loops";
+import {
+  resolveVariations,
+  variationMirror,
+  MAX_SEARCH_VARIATIONS,
+  type SearchCraftVariation,
+} from "./search-craft-variations";
 import type { Translator } from "./messages";
 
 /**
@@ -50,11 +56,10 @@ export const SEARCH_CRAFT_TIMINGS = [
 
 export type TemplateCraft = {
   items: string[];
-  searchStr: string | null;
   comment: string | null;
   timing: SearchCraftTiming | null;
-  /** Shiftを押しながらクラフトするか */
-  withShift: boolean;
+  /** 複数サーチ文字列バリエーション（単一の真実。searchStr/withShift スカラーは持たない） */
+  variations: SearchCraftVariation[];
 };
 
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
@@ -63,7 +68,11 @@ function normalizeTiming(value: unknown): TemplateCraft["timing"] {
     : null;
 }
 
-/** craftsData（PresetSearchCraftData[] のJSON）を表示用にデコードする。不正なデータは空配列を返す */
+/**
+ * craftsData（PresetSearchCraftData[] のJSON）を表示用にデコードする。不正なデータは空配列を返す。
+ * variations は resolveVariations() 経由で正準化する（旧データ＝searchStr/withShift のみの
+ * スナップショットも1件のバリエーションとして扱う）。
+ */
 export function parseTemplateCrafts(craftsData: string | null): TemplateCraft[] {
   if (!craftsData) return [];
   try {
@@ -81,10 +90,13 @@ export function parseTemplateCrafts(craftsData: string | null): TemplateCraft[] 
         }
         return {
           items,
-          searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
           comment: typeof c.comment === "string" ? c.comment : null,
           timing: normalizeTiming(c.timing),
-          withShift: c.withShift === true,
+          variations: resolveVariations({
+            variations: c.variations,
+            searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
+            withShift: c.withShift,
+          }),
         };
       });
   } catch {
@@ -128,17 +140,22 @@ export function parseTemplateRemaps(remapsData: string | null): UiRemapInfo[] {
 /**
  * クラフトエントリ配列を PresetSearchCraftData[] のJSON文字列にシリアライズする（parseTemplateCrafts の逆変換）。
  * DBの行データを経由しない一時データ（Playgroundの編集状態等）をプリセット/テンプレートに保存する際に使う。
+ * searchStr/withShift は variationMirror() 経由で第1バリエーションのミラーとして書く。
  */
 export function serializeTemplateCrafts(crafts: TemplateCraft[]): string {
-  const data: PresetSearchCraftData[] = crafts.map((c, index) => ({
-    sequence: index + 1,
-    items: JSON.stringify(c.items),
-    keys: "[]",
-    searchStr: c.searchStr,
-    comment: c.comment,
-    timing: c.timing,
-    withShift: c.withShift,
-  }));
+  const data: PresetSearchCraftData[] = crafts.map((c, index) => {
+    const mirror = variationMirror(c.variations);
+    return {
+      sequence: index + 1,
+      items: JSON.stringify(c.items),
+      keys: "[]",
+      searchStr: mirror.searchStr,
+      comment: c.comment,
+      timing: c.timing,
+      withShift: mirror.withShift,
+      variations: c.variations,
+    };
+  });
   return JSON.stringify(data);
 }
 
@@ -167,16 +184,20 @@ export function serializeTemplateRemaps(
  * （craftSeq = craftIndex + 1 が恒等）。
  */
 export type TemplateLoop = {
-  steps: { craftIndex: number; transition: LoopTransition | null }[];
+  steps: { craftIndex: number; transition: LoopTransition | null; variationIndex?: number }[];
   comment: string | null;
   timing: SearchCraftTiming | null;
 };
 
 /** isValidLoopStepsShape で構造検証するための仮の craftId 変換（craftIndex を文字列化するだけ） */
 function toShapeCheckSteps(
-  steps: { craftIndex: number; transition: LoopTransition | null }[],
-): { craftId: string; transition: LoopTransition | null }[] {
-  return steps.map((s) => ({ craftId: String(s.craftIndex), transition: s.transition }));
+  steps: { craftIndex: number; transition: LoopTransition | null; variationIndex?: number }[],
+): { craftId: string; transition: LoopTransition | null; variationIndex?: number }[] {
+  return steps.map((s) => ({
+    craftId: String(s.craftIndex),
+    transition: s.transition,
+    variationIndex: s.variationIndex,
+  }));
 }
 
 /**
@@ -186,6 +207,7 @@ function toShapeCheckSteps(
  *
  * craftSeq は 1..n の連番前提（craftIndex = craftSeq - 1）。プリセット由来のスナップショットも
  * この前提が成立する（全書き込み経路が crafts の sequence を i+1 で振り直すため）。
+ * variationIndex は欠落・不正値のどちらも 0 に矯正し、メモリ上は常に明示した数値を持たせる。
  */
 export function parseTemplateLoops(loopsData: string | null, craftCount: number): TemplateLoop[] {
   if (!loopsData) return [];
@@ -201,12 +223,16 @@ export function parseTemplateLoops(loopsData: string | null, craftCount: number)
   for (const rawLoop of (raw as unknown[]).slice(0, MAX_TEMPLATE_LOOPS) as PresetSearchCraftLoopData[]) {
     if (!rawLoop || !Array.isArray(rawLoop.steps)) continue;
 
-    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
+    const steps: { craftIndex: number; transition: LoopTransition | null; variationIndex: number }[] = [];
     for (const rawStep of rawLoop.steps.slice(0, MAX_LOOP_STEPS)) {
       if (!rawStep || typeof rawStep !== "object") continue;
       const craftIndex = (rawStep as PresetLoopStepData).craftSeq - 1;
       if (!Number.isInteger(craftIndex) || craftIndex < 0 || craftIndex >= craftCount) continue;
-      steps.push({ craftIndex, transition: (rawStep as PresetLoopStepData).transition ?? null });
+      steps.push({
+        craftIndex,
+        transition: (rawStep as PresetLoopStepData).transition ?? null,
+        variationIndex: normalizeVariationIndex((rawStep as PresetLoopStepData).variationIndex),
+      });
     }
     if (steps.length < 2) continue;
     // 除去でズレる場合に備え、先頭ステップの transition は常に null に統一する
@@ -228,7 +254,12 @@ export function parseTemplateLoops(loopsData: string | null, craftCount: number)
 export function serializeTemplateLoops(loops: TemplateLoop[]): string {
   const data: PresetSearchCraftLoopData[] = loops.map((loop, index) => ({
     sequence: index + 1,
-    steps: loop.steps.map((s) => ({ craftSeq: s.craftIndex + 1, transition: s.transition })),
+    steps: loop.steps.map((s) => ({
+      craftSeq: s.craftIndex + 1,
+      transition: s.transition,
+      // 0 は省略する（既存データとバイト同一を保つため）
+      ...(s.variationIndex ? { variationIndex: s.variationIndex } : {}),
+    })),
     comment: loop.comment,
     timing: loop.timing,
   }));
@@ -260,8 +291,12 @@ export function parseLoopsField(
       return { error: true };
     }
 
-    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
-    for (const rawStep of rawLoop.steps as Array<{ craftIndex?: unknown; transition?: unknown }>) {
+    const steps: { craftIndex: number; transition: LoopTransition | null; variationIndex: number }[] = [];
+    for (const rawStep of rawLoop.steps as Array<{
+      craftIndex?: unknown;
+      transition?: unknown;
+      variationIndex?: unknown;
+    }>) {
       if (!rawStep || typeof rawStep !== "object") {
         return { error: true };
       }
@@ -274,7 +309,21 @@ export function parseLoopsField(
       ) {
         return { error: true };
       }
-      steps.push({ craftIndex, transition: (rawStep.transition ?? null) as LoopTransition | null });
+      if (
+        rawStep.variationIndex !== undefined &&
+        !(
+          typeof rawStep.variationIndex === "number" &&
+          Number.isInteger(rawStep.variationIndex) &&
+          rawStep.variationIndex >= 0
+        )
+      ) {
+        return { error: true };
+      }
+      steps.push({
+        craftIndex,
+        transition: (rawStep.transition ?? null) as LoopTransition | null,
+        variationIndex: normalizeVariationIndex(rawStep.variationIndex as number | undefined),
+      });
     }
 
     if (!isValidLoopStepsShape(toShapeCheckSteps(steps))) {
@@ -313,7 +362,7 @@ export function toEditorCrafts(crafts: TemplateCraft[]): (TemplateCraft & { id: 
 export function toSubmittableLoops(
   crafts: { id: string }[],
   loops: {
-    steps: { craftId: string; transition: LoopTransition | null }[];
+    steps: { craftId: string; transition: LoopTransition | null; variationIndex?: number }[];
     comment: string | null;
     timing: SearchCraftTiming | null;
   }[],
@@ -321,7 +370,7 @@ export function toSubmittableLoops(
   const indexById = new Map(crafts.map((c, idx) => [c.id, idx]));
   const result: TemplateLoop[] = [];
   for (const loop of loops) {
-    const steps: { craftIndex: number; transition: LoopTransition | null }[] = [];
+    const steps: { craftIndex: number; transition: LoopTransition | null; variationIndex: number }[] = [];
     let allResolved = true;
     for (const step of loop.steps) {
       const craftIndex = indexById.get(step.craftId);
@@ -329,7 +378,11 @@ export function toSubmittableLoops(
         allResolved = false;
         break;
       }
-      steps.push({ craftIndex, transition: step.transition });
+      steps.push({
+        craftIndex,
+        transition: step.transition,
+        variationIndex: normalizeVariationIndex(step.variationIndex),
+      });
     }
     if (!allResolved || steps.length < 2) continue;
     result.push({ steps, comment: loop.comment, timing: loop.timing });
@@ -396,26 +449,36 @@ export function parseEditorSubmission(
   }
 
   const crafts: TemplateCraft[] = [];
-  for (const raw of craftsRaw as Array<Partial<TemplateCraft>>) {
+  for (const raw of craftsRaw as Array<
+    Partial<TemplateCraft> & { searchStr?: unknown; withShift?: unknown }
+  >) {
     const items = Array.isArray(raw.items)
       ? raw.items.filter((i): i is string => typeof i === "string")
       : [];
-    // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
-    const searchStr = typeof raw.searchStr === "string" ? raw.searchStr : "";
     if (items.length === 0) {
       return { error: t("meSearchCraft.selectAtLeastOneItem") };
     }
-    if (!searchStr.trim()) {
+    // 正準は variations。旧クライアント（searchStr/withShift のみ送信）は resolveVariations で
+    // 1件に合成して受理する（各所に手書きのフォールバックを書かない方針）
+    const variations = resolveVariations({
+      variations: raw.variations,
+      searchStr: typeof raw.searchStr === "string" ? raw.searchStr : null,
+      withShift: raw.withShift as boolean | null | undefined,
+    });
+    // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+    if (variations.length === 0 || variations.some((v) => !v.str.trim())) {
       return { error: t("meSearchCraft.craftStringRequired") };
+    }
+    if (variations.length > MAX_SEARCH_VARIATIONS) {
+      return { error: t("meSearchCraft.tooManyVariations", { max: MAX_SEARCH_VARIATIONS }) };
     }
     crafts.push({
       items,
-      searchStr,
       comment: typeof raw.comment === "string" && raw.comment.trim() ? raw.comment : null,
       timing: SEARCH_CRAFT_TIMINGS.includes(raw.timing as SearchCraftTiming)
         ? (raw.timing as SearchCraftTiming)
         : null,
-      withShift: raw.withShift === true,
+      variations,
     });
   }
 

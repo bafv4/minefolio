@@ -126,7 +126,7 @@ export function TemplateEditorForm({
       toast.error(t("meSearchCraft.selectAtLeastOneItem"));
       return;
     }
-    if (crafts.some((c) => !c.searchStr)) {
+    if (crafts.some((c) => c.variations.length === 0 || c.variations.some((v) => !v.str.trim()))) {
       toast.error(t("meSearchCraft.craftStringRequired"));
       return;
     }

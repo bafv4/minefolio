@@ -11,6 +11,7 @@ import {
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
 import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
@@ -127,11 +128,10 @@ export type SearchCraftRowData = {
   id: string;
   sequence: number;
   items: string[];
-  searchStr: string | null;
   comment: string | null;
   timing: string | null;
-  /** Shiftを押しながらクラフトするか（古いデータには存在しない） */
-  withShift?: boolean;
+  /** 複数サーチ文字列バリエーション。行内で縦積み表示する */
+  variations: SearchCraftVariation[];
 };
 
 // ============================================
@@ -467,16 +467,16 @@ function SearchCraftRow({
   lang: string;
 }) {
   const t = useT();
-  const handleCopySearchStr = () => {
-    if (!craft.searchStr || !navigator.clipboard) return;
-    navigator.clipboard.writeText(craft.searchStr).then(() => {
+  const handleCopy = (str: string) => {
+    if (!str || !navigator.clipboard) return;
+    navigator.clipboard.writeText(str).then(() => {
       toast.success(t("playerProfile.searchStrCopied"));
     });
   };
 
   return (
     <div className="py-3">
-      <div className={cn("flex flex-col gap-2 lg:items-center", SEARCH_CRAFT_GRID_COLS)}>
+      <div className={cn("flex flex-col gap-2 lg:items-start", SEARCH_CRAFT_GRID_COLS)}>
         {/* アイテム */}
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {craft.items.map((itemId, idx) => (
@@ -490,49 +490,63 @@ function SearchCraftRow({
           ))}
         </div>
 
-        {/* サーチ文字列（コピー可能） */}
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1">
+        {/* サーチ文字列（バリエーションごとに縦積み表示。コピーはそのバリエーションの元文字列） */}
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
             {t("playerProfile.searchLabel")}
           </span>
-          {craft.searchStr ? (
-            <>
-              <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
-                <SearchStringText value={craft.searchStr} />
-              </code>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={handleCopySearchStr}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
-              </Tooltip>
-            </>
+          {craft.variations.length > 0 ? (
+            craft.variations.map((variation, idx) =>
+              variation.str ? (
+                <div key={idx} className="flex items-center gap-1 min-w-0">
+                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
+                    <SearchStringText value={variation.str} />
+                  </code>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => handleCopy(variation.str)}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : (
+                <span key={idx} className="text-sm text-muted-foreground">—</span>
+              ),
+            )
           ) : (
             <span className="text-sm text-muted-foreground">—</span>
           )}
         </div>
 
-        {/* 入力キー */}
-        <div className="flex items-start gap-1 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1 mt-1.5">
+        {/* 入力キー（バリエーションごとに縦積み表示、行の高さをサーチ文字列列と揃える） */}
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
             {t("playerProfile.inputKeysLabel")}
           </span>
-          {craft.searchStr ? (
-            <ActualKeyBadges
-              searchStr={craft.searchStr}
-              remaps={remaps}
-              fingerAssignments={fingerAssignments}
-              shiftHeld={craft.withShift === true}
-            />
-          ) : craft.withShift ? (
-            <ShiftCraftBadge />
+          {craft.variations.length > 0 ? (
+            craft.variations.map((variation, idx) => (
+              <div key={idx} className="flex min-h-7 items-center">
+                {variation.str ? (
+                  <ActualKeyBadges
+                    searchStr={variation.str}
+                    remaps={remaps}
+                    fingerAssignments={fingerAssignments}
+                    shiftHeld={variation.withShift}
+                  />
+                ) : variation.withShift ? (
+                  <ShiftCraftBadge />
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+            ))
           ) : (
             <span className="text-sm text-muted-foreground">—</span>
           )}

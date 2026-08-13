@@ -36,7 +36,18 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftTimingBoard, reorderByBlock } from "@/components/search-craft-editor";
 import { toUiRemaps } from "@/lib/remap-utils";
 import { parseTemplateCrafts, parseTemplateLoops } from "@/lib/search-craft-templates";
-import { parseLoopSteps, isValidLoopStepsShape, remapLoopSteps, type LoopStepData } from "@/lib/search-craft-loops";
+import {
+  parseLoopSteps,
+  isValidLoopStepsShape,
+  remapLoopSteps,
+  type LoopStepData,
+} from "@/lib/search-craft-loops";
+import {
+  resolveVariations,
+  parseVariationsJson,
+  variationMirror,
+  type SearchCraftVariation,
+} from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -70,10 +81,10 @@ type SearchCraftItem = {
   sequence: number;
   items: string[];
   keys: string[];
-  searchStr: string | null;
   comment: string | null;
   timing: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
-  withShift: boolean;
+  /** 複数サーチ文字列バリエーション（単一の真実。searchStr/withShift スカラーは持たない） */
+  variations: SearchCraftVariation[];
 };
 
 type SearchCraftLoopItem = {
@@ -125,10 +136,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     sequence: craft.sequence,
     items: JSON.parse(craft.items) as string[],
     keys: JSON.parse(craft.keys) as string[],
-    searchStr: craft.searchStr,
     comment: craft.comment,
     timing: craft.timing ?? null,
-    withShift: craft.withShift,
+    variations: resolveVariations({
+      variations: parseVariationsJson(craft.searchVariations) ?? undefined,
+      searchStr: craft.searchStr,
+      withShift: craft.withShift,
+    }),
   }));
 
   const loops: SearchCraftLoopItem[] = user.searchCraftLoops.map((loop) => ({
@@ -263,20 +277,39 @@ export async function action({ request }: Route.ActionArgs) {
     const loopsField = formData.get("loops") as string | null;
 
     try {
-      const crafts = JSON.parse(craftsJson) as SearchCraftItem[];
+      const craftsRaw = JSON.parse(craftsJson) as Array<Record<string, unknown>>;
 
       // items が string[] であることを保証する。非配列・非文字列要素のまま永続化されると、
       // 公開ガイド埋め込みの SSR が items.map で TypeError を投げて 500 になるため、ここで拒否する。
       if (
-        !Array.isArray(crafts) ||
-        crafts.some(
+        !Array.isArray(craftsRaw) ||
+        craftsRaw.some(
           (craft) =>
-            !Array.isArray(craft?.items) ||
-            craft.items.some((item) => typeof item !== "string"),
+            !craft ||
+            typeof craft.id !== "string" ||
+            !craft.id ||
+            !Array.isArray(craft.items) ||
+            (craft.items as unknown[]).some((item) => typeof item !== "string"),
         )
       ) {
         return { error: t("meSearchCraft.invalidCraftData") };
       }
+
+      // variations が正準。フィールド自体が未送信（旧クライアントタブ）の場合は
+      // searchStr/withShift から1件合成して受理する（resolveVariations 経由。手書きしない）
+      const crafts: SearchCraftItem[] = craftsRaw.map((craft) => ({
+        id: craft.id as string,
+        sequence: 0,
+        items: craft.items as string[],
+        keys: [],
+        comment: typeof craft.comment === "string" ? craft.comment : null,
+        timing: (craft.timing ?? null) as SearchCraftItem["timing"],
+        variations: resolveVariations({
+          variations: craft.variations,
+          searchStr: typeof craft.searchStr === "string" ? craft.searchStr : null,
+          withShift: craft.withShift as boolean | null | undefined,
+        }),
+      }));
 
       let loops: SearchCraftLoopItem[];
       if (loopsField === null) {
@@ -346,19 +379,22 @@ export async function action({ request }: Route.ActionArgs) {
         await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
         await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
 
-        // 新しいサーチクラフトを挿入
+        // 新しいサーチクラフトを挿入（searchStr/withShift は variationMirror() 経由で
+        // 第1バリエーションのミラーとして書き込む）
         for (let i = 0; i < finalCrafts.length; i++) {
           const craft = finalCrafts[i];
+          const mirror = variationMirror(craft.variations);
           await tx.insert(searchCrafts).values({
             id: craft.id,
             userId: user.id,
             sequence: i + 1,
             items: JSON.stringify(craft.items),
             keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
-            searchStr: craft.searchStr || null,
+            searchStr: mirror.searchStr,
             comment: craft.comment || null,
             timing: craft.timing || null,
-            withShift: craft.withShift === true,
+            withShift: mirror.withShift,
+            searchVariations: craft.variations.length > 0 ? JSON.stringify(craft.variations) : null,
             createdAt: now,
             updatedAt: now,
           });
@@ -474,8 +510,11 @@ export default function SearchCraftPage() {
   }, [crafts, initialCrafts, loops, initialLoops]);
 
   // SearchCraftTimingBoard からの crafts 更新（D&D・行の更新・削除を含む）。
-  // 消えた craftId があれば、それを参照する Loop ステップを連動して除去する
-  // （生存参照は温存、remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）
+  // 消えた craftId があれば、それを参照する Loop ステップを連動して除去する（生存参照は温存、
+  // remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）。
+  // バリエーション単位の削除・編集にともなう Loop 側の付け替え（remapVariationRefs →
+  // resetTransitionCountsForCraft）は SearchCraftTimingBoard 内部（handleUpdateCraft）が
+  // onLoopsChange 経由で直接処理する（ここで二重に適用しない）
   const handleCraftsChange = useCallback((next: SearchCraftItem[]) => {
     setCrafts((prev) => {
       const removedIds = prev.filter((c) => !next.some((n) => n.id === c.id)).map((c) => c.id);
@@ -513,10 +552,9 @@ export default function SearchCraftPage() {
       sequence: crafts.length + 1,
       items: [],
       keys: [],
-      searchStr: null,
       comment: null,
       timing,
-      withShift: false,
+      variations: [{ str: "", withShift: false }],
     };
     setCrafts((prev) => reorderByBlock([...prev, newCraft]));
   }, [crafts.length]);
@@ -543,7 +581,9 @@ export default function SearchCraftPage() {
       return;
     }
 
-    const emptySearchStr = crafts.filter((c) => !c.searchStr);
+    const emptySearchStr = crafts.filter(
+      (c) => c.variations.length === 0 || c.variations.some((v) => !v.str.trim()),
+    );
     if (emptySearchStr.length > 0) {
       toast.error(t("meSearchCraft.craftStringRequired"));
       return;
@@ -599,10 +639,9 @@ export default function SearchCraftPage() {
       sequence: idx + 1,
       items: craft.items,
       keys: [],
-      searchStr: craft.searchStr,
       comment: craft.comment,
       timing: craft.timing,
-      withShift: craft.withShift,
+      variations: craft.variations,
     })));
 
     const parsedLoops = parseTemplateLoops(preset.searchCraftLoopsData, parsedCrafts.length);
@@ -611,6 +650,7 @@ export default function SearchCraftPage() {
       steps: loop.steps.map((s) => ({
         craftId: newCraftIds[s.craftIndex],
         transition: s.transition,
+        variationIndex: s.variationIndex,
       })),
       comment: loop.comment,
       timing: loop.timing,

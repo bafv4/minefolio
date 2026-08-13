@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serializeSearchCraftLoops } from "../preset-utils";
+import { serializeSearchCraftLoops, serializeSearchCrafts } from "../preset-utils";
 import type { SearchCraft, SearchCraftLoop } from "../schema";
 
 const NOW = new Date();
@@ -13,6 +13,7 @@ function makeCraft(overrides: Partial<SearchCraft> & Pick<SearchCraft, "id" | "s
     comment: null,
     timing: null,
     withShift: false,
+    searchVariations: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -121,5 +122,65 @@ describe("serializeSearchCraftLoops", () => {
 
   it("Loop が0件になった場合は null を返す", () => {
     expect(serializeSearchCraftLoops([], [])).toBeNull();
+  });
+});
+
+describe("serializeSearchCrafts", () => {
+  it("searchVariations 列があればそれを variations として出力する（searchStr/withShift は既存どおりミラー）", () => {
+    const crafts = [
+      makeCraft({
+        id: "c1",
+        sequence: 1,
+        searchStr: "en",
+        withShift: false,
+        searchVariations: JSON.stringify([
+          { str: "en", withShift: false },
+          { str: "er", withShift: true },
+        ]),
+      }),
+    ];
+    const [data] = JSON.parse(serializeSearchCrafts(crafts));
+    expect(data.variations).toEqual([
+      { str: "en", withShift: false },
+      { str: "er", withShift: true },
+    ]);
+    expect(data.searchStr).toBe("en");
+    expect(data.withShift).toBe(false);
+  });
+
+  it("searchVariations 列が無い（旧データ）場合は searchStr/withShift から1件合成する", () => {
+    const crafts = [
+      makeCraft({ id: "c1", sequence: 1, searchStr: "cra", withShift: true, searchVariations: null }),
+    ];
+    const [data] = JSON.parse(serializeSearchCrafts(crafts));
+    expect(data.variations).toEqual([{ str: "cra", withShift: true }]);
+  });
+
+  it("searchVariations が破損JSONの場合も searchStr/withShift から合成してフォールバックする", () => {
+    const crafts = [
+      makeCraft({
+        id: "c1",
+        sequence: 1,
+        searchStr: "cra",
+        withShift: false,
+        searchVariations: "not json",
+      }),
+    ];
+    const [data] = JSON.parse(serializeSearchCrafts(crafts));
+    expect(data.variations).toEqual([{ str: "cra", withShift: false }]);
+  });
+
+  it("DB行の searchStr/withShift 列は第1バリエーションのミラーとしてそのまま書き込まれる（正常運用時は一致する）", () => {
+    const crafts = [
+      makeCraft({
+        id: "c1",
+        sequence: 1,
+        searchStr: "en",
+        withShift: false,
+        searchVariations: JSON.stringify([{ str: "en", withShift: false }]),
+      }),
+    ];
+    const [data] = JSON.parse(serializeSearchCrafts(crafts));
+    expect(data.variations[0]).toEqual({ str: data.searchStr, withShift: data.withShift });
   });
 });

@@ -80,6 +80,8 @@ import {
   type LoopEditorEntry,
   type SearchCraftLoopDraft,
 } from "@/components/search-craft-loop-editor";
+import { remapVariationRefs } from "@/lib/search-craft-loops";
+import { MAX_SEARCH_VARIATIONS, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { cn } from "@/lib/utils";
@@ -91,17 +93,19 @@ import { useT } from "@/hooks/use-locale";
  * 「指定なし」+ TIMING_META の6種、計7ブロックを常時表示し、各ブロック内でクラフト・
  * 繋ぎ方（Loop）を編集する。timing の変更はブロック間D&D（@dnd-kit）で行うため、
  * 行UI自体（EditableSearchCraftRow・LoopEditorRow）には timing の選択コントロールを持たない。
+ * 1エントリは複数のサーチ文字列バリエーション（variations）を持てる。バリエーションごとに
+ * withShift を設定できる（エントリ共通ではない）。並べ替えUIはなく、最低1件・上限
+ * MAX_SEARCH_VARIATIONS（5）件。
  */
 
 /** 編集UIが必要とする最小のエントリ形状 */
 export type SearchCraftDraft = {
   id: string;
   items: string[];
-  searchStr: string | null;
   comment: string | null;
   timing: SearchCraftTiming | null;
-  /** Shiftを押しながらクラフトするか */
-  withShift: boolean;
+  /** 複数サーチ文字列バリエーション（単一の真実。searchStr/withShift スカラーは持たない） */
+  variations: SearchCraftVariation[];
 };
 
 // アイテム選択ダイアログ
@@ -247,7 +251,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
 }) {
   const t = useT();
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
-  const withShiftCheckboxId = useId();
+  const rowId = useId();
 
   const {
     attributes,
@@ -265,6 +269,23 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
 
   const removeItem = (itemIndex: number) => {
     onUpdate({ ...craft, items: craft.items.filter((_, i) => i !== itemIndex) });
+  };
+
+  const updateVariation = (variationIndex: number, patch: Partial<SearchCraftVariation>) => {
+    onUpdate({
+      ...craft,
+      variations: craft.variations.map((v, i) => (i === variationIndex ? { ...v, ...patch } : v)),
+    });
+  };
+
+  const addVariation = () => {
+    if (craft.variations.length >= MAX_SEARCH_VARIATIONS) return;
+    onUpdate({ ...craft, variations: [...craft.variations, { str: "", withShift: false }] });
+  };
+
+  const removeVariation = (variationIndex: number) => {
+    if (craft.variations.length <= 1) return;
+    onUpdate({ ...craft, variations: craft.variations.filter((_, i) => i !== variationIndex) });
   };
 
   return (
@@ -325,48 +346,77 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
             </Button>
           </div>
 
-          {/* サーチ文字列・入力キープレビュー */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground shrink-0">
-                {t("meSearchCraft.searchLabel")}
-              </Label>
-              <Input
-                value={craft.searchStr || ""}
-                onChange={(e) => onUpdate({ ...craft, searchStr: e.target.value || null })}
-                placeholder="scr"
-                className="font-mono h-8 w-32"
-              />
-            </div>
-            {/* Shiftを押しながらクラフトするか */}
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={withShiftCheckboxId}
-                checked={craft.withShift}
-                onCheckedChange={(checked) =>
-                  onUpdate({ ...craft, withShift: checked === true })
-                }
-              />
-              <Label
-                htmlFor={withShiftCheckboxId}
-                className="text-xs text-muted-foreground cursor-pointer"
-              >
-                {t("meSearchCraft.withShift")}
-              </Label>
-            </div>
-            {/* 入力キーのライブプレビュー（リマップ考慮） */}
-            {remaps && craft.searchStr && (
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground shrink-0">
-                  {t("meSearchCraft.keyPreviewLabel")}
-                </Label>
-                <ActualKeyBadges
-                  searchStr={craft.searchStr}
-                  remaps={remaps}
-                  shiftHeld={craft.withShift}
-                />
-              </div>
-            )}
+          {/* サーチ文字列バリエーション（1件以上、上限 MAX_SEARCH_VARIATIONS）。並べ替えUIはなし */}
+          <div className="space-y-1.5">
+            {craft.variations.map((variation, variationIndex) => {
+              const checkboxId = `${rowId}-shift-${variationIndex}`;
+              return (
+                <div key={variationIndex} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground shrink-0">
+                      {t("meSearchCraft.searchLabel")}
+                    </Label>
+                    <Input
+                      value={variation.str}
+                      onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
+                      placeholder="scr"
+                      className="font-mono h-8 w-32"
+                    />
+                  </div>
+                  {/* Shiftを押しながらクラフトするか（バリエーションごと） */}
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={variation.withShift}
+                      onCheckedChange={(checked) =>
+                        updateVariation(variationIndex, { withShift: checked === true })
+                      }
+                    />
+                    <Label
+                      htmlFor={checkboxId}
+                      className="text-xs text-muted-foreground cursor-pointer"
+                    >
+                      {t("meSearchCraft.withShift")}
+                    </Label>
+                  </div>
+                  {/* 入力キーのライブプレビュー（リマップ考慮） */}
+                  {remaps && variation.str && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground shrink-0">
+                        {t("meSearchCraft.keyPreviewLabel")}
+                      </Label>
+                      <ActualKeyBadges
+                        searchStr={variation.str}
+                        remaps={remaps}
+                        shiftHeld={variation.withShift}
+                      />
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                    disabled={craft.variations.length <= 1}
+                    onClick={() => removeVariation(variationIndex)}
+                    aria-label={t("meSearchCraft.removeVariation")}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7"
+              disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
+              onClick={addVariation}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {t("meSearchCraft.addVariation")}
+            </Button>
           </div>
 
           {/* コメント（常時表示） */}
@@ -653,7 +703,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   );
 
   const entries: LoopEditorEntry[] = useMemo(
-    () => crafts.map((c) => ({ id: c.id, items: c.items, searchStr: c.searchStr })),
+    () => crafts.map((c) => ({ id: c.id, items: c.items, variations: c.variations })),
     [crafts],
   );
 
@@ -809,29 +859,52 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     [activeDrag, crafts, loops, onCraftsChange, onLoopsChange],
   );
 
-  // クラフト行の更新。サーチ文字列が変わった場合は、そのエントリに隣接する
-  // Loop 遷移の BS/← 回数を新しい最小値へ再初期化する（エントリ選択変更時の
-  // リセットと同じ「最小回数を初期表示」の規則を searchStr 編集にも適用する）
+  // クラフト行の更新。
+  // - バリエーションの str/withShift を編集した、またはバリエーションが増えた場合:
+  //   そのエントリに隣接する Loop 遷移の BS/← 回数を新しい最小値へ再初期化する
+  //   （エントリ選択変更時のリセットと同じ「最小回数を初期表示」の規則をバリエーション編集にも適用する）
+  // - バリエーションが減った（削除された）場合: remapVariationRefs で参照 index を付け替えてから
+  //   同様に遷移回数を再初期化する（削除された index への参照は 0 へ倒る安全網は
+  //   remapVariationRefs 自身が担う）
   const handleUpdateCraft = useCallback(
     (id: string, updated: T) => {
       const prevCraft = crafts.find((c) => c.id === id);
       const nextCrafts = reorderByBlock(crafts.map((c) => (c.id === id ? updated : c)));
       onCraftsChange(nextCrafts);
-      if (prevCraft && prevCraft.searchStr !== updated.searchStr) {
-        const nextEntries: LoopEditorEntry[] = nextCrafts.map((c) => ({
-          id: c.id,
-          items: c.items,
-          searchStr: c.searchStr,
-        }));
-        let changed = false;
-        const nextLoops = loops.map((loop) => {
-          const steps = resetTransitionCountsForCraft(loop.steps, id, nextEntries);
-          if (steps === loop.steps) return loop;
-          changed = true;
-          return { ...loop, steps };
-        });
-        if (changed) onLoopsChange(nextLoops);
+      if (!prevCraft || prevCraft.variations === updated.variations) return;
+
+      const nextEntries: LoopEditorEntry[] = nextCrafts.map((c) => ({
+        id: c.id,
+        items: c.items,
+        variations: c.variations,
+      }));
+
+      const variationRemoved = updated.variations.length < prevCraft.variations.length;
+      let removedIndex = -1;
+      if (variationRemoved) {
+        removedIndex = prevCraft.variations.length - 1;
+        for (let i = 0; i < prevCraft.variations.length; i++) {
+          if (updated.variations[i] !== prevCraft.variations[i]) {
+            removedIndex = i;
+            break;
+          }
+        }
       }
+
+      let changed = false;
+      const nextLoops = loops.map((loop) => {
+        // このクラフトを参照しない Loop は触らない（remapVariationRefs は .map で常に新しい配列
+        // を返すため、無関係な Loop まで先に呼ぶと参照が不必要に変わり hasChanges が誤検知する）
+        if (!loop.steps.some((s) => s.craftId === id)) return loop;
+        let steps = loop.steps;
+        if (variationRemoved) {
+          steps = remapVariationRefs(steps, id, removedIndex, updated.variations.length);
+        }
+        steps = resetTransitionCountsForCraft(steps, id, nextEntries);
+        changed = true;
+        return { ...loop, steps };
+      });
+      if (changed) onLoopsChange(nextLoops);
     },
     [crafts, loops, onCraftsChange, onLoopsChange],
   );

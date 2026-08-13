@@ -34,6 +34,7 @@ import {
   type TemplateLoop,
 } from "@/lib/search-craft-templates";
 import { remapLoopSteps } from "@/lib/search-craft-loops";
+import { resolveVariations } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -250,19 +251,29 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("_action") as string;
   const includeRemaps = formData.get("includeRemaps") === "1";
 
-  let crafts: TemplateCraft[] = [];
+  let craftsRaw: unknown;
   let remaps: UiRemapInfo[] = [];
   try {
-    crafts = JSON.parse((formData.get("crafts") as string | null) || "[]");
+    craftsRaw = JSON.parse((formData.get("crafts") as string | null) || "[]");
     remaps = includeRemaps ? JSON.parse((formData.get("remaps") as string | null) || "[]") : [];
   } catch {
     return { error: t("playground.saveFailed") };
   }
-  if (!Array.isArray(crafts) || !Array.isArray(remaps) || crafts.length > MAX_TEMPLATE_CRAFTS) {
+  if (!Array.isArray(craftsRaw) || !Array.isArray(remaps) || craftsRaw.length > MAX_TEMPLATE_CRAFTS) {
     return { error: t("playground.saveFailed") };
   }
-  // クライアント由来のJSONのため withShift は boolean に正規化する
-  crafts = crafts.map((c) => ({ ...c, withShift: c.withShift === true }));
+  // クライアント由来のJSONのため variations を正準化する（旧クライアント由来の
+  // searchStr/withShift のみのペイロードも resolveVariations で1件合成して受理する）
+  const crafts: TemplateCraft[] = (craftsRaw as Array<Record<string, unknown>>).map((c) => ({
+    items: Array.isArray(c.items) ? (c.items as string[]) : [],
+    comment: typeof c.comment === "string" ? c.comment : null,
+    timing: (c.timing ?? null) as TemplateCraft["timing"],
+    variations: resolveVariations({
+      variations: c.variations,
+      searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
+      withShift: c.withShift as boolean | null | undefined,
+    }),
+  }));
 
   // loops フィールドはフォーム未送信なら [] 扱い（craftIndex は crafts の並び順を参照する）
   const loopsResult = parseLoopsField(formData, crafts.length);
@@ -365,10 +376,9 @@ function toPlaygroundCrafts(crafts: TemplateCraft[]): SearchCraftDraft[] {
   return crafts.map((c) => ({
     id: draftId("craft"),
     items: c.items,
-    searchStr: c.searchStr,
     comment: c.comment,
     timing: c.timing,
-    withShift: c.withShift,
+    variations: c.variations,
   }));
 }
 
@@ -380,7 +390,11 @@ function toPlaygroundCrafts(crafts: TemplateCraft[]): SearchCraftDraft[] {
 function toPlaygroundLoops(loops: TemplateLoop[], crafts: SearchCraftDraft[]): SearchCraftLoopDraft[] {
   return loops.map((loop) => ({
     id: draftId("loop"),
-    steps: loop.steps.map((s) => ({ craftId: crafts[s.craftIndex].id, transition: s.transition })),
+    steps: loop.steps.map((s) => ({
+      craftId: crafts[s.craftIndex].id,
+      transition: s.transition,
+      variationIndex: s.variationIndex,
+    })),
     comment: loop.comment,
     timing: loop.timing,
   }));
@@ -472,14 +486,26 @@ export default function PlaygroundPage() {
     const draft = loadDraftFromStorage();
     if (draft) {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
-      // 旧形式の下書きには withShift がないため boolean に正規化する。
+      // 旧形式の下書き（Loop 機能追加前・バリエーション対応前）には variations や withShift が
+      // 無いことがあるため resolveVariations() で正準化する。
       // crafts の draft id を振り直すため、Loop の craftId 参照も新 id へ再解決する
       // （旧id→新id の写像を remapLoopSteps に通し、参照切れは自動除去・<2 の Loop は破棄）
       const idMap = new Map<string, string>();
-      const restoredCrafts = draft.crafts.map((c) => {
+      const restoredCrafts: SearchCraftDraft[] = draft.crafts.map((c) => {
         const newId = draftId("craft");
         idMap.set(c.id, newId);
-        return { ...c, withShift: c.withShift === true, id: newId };
+        const raw = c as unknown as Record<string, unknown>;
+        return {
+          id: newId,
+          items: c.items,
+          comment: c.comment,
+          timing: c.timing,
+          variations: resolveVariations({
+            variations: raw.variations,
+            searchStr: typeof raw.searchStr === "string" ? raw.searchStr : null,
+            withShift: raw.withShift as boolean | null | undefined,
+          }),
+        };
       });
       setCrafts(restoredCrafts);
       setLoops(
@@ -573,15 +599,14 @@ export default function PlaygroundPage() {
 
     // 空行は送信対象から外れるため、Loop の craftIndex もこの並び（フィルタ後）基準で解決する
     const survivingCrafts = crafts.filter(
-      (c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim(),
+      (c) => c.items.length > 0 || c.variations.some((v) => v.str.trim()) || c.comment?.trim(),
     );
+    // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
     const craftsPayload: TemplateCraft[] = survivingCrafts.map((c) => ({
       items: c.items,
-      // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
-      searchStr: c.searchStr?.trim() ? c.searchStr : null,
       comment: c.comment,
       timing: c.timing,
-      withShift: c.withShift === true,
+      variations: c.variations,
     }));
     const loopsPayload = toSubmittableLoops(survivingCrafts, loops);
 

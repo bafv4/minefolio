@@ -12,12 +12,14 @@ import type { PresetSearchCraftLoopData, PresetLoopStepData } from "@/lib/preset
 import {
   resolveLoopSteps,
   isValidLoopTransitionValue,
+  normalizeVariationIndex,
   type LoopStepData,
   type LoopTransition,
   type LoopKeyOp,
   type ResolvedLoop,
   type ResolvedLoopStep,
 } from "@/lib/search-craft-loops";
+import { resolveVariations, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
   SearchStringText,
@@ -70,6 +72,12 @@ export type EmbedUserData = {
     timing: string | null;
     /** Shiftを押しながらクラフトするか（プリセットJSON由来の場合は存在しないことがある） */
     withShift?: boolean;
+    /**
+     * 複数サーチ文字列バリエーション（正準）。呼び出し元（guides/view.tsx のloader）は
+     * 旧データ・プリセットスナップショット由来でも必ず resolveVariations() を通した
+     * 値を渡すこと（このコンポーネント側では前提として信頼する）。
+     */
+    variations: SearchCraftVariation[];
   }>;
   /** サーチクラフトの繋ぎ方（Loop）。ライブ行の craftId は searchCrafts[].id を参照する */
   searchCraftLoops: Array<{
@@ -305,6 +313,7 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
   return steps.map((step, i) => ({
     craftId: step.craftId,
     transition: i === 0 ? null : toSafeLoopTransition(step.transition),
+    variationIndex: normalizeVariationIndex(step.variationIndex),
   }));
 }
 
@@ -319,16 +328,19 @@ export function SearchCraftEmbedView({
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(userData, locale);
 
-  let crafts = userData.searchCrafts;
   let remapsRaw = userData.keyRemaps;
   // presetName 指定時のみ使う。プリセットスナップショットは行 id を保持しないため、
   // このスナップショット内 crafts との突合は sequence フィールドで行う（配列位置は不可）
   let rawLoopsData: string | null = null;
+  // presetName 指定時は preset.searchCraftsData の生JSONを直接パースする（破損・旧データが
+  // ありうる）ため unknown[] で受け、後段で必ず resolveVariations() を通す。無指定時は
+  // userData.searchCrafts（loader 側で resolveVariations() 済み）をそのまま使う。
+  let rawCrafts: unknown[] = userData.searchCrafts;
 
   if (presetName) {
     const preset = userData.presets.find((p) => p.name === presetName);
     if (preset?.searchCraftsData) {
-      crafts = JSON.parse(preset.searchCraftsData);
+      rawCrafts = safeParseArray<unknown>(preset.searchCraftsData) ?? [];
     }
     if (preset?.remapsData) {
       remapsRaw = JSON.parse(preset.remapsData);
@@ -337,6 +349,25 @@ export function SearchCraftEmbedView({
   }
 
   const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
+
+  // crafts をバリエーション正準の形へ正規化する。presetName 経路（生JSON直パース）は
+  // variations フィールドが欠落・破損していることがあるため、必ず resolveVariations() を
+  // 経由する（壊れたJSONでSSRが落ちないように、原始的な型ガードを一つずつ通す）。
+  const crafts = rawCrafts.map((item, idx) => {
+    const c = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    return {
+      id: typeof c.id === "string" ? c.id : `preset-craft-${idx}`,
+      sequence: typeof c.sequence === "number" ? c.sequence : idx,
+      items: typeof c.items === "string" ? c.items : "[]",
+      comment: typeof c.comment === "string" ? c.comment : null,
+      timing: typeof c.timing === "string" ? c.timing : null,
+      variations: resolveVariations({
+        variations: c.variations,
+        searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
+        withShift: typeof c.withShift === "boolean" ? c.withShift : undefined,
+      }),
+    };
+  });
 
   if (crafts.length === 0) {
     return (
@@ -351,13 +382,13 @@ export function SearchCraftEmbedView({
   // Loop（繋ぎ方）の craft 参照解決キー。presetName 指定時は同スナップショット内の
   // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
   // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
-  const craftLookup = new Map<string, { items: string; searchStr: string | null }>(
-    crafts.map((c) => [presetName ? String(c.sequence) : c.id, c]),
+  const craftLookup = new Map<string, { items: string; searchStrs: string[] }>(
+    crafts.map((c) => [
+      presetName ? String(c.sequence) : c.id,
+      { items: c.items, searchStrs: c.variations.map((v) => v.str) },
+    ]),
   );
-  const getCraft = (craftId: string) => {
-    const craft = craftLookup.get(craftId);
-    return craft ? { searchStr: craft.searchStr } : undefined;
-  };
+  const getCraft = (craftId: string) => craftLookup.get(craftId);
 
   const loops: EmbedLoopRow[] = presetName
     ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
@@ -368,6 +399,7 @@ export function SearchCraftEmbedView({
           return {
             craftId: typeof craftSeq === "number" ? String(craftSeq) : "",
             transition: step?.transition ?? null,
+            variationIndex: normalizeVariationIndex(step?.variationIndex),
           };
         });
         return {
@@ -388,10 +420,6 @@ export function SearchCraftEmbedView({
     // craft.items は JSON 文字列（ライブ/プリセットスナップショット由来）だが、破損・非配列だと
     // .map で SSR が落ちる。coerceStringArray で常に string[] に矯正する（不正値は空クラフト表示）。
     const items = coerceStringArray(craft.items);
-    const withShift = craft.withShift === true;
-    const keyInfos = craft.searchStr
-      ? getActualKeyInfos(t, craft.searchStr, remaps, { shiftHeld: withShift })
-      : [];
 
     return (
       <div key={craft.id} className="rounded-md bg-muted/30 px-4 py-3">
@@ -404,32 +432,41 @@ export function SearchCraftEmbedView({
               </div>
             ))}
           </div>
-          {craft.searchStr && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              <div className="flex items-baseline gap-2">
-                <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
-                  <SearchStringText value={craft.searchStr} />
-                </code>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {withShift && (
-                    <kbd
-                      className="px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
-                      title={t("playerProfile.withShiftTooltip")}
-                    >
-                      ⇧ Shift
-                    </kbd>
-                  )}
-                  {keyInfos.map((info, idx) => (
-                    <kbd key={idx} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-                      {info.displayLabel}
-                    </kbd>
-                  ))}
-                </div>
-              </div>
+          {/* バリエーションごとに縦積み表示（1エントリに複数サーチ文字列を登録できる） */}
+          {craft.variations.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {craft.variations.map((variation, idx) =>
+                variation.str ? (
+                  <div key={idx} className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
+                      <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
+                        <SearchStringText value={variation.str} />
+                      </code>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {variation.withShift && (
+                          <kbd
+                            className="px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
+                            title={t("playerProfile.withShiftTooltip")}
+                          >
+                            ⇧ Shift
+                          </kbd>
+                        )}
+                        {getActualKeyInfos(t, variation.str, remaps, { shiftHeld: variation.withShift }).map(
+                          (info, i) => (
+                            <kbd key={i} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+                              {info.displayLabel}
+                            </kbd>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null,
+              )}
             </div>
           )}
           {craft.comment && <p className="text-sm text-muted-foreground">{craft.comment}</p>}
@@ -505,13 +542,12 @@ export function SearchCraftEmbedView({
   };
 
   // 先頭ステップ（idx===0）で最初に打つ文字列。先頭は遷移(derived)を持たないため、
-  // craftLookup から直接 searchStr を引き、type セグメント（renderLoopOp）と同じ流儀
-  // （kbd + SearchStringText でスペース␣表示）で描画する。search-craft-loop-view.tsx の
-  // LoopKeySequence（idx===0 で ActualKeyBadges）と対称になるようにする。
-  // craft 未解決（参照切れ）・searchStr が空の場合は既存の invalid 表現に倒す
-  const renderLoopFirstStepKeys = (craftId: string) => {
-    const craft = craftLookup.get(craftId);
-    if (!craft || !craft.searchStr) {
+  // resolveLoopSteps が variationIndex を織り込んで解決済みの step.searchStr を直接使い、
+  // type セグメント（renderLoopOp）と同じ流儀（kbd + SearchStringText でスペース␣表示）で
+  // 描画する。search-craft-loop-view.tsx の LoopKeySequence（idx===0 で ActualKeyBadges）と
+  // 対称になるようにする。craft 未解決（参照切れ）・searchStr が空の場合は既存の invalid 表現に倒す
+  const renderLoopFirstStepKeys = (step: ResolvedLoopStep) => {
+    if (!step.searchStr) {
       return (
         <kbd
           className="px-1.5 py-0.5 rounded border border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
@@ -523,7 +559,7 @@ export function SearchCraftEmbedView({
     }
     return (
       <kbd className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-        <SearchStringText value={craft.searchStr} />
+        <SearchStringText value={step.searchStr} />
       </kbd>
     );
   };
@@ -594,7 +630,7 @@ export function SearchCraftEmbedView({
         <div className="flex flex-wrap items-center gap-1.5">
           {resolved.steps.map((step, idx) => (
             <span key={idx} className="flex flex-wrap items-center gap-1.5">
-              {idx === 0 ? renderLoopFirstStepKeys(step.craftId) : renderLoopStepOps(step)}
+              {idx === 0 ? renderLoopFirstStepKeys(step) : renderLoopStepOps(step)}
               {renderLoopCraftMarker(step.craftId, idx)}
             </span>
           ))}

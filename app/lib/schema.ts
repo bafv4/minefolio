@@ -251,6 +251,12 @@ export const searchCrafts = sqliteTable("search_crafts", {
   // Shiftを押しながらクラフトするか（入力キーはシフト後の文字を優先して逆引きする）
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   withShift: integer("with_shift", { mode: "boolean" }).default(false).notNull(),
+
+  // 複数サーチ文字列バリエーション（JSON: { str: string; withShift: boolean }[]）。
+  // 既存の searchStr / withShift は第1バリエーションのミラーとして書き込みを継続する
+  // （旧リーダー・ロールバック互換）。バックフィルはせず、読み取り側のフォールバックで吸収する。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  searchVariations: text("search_variations"),
 }, (table) => [
   uniqueIndex("idx_search_crafts_user_sequence").on(table.userId, table.sequence),
 ]);

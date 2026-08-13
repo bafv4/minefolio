@@ -98,25 +98,28 @@
   sequence: number;
   items: string;
   keys: string;
-  searchStr: string | null;
+  searchStr: string | null; // 第1バリエーションのミラー（旧リーダー・ロールバック互換）
   comment: string | null;
   timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
-  withShift?: boolean; // Shiftを押しながらクラフトするか（古いスナップショットには存在しない）
+  withShift?: boolean; // 第1バリエーションのミラー（古いスナップショットには存在しない）
+  variations?: SearchCraftVariation[]; // { str: string; withShift: boolean }[]。正準はこちら
 }
 ```
+
+`variations` は複数サーチ文字列バリエーション（`app/lib/search-craft-variations.ts`）。読み取りは常に `resolveVariations({ variations, searchStr, withShift })` を経由する（`variations` が有効ならそれを採用、無ければ `searchStr`/`withShift` から1件合成）。書き込みは `variationMirror(variations)` で `searchStr`/`withShift` をミラーしつつ `variations` も併記する。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「複数サーチ文字列バリエーション」参照。
 
 #### PresetSearchCraftLoopData
 
 ```typescript
 {
   sequence: number;
-  steps: { craftSeq: number; transition: LoopTransition | null }[];
+  steps: { craftSeq: number; transition: LoopTransition | null; variationIndex?: number }[];
   comment: string | null;
   timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
 }
 ```
 
-プリセットスナップショットは行 id を保持しない（本ドキュメント末尾を参照）ため、ステップの参照先を **`craftSeq`（同一スナップショット内 `searchCraftsData` の `sequence` 値）** で表す。`LoopTransition` の型は `app/lib/search-craft-loops.ts` を参照（`{ type: "backspace"; bsCount: number } | { type: "selectAll" } | { type: "home" }`）。詳細な遷移方式のセマンティクスは [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」参照。
+プリセットスナップショットは行 id を保持しない（本ドキュメント末尾を参照）ため、ステップの参照先を **`craftSeq`（同一スナップショット内 `searchCraftsData` の `sequence` 値）** で表す。`variationIndex` は参照先クラフトのバリエーション index（0始まり、0 は省略してシリアライズ）。`LoopTransition` の型は `app/lib/search-craft-loops.ts` を参照（`{ type: "backspace"; bsCount: number } | { type: "selectAll" } | { type: "home" }`）。詳細な遷移方式・バリエーションのセマンティクスは [`docs/items-searchcraft.md`](items-searchcraft.md) の「繋ぎ方（Loop）」「複数サーチ文字列バリエーション」参照。
 
 #### PresetCustomKeyData
 

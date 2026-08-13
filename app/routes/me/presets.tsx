@@ -15,8 +15,10 @@ import {
   parseLoopSteps,
   remapLoopSteps,
   isValidLoopTransitionValue,
+  normalizeVariationIndex,
   type LoopStepData,
 } from "@/lib/search-craft-loops";
+import { resolveVariations, parseVariationsJson, variationMirror } from "@/lib/search-craft-variations";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -198,13 +200,14 @@ async function restoreSearchCraftLoopsFromSnapshot(
       const craftId = seqToNewCraftId.get(step.craftSeq);
       if (craftId === undefined) continue;
 
+      const variationIndex = normalizeVariationIndex(step.variationIndex);
       if (steps.length === 0) {
         // 先頭は transition の形を問わず null に統一する
-        steps.push({ craftId, transition: null });
+        steps.push({ craftId, transition: null, variationIndex });
         continue;
       }
       if (!isValidLoopTransitionValue(step.transition)) continue;
-      steps.push({ craftId, transition: step.transition });
+      steps.push({ craftId, transition: step.transition, variationIndex });
     }
     if (steps.length < 2) continue;
 
@@ -403,16 +406,23 @@ export async function action({ request }: Route.ActionArgs) {
           for (const craft of craftData) {
             const newCraftId = createId();
             seqToNewCraftId.set(craft.sequence, newCraftId);
+            const variations = resolveVariations({
+              variations: craft.variations,
+              searchStr: craft.searchStr,
+              withShift: craft.withShift,
+            });
+            const mirror = variationMirror(variations);
             await tx.insert(searchCrafts).values({
               id: newCraftId,
               userId: user.id,
               sequence: craft.sequence,
               items: craft.items,
               keys: craft.keys,
-              searchStr: craft.searchStr,
+              searchStr: mirror.searchStr,
               comment: craft.comment,
               timing: craft.timing ?? null,
-              withShift: craft.withShift === true,
+              withShift: mirror.withShift,
+              searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
               createdAt: now,
               updatedAt: now,
             });
@@ -547,16 +557,23 @@ export async function action({ request }: Route.ActionArgs) {
         for (const craft of user.searchCrafts) {
           const newCraftId = createId();
           oldToNewCraftId.set(craft.id, newCraftId);
+          const variations = resolveVariations({
+            variations: parseVariationsJson(craft.searchVariations) ?? undefined,
+            searchStr: craft.searchStr,
+            withShift: craft.withShift,
+          });
+          const mirror = variationMirror(variations);
           await tx.insert(searchCrafts).values({
             id: newCraftId,
             userId: user.id,
             sequence: craft.sequence,
             items: craft.items,
             keys: craft.keys,
-            searchStr: craft.searchStr,
+            searchStr: mirror.searchStr,
             comment: craft.comment,
             timing: craft.timing,
-            withShift: craft.withShift,
+            withShift: mirror.withShift,
+            searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
             createdAt: now,
             updatedAt: now,
           });
@@ -882,16 +899,23 @@ export async function action({ request }: Route.ActionArgs) {
         for (const craftData of craftsFromPreset) {
           const newCraftId = createId();
           seqToNewCraftId.set(craftData.sequence, newCraftId);
+          const variations = resolveVariations({
+            variations: craftData.variations,
+            searchStr: craftData.searchStr,
+            withShift: craftData.withShift,
+          });
+          const mirror = variationMirror(variations);
           await tx.insert(searchCrafts).values({
             id: newCraftId,
             userId: user.id,
             sequence: craftData.sequence,
             items: craftData.items,
             keys: craftData.keys,
-            searchStr: craftData.searchStr,
+            searchStr: mirror.searchStr,
             comment: craftData.comment,
             timing: craftData.timing ?? null,
-            withShift: craftData.withShift === true,
+            withShift: mirror.withShift,
+            searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
             createdAt: now,
             updatedAt: now,
           });

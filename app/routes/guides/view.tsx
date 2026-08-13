@@ -12,6 +12,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
+import { resolveVariations, parseVariationsJson } from "@/lib/search-craft-variations";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
@@ -277,7 +278,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           keybindings: u.keybindings,
           keyRemaps: u.keyRemaps,
           playerConfig: u.playerConfig,
-          searchCrafts: u.searchCrafts,
+          // ライブ行の search_variations 列（旧データは null）を正準の variations へ解決する
+          // （必ず resolveVariations() を経由 — 手書きのフォールバック合成はしない）
+          searchCrafts: u.searchCrafts.map((c) => ({
+            ...c,
+            variations: resolveVariations({
+              variations: parseVariationsJson(c.searchVariations) ?? undefined,
+              searchStr: c.searchStr,
+              withShift: c.withShift,
+            }),
+          })),
           searchCraftLoops: u.searchCraftLoops.map((row) => ({
             id: row.id,
             sequence: row.sequence,

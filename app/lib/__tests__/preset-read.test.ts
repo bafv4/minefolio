@@ -6,6 +6,50 @@ import {
   decodePresetConfig,
 } from "../preset-read";
 
+describe("decodePresetSearchCrafts", () => {
+  const userId = "user-1";
+
+  it("旧スナップショット（variations 列なし）は searchStr/withShift から1件のバリエーションに合成する", () => {
+    const craftsData = JSON.stringify([
+      { sequence: 1, items: "[]", keys: "[]", searchStr: "en", withShift: true, comment: null },
+    ]);
+    const crafts = decodePresetSearchCrafts(craftsData, userId)!;
+    expect(crafts[0].variations).toEqual([{ str: "en", withShift: true }]);
+    expect(crafts[0].searchStr).toBe("en");
+    expect(crafts[0].withShift).toBe(true);
+    expect(JSON.parse(crafts[0].searchVariations)).toEqual([{ str: "en", withShift: true }]);
+  });
+
+  it("variations 列があればそれを正準とし、searchStr/withShift は第1バリエーションのミラーとして併せ持つ", () => {
+    const craftsData = JSON.stringify([
+      {
+        sequence: 1,
+        items: "[]",
+        keys: "[]",
+        searchStr: "en",
+        withShift: false,
+        comment: null,
+        variations: [
+          { str: "en", withShift: false },
+          { str: "er", withShift: true },
+        ],
+      },
+    ]);
+    const crafts = decodePresetSearchCrafts(craftsData, userId)!;
+    expect(crafts[0].variations).toEqual([
+      { str: "en", withShift: false },
+      { str: "er", withShift: true },
+    ]);
+    expect(crafts[0].searchStr).toBe("en");
+    expect(crafts[0].withShift).toBe(false);
+  });
+
+  it("破損JSON・null は null を返す", () => {
+    expect(decodePresetSearchCrafts(null, userId)).toBeNull();
+    expect(decodePresetSearchCrafts("not json", userId)).toBeNull();
+  });
+});
+
 describe("coerceStringArray", () => {
   it("正当な JSON 文字列配列をそのまま string[] に復元する", () => {
     expect(coerceStringArray('["minecraft:diamond","minecraft:iron_ingot"]')).toEqual([
@@ -116,6 +160,36 @@ describe("decodePresetSearchCraftLoops", () => {
   it("破損JSONは空配列にフォールバックする", () => {
     expect(decodePresetSearchCraftLoops("not json", [])).toEqual([]);
     expect(decodePresetSearchCraftLoops('{"a":1}', [])).toEqual([]);
+  });
+
+  it("variationIndex は craftSeq→合成id 解決後もそのまま（正規化した上で）引き継ぎ、欠落・不正値は0に矯正する", () => {
+    const decodedCrafts = [
+      { id: "preset-craft-0", sequence: 1 },
+      { id: "preset-craft-1", sequence: 2 },
+    ];
+    const loopsData = JSON.stringify([
+      {
+        sequence: 1,
+        steps: [
+          { craftSeq: 1, transition: null }, // variationIndex 欠落 → 0
+          { craftSeq: 2, transition: { type: "selectAll" }, variationIndex: 3 }, // 妥当値はそのまま
+        ],
+        comment: null,
+        timing: null,
+      },
+      {
+        sequence: 2,
+        steps: [
+          { craftSeq: 1, transition: null, variationIndex: -1 }, // 不正値 → 0
+          { craftSeq: 2, transition: { type: "home" }, variationIndex: 1 },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ]);
+    const loops = decodePresetSearchCraftLoops(loopsData, decodedCrafts);
+    expect(loops[0].steps.map((s) => s.variationIndex)).toEqual([0, 3]);
+    expect(loops[1].steps.map((s) => s.variationIndex)).toEqual([0, 1]);
   });
 });
 

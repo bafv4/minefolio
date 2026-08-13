@@ -16,6 +16,7 @@ import {
   type TemplateLoop,
 } from "./search-craft-templates";
 import type { LoopStepData } from "./search-craft-loops";
+import { variationMirror } from "./search-craft-variations";
 
 /**
  * サーチクラフト（＋任意でリマップ）をプリセットへ反映するサーバー専用ヘルパー。
@@ -56,7 +57,7 @@ function resolveLoopsToNewCraftIds(
     for (const step of loop.steps) {
       const craftId = newCraftIds[step.craftIndex];
       if (craftId === undefined) continue;
-      steps.push({ craftId, transition: step.transition });
+      steps.push({ craftId, transition: step.transition, variationIndex: step.variationIndex });
     }
     if (steps.length < 2) continue;
     steps[0] = { ...steps[0], transition: null };
@@ -129,16 +130,18 @@ async function replaceLiveTables(
       const craft = crafts[i];
       const id = createId();
       newCraftIds.push(id);
+      const mirror = variationMirror(craft.variations);
       await tx.insert(searchCrafts).values({
         id,
         userId,
         sequence: i + 1,
         items: JSON.stringify(craft.items),
         keys: JSON.stringify([]),
-        searchStr: craft.searchStr,
+        searchStr: mirror.searchStr,
         comment: craft.comment,
         timing: craft.timing,
-        withShift: craft.withShift,
+        withShift: mirror.withShift,
+        searchVariations: craft.variations.length > 0 ? JSON.stringify(craft.variations) : null,
         createdAt: now,
         updatedAt: now,
       });

@@ -379,7 +379,7 @@ export default function TemplateViewPage() {
   const loopCraftRefs: LoopCraftInfo[] = crafts.map((craft, idx) => ({
     id: `craft-${idx}`,
     items: craft.items,
-    searchStr: craft.searchStr,
+    variations: craft.variations,
   }));
 
   // 繋ぎ方（Loop）を timing ごとにグループ化。SearchCraftGroupedList の
@@ -391,6 +391,7 @@ export default function TemplateViewPage() {
       steps: loop.steps.map((s) => ({
         craftId: `craft-${s.craftIndex}`,
         transition: s.transition,
+        variationIndex: s.variationIndex,
       })),
       comment: loop.comment,
       timing: loop.timing,

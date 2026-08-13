@@ -36,10 +36,12 @@ import {
   deriveTransition,
   minBackspaceCount,
   minArrowLeftCount,
+  normalizeVariationIndex,
   LOOP_TRANSITION_TYPES,
   type LoopStepData,
   type LoopTransition,
   type LoopTransitionType,
+  type ResolvedLoopStep,
 } from "@/lib/search-craft-loops";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
@@ -52,6 +54,10 @@ import type { Translator } from "@/lib/messages";
  * 行単体（LoopEditorRow）は app/components/search-craft-editor.tsx の
  * SearchCraftTimingBoard（タイミングブロック型エディタ）から再利用される。
  * timing の変更はブロック間D&Dで行うため、行ヘッダーに timing Select は持たない。
+ *
+ * 各ステップは「エントリ×バリエーション」を参照する（LoopStepData.craftId + variationIndex）。
+ * EntrySelect はエントリごとの全バリエーションを展開して選択肢にする
+ * （value は `${craftId}:${variationIndex}` の複合キー）。
  */
 
 /** 編集UIが必要とする最小のLoop形状 */
@@ -65,8 +71,28 @@ export type SearchCraftLoopDraft = {
 /** ステップのエントリ選択に使う、参照可能なサーチクラフトエントリ */
 export type LoopEditorEntry = LoopCraftInfo;
 
-/** Select の「未選択」を表す value（craftId "" と相互変換する） */
+/** Select の「未選択」を表す value */
 const UNSELECTED_ENTRY = "__unselected__";
+
+function encodeSelection(craftId: string, variationIndex: number): string {
+  return craftId ? `${craftId}:${variationIndex}` : UNSELECTED_ENTRY;
+}
+
+function decodeSelection(value: string): { craftId: string; variationIndex: number } {
+  if (value === UNSELECTED_ENTRY) return { craftId: "", variationIndex: 0 };
+  const sep = value.lastIndexOf(":");
+  if (sep === -1) return { craftId: value, variationIndex: 0 };
+  const craftId = value.slice(0, sep);
+  const parsed = Number(value.slice(sep + 1));
+  return { craftId, variationIndex: Number.isInteger(parsed) && parsed >= 0 ? parsed : 0 };
+}
+
+/** 指定エントリ・バリエーション index の検索文字列を引く（見つからなければ null） */
+function resolveEntryStr(entries: LoopEditorEntry[], craftId: string, variationIndex: number): string | null {
+  const entry = entries.find((e) => e.id === craftId);
+  const variation = entry?.variations[variationIndex];
+  return variation ? variation.str : null;
+}
 
 /** 新規ステップ追加時の初期 transition（前後のエントリが未選択のため bsCount は 0 から始める） */
 function defaultTransition(): LoopTransition {
@@ -74,28 +100,30 @@ function defaultTransition(): LoopTransition {
 }
 
 /**
- * 指定インデックスの遷移（steps[idx].transition）を、両隣のエントリから求めた
- * 新しい最小回数にリセットする（backspace は minBs、arrowLeft は minArrowLeftCount。
+ * 指定インデックスの遷移（steps[idx].transition）を、両隣のエントリ（craftId + variationIndex）から
+ * 求めた新しい最小回数にリセットする（backspace は minBs、arrowLeft は minArrowLeftCount。
  * 見つからなければ 1 のまま invalid 表示に倒す）。selectAll/home は回数を持たないため対象外。
- * エントリの選択変更で前後の searchStr が変わった直後に呼ぶ。
+ * エントリ・バリエーションの選択変更で前後の searchStr が変わった直後に呼ぶ。
  */
 function resetTransitionCountAt(steps: LoopStepData[], idx: number, entries: LoopEditorEntry[]): LoopStepData[] {
   if (idx <= 0 || idx >= steps.length) return steps;
   const transition = steps[idx].transition;
   if (!transition) return steps;
 
-  const prev = entries.find((e) => e.id === steps[idx - 1].craftId);
-  const next = entries.find((e) => e.id === steps[idx].craftId);
-  if (!prev?.searchStr || !next?.searchStr) return steps;
+  const prevStep = steps[idx - 1];
+  const curStep = steps[idx];
+  const prevStr = resolveEntryStr(entries, prevStep.craftId, normalizeVariationIndex(prevStep.variationIndex));
+  const nextStr = resolveEntryStr(entries, curStep.craftId, normalizeVariationIndex(curStep.variationIndex));
+  if (!prevStr || !nextStr) return steps;
 
   const result = [...steps];
   if (transition.type === "backspace") {
-    const minBs = minBackspaceCount(prev.searchStr, next.searchStr);
+    const minBs = minBackspaceCount(prevStr, nextStr);
     result[idx] = { ...result[idx], transition: { type: "backspace", bsCount: minBs } };
     return result;
   }
   if (transition.type === "arrowLeft") {
-    const minArrow = minArrowLeftCount(prev.searchStr, next.searchStr) ?? 1;
+    const minArrow = minArrowLeftCount(prevStr, nextStr) ?? 1;
     result[idx] = { ...result[idx], transition: { type: "arrowLeft", arrowCount: minArrow } };
     return result;
   }
@@ -104,9 +132,9 @@ function resetTransitionCountAt(steps: LoopStepData[], idx: number, entries: Loo
 
 /**
  * 指定 craftId に隣接する（前後いずれかのステップが参照する）全遷移の回数を、
- * 現在の searchStr に基づく最小値へリセットする。エントリのサーチ文字列を編集した直後に、
- * SearchCraftTimingBoard 側から呼ぶ（エントリ選択変更時の resetTransitionCountAt と同じ趣旨。
- * BS/← の回数は常に「最小回数を初期表示」し、ユーザーがそこから調整する）。
+ * 現在の searchStr に基づく最小値へリセットする。エントリのサーチ文字列を編集した直後・
+ * バリエーションを削除した直後（remapVariationRefs の後）に呼ぶ
+ * （BS/← の回数は常に「最小回数を初期表示」し、ユーザーがそこから調整する）。
  * 変更が無ければ元の配列をそのまま返す。
  */
 export function resetTransitionCountsForCraft(
@@ -133,13 +161,13 @@ function normalizeFirstStep(steps: LoopStepData[]): LoopStepData[] {
 
 function invalidTransitionMessage(
   t: Translator,
-  prev: LoopEditorEntry | undefined,
-  next: LoopEditorEntry | undefined,
+  prevResolved: ResolvedLoopStep,
+  nextResolved: ResolvedLoopStep,
   transition: LoopTransition,
 ): string | null {
-  if (!prev || !next) return t("meSearchCraft.loopInvalidEntryMissing");
-  if (!prev.searchStr || !next.searchStr) return t("meSearchCraft.loopInvalidEmptySearchStr");
-  const derived = deriveTransition(prev.searchStr, next.searchStr, transition);
+  if (!prevResolved.craft || !nextResolved.craft) return t("meSearchCraft.loopInvalidEntryMissing");
+  if (!prevResolved.searchStr || !nextResolved.searchStr) return t("meSearchCraft.loopInvalidEmptySearchStr");
+  const derived = deriveTransition(prevResolved.searchStr, nextResolved.searchStr, transition);
   if (derived.valid) return null;
   switch (derived.reason) {
     case "not_extension":
@@ -160,43 +188,53 @@ function invalidTransitionMessage(
 }
 
 // ============================================
-// エントリ選択（ステップ行）
+// エントリ選択（ステップ行）: エントリ×バリエーションを展開
 // ============================================
 
 function EntrySelect({
   craftId,
+  variationIndex,
   entries,
   onChange,
 }: {
   craftId: string;
+  variationIndex: number;
   entries: LoopEditorEntry[];
-  onChange: (craftId: string) => void;
+  onChange: (craftId: string, variationIndex: number) => void;
 }) {
   const t = useT();
   return (
     // エントリ数が少ないうちは Select で十分。数十件規模に増えたら
     // 検索可能な @/components/ui/combobox.tsx への差替えを検討する
     <Select
-      value={craftId || UNSELECTED_ENTRY}
-      onValueChange={(v) => onChange(v === UNSELECTED_ENTRY ? "" : v)}
+      value={encodeSelection(craftId, variationIndex)}
+      onValueChange={(v) => {
+        const decoded = decodeSelection(v);
+        onChange(decoded.craftId, decoded.variationIndex);
+      }}
     >
       <SelectTrigger className="h-8 min-w-0 flex-1">
         <SelectValue placeholder={t("meSearchCraft.loopSelectEntryPlaceholder")} />
       </SelectTrigger>
       <SelectContent>
-        {entries.map((entry) => (
-          <SelectItem key={entry.id} value={entry.id}>
-            <span className="flex min-w-0 items-center gap-1.5">
-              {entry.items[0] && <ItemIcon itemId={entry.items[0]} size={16} />}
-              <span className="truncate">
-                {entry.items[0] ? formatItemName(entry.items[0]) : "—"}
+        {entries.flatMap((entry) =>
+          entry.variations.map((variation, idx) => (
+            <SelectItem key={`${entry.id}:${idx}`} value={encodeSelection(entry.id, idx)}>
+              <span className="flex min-w-0 items-center gap-1.5">
+                {entry.items[0] && <ItemIcon itemId={entry.items[0]} size={16} />}
+                <span className="truncate">
+                  {entry.items[0] ? formatItemName(entry.items[0]) : "—"}
+                </span>
+                {variation.str && (
+                  <code className="text-xs text-muted-foreground">({variation.str})</code>
+                )}
+                {variation.withShift && (
+                  <span className="text-[10px] font-semibold text-warning">⇧</span>
+                )}
               </span>
-              {entry.searchStr && (
-                <code className="text-xs text-muted-foreground">({entry.searchStr})</code>
-              )}
-            </span>
-          </SelectItem>
-        ))}
+            </SelectItem>
+          )),
+        )}
       </SelectContent>
     </Select>
   );
@@ -207,35 +245,36 @@ function EntrySelect({
 // ============================================
 
 function TransitionRow({
-  prev,
-  next,
+  prevResolved,
+  nextResolved,
   transition,
   onChange,
   remaps,
 }: {
-  prev: LoopEditorEntry | undefined;
-  next: LoopEditorEntry | undefined;
+  prevResolved: ResolvedLoopStep;
+  nextResolved: ResolvedLoopStep;
   transition: LoopTransition;
   onChange: (transition: LoopTransition) => void;
   remaps?: RemapInfo[];
 }) {
   const t = useT();
+  const prevStr = prevResolved.searchStr;
+  const nextStr = nextResolved.searchStr;
 
   const bounds = useMemo(() => {
-    if (!prev?.searchStr || !next?.searchStr) return null;
+    if (!prevStr || !nextStr) return null;
     return {
-      minBs: minBackspaceCount(prev.searchStr, next.searchStr),
-      maxBs: prev.searchStr.length,
+      minBs: minBackspaceCount(prevStr, nextStr),
+      maxBs: prevStr.length,
       // arrowLeft は妥当な k が連続しているとは限らないため、範囲自体は固定で 1〜prev.length。
       // minArrow は方式切替時の初期値としてのみ使う（見つからなければ既定 1 のまま invalid 表示）
-      minArrow: minArrowLeftCount(prev.searchStr, next.searchStr) ?? 1,
-      maxArrow: prev.searchStr.length,
+      minArrow: minArrowLeftCount(prevStr, nextStr) ?? 1,
+      maxArrow: prevStr.length,
     };
-  }, [prev, next]);
+  }, [prevStr, nextStr]);
 
-  const invalidMessage = invalidTransitionMessage(t, prev, next, transition);
-  const derived =
-    prev?.searchStr && next?.searchStr ? deriveTransition(prev.searchStr, next.searchStr, transition) : null;
+  const invalidMessage = invalidTransitionMessage(t, prevResolved, nextResolved, transition);
+  const derived = prevStr && nextStr ? deriveTransition(prevStr, nextStr, transition) : null;
 
   const handleTypeChange = (type: LoopTransitionType) => {
     if (type === "backspace") {
@@ -403,8 +442,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
     onUpdate({ ...loop, steps: normalizeFirstStep(steps) });
   };
 
-  const handleChangeCraftId = (stepIndex: number, craftId: string) => {
-    let steps = loop.steps.map((s, i) => (i === stepIndex ? { ...s, craftId } : s));
+  const handleChangeSelection = (stepIndex: number, craftId: string, variationIndex: number) => {
+    let steps = loop.steps.map((s, i) => (i === stepIndex ? { ...s, craftId, variationIndex } : s));
     // このステップの前後、両方の遷移が影響を受ける（自分への遷移＝入、次への遷移＝出）
     steps = resetTransitionCountAt(steps, stepIndex, entries);
     steps = resetTransitionCountAt(steps, stepIndex + 1, entries);
@@ -417,14 +456,14 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   };
 
   const handleAddStep = () => {
-    const steps: LoopStepData[] = [...loop.steps, { craftId: "", transition: defaultTransition() }];
+    const steps: LoopStepData[] = [...loop.steps, { craftId: "", transition: defaultTransition(), variationIndex: 0 }];
     updateSteps(steps);
   };
 
   const handleRemoveStep = (stepIndex: number) => {
     let steps = loop.steps.filter((_, i) => i !== stepIndex);
     // 除去で前後がつながり直した位置（旧 stepIndex+1 が詰めて stepIndex に来る）の遷移を、
-    // 新しい前後ペアに合わせて最小回数へリセットする（handleChangeCraftId と同様の対称性）
+    // 新しい前後ペアに合わせて最小回数へリセットする（handleChangeSelection と同様の対称性）
     steps = resetTransitionCountAt(steps, stepIndex, entries);
     updateSteps(steps);
   };
@@ -433,7 +472,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const entry = entriesById.get(id);
-        return entry ? { searchStr: entry.searchStr } : undefined;
+        return entry ? { searchStrs: entry.variations.map((v) => v.str) } : undefined;
       }),
     [loop.steps, entriesById],
   );
@@ -489,8 +528,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
           <div key={stepIndex} className="space-y-1.5">
             {stepIndex > 0 && step.transition && (
               <TransitionRow
-                prev={entriesById.get(loop.steps[stepIndex - 1].craftId)}
-                next={entriesById.get(step.craftId)}
+                prevResolved={resolved.steps[stepIndex - 1]}
+                nextResolved={resolved.steps[stepIndex]}
                 transition={step.transition}
                 onChange={(next) => handleChangeTransition(stepIndex, next)}
                 remaps={remaps}
@@ -502,8 +541,9 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
               </span>
               <EntrySelect
                 craftId={step.craftId}
+                variationIndex={normalizeVariationIndex(step.variationIndex)}
                 entries={entries}
-                onChange={(craftId) => handleChangeCraftId(stepIndex, craftId)}
+                onChange={(craftId, variationIndex) => handleChangeSelection(stepIndex, craftId, variationIndex)}
               />
               <button
                 type="button"

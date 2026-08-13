@@ -38,7 +38,20 @@ export type LoopStepData = {
   craftId: string;
   /** 前ステップからの遷移。先頭ステップのみ null */
   transition: LoopTransition | null;
+  /**
+   * 参照先クラフトのバリエーション index（0始まり）。
+   * シリアライズ時は 0 を省略する（既存データとバイト同一を保つため）。パース時は欠落=0・
+   * 不正値も0に矯正する。メモリ上（parseLoopSteps/remapLoopSteps/remapVariationRefs の
+   * 戻り値、エディタの状態）は常に明示した数値を持つ（hasChanges の JSON 比較を安定させるため。
+   * 型としては任意のまま — 生の JSON.parse 直後の値だけ欠落しうる）。
+   */
+  variationIndex?: number;
 };
+
+/** variationIndex の正規化: 非負整数でなければ 0 に矯正する（欠落・不正値の両方を吸収） */
+export function normalizeVariationIndex(value: number | undefined): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+}
 
 /** prev と next の共通接頭辞の長さ（UTF-16コード単位での単純比較） */
 export function commonPrefixLength(prev: string, next: string): number {
@@ -281,8 +294,17 @@ export function typedCharSegments(
 /** 参照解決済みの1ステップ */
 export type ResolvedLoopStep = {
   craftId: string;
+  /** 正規化済み（欠落・不正値は0に矯正）の参照先バリエーション index */
+  variationIndex: number;
   /** 参照解決結果。null = 参照切れ（該当 craftId が見つからない） */
-  craft: { searchStr: string | null } | null;
+  craft: { searchStrs: string[] } | null;
+  /**
+   * このステップで実際に使う searchStr（craft.searchStrs[variationIndex]）。
+   * 参照切れ・variationIndex が範囲外なら null（missing_search_str 判定に使う）。
+   * 表示コンポーネントは必ずこちらを使うこと（craft.searchStrs[0] 等で再導出しない。
+   * variationIndex を無視した固定 index での再導出は誤表示のバグ原因になる）。
+   */
+  searchStr: string | null;
   transition: LoopTransition | null;
   /** 先頭ステップは null。missing_search_str（searchStr 欠落）もここに反映する */
   derived: DerivedTransition | null;
@@ -294,33 +316,47 @@ export type ResolvedLoop = { steps: ResolvedLoopStep[]; valid: boolean };
  * Loop のステップ配列を参照解決し、全ステップの遷移導出と全体の valid を集約する。
  * 編集プレビュー・全表示コンポーネントの共通入口。
  *
+ * getCraft は該当クラフトの全バリエーションの searchStr 配列（searchStrs）を返す。
+ * ステップの variationIndex が範囲外（対象クラフトのバリエーション数以上）の場合は
+ * missing_search_str 扱いにする（クラッシュ・黙った誤導出はしない）。
+ *
  * valid の条件:
  * - ステップ数が2以上
- * - 全ステップで craft が解決でき、searchStr が非 null・非空
+ * - 全ステップで craft が解決でき、variationIndex に対応する searchStr が非 null・非空
  * - 先頭以外の全ステップで derived.valid === true
  */
 export function resolveLoopSteps(
   steps: LoopStepData[],
-  getCraft: (craftId: string) => { searchStr: string | null } | undefined,
+  getCraft: (craftId: string) => { searchStrs: string[] } | undefined,
 ): ResolvedLoop {
-  const resolvedSteps: ResolvedLoopStep[] = steps.map((step) => ({
-    craftId: step.craftId,
-    craft: getCraft(step.craftId) ?? null,
-    transition: step.transition,
-    derived: null,
-  }));
+  const resolvedSteps: ResolvedLoopStep[] = steps.map((step) => {
+    const craft = getCraft(step.craftId) ?? null;
+    const variationIndex = normalizeVariationIndex(step.variationIndex);
+    const searchStr =
+      craft && variationIndex >= 0 && variationIndex < craft.searchStrs.length
+        ? craft.searchStrs[variationIndex]
+        : null;
+    return {
+      craftId: step.craftId,
+      variationIndex,
+      craft,
+      searchStr,
+      transition: step.transition,
+      derived: null,
+    };
+  });
 
   let valid = resolvedSteps.length >= 2;
 
   const first = resolvedSteps[0];
-  if (first && (!first.craft || !first.craft.searchStr)) {
+  if (first && !first.searchStr) {
     valid = false;
   }
 
   for (let i = 1; i < resolvedSteps.length; i++) {
     const current = resolvedSteps[i];
-    const prevSearchStr = resolvedSteps[i - 1].craft?.searchStr ?? null;
-    const currentSearchStr = current.craft?.searchStr ?? null;
+    const prevSearchStr = resolvedSteps[i - 1].searchStr;
+    const currentSearchStr = current.searchStr;
     const transition = current.transition;
 
     if (transition === null || !isValidLoopTransitionValue(transition)) {
@@ -369,6 +405,8 @@ export function isValidLoopTransitionValue(value: unknown): value is LoopTransit
  * steps JSON 列の耐性パース。不正な JSON・不正な要素は捨てて [] を返す（SSR を落とさないため）。
  * 要素単位で検証し、壊れた要素だけを取り除く。ただし先頭ステップのみ transition が null という
  * 規則がフィルタ後も成立しない場合は、配列ごと [] にする。
+ * variationIndex は欠落・不正値のどちらも 0 に矯正し、メモリ上は常に明示した数値を持たせる
+ * （hasChanges の JSON 比較を安定させるため）。
  */
 export function parseLoopSteps(json: string | null): LoopStepData[] {
   if (!json) return [];
@@ -385,11 +423,12 @@ export function parseLoopSteps(json: string | null): LoopStepData[] {
   for (const item of raw) {
     if (!isPlainObject(item)) continue;
     if (typeof item.craftId !== "string" || item.craftId === "") continue;
+    const variationIndex = normalizeVariationIndex(item.variationIndex as number | undefined);
     const transition = item.transition;
     if (transition === null) {
-      steps.push({ craftId: item.craftId, transition: null });
+      steps.push({ craftId: item.craftId, transition: null, variationIndex });
     } else if (isValidLoopTransitionValue(transition)) {
-      steps.push({ craftId: item.craftId, transition });
+      steps.push({ craftId: item.craftId, transition, variationIndex });
     }
     // transition が上記どちらにも該当しない要素は捨てる
   }
@@ -405,12 +444,20 @@ export function parseLoopSteps(json: string | null): LoopStepData[] {
  * LoopStepData[] としての構造検証（action の受け口用）。
  * 配列であること・各要素の型・bsCount が非負整数であること・
  * 先頭ステップのみ transition が null であること・要素数が2以上であることを検証する。
+ * variationIndex は任意フィールド。存在する場合のみ非負整数であることを検証する
+ * （欠落自体は許容 — parseLoopSteps 等が読み取り時に 0 へ矯正する）。
  */
 export function isValidLoopStepsShape(value: unknown): value is LoopStepData[] {
   if (!Array.isArray(value) || value.length < 2) return false;
   return value.every((step, index) => {
     if (!isPlainObject(step)) return false;
     if (typeof step.craftId !== "string" || step.craftId === "") return false;
+    if (
+      step.variationIndex !== undefined &&
+      !(typeof step.variationIndex === "number" && Number.isInteger(step.variationIndex) && step.variationIndex >= 0)
+    ) {
+      return false;
+    }
     if (index === 0) return step.transition === null;
     return isValidLoopTransitionValue(step.transition);
   });
@@ -423,6 +470,7 @@ export function isValidLoopStepsShape(value: unknown): value is LoopStepData[] {
  * 残りが2件未満になった場合は Loop ごと破棄する（null を返す）。
  * 除去により元の先頭ステップが失われた場合に備え、結果の先頭ステップの
  * transition は常に null にリセットする（先頭のみ null という規則を維持するため）。
+ * variationIndex は id の引き換えとは無関係なのでそのまま（正規化した上で）引き継ぐ。
  */
 export function remapLoopSteps(
   steps: LoopStepData[],
@@ -432,11 +480,40 @@ export function remapLoopSteps(
   for (const step of steps) {
     const newCraftId = idMap.get(step.craftId);
     if (newCraftId === undefined) continue;
-    remapped.push({ craftId: newCraftId, transition: step.transition });
+    remapped.push({
+      craftId: newCraftId,
+      transition: step.transition,
+      variationIndex: normalizeVariationIndex(step.variationIndex),
+    });
   }
 
   if (remapped.length < 2) return null;
 
   remapped[0] = { ...remapped[0], transition: null };
   return remapped;
+}
+
+/**
+ * 指定 craftId のバリエーションが1件削除された（index=removedIndex）ことに伴い、
+ * そのクラフトを参照する全ステップの variationIndex を付け替える。
+ * - removedIndex より後ろ（> removedIndex）を参照していたステップは -1 する
+ * - 結果が範囲外（0 未満、または newCount 以上）になったステップは 0 へ倒す
+ *   （削除された index そのものを参照していたステップも、この条件に該当すれば 0 になる。
+ *   該当しない場合＝削除後もまだ存在する index を指す位置関係になった場合は、
+ *   そのまま「新しくその位置に来たバリエーション」を指す — ステップの除去はしない）
+ * ステップ数・他のクラフトへの参照は変更しない。
+ */
+export function remapVariationRefs(
+  steps: LoopStepData[],
+  craftId: string,
+  removedIndex: number,
+  newCount: number,
+): LoopStepData[] {
+  return steps.map((step) => {
+    if (step.craftId !== craftId) return step;
+    const current = normalizeVariationIndex(step.variationIndex);
+    let next = current > removedIndex ? current - 1 : current;
+    if (next < 0 || next >= newCount) next = 0;
+    return { ...step, variationIndex: next };
+  });
 }

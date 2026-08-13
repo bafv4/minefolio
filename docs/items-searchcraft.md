@@ -98,12 +98,13 @@ import {
 | sequence | integer | シーケンス番号（順序管理） |
 | items | text (JSON配列) | クラフト対象アイテムID配列 |
 | keys | text (JSON配列) | サーチ入力キー配列 |
-| searchStr | text (nullable) | サーチ文字列 |
+| searchStr | text (nullable) | **第1バリエーションのミラー**（旧リーダー・ロールバック互換のため書き込みを継続。正準の読み取りは `searchVariations` → `resolveVariations()`） |
 | comment | text (nullable) | コメント |
 | timing | text (nullable) | クラフトタイミング（ow / bastion / bastion_fort / fortress / blinded / other、null=区分なし） |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時 |
-| withShift | integer (boolean) | Shiftを押しながらクラフトするか（デフォルト false） |
+| withShift | integer (boolean) | **第1バリエーションのミラー**（デフォルト false。正準は `searchVariations[0].withShift`） |
+| searchVariations | text (nullable, JSON配列) | 複数サーチ文字列バリエーション（`SearchCraftVariation[]`、下記「複数サーチ文字列バリエーション」参照） |
 
 - ユニーク制約: `(userId, sequence)` の組み合わせ
 
@@ -141,6 +142,29 @@ import {
   - **通常（Shiftなし）の逆引きマップにはフォールバックしない**。Shift 押下中、通常マップのソースキーは別の文字を出力する（完全一致リマップの発動・シフト文字化）ため、参照すると必ず誤った案内になる
   - 非リマップの記号は `SHIFT_CHAR_MAP` の逆引きで物理キーに解決する（例: `_` → `Minus`）。ただしそのキー自体がリマップで奪われている（単一キーソース or `Shift+同キー` ソースがある）場合は使わない。英字は大文字が出力されるが Minecraft の検索は大文字小文字を区別しないため基底キーをそのまま押す
   - 上記で解決できない文字（Shift 押下中に出せない数字等）は文字そのままの基底キーにフォールバックする
+
+### 複数サーチ文字列バリエーション
+
+1つのサーチクラフトエントリ（アイテム）へ複数のサーチ文字列を登録できる（例: エンダーアイを `en` でも `er` でもクラフトできるようにする）。共有ロジックは純関数の葉モジュール **`app/lib/search-craft-variations.ts`**（`.server` にしない。`app/lib/search-craft-loops.ts` と同じ位置付け）。
+
+```typescript
+type SearchCraftVariation = { str: string; withShift: boolean };
+const MAX_SEARCH_VARIATIONS = 5; // 1エントリあたりの上限（並べ替えUIなし・最低1件）
+```
+
+| 関数 | 説明 |
+|---|---|
+| `parseVariationsJson(json)` | `search_variations` 列（JSON文字列）の耐性パース。不正な JSON・形状は `null` |
+| `resolveVariations(src)` | 正準読み取り: `variations`（`isValidVariationsShape` を満たせば採用）?? `searchStr`/`withShift` から1件合成 ?? `[]`。**旧データのフォールバックは必ずこの関数を経由する**（各所に手書きしない） |
+| `variationMirror(variations)` | 書き込みミラー: `searchStr` = 第1バリエーションの `str`（空文字列なら `null`）、`withShift` = 第1バリエーションの `withShift` |
+| `isValidVariationsShape(v)` | action 受け口の構造検証（1〜`MAX_SEARCH_VARIATIONS`件、各要素が `{ str: string; withShift: boolean }`）。`str` の非空判定は行わない（呼び出し側の業務検証が `trim` で行う。保存値自体は原文のまま） |
+
+- **withShift はバリエーションごと**に設定できる（エントリ共通ではない）
+- **ミラー方針**: DB の `search_str` / `with_shift` 列、プリセットスナップショット (`PresetSearchCraftData`)・テンプレート (`craftsData`) の同名フィールドは、いずれも「第1バリエーションのミラー」として書き込みを継続する（旧リーダー・ロールバック互換）。全 insert 箇所（`me/search-craft.tsx` saveAll・`search-craft-apply.server.ts`・`me/presets.tsx` の3箇所）は `variationMirror()` 経由でこのミラーを書く
+- **メモリ上の型**（`TemplateCraft` / `SearchCraftDraft` / `SearchCraftItem` / `SearchCraftRowData` / `LoopCraftInfo` 等）は `variations: SearchCraftVariation[]` を単一の真実とし、スカラーの `searchStr`/`withShift` は持たない（二重管理を型で防ぐ）。ミラーが現れるのはシリアライズ境界（DB列・スナップショットJSON）のみ
+- **編集UI**（`SearchCraftTimingBoard` の `EditableSearchCraftRow`）: 1エントリ内にバリエーション行を縦積み表示。各行は検索文字列 Input + 「Shiftを押しながら」Checkbox + 入力キーのライブプレビュー（`shiftHeld` はそのバリエーションの値）+ 削除ボタン（バリエーションが1件のときは disabled）。行リストの下に「サーチ文字列を追加」ボタン（上限到達時は disabled）
+- **バリエーション削除時の Loop 連動**: `SearchCraftTimingBoard.handleUpdateCraft` がバリエーション配列の縮小を検知し、`app/lib/search-craft-loops.ts` の `remapVariationRefs(steps, craftId, removedIndex, newCount)` → `resetTransitionCountsForCraft()`（`search-craft-loop-editor.tsx`）の順で該当クラフトを参照する Loop ステップを付け替える（削除された index より後ろの参照は -1、範囲外になった参照は 0 へ倒す。ステップ自体の除去はしない）
+- **表示**（`SearchCraftGroupedList` の `SearchCraftRow`）: バリエーションごとにサーチ文字列・入力キーを縦積み表示。コピーボタンはそのバリエーションの元文字列をコピーする
 
 ### 編集UI（タイミングブロック型）
 
@@ -196,8 +220,11 @@ type LoopTransition =
 type LoopStepData = {
   craftId: string;                    // search_crafts.id への参照
   transition: LoopTransition | null;  // 先頭ステップのみ null
+  variationIndex?: number;            // 参照先クラフトのバリエーション index（0始まり）
 };
 ```
+
+`variationIndex` は「エントリ×バリエーション」のうちどのバリエーションを参照するかを表す。シリアライズ時は `0` を省略する（既存データとバイト同一を保つため）。パース時は欠落=0・不正値（非負整数でない）も0に矯正する（`normalizeVariationIndex()`）。メモリ上（`parseLoopSteps`/`remapLoopSteps`/`remapVariationRefs` の戻り値、エディタの状態）は常に明示した数値を持つ（`hasChanges` の JSON 比較を安定させるため）。範囲外の `variationIndex`（対象クラフトのバリエーション数以上）は `missing_search_str` invalid に倒す（クラッシュ・黙った誤導出はしない）。
 
 #### 遷移4方式のセマンティクス
 
@@ -222,11 +249,12 @@ type LoopStepData = {
 
 | 関数 | 説明 |
 |---|---|
-| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口） |
+| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口）。`getCraft` は `{ searchStrs: string[] }`（対象クラフトの全バリエーションの文字列）を返す契約。各 `ResolvedLoopStep` は正規化済み `variationIndex` と、それに対応する `searchStr`（範囲外・参照切れなら `null`）を持つ。**表示文字列は必ず `ResolvedLoopStep.searchStr` から取ること**（`getCraft` を呼び出し側で再度呼んで `searchStrs[0]` 等を参照すると、variationIndex を無視した誤表示になる） |
 | `minArrowLeftCount(prev, next)` | `arrowLeft` 方式で `prev` → `next` に遷移できる、妥当な最小の `k`。見つからなければ `null` |
-| `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする |
-| `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用） |
-| `remapLoopSteps(steps, idMap)` | craftId を idMap（旧id→新id）で引き換える。マップに存在しない craftId（削除済みエントリへの参照）を持つステップは除去し、残りが2件未満になった場合は Loop ごと `null` を返す |
+| `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする。`variationIndex` は欠落・不正値を 0 に矯正する |
+| `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用）。`variationIndex` は存在する場合のみ非負整数であることを検証する |
+| `remapLoopSteps(steps, idMap)` | craftId を idMap（旧id→新id）で引き換える。マップに存在しない craftId（削除済みエントリへの参照）を持つステップは除去し、残りが2件未満になった場合は Loop ごと `null` を返す。`variationIndex` は正規化した上でそのまま引き継ぐ |
+| `remapVariationRefs(steps, craftId, removedIndex, newCount)` | 指定 craftId のバリエーションが1件削除されたことに伴う参照の付け替え。`removedIndex` より後ろ（`>`）を参照するステップは `-1`、結果が範囲外（0未満または `newCount` 以上）になったステップは `0` へ倒す。ステップ自体の除去はしない。エディタは削除後 `remapVariationRefs` → `resetTransitionCountsForCraft`（BS/← 最小値再初期化、`search-craft-loop-editor.tsx`）の順で適用する |
 | `typedCharSegments(prev, next, transition)` | 表示専用の補助。`next` を「実際にタイプする文字（`typed: true`）」と「前ステップから検索欄に残存するだけの文字（`typed: false`）」の `TypedCharSegment[]`（`{ text, typed }`、空セグメントは含めない）に分割する。先頭ステップ（`transition === null`）・`prev` が null/空・`deriveTransition()` が invalid のいずれかなら全部 `typed: true`（判定不能時は薄くしない）。方式ごとの区切り方は `backspace`＝残存接頭辞(false)+続き(true)、`arrowLeft`＝残存接頭辞(false)+挿入部(true)+残存接尾辞(false)、`selectAll`＝全部true、`home`＝先頭追記部(true)+末尾に残る `prev` 部分(false)。`typed` 部分の文字列は `deriveTransition()` の `typed` をそのまま使い、重複計算による食い違いを避ける |
 
 ### 編集UI
@@ -235,7 +263,8 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
 - 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
-- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
+- **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルはアイコン＋アイテム名＋`(str)`＋（`withShift` の場合）⇧マーク
+- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
 - Loop の timing 変更はブロック間D&D（`SearchCraftTimingBoard` 内、クラフトとは別ドメインとして扱う `DndContext`）で行う。ドラッグ中のみ、Loop が0件のブロックにも破線のドロップゾーンが表示される
 - **エントリ削除時の連動**: `SearchCraftTimingBoard` の `getDeleteWarning?: (craftId: string) => string | null` プロップで、削除対象エントリを参照する Loop があれば削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される

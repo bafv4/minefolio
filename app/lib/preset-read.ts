@@ -11,7 +11,8 @@
 // 合成する行の id は `preset-<kind>-<idx>` 形式（表示専用。DB の行 id とは無関係)。
 // 並び順はライブテーブル取得時の orderBy と揃える。
 import { normalizeKeyRemapType } from "./remap-utils";
-import { isValidLoopTransitionValue, type LoopStepData } from "./search-craft-loops";
+import { isValidLoopTransitionValue, normalizeVariationIndex, type LoopStepData } from "./search-craft-loops";
+import { resolveVariations, variationMirror } from "./search-craft-variations";
 import type {
   PresetKeybindingData,
   PresetPlayerConfigData,
@@ -139,24 +140,42 @@ export function decodePresetItemLayouts(json: string | null | undefined, userId:
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
+/**
+ * サーチクラフトのスナップショットを表示用にデコードする。
+ * variations は resolveVariations() で正準化し、searchStr/withShift/searchVariations
+ * （JSON文字列）は variationMirror() 由来のミラーとして併せて持つ。
+ * 戻り値は raw な search_crafts 行（SearchCraft）と構造的に互換なので、
+ * ライブ行との入れ替えが必要な既存の呼び出し側（プロフィール等）をそのまま通す。
+ * variations フィールドは新しい呼び出し側がバリエーション表示に直接使える追加情報。
+ */
 export function decodePresetSearchCrafts(json: string | null | undefined, userId: string) {
   const rows = safeParseArray<PresetSearchCraftData>(json);
   if (!rows) return null;
   const now = new Date();
   return rows
-    .map((craft, idx) => ({
-      id: `preset-craft-${idx}`,
-      userId,
-      sequence: craft.sequence,
-      items: craft.items,
-      keys: craft.keys,
-      searchStr: craft.searchStr,
-      comment: craft.comment,
-      timing: craft.timing ?? null,
-      withShift: craft.withShift === true,
-      createdAt: now,
-      updatedAt: now,
-    }))
+    .map((craft, idx) => {
+      const variations = resolveVariations({
+        variations: craft.variations,
+        searchStr: craft.searchStr,
+        withShift: craft.withShift,
+      });
+      const mirror = variationMirror(variations);
+      return {
+        id: `preset-craft-${idx}`,
+        userId,
+        sequence: craft.sequence,
+        items: craft.items,
+        keys: craft.keys,
+        searchStr: mirror.searchStr,
+        comment: craft.comment,
+        timing: craft.timing ?? null,
+        withShift: mirror.withShift,
+        searchVariations: JSON.stringify(variations),
+        variations,
+        createdAt: now,
+        updatedAt: now,
+      };
+    })
     .sort((a, b) => a.sequence - b.sequence);
 }
 
@@ -197,14 +216,15 @@ export function decodePresetSearchCraftLoops(
       const craftId = seqToId.get((rawStep as PresetLoopStepData).craftSeq);
       if (craftId === undefined) continue;
 
+      const variationIndex = normalizeVariationIndex((rawStep as PresetLoopStepData).variationIndex);
       if (steps.length === 0) {
         // 先頭は transition の形を問わず null に統一する
-        steps.push({ craftId, transition: null });
+        steps.push({ craftId, transition: null, variationIndex });
         continue;
       }
       const transition = (rawStep as PresetLoopStepData).transition ?? null;
       if (!isValidLoopTransitionValue(transition)) continue;
-      steps.push({ craftId, transition });
+      steps.push({ craftId, transition, variationIndex });
     }
     if (steps.length < 2) return;
 

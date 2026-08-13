@@ -116,7 +116,7 @@ erDiagram
 | 7 | [`custom_actions`](#custom_actions) | 9 | カスタムアクション | 1 : N |
 | 8 | [`external_tools`](#external_tools) | 8 | 外部ツール連携 | 1 : N |
 | 9 | [`item_layouts`](#item_layouts) | 9 | アイテム配置 | 1 : N |
-| 10 | [`search_crafts`](#search_crafts) | 11 | サーチクラフト | 1 : N |
+| 10 | [`search_crafts`](#search_crafts) | 12 | サーチクラフト | 1 : N |
 | 11 | [`search_craft_loops`](#search_craft_loops) | 8 | サーチクラフトの繋ぎ方（Loop） | 1 : N |
 | 12 | [`social_links`](#social_links) | 9 | ソーシャルリンク | 1 : N |
 | 13 | [`profile_videos`](#profile_videos) | 8 | プロフィールの動画欄 | 1 : N |
@@ -412,6 +412,7 @@ erDiagram
 | `created_at` | ts | |
 | `updated_at` | ts | |
 | `with_shift` | bool | 既定 false。true なら入力キーはシフト後の文字を優先して逆引き |
+| `search_variations` | text? | JSON: `{ str: string; withShift: boolean }[]`（複数サーチ文字列バリエーション）。`search_str` / `with_shift` は第1バリエーションのミラーとして書き込み継続（旧リーダー・ロールバック互換）。null は未設定＝旧単一形式のみ（読み取り側で1件に正規化） |
 
 索引: **UNIQUE** `(user_id, sequence)`
 

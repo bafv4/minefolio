@@ -16,6 +16,7 @@ import {
   type TypedCharSegment,
 } from "@/lib/search-craft-loops";
 import type { UiRemapInfo, RemapInfo } from "@/lib/remap-utils";
+import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -31,7 +32,8 @@ import { AlertTriangle, ChevronRight, Hammer, Repeat } from "lucide-react";
 export type LoopCraftInfo = {
   id: string;
   items: string[];
-  searchStr: string | null;
+  /** 複数サーチ文字列バリエーション。表示文字列は必ず ResolvedLoopStep（.searchStr）経由で取ること */
+  variations: SearchCraftVariation[];
 };
 
 /** 表示用の Loop 行データ */
@@ -157,9 +159,12 @@ function InvalidSegmentBadge() {
  */
 function CraftMarker({
   craft,
+  searchStr,
   segments,
 }: {
   craft: LoopCraftInfo | undefined;
+  /** このステップで実際に参照されるバリエーションの searchStr（ResolvedLoopStep.searchStr） */
+  searchStr: string | null;
   segments: TypedCharSegment[];
 }) {
   const t = useT();
@@ -170,9 +175,9 @@ function CraftMarker({
         <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-dashed border-border bg-secondary/20 px-2">
           <Hammer className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
           {itemId && <ItemIcon itemId={itemId} size={20} />}
-          {craft?.searchStr && (
+          {searchStr && (
             <code className="font-mono text-sm">
-              <SegmentedSearchString value={craft.searchStr} segments={segments} />
+              <SegmentedSearchString value={searchStr} segments={segments} />
             </code>
           )}
         </span>
@@ -242,18 +247,21 @@ export function LoopKeySequence({
     <div className="flex flex-wrap items-center gap-1.5">
       {steps.map((step, idx) => {
         const craft = getCraft(step.craftId);
-        const prevCraft = idx > 0 ? getCraft(steps[idx - 1].craftId) : undefined;
+        // 表示文字列は必ず ResolvedLoopStep（variationIndex 考慮済み）から取る。
+        // getCraft の再引きは常に「そのクラフトの生データ」しか返さないため、
+        // ここで craft?.searchStr のような再導出をすると variationIndex を無視した
+        // 固定表示（実質バリエーション0固定）になるバグを埋め込むことになる。
         const segments = typedCharSegments(
-          idx > 0 ? (prevCraft?.searchStr ?? null) : null,
-          craft?.searchStr ?? "",
+          idx > 0 ? steps[idx - 1].searchStr : null,
+          step.searchStr ?? "",
           step.transition,
         );
         return (
           <Fragment key={idx}>
             {idx === 0 ? (
-              craft?.searchStr ? (
+              step.searchStr ? (
                 <ActualKeyBadges
-                  searchStr={craft.searchStr}
+                  searchStr={step.searchStr}
                   remaps={remaps}
                   fingerAssignments={fingerAssignments}
                 />
@@ -269,7 +277,7 @@ export function LoopKeySequence({
             ) : (
               <InvalidSegmentBadge />
             )}
-            <CraftMarker craft={craft} segments={segments} />
+            <CraftMarker craft={craft} searchStr={step.searchStr} segments={segments} />
             {idx < steps.length - 1 && (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
@@ -309,7 +317,7 @@ export function SearchCraftLoopRow({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const craft = craftsById.get(id);
-        return craft ? { searchStr: craft.searchStr } : undefined;
+        return craft ? { searchStrs: craft.variations.map((v) => v.str) } : undefined;
       }),
     [loop.steps, craftsById],
   );

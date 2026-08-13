@@ -26,6 +26,7 @@ import type {
 } from "./schema";
 import type { KeyRemapType } from "./remap-utils";
 import { parseLoopSteps, type LoopTransition } from "./search-craft-loops";
+import { resolveVariations, parseVariationsJson, type SearchCraftVariation } from "./search-craft-variations";
 
 /**
  * プリセットに保存するキーバインドデータの型
@@ -93,11 +94,14 @@ export interface PresetSearchCraftData {
   sequence: number;
   items: string;
   keys: string;
+  /** 第1バリエーションのミラー（旧リーダー・ロールバック互換のため書き込み継続） */
   searchStr: string | null;
   comment: string | null;
   timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
-  /** Shiftを押しながらクラフトするか（古いスナップショットには存在しない） */
+  /** 第1バリエーションのミラー（古いスナップショットには存在しない） */
   withShift?: boolean;
+  /** 複数サーチ文字列バリエーション（任意フィールド。正準の読み取りは resolveVariations() 経由） */
+  variations?: SearchCraftVariation[];
 }
 
 /**
@@ -109,6 +113,8 @@ export interface PresetLoopStepData {
   /** 同一スナップショット内 searchCraftsData の sequence 値で参照（行 id はスナップショットに無いため） */
   craftSeq: number;
   transition: LoopTransition | null;
+  /** 参照先クラフトのバリエーション index（0始まり）。0 は省略する（既存データとバイト同一を保つため） */
+  variationIndex?: number;
 }
 
 /**
@@ -234,18 +240,29 @@ export function serializeItemLayouts(layouts: ItemLayout[]): string {
 }
 
 /**
- * サーチクラフト配列からプリセット用のJSONデータを作成
+ * サーチクラフト配列からプリセット用のJSONデータを作成。
+ * variations は searchVariations 列（無ければ searchStr/withShift から1件合成）を
+ * resolveVariations() 経由で正準化して含める。searchStr/withShift は第1バリエーションの
+ * ミラーとして引き続き書き込む。
  */
 export function serializeSearchCrafts(crafts: SearchCraft[]): string {
-  const data: PresetSearchCraftData[] = crafts.map((c) => ({
-    sequence: c.sequence,
-    items: c.items,
-    keys: c.keys,
-    searchStr: c.searchStr,
-    comment: c.comment,
-    timing: c.timing,
-    withShift: c.withShift,
-  }));
+  const data: PresetSearchCraftData[] = crafts.map((c) => {
+    const variations = resolveVariations({
+      variations: parseVariationsJson(c.searchVariations) ?? undefined,
+      searchStr: c.searchStr,
+      withShift: c.withShift,
+    });
+    return {
+      sequence: c.sequence,
+      items: c.items,
+      keys: c.keys,
+      searchStr: c.searchStr,
+      comment: c.comment,
+      timing: c.timing,
+      withShift: c.withShift,
+      variations,
+    };
+  });
   return JSON.stringify(data);
 }
 
@@ -270,7 +287,12 @@ export function serializeSearchCraftLoops(
     for (const step of steps) {
       const craftSeq = craftIdToSeq.get(step.craftId);
       if (craftSeq === undefined) continue;
-      mappedSteps.push({ craftSeq, transition: step.transition });
+      mappedSteps.push({
+        craftSeq,
+        transition: step.transition,
+        // 0 は省略する（既存データとバイト同一を保つため）
+        ...(step.variationIndex ? { variationIndex: step.variationIndex } : {}),
+      });
     }
     if (mappedSteps.length < 2) continue;
     // 除去でズレる場合に備え、先頭ステップの transition は常に null に統一する

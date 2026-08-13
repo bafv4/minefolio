@@ -53,6 +53,7 @@ import {
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
+import { resolveVariations, parseVariationsJson } from "@/lib/search-craft-variations";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
@@ -727,6 +728,11 @@ export default function PlayerProfilePage() {
       player.searchCrafts.map((craft) => ({
         ...craft,
         items: JSON.parse(craft.items) as string[],
+        variations: resolveVariations({
+          variations: parseVariationsJson(craft.searchVariations) ?? undefined,
+          searchStr: craft.searchStr,
+          withShift: craft.withShift,
+        }),
       })),
     [player.searchCrafts],
   );

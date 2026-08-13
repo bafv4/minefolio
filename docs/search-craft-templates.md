@@ -30,7 +30,7 @@
 
 | 関数 | 説明 |
 |---|---|
-| `parseTemplateCrafts(craftsData)` | `PresetSearchCraftData[]` JSON → 表示用 `TemplateCraft[]`（items の二重エンコードを解決、sequence順ソート、timing正規化、withShift は boolean に正規化。不正データは空配列） |
+| `parseTemplateCrafts(craftsData)` | `PresetSearchCraftData[]` JSON → 表示用 `TemplateCraft[]`（items の二重エンコードを解決、sequence順ソート、timing正規化。`variations` は `resolveVariations()` で正準化〈旧データ＝searchStr/withShift のみのスナップショットも1件のバリエーションとして扱う〉。不正データは空配列） |
 | `parseTemplateRemapData(remapsData)` | `PresetRemapData[]` JSON をパース（不正データは空配列） |
 | `parseTemplateRemaps(remapsData)` | 表示・シミュレーション用 `UiRemapInfo[]` に変換（`outputMode: "character"` は `outputCharacter` を出力先として扱う） |
 | `serializeTemplateCrafts()` / `serializeTemplateRemaps()` | 上記の逆変換。編集状態や Playground の一時データをDB保存用JSONにする |
@@ -41,15 +41,31 @@
 | `parseEditorSubmission(formData)` | テンプレートエディタの送信を検証してDB保存形式へ変換（不正なら `{ error }`。`loopsData` も含む） |
 | `toEditorCrafts()` / `toEditorRemaps()` | パース済みデータにエディタ用の安定したIDを付与 |
 
+#### サーチクラフト: `TemplateCraft`
+
+```typescript
+type TemplateCraft = {
+  items: string[];
+  comment: string | null;
+  timing: SearchCraftTiming | null;
+  /** 複数サーチ文字列バリエーション（単一の真実。searchStr/withShift スカラーは持たない） */
+  variations: SearchCraftVariation[]; // { str: string; withShift: boolean }[]
+};
+```
+
+`searchStr`/`withShift` は `PresetSearchCraftData`（DB保存形式）側にのみミラーとして残る。`serializeTemplateCrafts()` は `variationMirror(c.variations)` で第1バリエーションを `searchStr`/`withShift` へミラーしつつ、`variations` フィールドも常に書き込む。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「複数サーチ文字列バリエーション」を参照。
+
 #### 繋ぎ方（Loop）: `TemplateLoop`
 
 ```typescript
 type TemplateLoop = {
-  steps: { craftIndex: number; transition: LoopTransition | null }[];
+  steps: { craftIndex: number; transition: LoopTransition | null; variationIndex?: number }[];
   comment: string | null;
   timing: SearchCraftTiming | null;
 };
 ```
+
+`variationIndex` は参照先クラフトのバリエーション index（0始まり）。`parseTemplateLoops`/`parseLoopsField`/`toSubmittableLoops` は欠落・不正値を 0 に矯正し、`serializeTemplateLoops` は 0 を省略してシリアライズする（`PresetLoopStepData.variationIndex` と同じ規則。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) 参照）。
 
 テンプレート・Playground は `crafts` に安定した行 id を持たない（`/me/search-craft` の `search_crafts.id` と異なり、編集中は毎回配列の位置が変わりうる）ため、ステップの参照先は **`craftIndex`（0始まりの配列位置）** で表す。保存形式は `config_presets.search_craft_loops_data` と同一の `PresetSearchCraftLoopData[]`（`craftSeq` 参照）を流用し、`serializeTemplateCrafts()` が常に `sequence = index + 1` を書くことを利用して **`craftSeq = craftIndex + 1` を恒等関係**として変換する（`docs/presets.md` の `PresetLoopStepData` 参照）。
 

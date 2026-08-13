@@ -9,6 +9,8 @@ import {
   isValidLoopTransitionValue,
   isValidLoopStepsShape,
   remapLoopSteps,
+  remapVariationRefs,
+  normalizeVariationIndex,
   type LoopStepData,
 } from "../search-craft-loops";
 
@@ -345,7 +347,7 @@ describe("deriveTransition - home", () => {
 });
 
 describe("resolveLoopSteps", () => {
-  type Craft = { searchStr: string | null };
+  type Craft = { searchStrs: string[] };
   const makeGetCraft =
     (crafts: Record<string, Craft>) =>
     (id: string): Craft | undefined =>
@@ -353,9 +355,9 @@ describe("resolveLoopSteps", () => {
 
   it("3ステップの正常系: 全ステップが解決し valid=true", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStr: "er" },
-      c2: { searchStr: "en" },
-      c3: { searchStr: "anything" },
+      c1: { searchStrs: ["er"] },
+      c2: { searchStrs: ["en"] },
+      c3: { searchStrs: ["anything"] },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -380,7 +382,7 @@ describe("resolveLoopSteps", () => {
   });
 
   it("参照切れ（craftId が見つからない）は craft:null になり Loop 全体が invalid", () => {
-    const getCraft = makeGetCraft({ c1: { searchStr: "er" } });
+    const getCraft = makeGetCraft({ c1: { searchStrs: ["er"] } });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
       { craftId: "missing", transition: { type: "backspace", bsCount: 1 } },
@@ -388,13 +390,14 @@ describe("resolveLoopSteps", () => {
     const result = resolveLoopSteps(steps, getCraft);
     expect(result.valid).toBe(false);
     expect(result.steps[1].craft).toBeNull();
+    expect(result.steps[1].searchStr).toBeNull();
     expect(result.steps[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
   });
 
-  it("craft は解決できても searchStr が null の場合も missing_search_str", () => {
+  it("craft は解決できても対象バリエーションが無い（searchStrs が空）場合も missing_search_str", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStr: "er" },
-      c2: { searchStr: null },
+      c1: { searchStrs: ["er"] },
+      c2: { searchStrs: [] },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -402,14 +405,15 @@ describe("resolveLoopSteps", () => {
     ];
     const result = resolveLoopSteps(steps, getCraft);
     expect(result.valid).toBe(false);
-    expect(result.steps[1].craft).toEqual({ searchStr: null });
+    expect(result.steps[1].craft).toEqual({ searchStrs: [] });
+    expect(result.steps[1].searchStr).toBeNull();
     expect(result.steps[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
   });
 
   it("非先頭ステップの transition が null（破損データ）は derived を計算せず invalid化する", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStr: "er" },
-      c2: { searchStr: "en" },
+      c1: { searchStrs: ["er"] },
+      c2: { searchStrs: ["en"] },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -422,8 +426,8 @@ describe("resolveLoopSteps", () => {
 
   it("同一 craft の複数回参照は許可される", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStr: "er" },
-      c2: { searchStr: "en" },
+      c1: { searchStrs: ["er"] },
+      c2: { searchStrs: ["en"] },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -436,9 +440,59 @@ describe("resolveLoopSteps", () => {
   });
 
   it("ステップ数が2未満は invalid", () => {
-    const getCraft = makeGetCraft({ c1: { searchStr: "er" } });
+    const getCraft = makeGetCraft({ c1: { searchStrs: ["er"] } });
     expect(resolveLoopSteps([], getCraft).valid).toBe(false);
     expect(resolveLoopSteps([{ craftId: "c1", transition: null }], getCraft).valid).toBe(false);
+  });
+
+  describe("variationIndex の解決", () => {
+    it("variationIndex が範囲内なら対応する searchStrs[index] を使う", () => {
+      const getCraft = makeGetCraft({
+        c1: { searchStrs: ["en", "er"] },
+        c2: { searchStrs: ["cra", "craft"] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null, variationIndex: 1 },
+        { craftId: "c2", transition: { type: "selectAll" }, variationIndex: 1 },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[0].variationIndex).toBe(1);
+      expect(result.steps[0].searchStr).toBe("er");
+      expect(result.steps[1].variationIndex).toBe(1);
+      expect(result.steps[1].searchStr).toBe("craft");
+      expect(result.valid).toBe(true);
+    });
+
+    it("variationIndex が対象クラフトのバリエーション数以上（範囲外）は missing_search_str", () => {
+      const getCraft = makeGetCraft({
+        c1: { searchStrs: ["er"] },
+        c2: { searchStrs: ["en", "er"] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null },
+        { craftId: "c2", transition: { type: "selectAll" }, variationIndex: 5 },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[1].searchStr).toBeNull();
+      expect(result.steps[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
+      expect(result.valid).toBe(false);
+    });
+
+    it("不正な variationIndex（負数・非整数）は 0 に正規化されて解決される", () => {
+      const getCraft = makeGetCraft({
+        c1: { searchStrs: ["en", "er"] },
+        c2: { searchStrs: ["cra"] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null, variationIndex: -1 },
+        { craftId: "c2", transition: { type: "selectAll" }, variationIndex: 1.5 },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[0].variationIndex).toBe(0);
+      expect(result.steps[0].searchStr).toBe("en");
+      expect(result.steps[1].variationIndex).toBe(0);
+      expect(result.steps[1].searchStr).toBe("cra");
+    });
   });
 });
 
@@ -453,8 +507,8 @@ describe("remapLoopSteps", () => {
       ["b", "B"],
     ]);
     expect(remapLoopSteps(steps, idMap)).toEqual([
-      { craftId: "A", transition: null },
-      { craftId: "B", transition: { type: "backspace", bsCount: 1 } },
+      { craftId: "A", transition: null, variationIndex: 0 },
+      { craftId: "B", transition: { type: "backspace", bsCount: 1 }, variationIndex: 0 },
     ]);
   });
 
@@ -470,8 +524,8 @@ describe("remapLoopSteps", () => {
       ["c", "C"],
     ]);
     expect(remapLoopSteps(steps, idMap)).toEqual([
-      { craftId: "B", transition: null },
-      { craftId: "C", transition: { type: "selectAll" } },
+      { craftId: "B", transition: null, variationIndex: 0 },
+      { craftId: "C", transition: { type: "selectAll" }, variationIndex: 0 },
     ]);
   });
 
@@ -494,9 +548,101 @@ describe("remapLoopSteps", () => {
       ["b", "B"],
     ]);
     expect(remapLoopSteps(steps, idMap)).toEqual([
-      { craftId: "A", transition: null },
-      { craftId: "B", transition: { type: "arrowLeft", arrowCount: 2 } },
+      { craftId: "A", transition: null, variationIndex: 0 },
+      { craftId: "B", transition: { type: "arrowLeft", arrowCount: 2 }, variationIndex: 0 },
     ]);
+  });
+
+  it("variationIndex は id の引き換えと無関係に（正規化した上で）そのまま引き継ぐ", () => {
+    const steps: LoopStepData[] = [
+      { craftId: "a", transition: null, variationIndex: 2 },
+      { craftId: "b", transition: { type: "backspace", bsCount: 1 }, variationIndex: -1 },
+    ];
+    const idMap = new Map([
+      ["a", "A"],
+      ["b", "B"],
+    ]);
+    expect(remapLoopSteps(steps, idMap)).toEqual([
+      { craftId: "A", transition: null, variationIndex: 2 },
+      { craftId: "B", transition: { type: "backspace", bsCount: 1 }, variationIndex: 0 },
+    ]);
+  });
+});
+
+describe("remapVariationRefs", () => {
+  it("removedIndex より後ろ（>removedIndex）を参照していたステップは -1 する", () => {
+    // 4件中 index1 を削除 → newCount=3。index3,2 を参照していたステップはそれぞれ2,1へ
+    const steps: LoopStepData[] = [
+      { craftId: "c1", transition: null, variationIndex: 3 },
+      { craftId: "c1", transition: { type: "selectAll" }, variationIndex: 2 },
+    ];
+    expect(remapVariationRefs(steps, "c1", 1, 3)).toEqual([
+      { craftId: "c1", transition: null, variationIndex: 2 },
+      { craftId: "c1", transition: { type: "selectAll" }, variationIndex: 1 },
+    ]);
+  });
+
+  it("removedIndex 以下（>removedIndex でない）は減算せず、結果が newCount 以上なら 0 に倒す", () => {
+    // 2件中 index1（末尾）を削除 → newCount=1。削除された index そのものを参照していたステップ
+    // （current=1, removedIndex=1, current>removedIndex は false のため減算されない）は
+    // 減算後も 1 のままだが newCount=1 の範囲外になるため 0 へ倒される
+    const steps: LoopStepData[] = [
+      { craftId: "c1", transition: null, variationIndex: 0 },
+      { craftId: "c1", transition: { type: "selectAll" }, variationIndex: 1 },
+    ];
+    expect(remapVariationRefs(steps, "c1", 1, 1)).toEqual([
+      { craftId: "c1", transition: null, variationIndex: 0 },
+      { craftId: "c1", transition: { type: "selectAll" }, variationIndex: 0 },
+    ]);
+  });
+
+  it("削除後もまだ存在する index を指す位置関係になった場合はその位置のバリエーションを指したままにする（ステップの除去はしない）", () => {
+    // removedIndex=2（末尾）の削除は index0 を参照するステップに影響しない。newCount=2 の範囲内なのでそのまま
+    const steps: LoopStepData[] = [
+      { craftId: "c1", transition: null, variationIndex: 0 },
+      { craftId: "c1", transition: { type: "selectAll" }, variationIndex: 0 },
+    ];
+    expect(remapVariationRefs(steps, "c1", 2, 2)).toEqual(steps);
+  });
+
+  it("他の craftId を参照するステップは値・参照とも変更しない", () => {
+    const otherStep: LoopStepData = {
+      craftId: "c2",
+      transition: { type: "selectAll" },
+      variationIndex: 3,
+    };
+    const steps: LoopStepData[] = [
+      { craftId: "c1", transition: null, variationIndex: 3 },
+      otherStep,
+    ];
+    const result = remapVariationRefs(steps, "c1", 0, 3);
+    // 対象外 craftId のステップはオブジェクト参照ごと不変
+    expect(result[1]).toBe(otherStep);
+    expect(result).toHaveLength(2);
+  });
+
+  it("ステップ数・transition・craftId は変更しない", () => {
+    const steps: LoopStepData[] = [
+      { craftId: "c1", transition: null, variationIndex: 1 },
+      { craftId: "c1", transition: { type: "backspace", bsCount: 2 }, variationIndex: 1 },
+    ];
+    const result = remapVariationRefs(steps, "c1", 0, 3);
+    expect(result).toHaveLength(2);
+    expect(result[1].transition).toEqual({ type: "backspace", bsCount: 2 });
+    expect(result.map((s) => s.craftId)).toEqual(["c1", "c1"]);
+  });
+});
+
+describe("normalizeVariationIndex", () => {
+  it("非負整数はそのまま返す", () => {
+    expect(normalizeVariationIndex(0)).toBe(0);
+    expect(normalizeVariationIndex(3)).toBe(3);
+  });
+
+  it("欠落（undefined）・負数・非整数は 0 に矯正する", () => {
+    expect(normalizeVariationIndex(undefined)).toBe(0);
+    expect(normalizeVariationIndex(-1)).toBe(0);
+    expect(normalizeVariationIndex(1.5)).toBe(0);
   });
 });
 
@@ -516,8 +662,8 @@ describe("parseLoopSteps", () => {
       { craftId: "c", transition: { type: "backspace", bsCount: 1 } },
     ]);
     expect(parseLoopSteps(json)).toEqual([
-      { craftId: "a", transition: null },
-      { craftId: "c", transition: { type: "backspace", bsCount: 1 } },
+      { craftId: "a", transition: null, variationIndex: 0 },
+      { craftId: "c", transition: { type: "backspace", bsCount: 1 }, variationIndex: 0 },
     ]);
   });
 
@@ -544,8 +690,25 @@ describe("parseLoopSteps", () => {
       { craftId: "c", transition: { type: "arrowLeft", arrowCount: -1 } }, // arrowCount 不正 → 除去
     ]);
     expect(parseLoopSteps(json)).toEqual([
-      { craftId: "a", transition: null },
-      { craftId: "b", transition: { type: "arrowLeft", arrowCount: 2 } },
+      { craftId: "a", transition: null, variationIndex: 0 },
+      { craftId: "b", transition: { type: "arrowLeft", arrowCount: 2 }, variationIndex: 0 },
+    ]);
+  });
+
+  it("variationIndex 欠落は 0 に補完し、不正値（負数・非整数・文字列）は 0 に矯正する", () => {
+    const json = JSON.stringify([
+      { craftId: "a", transition: null }, // 欠落 → 0
+      { craftId: "b", transition: { type: "backspace", bsCount: 0 }, variationIndex: -1 }, // 負数 → 0
+      { craftId: "c", transition: { type: "backspace", bsCount: 0 }, variationIndex: 1.5 }, // 非整数 → 0
+      { craftId: "d", transition: { type: "backspace", bsCount: 0 }, variationIndex: "2" }, // 文字列 → 0
+      { craftId: "e", transition: { type: "backspace", bsCount: 0 }, variationIndex: 3 }, // 妥当値はそのまま
+    ]);
+    expect(parseLoopSteps(json)).toEqual([
+      { craftId: "a", transition: null, variationIndex: 0 },
+      { craftId: "b", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+      { craftId: "c", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+      { craftId: "d", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+      { craftId: "e", transition: { type: "backspace", bsCount: 0 }, variationIndex: 3 },
     ]);
   });
 });
@@ -655,6 +818,33 @@ describe("isValidLoopStepsShape", () => {
       isValidLoopStepsShape([
         { craftId: "a", transition: null },
         { craftId: "b", transition: { type: "arrowLeft" } },
+      ]),
+    ).toBe(false);
+  });
+
+  it("variationIndex は任意フィールド。欠落は許容し、存在する場合のみ非負整数であることを検証する", () => {
+    expect(
+      isValidLoopStepsShape([
+        { craftId: "a", transition: null },
+        { craftId: "b", transition: { type: "selectAll" }, variationIndex: 2 },
+      ]),
+    ).toBe(true);
+    expect(
+      isValidLoopStepsShape([
+        { craftId: "a", transition: null },
+        { craftId: "b", transition: { type: "selectAll" } },
+      ]),
+    ).toBe(true);
+    expect(
+      isValidLoopStepsShape([
+        { craftId: "a", transition: null },
+        { craftId: "b", transition: { type: "selectAll" }, variationIndex: -1 },
+      ]),
+    ).toBe(false);
+    expect(
+      isValidLoopStepsShape([
+        { craftId: "a", transition: null },
+        { craftId: "b", transition: { type: "selectAll" }, variationIndex: 1.5 },
       ]),
     ).toBe(false);
   });

@@ -531,6 +531,7 @@ CREATE TABLE `search_crafts` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	`with_shift` integer DEFAULT false NOT NULL,
+	`search_variations` text,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 

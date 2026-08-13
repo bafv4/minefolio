@@ -239,7 +239,7 @@ export function SearchCraftWorkbench({
       onCraftsChange(
         reorderByBlock([
           ...crafts,
-          { id: draftId("craft"), items: [], searchStr: null, comment: null, timing, withShift: false },
+          { id: draftId("craft"), items: [], comment: null, timing, variations: [{ str: "", withShift: false }] },
         ]),
       );
     },

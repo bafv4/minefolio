@@ -17,6 +17,7 @@ import {
   type TemplateCraft,
   type TemplateLoop,
 } from "../search-craft-templates";
+import { MAX_SEARCH_VARIATIONS } from "../search-craft-variations";
 
 describe("parseTemplateCrafts", () => {
   it("PresetSearchCraftData[] 形式のJSONをデコードする（items は二重エンコード）", () => {
@@ -42,10 +43,40 @@ describe("parseTemplateCrafts", () => {
     const crafts = parseTemplateCrafts(craftsData);
     expect(crafts).toHaveLength(2);
     // sequence 順にソートされる
-    expect(crafts[0].searchStr).toBe("cra");
+    expect(crafts[0].variations).toEqual([{ str: "cra", withShift: false }]);
     expect(crafts[0].items).toEqual(["minecraft:crafting_table", "minecraft:chest"]);
     expect(crafts[0].comment).toBe("最初に作る");
     expect(crafts[1].timing).toBe("fortress");
+  });
+
+  it("旧形式（variations 列なし、searchStr/withShift スカラーのみ）のスナップショットは1件のバリエーションに合成する", () => {
+    const craftsData = JSON.stringify([
+      { sequence: 1, items: "[]", keys: "[]", searchStr: "en", comment: null, withShift: true },
+    ]);
+    const crafts = parseTemplateCrafts(craftsData);
+    expect(crafts[0].variations).toEqual([{ str: "en", withShift: true }]);
+  });
+
+  it("variations 列があればそれを正準として採用する（searchStr/withShift はミラーとして無視）", () => {
+    const craftsData = JSON.stringify([
+      {
+        sequence: 1,
+        items: "[]",
+        keys: "[]",
+        searchStr: "en",
+        withShift: false,
+        comment: null,
+        variations: [
+          { str: "en", withShift: false },
+          { str: "er", withShift: true },
+        ],
+      },
+    ]);
+    const crafts = parseTemplateCrafts(craftsData);
+    expect(crafts[0].variations).toEqual([
+      { str: "en", withShift: false },
+      { str: "er", withShift: true },
+    ]);
   });
 
   it("不正なJSONや null は空配列を返す", () => {
@@ -107,17 +138,47 @@ describe("parseTemplateRemapData / parseTemplateRemaps", () => {
 describe("serializeTemplateCrafts / serializeTemplateRemaps（Playground保存用の逆変換）", () => {
   it("serializeTemplateCrafts → parseTemplateCrafts で内容が往復する", () => {
     const crafts: TemplateCraft[] = [
-      { items: ["minecraft:crafting_table", "minecraft:chest"], searchStr: "cra", comment: "最初に作る", timing: null, withShift: false },
-      { items: ["minecraft:golden_carrot"], searchStr: "go_c", comment: null, timing: "bastion", withShift: true },
+      {
+        items: ["minecraft:crafting_table", "minecraft:chest"],
+        comment: "最初に作る",
+        timing: null,
+        variations: [{ str: "cra", withShift: false }],
+      },
+      {
+        items: ["minecraft:golden_carrot"],
+        comment: null,
+        timing: "bastion",
+        variations: [{ str: "go_c", withShift: true }],
+      },
     ];
     const roundTripped = parseTemplateCrafts(serializeTemplateCrafts(crafts));
     expect(roundTripped).toEqual(crafts);
   });
 
+  it("複数バリエーションも往復する（第1バリエーションが searchStr/withShift のミラーになる）", () => {
+    const crafts: TemplateCraft[] = [
+      {
+        items: ["minecraft:ender_eye"],
+        comment: null,
+        timing: null,
+        variations: [
+          { str: "en", withShift: false },
+          { str: "er", withShift: true },
+        ],
+      },
+    ];
+    const json = serializeTemplateCrafts(crafts);
+    const raw = JSON.parse(json);
+    expect(raw[0].searchStr).toBe("en");
+    expect(raw[0].withShift).toBe(false);
+    expect(raw[0].variations).toEqual(crafts[0].variations);
+    expect(parseTemplateCrafts(json)).toEqual(crafts);
+  });
+
   it("serializeTemplateCrafts は sequence を配列順（1始まり）で振り直す", () => {
     const json = serializeTemplateCrafts([
-      { items: [], searchStr: "a", comment: null, timing: null, withShift: false },
-      { items: [], searchStr: "b", comment: null, timing: null, withShift: false },
+      { items: [], comment: null, timing: null, variations: [{ str: "a", withShift: false }] },
+      { items: [], comment: null, timing: null, variations: [{ str: "b", withShift: false }] },
     ]);
     const raw = JSON.parse(json);
     expect(raw.map((r: { sequence: number }) => r.sequence)).toEqual([1, 2]);
@@ -127,7 +188,7 @@ describe("serializeTemplateCrafts / serializeTemplateRemaps（Playground保存�
     const json = JSON.stringify([
       { sequence: 1, items: "[]", keys: "[]", searchStr: "a", comment: null, timing: null },
     ]);
-    expect(parseTemplateCrafts(json)[0].withShift).toBe(false);
+    expect(parseTemplateCrafts(json)[0].variations[0].withShift).toBe(false);
   });
 
   it("serializeTemplateRemaps → parseTemplateRemaps で内容が往復する（key出力）", () => {
@@ -175,7 +236,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect(result.title).toBe("テスト");
     expect(result.gameLanguage).toBe("ja_jp");
     const crafts = parseTemplateCrafts(result.craftsData);
-    expect(crafts[0].searchStr).toBe("cra");
+    expect(crafts[0].variations).toEqual([{ str: "cra", withShift: false }]);
     expect(crafts[0].timing).toBe("bastion");
     const remaps = parseTemplateRemaps(result.remapsData);
     expect(remaps).toHaveLength(2);
@@ -183,7 +244,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
   });
 
   it("withShift を検証して保持する（未指定・不正値は false）", () => {
-    const result = parseEditorSubmission(t, 
+    const result = parseEditorSubmission(t,
       buildForm({
         title: "テスト",
         crafts: JSON.stringify([
@@ -197,11 +258,11 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect("error" in result).toBe(false);
     if ("error" in result) return;
     const crafts = parseTemplateCrafts(result.craftsData);
-    expect(crafts.map((c) => c.withShift)).toEqual([true, false, false]);
+    expect(crafts.map((c) => c.variations[0].withShift)).toEqual([true, false, false]);
   });
 
   it("サーチ文字列の先頭・末尾スペースを保存値に保持する（trim は空判定のみ）", () => {
-    const result = parseEditorSubmission(t, 
+    const result = parseEditorSubmission(t,
       buildForm({
         title: "a",
         crafts: JSON.stringify([
@@ -213,12 +274,77 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     expect("error" in result).toBe(false);
     if ("error" in result) return;
     const crafts = parseTemplateCrafts(result.craftsData);
-    expect(crafts[0].searchStr).toBe(" che ");
+    expect(crafts[0].variations[0].str).toBe(" che ");
+  });
+
+  it("複数バリエーション（variations 配列）の送信を受理し、先頭以外も先頭末尾スペースを保持する", () => {
+    const result = parseEditorSubmission(t,
+      buildForm({
+        title: "a",
+        crafts: JSON.stringify([
+          {
+            items: ["minecraft:ender_eye"],
+            comment: null,
+            timing: null,
+            variations: [
+              { str: "en", withShift: false },
+              { str: " er ", withShift: true },
+            ],
+          },
+        ]),
+        remaps: "[]",
+      }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    const crafts = parseTemplateCrafts(result.craftsData);
+    expect(crafts[0].variations).toEqual([
+      { str: "en", withShift: false },
+      { str: " er ", withShift: true },
+    ]);
+  });
+
+  it(`variations が ${MAX_SEARCH_VARIATIONS} 件を超える送信は拒否する`, () => {
+    const tooMany = Array.from({ length: MAX_SEARCH_VARIATIONS + 1 }, (_, i) => ({
+      str: `s${i}`,
+      withShift: false,
+    }));
+    const result = parseEditorSubmission(t,
+      buildForm({
+        title: "a",
+        crafts: JSON.stringify([
+          { items: ["minecraft:chest"], comment: null, timing: null, variations: tooMany },
+        ]),
+        remaps: "[]",
+      }),
+    );
+    expect(result).toHaveProperty("error");
+  });
+
+  it("variations 内に空文字列（trim後）のバリエーションが含まれる場合は拒否する", () => {
+    const result = parseEditorSubmission(t,
+      buildForm({
+        title: "a",
+        crafts: JSON.stringify([
+          {
+            items: ["minecraft:chest"],
+            comment: null,
+            timing: null,
+            variations: [
+              { str: "che", withShift: false },
+              { str: "   ", withShift: false },
+            ],
+          },
+        ]),
+        remaps: "[]",
+      }),
+    );
+    expect(result).toHaveProperty("error");
   });
 
   it("スペースのみのサーチ文字列は拒否する", () => {
     expect(
-      parseEditorSubmission(t, 
+      parseEditorSubmission(t,
         buildForm({
           title: "a",
           crafts: JSON.stringify([{ items: ["minecraft:chest"], searchStr: "   " }]),
@@ -292,8 +418,8 @@ describe("serializeTemplateLoops / parseTemplateLoops", () => {
     const loops: TemplateLoop[] = [
       {
         steps: [
-          { craftIndex: 0, transition: null },
-          { craftIndex: 1, transition: { type: "backspace", bsCount: 1 } },
+          { craftIndex: 0, transition: null, variationIndex: 0 },
+          { craftIndex: 1, transition: { type: "backspace", bsCount: 1 }, variationIndex: 0 },
         ],
         comment: "メモ",
         timing: "bastion",
@@ -307,8 +433,8 @@ describe("serializeTemplateLoops / parseTemplateLoops", () => {
     const loops: TemplateLoop[] = [
       {
         steps: [
-          { craftIndex: 0, transition: null },
-          { craftIndex: 1, transition: { type: "arrowLeft", arrowCount: 2 } },
+          { craftIndex: 0, transition: null, variationIndex: 0 },
+          { craftIndex: 1, transition: { type: "arrowLeft", arrowCount: 2 }, variationIndex: 0 },
         ],
         comment: null,
         timing: null,
@@ -316,6 +442,25 @@ describe("serializeTemplateLoops / parseTemplateLoops", () => {
     ];
     const roundTripped = parseTemplateLoops(serializeTemplateLoops(loops), 2);
     expect(roundTripped).toEqual(loops);
+  });
+
+  it("variationIndex を含むステップも往復する（0 はシリアライズ時に省略される）", () => {
+    const loops: TemplateLoop[] = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null, variationIndex: 0 },
+          { craftIndex: 1, transition: { type: "selectAll" }, variationIndex: 2 },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ];
+    const json = serializeTemplateLoops(loops);
+    const raw = JSON.parse(json);
+    // 0 は省略、非0は明示される
+    expect(raw[0].steps[0]).not.toHaveProperty("variationIndex");
+    expect(raw[0].steps[1].variationIndex).toBe(2);
+    expect(parseTemplateLoops(json, 2)).toEqual(loops);
   });
 
   it("craftSeq が crafts の範囲外を指すステップは除去し、2件未満になった Loop は除去する", () => {
@@ -343,8 +488,8 @@ describe("serializeTemplateLoops / parseTemplateLoops", () => {
     // 1件目は範囲外ステップ除去で1件になり丸ごと除去され、2件目のみ残る
     expect(loops).toHaveLength(1);
     expect(loops[0].steps).toEqual([
-      { craftIndex: 0, transition: null },
-      { craftIndex: 1, transition: { type: "selectAll" } },
+      { craftIndex: 0, transition: null, variationIndex: 0 },
+      { craftIndex: 1, transition: { type: "selectAll" }, variationIndex: 0 },
     ]);
   });
 
@@ -389,6 +534,39 @@ describe("parseEditorSubmission - loops（繋ぎ方）", () => {
     expect("error" in result).toBe(false);
     if ("error" in result) return;
     expect(result.loopsData).not.toBeNull();
+    expect(parseTemplateLoops(result.loopsData, 2)).toEqual([
+      {
+        steps: [
+          { craftIndex: 0, transition: null, variationIndex: 0 },
+          { craftIndex: 1, transition: { type: "backspace", bsCount: 1 }, variationIndex: 0 },
+        ],
+        comment: "コメント",
+        timing: null,
+      },
+    ]);
+  });
+
+  it("variationIndex を指定した loops もDB保存形式に変換して往復する", () => {
+    const loops = [
+      {
+        steps: [
+          { craftIndex: 0, transition: null, variationIndex: 0 },
+          { craftIndex: 1, transition: { type: "selectAll" }, variationIndex: 1 },
+        ],
+        comment: null,
+        timing: null,
+      },
+    ];
+    const result = parseEditorSubmission(t,
+      buildLoopForm({
+        title: "テスト",
+        crafts: twoCrafts,
+        remaps: "[]",
+        loops: JSON.stringify(loops),
+      }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
     expect(parseTemplateLoops(result.loopsData, 2)).toEqual(loops);
   });
 
