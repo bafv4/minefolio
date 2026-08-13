@@ -33,7 +33,8 @@ import {
   Share2,
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { SearchCraftTimingBoard, reorderByBlock } from "@/components/search-craft-editor";
+import { SearchCraftTimingBoard } from "@/components/search-craft-editor";
+import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import { toUiRemaps } from "@/lib/remap-utils";
 import { parseTemplateCrafts, parseTemplateLoops } from "@/lib/search-craft-templates";
 import {
@@ -43,9 +44,8 @@ import {
   type LoopStepData,
 } from "@/lib/search-craft-loops";
 import {
-  resolveVariations,
-  parseVariationsJson,
-  variationMirror,
+  resolveRowVariations,
+  searchCraftColumnValues,
   type SearchCraftVariation,
 } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
@@ -91,7 +91,7 @@ type SearchCraftLoopItem = {
   id: string;
   steps: LoopStepData[];
   comment: string | null;
-  timing: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
+  timing: SearchCraftTiming | null;
 };
 
 
@@ -138,11 +138,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     keys: JSON.parse(craft.keys) as string[],
     comment: craft.comment,
     timing: craft.timing ?? null,
-    variations: resolveVariations({
-      variations: parseVariationsJson(craft.searchVariations) ?? undefined,
-      searchStr: craft.searchStr,
-      withShift: craft.withShift,
-    }),
+    variations: resolveRowVariations(craft),
   }));
 
   const loops: SearchCraftLoopItem[] = user.searchCraftLoops.map((loop) => ({
@@ -294,7 +290,7 @@ export async function action({ request }: Route.ActionArgs) {
         keys: [],
         comment: typeof craft.comment === "string" ? craft.comment : null,
         timing: (craft.timing ?? null) as SearchCraftItem["timing"],
-        variations: resolveVariations({
+        variations: resolveRowVariations({
           variations: craft.variations,
           searchStr: typeof craft.searchStr === "string" ? craft.searchStr : null,
           withShift: craft.withShift as boolean | null | undefined,
@@ -369,40 +365,39 @@ export async function action({ request }: Route.ActionArgs) {
         await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
         await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
 
-        // 新しいサーチクラフトを挿入（searchStr/withShift は variationMirror() 経由で
+        // 新しいサーチクラフトを挿入（searchStr/withShift は searchCraftColumnValues() 経由で
         // 第1バリエーションのミラーとして書き込む）
-        for (let i = 0; i < finalCrafts.length; i++) {
-          const craft = finalCrafts[i];
-          const mirror = variationMirror(craft.variations);
-          await tx.insert(searchCrafts).values({
-            id: craft.id,
-            userId: user.id,
-            sequence: i + 1,
-            items: JSON.stringify(craft.items),
-            keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
-            searchStr: mirror.searchStr,
-            comment: craft.comment || null,
-            timing: craft.timing || null,
-            withShift: mirror.withShift,
-            searchVariations: craft.variations.length > 0 ? JSON.stringify(craft.variations) : null,
-            createdAt: now,
-            updatedAt: now,
-          });
+        if (finalCrafts.length > 0) {
+          await tx.insert(searchCrafts).values(
+            finalCrafts.map((craft, i) => ({
+              id: craft.id,
+              userId: user.id,
+              sequence: i + 1,
+              items: JSON.stringify(craft.items),
+              keys: JSON.stringify([]), // keysは使用しない（後方互換性のため空配列で保持）
+              comment: craft.comment || null,
+              timing: craft.timing || null,
+              ...searchCraftColumnValues(craft.variations),
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
         }
 
         // 新しいLoopを挿入
-        for (let i = 0; i < finalLoops.length; i++) {
-          const loop = finalLoops[i];
-          await tx.insert(searchCraftLoops).values({
-            id: loop.id,
-            userId: user.id,
-            sequence: i + 1,
-            steps: JSON.stringify(loop.steps),
-            comment: loop.comment || null,
-            timing: loop.timing || null,
-            createdAt: now,
-            updatedAt: now,
-          });
+        if (finalLoops.length > 0) {
+          await tx.insert(searchCraftLoops).values(
+            finalLoops.map((loop, i) => ({
+              id: loop.id,
+              userId: user.id,
+              sequence: i + 1,
+              steps: JSON.stringify(loop.steps),
+              comment: loop.comment || null,
+              timing: loop.timing || null,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
         }
       });
 
@@ -488,80 +483,42 @@ export default function SearchCraftPage() {
     }
   }, [fetcher.data]);
 
-  // 変更検知
+  // 変更検知。initialCrafts/initialLoops の stringify はそれ自体が変わる（loaderデータ更新）
+  // ときだけ計算すればよいので、crafts/loops の変更のたびに再計算しないよう別メモにする
+  const initialCraftsJson = useMemo(() => JSON.stringify(initialCrafts), [initialCrafts]);
+  const initialLoopsJson = useMemo(() => JSON.stringify(initialLoops), [initialLoops]);
   const hasChanges = useMemo(() => {
     if (crafts.length !== initialCrafts.length || loops.length !== initialLoops.length) {
       return true;
     }
     return (
-      JSON.stringify(crafts) !== JSON.stringify(initialCrafts) ||
-      JSON.stringify(loops) !== JSON.stringify(initialLoops)
+      JSON.stringify(crafts) !== initialCraftsJson ||
+      JSON.stringify(loops) !== initialLoopsJson
     );
-  }, [crafts, initialCrafts, loops, initialLoops]);
+  }, [crafts, initialCrafts.length, loops, initialLoops.length, initialCraftsJson, initialLoopsJson]);
 
-  // SearchCraftTimingBoard からの crafts 更新（D&D・行の更新・削除を含む）。
-  // 消えた craftId があれば、それを参照する Loop ステップを連動して除去する（生存参照は温存、
-  // remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）。
-  // バリエーション単位の削除・編集にともなう Loop 側の付け替え（remapVariationRefs →
-  // resetTransitionCountsForCraft）は SearchCraftTimingBoard 内部（handleUpdateCraft）が
-  // onLoopsChange 経由で直接処理する（ここで二重に適用しない）
-  const handleCraftsChange = useCallback((next: SearchCraftItem[]) => {
-    setCrafts((prev) => {
-      const removedIds = prev.filter((c) => !next.some((n) => n.id === c.id)).map((c) => c.id);
-      if (removedIds.length > 0) {
-        const idMap = new Map(next.map((c) => [c.id, c.id]));
-        setLoops((prevLoops) =>
-          prevLoops
-            .map((loop) => {
-              const steps = remapLoopSteps(loop.steps, idMap);
-              return steps ? { ...loop, steps } : null;
-            })
-            .filter((loop): loop is SearchCraftLoopItem => loop !== null),
-        );
-      }
-      return next;
-    });
-  }, []);
+  // SearchCraftTimingBoard からの crafts/loops 更新（D&D・行の更新・削除・追加を含む）は
+  // Board が内部でブロック順への正規化・削除時の Loop 連動除去・削除確認文言・新規追加時の
+  // draft 生成まで面倒を見るため、ここでは setState をそのまま渡すだけでよい
+  const createCraft = useCallback((timing: SearchCraftItem["timing"]): SearchCraftItem => ({
+    id: `new-${crypto.randomUUID()}`,
+    sequence: crafts.length + 1,
+    items: [],
+    keys: [],
+    comment: null,
+    timing,
+    variations: [{ str: "", withShift: false }],
+  }), [crafts.length]);
 
-  const handleLoopsChange = useCallback((next: SearchCraftLoopItem[]) => {
-    setLoops(next);
-  }, []);
-
-  // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
-  const getLoopDeleteWarning = useCallback(
-    (craftId: string): string | null => {
-      const count = loops.filter((loop) => loop.steps.some((s) => s.craftId === craftId)).length;
-      return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
-    },
-    [loops, t],
-  );
-
-  const handleAddCraft = useCallback((timing: SearchCraftItem["timing"]) => {
-    const newCraft: SearchCraftItem = {
-      id: `new-${crypto.randomUUID()}`,
-      sequence: crafts.length + 1,
-      items: [],
-      keys: [],
-      comment: null,
-      timing,
-      variations: [{ str: "", withShift: false }],
-    };
-    setCrafts((prev) => reorderByBlock([...prev, newCraft]));
-  }, [crafts.length]);
-
-  const handleAddLoop = useCallback((timing: SearchCraftLoopItem["timing"]) => {
-    if (crafts.length < 2) return;
-    const newLoop: SearchCraftLoopItem = {
-      id: `new-${crypto.randomUUID()}`,
-      steps: [
-        { craftId: "", transition: null },
-        { craftId: "", transition: { type: "backspace", bsCount: 0 } },
-      ],
-      comment: null,
-      timing,
-    };
-    setLoops((prev) => reorderByBlock([...prev, newLoop]));
-  }, [crafts.length]);
+  const createLoop = useCallback((timing: SearchCraftLoopItem["timing"]): SearchCraftLoopItem => ({
+    id: `new-${crypto.randomUUID()}`,
+    steps: [
+      { craftId: "", transition: null, variationIndex: 0 },
+      { craftId: "", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+    ],
+    comment: null,
+    timing,
+  }), []);
 
   const handleSave = useCallback(() => {
     // バリデーション（サーチクラフト）
@@ -687,13 +644,12 @@ export default function SearchCraftPage() {
       <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
       <SearchCraftTimingBoard
         crafts={crafts}
-        onCraftsChange={handleCraftsChange}
+        onCraftsChange={setCrafts}
         loops={loops}
-        onLoopsChange={handleLoopsChange}
+        onLoopsChange={setLoops}
         remaps={remaps}
-        getDeleteWarning={getLoopDeleteWarning}
-        onAddCraft={handleAddCraft}
-        onAddLoop={handleAddLoop}
+        createCraft={createCraft}
+        createLoop={createLoop}
       />
       </div>
       </PresetSwitchLock>

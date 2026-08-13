@@ -1,10 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router";
-import {
-  formatItemName,
-  getItemNameJa,
-} from "@bafv4/mcitems/1.16/react";
-import { ItemIcon } from "@/components/item-icon";
+import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
 import type { FingerType } from "@/lib/keybindings";
 import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
 import { coerceStringArray, safeParseArray } from "@/lib/preset-read";
@@ -28,7 +24,6 @@ import {
 } from "@/components/search-craft-template-view";
 import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
 import { useT, useLocale } from "@/hooks/use-locale";
-import type { Locale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { ArrowRight } from "lucide-react";
 
@@ -273,11 +268,7 @@ export function KeybindEmbedView({
 // サーチクラフト表示コンポーネント
 // ========================================
 
-// アイテム名の表示（player/profile.tsx の同名ヘルパーと同じロケール分岐）
-function getItemDisplayName(itemId: string, locale: Locale): string {
-  if (locale === "en") return formatItemName(itemId, "en_us");
-  return getItemNameJa(itemId) || formatItemName(itemId);
-}
+// アイテム名のロケールフォールバックは共通ヘルパーを使用（app/components/item-icon.tsx の getLocalizedItemName）
 
 // タイミングの表示順・ラベルは共通定義 TIMING_META（全6種）から導出する
 // （独自定義だと新タイミング追加時に該当クラフトが黙って非表示になる）
@@ -316,6 +307,22 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
     transition: i === 0 ? null : toSafeLoopTransition(step.transition),
     variationIndex: normalizeVariationIndex(step.variationIndex),
   }));
+}
+
+/**
+ * 参照切れ・導出失敗を示す「?」kbd（Loop 表示内の3箇所で共用。軽量レンダラ方針のため
+ * search-craft-loop-view.tsx の InvalidSegmentBadge とは別の簡易版を持つ）。
+ * dashed=true でクラフト実行マーカー用の破線ボーダー版にする。
+ */
+function InvalidKbd({ title, dashed }: { title: string; dashed?: boolean }) {
+  return (
+    <kbd
+      className={`px-1.5 py-0.5 rounded border${dashed ? " border-dashed" : ""} border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs`}
+      title={title}
+    >
+      ?
+    </kbd>
+  );
 }
 
 export function SearchCraftEmbedView({
@@ -429,7 +436,7 @@ export function SearchCraftEmbedView({
             {items.map((itemId: string, idx: number) => (
               <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
                 <ItemIcon itemId={itemId} size={28} />
-                <span className="text-base">{getItemDisplayName(itemId, locale)}</span>
+                <span className="text-base">{getLocalizedItemName(itemId, locale)}</span>
               </div>
             ))}
           </div>
@@ -549,14 +556,7 @@ export function SearchCraftEmbedView({
   // 対称になるようにする。craft 未解決（参照切れ）・searchStr が空の場合は既存の invalid 表現に倒す
   const renderLoopFirstStepKeys = (step: ResolvedLoopStep) => {
     if (!step.searchStr) {
-      return (
-        <kbd
-          className="px-1.5 py-0.5 rounded border border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
-          title={t("playerProfile.loopInvalidTransition")}
-        >
-          ?
-        </kbd>
-      );
+      return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
     }
     return (
       <kbd className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
@@ -568,14 +568,7 @@ export function SearchCraftEmbedView({
   // ステップ間の遷移（先頭以外）。参照切れ・導出失敗（無効な遷移）は「?」kbd に留める
   const renderLoopStepOps = (step: ResolvedLoopStep) => {
     if (!step.derived || !step.derived.valid) {
-      return (
-        <kbd
-          className="px-1.5 py-0.5 rounded border border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
-          title={t("playerProfile.loopInvalidTransition")}
-        >
-          ?
-        </kbd>
-      );
+      return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
     }
     return (
       <span className="flex flex-wrap items-center gap-1">
@@ -589,15 +582,7 @@ export function SearchCraftEmbedView({
   const renderLoopCraftMarker = (craftId: string, key: number) => {
     const craft = craftLookup.get(craftId);
     if (!craft) {
-      return (
-        <kbd
-          key={key}
-          className="px-1.5 py-0.5 rounded border border-dashed border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs"
-          title={t("playerProfile.loopInvalidTransition")}
-        >
-          ?
-        </kbd>
-      );
+      return <InvalidKbd key={key} dashed title={t("playerProfile.loopInvalidTransition")} />;
     }
     const items = coerceStringArray(craft.items);
     const firstItem = items[0];

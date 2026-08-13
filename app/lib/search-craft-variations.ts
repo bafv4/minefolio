@@ -22,7 +22,8 @@ export type SearchCraftVariation = { str: string; withShift: boolean };
 /** 1エントリあたりのバリエーション上限（並べ替えUIなし・最低1件） */
 export const MAX_SEARCH_VARIATIONS = 5;
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** 値がプレーンオブジェクト（配列でない object）かどうか。search-craft-loops.ts と共有する */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -89,5 +90,40 @@ export function variationMirror(
   return {
     searchStr: first && first.str ? first.str : null,
     withShift: first ? first.withShift === true : false,
+  };
+}
+
+/**
+ * DB行・スナップショット行からバリエーションを読み取る定型パターン。
+ * `variations` が既に妥当な配列（isValidVariationsShape を満たす。プリセットデコード等、
+ * 呼び出し側で既にパース済みの経路）で渡された場合はそれを優先し、無ければ
+ * `searchVariations`（JSON文字列列）を parseVariationsJson() でパースし、それも無ければ
+ * searchStr/withShift から1件合成する（resolveVariations() の定型呼び出し。手書きしない）。
+ */
+export function resolveRowVariations(row: {
+  searchVariations?: string | null;
+  searchStr: string | null;
+  withShift?: boolean | null;
+  variations?: unknown;
+}): SearchCraftVariation[] {
+  const variations = isValidVariationsShape(row.variations)
+    ? row.variations
+    : (parseVariationsJson(row.searchVariations) ?? undefined);
+  return resolveVariations({ variations, searchStr: row.searchStr, withShift: row.withShift });
+}
+
+/**
+ * insert 用の3列（searchStr・withShift・searchVariations）を、正準の variations から
+ * まとめて構築する（variationMirror() のミラー計算 + searchVariations の JSON 化の定型。
+ * 空配列（未入力状態）は searchVariations に null を書く）。
+ */
+export function searchCraftColumnValues(
+  variations: SearchCraftVariation[],
+): { searchStr: string | null; withShift: boolean; searchVariations: string | null } {
+  const mirror = variationMirror(variations);
+  return {
+    searchStr: mirror.searchStr,
+    withShift: mirror.withShift,
+    searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
   };
 }

@@ -1677,8 +1677,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     copyFromOtherPreset: "Copy from another preset",
     copyShort: "Copy",
     managePresets: "Manage presets",
-    emptyTitle: "No search-craft set",
-    emptyDescription: "Add craft searches to speed up your runs.",
     copyDialogTitle: "Copy from another preset",
     copyDialogDescription: "Select the preset to copy from",
     noData: "No data",
@@ -1691,8 +1689,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     withShift: "While holding Shift",
     emptyBlockHint: "Drag a search-craft here to move it, or use \"Add item\" to create one",
     loopSectionTitle: "Chaining (Loop)",
-    loopSectionDescription:
-      "Set up the key sequence to run multiple search-crafts in a row without closing the crafting table.",
     addLoop: "Add loop",
     loopDropHint: "Drag a loop here to move it",
     loopNeedTwoEntries: "You need at least 2 search-craft entries to create a loop.",

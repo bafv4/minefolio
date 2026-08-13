@@ -15,8 +15,8 @@ import {
   type TemplateCraft,
   type TemplateLoop,
 } from "./search-craft-templates";
-import type { LoopStepData } from "./search-craft-loops";
-import { variationMirror } from "./search-craft-variations";
+import { remapLoopSteps, type LoopStepData } from "./search-craft-loops";
+import { searchCraftColumnValues } from "./search-craft-variations";
 
 /**
  * サーチクラフト（＋任意でリマップ）をプリセットへ反映するサーバー専用ヘルパー。
@@ -45,23 +45,26 @@ type ResolvedLoopForInsert = {
   timing: TemplateLoop["timing"];
 };
 
-/** TemplateLoop（craftIndex 参照）を、挿入済み crafts の新id配列で LoopStepData（craftId 参照）へ変換する。
- * craftIndex が範囲外のステップは除去し、残りが2件未満になった Loop は破棄する。 */
+/**
+ * TemplateLoop（craftIndex 参照）を、挿入済み crafts の新id配列で LoopStepData（craftId 参照）へ変換する。
+ * craftIndex を文字列化した仮 id（idMap のキー）を介して remapLoopSteps() の除去・
+ * <2破棄・先頭null リセット規則をそのまま再利用する（ロジックの二重管理を避ける）。
+ */
 function resolveLoopsToNewCraftIds(
   loops: TemplateLoop[],
   newCraftIds: string[],
 ): ResolvedLoopForInsert[] {
+  const idMap = new Map(newCraftIds.map((id, index) => [String(index), id]));
   const resolved: ResolvedLoopForInsert[] = [];
   for (const loop of loops) {
-    const steps: LoopStepData[] = [];
-    for (const step of loop.steps) {
-      const craftId = newCraftIds[step.craftIndex];
-      if (craftId === undefined) continue;
-      steps.push({ craftId, transition: step.transition, variationIndex: step.variationIndex });
-    }
-    if (steps.length < 2) continue;
-    steps[0] = { ...steps[0], transition: null };
-    resolved.push({ steps, comment: loop.comment, timing: loop.timing });
+    const steps: LoopStepData[] = loop.steps.map((step) => ({
+      craftId: String(step.craftIndex),
+      transition: step.transition,
+      variationIndex: step.variationIndex,
+    }));
+    const remapped = remapLoopSteps(steps, idMap);
+    if (!remapped) continue;
+    resolved.push({ steps: remapped, comment: loop.comment, timing: loop.timing });
   }
   return resolved;
 }
@@ -125,41 +128,38 @@ async function replaceLiveTables(
   await db.transaction(async (tx) => {
     await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, userId));
     await tx.delete(searchCrafts).where(eq(searchCrafts.userId, userId));
-    const newCraftIds: string[] = [];
-    for (let i = 0; i < crafts.length; i++) {
-      const craft = crafts[i];
-      const id = createId();
-      newCraftIds.push(id);
-      const mirror = variationMirror(craft.variations);
-      await tx.insert(searchCrafts).values({
-        id,
-        userId,
-        sequence: i + 1,
-        items: JSON.stringify(craft.items),
-        keys: JSON.stringify([]),
-        searchStr: mirror.searchStr,
-        comment: craft.comment,
-        timing: craft.timing,
-        withShift: mirror.withShift,
-        searchVariations: craft.variations.length > 0 ? JSON.stringify(craft.variations) : null,
-        createdAt: now,
-        updatedAt: now,
-      });
+    const newCraftIds = crafts.map(() => createId());
+    if (crafts.length > 0) {
+      await tx.insert(searchCrafts).values(
+        crafts.map((craft, i) => ({
+          id: newCraftIds[i],
+          userId,
+          sequence: i + 1,
+          items: JSON.stringify(craft.items),
+          keys: JSON.stringify([]),
+          comment: craft.comment,
+          timing: craft.timing,
+          ...searchCraftColumnValues(craft.variations),
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     }
 
     const resolvedLoops = resolveLoopsToNewCraftIds(loops, newCraftIds);
-    for (let i = 0; i < resolvedLoops.length; i++) {
-      const loop = resolvedLoops[i];
-      await tx.insert(searchCraftLoops).values({
-        id: createId(),
-        userId,
-        sequence: i + 1,
-        steps: JSON.stringify(loop.steps),
-        comment: loop.comment,
-        timing: loop.timing,
-        createdAt: now,
-        updatedAt: now,
-      });
+    if (resolvedLoops.length > 0) {
+      await tx.insert(searchCraftLoops).values(
+        resolvedLoops.map((loop, i) => ({
+          id: createId(),
+          userId,
+          sequence: i + 1,
+          steps: JSON.stringify(loop.steps),
+          comment: loop.comment,
+          timing: loop.timing,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     }
 
     if (remaps !== null) {

@@ -25,9 +25,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
-import { ActualKeyBadges } from "@/components/search-craft-template-view";
 import {
-  ControlKeyBadge,
+  TransitionOpsBadges,
   LoopKeySequence,
   type LoopCraftInfo,
 } from "@/components/search-craft-loop-view";
@@ -387,23 +386,7 @@ function TransitionRow({
         {invalidMessage ? (
           <span className="text-xs text-destructive">{invalidMessage}</span>
         ) : (
-          derived?.valid &&
-          derived.ops.map((op, idx) => {
-            switch (op.kind) {
-              case "backspace":
-                return <ControlKeyBadge key={idx} kind="backspace" count={op.count} remaps={remaps} />;
-              case "arrowLeft":
-                return <ControlKeyBadge key={idx} kind="arrowLeft" count={op.count} remaps={remaps} />;
-              case "selectAll":
-                return <ControlKeyBadge key={idx} kind="selectAll" remaps={remaps} />;
-              case "home":
-                return <ControlKeyBadge key={idx} kind="home" remaps={remaps} />;
-              case "type":
-                return <ActualKeyBadges key={idx} searchStr={op.text} remaps={remaps ?? []} />;
-              default:
-                return null;
-            }
-          })
+          derived?.valid && <TransitionOpsBadges ops={derived.ops} remaps={remaps ?? []} />
         )}
       </div>
     </div>

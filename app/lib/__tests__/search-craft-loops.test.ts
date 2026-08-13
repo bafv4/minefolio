@@ -84,8 +84,6 @@ describe("deriveTransition - backspace", () => {
         { kind: "type", text: "n" },
       ],
       typed: "n",
-      minBs: 1,
-      maxBs: 2,
     });
   });
 
@@ -97,8 +95,6 @@ describe("deriveTransition - backspace", () => {
         { kind: "type", text: "en" },
       ],
       typed: "en",
-      minBs: 1,
-      maxBs: 2,
     });
   });
 
@@ -110,8 +106,6 @@ describe("deriveTransition - backspace", () => {
         { kind: "type", text: "bxy" },
       ],
       typed: "bxy",
-      minBs: 2,
-      maxBs: 4,
     });
   });
 
@@ -146,8 +140,6 @@ describe("deriveTransition - backspace", () => {
       valid: true,
       ops: [{ kind: "type", text: "abc" }],
       typed: "abc",
-      minBs: 0,
-      maxBs: 0,
     });
   });
 
@@ -156,8 +148,6 @@ describe("deriveTransition - backspace", () => {
       valid: true,
       ops: [],
       typed: "",
-      minBs: 0,
-      maxBs: 3,
     });
   });
 });
@@ -171,8 +161,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: "x" },
       ],
       typed: "x",
-      minBs: 2,
-      maxBs: 4,
     });
   });
 
@@ -223,8 +211,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: "x" },
       ],
       typed: "x",
-      minBs: 2,
-      maxBs: 2,
     });
   });
 
@@ -247,8 +233,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: "a" },
       ],
       typed: "a",
-      minBs: 0,
-      maxBs: 2,
     });
     expect(deriveTransition("aa", "aaa", { type: "arrowLeft", arrowCount: 2 })).toEqual({
       valid: true,
@@ -257,8 +241,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: "a" },
       ],
       typed: "a",
-      minBs: 0,
-      maxBs: 2,
     });
   });
 
@@ -270,8 +252,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: "x" },
       ],
       typed: "x",
-      minBs: 1,
-      maxBs: 3,
     });
   });
 
@@ -283,8 +263,6 @@ describe("deriveTransition - arrowLeft", () => {
         { kind: "type", text: " " },
       ],
       typed: " ",
-      minBs: 1,
-      maxBs: 2,
     });
   });
 });
@@ -298,8 +276,6 @@ describe("deriveTransition - selectAll", () => {
         { kind: "type", text: " en " },
       ],
       typed: " en ",
-      minBs: 3,
-      maxBs: 3,
     });
   });
 });
@@ -313,8 +289,6 @@ describe("deriveTransition - home", () => {
         { kind: "type", text: "ov" },
       ],
       typed: "ov",
-      minBs: 2,
-      maxBs: 2,
     });
   });
 
@@ -340,8 +314,6 @@ describe("deriveTransition - home", () => {
         { kind: "type", text: "ov" },
       ],
       typed: "ov",
-      minBs: 3,
-      maxBs: 3,
     });
   });
 });
@@ -375,8 +347,6 @@ describe("resolveLoopSteps", () => {
         { kind: "type", text: "n" },
       ],
       typed: "n",
-      minBs: 1,
-      maxBs: 2,
     });
     expect(result.steps[2].derived?.valid).toBe(true);
   });

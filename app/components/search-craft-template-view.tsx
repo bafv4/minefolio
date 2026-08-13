@@ -61,28 +61,32 @@ function useItemLang(gameLanguage: string | null | undefined): string {
 }
 
 /**
+ * 半角スペースの連続を「␣」（U+2423）に置き換えて可視化しつつ、テキスト片を描画する
+ * （全角スペースは対象外）。可視化用の span は常に aria-hidden にする（呼び出し側で
+ * 読み上げテキストを別途 aria-label 等で提供すること）。search-craft-loop-view.tsx の
+ * SegmentedSearchString と共用する。
+ */
+export function renderVisibleSpaces(text: string, spaceClassName: string): ReactNode[] {
+  const parts = text.split(/( +)/);
+  return parts.map((part, i) =>
+    part.length > 0 && part[0] === " " ? (
+      <span key={i} aria-hidden="true" className={spaceClassName}>
+        {"␣".repeat(part.length)}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
+/**
  * サーチ文字列を表示する。半角スペースは視認できるよう「␣」（U+2423）に置き換えて
  * 描画する（全角スペースは対象外）。描画テキストは実データと異なるため、
  * コピー機能は必ず元の searchStr 文字列を使うこと（DOM のテキストから取らない）。
  * スクリーンリーダーには aria-label で元の文字列を提供する。
  */
 export function SearchStringText({ value }: { value: string }) {
-  const t = useT();
-  // 半角スペースの連続を捕捉して分割
-  const parts = value.split(/( +)/);
-  return (
-    <span aria-label={value}>
-      {parts.map((part, i) =>
-        part.length > 0 && part[0] === " " ? (
-          <span key={i} aria-hidden="true" className="text-muted-foreground/70">
-            {"␣".repeat(part.length)}
-          </span>
-        ) : (
-          part
-        ),
-      )}
-    </span>
-  );
+  return <span aria-label={value}>{renderVisibleSpaces(value, "text-muted-foreground/70")}</span>;
 }
 
 /**

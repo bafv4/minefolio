@@ -21,7 +21,6 @@ import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
   SearchCraftTimingBoard,
-  reorderByBlock,
   type SearchCraftDraft,
 } from "@/components/search-craft-editor";
 import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
@@ -32,7 +31,6 @@ import {
 } from "@/lib/remap-utils";
 import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
-import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
 
@@ -212,59 +210,30 @@ export function SearchCraftWorkbench({
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
-  // SearchCraftTimingBoard からの crafts 更新（D&D・行の更新・削除を含む）。
-  // 消えた craftId があれば、それを参照する Loop ステップを連動して除去する
-  // （生存参照は温存、remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）
-  const handleCraftsChange = useCallback(
-    (next: SearchCraftDraft[]) => {
-      const removedIds = crafts.filter((c) => !next.some((n) => n.id === c.id)).map((c) => c.id);
-      onCraftsChange(next);
-      if (removedIds.length > 0) {
-        const idMap = new Map(next.map((c) => [c.id, c.id]));
-        onLoopsChange(
-          loops
-            .map((loop) => {
-              const steps = remapLoopSteps(loop.steps, idMap);
-              return steps ? { ...loop, steps } : null;
-            })
-            .filter((loop): loop is SearchCraftLoopDraft => loop !== null),
-        );
-      }
-    },
-    [crafts, loops, onCraftsChange, onLoopsChange],
+  // 新規クラフト/Loopのdraftファクトリ（id生成のみここで担う。ブロック内挿入・
+  // reorderByBlock の emit・削除時の Loop 連動除去は SearchCraftTimingBoard 側が担う）
+  const createCraft = useCallback(
+    (timing: SearchCraftDraft["timing"]): SearchCraftDraft => ({
+      id: draftId("craft"),
+      items: [],
+      comment: null,
+      timing,
+      variations: [{ str: "", withShift: false }],
+    }),
+    [],
   );
 
-  const handleAddCraft = useCallback(
-    (timing: SearchCraftDraft["timing"]) => {
-      onCraftsChange(
-        reorderByBlock([
-          ...crafts,
-          { id: draftId("craft"), items: [], comment: null, timing, variations: [{ str: "", withShift: false }] },
-        ]),
-      );
-    },
-    [crafts, onCraftsChange],
-  );
-
-  const handleAddLoop = useCallback(
-    (timing: SearchCraftLoopDraft["timing"]) => {
-      if (crafts.length < 2) return;
-      onLoopsChange(
-        reorderByBlock([
-          ...loops,
-          {
-            id: draftId("loop"),
-            steps: [
-              { craftId: "", transition: null },
-              { craftId: "", transition: { type: "backspace", bsCount: 0 } },
-            ],
-            comment: null,
-            timing,
-          },
-        ]),
-      );
-    },
-    [crafts.length, loops, onLoopsChange],
+  const createLoop = useCallback(
+    (timing: SearchCraftLoopDraft["timing"]): SearchCraftLoopDraft => ({
+      id: draftId("loop"),
+      steps: [
+        { craftId: "", transition: null, variationIndex: 0 },
+        { craftId: "", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+      ],
+      comment: null,
+      timing,
+    }),
+    [],
   );
 
   const updateRemapAt = useCallback(
@@ -458,18 +427,12 @@ export function SearchCraftWorkbench({
         <CardContent>
           <SearchCraftTimingBoard
             crafts={crafts}
-            onCraftsChange={handleCraftsChange}
+            onCraftsChange={onCraftsChange}
             loops={loops}
             onLoopsChange={onLoopsChange}
             remaps={effectiveRemaps}
-            getDeleteWarning={(craftId) => {
-              const count = loops.filter((loop) =>
-                loop.steps.some((s) => s.craftId === craftId),
-              ).length;
-              return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
-            }}
-            onAddCraft={handleAddCraft}
-            onAddLoop={handleAddLoop}
+            createCraft={createCraft}
+            createLoop={createLoop}
           />
         </CardContent>
       </Card>

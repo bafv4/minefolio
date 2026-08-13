@@ -408,16 +408,18 @@ export async function syncActivePresetSnapshot(
         break;
       }
       case "searchCrafts": {
-        const rows = await db.query.searchCrafts.findMany({
-          where: eq(searchCrafts.userId, userId),
-        });
+        // crafts と loops のスキューを防ぐため、常に両列を同時に書く（loops 専用の同期 kind は作らない）。
+        // 互いに独立したクエリ（両方 userId のみで絞り込み）なので並列化する
+        const [rows, loopRows] = await Promise.all([
+          db.query.searchCrafts.findMany({
+            where: eq(searchCrafts.userId, userId),
+          }),
+          db.query.searchCraftLoops.findMany({
+            where: eq(searchCraftLoops.userId, userId),
+            orderBy: [asc(searchCraftLoops.sequence)],
+          }),
+        ]);
         updates.searchCraftsData = rows.length > 0 ? serializeSearchCrafts(rows) : null;
-
-        // crafts と loops のスキューを防ぐため、常に両列を同時に書く（loops 専用の同期 kind は作らない）
-        const loopRows = await db.query.searchCraftLoops.findMany({
-          where: eq(searchCraftLoops.userId, userId),
-          orderBy: [asc(searchCraftLoops.sequence)],
-        });
         updates.searchCraftLoopsData = serializeSearchCraftLoops(loopRows, rows);
         break;
       }

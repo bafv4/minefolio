@@ -9,16 +9,11 @@ import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
 import { eq, desc, asc, and, ne } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetSearchCraftLoopData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
-import {
-  parseLoopSteps,
-  remapLoopSteps,
-  isValidLoopTransitionValue,
-  normalizeVariationIndex,
-  type LoopStepData,
-} from "@/lib/search-craft-loops";
-import { resolveVariations, parseVariationsJson, variationMirror } from "@/lib/search-craft-variations";
+import { parseLoopSteps, remapLoopSteps } from "@/lib/search-craft-loops";
+import { resolveRowVariations, searchCraftColumnValues } from "@/lib/search-craft-variations";
+import { decodePresetSearchCraftLoops } from "@/lib/preset-read";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -165,13 +160,12 @@ async function restorePlayerConfigFromSnapshot(
 
 /**
  * スナップショット（searchCraftLoopsData JSON）からライブテーブルへ Loop（繋ぎ方）を復元する。
- * ステップの craftSeq を seqToNewCraftId（挿入直後の crafts の sequence→新id マップ）で
- * craftId に解決する。参照切れステップ・transition が構造的に不正なステップ（null は先頭のみ許可。
- * decodePresetSearchCraftLoops と同じ規則）は除去し、残りが2件未満になった Loop は書き込まない
- * （安全側。スナップショット自体は serializeSearchCraftLoops の時点で既に整合済みのはずだが、
- * 破損データでもトランザクションを失敗させないための保険）。
+ * デコード（craftSeq→craftId 解決・参照切れ/構造不正ステップの除去・<2破棄）は
+ * decodePresetSearchCraftLoops（app/lib/preset-read.ts）に委ねる。プリセットの公開表示
+ * （decodePresetConfig 経由）と同じ規則を使うため、復元とデコードで判定が食い違わない。
  *
- * sequence はスナップショット値をそのまま使わず、実際に挿入した順の連番（1始まり）で振り直す。
+ * sequence はデコード結果の値をそのまま使わず、実際に挿入する順の連番（1始まり）で振り直す
+ * （decodePresetSearchCraftLoops は元のスナップショットの sequence をそのまま返すため干渉しない）。
  * スナップショット由来の sequence が重複していると (userId, sequence) の unique index に
  * 違反してトランザクション全体が失敗し、プリセット切替そのものが恒久的にできなくなるため。
  */
@@ -182,46 +176,22 @@ async function restoreSearchCraftLoopsFromSnapshot(
   seqToNewCraftId: Map<number, string>,
   now: Date,
 ) {
-  if (!searchCraftLoopsData) return;
-  let rows: PresetSearchCraftLoopData[];
-  try {
-    rows = JSON.parse(searchCraftLoopsData) as PresetSearchCraftLoopData[];
-  } catch {
-    return;
-  }
-  if (!Array.isArray(rows)) return;
+  const decodedCrafts = [...seqToNewCraftId].map(([sequence, id]) => ({ id, sequence }));
+  const loops = decodePresetSearchCraftLoops(searchCraftLoopsData, decodedCrafts);
+  if (loops.length === 0) return;
 
-  let nextSequence = 1;
-  for (const loop of rows) {
-    if (!loop || !Array.isArray(loop.steps)) continue;
-
-    const steps: LoopStepData[] = [];
-    for (const step of loop.steps) {
-      const craftId = seqToNewCraftId.get(step.craftSeq);
-      if (craftId === undefined) continue;
-
-      const variationIndex = normalizeVariationIndex(step.variationIndex);
-      if (steps.length === 0) {
-        // 先頭は transition の形を問わず null に統一する
-        steps.push({ craftId, transition: null, variationIndex });
-        continue;
-      }
-      if (!isValidLoopTransitionValue(step.transition)) continue;
-      steps.push({ craftId, transition: step.transition, variationIndex });
-    }
-    if (steps.length < 2) continue;
-
-    await tx.insert(searchCraftLoops).values({
+  await tx.insert(searchCraftLoops).values(
+    loops.map((loop, i) => ({
       id: createId(),
       userId,
-      sequence: nextSequence++,
-      steps: JSON.stringify(steps),
+      sequence: i + 1,
+      steps: JSON.stringify(loop.steps),
       comment: loop.comment,
       timing: loop.timing ?? null,
       createdAt: now,
       updatedAt: now,
-    });
-  }
+    })),
+  );
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -404,28 +374,23 @@ export async function action({ request }: Route.ActionArgs) {
           // Loop 復元用に sequence→新id を記録する（プリセットスナップショットは行 id を持たないため）
           const seqToNewCraftId = new Map<number, string>();
           for (const craft of craftData) {
-            const newCraftId = createId();
-            seqToNewCraftId.set(craft.sequence, newCraftId);
-            const variations = resolveVariations({
-              variations: craft.variations,
-              searchStr: craft.searchStr,
-              withShift: craft.withShift,
-            });
-            const mirror = variationMirror(variations);
-            await tx.insert(searchCrafts).values({
-              id: newCraftId,
-              userId: user.id,
-              sequence: craft.sequence,
-              items: craft.items,
-              keys: craft.keys,
-              searchStr: mirror.searchStr,
-              comment: craft.comment,
-              timing: craft.timing ?? null,
-              withShift: mirror.withShift,
-              searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
-              createdAt: now,
-              updatedAt: now,
-            });
+            seqToNewCraftId.set(craft.sequence, createId());
+          }
+          if (craftData.length > 0) {
+            await tx.insert(searchCrafts).values(
+              craftData.map((craft) => ({
+                id: seqToNewCraftId.get(craft.sequence)!,
+                userId: user.id,
+                sequence: craft.sequence,
+                items: craft.items,
+                keys: craft.keys,
+                comment: craft.comment,
+                timing: craft.timing ?? null,
+                ...searchCraftColumnValues(resolveRowVariations(craft)),
+                createdAt: now,
+                updatedAt: now,
+              })),
+            );
           }
           await restoreSearchCraftLoopsFromSnapshot(tx, user.id, searchCraftLoopsData, seqToNewCraftId, now);
         }
@@ -553,35 +518,27 @@ export async function action({ request }: Route.ActionArgs) {
           });
         }
         // Loop 復元用に旧craftId→新craftId を記録する（ライブ再挿入は毎回新idを振るため）
-        const oldToNewCraftId = new Map<string, string>();
-        for (const craft of user.searchCrafts) {
-          const newCraftId = createId();
-          oldToNewCraftId.set(craft.id, newCraftId);
-          const variations = resolveVariations({
-            variations: parseVariationsJson(craft.searchVariations) ?? undefined,
-            searchStr: craft.searchStr,
-            withShift: craft.withShift,
-          });
-          const mirror = variationMirror(variations);
-          await tx.insert(searchCrafts).values({
-            id: newCraftId,
-            userId: user.id,
-            sequence: craft.sequence,
-            items: craft.items,
-            keys: craft.keys,
-            searchStr: mirror.searchStr,
-            comment: craft.comment,
-            timing: craft.timing,
-            withShift: mirror.withShift,
-            searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
-            createdAt: now,
-            updatedAt: now,
-          });
+        const oldToNewCraftId = new Map(user.searchCrafts.map((craft) => [craft.id, createId()]));
+        if (user.searchCrafts.length > 0) {
+          await tx.insert(searchCrafts).values(
+            user.searchCrafts.map((craft) => ({
+              id: oldToNewCraftId.get(craft.id)!,
+              userId: user.id,
+              sequence: craft.sequence,
+              items: craft.items,
+              keys: craft.keys,
+              comment: craft.comment,
+              timing: craft.timing,
+              ...searchCraftColumnValues(resolveRowVariations(craft)),
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
         }
-        for (const loop of user.searchCraftLoops) {
+        const remappedLoopRows = user.searchCraftLoops.flatMap((loop) => {
           const remappedSteps = remapLoopSteps(parseLoopSteps(loop.steps), oldToNewCraftId);
-          if (!remappedSteps) continue;
-          await tx.insert(searchCraftLoops).values({
+          if (!remappedSteps) return [];
+          return [{
             id: createId(),
             userId: user.id,
             sequence: loop.sequence,
@@ -590,7 +547,10 @@ export async function action({ request }: Route.ActionArgs) {
             timing: loop.timing,
             createdAt: now,
             updatedAt: now,
-          });
+          }];
+        });
+        if (remappedLoopRows.length > 0) {
+          await tx.insert(searchCraftLoops).values(remappedLoopRows);
         }
         for (const ck of user.customKeys) {
           await tx.insert(customKeys).values({
@@ -897,28 +857,23 @@ export async function action({ request }: Route.ActionArgs) {
         // Loop 復元用に sequence→新id を記録する（プリセットスナップショットは行 id を持たないため）
         const seqToNewCraftId = new Map<number, string>();
         for (const craftData of craftsFromPreset) {
-          const newCraftId = createId();
-          seqToNewCraftId.set(craftData.sequence, newCraftId);
-          const variations = resolveVariations({
-            variations: craftData.variations,
-            searchStr: craftData.searchStr,
-            withShift: craftData.withShift,
-          });
-          const mirror = variationMirror(variations);
-          await tx.insert(searchCrafts).values({
-            id: newCraftId,
-            userId: user.id,
-            sequence: craftData.sequence,
-            items: craftData.items,
-            keys: craftData.keys,
-            searchStr: mirror.searchStr,
-            comment: craftData.comment,
-            timing: craftData.timing ?? null,
-            withShift: mirror.withShift,
-            searchVariations: variations.length > 0 ? JSON.stringify(variations) : null,
-            createdAt: now,
-            updatedAt: now,
-          });
+          seqToNewCraftId.set(craftData.sequence, createId());
+        }
+        if (craftsFromPreset.length > 0) {
+          await tx.insert(searchCrafts).values(
+            craftsFromPreset.map((craftData) => ({
+              id: seqToNewCraftId.get(craftData.sequence)!,
+              userId: user.id,
+              sequence: craftData.sequence,
+              items: craftData.items,
+              keys: craftData.keys,
+              comment: craftData.comment,
+              timing: craftData.timing ?? null,
+              ...searchCraftColumnValues(resolveRowVariations(craftData)),
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
         }
         await restoreSearchCraftLoopsFromSnapshot(
           tx,

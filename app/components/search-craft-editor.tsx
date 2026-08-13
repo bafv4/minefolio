@@ -80,7 +80,7 @@ import {
   type LoopEditorEntry,
   type SearchCraftLoopDraft,
 } from "@/components/search-craft-loop-editor";
-import { remapVariationRefs } from "@/lib/search-craft-loops";
+import { remapVariationRefs, remapLoopSteps } from "@/lib/search-craft-loops";
 import { MAX_SEARCH_VARIATIONS, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
@@ -124,9 +124,10 @@ function ItemSelectDialog({
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
 
-  // mcitemsからクラフト可能なアイテムを取得
+  // mcitemsからクラフト可能なアイテムを取得（検索のたびに includes() で全走査しないよう Set 化）
+  const craftableItemSet = useMemo(() => new Set(getCraftableItems()), []);
   const filteredItems = search
-    ? searchItems(search).filter((id) => getCraftableItems().includes(id))
+    ? searchItems(search).filter((id) => craftableItemSet.has(id))
     : getCraftableItemsByCategory(selectedCategory);
 
   const toggleItem = (itemId: string) => {
@@ -514,6 +515,72 @@ function reorderByBlock<T extends { timing: SearchCraftTiming | null }>(items: T
     .map(({ item }) => item);
 }
 
+/**
+ * D&D の「ブロック間移動」処理（handleDragOver）。クラフト・Loop で対称な処理（ドロップ先ブロックの
+ * timing 判定 → 同一ブロックなら何もしない → 除去して timing 更新の上、ドロップ位置へ挿入）を
+ * ドメイン非依存の1関数に畳む。移動不要（見つからない・同一ブロック）なら null を返す。
+ */
+function moveAcrossBlocks<T extends { id: string; timing: SearchCraftTiming | null }>(
+  list: T[],
+  activeId: string,
+  overId: string,
+  isZoneId: (id: string) => boolean,
+  zonePrefix: string,
+): T[] | null {
+  const active = list.find((item) => item.id === activeId);
+  if (!active) return null;
+
+  let destTiming: SearchCraftTiming | null;
+  let overItemId: string | null = null;
+  if (isZoneId(overId)) {
+    destTiming = timingFromZoneId(overId, zonePrefix);
+  } else {
+    const overItem = list.find((item) => item.id === overId);
+    if (!overItem) return null;
+    destTiming = overItem.timing;
+    overItemId = overItem.id;
+  }
+  if (active.timing === destTiming) return null; // 同一ブロック内は reorderWithinList（onDragEnd）に委ねる
+
+  const rest = list.filter((item) => item.id !== activeId);
+  const moved = { ...active, timing: destTiming };
+  let insertAt: number;
+  if (overItemId) {
+    insertAt = rest.findIndex((item) => item.id === overItemId);
+    if (insertAt === -1) insertAt = rest.length;
+  } else {
+    let lastIdx = -1;
+    rest.forEach((item, i) => {
+      if (item.timing === destTiming) lastIdx = i;
+    });
+    insertAt = lastIdx + 1;
+  }
+  return [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
+}
+
+/**
+ * D&D の「ブロック内並べ替え」処理（handleDragEnd）。ドロップ先がブロックのドロップゾーン
+ * 自体（ブロック間移動は handleDragOver で処理済み）、または要素が見つからない場合は null。
+ */
+function reorderWithinList<T extends { id: string; timing: SearchCraftTiming | null }>(
+  list: T[],
+  activeId: string,
+  overId: string,
+  isZoneId: (id: string) => boolean,
+): T[] | null {
+  if (isZoneId(overId)) return null;
+  const oldIndex = list.findIndex((item) => item.id === activeId);
+  const newIndex = list.findIndex((item) => item.id === overId);
+  if (oldIndex === -1 || newIndex === -1) return null;
+  return reorderByBlock(arrayMove(list, oldIndex, newIndex));
+}
+
+/** LoopEditorEntry（Loop のエントリ選択に使う参照可能クラフト一覧）への変換。crafts の変更のたびに
+ * 同じ形を作る箇所（初期表示・handleUpdateCraft の再構築）で共通化する */
+function toLoopEntries<T extends SearchCraftDraft>(crafts: T[]): LoopEditorEntry[] {
+  return crafts.map((c) => ({ id: c.id, items: c.items, variations: c.variations }));
+}
+
 type TimingBlockProps<T extends SearchCraftDraft, L extends SearchCraftLoopDraft> = {
   timing: SearchCraftTiming | null;
   crafts: T[];
@@ -681,9 +748,8 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   loops,
   onLoopsChange,
   remaps,
-  getDeleteWarning,
-  onAddCraft,
-  onAddLoop,
+  createCraft,
+  createLoop,
 }: {
   crafts: T[];
   onCraftsChange: (next: T[]) => void;
@@ -691,13 +757,20 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   onLoopsChange: (next: L[]) => void;
   /** 指定すると各行に入力キーのライブプレビューを表示する */
   remaps?: RemapInfo[];
-  /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
-  getDeleteWarning?: (craftId: string) => string | null;
-  /** 新規クラフトの追加。timing にはクリックしたブロックの値を渡す（オブジェクトの構築は呼び出し側） */
-  onAddCraft: (timing: SearchCraftTiming | null) => void;
-  /** 新規Loopの追加。timing にはクリックしたブロックの値を渡す */
-  onAddLoop: (timing: SearchCraftTiming | null) => void;
+  /**
+   * 新規クラフトのdraftファクトリ。timing にはクリックしたブロックの値を渡す
+   * （id 生成・その他フィールドの初期値は呼び出し側が担う）。
+   * Board が `reorderByBlock([...crafts, created])` の emit まで面倒を見る
+   */
+  createCraft: (timing: SearchCraftTiming | null) => T;
+  /**
+   * 新規Loopのdraftファクトリ。steps は最低2件・先頭 transition は null にすること。
+   * 各ステップの variationIndex は 0 を明示すること（メモリ上は常に明示済みという
+   * LoopStepData の契約 — app/lib/search-craft-loops.ts 参照）
+   */
+  createLoop: (timing: SearchCraftTiming | null) => L;
 }) {
+  const t = useT();
   const dndContextId = useId();
   const [activeDrag, setActiveDrag] = useState<{ type: "craft" | "loop"; id: string } | null>(null);
 
@@ -706,17 +779,17 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const entries: LoopEditorEntry[] = useMemo(
-    () => crafts.map((c) => ({ id: c.id, items: c.items, variations: c.variations })),
-    [crafts],
-  );
+  const entries: LoopEditorEntry[] = useMemo(() => toLoopEntries(crafts), [crafts]);
 
+  // 未知の timing（不正データ等、通常は起こらない）は「指定なし」ブロックへ正規化する。
+  // 正規化せず未知キーのまま Map に積むと、BLOCK_TIMINGS を走査する描画側には決して
+  // 拾われず、データは残ったままクラフトが画面から消えたように見えてしまう
   const craftsByBlock = useMemo(() => {
     const map = new Map<SearchCraftTiming | null, T[]>();
     for (const timing of BLOCK_TIMINGS) map.set(timing, []);
     for (const craft of crafts) {
-      if (!map.has(craft.timing)) map.set(craft.timing, []);
-      map.get(craft.timing)!.push(craft);
+      const bucket = map.has(craft.timing) ? craft.timing : null;
+      map.get(bucket)!.push(craft);
     }
     return map;
   }, [crafts]);
@@ -725,38 +798,42 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     const map = new Map<SearchCraftTiming | null, L[]>();
     for (const timing of BLOCK_TIMINGS) map.set(timing, []);
     for (const loop of loops) {
-      if (!map.has(loop.timing)) map.set(loop.timing, []);
-      map.get(loop.timing)!.push(loop);
+      const bucket = map.has(loop.timing) ? loop.timing : null;
+      map.get(bucket)!.push(loop);
     }
     return map;
   }, [loops]);
 
   // ドラッグ中の対象と同じドメイン（craft/loop）の droppable のみを衝突判定の対象にする
-  // （crafts と loops を同一 DndContext で扱うための、互いの干渉を防ぐ仕組み）
+  // （crafts と loops を同一 DndContext で扱うための、互いの干渉を防ぐ仕組み）。
+  // id の所属判定は ID セットで O(1) にする（ポインタ移動のたびに配列を全走査しない）
+  const craftIdSet = useMemo(() => new Set(crafts.map((c) => c.id)), [crafts]);
+  const loopIdSet = useMemo(() => new Set(loops.map((l) => l.id)), [loops]);
+
   const collisionDetectionStrategy: CollisionDetection = useCallback(
     (args) => {
       if (!activeDrag) return closestCenter(args);
       const filtered = args.droppableContainers.filter((container) => {
         const id = String(container.id);
         return activeDrag.type === "loop"
-          ? isLoopZoneId(id) || loops.some((l) => l.id === id)
-          : isCraftZoneId(id) || crafts.some((c) => c.id === id);
+          ? isLoopZoneId(id) || loopIdSet.has(id)
+          : isCraftZoneId(id) || craftIdSet.has(id);
       });
       return closestCenter({ ...args, droppableContainers: filtered });
     },
-    [activeDrag, crafts, loops],
+    [activeDrag, craftIdSet, loopIdSet],
   );
 
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const id = String(event.active.id);
-      if (loops.some((l) => l.id === id)) {
+      if (loopIdSet.has(id)) {
         setActiveDrag({ type: "loop", id });
-      } else if (crafts.some((c) => c.id === id)) {
+      } else if (craftIdSet.has(id)) {
         setActiveDrag({ type: "craft", id });
       }
     },
-    [crafts, loops],
+    [craftIdSet, loopIdSet],
   );
 
   const handleDragCancel = useCallback(() => setActiveDrag(null), []);
@@ -771,65 +848,11 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       if (activeId === overId) return;
 
       if (activeDrag.type === "craft") {
-        const activeCraft = crafts.find((c) => c.id === activeId);
-        if (!activeCraft) return;
-        let destTiming: SearchCraftTiming | null;
-        let overCraftId: string | null = null;
-        if (isCraftZoneId(overId)) {
-          destTiming = timingFromZoneId(overId, CRAFT_ZONE_PREFIX);
-        } else {
-          const overCraft = crafts.find((c) => c.id === overId);
-          if (!overCraft) return;
-          destTiming = overCraft.timing;
-          overCraftId = overCraft.id;
-        }
-        if (activeCraft.timing === destTiming) return; // 同一ブロック内は onDragEnd の arrayMove に委ねる
-
-        const rest = crafts.filter((c) => c.id !== activeId);
-        const moved = { ...activeCraft, timing: destTiming } as T;
-        let insertAt: number;
-        if (overCraftId) {
-          insertAt = rest.findIndex((c) => c.id === overCraftId);
-          if (insertAt === -1) insertAt = rest.length;
-        } else {
-          let lastIdx = -1;
-          rest.forEach((c, i) => {
-            if (c.timing === destTiming) lastIdx = i;
-          });
-          insertAt = lastIdx + 1;
-        }
-        const next = [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
-        onCraftsChange(reorderByBlock(next));
+        const next = moveAcrossBlocks(crafts, activeId, overId, isCraftZoneId, CRAFT_ZONE_PREFIX);
+        if (next) onCraftsChange(reorderByBlock(next));
       } else {
-        const activeLoop = loops.find((l) => l.id === activeId);
-        if (!activeLoop) return;
-        let destTiming: SearchCraftTiming | null;
-        let overLoopId: string | null = null;
-        if (isLoopZoneId(overId)) {
-          destTiming = timingFromZoneId(overId, LOOP_ZONE_PREFIX);
-        } else {
-          const overLoop = loops.find((l) => l.id === overId);
-          if (!overLoop) return;
-          destTiming = overLoop.timing;
-          overLoopId = overLoop.id;
-        }
-        if (activeLoop.timing === destTiming) return;
-
-        const rest = loops.filter((l) => l.id !== activeId);
-        const moved = { ...activeLoop, timing: destTiming } as L;
-        let insertAt: number;
-        if (overLoopId) {
-          insertAt = rest.findIndex((l) => l.id === overLoopId);
-          if (insertAt === -1) insertAt = rest.length;
-        } else {
-          let lastIdx = -1;
-          rest.forEach((l, i) => {
-            if (l.timing === destTiming) lastIdx = i;
-          });
-          insertAt = lastIdx + 1;
-        }
-        const next = [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
-        onLoopsChange(reorderByBlock(next));
+        const next = moveAcrossBlocks(loops, activeId, overId, isLoopZoneId, LOOP_ZONE_PREFIX);
+        if (next) onLoopsChange(reorderByBlock(next));
       }
     },
     [activeDrag, crafts, loops, onCraftsChange, onLoopsChange],
@@ -847,17 +870,11 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       if (activeId === overId) return;
 
       if (drag.type === "craft") {
-        if (isCraftZoneId(overId)) return; // ブロック間移動は onDragOver で処理済み
-        const oldIndex = crafts.findIndex((c) => c.id === activeId);
-        const newIndex = crafts.findIndex((c) => c.id === overId);
-        if (oldIndex === -1 || newIndex === -1) return;
-        onCraftsChange(reorderByBlock(arrayMove(crafts, oldIndex, newIndex)));
+        const next = reorderWithinList(crafts, activeId, overId, isCraftZoneId);
+        if (next) onCraftsChange(next);
       } else {
-        if (isLoopZoneId(overId)) return;
-        const oldIndex = loops.findIndex((l) => l.id === activeId);
-        const newIndex = loops.findIndex((l) => l.id === overId);
-        if (oldIndex === -1 || newIndex === -1) return;
-        onLoopsChange(reorderByBlock(arrayMove(loops, oldIndex, newIndex)));
+        const next = reorderWithinList(loops, activeId, overId, isLoopZoneId);
+        if (next) onLoopsChange(next);
       }
     },
     [activeDrag, crafts, loops, onCraftsChange, onLoopsChange],
@@ -877,11 +894,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       onCraftsChange(nextCrafts);
       if (!prevCraft || prevCraft.variations === updated.variations) return;
 
-      const nextEntries: LoopEditorEntry[] = nextCrafts.map((c) => ({
-        id: c.id,
-        items: c.items,
-        variations: c.variations,
-      }));
+      const nextEntries = toLoopEntries(nextCrafts);
 
       const variationRemoved = updated.variations.length < prevCraft.variations.length;
       let removedIndex = -1;
@@ -913,6 +926,48 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     [crafts, loops, onCraftsChange, onLoopsChange],
   );
 
+  // クラフト削除。参照している Loop ステップを連動して除去する（生存参照は温存、
+  // remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）
+  const handleDeleteCraft = useCallback(
+    (id: string) => {
+      const nextCrafts = reorderByBlock(crafts.filter((c) => c.id !== id));
+      onCraftsChange(nextCrafts);
+      const idMap = new Map(nextCrafts.map((c) => [c.id, c.id]));
+      const nextLoops = loops
+        .map((loop) => {
+          const steps = remapLoopSteps(loop.steps, idMap);
+          return steps ? { ...loop, steps } : null;
+        })
+        .filter((loop): loop is L => loop !== null);
+      onLoopsChange(nextLoops);
+    },
+    [crafts, loops, onCraftsChange, onLoopsChange],
+  );
+
+  // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
+  const getDeleteWarning = useCallback(
+    (craftId: string): string | null => {
+      const count = loops.filter((loop) => loop.steps.some((s) => s.craftId === craftId)).length;
+      return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
+    },
+    [loops, t],
+  );
+
+  const handleAddCraft = useCallback(
+    (timing: SearchCraftTiming | null) => {
+      onCraftsChange(reorderByBlock([...crafts, createCraft(timing)]));
+    },
+    [crafts, createCraft, onCraftsChange],
+  );
+
+  const handleAddLoop = useCallback(
+    (timing: SearchCraftTiming | null) => {
+      if (crafts.length < 2) return;
+      onLoopsChange(reorderByBlock([...loops, createLoop(timing)]));
+    },
+    [crafts.length, loops, createLoop, onLoopsChange],
+  );
+
   const isLoopDragging = activeDrag?.type === "loop";
   const totalCraftCount = crafts.length;
 
@@ -939,22 +994,16 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             totalCraftCount={totalCraftCount}
             isLoopDragging={isLoopDragging}
             onUpdateCraft={handleUpdateCraft}
-            onDeleteCraft={(id) => onCraftsChange(reorderByBlock(crafts.filter((c) => c.id !== id)))}
-            onAddCraft={() => onAddCraft(timing)}
+            onDeleteCraft={handleDeleteCraft}
+            onAddCraft={() => handleAddCraft(timing)}
             onUpdateLoop={(id, updated) =>
               onLoopsChange(reorderByBlock(loops.map((l) => (l.id === id ? updated : l))))
             }
             onDeleteLoop={(id) => onLoopsChange(reorderByBlock(loops.filter((l) => l.id !== id)))}
-            onAddLoop={() => onAddLoop(timing)}
+            onAddLoop={() => handleAddLoop(timing)}
           />
         ))}
       </div>
     </DndContext>
   );
 }
-
-/**
- * 新規追加直後などブロード外で作った配列をブロック表示順に正規化するための公開ヘルパー
- * （SearchCraftTimingBoard 自体は D&D・更新・削除のたびに内部で自動的にこれを適用する）。
- */
-export { reorderByBlock };

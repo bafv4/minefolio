@@ -56,7 +56,8 @@ import {
   KeyBadgeLegend,
 } from "@/components/search-craft-template-view";
 import {
-  SearchCraftLoopGroupSection,
+  groupLoopsByTiming,
+  makeLoopGroupExtra,
   type LoopCraftInfo,
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
@@ -382,25 +383,24 @@ export default function TemplateViewPage() {
     variations: craft.variations,
   }));
 
-  // 繋ぎ方（Loop）を timing ごとにグループ化。SearchCraftGroupedList の
-  // renderGroupExtra から各タイミンググループカード内に埋め込むため（プロフィールと同じパターン）
-  const searchCraftLoopsByTiming = new Map<string | null, SearchCraftLoopRowData[]>();
-  loops.forEach((loop, idx) => {
-    const row: SearchCraftLoopRowData = {
-      id: `loop-${idx}`,
-      steps: loop.steps.map((s) => ({
-        craftId: `craft-${s.craftIndex}`,
-        transition: s.transition,
-        variationIndex: s.variationIndex,
-      })),
-      comment: loop.comment,
-      timing: loop.timing,
-    };
-    const key = loop.timing;
-    if (!searchCraftLoopsByTiming.has(key)) searchCraftLoopsByTiming.set(key, []);
-    searchCraftLoopsByTiming.get(key)!.push(row);
+  // 繋ぎ方（Loop）を timing ごとにグループ化し、SearchCraftGroupedList の renderGroupExtra から
+  // 各タイミンググループカード内に埋め込むための関数を作る（プロフィールと同じパターン）
+  const searchCraftLoopRows: SearchCraftLoopRowData[] = loops.map((loop, idx) => ({
+    id: `loop-${idx}`,
+    steps: loop.steps.map((s) => ({
+      craftId: `craft-${s.craftIndex}`,
+      transition: s.transition,
+      variationIndex: s.variationIndex,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+  const searchCraftLoopTimings = Array.from(groupLoopsByTiming(searchCraftLoopRows).keys());
+  const renderSearchCraftLoopExtra = makeLoopGroupExtra({
+    loops: searchCraftLoopRows,
+    crafts: loopCraftRefs,
+    remaps,
   });
-  const searchCraftLoopTimings = Array.from(searchCraftLoopsByTiming.keys());
 
   return (
     <div className="space-y-6">
@@ -741,16 +741,7 @@ export default function TemplateViewPage() {
           remaps={remaps}
           gameLanguage={template.gameLanguage}
           extraTimings={searchCraftLoopTimings}
-          renderGroupExtra={(timing) => {
-            const groupLoops = searchCraftLoopsByTiming.get(timing) ?? [];
-            return groupLoops.length > 0 ? (
-              <SearchCraftLoopGroupSection
-                loops={groupLoops}
-                crafts={loopCraftRefs}
-                remaps={remaps}
-              />
-            ) : null;
-          }}
+          renderGroupExtra={renderSearchCraftLoopExtra}
         />
       </section>
     </div>

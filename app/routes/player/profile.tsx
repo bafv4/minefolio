@@ -21,11 +21,7 @@ import {
   checkPaceManPlayer,
   fetchSpeedrunComStats,
 } from "@/lib/external-stats";
-import {
-  formatItemName,
-  getItemNameJa,
-} from "@bafv4/mcitems/1.16/react";
-import { ItemIcon } from "@/components/item-icon";
+import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
@@ -49,11 +45,12 @@ import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo }
 import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import {
-  SearchCraftLoopGroupSection,
+  groupLoopsByTiming,
+  makeLoopGroupExtra,
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
-import { resolveVariations, parseVariationsJson } from "@/lib/search-craft-variations";
+import { resolveRowVariations } from "@/lib/search-craft-variations";
 import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
@@ -729,29 +726,26 @@ export default function PlayerProfilePage() {
       player.searchCrafts.map((craft) => ({
         ...craft,
         items: JSON.parse(craft.items) as string[],
-        variations: resolveVariations({
-          variations: parseVariationsJson(craft.searchVariations) ?? undefined,
-          searchStr: craft.searchStr,
-          withShift: craft.withShift,
-        }),
+        variations: resolveRowVariations(craft),
       })),
     [player.searchCrafts],
   );
 
-  // 繋ぎ方（Loop）を timing ごとにグループ化。SearchCraftGroupedList の
-  // renderGroupExtra から各タイミンググループカード内に埋め込むため
-  const searchCraftLoopsByTiming = useMemo(() => {
-    const map = new Map<string | null, SearchCraftLoopRowData[]>();
-    for (const loop of player.searchCraftLoops) {
-      const key = loop.timing;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(loop);
-    }
-    return map;
-  }, [player.searchCraftLoops]);
+  // 繋ぎ方（Loop）を timing ごとにグループ化し、SearchCraftGroupedList の
+  // renderGroupExtra から各タイミンググループカード内に埋め込むための関数を作る
   const searchCraftLoopTimings = useMemo(
-    () => Array.from(searchCraftLoopsByTiming.keys()),
-    [searchCraftLoopsByTiming],
+    () => Array.from(groupLoopsByTiming(player.searchCraftLoops).keys()),
+    [player.searchCraftLoops],
+  );
+  const renderSearchCraftLoopExtra = useMemo(
+    () =>
+      makeLoopGroupExtra({
+        loops: player.searchCraftLoops,
+        crafts: parsedSearchCrafts,
+        remaps: player.keyRemaps,
+        fingerAssignments: userFingerAssignments,
+      }),
+    [player.searchCraftLoops, parsedSearchCrafts, player.keyRemaps, userFingerAssignments],
   );
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
@@ -1845,17 +1839,7 @@ export default function PlayerProfilePage() {
                 fingerAssignments={userFingerAssignments}
                 gameLanguage={player.playerConfig?.gameLanguage}
                 extraTimings={searchCraftLoopTimings}
-                renderGroupExtra={(timing) => {
-                  const groupLoops = searchCraftLoopsByTiming.get(timing) ?? [];
-                  return groupLoops.length > 0 ? (
-                    <SearchCraftLoopGroupSection
-                      loops={groupLoops}
-                      crafts={parsedSearchCrafts}
-                      remaps={player.keyRemaps}
-                      fingerAssignments={userFingerAssignments}
-                    />
-                  ) : null;
-                }}
+                renderGroupExtra={renderSearchCraftLoopExtra}
               />
             </>
           ) : (
@@ -2108,12 +2092,7 @@ export default function PlayerProfilePage() {
 
 // mcitemsのテクスチャベースURL
 
-// アイテム名をロケールに合わせて取得するヘルパー。英語ロケールは formatItemName の
-// 英語表記を優先し、日本語ロケールは和名（getItemNameJa）優先 → 無ければ英語にフォールバック
-function getItemDisplayName(itemId: string, locale: Locale): string {
-  if (locale === "en") return formatItemName(itemId, "en_us");
-  return getItemNameJa(itemId) || formatItemName(itemId);
-}
+// アイテム名のロケールフォールバックは共通ヘルパーを使用（app/components/item-icon.tsx の getLocalizedItemName）
 
 // ゲーム言語名の取得は共通モジュールを使用（app/lib/game-languages.ts）
 
@@ -2187,7 +2166,7 @@ function ItemLayoutCard({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {items.map((item) => getItemDisplayName(item, locale)).join(", ") || t("playerProfile.slot", { num: slotNum })}
+                      {items.map((item) => getLocalizedItemName(item, locale)).join(", ") || t("playerProfile.slot", { num: slotNum })}
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -2213,7 +2192,7 @@ function ItemLayoutCard({
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                {offhand.map((item) => getItemDisplayName(item, locale)).join(", ") || t("playerProfile.offhand")}
+                {offhand.map((item) => getLocalizedItemName(item, locale)).join(", ") || t("playerProfile.offhand")}
               </TooltipContent>
             </Tooltip>
             </div>
@@ -2231,7 +2210,7 @@ function ItemLayoutCard({
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
                     <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getItemDisplayName(item, locale)}</span>
+                    <span className="text-xs">{getLocalizedItemName(item, locale)}</span>
                   </span>
                 ))}
               </div>
@@ -2246,7 +2225,7 @@ function ItemLayoutCard({
                   <span key={idx} className="flex items-center gap-1">
                     {idx > 0 && <span className="text-muted-foreground">/</span>}
                     <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getItemDisplayName(item, locale)}</span>
+                    <span className="text-xs">{getLocalizedItemName(item, locale)}</span>
                   </span>
                 ))}
               </div>

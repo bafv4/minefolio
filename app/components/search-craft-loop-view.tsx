@@ -1,10 +1,11 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ItemIcon } from "@/components/item-icon";
 import {
   ActualKeyBadges,
   TIMING_META,
   timingLabel,
+  renderVisibleSpaces,
 } from "@/components/search-craft-template-view";
 import {
   resolveLoopSteps,
@@ -47,23 +48,6 @@ export type SearchCraftLoopRowData = {
 // ============================================
 // セグメント分割された文字列表示
 // ============================================
-
-/**
- * 半角スペースを ␣（U+2423）として可視化しつつテキスト片を描画する
- * （search-craft-template-view.tsx の SearchStringText と同じロジック。全角スペースは対象外）。
- */
-function renderVisibleSpaces(text: string, spaceClassName: string) {
-  const parts = text.split(/( +)/);
-  return parts.map((part, i) =>
-    part.length > 0 && part[0] === " " ? (
-      <span key={i} className={spaceClassName}>
-        {"␣".repeat(part.length)}
-      </span>
-    ) : (
-      part
-    ),
-  );
-}
 
 /**
  * typedCharSegments() の結果を描画する。そのステップで実際にタイプしない
@@ -110,29 +94,37 @@ function SegmentedSearchString({
  * 既存のリマップ用リング（ring-1 ring-primary ring-offset-1）を付け、
  * Tooltip も主従の入れ替えに合わせた文言に差し替える。
  */
+type ControlKeyKind = "backspace" | "arrowLeft" | "selectAll" | "home";
+
+/** kind ごとの表示・逆引き設定を1箇所にまとめる（keyCode・バッジ短縮ラベル・逆引き対象キー） */
+const CONTROL_KEY_META: Record<
+  ControlKeyKind,
+  { keyCode: string; label: string; targetKeyCode: string }
+> = {
+  backspace: { keyCode: "Backspace", label: "BS", targetKeyCode: "Backspace" },
+  arrowLeft: { keyCode: "ArrowLeft", label: "←", targetKeyCode: "ArrowLeft" },
+  home: { keyCode: "Home", label: "Home", targetKeyCode: "Home" },
+  // ⇧Home は「1キーの出力」に単一化されないため、逆引きは Home 成分のみ渡し
+  // getActualControlKeyInfo 側の shiftHeld オプションで Shift 成分と合成する
+  selectAll: { keyCode: "Shift+Home", label: "⇧Home", targetKeyCode: "Home" },
+};
+
 export function ControlKeyBadge({
   kind,
   count,
   remaps,
 }: {
-  kind: "backspace" | "arrowLeft" | "selectAll" | "home";
+  kind: ControlKeyKind;
   /** backspace / arrowLeft のときのみ意味を持つ。2以上のときだけ右肩に ×n を表示する */
   count?: number;
   /** 指定すると、この制御キーの出力になっているリマップを逆引きして複合ピル表示にする */
   remaps?: UiRemapInfo[] | RemapInfo[];
 }) {
   const t = useT();
-  const keyCode =
-    kind === "backspace" ? "Backspace" : kind === "arrowLeft" ? "ArrowLeft" : kind === "home" ? "Home" : "Shift+Home";
-  const label = kind === "backspace" ? "BS" : kind === "arrowLeft" ? "←" : kind === "home" ? "Home" : "⇧Home";
+  const { keyCode, label, targetKeyCode } = CONTROL_KEY_META[kind];
 
   const actual = remaps
-    ? getActualControlKeyInfo(
-        t,
-        kind === "backspace" ? "Backspace" : kind === "arrowLeft" ? "ArrowLeft" : "Home",
-        remaps,
-        { shiftHeld: kind === "selectAll" },
-      )
+    ? getActualControlKeyInfo(t, targetKeyCode, remaps, { shiftHeld: kind === "selectAll" })
     : null;
 
   // 操作名のフル表記（⇧ 等の短縮記号を使わない。Tooltip 専用。Shift+Home も省略しない）
@@ -239,8 +231,9 @@ function CraftMarker({
   );
 }
 
-/** 遷移1件分のキー操作列（backspace/selectAll/home は制御キーバッジ、type は ActualKeyBadges） */
-function TransitionOpsBadges({
+/** 遷移1件分のキー操作列（backspace/selectAll/home は制御キーバッジ、type は ActualKeyBadges）。
+ * 編集UI（search-craft-loop-editor.tsx の TransitionRow）のライブプレビューとも共用する */
+export function TransitionOpsBadges({
   ops,
   remaps,
   fingerAssignments,
@@ -305,10 +298,13 @@ export function LoopKeySequence({
         // getCraft の再引きは常に「そのクラフトの生データ」しか返さないため、
         // ここで craft?.searchStr のような再導出をすると variationIndex を無視した
         // 固定表示（実質バリエーション0固定）になるバグを埋め込むことになる。
+        // derived は resolveLoopSteps 側で計算済み（ResolvedLoopStep.derived）のため、
+        // ここでは渡すだけで内部の deriveTransition 再計算をスキップする
         const segments = typedCharSegments(
           idx > 0 ? steps[idx - 1].searchStr : null,
           step.searchStr ?? "",
           step.transition,
+          step.derived,
         );
         return (
           <Fragment key={idx}>
@@ -451,4 +447,50 @@ export function SearchCraftLoopGroupSection({
       </div>
     </div>
   );
+}
+
+/**
+ * Loop を timing ごとにグループ化する（SearchCraftGroupedList の renderGroupExtra /
+ * extraTimings 用）。プロフィール・テンプレート詳細ページで共通のグルーピング配線。
+ */
+export function groupLoopsByTiming(
+  loops: SearchCraftLoopRowData[],
+): Map<string | null, SearchCraftLoopRowData[]> {
+  const map = new Map<string | null, SearchCraftLoopRowData[]>();
+  for (const loop of loops) {
+    const key = loop.timing;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(loop);
+  }
+  return map;
+}
+
+/**
+ * SearchCraftGroupedList の `renderGroupExtra` にそのまま渡せる `(timing) => ReactNode` を作る。
+ * 内部で groupLoopsByTiming() を使い、該当 timing の loops が空なら何も描画しない
+ * （SearchCraftLoopGroupSection 自身も同じ判定を持つが、Map 未ヒット時の `?? []` はここで吸収する）。
+ */
+export function makeLoopGroupExtra({
+  loops,
+  crafts,
+  remaps,
+  fingerAssignments,
+}: {
+  loops: SearchCraftLoopRowData[];
+  crafts: LoopCraftInfo[];
+  remaps: UiRemapInfo[] | RemapInfo[];
+  fingerAssignments?: Record<string, FingerType[]>;
+}): (timing: string | null) => ReactNode {
+  const byTiming = groupLoopsByTiming(loops);
+  return (timing) => {
+    const groupLoops = byTiming.get(timing) ?? [];
+    return groupLoops.length > 0 ? (
+      <SearchCraftLoopGroupSection
+        loops={groupLoops}
+        crafts={crafts}
+        remaps={remaps}
+        fingerAssignments={fingerAssignments}
+      />
+    ) : null;
+  };
 }

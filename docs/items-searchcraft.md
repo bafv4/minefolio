@@ -198,10 +198,12 @@ const MAX_SEARCH_VARIATIONS = 5; // 1エントリあたりの上限（並べ替�
 - **繋ぎ方（Loop）サブセクション**: 各ブロック内、クラフトリストの下に配置。Loop 行の編集UI（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` からエクスポート）はステップ選択・遷移行・プレビュー・コメント・削除を持つが、行ヘッダーに timing Select は無い（timing の変更はやはりブロック間D&D）。0件のブロックでは通常サブセクション自体を出さず、**Loop のドラッグ中のみ**全ブロックに破線のドロップゾーンを表示する
 - **ブロック内の追加ボタン**: 各ブロックに「クラフトを追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満なら disabled）を配置
 - **空ブロック**: クラフト0件のブロックは破線のプレースホルダを表示し、そのままドロップ先として機能する
+- **未知の timing**: 通常は起こらないが、`crafts`/`loops` の `timing` が7ブロックのいずれにも一致しない値だった場合、「指定なし」ブロックへ正規化して表示する（データは残るが未知キーのまま非表示になる、という黙った消失を避けるための防御）
 - 保存時の `sequence` は「ブロック表示順にグループを連結したフラット配列」になる。ユーザー操作（D&D・追加・削除・更新）のたびに正規化される（初期ロード時点では再emitしないため、ブロック順に並んでいない既存データを開いてもそれだけでは変更扱いにならない）
 - `@bafv4/mcitems` の `getCraftableItems()` / `getCraftableItemsByCategory()` でクラフト可能アイテムをフィルタリング、アイテム検索・カテゴリ別選択
 - `FloatingSaveBar` による変更の一括保存
 - プリセット機能（`configPresets` テーブルと連携）
+- **Board の props 契約**: `crafts`/`onCraftsChange`/`loops`/`onLoopsChange`（フラット配列＋setter）に加え、新規追加は **draft ファクトリ契約**の `createCraft(timing) => T` / `createLoop(timing) => L`（id 生成・初期値の構築は呼び出し側、`reorderByBlock([...list, created])` の emit は Board が担う）を渡す。エントリ削除時の Loop 連動除去・削除確認ダイアログの文言差し替え（`meSearchCraft.deleteEntryUsedByLoops`）は Board 内部で完結し、外部プロップは無い（消費側は `onCraftsChange`/`onLoopsChange` にそのまま `setState` を渡すだけでよい）。`reorderByBlock` はモジュール非公開（Board が D&D・追加・削除・更新のたびに内部で自動適用するため、消費側が呼ぶ必要はない）
 
 ---
 
@@ -286,10 +288,10 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
 - 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
 - **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルはアイコン＋アイテム名＋`(str)`＋（`withShift` の場合）⇧マーク
-- BS ステッパーの範囲は `deriveTransition()` の `minBs`/`maxBs`。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBs`/`minArrowLeftCount`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
+- BS ステッパーの範囲は `minBackspaceCount(prev, next)`〜`prev.length`（TransitionRow が自前で算出する。`deriveTransition()` の戻り値に min/max は含まれない）。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBackspaceCount()`/`minArrowLeftCount()`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
 - Loop の timing 変更はブロック間D&D（`SearchCraftTimingBoard` 内、クラフトとは別ドメインとして扱う `DndContext`）で行う。ドラッグ中のみ、Loop が0件のブロックにも破線のドロップゾーンが表示される
-- **エントリ削除時の連動**: `SearchCraftTimingBoard` の `getDeleteWarning?: (craftId: string) => string | null` プロップで、削除対象エントリを参照する Loop があれば削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される
+- **エントリ削除時の連動**: `SearchCraftTimingBoard` が内部で、削除対象エントリを参照する Loop 数に応じて削除確認ダイアログの文言を差し替える（`meSearchCraft.deleteEntryUsedByLoops`、`{count}` 補間。旧 `getDeleteWarning` 外部プロップは廃止しボード内部に吸収）。削除確定時、該当ステップは `remapLoopSteps()` の除去規則で自動的に取り除かれ、2件未満になった Loop は自動削除される（これも Board 内部の `handleDeleteCraft` が担う）
 
 ### 表示
 

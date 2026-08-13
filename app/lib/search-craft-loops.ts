@@ -12,6 +12,8 @@
  * 呼び出し側から渡された文字列をそのまま扱う（docs/items-searchcraft.md 参照）。
  */
 
+import { isPlainObject } from "./search-craft-variations";
+
 /** Loop のステップ間遷移方式 */
 export const LOOP_TRANSITION_TYPES = ["backspace", "arrowLeft", "selectAll", "home"] as const;
 export type LoopTransitionType = (typeof LOOP_TRANSITION_TYPES)[number];
@@ -114,7 +116,7 @@ export type TransitionInvalidReason =
   | "missing_search_str";
 
 export type DerivedTransition =
-  | { valid: true; ops: LoopKeyOp[]; typed: string; minBs: number; maxBs: number }
+  | { valid: true; ops: LoopKeyOp[]; typed: string }
   | { valid: false; reason: TransitionInvalidReason };
 
 /**
@@ -127,7 +129,6 @@ export type DerivedTransition =
  *   next が残存接頭辞 prev.slice(0, prev.length - k) から始まること。
  *   ops は count>0 のときのみ backspace、typed が非空のときのみ type を含む
  *   （k=0 かつ prev===next のときは ops=[] になり得る）。
- *   minBs/maxBs = [minBackspaceCount(prev, next), prev.length]
  * - arrowLeft(k): ← を k 回押してカーソルを末尾から k 文字戻し、その位置に文字列を挿入する
  *   （削除は伴わない）。next = prev.slice(0, prev.length-k) + typed + prev.slice(prev.length-k)、
  *   typed = next.slice(prev.length-k, next.length-k)。
@@ -142,9 +143,9 @@ export type DerivedTransition =
  * - home: 妥当条件は next.endsWith(prev) かつ next.length > prev.length。
  *   typed = next.slice(0, next.length - prev.length)、ops = [home, type(typed)]
  *
- * arrowLeft 以外（selectAll/home）の minBs/maxBs は「BS 方式に切り替えた場合の目安」として
- * backspace と同じ式で常に算出する（実際の遷移方式とは独立）。arrowLeft も同様に
- * この目安を返す（arrowLeft 自体の範囲は minArrowLeftCount / prev.length を別途参照する）。
+ * BS/← ステッパーの範囲（min/max）はこの関数の戻り値には含まれない。UI 側
+ * （search-craft-loop-editor.tsx の TransitionRow）が minBackspaceCount()/prev.length・
+ * minArrowLeftCount()/prev.length を直接使って自前で算出する。
  */
 export function deriveTransition(
   prev: string,
@@ -165,13 +166,7 @@ export function deriveTransition(
       const ops: LoopKeyOp[] = [];
       if (bsCount > 0) ops.push({ kind: "backspace", count: bsCount });
       if (typed !== "") ops.push({ kind: "type", text: typed });
-      return {
-        valid: true,
-        ops,
-        typed,
-        minBs: minBackspaceCount(prev, next),
-        maxBs: prev.length,
-      };
+      return { valid: true, ops, typed };
     }
     case "arrowLeft": {
       const { arrowCount } = transition;
@@ -187,21 +182,13 @@ export function deriveTransition(
       const typed = next.slice(remaining, next.length - arrowCount);
       const ops: LoopKeyOp[] = [{ kind: "arrowLeft", count: arrowCount }];
       if (typed !== "") ops.push({ kind: "type", text: typed });
-      return {
-        valid: true,
-        ops,
-        typed,
-        minBs: minBackspaceCount(prev, next),
-        maxBs: prev.length,
-      };
+      return { valid: true, ops, typed };
     }
     case "selectAll": {
       return {
         valid: true,
         ops: [{ kind: "selectAll" }, { kind: "type", text: next }],
         typed: next,
-        minBs: minBackspaceCount(prev, next),
-        maxBs: prev.length,
       };
     }
     case "home": {
@@ -213,8 +200,6 @@ export function deriveTransition(
         valid: true,
         ops: [{ kind: "home" }, { kind: "type", text: typed }],
         typed,
-        minBs: minBackspaceCount(prev, next),
-        maxBs: prev.length,
       };
     }
   }
@@ -239,11 +224,16 @@ export type TypedCharSegment = { text: string; typed: boolean };
  *
  * typed 部分の文字列は deriveTransition() が返す typed をそのまま使う（重複計算による
  * 食い違いを避けるため）。
+ *
+ * `derived` を渡すと（resolveLoopSteps 済みの ResolvedLoopStep.derived 等、呼び出し側が
+ * 既に deriveTransition(prev, next, transition) を計算済みの場合）、内部での再計算を
+ * スキップしてそれをそのまま使う。省略時はこれまでどおり内部で算出する。
  */
 export function typedCharSegments(
   prev: string | null,
   next: string,
   transition: LoopTransition | null,
+  derived?: DerivedTransition | null,
 ): TypedCharSegment[] {
   const segments: TypedCharSegment[] = [];
   const push = (text: string, typed: boolean) => {
@@ -255,8 +245,8 @@ export function typedCharSegments(
     return segments;
   }
 
-  const derived = deriveTransition(prev, next, transition);
-  if (!derived.valid) {
+  const resolvedDerived = derived ?? deriveTransition(prev, next, transition);
+  if (!resolvedDerived.valid) {
     push(next, true);
     return segments;
   }
@@ -265,7 +255,7 @@ export function typedCharSegments(
     case "backspace": {
       const remaining = prev.slice(0, prev.length - transition.bsCount);
       push(remaining, false);
-      push(derived.typed, true);
+      push(resolvedDerived.typed, true);
       break;
     }
     case "arrowLeft": {
@@ -273,16 +263,16 @@ export function typedCharSegments(
       const prefix = prev.slice(0, remainingLength);
       const suffix = prev.slice(remainingLength);
       push(prefix, false);
-      push(derived.typed, true);
+      push(resolvedDerived.typed, true);
       push(suffix, false);
       break;
     }
     case "selectAll": {
-      push(derived.typed, true);
+      push(resolvedDerived.typed, true);
       break;
     }
     case "home": {
-      push(derived.typed, true);
+      push(resolvedDerived.typed, true);
       push(prev, false);
       break;
     }
@@ -380,10 +370,6 @@ export function resolveLoopSteps(
   }
 
   return { steps: resolvedSteps, valid };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
