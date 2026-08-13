@@ -821,22 +821,9 @@ body {
   line-height: 1.65;
 }
 
-/* 本文（段落・見出し・リスト・引用・コールアウト・トグル）だけ読みやすい行長に制限して
-   中央の1本のカラムに揃える。画像・表（.table-scroll-wrapper）・埋め込み（.not-prose）・
-   段組（div[data-columns]）・コードブロック（pre）は対象外で、コンテナ幅いっぱいまで使える。
-   閲覧ページとエディタは同じ .guide-content.prose を共有するため WYSIWYG が保たれる。
-
-   幅は 65ch ではなく rem 固定（36rem ≒ 65ch@16px）にする。ch は各要素自身のフォント
-   サイズ基準のため、見出し（大きい文字）と段落・リストでカラム幅が変わり、
-   margin-inline: auto と組み合わさると左端がバラバラの階段状レイアウトになる
-   （フォント非依存の固定幅なら全ブロックが同じカラムに揃う）。
-   ネストされた要素（コールアウト内の p 等）は min(100%, …) により親の幅に収まる。
-   :where ではなく :is を使う（ゼロ特異度だと .callout / details 自身の margin 指定に
-   margin-inline が負けて、その2種だけ中央に揃わない）。 */
-.guide-content.prose :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, .callout, details) {
-  max-width: min(100%, 36rem);
-  margin-inline: auto;
-}
+/* 本文の行長制限（max-width + 中央寄せ）は設けない。一度 65ch → 36rem 固定カラムを
+   試したが、改修前の「コンテナ幅いっぱいの左寄せ」の方がよいというユーザー判断で撤廃した
+   （ch 単位はフォントサイズ依存で左端が階段状にずれる問題もあった）。再導入しないこと。 */
 
 .guide-content.prose :where(p) {
   margin-top: 0.4em;
@@ -1070,10 +1057,7 @@ body {
 .guide-content.prose .callout {
   border-radius: 0.5em;
   padding: 0.75em 1em;
-  /* 縦マージンのみ指定する（margin: 0.5em 0 の shorthand は横 0 を含み、
-     本文カラム統一ルール（上記 :is(...) の margin-inline: auto）と同特異度・後勝ちで
-     中央揃えを打ち消してしまう） */
-  margin-block: 0.5em;
+  margin: 0.5em 0;
   display: grid;
   grid-template-columns: auto 1fr;
   column-gap: 0.5em;
