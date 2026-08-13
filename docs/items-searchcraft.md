@@ -129,12 +129,34 @@ import {
 
 逆引きの優先順位: 同じ文字を複数のリマップが出力できる場合、**修飾キーなしのソースを優先**する（例: `E→h` と `Shift+S→h` があるとき `h` は `E` に解決する）。同クラス内で複数候補がある場合は、通常マップは後勝ち、shiftHeld マップは先勝ち（`dedupeRemaps` と同じ規則）。
 
+**制御キー（Backspace / ArrowLeft / Home）の逆引き**: `getActualControlKeyInfo(t, targetKeyCode, remaps, options?)` は、繋ぎ方（Loop）の `ControlKeyBadge` 用に「その制御キーを出力するリマップ」を逆引きする（chat 文脈専用、`filterRemapsForChat()` 適用）。`getActualKeyInfos()` と同じ規則（修飾キーなしのソースを優先、同クラス内は後勝ち）で解決し、該当リマップが無ければ物理キーそのまま（`isRemapped: false`）を返す。**自己リマップ（sourceKey が修飾キーなしで targetKeyCode 自身に正規化される。例: `Backspace → Backspace`、`ShiftLeft → ShiftLeft`）は「リマップ」として扱わない**（見た目上は無変更のリマップ行であり、押すキーも物理キーと変わらないため。`isPhysicalShiftLeftTaken()` の「自己リマップは奪われていない扱い」と同じ考え方で一貫させている）。
+
+`⇧Home`（Shift+Home）は「1キーの出力」に単一化されることがない。実際の入力は**Shift 側のキーと Home 側のキーの同時押し**で、それぞれ独立にリマップされうる（例: `KeyR → ShiftLeft`、`KeyT → Home` のリマップがあれば実入力は `R+T`）。`options.shiftHeld: true` を指定すると、Shift 成分と Home 成分（通常の `Home` 逆引きと同じ規則）を別々に解決し、`"${shiftLabel}+${homeLabel}"` の形で合成する（例: 両方リマップなら `R+T`、Shift のみなら `R+Home`、Home のみなら `⇧+T`）。`isRemapped` はどちらか一方でもリマップされていれば `true`（両方非リマップなら `⇧+Home` を計算した上で `isRemapped: false` を返し、呼び出し側は非リマップ時と同一の単一ピル表示に倒す）。
+
+Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中では **リマップ → 物理** の順」の4段階（`resolveShiftComponent()`）:
+
+1. `ShiftLeft` を出力する chat 文脈リマップがあれば、そのソースキー（`isRemapped: true`）
+2. 無ければ、**物理 `ShiftLeft` が chat 文脈で奪われていなければ**物理 Shift（`⇧` 表記、`isRemapped: false`）— 「奪われている」は、修飾キーなしで `ShiftLeft` に正規化される sourceKey の行が存在し、かつその出力が `ShiftLeft` 自身でない（無効化・別キー出力・文字出力のいずれか）ことを指す
+3. 物理 `ShiftLeft` が奪われている場合のみ右へ進む: `ShiftRight` を出力するリマップがあれば、そのソースキー（`isRemapped: true`）
+4. それも無ければ物理 `ShiftRight`（表示は `⇧` のまま、`isRemapped: false`）
+
+**物理 `ShiftLeft` が生きている限り `ShiftRight` 側は一切見ない**（`ShiftRight` のリマップより物理 `ShiftLeft` が優先される）点が、単純な「`ShiftLeft` リマップ → `ShiftRight` リマップ → 物理」との違い。
+
+**既知の限界**: 物理キー自体が chat 文脈で別出力にリマップされており、かつ対象の制御キー（または Shift 成分・Home 成分）を出力するリマップも無い場合（押しても意図したキーが出ない状態）でも、正解となるキーが存在しないため物理キーのまま `isRemapped: false` を返す。
+
+**ツールチップ用の構造化情報**: `getActualKeyInfos()` の `ActualKeyInfo` と `getActualControlKeyInfo()` の `ActualControlKeyInfo` は、バッジ表示用の短縮ラベル（`displayLabel`。⇧ 等の短縮記号を含む）とは別に、Tooltip 専用のフィールドを持つ。
+
+- `remapDetail` / `remapDetails`（`RemapDetail[]`）: リマップされている場合のみの「リマップ: 物理キー名称 → リマップ先」用の詳細（`sourceLabel`／`targetLabel`、いずれもフル名称）。プレイヤープロフィールの keybindings タブ（`key-info-trigger.tsx` の `RemapRow`）と同じ「物理 → 出力」の概念をテキスト版で踏襲したもの。`ActualControlKeyInfo` は `⇧Home` 合成時に成分ごと最大2件持つ
+- `ActualControlKeyInfo.tooltipLabel`: 実際に押すキーのフル名称（`⇧` を使わず「左Shift」「右Shift」等で表記。`⇧Home` 合成時は成分ごとのフル名称を `+` で連結、例: `左Shift+サイド1`）
+
+`KeyBadge`（`search-craft-template-view.tsx`）と `ControlKeyBadge`（`search-craft-loop-view.tsx`）はこれらを使い、リマップ時の Tooltip を「実際に押すキー — 操作を入力」＋「リマップ: 物理 → 出力」（成分が複数ならリマップ行を複数並べる）の構成にする。Tooltip 内は `⇧` への省略をせずフルネーム表記にする（バッジ本体の表示は `ShiftMark`/短縮記号のまま変更しない）。翻訳キーは `playerProfile.controlKeyActualTooltip`（`{key} — {op}` の主表記行）と `playerProfile.remapped`（`リマップ: {source} → {target}` のリマップ詳細行、両バッジで共用）。
+
 ### Shiftを押しながらクラフト（withShift）
 
 スタック単位のクラフト（Shift+クリック）のために Shift を押しっぱなしでサーチ入力するエントリは、`withShift: true` を設定できる。
 
 - 編集UI（/me/search-craft・テンプレートエディタ・Playground）の各行に「Shiftを押しながら」チェックボックスがある
-- 表示行の入力キー列の先頭に琥珀色の「⇧ Shift」バッジが付く（凡例にも表示）
+- 表示行の入力キー列の先頭に琥珀色の「⇧ Shift」バッジが付く（凡例にも表示）。**⇧ はフォント依存の Unicode 文字直書きではなく `app/components/shift-mark.tsx` の `ShiftMark`（lucide `ArrowBigUp`）で描画する**（データ層の `displayLabel` 等の文字列は "⇧" のまま。詳細は `.claude/rules/ui.md`「キーバッジ」節）
 - 入力キーの逆引きは `getActualKeyInfos(searchStr, remaps, { shiftHeld: true })` となり、**Shift 押下中の出力文字で**解決する:
   - 単一キーソースのリマップは target キーのシフト後文字（例: target が `Semicolon` なら `:`）で逆引きする
   - `Shift+X` ソースの完全一致リマップは X 単独のバッジになる（Shift は押しっぱなしのため ⇧ プレフィックスなし）
@@ -275,8 +297,8 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 | コンポーネント | 説明 |
 |---|---|
-| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系）と区別できるよう info トーン（`border-info/50 bg-info/10 text-info`）で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策） |
-| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon＋Hammer の破線チップ＋サーチ文字列、Tooltip 付き）を `ChevronRight` を挟んで交互に描画。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用）。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
+| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系・角丸 `rounded`）と一目で区別できるよう、info トーン（`border-info/50 bg-info/10 text-info`）＋ **`rounded-full` のピル形状**で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策）。任意 prop `remaps` を渡すと、その制御キーの出力になっているリマップを `getActualControlKeyInfo()`（`app/lib/remap-utils.ts`）で逆引きする。リマップが見つかった場合のみ「実際に押すキーを主ラベル（外側）、出力操作（`BS` 等）をミニチップ（`text-[10px]`、チップの中のチップ）」の複合ピル表示＋リマップ用リングになる。リマップが無い（大多数）場合は非リマップ時と同一の単一ピルのまま |
+| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon 24px＋サーチ文字列。通常のアイテムチップと同じ見た目でキー系バッジと同じ高さ h-7、専用アイコンなし・Tooltip 付き）を `ChevronRight` を挟んで交互に描画。セグメント間は gap-2。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用）。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
 | `SearchCraftLoopRow` | Loop 一覧の行表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`h-2.5 w-2.5`、`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
 | `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。見出しと行リストの間は `space-y-2`（8px）で区切る。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
 

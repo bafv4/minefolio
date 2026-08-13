@@ -45,6 +45,7 @@ import {
 } from "@/lib/search-craft-loops";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import { ShiftMark } from "@/components/shift-mark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
@@ -228,9 +229,7 @@ function EntrySelect({
                 {variation.str && (
                   <code className="text-xs text-muted-foreground">({variation.str})</code>
                 )}
-                {variation.withShift && (
-                  <span className="text-[10px] font-semibold text-warning">⇧</span>
-                )}
+                {variation.withShift && <ShiftMark className="size-2.5 text-warning" />}
               </span>
             </SelectItem>
           )),
@@ -392,13 +391,13 @@ function TransitionRow({
           derived.ops.map((op, idx) => {
             switch (op.kind) {
               case "backspace":
-                return <ControlKeyBadge key={idx} kind="backspace" count={op.count} />;
+                return <ControlKeyBadge key={idx} kind="backspace" count={op.count} remaps={remaps} />;
               case "arrowLeft":
-                return <ControlKeyBadge key={idx} kind="arrowLeft" count={op.count} />;
+                return <ControlKeyBadge key={idx} kind="arrowLeft" count={op.count} remaps={remaps} />;
               case "selectAll":
-                return <ControlKeyBadge key={idx} kind="selectAll" />;
+                return <ControlKeyBadge key={idx} kind="selectAll" remaps={remaps} />;
               case "home":
-                return <ControlKeyBadge key={idx} kind="home" />;
+                return <ControlKeyBadge key={idx} kind="home" remaps={remaps} />;
               case "type":
                 return <ActualKeyBadges key={idx} searchStr={op.text} remaps={remaps ?? []} />;
               default:

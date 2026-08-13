@@ -14,12 +14,13 @@ import {
   type ResolvedLoopStep,
   type TypedCharSegment,
 } from "@/lib/search-craft-loops";
-import type { UiRemapInfo, RemapInfo } from "@/lib/remap-utils";
+import { getActualControlKeyInfo, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
+import { KeyLabelText } from "@/components/shift-mark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import { AlertTriangle, ChevronRight, Hammer, Repeat } from "lucide-react";
+import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";
 
 /**
  * サーチクラフトの「繋ぎ方（Loop）」表示コンポーネント群。
@@ -100,31 +101,83 @@ function SegmentedSearchString({
  * （⇧ Shift バッジ=warning・クラフト実行マーカー=破線チップと同じ「役割ごとに色調を変える」規則）。
  * BS×n / ←×n はバッジを n 個並べず、右肩に ×n を併記する（モバイル幅対策）。
  * ← のラベルは app/lib/keybindings.ts の KEY_LABELS.ArrowLeft と同じ "←" を使う。
+ *
+ * remaps を渡すと、その制御キーの出力になっているリマップを逆引きする
+ * （getActualControlKeyInfo()）。リマップが無い場合（大多数）は非リマップ時と完全に同一の
+ * 単一ピル表示のまま。リマップが見つかった場合のみ複合ピルにする —
+ * **主ラベル＝実際に押すキー**（外側、既存の単一ピルと同じ text-sm・info トーン）、
+ * その中に「チップの中のチップ」として**出力操作**（BS 等）をミニチップ（text-[10px]）で添える。
+ * 既存のリマップ用リング（ring-1 ring-primary ring-offset-1）を付け、
+ * Tooltip も主従の入れ替えに合わせた文言に差し替える。
  */
 export function ControlKeyBadge({
   kind,
   count,
+  remaps,
 }: {
   kind: "backspace" | "arrowLeft" | "selectAll" | "home";
   /** backspace / arrowLeft のときのみ意味を持つ。2以上のときだけ右肩に ×n を表示する */
   count?: number;
+  /** 指定すると、この制御キーの出力になっているリマップを逆引きして複合ピル表示にする */
+  remaps?: UiRemapInfo[] | RemapInfo[];
 }) {
   const t = useT();
   const keyCode =
     kind === "backspace" ? "Backspace" : kind === "arrowLeft" ? "ArrowLeft" : kind === "home" ? "Home" : "Shift+Home";
   const label = kind === "backspace" ? "BS" : kind === "arrowLeft" ? "←" : kind === "home" ? "Home" : "⇧Home";
-  const tooltipText = keyCode.includes("+")
-    ? getKeyCombinationLabel(t, keyCode)
-    : getKeyLabel(t, keyCode);
+
+  const actual = remaps
+    ? getActualControlKeyInfo(
+        t,
+        kind === "backspace" ? "Backspace" : kind === "arrowLeft" ? "ArrowLeft" : "Home",
+        remaps,
+        { shiftHeld: kind === "selectAll" },
+      )
+    : null;
+
+  // 操作名のフル表記（⇧ 等の短縮記号を使わない。Tooltip 専用。Shift+Home も省略しない）
+  const opFullLabel = keyCode.includes("+") ? getKeyCombinationLabel(t, keyCode) : getKeyLabel(t, keyCode);
+
+  // 物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と同じ「リマップ: 物理 → 出力」形式。
+  // 1行目は実際に押すキー（フル名称）— 操作名、2行目以降は成分ごとのリマップ詳細（⇧Home は最大2行）
+  const tooltipContent = actual?.isRemapped ? (
+    <div className="space-y-1">
+      <p>{t("playerProfile.controlKeyActualTooltip", { key: actual.tooltipLabel, op: opFullLabel })}</p>
+      <div className="space-y-0.5 border-t border-border/40 pt-1">
+        {actual.remapDetails.map((detail, i) => (
+          <p key={i} className="text-muted-foreground">
+            {t("playerProfile.remapped", { source: detail.sourceLabel, target: detail.targetLabel })}
+          </p>
+        ))}
+      </div>
+    </div>
+  ) : (
+    opFullLabel
+  );
+
   return (
     <span className="relative inline-flex">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded border-2 border-info/50 bg-info/10 px-1.5 font-mono text-sm font-semibold text-info">
-            {label}
-          </span>
+          {actual?.isRemapped ? (
+            // 複合ピル: 主ラベル＝実際に押すキー（既存の単一ピルと同じ text-sm）、
+            // その中に「チップの中のチップ」として出力操作（BS 等）をミニチップで添える
+            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-1 ring-primary ring-offset-1">
+              <span className="text-sm">
+                <KeyLabelText label={actual.displayLabel} />
+              </span>
+              <span className="rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-info">
+                <KeyLabelText label={label} shiftClassName="size-2.5" />
+              </span>
+            </span>
+          ) : (
+            // 文字入力キー（角丸 rounded）と一目で区別できるよう、制御キーは rounded-full のピル形状にする
+            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-2.5 font-mono text-sm font-semibold text-info">
+              <KeyLabelText label={label} />
+            </span>
+          )}
         </TooltipTrigger>
-        <TooltipContent>{tooltipText}</TooltipContent>
+        <TooltipContent>{tooltipContent}</TooltipContent>
       </Tooltip>
       {(kind === "backspace" || kind === "arrowLeft") && (count ?? 0) > 1 && (
         // aria-hidden を付けない: スクリーンリーダーにも「BS ×2」のように回数が伝わるようにする
@@ -152,9 +205,10 @@ function InvalidSegmentBadge() {
 }
 
 /**
- * クラフト実行マーカー（ItemIcon＋Hammer の破線チップ）。
- * そのステップのサーチ文字列を ItemIcon の後ろに小さく表示する（typedCharSegments() の
- * 結果を渡すと、実際にタイプしない残存部分は薄く表示される）。
+ * クラフト実行マーカー（通常のアイテムチップと同じ見た目のチップ。ItemIcon 24px＋サーチ文字列）。
+ * 高さはキー系バッジ（h-7）に揃える。アイコン類（Hammer 等）は置かず、
+ * 「ここでクラフトを実行する」ことの説明は Tooltip と凡例（KeyBadgeLegend）が担う。
+ * サーチ文字列は typedCharSegments() の結果を渡すと、実際にタイプしない残存部分が薄く表示される。
  */
 function CraftMarker({
   craft,
@@ -171,9 +225,8 @@ function CraftMarker({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-dashed border-border bg-secondary/30 px-2">
-          <Hammer className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          {itemId && <ItemIcon itemId={itemId} size={20} />}
+        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2">
+          {itemId && <ItemIcon itemId={itemId} size={24} />}
           {searchStr && (
             <code className="font-mono text-sm">
               <SegmentedSearchString value={searchStr} segments={segments} />
@@ -201,13 +254,13 @@ function TransitionOpsBadges({
       {ops.map((op, idx) => {
         switch (op.kind) {
           case "backspace":
-            return <ControlKeyBadge key={idx} kind="backspace" count={op.count} />;
+            return <ControlKeyBadge key={idx} kind="backspace" count={op.count} remaps={remaps} />;
           case "arrowLeft":
-            return <ControlKeyBadge key={idx} kind="arrowLeft" count={op.count} />;
+            return <ControlKeyBadge key={idx} kind="arrowLeft" count={op.count} remaps={remaps} />;
           case "selectAll":
-            return <ControlKeyBadge key={idx} kind="selectAll" />;
+            return <ControlKeyBadge key={idx} kind="selectAll" remaps={remaps} />;
           case "home":
-            return <ControlKeyBadge key={idx} kind="home" />;
+            return <ControlKeyBadge key={idx} kind="home" remaps={remaps} />;
           case "type":
             return (
               <ActualKeyBadges
@@ -243,7 +296,9 @@ export function LoopKeySequence({
   fingerAssignments?: Record<string, FingerType[]>;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    // gap-2: 制御キー・打鍵キー・クラフトチップの各セグメント間に若干の間隔を置く
+    // （個々のキー同士は ActualKeyBadges 内部の gap-1 のまま）
+    <div className="flex flex-wrap items-center gap-2">
       {steps.map((step, idx) => {
         const craft = getCraft(step.craftId);
         // 表示文字列は必ず ResolvedLoopStep（variationIndex 考慮済み）から取る。

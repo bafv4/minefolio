@@ -26,6 +26,7 @@ import {
   TIMING_META,
   timingLabelById,
 } from "@/components/search-craft-template-view";
+import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Locale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -449,16 +450,16 @@ export function SearchCraftEmbedView({
                       <div className="flex flex-wrap items-center gap-1">
                         {variation.withShift && (
                           <kbd
-                            className="px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
                             title={t("playerProfile.withShiftTooltip")}
                           >
-                            ⇧ Shift
+                            <ShiftMark /> Shift
                           </kbd>
                         )}
                         {getActualKeyInfos(t, variation.str, remaps, { shiftHeld: variation.withShift }).map(
                           (info, i) => (
                             <kbd key={i} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-                              {info.displayLabel}
+                              <KeyLabelText label={info.displayLabel} />
                             </kbd>
                           ),
                         )}
@@ -521,7 +522,7 @@ export function SearchCraftEmbedView({
       case "selectAll":
         return (
           <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            ⇧Home
+            <KeyLabelText label="⇧Home" />
           </kbd>
         );
       case "home":
@@ -603,7 +604,7 @@ export function SearchCraftEmbedView({
     return (
       <span
         key={key}
-        className="inline-flex items-center gap-1 rounded border border-dashed border-border bg-secondary/30 px-1.5 py-0.5"
+        className="inline-flex items-center gap-1 rounded bg-secondary/50 px-1.5 py-0.5"
         title={t("playerProfile.loopCraftMarker")}
       >
         {firstItem ? (

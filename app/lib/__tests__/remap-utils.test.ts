@@ -6,6 +6,7 @@ const t = createTranslator("ja");
 import {
   simulateRemapOutput,
   getActualKeyInfos,
+  getActualControlKeyInfo,
   filterRemapsForChat,
   filterRemapsForTrigger,
   findRemapConflict,
@@ -533,5 +534,157 @@ describe("findRemapConflict（保存前バリデーション）", () => {
         { sourceKey: "KeyE", remapType: "chat" },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("getActualControlKeyInfo（制御キーの逆引き。Loop の ControlKeyBadge 用）", () => {
+  it("リマップ無しなら物理キーそのまま（isRemapped: false）", () => {
+    expect(getActualControlKeyInfo(t, "Backspace", [])).toEqual({
+      keyCode: "Backspace",
+      displayLabel: "BS",
+      tooltipLabel: "BS",
+      isRemapped: false,
+      remapDetails: [],
+    });
+    expect(getActualControlKeyInfo(t, "ArrowLeft", [])).toEqual({
+      keyCode: "ArrowLeft",
+      displayLabel: "←",
+      tooltipLabel: "←",
+      isRemapped: false,
+      remapDetails: [],
+    });
+    expect(getActualControlKeyInfo(t, "Home", [])).toEqual({
+      keyCode: "Home",
+      displayLabel: "Home",
+      tooltipLabel: "Home",
+      isRemapped: false,
+      remapDetails: [],
+    });
+  });
+
+  it("KeyR → Backspace のリマップを逆引きする", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "KeyR", targetKey: "Backspace" }];
+    const info = getActualControlKeyInfo(t, "Backspace", remaps);
+    expect(info.keyCode).toBe("KeyR");
+    expect(info.displayLabel).toBe("R");
+    expect(info.isRemapped).toBe(true);
+  });
+
+  it("修飾キーなしソースを優先する（Shift+KeyS→Backspace と KeyE→Backspace が両方あるとき KeyE に解決）", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "Shift+KeyS", targetKey: "Backspace" },
+      { sourceKey: "KeyE", targetKey: "Backspace" },
+    ];
+    expect(getActualControlKeyInfo(t, "Backspace", remaps).keyCode).toBe("KeyE");
+    // 配列の並び順に関係なく修飾キーなしのソースが勝つ
+    expect(getActualControlKeyInfo(t, "Backspace", [...remaps].reverse()).keyCode).toBe("KeyE");
+  });
+
+  it("同クラス内（修飾キーなし同士）は後勝ち（getActualKeyInfos と同規則）", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyA", targetKey: "Backspace" },
+      { sourceKey: "KeyB", targetKey: "Backspace" },
+    ];
+    expect(getActualControlKeyInfo(t, "Backspace", remaps).keyCode).toBe("KeyB");
+  });
+
+  it("chat 文脈フィルタ: trigger 種別のリマップは無視される", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "KeyR", targetKey: "Backspace", remapType: "trigger" }];
+    const info = getActualControlKeyInfo(t, "Backspace", remaps);
+    expect(info.isRemapped).toBe(false);
+    expect(info.keyCode).toBe("Backspace");
+  });
+
+  it("chat 種別の行があれば trigger 種別の同一出力より優先して解決する", () => {
+    const remaps: RemapInfo[] = [
+      { sourceKey: "KeyR", targetKey: "Backspace", remapType: "trigger" },
+      { sourceKey: "KeyF", targetKey: "Backspace", remapType: "chat" },
+    ];
+    expect(getActualControlKeyInfo(t, "Backspace", remaps).keyCode).toBe("KeyF");
+  });
+
+  describe("shiftHeld: true（⇧Home 用。Shift成分とHome成分をそれぞれ独立に逆引きして合成する）", () => {
+    it("両成分とも非リマップ → 物理キーのまま合成される（⇧+Home）", () => {
+      const info = getActualControlKeyInfo(t, "Home", [], { shiftHeld: true });
+      expect(info.keyCode).toBe("ShiftLeft+Home");
+      expect(info.displayLabel).toBe("⇧+Home");
+      expect(info.isRemapped).toBe(false);
+    });
+
+    it("Shift成分・Home成分ともにリマップがある → それぞれのソースキーを合成する（R+T）", () => {
+      const remaps: RemapInfo[] = [
+        { sourceKey: "KeyR", targetKey: "ShiftLeft" },
+        { sourceKey: "KeyT", targetKey: "Home" },
+      ];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("KeyR+KeyT");
+      expect(info.displayLabel).toBe("R+T");
+      expect(info.isRemapped).toBe(true);
+    });
+
+    it("Shift成分のみリマップ → Home成分は物理のまま合成される（R+Home）", () => {
+      const remaps: RemapInfo[] = [{ sourceKey: "KeyR", targetKey: "ShiftLeft" }];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("KeyR+Home");
+      expect(info.displayLabel).toBe("R+Home");
+      expect(info.isRemapped).toBe(true);
+    });
+
+    it("Home成分のみリマップ → Shift成分は物理のまま合成される（⇧+T）", () => {
+      const remaps: RemapInfo[] = [{ sourceKey: "KeyT", targetKey: "Home" }];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("ShiftLeft+KeyT");
+      expect(info.displayLabel).toBe("⇧+T");
+      expect(info.isRemapped).toBe(true);
+    });
+
+    it("Shift成分は ShiftLeft を出力するリマップを優先する（ShiftRight より）", () => {
+      const remaps: RemapInfo[] = [
+        { sourceKey: "KeyA", targetKey: "ShiftRight" },
+        { sourceKey: "KeyB", targetKey: "ShiftLeft" },
+      ];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("KeyB+Home");
+      expect(info.displayLabel).toBe("B+Home");
+      expect(info.isRemapped).toBe(true);
+    });
+
+    it("物理 ShiftLeft が奪われていなければ ShiftRight 側のリマップは見ず、物理 Shift のまま解決する", () => {
+      // ShiftLeft 自体を出力するリマップは無いが、物理 ShiftLeft も別出力に奪われていないため、
+      // KeyA → ShiftRight のリマップは無視され物理 ⇧ になる
+      const remaps: RemapInfo[] = [{ sourceKey: "KeyA", targetKey: "ShiftRight" }];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("ShiftLeft+Home");
+      expect(info.displayLabel).toBe("⇧+Home");
+      expect(info.isRemapped).toBe(false);
+    });
+
+    it("物理 ShiftLeft が奪われている場合のみ ShiftRight を出力するリマップに進む", () => {
+      const remaps: RemapInfo[] = [
+        { sourceKey: "ShiftLeft", targetKey: "KeyZ" },
+        { sourceKey: "KeyA", targetKey: "ShiftRight" },
+      ];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("KeyA+Home");
+      expect(info.displayLabel).toBe("A+Home");
+      expect(info.isRemapped).toBe(true);
+    });
+
+    it("物理 ShiftLeft が奪われており、ShiftRight を出力するリマップも無ければ物理 ShiftRight になる", () => {
+      const remaps: RemapInfo[] = [{ sourceKey: "ShiftLeft", targetKey: "KeyZ" }];
+      const info = getActualControlKeyInfo(t, "Home", remaps, { shiftHeld: true });
+      expect(info.keyCode).toBe("ShiftRight+Home");
+      expect(info.displayLabel).toBe("⇧+Home");
+      expect(info.isRemapped).toBe(false);
+    });
+  });
+
+  it("既知の限界: 物理キーが別出力に奪われ、かつ対象キーを出力するリマップも無い場合は物理キーのまま", () => {
+    // Backspace 自体は KeyZ を出力するようリマップされているが、
+    // Backspace を出力するリマップは存在しない
+    const remaps: RemapInfo[] = [{ sourceKey: "Backspace", targetKey: "KeyZ" }];
+    const info = getActualControlKeyInfo(t, "Backspace", remaps);
+    expect(info.keyCode).toBe("Backspace");
+    expect(info.isRemapped).toBe(false);
   });
 });

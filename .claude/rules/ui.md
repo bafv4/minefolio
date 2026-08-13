@@ -59,11 +59,17 @@
   - 通常キー: `bg-secondary/50 border-border/50 text-muted-foreground`（指割り当てがあれば指色）
   - リマップ済み: `ring-1 ring-primary ring-offset-1`
   - Shift 同時押し: `border-warning/50 bg-warning/10`（⇧ Shift バッジは `text-warning`）
-  - 制御キー（BS/←/Home/⇧Home）: `border-info/50 bg-info/10 text-info`
+  - 制御キー（BS/←/Home/⇧Home）: `rounded-full border-info/50 bg-info/10 text-info px-2.5`（文字入力キーの角丸 `rounded` と一目で区別するためのピル形状）。**リマップ考慮時（`remaps` を渡し、逆引きでリマップが見つかった場合のみ）**は「実キー主表記＋操作ラベルのミニチップ」の複合ピルにする — **主ラベル＝実際に押すキー**（既存の単一ピルと同じ `text-sm`、外側の見た目はそのまま）、その中に「チップの中のチップ」として**出力操作**（`BS` 等）を小さめの丸チップ（`rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px]`）で添える。ピル全体にリマップ用リング（`ring-1 ring-primary ring-offset-1`）を付ける。リマップが無い（大多数）場合は非リマップ時と1px も変わらない単一ピルのまま
   - 無効: `border-destructive/50 bg-destructive/10 text-destructive`
-- クラフト実行マーカー: 破線チップ `border border-dashed border-border bg-secondary/30`（Hammer アイコン＋`ItemIcon` 20px＋文字列）
+- クラフト実行マーカー: 通常のアイテムチップと同じ見た目の `h-7 rounded bg-secondary/50 px-2`（`ItemIcon` 24px＋文字列。Hammer 等の専用アイコン・破線ボーダーは付けない。「ここでクラフト実行」の説明は Tooltip と凡例が担う）。キー操作列ではキー系バッジと高さ h-7 を揃え、セグメント（制御キー・打鍵キー・チップ）間は `gap-2`、キー同士は `gap-1`
 - 回数は右肩の `×n` カウンタで表す（バッジを並べない）
 - マイクロテキストは2値: バッジ肩・印 = `text-[10px]`、凡例ラベル = `text-[11px]`
+- Shift の「⇧」はフォント依存でグリフが揺れるため、Unicode 文字の直書きではなく `app/components/shift-mark.tsx` の
+  `ShiftMark`（lucide `ArrowBigUp`、`aria-hidden` + `sr-only` の "Shift" 併記）で描画する。ラベル文字列中の "⇧" を
+  まとめて置換する場合は `KeyLabelText`（サイズは `shiftClassName` で調整。バッジ/`text-sm` 文脈は既定の `size-3.5`、
+  ミニチップ/`text-[10px]` 文脈は `size-2.5`）を使う。**データ層（`app/lib/remap-utils.ts` の `displayLabel` 等の
+  返り値、翻訳文言・Tooltip・aria-label のような純テキスト文脈）は "⇧" 文字のまま保持し、アイコンへの変換は
+  それを画面に描画する JSX 側でのみ行う**
 
 ### カード内アイコン
 - セクション見出し（CardTitle）先頭: `h-5 w-5`

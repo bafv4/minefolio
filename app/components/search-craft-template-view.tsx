@@ -9,16 +9,17 @@ import {
   isLangLoaded,
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
-import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
+import { getActualKeyInfos, type UiRemapInfo, type RemapInfo, type RemapDetail } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
+import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
-import { Copy, Hammer } from "lucide-react";
+import { Copy } from "lucide-react";
 
 /**
  * サーチクラフトの公開表示コンポーネント群。
@@ -145,24 +146,28 @@ export function KeyBadge({
   finger,
   isRemapped,
   needsShift,
+  remapDetail,
 }: {
   keyCode: string;
   label: string;
   finger?: FingerType;
   isRemapped?: boolean;
   needsShift?: boolean;
+  /** リマップされている場合のツールチップ詳細（「リマップ: 物理 → 出力」表示用） */
+  remapDetail?: RemapDetail;
 }) {
   const t = useT();
   const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
 
-  // ツールチップのテキスト
-  const getTooltipText = () => {
+  // ツールチップのテキスト。物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と
+  // 同じ「リマップ: 物理 → 出力」形式（フル名称。⇧ 等の短縮記号は使わない）
+  const getTooltipContent = (): ReactNode => {
+    if (isRemapped && remapDetail) {
+      return t("playerProfile.remapped", { source: remapDetail.sourceLabel, target: remapDetail.targetLabel });
+    }
     if (keyCode.includes("+")) {
       // 修飾キー組み合わせの場合
       return getKeyCombinationLabel(t, keyCode);
-    }
-    if (isRemapped) {
-      return t("playerProfile.remapped", { key: getKeyLabel(t, keyCode) });
     }
     return getKeyLabel(t, keyCode);
   };
@@ -180,10 +185,10 @@ export function KeyBadge({
             needsShift && !isRemapped && "border-warning/50 bg-warning/10"
           )}
         >
-          {label}
+          <KeyLabelText label={label} />
         </span>
       </TooltipTrigger>
-      <TooltipContent>{getTooltipText()}</TooltipContent>
+      <TooltipContent>{getTooltipContent()}</TooltipContent>
     </Tooltip>
   );
 }
@@ -194,8 +199,8 @@ export function ShiftCraftBadge() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
-          ⇧ Shift
+        <span className="inline-flex items-center justify-center gap-1 rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
+          <ShiftMark /> Shift
         </span>
       </TooltipTrigger>
       <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
@@ -242,6 +247,7 @@ export function ActualKeyBadges({
             finger={getFingerForKey(baseKeyCode)}
             isRemapped={info.isRemapped}
             needsShift={info.needsShift}
+            remapDetail={info.remapDetail}
           />
         );
       })}
@@ -268,8 +274,8 @@ export function KeyBadgeLegend({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-[10px] font-semibold text-warning">
-          ⇧
+        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
+          <ShiftMark className="size-2.5" />
         </span>
         <span className="text-[11px] text-muted-foreground">
           {t("playerProfile.legendWithShift")}
@@ -278,7 +284,7 @@ export function KeyBadgeLegend({
       {showCraftMarker && (
         <>
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-info/50 bg-info/10 px-0.5 font-mono text-[10px] font-semibold text-info">
+            <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-1 font-mono text-[10px] font-semibold text-info">
               BS
             </span>
             <span className="text-[11px] text-muted-foreground">
@@ -286,8 +292,9 @@ export function KeyBadgeLegend({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex h-3.5 items-center justify-center rounded border border-dashed border-border bg-secondary/30 px-0.5">
-              <Hammer className="h-2.5 w-2.5 text-muted-foreground" aria-hidden="true" />
+            {/* マーカー本体（CraftMarker）と同じ「アイテムチップ」のミニチュア。代表アイコンとして作業台を使う */}
+            <span className="inline-flex h-3.5 items-center justify-center rounded bg-secondary/50 px-0.5">
+              <ItemIcon itemId="minecraft:crafting_table" size={12} />
             </span>
             <span className="text-[11px] text-muted-foreground">
               {t("playerProfile.legendCraftMarker")}
