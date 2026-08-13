@@ -177,8 +177,8 @@ export default function VideosPage() {
   return (
     <div className="flex-1 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-red-500/10 p-2">
-          <Play className="h-5 w-5 text-red-600" />
+        <div className="rounded-xl bg-primary/10 p-2">
+          <Play className="h-5 w-5 text-primary" />
         </div>
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">

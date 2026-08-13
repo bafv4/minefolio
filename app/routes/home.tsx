@@ -12,7 +12,7 @@ import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
-import { type CachedPace } from "@/components/recent-pace-card";
+import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { LivePaceList } from "@/components/live-pace-list";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { ProfileFeedCard } from "@/components/profile-feed-card";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
 import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video";
@@ -152,9 +153,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           .orderBy(desc(users.updatedAt))
           .limit(4),
         // よく見られているプロフィール（直近7日PV順、最新4件）。page_view_stats のスナップショット行を
-        // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）
+        // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）。
+        // pageViews7d はカードの根拠数値表示用（ProfileFeedCard に渡す）
         db
-          .select(profileFeedColumns)
+          .select({ ...profileFeedColumns, pageViews7d: pageViewStats.pageviews })
           .from(pageViewStats)
           .innerJoin(users, eq(pageViewStats.targetId, users.id))
           .where(
@@ -176,9 +178,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           .orderBy(desc(guides.updatedAt))
           .limit(4),
         // よく読まれているガイド（直近7日PV順、最新4件）。プロフィールと同様に page_view_stats
-        // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる
+        // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる。
+        // pageViews7d はカードの表示に使う（このセクションのみ累計View数を7日間PVに置き換える）
         db
-          .select(guideListColumns)
+          .select({ ...guideListColumns, pageViews7d: pageViewStats.pageviews })
           .from(pageViewStats)
           .innerJoin(guides, eq(pageViewStats.targetId, guides.id))
           .innerJoin(users, eq(guides.authorId, users.id))
@@ -358,13 +361,11 @@ const HOME_VIDEO_DISPLAY_COUNT = 6;
 
 // セクション全体のローディングスケルトン（memo化）
 const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns?: number }) {
-  const gridColsClass =
-    columns === 3 ? "lg:grid-cols-3" :
-      columns === 4 ? "lg:grid-cols-4" :
-        "lg:grid-cols-4";
+  // 実セクションと同じグリッド段階に揃える（4カラムは xl 以上、3カラムは lg 以上）
+  const gridColsClass = columns === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4";
 
   return (
-    <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+    <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
       <div className="flex items-center gap-3">
         <Skeleton className="h-9 w-9 rounded-xl" />
         <div className="space-y-2">
@@ -372,7 +373,7 @@ const SectionSkeleton = memo(function SectionSkeleton({ columns = 4 }: { columns
           <Skeleton className="h-6 w-40 rounded" />
         </div>
       </div>
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-4`}>
+      <div className={`grid grid-cols-1 gap-4 ${gridColsClass}`}>
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
@@ -579,9 +580,10 @@ export default function HomePage() {
     [mcidToSkinUrl, feed.mcidToSkinUrl]
   );
 
-  // ガイド一覧行（更新順・PV順で共通の select 形）を GuideCardGrid 用の型へ変換
+  // ガイド一覧行（更新順・PV順で共通の select 形。PV順のみ pageViews7d を追加で持つ）を
+  // GuideCardGrid 用の型へ変換
   const toGuideItem = useCallback(
-    (g: (typeof recentlyUpdatedGuides)[number]): GuideItemWithAuthorSlug => ({
+    (g: (typeof recentlyUpdatedGuides)[number] | (typeof popularGuides)[number]): GuideItemWithAuthorSlug => ({
       ...g,
       likeCount: Number(g.likeCount),
       authorName:
@@ -611,11 +613,11 @@ export default function HomePage() {
         }}
       />
 
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_40%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--border)_35%,transparent)_1px,transparent_1px)] bg-[size:26px_26px] opacity-25" />
         <div className="relative grid gap-7 lg:grid-cols-[1.3fr_1fr] lg:items-end">
           <div className="space-y-5">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               {t("home.heroBadge")}
             </span>
@@ -652,11 +654,11 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
               <p className="text-xs text-muted-foreground">{t("home.profileTotal")}</p>
               <p className="mt-2 text-2xl font-bold">{totalPublicProfiles}</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
               <p className="text-xs text-muted-foreground">{t("home.profileActive")}</p>
               <p className="mt-2 text-2xl font-bold">{activePublicProfiles}</p>
             </div>
@@ -664,7 +666,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+      <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary/10 p-2">
             <UserCheck className="h-5 w-5 text-primary" />
@@ -673,12 +675,18 @@ export default function HomePage() {
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.profilesLabel")}</p>
             <h2 className="text-xl font-bold">{t("home.sectionProfiles")}</h2>
           </div>
+          <Button variant="ghost" size="sm" asChild className="ml-auto">
+            <Link to="/browse">
+              {t("home.viewAll")}
+              <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            </Link>
+          </Button>
         </div>
         {recentlyUpdatedUsers.length > 0 ? (
           <div className="space-y-5">
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground">{t("home.sectionRecentlyUpdated")}</p>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {recentlyUpdatedUsers.map((user) => (
                   <ProfileFeedCard key={user.slug} player={user} />
                 ))}
@@ -691,7 +699,7 @@ export default function HomePage() {
                   <p className="text-sm font-medium text-muted-foreground">
                     {t("home.sectionPopular", { days: PAGE_VIEW_WINDOW_DAYS })}
                   </p>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {popularUsers.map((user) => (
                       <ProfileFeedCard key={user.slug} player={user} />
                     ))}
@@ -701,15 +709,16 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
-            <Users className="mx-auto mb-2 h-12 w-12 opacity-30" />
-            <p>{t("home.noProfiles")}</p>
-          </div>
+          <EmptyState
+            icon={<Users className="h-12 w-12" />}
+            title={t("home.noProfiles")}
+            description={t("home.noProfilesDescription")}
+          />
         )}
       </section>
 
       {(recentlyUpdatedGuides.length > 0 || popularGuides.length > 0) && (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
               <BookOpen className="h-5 w-5 text-primary" />
@@ -732,7 +741,7 @@ export default function HomePage() {
                 <GuideCardGrid
                   guides={recentlyUpdatedGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
-                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                  gridCols="sm:grid-cols-2 xl:grid-cols-4"
                 />
               </div>
             )}
@@ -747,7 +756,8 @@ export default function HomePage() {
                 <GuideCardGrid
                   guides={popularGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
-                  gridCols="md:grid-cols-2 lg:grid-cols-4"
+                  gridCols="sm:grid-cols-2 xl:grid-cols-4"
+                  pageViewsMode="replace"
                 />
               </div>
             )}
@@ -760,7 +770,7 @@ export default function HomePage() {
       {feed.loading.paces && feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
       ) : sortedLiveRuns.length > 0 || sortedRecentPaces.length > 0 || feed.loading.paces || feed.loading.liveRuns ? (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
               <History className="h-5 w-5 text-primary" />
@@ -817,7 +827,7 @@ export default function HomePage() {
                 <History className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold">{t("home.pastPacesTitle")}</h3>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-24 rounded-xl" />
                 ))}
@@ -835,7 +845,7 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {sortedRecentPaces.map((run) => (
                   <PaceFeedCard
                     key={`${run.mcid}-${run.time}-${run.timeline}`}
@@ -858,10 +868,10 @@ export default function HomePage() {
       {feed.loading.videos || feed.loading.twitchVods ? (
         <SectionSkeleton columns={3} />
       ) : sortedRecentVideos.length > 0 ? (
-        <section className="space-y-5 rounded-3xl border border-border/70 bg-card/70 p-5 sm:p-6">
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-red-500/10 p-2">
-              <Play className="h-5 w-5 text-red-600" />
+            <div className="rounded-xl bg-primary/10 p-2">
+              <Play className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("home.videoFeedLabel")}</p>

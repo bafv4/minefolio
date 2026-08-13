@@ -14,17 +14,11 @@
 
 html,
 body {
-  @apply bg-white dark:bg-gray-950;
+  background-color: var(--background);
 
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
-}
-
-/* ウルトラダークは body の背景にも深い zinc（--background）を使う。
-   （上の dark:bg-gray-950 は青みのある gray-950 のため上書きする） */
-.ultra-dark body {
-  background-color: var(--background);
 }
 
 @theme inline {
@@ -81,6 +75,11 @@ body {
   --color-finger-index: var(--finger-index);
   --color-finger-thumb: var(--finger-thumb);
   --color-finger-chip-foreground: var(--finger-chip-fg);
+  --color-favorite: var(--favorite);
+  --color-youtube: var(--youtube);
+  --color-twitch: var(--twitch);
+  --color-gold: var(--gold);
+  --color-bronze: var(--bronze);
 }
 
 /* :root（既定=ライト）と .light クラス（画像出力プレビュー等で局所的にライトを強制）で共有 */
@@ -150,6 +149,20 @@ body {
 
   /* Discord brand color */
   --discord: oklch(0.546 0.195 270.769);
+
+  /* お気に入り／いいねハートの色（favorite-button・like-button で共有） */
+  --favorite: oklch(0.63 0.24 27);
+
+  /* YouTube ブランド色（feed-video-card 等のプラットフォームバッジで共有） */
+  --youtube: oklch(0.577 0.245 27.325);
+
+  /* Twitch ブランド色（feed-video-card 等のプラットフォームバッジで共有） */
+  --twitch: oklch(0.558 0.288 302.321);
+
+  /* ランキング1位・3位のメダル色（rankings 等で共有）。
+     yellow-500 相当だとライトの白背景で埋もれるため、金は yellow-600 相当まで落として濃くする */
+  --gold: oklch(0.681 0.162 75.834);
+  --bronze: oklch(0.666 0.179 58.318);
 }
 
 .dark,
@@ -198,6 +211,17 @@ body {
   --warning-foreground: oklch(0.129 0.042 264.695);
   --info: oklch(0.707 0.165 254.624);
   --info-foreground: oklch(0.129 0.042 264.695);
+
+  /* お気に入り／いいねハートの色（dark mode adjustments） */
+  --favorite: oklch(0.7 0.19 22);
+
+  /* YouTube/Twitch ブランド色（dark mode adjustments） */
+  --youtube: oklch(0.704 0.191 22.216);
+  --twitch: oklch(0.714 0.203 305.504);
+
+  /* ランキング1位・3位のメダル色（dark mode adjustments） */
+  --gold: oklch(0.795 0.184 86.047);
+  --bronze: oklch(0.769 0.188 70.08);
 
   /* Keybinding category colors (brighter for dark mode) */
   --key-movement: oklch(0.792 0.209 151.711);
@@ -582,45 +606,27 @@ body {
      （これがないと公開ビューと違いアイコンが二重表示になる） */
   .guide-content .ProseMirror .callout::before { content: none; }
 
-  /* Callout type colors */
+  /* Callout type colors — セマンティックトークンから導出し、light/dark/ultra-dark を
+     var() の切り替えだけでまかなう（直値の light/dark 二重管理をしない）。
+     tip→success, info→info, warning→warning, danger→destructive */
   .callout-tip {
-    background: oklch(0.95 0.02 145);
-    border-left: 3px solid oklch(0.65 0.18 145);
+    background: color-mix(in oklch, var(--success) 12%, transparent);
+    border-left: 3px solid var(--success);
   }
 
   .callout-info {
-    background: oklch(0.95 0.02 240);
-    border-left: 3px solid oklch(0.6 0.15 240);
+    background: color-mix(in oklch, var(--info) 12%, transparent);
+    border-left: 3px solid var(--info);
   }
 
   .callout-warning {
-    background: oklch(0.95 0.04 80);
-    border-left: 3px solid oklch(0.7 0.15 80);
+    background: color-mix(in oklch, var(--warning) 12%, transparent);
+    border-left: 3px solid var(--warning);
   }
 
   .callout-danger {
-    background: oklch(0.95 0.03 25);
-    border-left: 3px solid oklch(0.6 0.2 25);
-  }
-
-  :is(.dark, .ultra-dark) .callout-tip {
-    background: oklch(0.25 0.03 145);
-    border-left-color: oklch(0.55 0.15 145);
-  }
-
-  :is(.dark, .ultra-dark) .callout-info {
-    background: oklch(0.25 0.03 240);
-    border-left-color: oklch(0.5 0.12 240);
-  }
-
-  :is(.dark, .ultra-dark) .callout-warning {
-    background: oklch(0.25 0.04 80);
-    border-left-color: oklch(0.6 0.12 80);
-  }
-
-  :is(.dark, .ultra-dark) .callout-danger {
-    background: oklch(0.25 0.03 25);
-    border-left-color: oklch(0.5 0.15 25);
+    background: color-mix(in oklch, var(--destructive) 12%, transparent);
+    border-left: 3px solid var(--destructive);
   }
 
   /* Toggle list — editor only (view styles are outside layer) */
@@ -814,6 +820,10 @@ body {
   font-size: 1rem;
   line-height: 1.65;
 }
+
+/* 本文の行長制限（max-width + 中央寄せ）は設けない。一度 65ch → 36rem 固定カラムを
+   試したが、改修前の「コンテナ幅いっぱいの左寄せ」の方がよいというユーザー判断で撤廃した
+   （ch 単位はフォントサイズ依存で左端が階段状にずれる問題もあった）。再導入しないこと。 */
 
 .guide-content.prose :where(p) {
   margin-top: 0.4em;

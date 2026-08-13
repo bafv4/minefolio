@@ -442,7 +442,7 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
         {step === "done" && (
           <div className="space-y-4">
             <Alert>
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
               <AlertTitle>{t("meImport.completed")}</AlertTitle>
               <AlertDescription>
                 {t("meImport.importedSuccessfully")}

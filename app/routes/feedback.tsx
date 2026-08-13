@@ -167,11 +167,11 @@ export default function FeedbackPage() {
 
   if (sent) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <div className="max-w-2xl mx-auto w-full">
         <Card>
           <CardContent>
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
+              <CheckCircle2 className="h-16 w-16 text-success mb-4" />
               <h2 className="text-xl font-semibold mb-2">
                 {t("feedback.sentTitle")}
               </h2>
@@ -189,7 +189,7 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
+    <div className="max-w-2xl mx-auto w-full">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

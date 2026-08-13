@@ -1,7 +1,7 @@
 import type { Translator } from "@/lib/messages";
 import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
-import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, customActions } from "./schema";
+import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customActions } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
 import { isValidMouseDpi, isValidSensitivity } from "./mouse-settings";
@@ -516,7 +516,10 @@ export async function importFromLegacy(
 
     // サーチクラフトをインポート
     if (legacyData.searchCrafts && legacyData.searchCrafts.length > 0) {
-      // 既存のサーチクラフトを削除
+      // 既存のサーチクラフト・Loop（繋ぎ方）を削除
+      // Loop は searchCrafts.id を参照するため、crafts を入れ替える前に必ず Loop も削除する
+      // （残すと新しい crafts の id に対して古い Loop が孤児参照になる）
+      await db.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, userId));
       await db.delete(searchCrafts).where(eq(searchCrafts.userId, userId));
 
       const now = new Date();

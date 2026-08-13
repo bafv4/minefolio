@@ -2,7 +2,7 @@ import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
 import { useState, useEffect } from "react";
-import { useLoaderData, Link, Form, useSearchParams, type LoaderFunctionArgs } from "react-router";
+import { useLoaderData, Link, Form, useSearchParams, useNavigation, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -19,9 +19,10 @@ import {
 } from "@/components/content-sort-select";
 import { LikeButton } from "@/components/like-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
+import { EmptyState } from "@/components/empty-state";
 import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages } from "lucide-react";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
@@ -162,6 +163,9 @@ export default function TemplatesIndexPage() {
   const hasFilters = !!q || !!lang;
   // タブ切替（→ /guides）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
+  // 検索・絞り込み・並び替え等でのナビゲーション中は一覧をスケルトンに差し替える（guides/index.tsx と同型）
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
 
   const handleSortChange = (value: ContentSort) => {
     setSearchParams(
@@ -248,7 +252,18 @@ export default function TemplatesIndexPage() {
         />
       </div>
 
-      {templates.length > 0 ? (
+      {isNavigating ? (
+        <div className="space-y-1">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 py-3 px-1">
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : templates.length > 0 ? (
         <div className="divide-y">
           {templates.map((template) => (
             // 行全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
@@ -283,17 +298,17 @@ export default function TemplatesIndexPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
                   <span>{t("templates.byAuthor", { name: template.authorName })}</span>
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-1">
                     <Search className="h-3 w-3" />
                     {t("templates.craftCount", { count: template.craftCount })}
                   </span>
                   {template.hasRemaps && (
-                    <span className="flex items-center gap-0.5">
+                    <span className="flex items-center gap-1">
                       <Keyboard className="h-3 w-3" />
                       {t("templates.includesRemaps")}
                     </span>
                   )}
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" />
                     {template.applyCount}
                   </span>
@@ -304,7 +319,9 @@ export default function TemplatesIndexPage() {
                     likeCount={template.likeCount}
                     isOwn={template.isOwn}
                   />
-                  <span>
+                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制。ガイド系一覧と
+                      同様に右端固定（ml-auto shrink-0）にする */}
+                  <span className="ml-auto shrink-0" suppressHydrationWarning>
                     {formatDistanceToNow(new Date(template.createdAt), {
                       addSuffix: true,
                       locale: dateFnsLocale(locale),
@@ -316,30 +333,27 @@ export default function TemplatesIndexPage() {
           ))}
         </div>
       ) : hasFilters ? (
-        <Card>
-          <CardContent className="text-center py-16">
-            <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">{t("templates.noResultsTitle")}</p>
-            <p className="text-sm text-muted-foreground">
-              <Link to="/guides/templates" className="text-primary hover:underline">
-                {t("templates.resetFilters")}
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<Search className="h-12 w-12" />}
+          title={t("templates.noResultsTitle")}
+          description={t("templates.noResultsDescription")}
+          action={
+            <Button asChild variant="link" size="sm" className="mt-2">
+              <Link to="/guides/templates">{t("templates.resetFilters")}</Link>
+            </Button>
+          }
+        />
       ) : (
-        <Card>
-          <CardContent className="text-center py-16">
-            <LayoutTemplate className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">{t("templates.emptyTitle")}</p>
-            <p className="text-sm text-muted-foreground">
-              <Link to="/my-guides/templates" className="text-primary hover:underline">
-                {t("templates.emptyDescriptionLink")}
-              </Link>{" "}
-              {t("templates.emptyDescriptionSuffix")}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<LayoutTemplate className="h-12 w-12" />}
+          title={t("templates.emptyTitle")}
+          description={t("templates.emptyDescriptionSuffix")}
+          action={
+            <Button asChild variant="outline" size="sm" className="mt-2">
+              <Link to="/my-guides/templates">{t("templates.emptyDescriptionLink")}</Link>
+            </Button>
+          }
+        />
       )}
       </>
       )}

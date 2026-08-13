@@ -102,7 +102,7 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
               <div>
                 <p className="font-medium text-sm">{t("cookieConsent.title")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {t("cookieConsent.body1")}
+                  {t("cookieConsent.body1")}{" "}
                   {t("cookieConsent.body2")}
                 </p>
               </div>
@@ -117,8 +117,8 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
             </div>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0"
+              size="icon-sm"
+              className="shrink-0"
               onClick={handleDecline}
             >
               <X className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -9,11 +9,13 @@ import {
   isLangLoaded,
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
-import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
+import { getActualKeyInfos, type UiRemapInfo, type RemapInfo, type RemapDetail } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
 import { cn } from "@/lib/utils";
+import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
@@ -59,28 +61,32 @@ function useItemLang(gameLanguage: string | null | undefined): string {
 }
 
 /**
+ * 半角スペースの連続を「␣」（U+2423）に置き換えて可視化しつつ、テキスト片を描画する
+ * （全角スペースは対象外）。可視化用の span は常に aria-hidden にする（呼び出し側で
+ * 読み上げテキストを別途 aria-label 等で提供すること）。search-craft-loop-view.tsx の
+ * SegmentedSearchString と共用する。
+ */
+export function renderVisibleSpaces(text: string, spaceClassName: string): ReactNode[] {
+  const parts = text.split(/( +)/);
+  return parts.map((part, i) =>
+    part.length > 0 && part[0] === " " ? (
+      <span key={i} aria-hidden="true" className={spaceClassName}>
+        {"␣".repeat(part.length)}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
+/**
  * サーチ文字列を表示する。半角スペースは視認できるよう「␣」（U+2423）に置き換えて
  * 描画する（全角スペースは対象外）。描画テキストは実データと異なるため、
  * コピー機能は必ず元の searchStr 文字列を使うこと（DOM のテキストから取らない）。
  * スクリーンリーダーには aria-label で元の文字列を提供する。
  */
 export function SearchStringText({ value }: { value: string }) {
-  const t = useT();
-  // 半角スペースの連続を捕捉して分割
-  const parts = value.split(/( +)/);
-  return (
-    <span aria-label={value}>
-      {parts.map((part, i) =>
-        part.length > 0 && part[0] === " " ? (
-          <span key={i} aria-hidden="true" className="text-muted-foreground/70">
-            {"␣".repeat(part.length)}
-          </span>
-        ) : (
-          part
-        ),
-      )}
-    </span>
-  );
+  return <span aria-label={value}>{renderVisibleSpaces(value, "text-muted-foreground/70")}</span>;
 }
 
 /**
@@ -127,11 +133,10 @@ export type SearchCraftRowData = {
   id: string;
   sequence: number;
   items: string[];
-  searchStr: string | null;
   comment: string | null;
   timing: string | null;
-  /** Shiftを押しながらクラフトするか（古いデータには存在しない） */
-  withShift?: boolean;
+  /** 複数サーチ文字列バリエーション。行内で縦積み表示する */
+  variations: SearchCraftVariation[];
 };
 
 // ============================================
@@ -145,24 +150,28 @@ export function KeyBadge({
   finger,
   isRemapped,
   needsShift,
+  remapDetail,
 }: {
   keyCode: string;
   label: string;
   finger?: FingerType;
   isRemapped?: boolean;
   needsShift?: boolean;
+  /** リマップされている場合のツールチップ詳細（「リマップ: 物理 → 出力」表示用） */
+  remapDetail?: RemapDetail;
 }) {
   const t = useT();
   const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
 
-  // ツールチップのテキスト
-  const getTooltipText = () => {
+  // ツールチップのテキスト。物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と
+  // 同じ「リマップ: 物理 → 出力」形式（フル名称。⇧ 等の短縮記号は使わない）
+  const getTooltipContent = (): ReactNode => {
+    if (isRemapped && remapDetail) {
+      return t("playerProfile.remapped", { source: remapDetail.sourceLabel, target: remapDetail.targetLabel });
+    }
     if (keyCode.includes("+")) {
       // 修飾キー組み合わせの場合
       return getKeyCombinationLabel(t, keyCode);
-    }
-    if (isRemapped) {
-      return t("playerProfile.remapped", { key: getKeyLabel(t, keyCode) });
     }
     return getKeyLabel(t, keyCode);
   };
@@ -177,13 +186,13 @@ export function KeyBadge({
               ? fingerClass
               : "bg-secondary/50 border-border/50 text-muted-foreground",
             isRemapped && "ring-1 ring-primary ring-offset-1",
-            needsShift && !isRemapped && "border-amber-500/50 bg-amber-500/10"
+            needsShift && !isRemapped && "border-warning/50 bg-warning/10"
           )}
         >
-          {label}
+          <KeyLabelText label={label} />
         </span>
       </TooltipTrigger>
-      <TooltipContent>{getTooltipText()}</TooltipContent>
+      <TooltipContent>{getTooltipContent()}</TooltipContent>
     </Tooltip>
   );
 }
@@ -194,8 +203,8 @@ export function ShiftCraftBadge() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-          ⇧ Shift
+        <span className="inline-flex items-center justify-center gap-1 rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
+          <ShiftMark /> Shift
         </span>
       </TooltipTrigger>
       <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
@@ -242,6 +251,7 @@ export function ActualKeyBadges({
             finger={getFingerForKey(baseKeyCode)}
             isRemapped={info.isRemapped}
             needsShift={info.needsShift}
+            remapDetail={info.remapDetail}
           />
         );
       })}
@@ -250,7 +260,14 @@ export function ActualKeyBadges({
 }
 
 /** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
-export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean }) {
+export function KeyBadgeLegend({
+  showFingers = false,
+  showCraftMarker = false,
+}: {
+  showFingers?: boolean;
+  /** Loop（繋ぎ方）表示があるページでのみ、制御キー（BS/←/Home/⇧Home）バッジの説明を追加する */
+  showCraftMarker?: boolean;
+}) {
   const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -261,13 +278,23 @@ export function KeyBadgeLegend({ showFingers = false }: { showFingers?: boolean 
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-amber-500/50 bg-amber-500/10 px-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
-          ⇧
+        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
+          <ShiftMark className="size-2.5" />
         </span>
         <span className="text-[11px] text-muted-foreground">
           {t("playerProfile.legendWithShift")}
         </span>
       </div>
+      {showCraftMarker && (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-1 font-mono text-[10px] font-semibold text-info">
+            BS
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("playerProfile.legendControlKey")}
+          </span>
+        </div>
+      )}
       {showFingers && <FingerLegend />}
     </div>
   );
@@ -290,16 +317,35 @@ export function SearchCraftGroupedList({
   remaps,
   fingerAssignments,
   gameLanguage,
+  renderGroupExtra,
+  extraTimings,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
+  /**
+   * 各グループカードの行リストの後（CardContent 内）に追加コンテンツを描画するフック
+   * （繋ぎ方 Loop 表示などを疎結合に差し込むための拡張点。search-craft-loop-view.tsx を
+   * ここから直接 import しない ＝ 循環 import 回避のため render prop 方式にしている）。
+   * タイミングなしの1枚カード表示のときも renderGroupExtra(null) を呼ぶ。
+   */
+  renderGroupExtra?: (timing: string | null) => ReactNode;
+  /**
+   * crafts 側に存在しない timing でもグループカードを出すための補助
+   * （例: Loop だけがその timing を持ち、crafts は全て timing なし、というケースで
+   * Loop のグループが表示から漏れるのを防ぐ）。該当カードは crafts が0件なら行リストを省略し、
+   * renderGroupExtra の内容だけを描画する。
+   */
+  extraTimings?: (string | null)[];
 }) {
   const t = useT();
   const lang = useItemLang(gameLanguage);
-  const hasAnyTiming = crafts.some((c) => c.timing);
+
+  const timingsFromCrafts = new Set(crafts.map((c) => c.timing));
+  const extraOnlyTimings = (extraTimings ?? []).filter((timing) => !timingsFromCrafts.has(timing));
+  const hasAnyTiming = crafts.some((c) => c.timing) || extraOnlyTimings.length > 0;
 
   if (!hasAnyTiming) {
     return (
@@ -308,6 +354,7 @@ export function SearchCraftGroupedList({
         remaps={remaps}
         fingerAssignments={fingerAssignments}
         lang={lang}
+        extra={renderGroupExtra?.(null)}
       />
     );
   }
@@ -318,6 +365,10 @@ export function SearchCraftGroupedList({
     const key = craft.timing;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(craft);
+  }
+  // extraTimings のうち crafts 側に無いものは、空のグループとして追加する
+  for (const timing of extraOnlyTimings) {
+    if (!grouped.has(timing)) grouped.set(timing, []);
   }
 
   // ソート: 指定なし(null) → OW → Bastion → Bastion→Fort → Fortress → Blinded → その他
@@ -338,13 +389,14 @@ export function SearchCraftGroupedList({
           remaps={remaps}
           fingerAssignments={fingerAssignments}
           lang={lang}
+          extra={renderGroupExtra?.(timing)}
         />
       ))}
     </div>
   );
 }
 
-/** タイミンググループ1つ分のカード（行リスト + デスクトップ用の列ヘッダー） */
+/** タイミンググループ1つ分のカード（行リスト + デスクトップ用の列ヘッダー + 任意の追加コンテンツ） */
 function SearchCraftGroupCard({
   title,
   dotClass,
@@ -352,6 +404,7 @@ function SearchCraftGroupCard({
   remaps,
   fingerAssignments,
   lang,
+  extra,
 }: {
   title?: string;
   dotClass?: string;
@@ -359,12 +412,17 @@ function SearchCraftGroupCard({
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
   lang: string;
+  extra?: ReactNode;
 }) {
   const t = useT();
+  // タイミング未設定のみの1枚カード（title未設定）は crafts=[] でも従来どおり行リストの枠を出す。
+  // タイミング別グループカード（title あり）は、extraTimings 由来で crafts=0件のことがあるため、
+  // その場合は行リスト（列ヘッダー含む）を省略し extra だけを描画する。
+  const showList = title === undefined || crafts.length > 0;
   return (
-    <Card>
+    <Card className="gap-3 py-5">
       {title && (
-        <CardHeader className="py-2">
+        <CardHeader className="px-5">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
             {title}
@@ -374,29 +432,34 @@ function SearchCraftGroupCard({
           </CardTitle>
         </CardHeader>
       )}
-      <CardContent className={cn("pb-3", title ? "pt-0" : "pt-4")}>
-        {/* 列ヘッダー（デスクトップのみ） */}
-        <div
-          className={cn(
-            "hidden pb-2 border-b text-xs text-muted-foreground",
-            SEARCH_CRAFT_GRID_COLS,
-          )}
-        >
-          <span>{t("playerProfile.colItems")}</span>
-          <span>{t("playerProfile.colSearchStr")}</span>
-          <span>{t("playerProfile.colInputKeys")}</span>
-        </div>
-        <div className="divide-y">
-          {crafts.map((craft) => (
-            <SearchCraftRow
-              key={craft.id}
-              craft={craft}
-              remaps={remaps}
-              fingerAssignments={fingerAssignments}
-              lang={lang}
-            />
-          ))}
-        </div>
+      <CardContent className="px-5">
+        {showList && (
+          <>
+            {/* 列ヘッダー（デスクトップのみ） */}
+            <div
+              className={cn(
+                "hidden pb-2 border-b text-xs text-muted-foreground",
+                SEARCH_CRAFT_GRID_COLS,
+              )}
+            >
+              <span>{t("playerProfile.colItems")}</span>
+              <span>{t("playerProfile.colSearchStr")}</span>
+              <span>{t("playerProfile.colInputKeys")}</span>
+            </div>
+            <div className="divide-y">
+              {crafts.map((craft) => (
+                <SearchCraftRow
+                  key={craft.id}
+                  craft={craft}
+                  remaps={remaps}
+                  fingerAssignments={fingerAssignments}
+                  lang={lang}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {extra && <div className={showList ? "mt-3" : undefined}>{extra}</div>}
       </CardContent>
     </Card>
   );
@@ -414,16 +477,16 @@ function SearchCraftRow({
   lang: string;
 }) {
   const t = useT();
-  const handleCopySearchStr = () => {
-    if (!craft.searchStr || !navigator.clipboard) return;
-    navigator.clipboard.writeText(craft.searchStr).then(() => {
+  const handleCopy = (str: string) => {
+    if (!str || !navigator.clipboard) return;
+    navigator.clipboard.writeText(str).then(() => {
       toast.success(t("playerProfile.searchStrCopied"));
     });
   };
 
   return (
     <div className="py-3">
-      <div className={cn("flex flex-col gap-2 lg:items-center", SEARCH_CRAFT_GRID_COLS)}>
+      <div className={cn("flex flex-col gap-2 lg:items-start", SEARCH_CRAFT_GRID_COLS)}>
         {/* アイテム */}
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {craft.items.map((itemId, idx) => (
@@ -437,49 +500,63 @@ function SearchCraftRow({
           ))}
         </div>
 
-        {/* サーチ文字列（コピー可能） */}
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1">
+        {/* サーチ文字列（バリエーションごとに縦積み表示。コピーはそのバリエーションの元文字列） */}
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
             {t("playerProfile.searchLabel")}
           </span>
-          {craft.searchStr ? (
-            <>
-              <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
-                <SearchStringText value={craft.searchStr} />
-              </code>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={handleCopySearchStr}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
-              </Tooltip>
-            </>
+          {craft.variations.length > 0 ? (
+            craft.variations.map((variation, idx) =>
+              variation.str ? (
+                <div key={idx} className="flex items-center gap-1 min-w-0">
+                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
+                    <SearchStringText value={variation.str} />
+                  </code>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => handleCopy(variation.str)}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : (
+                <span key={idx} className="text-sm text-muted-foreground">—</span>
+              ),
+            )
           ) : (
             <span className="text-sm text-muted-foreground">—</span>
           )}
         </div>
 
-        {/* 入力キー */}
-        <div className="flex items-start gap-1 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0 mr-1 mt-1.5">
+        {/* 入力キー（バリエーションごとに縦積み表示、行の高さをサーチ文字列列と揃える） */}
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
             {t("playerProfile.inputKeysLabel")}
           </span>
-          {craft.searchStr ? (
-            <ActualKeyBadges
-              searchStr={craft.searchStr}
-              remaps={remaps}
-              fingerAssignments={fingerAssignments}
-              shiftHeld={craft.withShift === true}
-            />
-          ) : craft.withShift ? (
-            <ShiftCraftBadge />
+          {craft.variations.length > 0 ? (
+            craft.variations.map((variation, idx) => (
+              <div key={idx} className="flex min-h-7 items-center">
+                {variation.str ? (
+                  <ActualKeyBadges
+                    searchStr={variation.str}
+                    remaps={remaps}
+                    fingerAssignments={fingerAssignments}
+                    shiftHeld={variation.withShift}
+                  />
+                ) : variation.withShift ? (
+                  <ShiftCraftBadge />
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+            ))
           ) : (
             <span className="text-sm text-muted-foreground">—</span>
           )}

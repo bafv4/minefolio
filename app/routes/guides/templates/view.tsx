@@ -19,6 +19,7 @@ import {
   parseTemplateCrafts,
   parseTemplateRemapData,
   parseTemplateRemaps,
+  parseTemplateLoops,
   MAX_TEMPLATE_CRAFTS,
 } from "@/lib/search-craft-templates";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -54,6 +55,12 @@ import {
   SearchCraftGroupedList,
   KeyBadgeLegend,
 } from "@/components/search-craft-template-view";
+import {
+  groupLoopsByTiming,
+  makeLoopGroupExtra,
+  type LoopCraftInfo,
+  type SearchCraftLoopRowData,
+} from "@/components/search-craft-loop-view";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
   ArrowLeft,
@@ -153,6 +160,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const appUrl = env.APP_URL || "https://minefolio.app";
   const likeCount = await getTemplateLikeCount(db, template.id);
 
+  const crafts = parseTemplateCrafts(template.craftsData);
+
   return {
     template: {
       id: template.id,
@@ -165,8 +174,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       createdAt: template.createdAt.toISOString(),
       updatedAt: template.updatedAt.toISOString(),
     },
-    crafts: parseTemplateCrafts(template.craftsData),
+    crafts,
     remaps: parseTemplateRemaps(template.remapsData),
+    loops: parseTemplateLoops(template.loopsData, crafts.length),
     author: {
       slug: template.user.slug,
       name: getLocalizedDisplayName(template.user, resolveLocale(request)),
@@ -219,6 +229,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   const input = {
     crafts,
     remaps: applyRemaps ? parseTemplateRemapData(template.remapsData) : null,
+    // crafts と同じタイミングで常に適用する（テンプレートの loops は適用可否を選べない）
+    loops: parseTemplateLoops(template.loopsData, crafts.length),
   };
 
   const now = new Date();
@@ -292,7 +304,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function TemplateViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { template, crafts, remaps, author, myPresets, isOwner, isLoggedIn, appUrl } =
+  const { template, crafts, remaps, loops, author, myPresets, isOwner, isLoggedIn, appUrl } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -359,16 +371,46 @@ export default function TemplateViewPage() {
     fetcher.submit(formData, { method: "post" });
   };
 
+  // サーチクラフト（グループカード表示・Loop 参照解決の両方で使うため合成 id を一度だけ振る）
+  const parsedSearchCrafts = crafts.map((craft, idx) => ({
+    ...craft,
+    id: `craft-${idx}`,
+    sequence: idx + 1,
+  }));
+  const loopCraftRefs: LoopCraftInfo[] = crafts.map((craft, idx) => ({
+    id: `craft-${idx}`,
+    items: craft.items,
+    variations: craft.variations,
+  }));
+
+  // 繋ぎ方（Loop）を timing ごとにグループ化し、SearchCraftGroupedList の renderGroupExtra から
+  // 各タイミンググループカード内に埋め込むための関数を作る（プロフィールと同じパターン）
+  const searchCraftLoopRows: SearchCraftLoopRowData[] = loops.map((loop, idx) => ({
+    id: `loop-${idx}`,
+    steps: loop.steps.map((s) => ({
+      craftId: `craft-${s.craftIndex}`,
+      transition: s.transition,
+      variationIndex: s.variationIndex,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+  const searchCraftLoopTimings = Array.from(groupLoopsByTiming(searchCraftLoopRows).keys());
+  const renderSearchCraftLoopExtra = makeLoopGroupExtra({
+    loops: searchCraftLoopRows,
+    crafts: loopCraftRefs,
+    remaps,
+  });
+
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          to="/guides/templates"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("templates.backToList")}
-        </Link>
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link to="/guides/templates">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {t("templates.backToList")}
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-3">
@@ -387,10 +429,13 @@ export default function TemplateViewPage() {
             {author.name}
           </Link>
           <span className="mx-2">·</span>
-          {formatDistanceToNow(new Date(template.createdAt), {
-            addSuffix: true,
-            locale: dateFnsLocale(locale),
-          })}
+          {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+          <span suppressHydrationWarning>
+            {formatDistanceToNow(new Date(template.createdAt), {
+              addSuffix: true,
+              locale: dateFnsLocale(locale),
+            })}
+          </span>
         </p>
         {template.description && (
           <p className="text-sm whitespace-pre-wrap">{template.description}</p>
@@ -678,20 +723,25 @@ export default function TemplateViewPage() {
         </section>
       )}
 
-      {/* サーチクラフト */}
+      {/* サーチクラフト（繋ぎ方〈Loop〉はタイミンググループカード内のサブセクションとして表示） */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">{t("templates.craftSection")}</h2>
-          <KeyBadgeLegend />
+          <div className="flex flex-wrap items-center gap-2">
+            {loops.length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {t("templates.loopCount", { count: loops.length })}
+              </Badge>
+            )}
+            <KeyBadgeLegend showCraftMarker={loops.length > 0} />
+          </div>
         </div>
         <SearchCraftGroupedList
-          crafts={crafts.map((craft, idx) => ({
-            ...craft,
-            id: `craft-${idx}`,
-            sequence: idx + 1,
-          }))}
+          crafts={parsedSearchCrafts}
           remaps={remaps}
           gameLanguage={template.gameLanguage}
+          extraTimings={searchCraftLoopTimings}
+          renderGroupExtra={renderSearchCraftLoopExtra}
         />
       </section>
     </div>

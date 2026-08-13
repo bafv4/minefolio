@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { useLoaderData, useSearchParams } from "react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -26,10 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { PACES_PAGE_SIZE } from "./api/paces";
 import { History, Activity, Loader2, Search, X } from "lucide-react";
-
-// 初回・追加読み込みの件数（無限スクロールで順次追加）
-const PAGE_SIZE = 60;
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
@@ -69,13 +68,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     ]);
 
   // 見出しの件数バッジは実際に表示されるカード数と一致させる。
-  // 一方 total は /api/paces（ユーザー非依存・CDNキャッシュ）のoffsetページングの
+  // 一方 total は /api/paces（ユーザー非依存・CDNキャッシュ）のページングの
   // 基準なので、除外前の件数のまま保つ
   const visibleTotal = filterOwnPaces(items, viewerPrefs).length;
 
   return {
     appUrl,
-    paces: items.slice(0, PAGE_SIZE),
+    paces: items.slice(0, PACES_PAGE_SIZE),
     total: items.length,
     visibleTotal,
     mcidToUuid,
@@ -86,17 +85,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-interface PacesApiResponse {
-  paces: PaceFeedItem[];
-  total: number;
-  hasMore: boolean;
-}
-
-// 無限スクロール付きのペース一覧（検索条件が変わったら key で作り直す）
+// 無限スクロール付きのペース一覧（/videos と共通の use-infinite-scroll フックを使用。
+// 検索条件の変化は resetDeps でフック側がリセットする）
 function PacesList({
   initialPaces,
   initialTotal,
-  searchQuery,
+  filterKey,
   mcidToUuid,
   mcidToDisplayName,
   mcidToDisplayNameAlphabet,
@@ -105,7 +99,7 @@ function PacesList({
 }: {
   initialPaces: PaceFeedItem[];
   initialTotal: number;
-  searchQuery: string;
+  filterKey: string;
   mcidToUuid: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToDisplayNameAlphabet: Record<string, string>;
@@ -114,63 +108,19 @@ function PacesList({
 }) {
   const t = useT();
   const locale = useLocale();
-  const [paces, setPaces] = useState(initialPaces);
-  const [reachedEnd, setReachedEnd] = useState(initialPaces.length >= initialTotal);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const loadingRef = useRef(false);
-  const offsetRef = useRef(initialPaces.length);
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  const loadMore = useCallback(async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoadingMore(true);
-    setLoadError(false);
-    try {
-      const params = new URLSearchParams(searchQuery);
-      params.set("offset", String(offsetRef.current));
-      params.set("limit", String(PAGE_SIZE));
-      const res = await fetch(`/api/paces?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as PacesApiResponse;
-
-      offsetRef.current += data.paces.length;
-      if (data.paces.length === 0 || !data.hasMore) {
-        setReachedEnd(true);
-      }
-      // 追加読み込み中に新しいペースが入って一覧がずれた場合の重複を除去
-      setPaces((prev) => {
-        const seen = new Set(prev.map((p) => p.pacemanRunId));
-        return [...prev, ...data.paces.filter((p) => !seen.has(p.pacemanRunId))];
-      });
-    } catch (err) {
-      console.error("Failed to load more paces:", err);
-      setLoadError(true);
-    } finally {
-      loadingRef.current = false;
-      setLoadingMore(false);
-    }
-  }, [searchQuery]);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || reachedEnd || loadError) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) void loadMore();
-      },
-      { rootMargin: "400px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [loadMore, reachedEnd, loadError]);
+  const infinite = useInfiniteScroll<PaceFeedItem>({
+    initialItems: initialPaces,
+    initialPage: 1,
+    initialHasMore: initialPaces.length < initialTotal,
+    endpoint: "/api/paces",
+    resetDeps: [filterKey],
+  });
 
   // 「ホームに自分のペースを表示しない」設定時、自分のペースを除外（ホームと同じ挙動）
   // レスポンス自体はユーザー非依存（CDNキャッシュ対象）のため、フィルタはクライアント側で適用する
   const visiblePaces = useMemo(
-    () => filterOwnPaces(paces, viewerPrefs),
-    [paces, viewerPrefs]
+    () => filterOwnPaces(infinite.items, viewerPrefs),
+    [infinite.items, viewerPrefs]
   );
 
   return (
@@ -191,18 +141,23 @@ function PacesList({
         ))}
       </div>
 
-      {!reachedEnd && (
-        <div ref={sentinelRef} className="flex justify-center py-4">
-          {loadError ? (
-            <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-              <p>{t("paces.loadMoreError")}</p>
-              <Button variant="outline" size="sm" onClick={() => void loadMore()}>
-                {t("paces.retry")}
-              </Button>
-            </div>
-          ) : (
-            loadingMore && <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          )}
+      {/* スクリーンリーダー向け追加読み込み通知 */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {infinite.liveMessage}
+      </div>
+
+      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック */}
+      {infinite.items.length > 0 && infinite.hasMore && (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
+          <Button
+            variant="outline"
+            onClick={infinite.loadMore}
+            disabled={infinite.isLoadingMore}
+          >
+            {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {t("paces.loadMore")}
+          </Button>
         </div>
       )}
     </>
@@ -345,10 +300,9 @@ export default function PacesPage() {
 
       {visibleTotal > 0 ? (
         <PacesList
-          key={filterKey}
           initialPaces={paces}
           initialTotal={total}
-          searchQuery={searchParams.toString()}
+          filterKey={filterKey}
           mcidToUuid={mcidToUuid}
           mcidToDisplayName={mcidToDisplayName}
           mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}

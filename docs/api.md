@@ -291,7 +291,7 @@ DB に存在しない slug のみ追加（重複は無視）。レスポンス�
 
 最大100件まで。
 
-**レスポンス:** `{ "users": [{ slug, mcid, uuid, displayName, displayNameAlphabet, shortBio, location, updatedAt, customSkinUrl, slimSkin }, ...] }`
+**レスポンス:** `{ "users": [{ slug, mcid, uuid, displayName, displayNameAlphabet, pronouns, role, mainEdition, mainPlatform, shortBio, location, updatedAt, customSkinUrl, slimSkin }, ...] }`
 
 入力順にソートされる。
 

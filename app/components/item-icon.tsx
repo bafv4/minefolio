@@ -1,4 +1,5 @@
-import { MinecraftItemIcon, type MinecraftItemIconProps } from "@bafv4/mcitems/1.16/react";
+import { MinecraftItemIcon, formatItemName, getItemNameJa, type MinecraftItemIconProps } from "@bafv4/mcitems/1.16/react";
+import type { Locale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
 /** アイテムテクスチャ・言語ファイルの配信元（public/mcitems）。loadLang にも同じ値を渡す */
@@ -25,6 +26,16 @@ function ItemIconSpinner({ size }: { size: number }) {
       />
     </span>
   );
+}
+
+/**
+ * アイテム名をアプリの UI ロケール（"en"/"ja"）に合わせて取得する。
+ * 英語ロケールは formatItemName の英語表記を優先し、日本語ロケールは和名（getItemNameJa）優先
+ * → 無ければ英語にフォールバックする（player/profile.tsx・guide-embeds.tsx で共用）。
+ */
+export function getLocalizedItemName(itemId: string, locale: Locale): string {
+  if (locale === "en") return formatItemName(itemId, "en_us");
+  return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
 export type ItemIconProps = Omit<MinecraftItemIconProps, "textureBaseUrl">;

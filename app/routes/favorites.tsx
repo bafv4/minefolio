@@ -10,25 +10,34 @@ import { users } from "@/lib/schema";
 import { eq, inArray } from "drizzle-orm";
 import { getFavoritesFromDb } from "@/lib/favorites";
 import { getLocalFavorites } from "@/lib/favorites-client";
-import { PlayerCard } from "@/components/player-card";
+import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, Users, ArrowLeft, Cookie, Loader2 } from "lucide-react";
+import { Heart, Users, ArrowLeft, Cookie } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useT } from "@/hooks/use-locale";
 import { localeFromMatches } from "@/lib/locale";
 
-type FavoritePlayer = {
-  mcid: string | null;
-  uuid: string | null;
-  slug: string;
-  displayName: string | null;
-  displayNameAlphabet: string | null;
-  shortBio: string | null;
-  location: string | null;
-  updatedAt: Date;
-};
+type FavoritePlayer = ProfileFeedCardPlayer;
+
+// 一覧取得で必要な列（ProfileFeedCard の描画に必要な最小限。browse-query.server.ts の
+// BROWSE_LIST_COLUMNS と揃える）
+const FAVORITE_PLAYER_COLUMNS = {
+  mcid: true,
+  uuid: true,
+  slug: true,
+  displayName: true,
+  displayNameAlphabet: true,
+  pronouns: true,
+  role: true,
+  mainEdition: true,
+  mainPlatform: true,
+  customSkinUrl: true,
+  updatedAt: true,
+  shortBio: true,
+} as const;
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -77,16 +86,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const rows = await db.query.users.findMany({
     where: inArray(users.slug, slugs),
-    columns: {
-      mcid: true,
-      uuid: true,
-      slug: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      shortBio: true,
-      location: true,
-      updatedAt: true,
-    },
+    columns: FAVORITE_PLAYER_COLUMNS,
   });
 
   // お気に入り順（DB登録順 = slugsの順）でソート
@@ -147,7 +147,7 @@ export default function FavoritesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Heart className="h-6 w-6 text-red-500 fill-current" />
+            <Heart className="h-6 w-6 text-favorite fill-current" />
             {t("favorites.title")}
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -177,28 +177,28 @@ export default function FavoritesPage() {
       )}
 
       {isLoadingList ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
+        <FavoriteCardSkeletonGrid />
       ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
-            <PlayerCard key={player.slug} player={player} />
+            <ProfileFeedCard key={player.slug} player={player} />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p className="text-lg mb-2">{t("favorites.emptyTitle")}</p>
-          <p className="text-sm text-center max-w-md mb-6">
-            {!isLoggedIn && hasConsent === false
+        <EmptyState
+          icon={<Users className="h-12 w-12" />}
+          title={t("favorites.emptyTitle")}
+          description={
+            !isLoggedIn && hasConsent === false
               ? t("favorites.cookieRequired")
-              : t("favorites.emptyHelp")}
-          </p>
-          <Button asChild>
-            <Link to="/">{t("favorites.browseRunner")}</Link>
-          </Button>
-        </div>
+              : t("favorites.emptyHelp")
+          }
+          action={
+            <Button asChild className="mt-4">
+              <Link to="/browse">{t("favorites.browseRunner")}</Link>
+            </Button>
+          }
+        />
       )}
 
       {!isLoggedIn && (
@@ -206,6 +206,37 @@ export default function FavoritesPage() {
           {t("favorites.cookieNotice")}
         </p>
       )}
+    </div>
+  );
+}
+
+// ProfileFeedCard と同寸のスケルトンカード（rounded-xl / p-4 / アバター12x12 / フッター行）。
+// HydrateFallback とゲスト読み込み中（clientの by-slugs フェッチ）の両方で共有する。
+function FavoriteCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <Skeleton className="h-5 w-16 rounded-full" />
+        <Skeleton className="h-3 w-12" />
+      </div>
+    </div>
+  );
+}
+
+function FavoriteCardSkeletonGrid() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <FavoriteCardSkeleton key={i} />
+      ))}
     </div>
   );
 }
@@ -221,20 +252,7 @@ export function HydrateFallback() {
         </div>
         <Skeleton className="h-10 w-32" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="border border-border/70 rounded-xl p-3">
-            <div className="flex items-center gap-3">
-              <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-3 w-40" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <FavoriteCardSkeletonGrid />
     </div>
   );
 }

@@ -19,9 +19,10 @@ import { guideLikeCountSql } from "@/lib/likes.server";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { EmptyState } from "@/components/empty-state";
 import { BookOpen, ArrowLeft } from "lucide-react";
+import { ViewToggle } from "@/components/view-toggle";
 import {
-  ViewToggle,
   GuideCardGrid,
   GuideListView,
   type GuideItem,
@@ -193,10 +194,11 @@ export default function UserGuidesPage() {
           </div>
         )
       ) : authorGuides.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>{t("guides.noPublishedGuides")}</p>
-        </div>
+        <EmptyState
+          icon={<BookOpen className="h-12 w-12" />}
+          title={t("guides.noPublishedGuidesTitle")}
+          description={t("guides.noPublishedGuides")}
+        />
       ) : viewMode === "card" ? (
         <GuideCardGrid guides={authorGuides} linkFn={linkFn} />
       ) : (

@@ -50,7 +50,7 @@ export function FloatingSaveBar({
         {hasChanges && (
           <Badge
             variant="outline"
-            className="text-amber-600 dark:text-amber-400 border-amber-500/50 bg-amber-500/10 text-xs sm:text-sm"
+            className="text-warning border-warning/50 bg-warning/10 text-xs sm:text-sm"
           >
             <span className="hidden sm:inline">{t("common.unsavedChanges")}</span>
             <span className="sm:hidden">{t("common.unsaved")}</span>

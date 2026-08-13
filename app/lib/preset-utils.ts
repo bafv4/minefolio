@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "./db";
 import {
   configPresets,
@@ -9,6 +9,7 @@ import {
   keyRemaps,
   itemLayouts,
   searchCrafts,
+  searchCraftLoops,
   customKeys,
   customActions,
   type ConfigPreset,
@@ -19,10 +20,13 @@ import type {
   KeyRemap,
   ItemLayout,
   SearchCraft,
+  SearchCraftLoop,
   CustomKey,
   CustomAction,
 } from "./schema";
 import type { KeyRemapType } from "./remap-utils";
+import { parseLoopSteps, type LoopTransition } from "./search-craft-loops";
+import { resolveVariations, parseVariationsJson, type SearchCraftVariation } from "./search-craft-variations";
 
 /**
  * プリセットに保存するキーバインドデータの型
@@ -90,11 +94,37 @@ export interface PresetSearchCraftData {
   sequence: number;
   items: string;
   keys: string;
+  /** 第1バリエーションのミラー（旧リーダー・ロールバック互換のため書き込み継続） */
   searchStr: string | null;
   comment: string | null;
   timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
-  /** Shiftを押しながらクラフトするか（古いスナップショットには存在しない） */
+  /** 第1バリエーションのミラー（古いスナップショットには存在しない） */
   withShift?: boolean;
+  /** 複数サーチ文字列バリエーション（任意フィールド。正準の読み取りは resolveVariations() 経由） */
+  variations?: SearchCraftVariation[];
+}
+
+/**
+ * プリセットに保存するサーチクラフトLoop（繋ぎ方）の1ステップの型。
+ * 行 id はスナップショットに保持できないため、同一スナップショット内
+ * searchCraftsData の sequence 値（craftSeq）でステップの参照先を表す。
+ */
+export interface PresetLoopStepData {
+  /** 同一スナップショット内 searchCraftsData の sequence 値で参照（行 id はスナップショットに無いため） */
+  craftSeq: number;
+  transition: LoopTransition | null;
+  /** 参照先クラフトのバリエーション index（0始まり）。0 は省略する（既存データとバイト同一を保つため） */
+  variationIndex?: number;
+}
+
+/**
+ * プリセットに保存するサーチクラフトLoop（繋ぎ方）データの型
+ */
+export interface PresetSearchCraftLoopData {
+  sequence: number;
+  steps: PresetLoopStepData[];
+  comment: string | null;
+  timing?: "ow" | "bastion" | "bastion_fort" | "fortress" | "blinded" | "other" | null;
 }
 
 /**
@@ -133,6 +163,7 @@ export interface CreatePresetOptions {
   keyRemaps?: KeyRemap[];
   itemLayouts?: ItemLayout[];
   searchCrafts?: SearchCraft[];
+  searchCraftLoops?: SearchCraftLoop[];
   customKeys?: CustomKey[];
   customActions?: CustomAction[];
   source?: "manual" | "import" | "onboarding";
@@ -209,19 +240,73 @@ export function serializeItemLayouts(layouts: ItemLayout[]): string {
 }
 
 /**
- * サーチクラフト配列からプリセット用のJSONデータを作成
+ * サーチクラフト配列からプリセット用のJSONデータを作成。
+ * variations は searchVariations 列（無ければ searchStr/withShift から1件合成）を
+ * resolveVariations() 経由で正準化して含める。searchStr/withShift は第1バリエーションの
+ * ミラーとして引き続き書き込む。
  */
 export function serializeSearchCrafts(crafts: SearchCraft[]): string {
-  const data: PresetSearchCraftData[] = crafts.map((c) => ({
-    sequence: c.sequence,
-    items: c.items,
-    keys: c.keys,
-    searchStr: c.searchStr,
-    comment: c.comment,
-    timing: c.timing,
-    withShift: c.withShift,
-  }));
+  const data: PresetSearchCraftData[] = crafts.map((c) => {
+    const variations = resolveVariations({
+      variations: parseVariationsJson(c.searchVariations) ?? undefined,
+      searchStr: c.searchStr,
+      withShift: c.withShift,
+    });
+    return {
+      sequence: c.sequence,
+      items: c.items,
+      keys: c.keys,
+      searchStr: c.searchStr,
+      comment: c.comment,
+      timing: c.timing,
+      withShift: c.withShift,
+      variations,
+    };
+  });
   return JSON.stringify(data);
+}
+
+/**
+ * サーチクラフトLoop（繋ぎ方）配列からプリセット用のJSONデータを作成する。
+ * ステップの craftId は同一スナップショット内 crafts の sequence 値（craftSeq）へ変換する
+ * （プリセットスナップショットは行 id を保持しないため）。
+ * 参照切れステップ（crafts に存在しない craftId）は除去し、残りが2件未満になった
+ * Loop は丸ごと除去する。Loop が0件になった場合は null を返す。
+ */
+export function serializeSearchCraftLoops(
+  loops: SearchCraftLoop[],
+  crafts: SearchCraft[],
+): string | null {
+  const craftIdToSeq = new Map(crafts.map((c) => [c.id, c.sequence]));
+  const sortedLoops = [...loops].sort((a, b) => a.sequence - b.sequence);
+
+  const data: PresetSearchCraftLoopData[] = [];
+  for (const loop of sortedLoops) {
+    const steps = parseLoopSteps(loop.steps);
+    const mappedSteps: PresetLoopStepData[] = [];
+    for (const step of steps) {
+      const craftSeq = craftIdToSeq.get(step.craftId);
+      if (craftSeq === undefined) continue;
+      mappedSteps.push({
+        craftSeq,
+        transition: step.transition,
+        // 0 は省略する（既存データとバイト同一を保つため）
+        ...(step.variationIndex ? { variationIndex: step.variationIndex } : {}),
+      });
+    }
+    if (mappedSteps.length < 2) continue;
+    // 除去でズレる場合に備え、先頭ステップの transition は常に null に統一する
+    mappedSteps[0] = { ...mappedSteps[0], transition: null };
+
+    data.push({
+      sequence: loop.sequence,
+      steps: mappedSteps,
+      comment: loop.comment,
+      timing: loop.timing,
+    });
+  }
+
+  return data.length > 0 ? JSON.stringify(data) : null;
 }
 
 /**
@@ -323,10 +408,19 @@ export async function syncActivePresetSnapshot(
         break;
       }
       case "searchCrafts": {
-        const rows = await db.query.searchCrafts.findMany({
-          where: eq(searchCrafts.userId, userId),
-        });
+        // crafts と loops のスキューを防ぐため、常に両列を同時に書く（loops 専用の同期 kind は作らない）。
+        // 互いに独立したクエリ（両方 userId のみで絞り込み）なので並列化する
+        const [rows, loopRows] = await Promise.all([
+          db.query.searchCrafts.findMany({
+            where: eq(searchCrafts.userId, userId),
+          }),
+          db.query.searchCraftLoops.findMany({
+            where: eq(searchCraftLoops.userId, userId),
+            orderBy: [asc(searchCraftLoops.sequence)],
+          }),
+        ]);
         updates.searchCraftsData = rows.length > 0 ? serializeSearchCrafts(rows) : null;
+        updates.searchCraftLoopsData = serializeSearchCraftLoops(loopRows, rows);
         break;
       }
       case "customKeys": {
@@ -440,6 +534,7 @@ export async function createPreset(
     keyRemaps = [],
     itemLayouts = [],
     searchCrafts = [],
+    searchCraftLoops = [],
     customKeys = [],
     customActions = [],
     source = "manual",
@@ -455,6 +550,7 @@ export async function createPreset(
   const fingerAssignmentsData = playerConfig?.fingerAssignments ?? null;
   const itemLayoutsData = itemLayouts.length > 0 ? serializeItemLayouts(itemLayouts) : null;
   const searchCraftsData = searchCrafts.length > 0 ? serializeSearchCrafts(searchCrafts) : null;
+  const searchCraftLoopsData = serializeSearchCraftLoops(searchCraftLoops, searchCrafts);
   const customKeysData = customKeys.length > 0 ? serializeCustomKeys(customKeys) : null;
   const customActionsData = customActions.length > 0 ? serializeCustomActions(customActions) : null;
 
@@ -494,6 +590,7 @@ export async function createPreset(
       fingerAssignmentsData,
       itemLayoutsData,
       searchCraftsData,
+      searchCraftLoopsData,
       customKeysData,
       customActionsData,
       createdAt: now,
@@ -524,6 +621,7 @@ export async function createPreset(
     fingerAssignmentsData,
     itemLayoutsData,
     searchCraftsData,
+    searchCraftLoopsData,
     customKeysData,
     customActionsData,
     createdAt: now,

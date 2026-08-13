@@ -458,11 +458,11 @@ export default function ComparePage() {
 
       {/* 走者選択 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="gap-3 py-5">
+          <CardHeader className="px-5">
             <CardTitle className="text-base">{t("compare.runner1")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 px-5">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -500,11 +500,11 @@ export default function ComparePage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="gap-3 py-5">
+          <CardHeader className="px-5">
             <CardTitle className="text-base">{t("compare.runner2")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 px-5">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -547,8 +547,8 @@ export default function ComparePage() {
       {player1 && player2 && (
         <>
           {/* 統計サマリー */}
-          <Card>
-            <CardContent>
+          <Card className="gap-3 py-5">
+            <CardContent className="px-5">
               <div className="flex flex-wrap items-center justify-center gap-6">
                 <div className="flex items-center gap-2">
                   <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
@@ -561,11 +561,11 @@ export default function ComparePage() {
                 <div className="text-center px-6">
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-green-500">{stats.same}</p>
+                      <p className="text-2xl font-bold text-success">{stats.same}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.same")}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-red-500">{stats.different}</p>
+                      <p className="text-2xl font-bold text-destructive">{stats.different}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.different")}</p>
                     </div>
                   </div>
@@ -591,11 +591,11 @@ export default function ComparePage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
             {Object.entries(groupedActions).map(([category, actions]) => (
-              <Card key={category}>
-                <CardHeader className="pb-2">
+              <Card key={category} className="gap-3 py-5">
+                <CardHeader className="px-5">
                   <CardTitle className="text-base">{categoryLabelsOf(t)[category]}</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-5">
                   <div className="divide-y">
                     {actions.map((item) => {
                       const key1 = p1Keybindings[item.action];
@@ -608,21 +608,21 @@ export default function ComparePage() {
                           key={item.action}
                           className={cn(
                             "flex items-center justify-between py-2 px-2 -mx-2",
-                            isSame && "bg-green-500/5",
-                            isDifferent && "bg-red-500/5"
+                            isSame && "bg-success/10",
+                            isDifferent && "bg-destructive/10"
                           )}
                         >
                           <div className="flex items-center gap-2 flex-1">
-                            {isSame && <Check className="h-4 w-4 text-green-500" />}
-                            {isDifferent && <X className="h-4 w-4 text-red-500" />}
+                            {isSame && <Check className="h-4 w-4 text-success" />}
+                            {isDifferent && <X className="h-4 w-4 text-destructive" />}
                             <span className="text-sm">{getActionLabel(t, item.action)}</span>
                           </div>
                           <div className="flex items-center gap-4">
-                            <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
+                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
                               {key1 ? getKeyLabel(t, key1) : "-"}
                             </kbd>
                             <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            <kbd className="min-w-20 text-center px-2 py-1 bg-secondary/80 rounded text-sm font-mono">
+                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
                               {key2 ? getKeyLabel(t, key2) : "-"}
                             </kbd>
                           </div>
@@ -638,8 +638,8 @@ export default function ComparePage() {
           {/* デバイス・設定の比較 */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
-            <Card>
-              <CardContent>
+            <Card className="gap-3 py-5">
+              <CardContent className="px-5">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
                   <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player1, locale)}</div>
@@ -707,8 +707,8 @@ function CompareRow({
       <div
         className={cn(
           "text-sm text-center py-1 rounded",
-          isSame && "bg-green-500/10",
-          isDifferent && "bg-red-500/10"
+          isSame && "bg-success/10",
+          isDifferent && "bg-destructive/10"
         )}
       >
         {value1 ?? "-"}
@@ -716,8 +716,8 @@ function CompareRow({
       <div
         className={cn(
           "text-sm text-center py-1 rounded",
-          isSame && "bg-green-500/10",
-          isDifferent && "bg-red-500/10"
+          isSame && "bg-success/10",
+          isDifferent && "bg-destructive/10"
         )}
       >
         {value2 ?? "-"}
@@ -738,8 +738,8 @@ function SimilarPlayersSection({
   const t = useT();
   const locale = useLocale();
   return (
-    <Card>
-      <CardHeader>
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
           {t("compare.similarTitle")}
@@ -748,13 +748,13 @@ function SimilarPlayersSection({
           {getLocalizedDisplayName(targetPlayer, locale) + t("compare.similarSuffix")}
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5">
         {similarPlayers.length > 0 ? (
           <div className="space-y-2">
             {similarPlayers.map((player) => (
               <div
                 key={player.slug}
-                className="flex items-center justify-between p-3 rounded-lg border hover:bg-secondary/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg border"
               >
                 <div className="flex items-center gap-3">
                   <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
@@ -765,7 +765,7 @@ function SimilarPlayersSection({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="font-bold text-green-500">
+                    <p className="font-bold text-success">
                       {Math.round(player.similarity * 100)}%
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -804,11 +804,11 @@ export function HydrateFallback() {
       {/* 走者選択スケルトン */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="pb-3">
+          <Card key={i} className="gap-3 py-5">
+            <CardHeader className="px-5">
               <Skeleton className="h-5 w-24" />
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 px-5">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </CardContent>
@@ -817,11 +817,11 @@ export function HydrateFallback() {
       </div>
 
       {/* 統計サマリースケルトン */}
-      <Card>
-        <CardContent>
+      <Card className="gap-3 py-5">
+        <CardContent className="px-5">
           <div className="flex flex-wrap items-center justify-center gap-6">
             <div className="flex items-center gap-2">
-              <Skeleton className="w-10 h-10 rounded-lg" />
+              <Skeleton className="w-10 h-10 rounded-none" />
               <div className="space-y-2">
                 <Skeleton className="h-5 w-24" />
                 <Skeleton className="h-3 w-16" />
@@ -841,7 +841,7 @@ export function HydrateFallback() {
               <Skeleton className="h-4 w-24 mx-auto" />
             </div>
             <div className="flex items-center gap-2">
-              <Skeleton className="w-10 h-10 rounded-lg" />
+              <Skeleton className="w-10 h-10 rounded-none" />
               <div className="space-y-2">
                 <Skeleton className="h-5 w-24" />
                 <Skeleton className="h-3 w-16" />
@@ -855,11 +855,11 @@ export function HydrateFallback() {
       <div className="space-y-4">
         <Skeleton className="h-6 w-40" />
         {Array.from({ length: 4 }).map((_, categoryIndex) => (
-          <Card key={categoryIndex}>
-            <CardHeader className="pb-2">
+          <Card key={categoryIndex} className="gap-3 py-5">
+            <CardHeader className="px-5">
               <Skeleton className="h-5 w-20" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5">
               <div className="divide-y">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <div key={i} className="flex items-center justify-between py-2 px-2 -mx-2">
@@ -880,8 +880,8 @@ export function HydrateFallback() {
       {/* デバイス・設定の比較スケルトン */}
       <div className="space-y-4">
         <Skeleton className="h-6 w-48" />
-        <Card>
-          <CardContent>
+        <Card className="gap-3 py-5">
+          <CardContent className="px-5">
             <div className="grid grid-cols-3 gap-4">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-full" />

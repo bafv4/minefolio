@@ -10,6 +10,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
@@ -827,7 +828,7 @@ export default function ItemLayoutsPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
+      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
       {layouts.length > 0 ? (
         <div className="space-y-4">
           {layouts.map((layout, index) => (
@@ -930,7 +931,7 @@ export function ErrorBoundary() {
       <Card>
         <CardContent className="p-6">
           <div className="text-center space-y-4">
-            <Package className="h-12 w-12 mx-auto text-destructive" />
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
             <h2 className="text-2xl font-bold">{t("meItems.errorTitle")}</h2>
             <p className="text-muted-foreground">
               {t("meItems.errorDescription")}

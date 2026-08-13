@@ -40,6 +40,7 @@ import { useUnsavedWarning } from "./hooks/use-unsaved-warning";
 import { insertEmbed, insertGuideLink } from "./lib/block-commands";
 import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
+import { YoutubeDialog } from "./panels/youtube-dialog";
 import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
@@ -83,6 +84,7 @@ export function GuideEditor({
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
   const [videoToGifOpen, setVideoToGifOpen] = useState(false);
+  const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
 
   const isTouch = useMediaQuery("(hover: none)");
 
@@ -247,14 +249,7 @@ export function GuideEditor({
   const slashContext: SlashCommandContext = useMemo(
     () => ({
       openImagePicker: () => imageInputRef.current?.click(),
-      insertYoutube: () => {
-        if (!editor) return;
-        const url = window.prompt(
-          t("guideEditor.youtubeUrlPrompt"),
-          "https://www.youtube.com/watch?v=",
-        );
-        if (url) editor.commands.setYoutubeVideo({ src: url });
-      },
+      insertYoutube: () => setYoutubeDialogOpen(true),
       insertLink: handleLinkInsert,
       openEmbedDialog: (kind) => setEmbedKind(kind),
       openGuideLinkSearch: () => setGuideLinkOpen(true),
@@ -292,6 +287,10 @@ export function GuideEditor({
     if (editor) insertGuideLink(editor, guide);
   };
 
+  const handleInsertYoutube = (url: string) => {
+    if (editor) editor.commands.setYoutubeVideo({ src: url });
+  };
+
   // プレビューはドラフト（仮保存）内容を表示（著者本人のみ。未保存ドラフトが無ければ公開版）
   const previewUrl = `/guides/${authorSlug}/${guideSlug}?draft=1`;
 
@@ -319,13 +318,12 @@ export function GuideEditor({
       {/* コンテンツ幅は公開ビュー（guides/view.tsx の article）と一致させ WYSIWYG にする */}
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-2 mt-4">
-          <Link
-            to="/my-guides"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t("guideEditor.back")}
-          </Link>
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link to="/my-guides">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              {t("guideEditor.back")}
+            </Link>
+          </Button>
           {/* タイトルは設定モーダルで編集。本文上には現在のタイトルを見出しとして表示 */}
         </div>
 
@@ -412,6 +410,11 @@ export function GuideEditor({
         open={guideLinkOpen}
         onOpenChange={setGuideLinkOpen}
         onInsert={handleInsertGuideLink}
+      />
+      <YoutubeDialog
+        open={youtubeDialogOpen}
+        onOpenChange={setYoutubeDialogOpen}
+        onInsert={handleInsertYoutube}
       />
       <VideoToGifDialog
         open={videoToGifOpen}

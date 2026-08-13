@@ -23,8 +23,8 @@ interface LikeButtonProps {
 /**
  * いいね（グッド）ボタン。
  *
- * - 色はテーマトークン `--brand` を使う（3テーマ対応。favorite-button の text-red-500 は
- *   固定色で ui.md 違反かつお気に入りと同色になるため流用しない）
+ * - 色はテーマトークン `--brand` を使う（3テーマ対応。ThumbsUp アイコンでハートではないため、
+ *   お気に入り用の `--favorite` トークン（favorite-button.tsx 参照）とは意図的に分けている）
  * - compact は一覧カード用。カード全体が <Link> のため、押せない状態では
  *   インタラクティブ要素を一切描画しない（<a> の中に <button>/<a> は不正なHTML）
  */

@@ -410,7 +410,7 @@ const MinecraftFullBodyComponent = ({
         style={{
           width: width * 0.3,
           height: height * 0.7,
-          backgroundColor: "hsl(var(--muted))",
+          backgroundColor: "var(--muted)",
           borderRadius: 8,
           animation: "pulse 1.5s ease-in-out infinite",
         }}

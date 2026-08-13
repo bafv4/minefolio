@@ -45,7 +45,7 @@ export default function KeybindingsStatsPage() {
   // ビュー切替（→ /keybindings, /keybindings/visual）中は本体をスケルトンに差し替える
   const { isTabSwitching, targetPathname } = useTabNavigation();
   return (
-    <div className="flex-1 flex flex-col space-y-5">
+    <div className="flex-1 flex flex-col space-y-6">
       <KeybindingsPageTitle />
       <ViewSwitcher />
       {isTabSwitching ? (

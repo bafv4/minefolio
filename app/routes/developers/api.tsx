@@ -46,8 +46,8 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <FileText className="h-7 w-7" />
-        <h1 className="text-3xl font-bold">{t("developers.apiTitle")}</h1>
+        <FileText className="h-6 w-6" />
+        <h1 className="text-2xl font-bold">{t("developers.apiTitle")}</h1>
       </div>
 
       <article className="prose prose-sm dark:prose-invert max-w-none">

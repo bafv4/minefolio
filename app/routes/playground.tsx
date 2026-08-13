@@ -10,13 +10,14 @@ import { getEnv } from "@/lib/env.server";
 import {
   users,
   searchCrafts as searchCraftsTable,
+  searchCraftLoops as searchCraftLoopsTable,
   configHistory,
   searchCraftTemplates,
 } from "@/lib/schema";
 import { eq, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { filterRemapsForChat, type UiRemapInfo } from "@/lib/remap-utils";
-import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
+import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
 import {
   applyCraftsToExistingPreset,
   createPresetWithCrafts,
@@ -24,10 +25,16 @@ import {
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
+  parseTemplateLoops,
+  parseLoopsField,
+  toSubmittableLoops,
   draftId,
   MAX_TEMPLATE_CRAFTS,
   type TemplateCraft,
+  type TemplateLoop,
 } from "@/lib/search-craft-templates";
+import { remapLoopSteps } from "@/lib/search-craft-loops";
+import { resolveVariations } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +68,7 @@ import {
   type KeyboardLayoutOption,
 } from "@/components/search-craft-workbench";
 import type { SearchCraftDraft } from "@/components/search-craft-editor";
+import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
 import { cn } from "@/lib/utils";
 import {
   FlaskConical,
@@ -104,6 +112,8 @@ export const meta = ({
 type PlaygroundData = {
   crafts: TemplateCraft[];
   remaps: UiRemapInfo[];
+  /** craftIndex 参照（crafts 配列内の位置）。Playground は crafts に安定した行 id を持たない */
+  loops: TemplateLoop[];
 };
 
 type MyPresetOption = PlaygroundData & {
@@ -133,10 +143,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       where: eq(users.discordId, session.user.id),
       with: {
         searchCrafts: { orderBy: [asc(searchCraftsTable.sequence)] },
+        searchCraftLoops: { orderBy: [asc(searchCraftLoopsTable.sequence)] },
         keyRemaps: true,
         playerConfig: { columns: { keyboardLayout: true } },
         configPresets: {
-          columns: { id: true, name: true, isActive: true, searchCraftsData: true, remapsData: true },
+          columns: {
+            id: true,
+            name: true,
+            isActive: true,
+            searchCraftsData: true,
+            searchCraftLoopsData: true,
+            remapsData: true,
+          },
         },
       },
     });
@@ -145,20 +163,35 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       // ワークベンチは chat 用途のため、trigger 専用リマップは取り込まない
       if (me.configPresets.length > 0) {
-        myPresets = me.configPresets.map((p) => ({
-          id: p.id,
-          name: p.name,
-          isActive: p.isActive,
-          crafts: parseTemplateCrafts(p.searchCraftsData),
-          remaps: filterRemapsForChat(parseTemplateRemaps(p.remapsData)),
-        }));
+        myPresets = me.configPresets.map((p) => {
+          const crafts = parseTemplateCrafts(p.searchCraftsData);
+          return {
+            id: p.id,
+            name: p.name,
+            isActive: p.isActive,
+            crafts,
+            remaps: filterRemapsForChat(parseTemplateRemaps(p.remapsData)),
+            loops: parseTemplateLoops(p.searchCraftLoopsData, crafts.length),
+          };
+        });
       } else {
         // プリセット未作成ユーザー向けフォールバック：ライブテーブルの内容をそのまま選択肢にする
         const crafts = parseTemplateCrafts(serializeSearchCrafts(me.searchCrafts));
         const remaps = filterRemapsForChat(parseTemplateRemaps(serializeRemaps(me.keyRemaps)));
+        const loops = parseTemplateLoops(
+          serializeSearchCraftLoops(me.searchCraftLoops, me.searchCrafts),
+          crafts.length,
+        );
         if (crafts.length > 0 || remaps.length > 0) {
           myPresets = [
-            { id: LIVE_PRESET_ID, name: t("playground.currentSettingsLabel"), isActive: true, crafts, remaps },
+            {
+              id: LIVE_PRESET_ID,
+              name: t("playground.currentSettingsLabel"),
+              isActive: true,
+              crafts,
+              remaps,
+              loops,
+            },
           ];
         }
       }
@@ -176,11 +209,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       template &&
       (template.isPublished || (myDiscordId !== null && template.user.discordId === myDiscordId))
     ) {
+      const crafts = parseTemplateCrafts(template.craftsData);
       templateData = {
         id: template.id,
         title: template.title,
-        crafts: parseTemplateCrafts(template.craftsData),
+        crafts,
         remaps: parseTemplateRemaps(template.remapsData),
+        loops: parseTemplateLoops(template.loopsData, crafts.length),
       };
     }
   }
@@ -216,19 +251,35 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("_action") as string;
   const includeRemaps = formData.get("includeRemaps") === "1";
 
-  let crafts: TemplateCraft[] = [];
+  let craftsRaw: unknown;
   let remaps: UiRemapInfo[] = [];
   try {
-    crafts = JSON.parse((formData.get("crafts") as string | null) || "[]");
+    craftsRaw = JSON.parse((formData.get("crafts") as string | null) || "[]");
     remaps = includeRemaps ? JSON.parse((formData.get("remaps") as string | null) || "[]") : [];
   } catch {
     return { error: t("playground.saveFailed") };
   }
-  if (!Array.isArray(crafts) || !Array.isArray(remaps) || crafts.length > MAX_TEMPLATE_CRAFTS) {
+  if (!Array.isArray(craftsRaw) || !Array.isArray(remaps) || craftsRaw.length > MAX_TEMPLATE_CRAFTS) {
     return { error: t("playground.saveFailed") };
   }
-  // クライアント由来のJSONのため withShift は boolean に正規化する
-  crafts = crafts.map((c) => ({ ...c, withShift: c.withShift === true }));
+  // クライアント由来のJSONのため variations を正準化する（旧クライアント由来の
+  // searchStr/withShift のみのペイロードも resolveVariations で1件合成して受理する）
+  const crafts: TemplateCraft[] = (craftsRaw as Array<Record<string, unknown>>).map((c) => ({
+    items: Array.isArray(c.items) ? (c.items as string[]) : [],
+    comment: typeof c.comment === "string" ? c.comment : null,
+    timing: (c.timing ?? null) as TemplateCraft["timing"],
+    variations: resolveVariations({
+      variations: c.variations,
+      searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
+      withShift: c.withShift as boolean | null | undefined,
+    }),
+  }));
+
+  // loops フィールドはフォーム未送信なら [] 扱い（craftIndex は crafts の並び順を参照する）
+  const loopsResult = parseLoopsField(formData, crafts.length);
+  if ("error" in loopsResult) {
+    return { error: t("playground.saveFailed") };
+  }
 
   const now = new Date();
   // リマップ: includeRemaps=false のときは変更しない（null）
@@ -255,7 +306,7 @@ export async function action({ request }: Route.ActionArgs) {
       db,
       user.id,
       { name, description: description || null, basePresetId },
-      { crafts, remaps: remapInput },
+      { crafts, remaps: remapInput, loops: loopsResult },
     );
     if (!result.ok) {
       return { error: t("mePresets.sourcePresetNotFound"), action: "save-new-preset" };
@@ -282,6 +333,7 @@ export async function action({ request }: Route.ActionArgs) {
     const result = await applyCraftsToExistingPreset(db, user.id, presetId, {
       crafts,
       remaps: remapInput,
+      loops: loopsResult,
     });
     if (!result.ok) {
       return { error: t("mePresets.presetNotFound"), action: "save-to-preset" };
@@ -324,10 +376,27 @@ function toPlaygroundCrafts(crafts: TemplateCraft[]): SearchCraftDraft[] {
   return crafts.map((c) => ({
     id: draftId("craft"),
     items: c.items,
-    searchStr: c.searchStr,
     comment: c.comment,
     timing: c.timing,
-    withShift: c.withShift,
+    variations: c.variations,
+  }));
+}
+
+/**
+ * TemplateLoop[]（craftIndex 参照）を、既に draft id を割り当て済みの crafts に合わせて
+ * SearchCraftLoopDraft[]（craftId 参照）へ変換する。呼び出し側は必ず、この loops の
+ * 元になった crafts 配列と同じ順序で toPlaygroundCrafts した結果を渡すこと。
+ */
+function toPlaygroundLoops(loops: TemplateLoop[], crafts: SearchCraftDraft[]): SearchCraftLoopDraft[] {
+  return loops.map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: crafts[s.craftIndex].id,
+      transition: s.transition,
+      variationIndex: s.variationIndex,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
   }));
 }
 
@@ -340,6 +409,7 @@ const DRAFT_STORAGE_KEY = "minefolio.playground.draft.v1";
 type PlaygroundDraft = {
   remaps: WorkbenchRemap[];
   crafts: SearchCraftDraft[];
+  loops: SearchCraftLoopDraft[];
   layout: KeyboardLayoutOption;
 };
 
@@ -352,6 +422,8 @@ function loadDraftFromStorage(): PlaygroundDraft | null {
     return {
       remaps: parsed.remaps,
       crafts: parsed.crafts,
+      // loops フィールドが無い旧形式の下書き（Loop機能追加前）は [] として扱う
+      loops: Array.isArray(parsed.loops) ? parsed.loops : [],
       layout: normalizeLayout(parsed.layout),
     };
   } catch {
@@ -383,13 +455,17 @@ export default function PlaygroundPage() {
   );
   const realPresets = useMemo(() => myPresets.filter((p) => p.id !== LIVE_PRESET_ID), [myPresets]);
 
-  const initialData: PlaygroundData = templateData ?? activeMyPreset ?? { crafts: [], remaps: [] };
+  const initialData: PlaygroundData = templateData ?? activeMyPreset ?? { crafts: [], remaps: [], loops: [] };
 
   const [remaps, setRemaps] = useState<WorkbenchRemap[]>(() =>
     toPlaygroundRemaps(initialData.remaps),
   );
   const [crafts, setCrafts] = useState<SearchCraftDraft[]>(() =>
     toPlaygroundCrafts(initialData.crafts),
+  );
+  // crafts が確定した直後（同一レンダー内）に、その draft id を使って loops を解決する
+  const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(() =>
+    toPlaygroundLoops(initialData.loops, crafts),
   );
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() => normalizeLayout(keyboardLayout));
   const [loadedLabel, setLoadedLabel] = useState<string | null>(() =>
@@ -410,8 +486,36 @@ export default function PlaygroundPage() {
     const draft = loadDraftFromStorage();
     if (draft) {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
-      // 旧形式の下書きには withShift がないため boolean に正規化する
-      setCrafts(draft.crafts.map((c) => ({ ...c, withShift: c.withShift === true, id: draftId("craft") })));
+      // 旧形式の下書き（Loop 機能追加前・バリエーション対応前）には variations や withShift が
+      // 無いことがあるため resolveVariations() で正準化する。
+      // crafts の draft id を振り直すため、Loop の craftId 参照も新 id へ再解決する
+      // （旧id→新id の写像を remapLoopSteps に通し、参照切れは自動除去・<2 の Loop は破棄）
+      const idMap = new Map<string, string>();
+      const restoredCrafts: SearchCraftDraft[] = draft.crafts.map((c) => {
+        const newId = draftId("craft");
+        idMap.set(c.id, newId);
+        const raw = c as unknown as Record<string, unknown>;
+        return {
+          id: newId,
+          items: c.items,
+          comment: c.comment,
+          timing: c.timing,
+          variations: resolveVariations({
+            variations: raw.variations,
+            searchStr: typeof raw.searchStr === "string" ? raw.searchStr : null,
+            withShift: raw.withShift as boolean | null | undefined,
+          }),
+        };
+      });
+      setCrafts(restoredCrafts);
+      setLoops(
+        draft.loops
+          .map((loop) => {
+            const steps = remapLoopSteps(loop.steps, idMap);
+            return steps ? { ...loop, id: draftId("loop"), steps } : null;
+          })
+          .filter((loop): loop is SearchCraftLoopDraft => loop !== null),
+      );
       setLayout(draft.layout);
       setLoadedLabel(t("playground.loadedDraft"));
     }
@@ -423,15 +527,17 @@ export default function PlaygroundPage() {
   // 変更のたびにブラウザへ仮保存する
   useEffect(() => {
     if (!isHydrated) return;
-    saveDraftToStorage({ remaps, crafts, layout });
-  }, [isHydrated, remaps, crafts, layout]);
+    saveDraftToStorage({ remaps, crafts, loops, layout });
+  }, [isHydrated, remaps, crafts, loops, layout]);
 
   // 保存ペイロード用の有効なリマップ（ワークベンチ内の表示と同じ導出）
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
   const loadData = useCallback((data: PlaygroundData, label: string) => {
+    const nextCrafts = toPlaygroundCrafts(data.crafts);
     setRemaps(toPlaygroundRemaps(data.remaps));
-    setCrafts(toPlaygroundCrafts(data.crafts));
+    setCrafts(nextCrafts);
+    setLoops(toPlaygroundLoops(data.loops, nextCrafts));
     setLoadedLabel(label);
   }, []);
 
@@ -482,21 +588,33 @@ export default function PlaygroundPage() {
   }, []);
 
   const handleSave = useCallback(() => {
-    const craftsPayload: TemplateCraft[] = crafts
-      .filter((c) => c.items.length > 0 || c.searchStr?.trim() || c.comment?.trim())
-      .map((c) => ({
-        items: c.items,
-        // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
-        searchStr: c.searchStr?.trim() ? c.searchStr : null,
-        comment: c.comment,
-        timing: c.timing,
-        withShift: c.withShift === true,
-      }));
+    if (loops.some((loop) => loop.steps.length < 2)) {
+      toast.error(t("meSearchCraft.loopStepsRequired"));
+      return;
+    }
+    if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
+      toast.error(t("meSearchCraft.loopEntryRequired"));
+      return;
+    }
+
+    // 空行は送信対象から外れるため、Loop の craftIndex もこの並び（フィルタ後）基準で解決する
+    const survivingCrafts = crafts.filter(
+      (c) => c.items.length > 0 || c.variations.some((v) => v.str.trim()) || c.comment?.trim(),
+    );
+    // trim は空判定のみ。先頭・末尾スペースはスペースキー入力として意味を持つため原文を保存する
+    const craftsPayload: TemplateCraft[] = survivingCrafts.map((c) => ({
+      items: c.items,
+      comment: c.comment,
+      timing: c.timing,
+      variations: c.variations,
+    }));
+    const loopsPayload = toSubmittableLoops(survivingCrafts, loops);
 
     const formData = new FormData();
     formData.set("_action", saveTarget === "new" ? "save-new-preset" : "save-to-preset");
     formData.set("includeRemaps", saveIncludeRemaps ? "1" : "0");
     formData.set("crafts", JSON.stringify(craftsPayload));
+    formData.set("loops", JSON.stringify(loopsPayload));
     formData.set("remaps", JSON.stringify(effectiveRemaps));
     if (saveTarget === "new") {
       formData.set("name", newPresetName.trim());
@@ -508,13 +626,13 @@ export default function PlaygroundPage() {
       formData.set("presetId", targetPresetId);
     }
     saveFetcher.submit(formData, { method: "post" });
-  }, [basePresetId, crafts, effectiveRemaps, newPresetDescription, newPresetName, saveFetcher, saveIncludeRemaps, saveTarget, targetPresetId]);
+  }, [basePresetId, crafts, loops, effectiveRemaps, newPresetDescription, newPresetName, saveFetcher, saveIncludeRemaps, saveTarget, t, targetPresetId]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FlaskConical className="h-6 w-6 text-primary" />
+          <FlaskConical className="h-6 w-6" />
           {t("playground.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground max-w-3xl">
@@ -523,270 +641,275 @@ export default function PlaygroundPage() {
       </div>
 
       {/* データ読み込み・保存バー */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
-        <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
-        {loadedLabel && (
-          <Badge variant="secondary" className="text-xs">
-            {loadedLabel}
-          </Badge>
-        )}
-        <div className="flex flex-wrap items-center gap-2 ml-auto">
-          {templateData && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                loadData(
-                  templateData,
-                  t("playground.loadedTemplate", { title: templateData.title }),
-                )
-              }
-            >
-              <RotateCcw className="mr-2 h-3.5 w-3.5" />
-              {t("playground.reloadTemplate")}
-            </Button>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+          <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
+          {loadedLabel && (
+            <Badge variant="secondary" className="text-xs">
+              {loadedLabel}
+            </Badge>
           )}
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            {templateData && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  loadData(
+                    templateData,
+                    t("playground.loadedTemplate", { title: templateData.title }),
+                  )
+                }
+              >
+                <RotateCcw className="mr-2 size-3.5" />
+                {t("playground.reloadTemplate")}
+              </Button>
+            )}
 
-          {isLoggedIn && myPresets.length > 0 && (
-            <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <User className="mr-2 h-3.5 w-3.5" />
-                  {t("playground.loadMySettings")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
-                  <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {myPresets.map((preset) => (
-                    <Button
-                      key={preset.id}
-                      variant="outline"
-                      className="w-full justify-start h-auto py-3"
-                      onClick={() => {
-                        loadData(preset, t("playground.loadedPreset", { name: preset.name }));
-                        setLoadDialogOpen(false);
-                      }}
-                    >
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="font-medium flex items-center gap-2">
-                          {preset.name}
-                          {preset.isActive && (
-                            <Badge variant="outline" className="text-xs">
-                              {t("mePresets.active")}
-                            </Badge>
-                          )}
-                        </span>
-                        <div className="flex gap-1 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">
-                            {t("templates.craftCount", { count: preset.crafts.length })}
-                          </Badge>
-                          {preset.remaps.length > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {t("templates.remapCount", { count: preset.remaps.length })}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setRemaps([]);
-              setCrafts([]);
-              setLoadedLabel(null);
-            }}
-          >
-            <X className="mr-2 h-3.5 w-3.5" />
-            {t("playground.clearAll")}
-          </Button>
-
-          {isLoggedIn && (
-            <>
-              <div className="h-4 w-px bg-border mx-1" />
-              <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
+            {isLoggedIn && myPresets.length > 0 && (
+              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm">
-                    <Save className="mr-2 h-3.5 w-3.5" />
-                    {t("mePresets.save")}
+                  <Button variant="outline" size="sm">
+                    <User className="mr-2 size-3.5" />
+                    {t("playground.loadMySettings")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>{t("playground.saveDialogTitle")}</DialogTitle>
-                    <DialogDescription>{t("playground.saveDialogDescription")}</DialogDescription>
+                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
+                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <RadioGroup
-                      value={saveTarget}
-                      onValueChange={(v) => setSaveTarget(v as "new" | "existing")}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="new" id="save-target-new" />
-                        <Label htmlFor="save-target-new" className="cursor-pointer font-normal">
-                          {t("playground.saveAsNewOption")}
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem
-                          value="existing"
-                          id="save-target-existing"
-                          disabled={realPresets.length === 0}
-                        />
-                        <Label
-                          htmlFor="save-target-existing"
-                          className={cn(
-                            "cursor-pointer font-normal",
-                            realPresets.length === 0 && "text-muted-foreground",
-                          )}
-                        >
-                          {t("playground.saveToExistingOption")}
-                        </Label>
-                      </div>
-                    </RadioGroup>
-
-                    {saveTarget === "new" ? (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="save-new-name">{t("mePresets.presetName")}</Label>
-                          <Input
-                            id="save-new-name"
-                            value={newPresetName}
-                            onChange={(e) => setNewPresetName(e.target.value)}
-                            placeholder={t("mePresets.presetNamePlaceholder")}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="save-new-description">
-                            {t("mePresets.descriptionOptional")}
-                          </Label>
-                          <Textarea
-                            id="save-new-description"
-                            value={newPresetDescription}
-                            onChange={(e) => setNewPresetDescription(e.target.value)}
-                            placeholder={t("mePresets.descriptionPlaceholder")}
-                            rows={3}
-                          />
-                        </div>
-                        {realPresets.length > 0 && (
-                          <div className="space-y-2">
-                            <Label htmlFor="save-base-preset">
-                              {t("playground.basePresetLabel")}
-                            </Label>
-                            <Select value={basePresetId} onValueChange={setBasePresetId}>
-                              <SelectTrigger id="save-base-preset">
-                                <SelectValue placeholder={t("playground.basePresetNone")} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none">
-                                  {t("playground.basePresetNone")}
-                                </SelectItem>
-                                {realPresets.map((preset) => (
-                                  <SelectItem key={preset.id} value={preset.id}>
-                                    <div className="flex items-center gap-2">
-                                      {preset.name}
-                                      {preset.isActive && (
-                                        <Badge variant="outline" className="text-xs ml-1">
-                                          {t("mePresets.active")}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                              {t("playground.basePresetHint")}
-                            </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {myPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => {
+                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
+                          setLoadDialogOpen(false);
+                        }}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium flex items-center gap-2">
+                            {preset.name}
+                            {preset.isActive && (
+                              <Badge variant="outline" className="text-xs">
+                                {t("mePresets.active")}
+                              </Badge>
+                            )}
+                          </span>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">
+                              {t("templates.craftCount", { count: preset.crafts.length })}
+                            </Badge>
+                            {preset.remaps.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {t("templates.remapCount", { count: preset.remaps.length })}
+                              </Badge>
+                            )}
                           </div>
-                        )}
-                      </>
-                    ) : realPresets.length > 0 ? (
-                      <div className="space-y-2">
-                        <Label htmlFor="save-target-preset">{t("playground.targetPresetLabel")}</Label>
-                        <Select value={targetPresetId} onValueChange={setTargetPresetId}>
-                          <SelectTrigger id="save-target-preset">
-                            <SelectValue placeholder={t("mePresets.selectPreset")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {realPresets.map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id}>
-                                <div className="flex items-center gap-2">
-                                  {preset.name}
-                                  {preset.isActive && (
-                                    <Badge variant="outline" className="text-xs ml-1">
-                                      {t("mePresets.active")}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {t("playground.noPresetsToOverwrite")}
-                      </p>
-                    )}
-
-                    {effectiveRemaps.length > 0 && (
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          id="save-include-remaps"
-                          checked={saveIncludeRemaps}
-                          onCheckedChange={(checked) => setSaveIncludeRemaps(checked === true)}
-                        />
-                        <div className="grid gap-1 leading-none">
-                          <Label htmlFor="save-include-remaps" className="text-sm">
-                            {t("playground.saveIncludeRemapsLabel", { count: effectiveRemaps.length })}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("playground.saveIncludeRemapsHint")}
-                          </p>
                         </div>
-                      </div>
-                    )}
+                      </Button>
+                    ))}
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-                      {t("templates.cancel")}
-                    </Button>
-                    <Button
-                      onClick={handleSave}
-                      disabled={
-                        isSaving ||
-                        (saveTarget === "new" && !newPresetName.trim()) ||
-                        (saveTarget === "existing" && !targetPresetId)
-                      }
-                    >
-                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {t("mePresets.save")}
-                    </Button>
-                  </DialogFooter>
                 </DialogContent>
               </Dialog>
-            </>
-          )}
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground -mt-6">{t("playground.autosaveHint")}</p>
+            )}
 
-      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト） */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRemaps([]);
+                setCrafts([]);
+                setLoops([]);
+                setLoadedLabel(null);
+              }}
+            >
+              <X className="mr-2 size-3.5" />
+              {t("playground.clearAll")}
+            </Button>
+
+            {isLoggedIn && (
+              <>
+                <div className="h-4 w-px bg-border mx-1" />
+                <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Save className="mr-2 size-3.5" />
+                      {t("mePresets.save")}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{t("playground.saveDialogTitle")}</DialogTitle>
+                      <DialogDescription>{t("playground.saveDialogDescription")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <RadioGroup
+                        value={saveTarget}
+                        onValueChange={(v) => setSaveTarget(v as "new" | "existing")}
+                        className="space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="new" id="save-target-new" />
+                          <Label htmlFor="save-target-new" className="cursor-pointer font-normal">
+                            {t("playground.saveAsNewOption")}
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="existing"
+                            id="save-target-existing"
+                            disabled={realPresets.length === 0}
+                          />
+                          <Label
+                            htmlFor="save-target-existing"
+                            className={cn(
+                              "cursor-pointer font-normal",
+                              realPresets.length === 0 && "text-muted-foreground",
+                            )}
+                          >
+                            {t("playground.saveToExistingOption")}
+                          </Label>
+                        </div>
+                      </RadioGroup>
+
+                      {saveTarget === "new" ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="save-new-name">{t("mePresets.presetName")}</Label>
+                            <Input
+                              id="save-new-name"
+                              value={newPresetName}
+                              onChange={(e) => setNewPresetName(e.target.value)}
+                              placeholder={t("mePresets.presetNamePlaceholder")}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="save-new-description">
+                              {t("mePresets.descriptionOptional")}
+                            </Label>
+                            <Textarea
+                              id="save-new-description"
+                              value={newPresetDescription}
+                              onChange={(e) => setNewPresetDescription(e.target.value)}
+                              placeholder={t("mePresets.descriptionPlaceholder")}
+                              rows={3}
+                            />
+                          </div>
+                          {realPresets.length > 0 && (
+                            <div className="space-y-2">
+                              <Label htmlFor="save-base-preset">
+                                {t("playground.basePresetLabel")}
+                              </Label>
+                              <Select value={basePresetId} onValueChange={setBasePresetId}>
+                                <SelectTrigger id="save-base-preset">
+                                  <SelectValue placeholder={t("playground.basePresetNone")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none">
+                                    {t("playground.basePresetNone")}
+                                  </SelectItem>
+                                  {realPresets.map((preset) => (
+                                    <SelectItem key={preset.id} value={preset.id}>
+                                      <div className="flex items-center gap-2">
+                                        {preset.name}
+                                        {preset.isActive && (
+                                          <Badge variant="outline" className="text-xs ml-1">
+                                            {t("mePresets.active")}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground">
+                                {t("playground.basePresetHint")}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      ) : realPresets.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="save-target-preset">{t("playground.targetPresetLabel")}</Label>
+                          <Select value={targetPresetId} onValueChange={setTargetPresetId}>
+                            <SelectTrigger id="save-target-preset">
+                              <SelectValue placeholder={t("mePresets.selectPreset")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {realPresets.map((preset) => (
+                                <SelectItem key={preset.id} value={preset.id}>
+                                  <div className="flex items-center gap-2">
+                                    {preset.name}
+                                    {preset.isActive && (
+                                      <Badge variant="outline" className="text-xs ml-1">
+                                        {t("mePresets.active")}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {t("playground.noPresetsToOverwrite")}
+                        </p>
+                      )}
+
+                      {effectiveRemaps.length > 0 && (
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            id="save-include-remaps"
+                            checked={saveIncludeRemaps}
+                            onCheckedChange={(checked) => setSaveIncludeRemaps(checked === true)}
+                          />
+                          <div className="grid gap-1 leading-none">
+                            <Label htmlFor="save-include-remaps" className="text-sm">
+                              {t("playground.saveIncludeRemapsLabel", { count: effectiveRemaps.length })}
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              {t("playground.saveIncludeRemapsHint")}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+                        {t("templates.cancel")}
+                      </Button>
+                      <Button
+                        onClick={handleSave}
+                        disabled={
+                          isSaving ||
+                          (saveTarget === "new" && !newPresetName.trim()) ||
+                          (saveTarget === "existing" && !targetPresetId)
+                        }
+                      >
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {t("mePresets.save")}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
+      </div>
+
+      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
       <SearchCraftWorkbench
         crafts={crafts}
         onCraftsChange={setCrafts}
+        loops={loops}
+        onLoopsChange={setLoops}
         remaps={remaps}
         onRemapsChange={setRemaps}
         layout={layout}

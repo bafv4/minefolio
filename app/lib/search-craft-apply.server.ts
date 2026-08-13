@@ -1,14 +1,22 @@
 import { createId } from "@paralleldrive/cuid2";
 import { eq, and, inArray } from "drizzle-orm";
 import type { Database } from "./db";
-import { searchCrafts, keyRemaps, configPresets, type ConfigPreset } from "./schema";
+import { searchCrafts, searchCraftLoops, keyRemaps, configPresets, type ConfigPreset } from "./schema";
 import { sanitizeRemapTargetKey, remapSourceMatchKey } from "./remap-utils";
 import {
   syncActivePresetSnapshot,
   resolveIsMainForNewPreset,
   type PresetRemapData,
 } from "./preset-utils";
-import { serializeTemplateCrafts, parseTemplateRemapData, type TemplateCraft } from "./search-craft-templates";
+import {
+  serializeTemplateCrafts,
+  serializeTemplateLoops,
+  parseTemplateRemapData,
+  type TemplateCraft,
+  type TemplateLoop,
+} from "./search-craft-templates";
+import { remapLoopSteps, type LoopStepData } from "./search-craft-loops";
+import { searchCraftColumnValues } from "./search-craft-variations";
 
 /**
  * サーチクラフト（＋任意でリマップ）をプリセットへ反映するサーバー専用ヘルパー。
@@ -19,13 +27,47 @@ import { serializeTemplateCrafts, parseTemplateRemapData, type TemplateCraft } f
  *   挿入分と同一 sourceKey の all 行はゲーム側の挙動を保つため trigger に変換する
  * - アクティブプリセットへの反映は「アクティブプリセット = ライブテーブル」の不変条件を保つため、
  *   ライブテーブルを置換した上で syncActivePresetSnapshot() で同期する
+ * - crafts を置換する経路は loops も常に置換する（crafts が入れ替わると旧 loops の参照が
+ *   必ず腐るため、loops だけ据え置くという選択肢はない）
  */
 
 export type ApplyCraftsInput = {
   crafts: TemplateCraft[];
   /** null = リマップは変更しない */
   remaps: PresetRemapData[] | null;
+  /** crafts と同じタイミングで常に置換する（crafts の craftIndex を参照） */
+  loops: TemplateLoop[];
 };
+
+type ResolvedLoopForInsert = {
+  steps: LoopStepData[];
+  comment: string | null;
+  timing: TemplateLoop["timing"];
+};
+
+/**
+ * TemplateLoop（craftIndex 参照）を、挿入済み crafts の新id配列で LoopStepData（craftId 参照）へ変換する。
+ * craftIndex を文字列化した仮 id（idMap のキー）を介して remapLoopSteps() の除去・
+ * <2破棄・先頭null リセット規則をそのまま再利用する（ロジックの二重管理を避ける）。
+ */
+function resolveLoopsToNewCraftIds(
+  loops: TemplateLoop[],
+  newCraftIds: string[],
+): ResolvedLoopForInsert[] {
+  const idMap = new Map(newCraftIds.map((id, index) => [String(index), id]));
+  const resolved: ResolvedLoopForInsert[] = [];
+  for (const loop of loops) {
+    const steps: LoopStepData[] = loop.steps.map((step) => ({
+      craftId: String(step.craftIndex),
+      transition: step.transition,
+      variationIndex: step.variationIndex,
+    }));
+    const remapped = remapLoopSteps(steps, idMap);
+    if (!remapped) continue;
+    resolved.push({ steps: remapped, comment: loop.comment, timing: loop.timing });
+  }
+  return resolved;
+}
 
 /** sourceKey 重複を除外（先勝ち）し、未入力エントリを落とす */
 function dedupeRemaps(remaps: PresetRemapData[]): PresetRemapData[] {
@@ -80,26 +122,44 @@ export function mergeChatRemapsIntoSnapshot(
 async function replaceLiveTables(
   db: Database,
   userId: string,
-  { crafts, remaps }: ApplyCraftsInput,
+  { crafts, remaps, loops }: ApplyCraftsInput,
   now: Date,
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, userId));
     await tx.delete(searchCrafts).where(eq(searchCrafts.userId, userId));
-    for (let i = 0; i < crafts.length; i++) {
-      const craft = crafts[i];
-      await tx.insert(searchCrafts).values({
-        id: createId(),
-        userId,
-        sequence: i + 1,
-        items: JSON.stringify(craft.items),
-        keys: JSON.stringify([]),
-        searchStr: craft.searchStr,
-        comment: craft.comment,
-        timing: craft.timing,
-        withShift: craft.withShift,
-        createdAt: now,
-        updatedAt: now,
-      });
+    const newCraftIds = crafts.map(() => createId());
+    if (crafts.length > 0) {
+      await tx.insert(searchCrafts).values(
+        crafts.map((craft, i) => ({
+          id: newCraftIds[i],
+          userId,
+          sequence: i + 1,
+          items: JSON.stringify(craft.items),
+          keys: JSON.stringify([]),
+          comment: craft.comment,
+          timing: craft.timing,
+          ...searchCraftColumnValues(craft.variations),
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
+
+    const resolvedLoops = resolveLoopsToNewCraftIds(loops, newCraftIds);
+    if (resolvedLoops.length > 0) {
+      await tx.insert(searchCraftLoops).values(
+        resolvedLoops.map((loop, i) => ({
+          id: createId(),
+          userId,
+          sequence: i + 1,
+          steps: JSON.stringify(loop.steps),
+          comment: loop.comment,
+          timing: loop.timing,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     }
 
     if (remaps !== null) {
@@ -195,6 +255,8 @@ export async function applyCraftsToExistingPreset(
   } else {
     const updates: Partial<typeof configPresets.$inferInsert> = {
       searchCraftsData: serializeTemplateCrafts(input.crafts),
+      // crafts を置換する経路は loops も常に置換する（旧 loops を残すと参照が腐るため）
+      searchCraftLoopsData: input.loops.length > 0 ? serializeTemplateLoops(input.loops) : null,
       updatedAt: now,
     };
     if (input.remaps !== null) {
@@ -251,6 +313,8 @@ export async function createPresetWithCrafts(
     customKeysData: base?.customKeysData ?? null,
     customActionsData: base?.customActionsData ?? null,
     searchCraftsData: serializeTemplateCrafts(input.crafts),
+    // ベースプリセットの loops は継承しない（crafts を上書きする以上、旧 loops の参照は必ず腐るため）
+    searchCraftLoopsData: input.loops.length > 0 ? serializeTemplateLoops(input.loops) : null,
     remapsData:
       input.remaps !== null
         ? mergeChatRemapsIntoSnapshot(base?.remapsData ?? null, input.remaps)

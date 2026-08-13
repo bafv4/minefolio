@@ -57,7 +57,7 @@ export function FavoriteButton({
         aria-pressed={favorite}
         className={cn(
           "transition-colors",
-          favorite && "text-red-500 hover:text-red-600",
+          favorite && "text-favorite hover:text-favorite/80",
         )}
       >
         <Heart

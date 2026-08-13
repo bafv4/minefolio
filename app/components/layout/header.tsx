@@ -175,7 +175,7 @@ export function Header({ user }: HeaderProps) {
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/playground">
                         <FlaskConical className="mr-2 h-4 w-4" />
-                        Playground
+                        {t("nav.playground")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
@@ -218,7 +218,7 @@ export function Header({ user }: HeaderProps) {
                     size="icon"
                     aria-label={t("nav.openMenu")}
                   >
-                    <Menu className="h-6 w-6" aria-hidden />
+                    <Menu className="size-5" aria-hidden />
                   </Button>
                 </SheetTrigger>
               </div>
@@ -299,7 +299,7 @@ export function Header({ user }: HeaderProps) {
                           { href: `/player/${user.slug}`, icon: User, label: t("nav.myProfile") },
                           { href: "/me/edit", icon: Settings, label: t("nav.settings") },
                           { href: "/my-guides", icon: BookOpen, label: t("nav.myGuides") },
-                          { href: "/playground", icon: FlaskConical, label: "Playground" },
+                          { href: "/playground", icon: FlaskConical, label: t("nav.playground") },
                           { href: "/favorites", icon: Heart, label: t("nav.favorites") },
                           { href: "/feedback", icon: MessageSquare, label: t("nav.feedback") },
                         ].map(({ href, icon: Icon, label }) => (

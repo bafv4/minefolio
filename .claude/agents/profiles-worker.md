@@ -20,7 +20,7 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 - **お気に入り**: `/favorites`
 - **スキン/アバター**: `api/skin`, `api/me/skin`, `api/me/skin/upload-token`
 - **その他 API**: `api/browse`, `api/favorites`, `api/users/by-slugs`
-- **コンポーネント**: `player-card.tsx`, `profile-feed-card.tsx`, `minecraft-avatar.tsx`, `minecraft-fullbody.tsx`,
+- **コンポーネント**: `profile-feed-card.tsx`, `minecraft-avatar.tsx`, `minecraft-fullbody.tsx`,
   `skin-uploader.tsx`, `favorite-button.tsx`, `share-button.tsx`, `pinned-badge.tsx`
 - **ロジック**: `app/lib/users-filter.ts`, `browse-query.server.ts`, `avatar-cache.ts`, `skin-face.server.ts`,
   `mojang.ts`, `slug.ts`, `favorites.ts`, `favorites-client.ts`

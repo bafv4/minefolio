@@ -20,10 +20,10 @@ import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
-  SearchCraftListEditor,
-  arrayMove,
+  SearchCraftTimingBoard,
   type SearchCraftDraft,
 } from "@/components/search-craft-editor";
+import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
 import {
   simulateRemapOutput,
   type RemapInfo,
@@ -191,6 +191,8 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
 export function SearchCraftWorkbench({
   crafts,
   onCraftsChange,
+  loops,
+  onLoopsChange,
   remaps,
   onRemapsChange,
   layout,
@@ -198,6 +200,8 @@ export function SearchCraftWorkbench({
 }: {
   crafts: SearchCraftDraft[];
   onCraftsChange: (next: SearchCraftDraft[]) => void;
+  loops: SearchCraftLoopDraft[];
+  onLoopsChange: (next: SearchCraftLoopDraft[]) => void;
   remaps: WorkbenchRemap[];
   onRemapsChange: (next: WorkbenchRemap[]) => void;
   layout: KeyboardLayoutOption;
@@ -205,6 +209,32 @@ export function SearchCraftWorkbench({
 }) {
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
+
+  // 新規クラフト/Loopのdraftファクトリ（id生成のみここで担う。ブロック内挿入・
+  // reorderByBlock の emit・削除時の Loop 連動除去は SearchCraftTimingBoard 側が担う）
+  const createCraft = useCallback(
+    (timing: SearchCraftDraft["timing"]): SearchCraftDraft => ({
+      id: draftId("craft"),
+      items: [],
+      comment: null,
+      timing,
+      variations: [{ str: "", withShift: false }],
+    }),
+    [],
+  );
+
+  const createLoop = useCallback(
+    (timing: SearchCraftLoopDraft["timing"]): SearchCraftLoopDraft => ({
+      id: draftId("loop"),
+      steps: [
+        { craftId: "", transition: null, variationIndex: 0 },
+        { craftId: "", transition: { type: "backspace", bsCount: 0 }, variationIndex: 0 },
+      ],
+      comment: null,
+      timing,
+    }),
+    [],
+  );
 
   const updateRemapAt = useCallback(
     (index: number, updates: Partial<WorkbenchRemap>) => {
@@ -349,8 +379,8 @@ export function SearchCraftWorkbench({
                   ])
                 }
               >
-                <Plus className="mr-1 h-3 w-3" />
-                追加
+                <Plus className="mr-2 h-4 w-4" />
+                {t("meKeybindings.add")}
               </Button>
             </div>
 
@@ -370,7 +400,7 @@ export function SearchCraftWorkbench({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-2 border rounded-md bg-muted/30">
-                {t("meKeybindings.remapsTitle")}が設定されていません
+                {t("meKeybindings.remapsNotConfigured")}
               </p>
             )}
           </div>
@@ -388,44 +418,22 @@ export function SearchCraftWorkbench({
         </DialogContent>
       </Dialog>
 
-      {/* サーチクラフト編集 */}
+      {/* サーチクラフト＋繋ぎ方（Loop）編集（タイミングブロック型） */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">{t("playground.craftSection")}</CardTitle>
           <CardDescription>{t("playground.craftSectionDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {crafts.length > 0 ? (
-            <SearchCraftListEditor
-              crafts={crafts}
-              remaps={effectiveRemaps}
-              onUpdate={(index, updated) =>
-                onCraftsChange(crafts.map((c, i) => (i === index ? updated : c)))
-              }
-              onDelete={(index) => onCraftsChange(crafts.filter((_, i) => i !== index))}
-              onReorder={(oldIndex, newIndex) =>
-                onCraftsChange(arrayMove(crafts, oldIndex, newIndex))
-              }
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              {t("meTemplates.noCraftsInEditor")}
-            </p>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() =>
-              onCraftsChange([
-                ...crafts,
-                { id: draftId("craft"), items: [], searchStr: null, comment: null, timing: null, withShift: false },
-              ])
-            }
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t("playground.addCraft")}
-          </Button>
+          <SearchCraftTimingBoard
+            crafts={crafts}
+            onCraftsChange={onCraftsChange}
+            loops={loops}
+            onLoopsChange={onLoopsChange}
+            remaps={effectiveRemaps}
+            createCraft={createCraft}
+            createLoop={createLoop}
+          />
         </CardContent>
       </Card>
     </>

@@ -10,6 +10,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, playerConfigs, configPresets } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -637,7 +638,7 @@ export default function DevicesPage() {
   }, [data, formValues, showFieldError]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold">{t("meDevices.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("meDevices.pageDescription")}</p>
@@ -697,7 +698,7 @@ export default function DevicesPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className="space-y-6" style={{ pointerEvents: hasPresets ? "auto" : "none", opacity: hasPresets ? 1 : 0.5 }}>
+      <div className={cn("space-y-6", !hasPresets && "pointer-events-none opacity-50")}>
         {/* コントローラー設定（inputMethod === "controller" の場合） */}
         {formValues.inputMethod === "controller" && (
           <Card>

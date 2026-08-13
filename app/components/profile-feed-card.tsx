@@ -1,11 +1,12 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { User, Clock3, LayoutGrid, List } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { PageViews7dMeta } from "@/components/page-views-meta";
+import { User, Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { platformLabel } from "@/lib/platform-label";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -20,6 +21,11 @@ export interface ProfileFeedCardPlayer {
   customSkinUrl?: string | null;
   updatedAt: Date;
   shortBio: string | null;
+  /**
+   * 直近7日のページビュー（page_view_stats）。人気順で並べたときの根拠数値。
+   * 任意（渡した一覧だけが表示する。ホームの「よく見られているプロフィール」専用）。
+   */
+  pageViews7d?: number;
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
@@ -33,36 +39,33 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
         ? t("common.viewer")
         : null;
   const editionLabel = player.mainEdition === "java" ? "Java" : player.mainEdition === "bedrock" ? "Bedrock" : null;
-  const platformLabel =
-    player.mainPlatform === "pc_windows" ? "Windows" :
-      player.mainPlatform === "pc_mac" ? "Mac" :
-        player.mainPlatform === "pc_linux" ? "Linux" :
-          player.mainPlatform === "switch" ? "Switch" :
-            player.mainPlatform === "mobile" ? "Mobile" :
-              player.mainPlatform === "other" ? "Other" : null;
+  const platformText = platformLabel(t, player.mainPlatform, "short");
   return (
     <Link
       to={`/player/${player.slug}`}
       prefetch="intent"
-      className="group rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+      className="group flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
     >
-      <div className="flex items-start gap-3">
+      {/* flex-1 でヘッダー側が余白を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
+      <div className="flex flex-1 items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
           {player.uuid ? (
             <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm font-semibold text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-semibold text-muted-foreground">
               {displayName[0]?.toUpperCase() ?? "?"}
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
+        {/* min-h-12 keeps header block height == avatar height, so rows stay aligned across cards
+            even when optional fields (@mcid / bio) are missing */}
+        <div className="flex min-h-12 min-w-0 flex-1 flex-col justify-center">
           <p className="truncate font-semibold">{displayName}</p>
           {player.mcid && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <p>@{player.mcid}</p>
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <p className="min-w-0 truncate">@{player.mcid}</p>
               {player.pronouns && (
-                <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] leading-none">
+                <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] leading-none">
                   {player.pronouns}
                 </span>
               )}
@@ -73,26 +76,28 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        {/* min-h-5: バッジ（約20px）の有無でフッター高が変わり、罫線位置が兄弟カードとずれるのを防ぐ */}
+        <div className="flex min-h-5 min-w-0 flex-wrap items-center gap-1.5">
           {userRoleLabel && (
-            <Badge variant="secondary" className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="secondary" className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px]">
               <User className="h-3 w-3 shrink-0" />
               {userRoleLabel}
             </Badge>
           )}
           {editionLabel && (
-            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
               {editionLabel}
             </Badge>
           )}
-          {platformLabel && (
-            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
-              {platformLabel}
+          {platformText && (
+            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
+              {platformText}
             </Badge>
           )}
+          {player.pageViews7d !== undefined && <PageViews7dMeta count={player.pageViews7d} />}
         </div>
-        <span className="inline-flex items-center gap-1 shrink-0">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           <Clock3 className="h-3 w-3" />
           {formatRelativeDate(t, player.updatedAt)}
         </span>
@@ -162,31 +167,3 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
   );
 }
 
-export function PlayerViewToggle({
-  viewMode,
-  onChange,
-}: {
-  viewMode: "card" | "list";
-  onChange: (mode: "card" | "list") => void;
-}) {
-  return (
-    <div className="flex border rounded-md">
-      <Button
-        variant={viewMode === "card" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-r-none"
-        onClick={() => onChange("card")}
-      >
-        <LayoutGrid className="h-4 w-4" />
-      </Button>
-      <Button
-        variant={viewMode === "list" ? "default" : "ghost"}
-        size="icon"
-        className="h-8 w-8 rounded-l-none"
-        onClick={() => onChange("list")}
-      >
-        <List className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}

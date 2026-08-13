@@ -33,6 +33,9 @@ import { truncateByVisualWidth } from "@/lib/text-width";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 
+/** マウスキーバッジの強調スタイル（KeyBadge / stats-view で共有） */
+export const MOUSE_KEY_BADGE_CLASS = "bg-info/10 text-info border-info/20";
+
 /** 走者列の最小データ */
 export type PlayerSummary = {
   slug: string;
@@ -131,8 +134,7 @@ export function KeyBadge({
       variant="secondary"
       className={cn(
         "font-mono text-xs px-1.5 py-0.5",
-        isMouse &&
-          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+        isMouse && MOUSE_KEY_BADGE_CLASS,
       )}
     >
       {truncated}

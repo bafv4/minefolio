@@ -109,9 +109,9 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
             size="lg"
           >
             {isLoading ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <DiscordIcon className="mr-2 h-5 w-5" />
+              <DiscordIcon className="mr-2 h-4 w-4" />
             )}
             {t("login.signInWithDiscord")}
           </Button>

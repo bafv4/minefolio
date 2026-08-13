@@ -7,20 +7,24 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, searchCraftTemplates } from "@/lib/schema";
+import { users, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { serializeSearchCrafts, serializeRemaps } from "@/lib/preset-utils";
+import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
 import { filterRemapsForChat } from "@/lib/remap-utils";
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
+  parseTemplateLoops,
   parseEditorSubmission,
   toEditorCrafts,
   toEditorRemaps,
+  toSubmittableLoops,
+  draftId,
 } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { TemplateEditorForm } from "@/components/template-editor";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -40,6 +44,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     where: eq(users.discordId, session.user.id),
     with: {
       searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+      searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
       keyRemaps: true,
       playerConfig: { columns: { keyboardLayout: true } },
     },
@@ -60,19 +65,47 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("meTemplates.templateNotFound"), { status: 404 });
   }
 
+  const templateCrafts = toEditorCrafts(parseTemplateCrafts(template.craftsData));
+  // loopsData（craftIndex 参照）を、上で振った crafts の draft id へ解決する
+  const templateLoops = parseTemplateLoops(template.loopsData, templateCrafts.length).map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: templateCrafts[s.craftIndex].id,
+      transition: s.transition,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+
+  const currentCrafts = toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts)));
+  const currentLoops = parseTemplateLoops(
+    serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts),
+    currentCrafts.length,
+  ).map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: currentCrafts[s.craftIndex].id,
+      transition: s.transition,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+
   return {
     template: {
       id: template.id,
       title: template.title,
       description: template.description ?? "",
       gameLanguage: template.gameLanguage ?? "",
-      crafts: toEditorCrafts(parseTemplateCrafts(template.craftsData)),
+      crafts: templateCrafts,
       remaps: toEditorRemaps(parseTemplateRemaps(template.remapsData)),
+      loops: templateLoops,
     },
     currentSettings: {
-      crafts: toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts))),
+      crafts: currentCrafts,
       // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
       remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
+      loops: currentLoops,
     },
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
   };
@@ -117,6 +150,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       gameLanguage: submission.gameLanguage,
       craftsData: submission.craftsData,
       remapsData: submission.remapsData,
+      loopsData: submission.loopsData,
       updatedAt: new Date(),
     })
     .where(eq(searchCraftTemplates.id, template.id));
@@ -147,13 +181,12 @@ export default function TemplateEditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          to="/my-guides/templates"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("meTemplates.backToManagement")}
-        </Link>
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link to="/my-guides/templates">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {t("meTemplates.backToManagement")}
+          </Link>
+        </Button>
       </div>
       <div>
         <h1 className="text-2xl font-bold">{t("meTemplates.editorEditTitle")}</h1>
@@ -168,6 +201,7 @@ export default function TemplateEditPage() {
           gameLanguage: template.gameLanguage,
           crafts: template.crafts,
           remaps: template.remaps,
+          loops: template.loops,
         }}
         currentSettings={currentSettings}
         keyboardLayout={keyboardLayout}
@@ -179,6 +213,7 @@ export default function TemplateEditPage() {
           formData.set("gameLanguage", data.gameLanguage);
           formData.set("crafts", JSON.stringify(data.crafts));
           formData.set("remaps", JSON.stringify(data.remaps));
+          formData.set("loops", JSON.stringify(toSubmittableLoops(data.crafts, data.loops)));
           fetcher.submit(formData, { method: "post" });
         }}
       />

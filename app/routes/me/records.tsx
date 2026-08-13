@@ -559,7 +559,11 @@ export default function RecordsPage() {
             ) : speedruncomRecords?.error ? (
               <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">{t("meRecords.noSpeedrunRecords")}</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">{t("meRecords.noSpeedrunRecords")}</p>
+                <p className="text-xs mt-1">{t("meRecords.noSpeedrunRecordsHint")}</p>
+              </div>
             )}
           </CardContent>
         </Card>

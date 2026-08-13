@@ -22,6 +22,16 @@ import {
   type RankingEntry,
 } from "@/lib/rankings-query.server";
 import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
+import { EmptyState } from "@/components/empty-state";
+
+// 1〜3位のメダル色（3テーブルで共通）。2位は素のグレーだとライトテーマでコントラスト不足のため
+// text-muted-foreground を使う
+function rankMedalClass(rank: number): string {
+  if (rank === 1) return "text-gold";
+  if (rank === 2) return "text-muted-foreground";
+  if (rank === 3) return "text-bronze";
+  return "";
+}
 
 /** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ */
 function StickyHeaderShell({ children }: { children: ReactNode }) {
@@ -107,10 +117,18 @@ export default function RankingsPage() {
   return (
     <div className="flex-1 flex flex-col space-y-6">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Trophy className="h-6 w-6" />
-          {t("rankings.pageTitle")}
-        </h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <Trophy className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">{t("rankings.pageTitle")}</h1>
+          </div>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
+            <Trophy className="h-3.5 w-3.5" />
+            {t("rankings.count", { count: items.length })}
+          </span>
+        </div>
         <p className="text-muted-foreground mt-1 text-sm">
           {t("rankings.publicityNote")}
         </p>
@@ -176,11 +194,15 @@ export default function RankingsPage() {
         items.length > 0 ? (
           <SpeedruncomRankingsTable rankings={items} />
         ) : (
-          <div className="text-center py-12 text-muted-foreground">
-            {data.categories.length === 0
-              ? t("rankings.noCategories")
-              : t("rankings.noRankingData")}
-          </div>
+          <EmptyState
+            icon={<Trophy className="h-12 w-12" />}
+            title={
+              data.categories.length === 0
+                ? t("rankings.noCategories")
+                : t("rankings.noRankingData")
+            }
+            description={t("rankings.publicityNote")}
+          />
         )
       ) : items.length > 0 ? (
         data.rankedType === "pb" ? (
@@ -189,9 +211,11 @@ export default function RankingsPage() {
           <RankedEloTable rankings={items} />
         )
       ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          {t("rankings.noRankingData")}
-        </div>
+        <EmptyState
+          icon={<Trophy className="h-12 w-12" />}
+          title={t("rankings.noRankingData")}
+          description={t("rankings.publicityNote")}
+        />
       )}
     </div>
   );
@@ -212,7 +236,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -236,11 +260,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                       <TooltipContent>{t("rankings.pendingVerification")}</TooltipContent>
                     </Tooltip>
                   ) : entry.rank !== null && entry.rank <= 3 ? (
-                    <span className={
-                      entry.rank === 1 ? "text-yellow-500" :
-                      entry.rank === 2 ? "text-gray-400" :
-                      "text-amber-600"
-                    }>
+                    <span className={rankMedalClass(entry.rank)}>
                       {entry.rank}
                     </span>
                   ) : entry.rank}
@@ -258,9 +278,9 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                     />
                     <div className="min-w-0">
                       <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
-                        {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
+                        {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
                         {isPending && (
-                          <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-500">
+                          <span className="ml-2 text-xs text-warning">
                             {t("rankings.pendingVerificationSuffix")}
                           </span>
                         )}
@@ -281,7 +301,8 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                         href={entry.videoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={t("rankings.watchVideo")}
+                        className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                       >
                         <Video className="h-4 w-4" />
                       </a>
@@ -291,7 +312,8 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                         href={entry.runWeblink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={t("rankings.viewExternal")}
+                        className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>
@@ -320,7 +342,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -330,11 +352,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
             <TableRow key={entry.userId} className="hover:bg-muted/30">
               <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
                 {entry.rank !== null && entry.rank <= 3 ? (
-                  <span className={
-                    entry.rank === 1 ? "text-yellow-500" :
-                    entry.rank === 2 ? "text-gray-400" :
-                    "text-amber-600"
-                  }>
+                  <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
                   </span>
                 ) : entry.rank ?? "-"}
@@ -352,7 +370,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
+                      {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
                     </p>
                   </div>
                 </Link>
@@ -381,7 +399,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-lg overflow-hidden"
+      className="relative border rounded-xl overflow-hidden"
       stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
     >
       <table className="w-full caption-bottom text-sm">
@@ -391,11 +409,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
             <TableRow key={entry.userId} className="hover:bg-muted/30">
               <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
                 {entry.rank !== null && entry.rank <= 3 ? (
-                  <span className={
-                    entry.rank === 1 ? "text-yellow-500" :
-                    entry.rank === 2 ? "text-gray-400" :
-                    "text-amber-600"
-                  }>
+                  <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
                   </span>
                 ) : entry.rank ?? "-"}
@@ -413,16 +427,16 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {pickDisplayName(entry, locale) ?? entry.mcid ?? "Unknown"}
+                      {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
                     </p>
                   </div>
                 </Link>
               </TableCell>
               <TableCell className="text-right font-mono">{entry.eloRate ?? "-"}</TableCell>
               <TableCell className="text-right text-sm">
-                <span className="text-green-600">{entry.wins ?? 0}W</span>
+                <span className="text-success">{entry.wins ?? 0}W</span>
                 {" / "}
-                <span className="text-red-600">{entry.losses ?? 0}L</span>
+                <span className="text-destructive">{entry.losses ?? 0}L</span>
               </TableCell>
               <TableCell className="text-right">{entry.winRate ?? 0}%</TableCell>
             </TableRow>
@@ -437,7 +451,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
 function RankingsTableSkeleton() {
   const t = useT();
   return (
-    <div className="relative border rounded-lg overflow-hidden">
+    <div className="relative border rounded-xl overflow-hidden">
       <table className="w-full caption-bottom text-sm">
         <TableHeader>
           <TableRow>

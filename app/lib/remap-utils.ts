@@ -287,13 +287,33 @@ function keyCodeToBadgeLabel(t: Translator, keyCode: string): string {
   return char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(t, keyCode);
 }
 
+/**
+ * ツールチップの「リマップ: 物理キー名称 → リマップ先」表示用の詳細。
+ * 物理キーボードのキー情報ツールチップ（`key-info-trigger.tsx` の `RemapRow`）と概念を揃えた、
+ * テキスト版の簡易表現。フル名称（`getRemapSourceLabel` 等）を使い、バッジ表示用の短縮記号
+ * （`⇧` 等）は含めない。
+ */
+export type RemapDetail = {
+  /** 物理キー名称（リマップ元、フル表記） */
+  sourceLabel: string;
+  /** リマップ先の名称（フル表記。文字出力ターゲットは「」で囲む） */
+  targetLabel: string;
+};
+
 export type ActualKeyInfo = {
   char: string;
   keyCode: string;
   isRemapped: boolean;
   needsShift: boolean;
   displayLabel: string;
+  /** リマップされている場合のみ: ツールチップの「リマップ: 物理 → 出力」表示用 */
+  remapDetail?: RemapDetail;
 };
+
+/** 文字出力ターゲットをツールチップ表記用に「」で囲む（key-info-trigger.tsx の RemapRow と同じ表記） */
+function wrapCharTarget(t: Translator, char: string): string {
+  return `${t("keybindings.remapCharOpen")}${char}${t("keybindings.remapCharClose")}`;
+}
 
 export type ActualKeyOptions = {
   /**
@@ -461,6 +481,10 @@ export function getActualKeyInfos(
           isRemapped: true,
           needsShift: false,
           displayLabel: keyCodeToBadgeLabel(t, shiftInfo.sourceKey),
+          remapDetail: {
+            sourceLabel: getRemapSourceLabel(t, shiftInfo.sourceKey),
+            targetLabel: wrapCharTarget(t, char),
+          },
         });
         continue;
       }
@@ -511,6 +535,10 @@ export function getActualKeyInfos(
         isRemapped: true,
         needsShift: hasModifiers && sourceKey.includes("Shift"),
         displayLabel,
+        remapDetail: {
+          sourceLabel: getRemapSourceLabel(t, sourceKey),
+          targetLabel: wrapCharTarget(t, char),
+        },
       });
       continue;
     }
@@ -529,6 +557,188 @@ export function getActualKeyInfos(
   }
 
   return result;
+}
+
+export type ActualControlKeyInfo = {
+  /** 実際に押すキー（コード、または "Shift+KeyR" のような組み合わせ） */
+  keyCode: string;
+  /** 実キーの短いバッジ表示ラベル（⇧ 等の短縮記号を含む。バッジ本体の描画専用） */
+  displayLabel: string;
+  /**
+   * ツールチップ用のフル名称（⇧ の短縮記号を使わず「左Shift」「右Shift」等のフル表記にする。
+   * ⇧Home 合成時は成分ごとのフル名称を "+" で連結する（例: "左Shift+サイド1"）
+   */
+  tooltipLabel: string;
+  isRemapped: boolean;
+  /** リマップの詳細（isRemapped 時のみ1件以上。⇧Home 合成時は成分ごとに複数件になりうる） */
+  remapDetails: RemapDetail[];
+};
+
+/**
+ * targetKeyCode（Backspace / ArrowLeft / Home / ShiftLeft / ShiftRight 等）を出力するリマップを
+ * chat 文脈で逆引きする（単一の制御キー成分の解決）。
+ * 同じ出力を複数のリマップが持つ場合は getActualKeyInfos() と同じ規則（修飾キーなしの
+ * ソースを優先。同クラス内の複数候補は配列の後勝ち）で解決する。
+ * **自己リマップ（sourceKey が修飾キーなしで targetKeyCode 自身に正規化される。
+ * 例: `Backspace → Backspace`、`ShiftLeft → ShiftLeft`）は「リマップ」として扱わない**
+ * （見た目上は無変更のリマップ行であり、押すキーも物理キーと変わらないため。
+ * isPhysicalShiftLeftTaken() の「自己リマップは奪われていない扱い」と同じ考え方）。
+ * 該当リマップが無ければ物理キーそのまま（`isRemapped: false`）を返す。
+ */
+function resolveControlKeyComponent(
+  t: Translator,
+  targetKeyCode: string,
+  chatRemaps: RemapInfo[],
+): ActualControlKeyInfo {
+  const outputsTarget = (r: RemapInfo): boolean => {
+    if (r.targetKey === null || isSpecialRemapTarget(r.targetKey)) return false;
+    if (normalizeKeyCode(r.targetKey) !== targetKeyCode) return false;
+    // 自己リマップ除外（修飾キーなしソースが自分自身を出力するだけの行はリマップ扱いしない）
+    if (!r.sourceKey.includes("+") && normalizeKeyCode(r.sourceKey) === targetKeyCode) return false;
+    return true;
+  };
+
+  // 修飾キー付きソースを先に走査し、修飾キーなしのソースで上書きする
+  // （修飾キーなしを優先。同クラス内の複数候補は配列順で後勝ち＝getActualKeyInfos と同じ規則）
+  let found: RemapInfo | undefined;
+  for (const r of chatRemaps) {
+    if (r.sourceKey.includes("+") && outputsTarget(r)) found = r;
+  }
+  for (const r of chatRemaps) {
+    if (!r.sourceKey.includes("+") && outputsTarget(r)) found = r;
+  }
+
+  if (found) {
+    const sourceLabel = getRemapSourceLabel(t, found.sourceKey);
+    return {
+      keyCode: found.sourceKey,
+      displayLabel: sourceLabel,
+      tooltipLabel: sourceLabel,
+      isRemapped: true,
+      remapDetails: [{ sourceLabel, targetLabel: getKeyLabel(t, targetKeyCode) }],
+    };
+  }
+
+  const fallbackLabel = getKeyLabel(t, targetKeyCode);
+  return {
+    keyCode: targetKeyCode,
+    displayLabel: fallbackLabel,
+    tooltipLabel: fallbackLabel,
+    isRemapped: false,
+    remapDetails: [],
+  };
+}
+
+/**
+ * chat 文脈のリマップで、物理 ShiftLeft（単独ソース）が「別出力に奪われている」かどうか。
+ * sourceKey が修飾キーなしで ShiftLeft に正規化される行が存在し、かつその出力が
+ * ShiftLeft 自身でない（無効化・別キー出力・文字出力のいずれか）場合に true。
+ * ShiftLeft → ShiftLeft の無意味な自己リマップは「奪われていない」扱いにする
+ * （resolveControlKeyComponent() の自己リマップ除外〈outputsTarget〉と同じ考え方。
+ * こちらは「奪われている＝isRemapped:true」ではなく「奪われている＝物理キーが機能しない」
+ * という別の判定軸だが、自己リマップを無視する結論は一致する）。
+ */
+function isPhysicalShiftLeftTaken(chatRemaps: RemapInfo[]): boolean {
+  return chatRemaps.some((r) => {
+    if (r.sourceKey.includes("+") || normalizeKeyCode(r.sourceKey) !== "ShiftLeft") return false;
+    const outputsShiftLeft =
+      r.targetKey !== null && !isSpecialRemapTarget(r.targetKey) && normalizeKeyCode(r.targetKey) === "ShiftLeft";
+    return !outputsShiftLeft;
+  });
+}
+
+/**
+ * Shift 成分の逆引き（⇧Home 用）。優先順は「左Shift → 右Shift」の順で、各々の中では
+ * 「リマップ → 物理」の順（4段階）:
+ * 1. ShiftLeft を出力する chat 文脈リマップがあれば、そのソースキー（isRemapped: true）
+ * 2. 無ければ、物理 ShiftLeft が chat 文脈で奪われていなければ物理 Shift（"⇧"、isRemapped: false）
+ * 3. 物理 ShiftLeft が奪われている場合のみ右へ進む: ShiftRight を出力するリマップがあれば
+ *    そのソースキー（isRemapped: true）
+ * 4. それも無ければ物理 ShiftRight（表示は他の Shift 表記と揃えて "⇧" のまま、isRemapped: false）
+ *
+ * 「奪われている」の判定は isPhysicalShiftLeftTaken() を参照。ShiftLeft が生きている限り
+ * ShiftRight 側は一切見ない（ShiftRight のリマップより物理 ShiftLeft が優先される）点が
+ * 素朴な「ShiftLeft リマップ → ShiftRight リマップ → 物理」との差分。
+ * 物理キーのフォールバック表示に "⇧" を使うのは、resolveControlKeyComponent の汎用
+ * フォールバック（getKeyLabel(t, "ShiftLeft") 等の長いキー名）だと他の Shift 表記と
+ * 揃わないため（既存の「物理キーが奪われているケース」の扱いと同じ既知の限界を踏襲）。
+ */
+function resolveShiftComponent(t: Translator, chatRemaps: RemapInfo[]): ActualControlKeyInfo {
+  // 1. ShiftLeft を出力するリマップ
+  const shiftLeftRemap = resolveControlKeyComponent(t, "ShiftLeft", chatRemaps);
+  if (shiftLeftRemap.isRemapped) return shiftLeftRemap;
+
+  // 2. 物理 ShiftLeft が生きていればそれを使う（ShiftRight 側は見ない）
+  if (!isPhysicalShiftLeftTaken(chatRemaps)) {
+    return {
+      keyCode: "ShiftLeft",
+      displayLabel: "⇧",
+      tooltipLabel: getKeyLabel(t, "ShiftLeft"),
+      isRemapped: false,
+      remapDetails: [],
+    };
+  }
+
+  // 3. 物理 ShiftLeft が奪われている場合のみ ShiftRight を出力するリマップを探す
+  const shiftRightRemap = resolveControlKeyComponent(t, "ShiftRight", chatRemaps);
+  if (shiftRightRemap.isRemapped) return shiftRightRemap;
+
+  // 4. 物理 ShiftRight（バッジは他の Shift 表記と揃えて "⇧" のまま、ツールチップはフル名称）
+  return {
+    keyCode: "ShiftRight",
+    displayLabel: "⇧",
+    tooltipLabel: getKeyLabel(t, "ShiftRight"),
+    isRemapped: false,
+    remapDetails: [],
+  };
+}
+
+/**
+ * 制御キー（Backspace / ArrowLeft / Home / ⇧Home＝Shift+Home）の出力になっているリマップを
+ * 逆引きする（Loop の ControlKeyBadge 用。chat 文脈専用）。
+ *
+ * - 通常（`options?.shiftHeld` 省略）: `resolveControlKeyComponent()` で `targetKeyCode`
+ *   （Backspace / ArrowLeft / Home）を出力するリマップを探す
+ * - `options.shiftHeld: true`（⇧Home）: Shift+Home は「1キーの出力」に単一化されることはなく、
+ *   実際の入力は **Shift 側のキーと Home 側のキーの同時押し**で、それぞれ独立にリマップされうる
+ *   （例: `KeyR → ShiftLeft`、`KeyT → Home` のリマップがあれば実入力は R+T）。
+ *   Shift 成分は `resolveShiftComponent()`（ShiftLeft 優先、無ければ ShiftRight、
+ *   どちらも無ければ物理 Shift＝⇧ 表記）、Home 成分は `targetKeyCode`（= "Home"）を
+ *   `resolveControlKeyComponent()` で解決し、`"${shiftLabel}+${homeLabel}"` の形で合成する。
+ *   `isRemapped` はどちらか一方でもリマップされていれば true（例: Shift 側のみリマップなら
+ *   表示は "R+Home"、Home 側のみなら "⇧+T"、両方なら "R+T"、両方非リマップなら "⇧+Home" だが
+ *   この場合 isRemapped=false のため呼び出し側は複合ピルを使わず、非リマップ時と同一の
+ *   "⇧Home" 単一ピル表示のままになる）
+ * - 該当リマップが無ければ物理キーそのまま（`isRemapped: false`）を返す。**既知の限界**:
+ *   物理キー自体が chat 文脈で別出力にリマップされており、かつ targetKeyCode を出力する
+ *   リマップも無い場合（= 押しても意図した制御キーが出ない状態）でも、正解となるキーが
+ *   存在しないため物理キーのまま `isRemapped: false` を返す
+ *
+ * 返り値の `tooltipLabel`（⇧ を使わないフル名称）と `remapDetails`（「リマップ: 物理 → 出力」用の
+ * 詳細。⇧Home 合成時は成分ごとに複数件）はツールチップ表示専用。バッジ本体の描画には
+ * 引き続き `displayLabel`（短縮記号あり）を使う。
+ */
+export function getActualControlKeyInfo(
+  t: Translator,
+  targetKeyCode: string,
+  remaps: RemapInfo[],
+  options?: { shiftHeld?: boolean },
+): ActualControlKeyInfo {
+  const chatRemaps = filterRemapsForChat(remaps);
+
+  if (options?.shiftHeld) {
+    const shiftPart = resolveShiftComponent(t, chatRemaps);
+    const homePart = resolveControlKeyComponent(t, targetKeyCode, chatRemaps);
+    return {
+      keyCode: `${shiftPart.keyCode}+${homePart.keyCode}`,
+      displayLabel: `${shiftPart.displayLabel}+${homePart.displayLabel}`,
+      tooltipLabel: `${shiftPart.tooltipLabel}+${homePart.tooltipLabel}`,
+      isRemapped: shiftPart.isRemapped || homePart.isRemapped,
+      remapDetails: [...shiftPart.remapDetails, ...homePart.remapDetails],
+    };
+  }
+
+  return resolveControlKeyComponent(t, targetKeyCode, chatRemaps);
 }
 
 export type SimulatedKeyOutput = {

@@ -237,13 +237,15 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
 
   return (
     // 2xl:hidden はこの sticky バー自身に付ける（ラッパーで包むと sticky の
-    // 可動域がバー高さ分しかなくなり、スクロールで流れて操作できなくなる）
-    <div className="2xl:hidden sticky top-16 z-30 -mx-4 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
+    // 可動域がバー高さ分しかなくなり、スクロールで流れて操作できなくなる）。
+    // -mx-* は親（guides/view.tsx の article）の左右パディングを打ち消して全幅化する。
+    // モバイル（base）は article 側が px-0 になったため打ち消し不要（sm 以上は sm:px-6 と対）。
+    <div className="2xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2 px-4 py-3.5 text-sm font-semibold sm:px-6"
+            className="flex w-full items-center gap-2 px-4 py-3.5 text-sm font-semibold hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-6"
           >
             <List className="h-4 w-4 text-muted-foreground" />
             {t("guideToc.title")}

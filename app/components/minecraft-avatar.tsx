@@ -1,5 +1,6 @@
 import { useState, useEffect, memo } from "react";
 import { getRenderableAvatar, renderAvatar } from "@/lib/avatar-cache";
+import { useT } from "@/hooks/use-locale";
 
 interface MinecraftAvatarProps {
   uuid: string | null | undefined;
@@ -18,6 +19,7 @@ const MinecraftAvatarComponent = ({
   overlay = true,
   className = "",
 }: MinecraftAvatarProps) => {
+  const t = useT();
   // スキンが取得済み（別サイズ・別ページ含む）なら初期描画から即座に表示（ちらつき防止）
   const [imgSrc, setImgSrc] = useState<string | null>(
     () => getRenderableAvatar({ uuid, skinUrl, size, overlay }) ?? null
@@ -71,7 +73,7 @@ const MinecraftAvatarComponent = ({
       {imgSrc && !isLoading && (
         <img
           src={imgSrc}
-          alt={mcid ? `${mcid}'s avatar` : "Minecraft avatar"}
+          alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
           width={size}
           height={size}
           style={{
@@ -89,7 +91,7 @@ const MinecraftAvatarComponent = ({
           style={{
             width: size,
             height: size,
-            backgroundColor: "#3c3c3c",
+            backgroundColor: "var(--muted)",
             position: "absolute",
             top: 0,
             left: 0,
@@ -101,7 +103,7 @@ const MinecraftAvatarComponent = ({
           style={{
             width: size,
             height: size,
-            backgroundColor: "#3c3c3c",
+            backgroundColor: "var(--muted)",
             position: "absolute",
             top: 0,
             left: 0,

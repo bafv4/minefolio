@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
-import { Keyboard, Mouse, ArrowRight, Users } from "lucide-react";
+import { Keyboard, Mouse, ArrowRight, Users, BarChart3 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -401,11 +401,11 @@ function ActionToKeyCard({
   const maxCount = entries[0]?.[1] || 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="text-base">{getActionLabel(t, action)}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 px-5">
         {entries.map(([key, count]) => (
           <StatBar
             key={key}
@@ -439,11 +439,11 @@ function KeyToActionCard({
   const maxCount = entries[0]?.[1] || 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="text-base">{getKeyLabel(t, keyCode)}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 px-5">
         {entries.map(([action, count]) => (
           <StatBar
             key={action}
@@ -475,11 +475,11 @@ function DistributionCard({
   if (total === 0) return null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 px-5">
         {entries.map(([label, count]) => (
           <StatBar
             key={label}
@@ -511,11 +511,11 @@ function BooleanStatCard({
   const maxCount = Math.max(enabled, disabled);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 px-5">
         <StatBar label={t("common.on")} count={enabled} total={total} maxCount={maxCount} />
         <StatBar
           label={t("common.off")}
@@ -552,7 +552,18 @@ export default function StatsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">{t("stats.title")}</h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">{t("stats.title")}</h1>
+          </div>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            {t("stats.headerCount", { count: totalUsers })}
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           {t("stats.headingDescription")}
         </p>
@@ -563,8 +574,6 @@ export default function StatsPage() {
         <Users className="h-4 w-4" />
         <span>
           {t("stats.summary", {
-            total: totalUsers,
-            suffix: t("stats.summaryPrefix"),
             withKeybindings: usersWithKeybindings,
           })}
         </span>

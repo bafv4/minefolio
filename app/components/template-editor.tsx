@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { SearchCraftDraft } from "@/components/search-craft-editor";
+import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
 import {
   SearchCraftWorkbench,
   normalizeLayout,
@@ -28,6 +29,7 @@ import {
   TEMPLATE_DESCRIPTION_MAX,
   draftId,
 } from "@/lib/search-craft-templates";
+import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { toast } from "sonner";
 import { Download, Loader2, Save, X } from "lucide-react";
@@ -49,6 +51,7 @@ export type TemplateEditorData = {
   gameLanguage: string; // "" = 未設定
   crafts: SearchCraftDraft[];
   remaps: TemplateRemapDraft[];
+  loops: SearchCraftLoopDraft[];
 };
 
 export function TemplateEditorForm({
@@ -60,7 +63,11 @@ export function TemplateEditorForm({
 }: {
   initial: TemplateEditorData;
   /** 「現在の設定を読み込む」用のライブ設定（空なら非表示） */
-  currentSettings: { crafts: SearchCraftDraft[]; remaps: TemplateRemapDraft[] } | null;
+  currentSettings: {
+    crafts: SearchCraftDraft[];
+    remaps: TemplateRemapDraft[];
+    loops: SearchCraftLoopDraft[];
+  } | null;
   keyboardLayout: string | null;
   isSubmitting: boolean;
   onSubmit: (data: TemplateEditorData) => void;
@@ -72,6 +79,7 @@ export function TemplateEditorForm({
   const [gameLanguage, setGameLanguage] = useState(initial.gameLanguage);
   const [crafts, setCrafts] = useState<SearchCraftDraft[]>(initial.crafts);
   const [remaps, setRemaps] = useState<TemplateRemapDraft[]>(initial.remaps);
+  const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(initial.loops);
   // バーチャルキーボードの表示レイアウト（初期値はユーザーの設定）
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() =>
     normalizeLayout(keyboardLayout),
@@ -83,8 +91,25 @@ export function TemplateEditorForm({
 
   const loadCurrentSettings = useCallback(() => {
     if (!currentSettings) return;
-    setCrafts(currentSettings.crafts.map((c) => ({ ...c, id: draftId("craft") })));
+    // crafts の draft id を振り直すため、Loop の craftId 参照も新しい id へ再解決する
+    // （旧id→新id の identity でない写像を remapLoopSteps に通し、<2 になった Loop は自動除去）
+    const idMap = new Map<string, string>();
+    setCrafts(
+      currentSettings.crafts.map((c) => {
+        const newId = draftId("craft");
+        idMap.set(c.id, newId);
+        return { ...c, id: newId };
+      }),
+    );
     setRemaps(currentSettings.remaps.map((r) => ({ ...r, id: draftId("remap") })));
+    setLoops(
+      currentSettings.loops
+        .map((loop) => {
+          const steps = remapLoopSteps(loop.steps, idMap);
+          return steps ? { ...loop, id: draftId("loop"), steps } : null;
+        })
+        .filter((loop): loop is SearchCraftLoopDraft => loop !== null),
+    );
     toast.success(t("meTemplates.loadedFromCurrent"));
   }, [currentSettings]);
 
@@ -101,8 +126,16 @@ export function TemplateEditorForm({
       toast.error(t("meSearchCraft.selectAtLeastOneItem"));
       return;
     }
-    if (crafts.some((c) => !c.searchStr)) {
+    if (crafts.some((c) => c.variations.length === 0 || c.variations.some((v) => !v.str.trim()))) {
       toast.error(t("meSearchCraft.craftStringRequired"));
+      return;
+    }
+    if (loops.some((loop) => loop.steps.length < 2)) {
+      toast.error(t("meSearchCraft.loopStepsRequired"));
+      return;
+    }
+    if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
+      toast.error(t("meSearchCraft.loopEntryRequired"));
       return;
     }
     onSubmit({
@@ -111,8 +144,9 @@ export function TemplateEditorForm({
       gameLanguage,
       crafts,
       remaps,
+      loops,
     });
-  }, [crafts, description, gameLanguage, onSubmit, remaps, title]);
+  }, [crafts, description, gameLanguage, loops, onSubmit, remaps, title]);
 
   return (
     <div className="space-y-6">
@@ -207,10 +241,12 @@ export function TemplateEditorForm({
         </CardContent>
       </Card>
 
-      {/* ワークベンチ（/playground と同一構成: リマップ → キーボード → タイピングテスト → サーチクラフト） */}
+      {/* ワークベンチ（/playground と同一構成: リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
       <SearchCraftWorkbench
         crafts={crafts}
         onCraftsChange={setCrafts}
+        loops={loops}
+        onLoopsChange={setLoops}
         remaps={remaps}
         onRemapsChange={setRemaps}
         layout={layout}

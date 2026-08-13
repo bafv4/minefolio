@@ -13,9 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
-import { type CachedPace } from "@/components/recent-pace-card";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
-import type { PaceTimelineEntry } from "@/lib/paceman-cache";
+import type { CachedPace, PaceTimelineEntry } from "@/lib/paceman-cache";
 import { Clock3, ExternalLink, Loader2 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
@@ -68,8 +67,8 @@ export function PaceFeedCard({
   return (
     <div
       className={cn(
-        "group relative block rounded-2xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
-        isFinished && "border-cyan-400/60 bg-cyan-500/5"
+        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+        isFinished && "border-info/60 bg-info/5"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
@@ -77,7 +76,7 @@ export function PaceFeedCard({
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="absolute inset-0 z-0 rounded-2xl cursor-pointer"
+        className="absolute inset-0 z-0 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${displayName || run.nickname || run.mcid}: ${t("home.viewTimeline")}`}
       />
       <div className="flex items-center gap-3">
@@ -101,17 +100,19 @@ export function PaceFeedCard({
       </div>
 
       <div className="mt-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
+        {/* 狭幅でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。バッジは
+            ml-auto shrink-0 で折り返し後も行内右端に揃える */}
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+          <div className="min-w-0">
             <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
             <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
           </div>
-          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+          <Badge variant="secondary" className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs">
             <PaceManSplitMark timeline={run.timeline} size={13} />
           </Badge>
         </div>
 
-        <div className="mt-3 flex items-center border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
             {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}

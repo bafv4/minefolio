@@ -334,9 +334,9 @@ export default function OnboardingPage() {
               {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
               <div className="space-y-4">
-                <Alert className="border-green-500/50 bg-green-500/10">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-600">
+                <Alert className="border-success/50 bg-success/10">
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                  <AlertDescription className="text-success">
                     {t("onboarding.verifySuccess")}
                   </AlertDescription>
                 </Alert>

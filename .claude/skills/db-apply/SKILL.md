@@ -41,10 +41,29 @@ NOT NULL 列の追加でテーブル再作成（＝データ損失）を提案�
 
 この場合は push せず、`scripts/` に**一回限りの tsx スクリプト**を作って手動 DDL で適用する。
 
+### ★ ローカル `db:push` が式インデックスで恒常的に失敗するとき
+
+現行の **drizzle-kit 0.31.10**（`package.json` 参照）は、式インデックス `idx_paceman_paces_mcid_lower`
+（`paceman_paces` の `lower(mcid)`）が絡む push で、テーブル再構築時の index 一括再列挙経路が式を
+列名としてクォートしてしまうバグを持つ。症状は `local.db` への `pnpm db:push` が
+**`SQLITE_ERROR: no such column: lower("mcid")`** で恒常的に中断する、というもの
+（upstream の 0.x 系に修正はない。drizzle-kit v1 の RC ではパーサが書き直され解消見込みだが、
+本リポジトリはまだ 0.x 系）。
+
+この場合も push せず、`scripts/fix-paceman-expression-index.ts`（一回限りスクリプト）で
+`idx_paceman_paces_mcid_lower` を drizzle-kit が期待する SQL テキスト表記に張り替えて回避する。
+式インデックスに限らず `local.db` の index 命名ドリフト全般が push を巻き込んで中断させるため、
+ローカル DDL 反映は `pnpm db:push` より**一回限りスクリプトの方が信頼できる経路**になっている
+（詳細は `docs/database.md` の「運用ノート」参照）。
+
 ### スクリプトの型（既存に倣う）
 
 前例: `scripts/add-with-shift.ts`, `scripts/apply-0019.ts`,
-`scripts/add-page-view-stats-table.ts`, `scripts/add-like-tables.ts`
+`scripts/add-page-view-stats-table.ts`, `scripts/add-like-tables.ts`,
+`scripts/add-search-craft-loops.ts`, `scripts/fix-unique-index-names.ts`,
+`scripts/fix-missing-indexes.ts`, `scripts/add-player-rankings-table.ts`,
+`scripts/add-app-meta-table.ts`, `scripts/drop-orphan-favorites-index.ts`,
+`scripts/fix-paceman-expression-index.ts`
 
 ```ts
 // <何を追加するか> の一回限りのスクリプト。

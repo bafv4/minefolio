@@ -18,11 +18,23 @@ import { del } from "@vercel/blob";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { MyContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
-import { Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -130,42 +142,59 @@ export default function MyGuidesPage() {
       </div>
 
       {userGuides.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground mb-4">{t("meGuides.noGuides")}</p>
-            <Button asChild>
+        <EmptyState
+          icon={<BookOpen className="h-12 w-12" />}
+          title={t("meGuides.noGuidesTitle")}
+          description={t("meGuides.noGuides")}
+          action={
+            <Button asChild size="sm" className="mt-4">
               <Link to="/my-guides/new">
                 <Plus className="h-4 w-4 mr-2" />
                 {t("meGuides.newGuide")}
               </Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {userGuides.map((guide) => {
             const tags = JSON.parse(guide.tags) as string[];
             return (
-              <Card key={guide.id}>
+              <Card key={guide.id} className="py-0">
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-medium truncate">{guide.title}</h3>
+                      {guide.isPublished ? (
+                        <Link
+                          to={`/guides/${user.slug}/${guide.slug}`}
+                          className="font-medium truncate hover:underline"
+                        >
+                          {guide.title}
+                        </Link>
+                      ) : (
+                        <Link
+                          to={`/my-guides/${guide.slug}/edit`}
+                          className="font-medium truncate hover:underline"
+                        >
+                          {guide.title}
+                        </Link>
+                      )}
                       {guide.isPublished ? (
                         <Badge variant="default" className="shrink-0 text-xs">
-                          <Globe className="h-3 w-3 mr-1" />
+                          <Globe className="h-3 w-3" />
                           {t("meGuides.statusPublished")}
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="shrink-0 text-xs">
-                          <Lock className="h-3 w-3 mr-1" />
+                          <Lock className="h-3 w-3" />
                           {t("meGuides.statusDraft")}
                         </Badge>
                       )}
                       {guide.isPinned && <PinnedBadge className="shrink-0" />}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span>
+                      {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
+                      <span suppressHydrationWarning>
                         {t("common.updatedAgo", {
                           time: formatDistanceToNow(guide.updatedAt, {
                             addSuffix: true,
@@ -182,12 +211,13 @@ export default function MyGuidesPage() {
                       {tags.length > 0 && (
                         <div className="flex gap-1 flex-wrap">
                           {tags.map((tag) => (
-                            <span
+                            <Badge
                               key={tag}
-                              className="bg-muted px-1.5 py-0.5 rounded text-xs"
+                              variant="secondary"
+                              className="rounded-full px-2 py-0.5 text-[11px]"
                             >
                               {tag}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       )}
@@ -202,6 +232,7 @@ export default function MyGuidesPage() {
                         size="sm"
                         type="submit"
                         title={guide.isPinned ? t("meGuides.unpin") : t("meGuides.pin")}
+                        aria-label={guide.isPinned ? t("meGuides.unpin") : t("meGuides.pin")}
                       >
                         {guide.isPinned ? (
                           <PinOff className="h-4 w-4" />
@@ -215,36 +246,60 @@ export default function MyGuidesPage() {
                         <Link
                           to={`/guides/${user.slug}/${guide.slug}`}
                           target="_blank"
+                          aria-label={t("meGuides.viewPublished")}
+                          title={t("meGuides.viewPublished")}
                         >
                           <Globe className="h-4 w-4" />
                         </Link>
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={`/my-guides/${guide.slug}/edit`}>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link
+                        to={`/my-guides/${guide.slug}/edit`}
+                        aria-label={t("guideEditor.edit")}
+                        title={t("guideEditor.edit")}
+                      >
                         <Pencil className="h-4 w-4" />
                       </Link>
                     </Button>
-                    <fetcher.Form method="post">
-                      <input type="hidden" name="_action" value="delete" />
-                      <input type="hidden" name="guideId" value={guide.id} />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="submit"
-                        onClick={(e) => {
-                          if (!confirm(t("meGuides.confirmDelete")))
-                            e.preventDefault();
-                        }}
-                      >
-                        {fetcher.state !== "idle" &&
-                        fetcher.formData?.get("guideId") === guide.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </fetcher.Form>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={t("meGuides.delete")}
+                          title={t("meGuides.delete")}
+                        >
+                          {fetcher.state !== "idle" &&
+                          fetcher.formData?.get("guideId") === guide.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t("meGuides.deleteTitle")}</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t("meGuides.deleteDescription", { title: guide.title })}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("meGuides.cancel")}</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              const formData = new FormData();
+                              formData.set("_action", "delete");
+                              formData.set("guideId", guide.id);
+                              fetcher.submit(formData, { method: "post" });
+                            }}
+                          >
+                            {t("meGuides.delete")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </CardContent>
               </Card>

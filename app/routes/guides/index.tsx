@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { BookOpen, Search } from "lucide-react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
@@ -21,8 +22,8 @@ import { pickDisplayName } from "@/lib/slug";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
+import { ViewToggle } from "@/components/view-toggle";
 import {
-  ViewToggle,
   GuideCardGrid,
   GuideListView,
   type GuideItem,
@@ -339,10 +340,11 @@ export default function GuidesIndexPage() {
           </div>
         )
       ) : guideItems.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>{t("guides.noGuides")}</p>
-        </div>
+        <EmptyState
+          icon={<BookOpen className="h-12 w-12" />}
+          title={t("guides.noGuidesTitle")}
+          description={t("guides.noGuides")}
+        />
       ) : viewMode === "card" ? (
         <GuideCardGrid guides={guideItems} linkFn={linkFn} />
       ) : (

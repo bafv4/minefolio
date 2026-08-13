@@ -9,8 +9,10 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, configPresets } from "@/lib/schema";
+import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { parseLoopSteps } from "@/lib/search-craft-loops";
+import { resolveRowVariations } from "@/lib/search-craft-variations";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
@@ -36,6 +38,13 @@ import {
   SearchCraftEmbedView,
   type EmbedUserData,
 } from "@/components/guide-embeds";
+
+// コードブロックのコピーボタンに innerHTML で挿入する lucide アイコン（Copy / Check）。
+// stroke="currentColor" のため、ボタンの text-muted-foreground / hover 色がそのまま反映される。
+const COPY_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+const CHECK_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
 export function meta({
   loaderData,
@@ -178,6 +187,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
         playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
         searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+        searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
         configPresets: {
           columns: {
             name: true,
@@ -188,6 +198,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             playerConfigData: true,
             fingerAssignmentsData: true,
             searchCraftsData: true,
+            searchCraftLoopsData: true,
           },
         },
       },
@@ -211,6 +222,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
           playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
           searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+          searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
           configPresets: {
             columns: {
               name: true,
@@ -221,6 +233,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               playerConfigData: true,
               fingerAssignmentsData: true,
               searchCraftsData: true,
+              searchCraftLoopsData: true,
             },
           },
         },
@@ -235,7 +248,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       const mainPreset = u.configPresets.find((p) => p.isMain);
       let display: Pick<
         EmbedUserData,
-        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts"
+        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts" | "searchCraftLoops"
       >;
       if (shouldUsePresetSnapshot(mainPreset)) {
         const decoded = decodePresetConfig(mainPreset, u.id);
@@ -249,13 +262,35 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               }
             : null,
           searchCrafts: decoded.searchCrafts,
+          // decodePresetSearchCraftLoops は既に craftId をこのスナップショットの
+          // searchCrafts（合成id）へ解決済み。timing はスナップショットに欠落していると
+          // undefined になり得るため null へ正規化する
+          searchCraftLoops: decoded.searchCraftLoops.map((l) => ({
+            id: l.id,
+            sequence: l.sequence,
+            steps: l.steps,
+            comment: l.comment,
+            timing: l.timing ?? null,
+          })),
         };
       } else {
         display = {
           keybindings: u.keybindings,
           keyRemaps: u.keyRemaps,
           playerConfig: u.playerConfig,
-          searchCrafts: u.searchCrafts,
+          // ライブ行の search_variations 列（旧データは null）を正準の variations へ解決する
+          // （必ず resolveRowVariations() を経由 — 手書きのフォールバック合成はしない）
+          searchCrafts: u.searchCrafts.map((c) => ({
+            ...c,
+            variations: resolveRowVariations(c),
+          })),
+          searchCraftLoops: u.searchCraftLoops.map((row) => ({
+            id: row.id,
+            sequence: row.sequence,
+            steps: parseLoopSteps(row.steps),
+            comment: row.comment,
+            timing: row.timing,
+          })),
         };
       }
       const data: EmbedUserData = {
@@ -272,6 +307,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           remapsData: p.remapsData,
           playerConfigData: p.playerConfigData,
           searchCraftsData: p.searchCraftsData,
+          searchCraftLoopsData: p.searchCraftLoopsData,
         })),
         ...display,
       };
@@ -341,15 +377,15 @@ export default function GuideViewPage() {
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
       btn.title = t("guideView.copy");
-      btn.textContent = "📋";
+      btn.innerHTML = COPY_ICON_SVG;
       const controller = new AbortController();
       controllers.push(controller);
       btn.addEventListener("click", () => {
         const code = pre.querySelector("code");
         const text = code?.textContent ?? pre.textContent ?? "";
         navigator.clipboard.writeText(text).then(() => {
-          btn.textContent = "✓";
-          const tid = setTimeout(() => { btn.textContent = "📋"; }, 1500);
+          btn.innerHTML = CHECK_ICON_SVG;
+          const tid = setTimeout(() => { btn.innerHTML = COPY_ICON_SVG; }, 1500);
           timeouts.push(tid);
         });
       }, { signal: controller.signal });
@@ -366,8 +402,11 @@ export default function GuideViewPage() {
     };
   }, []);
 
+  // モバイルの左右パディングは main（_layout.tsx）側の px-4 と二重にならないよう、
+  // article 側は 0 にする（sm 以上は main と article の両方で加算する既存の見た目を維持）。
+  // GuideTocMobile 側の -mx-* もこの調整に合わせている（guide-toc-nav.tsx 参照）。
   return (
-    <article className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="relative w-full max-w-5xl mx-auto px-0 sm:px-6 lg:px-8">
       {/* デスクトップ目次: 本文幅は削らず、中央寄せ本文の左余白（ガター）に固定表示する。
           左端はヘッダーのロゴ始点（コンテナ左端）と揃える。2xl ではガター幅が w-56 と一致し、
           right-full（右端＝本文パディング左端）と合わせて左端がコンテナ左端になる。
