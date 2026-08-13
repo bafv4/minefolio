@@ -27,13 +27,15 @@
 - 個別のカード・アイテム・ボックス: `rounded-xl`（14px）
 - ページ内の大型セクションパネル（ホームのセクション枠など、複数カードを包む面）: `rounded-2xl`（18px）
 - `rounded-3xl` 以上はコンテナには使わない（装飾要素は除く）
+- ネスト規則: `rounded-xl` カードの内側にネストするボックス（ドロップゾーン・プレースホルダ等）は1段下げて `rounded-lg`、さらに内側のチップは `rounded` でよい
 
 ## カードシステム
 カードは用途に応じて次の3レシピのいずれかに従う。
 
 - **インタラクティブカード**（遷移先のある一覧アイテム。走者/ペース/動画/ガイドカード）: `rounded-xl border border-border/70 bg-background/80`。ホバーは外側ラッパーに `-translate-y-0.5` ＋ `border-primary/40` ＋ `shadow-md`。カード全面クリックは上記「カード全体をクリック可能にする（オーバーレイリンク）」の構成に従う
 - **静的セクションカード**（情報グルーピング）: shadcn Card を `<Card className="gap-3 py-5">` ＋ `CardHeader`/`CardContent className="px-5"` で使う（外側余白 20px。カード面が大きいため 16px では窮屈になる）。**現行 `card.tsx` 基底は gap 方式のため、旧 API 前提の `pt-0` / `pb-3` / `py-2` は無効または逆効果（禁止）**
-- **リスト行**: `divide-y` 区切り＋`hover:bg-muted/50`（行がリンクの場合のみ。クリック不能な行にホバー背景を付けない）
+- **リスト行**: `divide-y` 区切り＋`hover:bg-muted/50`（行がリンクの場合のみ。クリック不能な行にホバー背景を付けない）。この `divide-y` は既定濃度のままでよい（「カード内区切り `/60`」を適用しない）。`/60` は見出し・サブセクション境界などの `border-t`/`border-b` に適用するもので、両者は矛盾しない
+- **編集用高密度ブロック**（サーチクラフトの `SearchCraftTimingBoard` のような、多数のブロックを常設する編集ボード）: 静的セクションカードの代わりに `rounded-xl border border-border/70 bg-background/80`＋ヘッダ帯 `px-4 py-2.5`（`border-b border-border/60`）＋中身 `px-4 py-3` の高密度ブロックを使ってよい。ブロック見出しは `text-sm font-semibold`（CardTitle の `text-base` より1段小さい）
 
 ### グリッドカードの内部文法
 ①メディア帯/ヘッダー行 → ②タイトル（`text-base font-semibold`。リスト行は `text-sm font-medium`）＋説明（`text-xs` muted）→ ③タグ行（Badge secondary、`rounded-full px-2 py-0.5 text-[11px]`・最大3個）→ ④フッターメタ行 `mt-3 border-t border-border/60 pt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground`、左＝著者/件数系（`truncate`/`min-w-0`）、右端＝`ml-auto shrink-0` で `Clock3 h-3 w-3` ＋相対時刻。**折返し耐性（`flex-wrap`＋`ml-auto`＋`shrink-0`＋`min-w-0`）は必須**。**フッターは下端固定**: カードを `flex flex-col` にし、フッター直前に伸縮スペーサー `<div className="flex-1" />`（またはヘッダー行に `flex-1`）を置いて、タイトル行数や任意項目の差があっても水平線位置が兄弟カード間で揃うようにする
@@ -48,6 +50,20 @@
 
 ### 丸ピル（バッジピル・件数ピル）
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
+
+### キーバッジ（サーチクラフト系）
+`search-craft-template-view.tsx` の `KeyBadge` と `search-craft-loop-view.tsx` の派生バッジ群で確立した規格。
+
+- 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
+- トーン:
+  - 通常キー: `bg-secondary/50 border-border/50 text-muted-foreground`（指割り当てがあれば指色）
+  - リマップ済み: `ring-1 ring-primary ring-offset-1`
+  - Shift 同時押し: `border-warning/50 bg-warning/10`（⇧ Shift バッジは `text-warning`）
+  - 制御キー（BS/←/Home/⇧Home）: `border-info/50 bg-info/10 text-info`
+  - 無効: `border-destructive/50 bg-destructive/10 text-destructive`
+- クラフト実行マーカー: 破線チップ `border border-dashed border-border bg-secondary/30`（Hammer アイコン＋`ItemIcon` 20px＋文字列）
+- 回数は右肩の `×n` カウンタで表す（バッジを並べない）
+- マイクロテキストは2値: バッジ肩・印 = `text-[10px]`、凡例ラベル = `text-[11px]`
 
 ### カード内アイコン
 - セクション見出し（CardTitle）先頭: `h-5 w-5`
