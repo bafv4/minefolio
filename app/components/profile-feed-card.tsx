@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { PageViews7dMeta } from "@/components/page-views-meta";
 import { User, Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -20,6 +21,11 @@ export interface ProfileFeedCardPlayer {
   customSkinUrl?: string | null;
   updatedAt: Date;
   shortBio: string | null;
+  /**
+   * 直近7日のページビュー（page_view_stats）。人気順で並べたときの根拠数値。
+   * 任意（渡した一覧だけが表示する。ホームの「よく見られているプロフィール」専用）。
+   */
+  pageViews7d?: number;
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
@@ -89,6 +95,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
               {platformText}
             </Badge>
           )}
+          {player.pageViews7d !== undefined && <PageViews7dMeta count={player.pageViews7d} />}
         </div>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           <Clock3 className="h-3 w-3" />

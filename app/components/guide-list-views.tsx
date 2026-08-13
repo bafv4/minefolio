@@ -1,10 +1,10 @@
 import { Link } from "react-router";
-import { useLocale, useT } from "@/hooks/use-locale";
-import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
+import { useLocale } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Eye, FileText, Pin, TrendingUp } from "lucide-react";
+import { Eye, FileText, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
+import { PageViews7dMeta } from "@/components/page-views-meta";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 
@@ -35,31 +35,22 @@ export type GuideItem = {
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
 
-/**
- * 直近7日のページビュー（人気順の根拠数値）。累計閲覧数（Eye）の隣に出す。
- * 0 でも表示する（なぜ下位にいるのかが分かるため）。
- */
-function PageViews7dMeta({ count }: { count: number }) {
-  const t = useT();
-  const label = t("guides.pageViews7d", { days: PAGE_VIEW_WINDOW_DAYS });
-  return (
-    <span className="flex shrink-0 items-center gap-1" title={label}>
-      <TrendingUp className="h-3 w-3" aria-hidden />
-      <span className="sr-only">{label}</span>
-      {count}
-    </span>
-  );
-}
-
 /** Card grid view */
 export function GuideCardGrid({
   guides,
   linkFn,
   gridCols = "sm:grid-cols-2 lg:grid-cols-3",
+  pageViewsMode = "additional",
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
+  /**
+   * `pageViews7d`（直近7日PV）の表示方法。
+   * - "additional"（既定）: 累計View数（Eye）の隣に追加表示する（/guides の人気順など）
+   * - "replace": 累計View数の代わりに直近7日PVを表示する（ホームの「よく読まれているガイド」専用）
+   */
+  pageViewsMode?: "additional" | "replace";
 }) {
   const locale = useLocale();
   // ログイン状態は LikesProvider が持つ（未ログインなら LikeButton が静的表示に落ちる）
@@ -137,10 +128,14 @@ export function GuideCardGrid({
                   {guide.authorName && (
                     <span className="min-w-0 truncate">{guide.authorName}</span>
                   )}
-                  <span className="flex shrink-0 items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    {guide.viewCount}
-                  </span>
+                  {/* "replace" モードでは pageViews7d がある間だけ累計View数を隠し、7日間PVに差し替える
+                      （ホームの「よく読まれているガイド」専用。/guides の人気順は "additional" のまま両方出す） */}
+                  {!(pageViewsMode === "replace" && guide.pageViews7d !== undefined) && (
+                    <span className="flex shrink-0 items-center gap-1">
+                      <Eye className="h-3 w-3" />
+                      {guide.viewCount}
+                    </span>
+                  )}
                   {guide.pageViews7d !== undefined && (
                     <PageViews7dMeta count={guide.pageViews7d} />
                   )}

@@ -153,9 +153,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           .orderBy(desc(users.updatedAt))
           .limit(4),
         // よく見られているプロフィール（直近7日PV順、最新4件）。page_view_stats のスナップショット行を
-        // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）
+        // 直接引くため、集計未稼働（cron未稼働）の環境では自然に0件になる（UI側はその場合PV欄を出さない）。
+        // pageViews7d はカードの根拠数値表示用（ProfileFeedCard に渡す）
         db
-          .select(profileFeedColumns)
+          .select({ ...profileFeedColumns, pageViews7d: pageViewStats.pageviews })
           .from(pageViewStats)
           .innerJoin(users, eq(pageViewStats.targetId, users.id))
           .where(
@@ -177,9 +178,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           .orderBy(desc(guides.updatedAt))
           .limit(4),
         // よく読まれているガイド（直近7日PV順、最新4件）。プロフィールと同様に page_view_stats
-        // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる
+        // のスナップショット行を起点に join するため、集計が無い環境では自然に0件になる。
+        // pageViews7d はカードの表示に使う（このセクションのみ累計View数を7日間PVに置き換える）
         db
-          .select(guideListColumns)
+          .select({ ...guideListColumns, pageViews7d: pageViewStats.pageviews })
           .from(pageViewStats)
           .innerJoin(guides, eq(pageViewStats.targetId, guides.id))
           .innerJoin(users, eq(guides.authorId, users.id))
@@ -578,9 +580,10 @@ export default function HomePage() {
     [mcidToSkinUrl, feed.mcidToSkinUrl]
   );
 
-  // ガイド一覧行（更新順・PV順で共通の select 形）を GuideCardGrid 用の型へ変換
+  // ガイド一覧行（更新順・PV順で共通の select 形。PV順のみ pageViews7d を追加で持つ）を
+  // GuideCardGrid 用の型へ変換
   const toGuideItem = useCallback(
-    (g: (typeof recentlyUpdatedGuides)[number]): GuideItemWithAuthorSlug => ({
+    (g: (typeof recentlyUpdatedGuides)[number] | (typeof popularGuides)[number]): GuideItemWithAuthorSlug => ({
       ...g,
       likeCount: Number(g.likeCount),
       authorName:
@@ -754,6 +757,7 @@ export default function HomePage() {
                   guides={popularGuides.map(toGuideItem)}
                   linkFn={guideLinkFn}
                   gridCols="sm:grid-cols-2 xl:grid-cols-4"
+                  pageViewsMode="replace"
                 />
               </div>
             )}

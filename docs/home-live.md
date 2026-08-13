@@ -31,6 +31,11 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`＝「最近の更新」）」→ 水平線 → 「PV順（`home.sectionPopular`＝「注目（直近7日）」。プロフィール・ガイド共通）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
 
+PV順の select は `page_view_stats.pageviews` を `pageViews7d` として追加で持ち、カード表示の根拠数値に使う（`common.pageViews7d`＝「直近{days}日の閲覧数」、`TrendingUp` アイコン。実体は `app/components/page-views-meta.tsx` の `PageViews7dMeta`、ガイドカードと共有）:
+
+- **よく見られているプロフィール**（`ProfileFeedCard`）: フッターメタ行の左側（役割・エディション等のバッジ群と同じ並び）に `pageViews7d` を追加表示する（既存表示への追加のみ）
+- **よく読まれているガイド**（`GuideCardGrid`）: このセクションのみ `pageViewsMode="replace"` を渡し、累計View数（`Eye` アイコン）の表示を `pageViews7d` に**置き換える**。「最近更新されたガイド」セクション（`pageViewsMode` 未指定＝既定の `"additional"`）や `/guides` の人気順（`guideListOrderBy("popular")`、`pageViews7d` を累計View数の隣に追加表示）は従来どおり累計View数を表示する
+
 #### クライアントサイドで遅延取得（/api/home-feed）
 
 | データ | キャッシュキー | CDNキャッシュ (s-maxage) | stale-while-revalidate |
@@ -322,3 +327,4 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/components/pace-feed-card.tsx` - ペースフィードカード（ホーム・ペース一覧で共用）
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード
 - `app/components/paceman-split-mark.tsx` - PaceManスプリットマーク
+- `app/components/page-views-meta.tsx` - 直近7日PV表示（`PageViews7dMeta`。ガイドカード・プロフィールカードで共有）

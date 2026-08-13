@@ -333,6 +333,8 @@ export const PAGES_JA = {
     discard: "取消",
     saveBar: "保存バー",
     noData: "データがありません",
+    /** カードに出す直近{days}日のページビュー数の説明（ガイド・プロフィールの人気順カードで共用） */
+    pageViews7d: "直近{days}日の閲覧数",
     runner: "走者",
     viewer: "視聴者",
     on: "ON",
@@ -2211,8 +2213,6 @@ export const PAGES_JA = {
     noGuides: "公開されているガイドはまだありません",
     /** 人気順を選んでも page_view_stats がまだ空のとき（cron 未稼働・集計前）の注記 */
     popularPending: "閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています",
-    /** 一覧カードに出す直近{days}日のページビュー数の説明（人気順のときだけ表示） */
-    pageViews7d: "直近{days}日の閲覧数",
     searchPlaceholder: "タイトルや概要で検索...",
     tagAll: "すべて",
     tabGuides: "ガイド",
