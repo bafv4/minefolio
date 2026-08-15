@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/items";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,21 +55,40 @@ import {
   Trash2,
   Edit,
   AlertCircle,
-  Settings,
   Copy,
+  GripVertical,
 } from "lucide-react";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   searchItems,
-  formatItemName,
+  getCategoryName,
   ITEM_CATEGORIES,
   getItemsByCategory,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
-import { ItemIcon } from "@/components/item-icon";
+import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
+import { ItemHotbar, type Slot } from "@/components/item-hotbar";
+import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
-import { useT } from "@/hooks/use-locale";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
@@ -108,11 +127,6 @@ const SEGMENT_PRESETS = [
   "Enter End",
   "Enter End (Zero)",
 ] as const;
-
-type Slot = {
-  slot: number;
-  items: string[];
-};
 
 type ItemLayout = {
   id: string;
@@ -193,30 +207,33 @@ export function HydrateFallback() {
           <Skeleton className="h-8 w-32 mb-2" />
           <Skeleton className="h-4 w-80" />
         </div>
-        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-lg border bg-card p-6 space-y-4">
-            <div className="flex items-center justify-between">
+      <div className="rounded-xl border border-border/70 bg-background/80">
+        <div className="divide-y divide-border/60">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="px-4 py-3">
               <div className="flex items-center gap-2">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-5 w-5 shrink-0" />
+                <Skeleton className="h-8 flex-1" />
+                <div className="flex gap-1 shrink-0">
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                </div>
               </div>
-              <div className="flex gap-1">
-                <Skeleton className="h-8 w-8" />
-                <Skeleton className="h-8 w-8" />
+              <div className="flex items-center gap-2 overflow-x-auto mt-3">
+                <Skeleton className="w-10 h-10 sm:w-12 sm:h-12 shrink-0" />
+                <div className="w-px h-10 bg-border shrink-0" />
+                {Array.from({ length: 9 }).map((_, j) => (
+                  <Skeleton key={j} className="w-10 h-10 sm:w-12 sm:h-12 shrink-0" />
+                ))}
               </div>
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              <Skeleton className="w-12 h-12 shrink-0" />
-              <div className="w-px h-8 bg-border shrink-0" />
-              {Array.from({ length: 9 }).map((_, j) => (
-                <Skeleton key={j} className="w-12 h-12 shrink-0" />
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        <div className="border-t border-border/60 px-4 py-3">
+          <Skeleton className="h-8 w-32" />
+        </div>
       </div>
     </div>
   );
@@ -313,26 +330,29 @@ export async function action({ request }: Route.ActionArgs) {
   return { error: t("meItems.unknownAction") };
 }
 
-// ホットバースロットコンポーネント
-function HotbarSlot({
-  slot,
+// アイテム選択ダイアログ付きのホットバースロット trigger（ItemHotbar の renderSlotWrapper として使用）
+function ItemSlotEditButton({
+  slotKey,
   items,
+  tile,
   onItemsChange,
-  isOffhand = false,
 }: {
-  slot: number;
+  slotKey: number | "offhand";
   items: string[];
+  tile: ReactNode;
   onItemsChange: (items: string[]) => void;
-  isOffhand?: boolean;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
+  // mcitems の lang 引数（"en_us" / "ja_jp"）。getLocalizedItemName と同じ判定基準
+  const langCode = locale === "en" ? "en_us" : "ja_jp";
 
-  // mcitemsから検索
+  // mcitemsから検索（表示ロケールに追従）
   const filteredItems = search
-    ? searchItems(search)
+    ? searchItems(search, langCode)
     : getItemsByCategory(selectedCategory);
 
   const toggleItem = (itemId: string) => {
@@ -355,30 +375,19 @@ function HotbarSlot({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="relative w-10 h-10 sm:w-12 sm:h-12 bg-secondary/50 border-2 border-border/50 rounded flex items-center justify-center hover:border-primary/50 transition-colors group touch-manipulation"
+          aria-label={t("meItems.slotItems", {
+            name: slotKey === "offhand" ? t("meItems.offhand") : t("meItems.slot", { slot: slotKey }),
+          })}
+          className="group rounded touch-manipulation"
         >
-          {items.length > 0 ? (
-            <div className="relative w-full h-full flex items-center justify-center">
-              <ItemIcon itemId={items[0]} size={24} className="sm:hidden" />
-              <ItemIcon itemId={items[0]} size={28} className="hidden sm:block" />
-              {items.length > 1 && (
-                <span className="absolute bottom-0 right-0 text-[10px] bg-background/80 px-0.5 rounded">
-                  +{items.length - 1}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-muted-foreground text-xs">
-              {isOffhand ? t("meItems.off") : slot}
-            </span>
-          )}
+          {tile}
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {t("meItems.slotItems", {
-              name: isOffhand ? t("meItems.offhand") : t("meItems.slot", { slot }),
+              name: slotKey === "offhand" ? t("meItems.offhand") : t("meItems.slot", { slot: slotKey }),
             })}
           </DialogTitle>
           <DialogDescription>
@@ -404,7 +413,7 @@ function HotbarSlot({
               <SelectContent>
                 {ITEM_CATEGORIES.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
+                    {getCategoryName(cat.id, langCode) ?? cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -422,7 +431,7 @@ function HotbarSlot({
                   onClick={() => toggleItem(itemId)}
                 >
                   <ItemIcon itemId={itemId} size={16} />
-                  {formatItemName(itemId)}
+                  {getLocalizedItemName(itemId, locale)}
                   <span className="ml-1 text-muted-foreground">×</span>
                 </Badge>
               ))}
@@ -446,7 +455,7 @@ function HotbarSlot({
                     <ItemIcon itemId={itemId} size={28} />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>{formatItemName(itemId)}</TooltipContent>
+                <TooltipContent>{getLocalizedItemName(itemId, locale)}</TooltipContent>
               </Tooltip>
             ))}
           </div>
@@ -462,66 +471,6 @@ function HotbarSlot({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ホットバー全体コンポーネント
-function Hotbar({
-  slots,
-  offhand,
-  onSlotsChange,
-  onOffhandChange,
-}: {
-  slots: Slot[];
-  offhand: string[];
-  onSlotsChange: (slots: Slot[]) => void;
-  onOffhandChange: (items: string[]) => void;
-}) {
-  const t = useT();
-  const updateSlot = (slotNum: number, items: string[]) => {
-    const newSlots = slots.map((s) =>
-      s.slot === slotNum ? { ...s, items } : s
-    );
-    // スロットが存在しない場合は追加
-    if (!slots.find((s) => s.slot === slotNum)) {
-      newSlots.push({ slot: slotNum, items });
-    }
-    onSlotsChange(newSlots);
-  };
-
-  const getSlotItems = (slotNum: number): string[] => {
-    return slots.find((s) => s.slot === slotNum)?.items || [];
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      {/* オフハンド */}
-      <div className="flex flex-col items-center gap-0.5">
-        <HotbarSlot
-          slot={0}
-          items={offhand}
-          onItemsChange={onOffhandChange}
-          isOffhand
-        />
-        <span className="text-[10px] text-muted-foreground">{t("meItems.off")}</span>
-      </div>
-
-      <div className="w-px h-10 bg-border" />
-
-      {/* メインホットバー */}
-      <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((slotNum) => (
-          <div key={slotNum} className="flex flex-col items-center gap-0.5">
-            <HotbarSlot
-              slot={slotNum}
-              items={getSlotItems(slotNum)}
-              onItemsChange={(items) => updateSlot(slotNum, items)}
-            />
-            <span className="text-[10px] text-muted-foreground">{slotNum}</span>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -559,27 +508,43 @@ function SegmentNameInput({
   );
 }
 
-// インライン編集可能なレイアウトカード
-function EditableLayoutCard({
+// インライン編集可能なレイアウト行（単一カード内の divide-y リスト行。操作行→ホットバー→メモ）
+function EditableLayoutRow({
   layout,
   onUpdate,
   onDelete,
+  onDuplicate,
   existingSegments,
 }: {
   layout: ItemLayout;
   onUpdate: (updated: ItemLayout) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   existingSegments: string[];
 }) {
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: layout.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   const handleSegmentChange = (segment: string) => {
     onUpdate({ ...layout, segment });
   };
 
-  const handleSlotsChange = (slots: Slot[]) => {
-    onUpdate({ ...layout, slots });
+  const updateSlot = (slotNum: number, items: string[]) => {
+    const newSlots = layout.slots.map((s) => (s.slot === slotNum ? { ...s, items } : s));
+    // スロットが存在しない場合は追加
+    if (!layout.slots.find((s) => s.slot === slotNum)) {
+      newSlots.push({ slot: slotNum, items });
+    }
+    onUpdate({ ...layout, slots: newSlots });
   };
 
   const handleOffhandChange = (offhand: string[]) => {
@@ -591,58 +556,84 @@ function EditableLayoutCard({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1">
-            <SegmentNameInput
-              value={layout.segment}
-              onChange={handleSegmentChange}
-              existingSegments={existingSegments.filter((s) => s !== layout.segment)}
-            />
-          </div>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(!isExpanded)}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("meItems.deleteLayoutTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("meItems.deleteLayoutDescription")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("meItems.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete}>{t("meItems.delete")}</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("px-4 py-3", isDragging && "opacity-50")}
+    >
+      <div className="flex items-center gap-2">
+        <button
+          {...attributes}
+          {...listeners}
+          type="button"
+          aria-label={t("meItems.dragHandle")}
+          className="flex shrink-0 items-center justify-center text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="h-5 w-5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <SegmentNameInput
+            value={layout.segment}
+            onChange={handleSegmentChange}
+            existingSegments={existingSegments.filter((s) => s !== layout.segment)}
+          />
         </div>
-      </CardHeader>
-      <CardContent>
+        <div className="flex shrink-0 gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={onDuplicate} aria-label={t("meItems.duplicate")}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("meItems.duplicate")}</TooltipContent>
+          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("meItems.deleteLayoutTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("meItems.deleteLayoutDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("meItems.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={onDelete}>{t("meItems.delete")}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+
+      <div className="mt-3">
         {/* ホットバー編集 */}
-        <div className="overflow-x-auto pb-2">
-          <div className="min-w-max">
-            <Hotbar
-              slots={layout.slots}
-              offhand={layout.offhand}
-              onSlotsChange={handleSlotsChange}
-              onOffhandChange={handleOffhandChange}
+        <ItemHotbar
+          slots={layout.slots}
+          offhand={layout.offhand}
+          offhandLabel={t("meItems.off")}
+          renderSlotWrapper={({ slotKey, items, tile }) => (
+            <ItemSlotEditButton
+              slotKey={slotKey}
+              items={items}
+              tile={tile}
+              onItemsChange={(newItems) => {
+                if (slotKey === "offhand") handleOffhandChange(newItems);
+                else updateSlot(slotKey, newItems);
+              }}
             />
-          </div>
-        </div>
+          )}
+        />
 
         {/* 展開時にメモ表示 */}
         {isExpanded && (
@@ -662,8 +653,8 @@ function EditableLayoutCard({
         {!isExpanded && layout.notes && (
           <p className="text-xs text-muted-foreground mt-2">{layout.notes}</p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -734,15 +725,46 @@ export default function ItemLayoutsPage() {
     setLayouts((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  // セグメント名を空にして直後に複製を挿入する（保存時の必須・重複バリデーションが命名を強制する）
+  const handleDuplicateLayout = useCallback((index: number) => {
+    setLayouts((prev) => {
+      const cloned: ItemLayout = {
+        ...structuredClone(prev[index]),
+        // "new-" プレフィックスは action の新規判定に使う。連続クリックでも衝突しないよう cuid2 を使う
+        id: `new-${createId()}`,
+        segment: "",
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, cloned);
+      return next;
+    });
+  }, []);
+
   const handleAddLayout = useCallback(() => {
     const newLayout: ItemLayout = {
-      id: `new-${Date.now()}`,
+      id: `new-${createId()}`,
       segment: "",
       slots: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ slot: n, items: [] })),
       offhand: [],
       notes: null,
     };
     setLayouts((prev) => [...prev, newLayout]);
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setLayouts((prev) => {
+      const oldIndex = prev.findIndex((l) => l.id === active.id);
+      const newIndex = prev.findIndex((l) => l.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
   }, []);
 
   const handleSave = useCallback(() => {
@@ -783,10 +805,15 @@ export default function ItemLayoutsPage() {
     }
 
     try {
-      const itemLayoutsDataParsed = JSON.parse(preset.itemLayoutsData) as ItemLayout[];
-      setLayouts(itemLayoutsDataParsed.map((layout, idx) => ({
-        ...layout,
-        id: `new-${Date.now()}-${idx}`,
+      // itemLayoutsData（serializeItemLayouts の出力）は slots / offhand が入れ子の JSON 文字列のまま。
+      // state の ItemLayout はパース済み配列を持つ形なので、ここで展開してから入れる
+      const itemLayoutsDataParsed = JSON.parse(preset.itemLayoutsData) as PresetItemLayoutData[];
+      setLayouts(itemLayoutsDataParsed.map((layout) => ({
+        id: `new-${createId()}`,
+        segment: layout.segment,
+        slots: JSON.parse(layout.slots) as Slot[],
+        offhand: layout.offhand ? (JSON.parse(layout.offhand) as string[]) : [],
+        notes: layout.notes ?? null,
       })));
       toast.success(t("meItems.copiedFromPreset", { name: preset.name }));
     } catch (e) {
@@ -808,10 +835,6 @@ export default function ItemLayoutsPage() {
             {t("meItems.pageDescription")}
           </p>
         </div>
-        <Button onClick={handleAddLayout} disabled={!hasPresets} className="w-full sm:w-auto h-11 sm:h-10">
-          <Plus className="mr-2 h-4 w-4" />
-          {t("meItems.add")}
-        </Button>
       </div>
 
       {/* プリセットセレクター */}
@@ -830,31 +853,48 @@ export default function ItemLayoutsPage() {
       <PresetSwitchLock locked={presetSwitching}>
       <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
       {layouts.length > 0 ? (
-        <div className="space-y-4">
-          {layouts.map((layout, index) => (
-            <EditableLayoutCard
-              key={layout.id}
-              layout={layout}
-              onUpdate={(updated) => handleUpdateLayout(index, updated)}
-              onDelete={() => handleDeleteLayout(index)}
-              existingSegments={existingSegments}
-            />
-          ))}
+        <div className="rounded-xl border border-border/70 bg-background/80">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={layouts.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+              <div className="divide-y divide-border/60">
+                {layouts.map((layout, index) => (
+                  <EditableLayoutRow
+                    key={layout.id}
+                    layout={layout}
+                    onUpdate={(updated) => handleUpdateLayout(index, updated)}
+                    onDelete={() => handleDeleteLayout(index)}
+                    onDuplicate={() => handleDuplicateLayout(index)}
+                    existingSegments={existingSegments}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          <div className="border-t border-border/60 px-4 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddLayout}
+              disabled={!hasPresets}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t("meItems.addLayout")}
+            </Button>
+          </div>
         </div>
       ) : (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium">{t("meItems.emptyTitle")}</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("meItems.emptyDescription")}
-            </p>
+        <EmptyState
+          icon={<Package className="h-12 w-12" />}
+          title={t("meItems.emptyTitle")}
+          description={t("meItems.emptyDescription")}
+          action={
             <Button onClick={handleAddLayout}>
               <Plus className="mr-2 h-4 w-4" />
               {t("meItems.addLayout")}
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       )}
       </div>
       </PresetSwitchLock>
