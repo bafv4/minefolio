@@ -486,7 +486,7 @@ function SearchCraftRow({
 
   return (
     <div className="py-3">
-      <div className={cn("flex flex-col gap-2 lg:items-start", SEARCH_CRAFT_GRID_COLS)}>
+      <div className={cn("flex flex-col gap-2 lg:items-center", SEARCH_CRAFT_GRID_COLS)}>
         {/* アイテム */}
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {craft.items.map((itemId, idx) => (
@@ -500,49 +500,46 @@ function SearchCraftRow({
           ))}
         </div>
 
-        {/* サーチ文字列（バリエーションごとに縦積み表示。コピーはそのバリエーションの元文字列） */}
-        <div className="flex flex-col gap-1.5 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
-            {t("playerProfile.searchLabel")}
-          </span>
+        {/*
+          サーチ文字列 + 入力キー（バリエーションごとに [文字列セル, キーセル] のペアで並べ、
+          サブグリッドの1行に自動配置する。独立した縦積みだと行の高さが揃わないため、
+          ペアをグリッドの自動配置に委ねることで行を確実に揃える。
+          モバイルは flex-col のため DOM 順（文字列1→キー1→文字列2→キー2…）のまま縦に並ぶ。
+        */}
+        <div className="min-w-0 flex flex-col gap-2 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2">
           {craft.variations.length > 0 ? (
-            craft.variations.map((variation, idx) =>
-              variation.str ? (
-                <div key={idx} className="flex items-center gap-1 min-w-0">
-                  <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
-                    <SearchStringText value={variation.str} />
-                  </code>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleCopy(variation.str)}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
-                  </Tooltip>
-                </div>
-              ) : (
-                <span key={idx} className="text-sm text-muted-foreground">—</span>
-              ),
-            )
-          ) : (
-            <span className="text-sm text-muted-foreground">—</span>
-          )}
-        </div>
-
-        {/* 入力キー（バリエーションごとに縦積み表示、行の高さをサーチ文字列列と揃える） */}
-        <div className="flex flex-col gap-1.5 min-w-0">
-          <span className="lg:hidden text-xs text-muted-foreground shrink-0">
-            {t("playerProfile.inputKeysLabel")}
-          </span>
-          {craft.variations.length > 0 ? (
-            craft.variations.map((variation, idx) => (
-              <div key={idx} className="flex min-h-7 items-center">
+            craft.variations.flatMap((variation, idx) => [
+              <div key={`search-${idx}`} className="flex min-h-7 items-center gap-1 min-w-0">
+                <span className="lg:hidden text-xs text-muted-foreground shrink-0">
+                  {t("playerProfile.searchLabel")}
+                </span>
+                {variation.str ? (
+                  <>
+                    <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono text-sm break-all whitespace-pre-wrap">
+                      <SearchStringText value={variation.str} />
+                    </code>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleCopy(variation.str)}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("playerProfile.copySearchStr")}</TooltipContent>
+                    </Tooltip>
+                  </>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>,
+              <div key={`keys-${idx}`} className="flex min-h-7 items-center gap-1">
+                <span className="lg:hidden text-xs text-muted-foreground shrink-0">
+                  {t("playerProfile.inputKeysLabel")}
+                </span>
                 {variation.str ? (
                   <ActualKeyBadges
                     searchStr={variation.str}
@@ -555,10 +552,23 @@ function SearchCraftRow({
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
-              </div>
-            ))
+              </div>,
+            ])
           ) : (
-            <span className="text-sm text-muted-foreground">—</span>
+            <>
+              <div className="flex min-h-7 items-center gap-1 min-w-0">
+                <span className="lg:hidden text-xs text-muted-foreground shrink-0">
+                  {t("playerProfile.searchLabel")}
+                </span>
+                <span className="text-sm text-muted-foreground">—</span>
+              </div>
+              <div className="flex min-h-7 items-center gap-1">
+                <span className="lg:hidden text-xs text-muted-foreground shrink-0">
+                  {t("playerProfile.inputKeysLabel")}
+                </span>
+                <span className="text-sm text-muted-foreground">—</span>
+              </div>
+            </>
           )}
         </div>
       </div>
