@@ -185,7 +185,7 @@ export function KeyBadge({
             finger
               ? fingerClass
               : "bg-secondary/50 border-border/50 text-muted-foreground",
-            isRemapped && "ring-1 ring-primary ring-offset-1",
+            isRemapped && "ring-2 ring-primary ring-offset-1 ring-offset-background",
             needsShift && !isRemapped && "border-warning/50 bg-warning/10"
           )}
         >
@@ -272,7 +272,7 @@ export function KeyBadgeLegend({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
       <div className="flex items-center gap-1.5">
-        <span className="inline-block h-3.5 w-3.5 rounded border-2 bg-secondary/50 border-border/50 ring-1 ring-primary ring-offset-1 ring-offset-background" />
+        <span className="inline-block h-3.5 w-3.5 rounded border-2 bg-secondary/50 border-border/50 ring-2 ring-primary ring-offset-1 ring-offset-background" />
         <span className="text-[11px] text-muted-foreground">
           {t("playerProfile.legendRemapped")}
         </span>

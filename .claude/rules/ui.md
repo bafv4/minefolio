@@ -57,9 +57,9 @@
 - 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
 - トーン:
   - 通常キー: `bg-secondary/50 border-border/50 text-muted-foreground`（指割り当てがあれば指色）
-  - リマップ済み: `ring-1 ring-primary ring-offset-1`
+  - リマップ済み: `ring-2 ring-primary ring-offset-1 ring-offset-background`
   - Shift 同時押し: `border-warning/50 bg-warning/10`（⇧ Shift バッジは `text-warning`）
-  - 制御キー（BS/←/Home/⇧Home）: `rounded-full border-info/50 bg-info/10 text-info px-2.5`（文字入力キーの角丸 `rounded` と一目で区別するためのピル形状）。**リマップ考慮時（`remaps` を渡し、逆引きでリマップが見つかった場合のみ）**は「実キー主表記＋操作ラベルのミニチップ」の複合ピルにする — **主ラベル＝実際に押すキー**（既存の単一ピルと同じ `text-sm`、外側の見た目はそのまま）、その中に「チップの中のチップ」として**出力操作**（`BS` 等）を小さめの丸チップ（`rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px]`）で添える。ピル全体にリマップ用リング（`ring-1 ring-primary ring-offset-1`）を付ける。リマップが無い（大多数）場合は非リマップ時と1px も変わらない単一ピルのまま
+  - 制御キー（BS/←/Home/⇧Home）: `rounded-full border-info/50 bg-info/10 text-info px-2.5`（文字入力キーの角丸 `rounded` と一目で区別するためのピル形状）。**リマップ考慮時（`remaps` を渡し、逆引きでリマップが見つかった場合のみ）**は「実キー主表記＋操作ラベルのミニチップ」の複合ピルにする — **主ラベル＝実際に押すキー**（既存の単一ピルと同じ `text-sm`、外側の見た目はそのまま）、その中に「チップの中のチップ」として**出力操作**（`BS` 等）を小さめの丸チップ（`rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px]`）で添える。ピル全体にリマップ用リング（`ring-2 ring-primary ring-offset-1 ring-offset-background`）を付ける。リマップが無い（大多数）場合は非リマップ時と1px も変わらない単一ピルのまま
   - 無効: `border-destructive/50 bg-destructive/10 text-destructive`
 - クラフト実行マーカー: 通常のアイテムチップと同じ見た目の `h-7 rounded bg-secondary/50 px-2`（`ItemIcon` 24px＋文字列。Hammer 等の専用アイコン・破線ボーダーは付けない。「ここでクラフト実行」の説明は Tooltip と凡例が担う）。キー操作列ではキー系バッジと高さ h-7 を揃え、セグメント（制御キー・打鍵キー・チップ）間は `gap-2`、キー同士は `gap-1`
 - 回数は右肩の `×n` カウンタで表す（バッジを並べない）
