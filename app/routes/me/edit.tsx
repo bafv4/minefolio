@@ -617,6 +617,11 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
 
+  // ソーシャルリンク欄の speedruncom identifier と同じ形式（英数字・ハイフン・アンダースコアのみ）を要求する
+  if (speedruncomUsername && !/^[\w\-]+$/.test(speedruncomUsername)) {
+    return { error: t("meEdit.speedrunUsernameInvalid") };
+  }
+
   if (rtaStartedYearMonth && !isValidRtaStartedYearMonth(rtaStartedYearMonth)) {
     return { error: t("meEdit.rtaStartedInvalid") };
   }
@@ -646,6 +651,31 @@ export async function action({ request }: Route.ActionArgs) {
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
+
+  // speedruncomUsername を social_links（speedruncom行）へ逆方向同期する。
+  // ソーシャルリンク欄側の create_link/update_link/delete_link は既に users.speedruncomUsername を
+  // 同期しているため、こちらは基本情報フォーム（連携欄）からの設定・変更・クリアを social_links に反映する
+  const existingSpeedruncomLink = await db.query.socialLinks.findFirst({
+    where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "speedruncom")),
+  });
+
+  if (speedruncomUsername) {
+    if (!existingSpeedruncomLink) {
+      await db.insert(socialLinks).values({
+        id: createId(),
+        userId: user.id,
+        platform: "speedruncom",
+        identifier: speedruncomUsername,
+      });
+    } else if (existingSpeedruncomLink.identifier !== speedruncomUsername) {
+      await db
+        .update(socialLinks)
+        .set({ identifier: speedruncomUsername, updatedAt: new Date() })
+        .where(eq(socialLinks.id, existingSpeedruncomLink.id));
+    }
+  } else if (existingSpeedruncomLink) {
+    await db.delete(socialLinks).where(eq(socialLinks.id, existingSpeedruncomLink.id));
+  }
 
   return { success: true, action: "profile" };
 }

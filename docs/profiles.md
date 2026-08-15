@@ -351,6 +351,19 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 | `twitter` | ユーザー名 | `https://x.com/{identifier}` |
 | `custom` | 任意 | `customUrl` を直接使用、`customLabel` が必要 |
 
+### `speedruncom` リンクと `users.speedruncomUsername` の双方向同期
+
+`app/routes/me/edit.tsx` の action（`/me/edit`）で双方向に同期する。
+
+- **ソーシャルリンク欄からの操作** → `speedruncomUsername` に反映: `create_link` / `update_link` で
+  platform が `speedruncom` なら identifier を `speedruncomUsername` にセット、別プラットフォームへ
+  変更した場合はクリア、`delete_link` で `speedruncom` リンクを削除した場合もクリア
+- **基本情報フォーム（Speedrun.com連携欄）からの操作** → `speedruncom` ソーシャルリンクに反映: 値を
+  設定/変更すると `social_links` に `speedruncom` 行を作成・更新（identifier が同じ場合は書き込みしない）、
+  空にすると該当行を削除する
+
+どちらの経路で設定しても、ソーシャルリンク一覧・公開プロフィールの `SocialLinksCard` の両方に反映される。
+
 ### YouTube / Twitch の統計表示（プロフィールタブ）
 
 プロフィールタブの「リンク」カードでは、YouTube / Twitch のリンクは統計付きのリッチカードで表示する

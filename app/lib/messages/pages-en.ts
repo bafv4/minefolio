@@ -965,6 +965,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     rtaStartedBothOrNone: "Select both year and month, or leave both unset",
     rtaStartedInvalid: "Invalid start month (must be between Jan 2009 and now)",
     speedrunUsernameMax: "Speedrun.com username must be 50 characters or fewer",
+    speedrunUsernameInvalid: "Speedrun.com username can only contain letters, numbers, hyphens, and underscores",
     socialDialogEditTitle: "Edit link",
     socialDialogAddTitle: "Add social link",
     socialDialogEditDesc: "Update the details of this link.",

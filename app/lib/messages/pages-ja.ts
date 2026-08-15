@@ -944,6 +944,7 @@ export const PAGES_JA = {
     rtaStartedBothOrNone: "年と月の両方を選択するか、両方未設定にしてください",
     rtaStartedInvalid: "RTA歴の開始年月が不正です（2009年1月〜現在まで）",
     speedrunUsernameMax: "Speedrun.comユーザー名は50文字以下にしてください",
+    speedrunUsernameInvalid: "Speedrun.comユーザー名に使用できるのは英数字・ハイフン・アンダースコアのみです",
     socialDialogEditTitle: "リンクを編集",
     socialDialogAddTitle: "ソーシャルリンクを追加",
     socialDialogEditDesc: "リンクの詳細を更新します。",
