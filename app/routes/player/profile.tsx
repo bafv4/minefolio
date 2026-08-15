@@ -2116,7 +2116,11 @@ function inputMethodLabel(t: Translator, value: string): string {
   }
 }
 
-/** アイテム配置行のセグメント名 → 見出し色ドットのマップ（完全一致のみ。カスタム名はドットなし。新色は導入しない） */
+/**
+ * アイテム配置行のセグメント名 → 見出し色ドットのマップ（完全一致。新色は導入しない）。
+ * マップ外（Common / Enter Nether / Enter End 系・カスタム名）は searchcraft の
+ * 「その他」タイミングと同じグレードット（bg-muted-foreground）で統一する
+ */
 const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
   Overworld: "bg-success",
   Bastion: "bg-warning",
@@ -2141,7 +2145,7 @@ function ItemLayoutRow({
   const locale = useLocale();
   const slots = JSON.parse(layout.slots) as Slot[];
   const offhand = layout.offhand ? (JSON.parse(layout.offhand) as string[]) : [];
-  const dotClass = ITEM_LAYOUT_SEGMENT_DOT_CLASSES[layout.segment];
+  const dotClass = ITEM_LAYOUT_SEGMENT_DOT_CLASSES[layout.segment] ?? "bg-muted-foreground";
 
   return (
     <div className="py-4 first:pt-0 last:pb-0 space-y-3">

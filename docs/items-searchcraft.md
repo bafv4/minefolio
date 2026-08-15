@@ -339,7 +339,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 - アイテム配置:
   - 全セグメントを1枚のカード内の `divide-y` 行リストで表示する（サーチクラフトのグループカードと同じ文法）
-  - 行見出しはセグメント名のみ。既知のセグメント名（Overworld / Bastion / Bastion → Fort / Fortress / Blinded / Stronghold）は色ドットが付く（カスタム名はドットなし）
+  - 行見出しはセグメント名のみ。既知のセグメント名（Overworld / Bastion / Bastion → Fort / Fortress / Blinded / Stronghold）は色ドット、それ以外（Common / Enter Nether / Enter End 系・カスタム名）は searchcraft の「その他」と同じグレードット（bg-muted-foreground）が付く
   - 行内容はホットバー（`ItemHotbar`。詳細は「[ホットバー表示コンポーネント](#ホットバー表示コンポーネント)」参照）+ メモのみ。アイテム名はタイルの Tooltip でのみ提示する（スロットごとの詳細チップ一覧・サマリーバー・埋まりスロット数は v1.12 系の改修で廃止）
 - サーチクラフト（v1.6.0 で表示刷新）:
   - **サマリーバー**: ゲーム内言語（日本語名併記）・総件数・キーバッジの凡例（リマップ済み / Shift同時押し / 指割り当て色。指割り当ては設定がある場合のみ）
