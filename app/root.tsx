@@ -14,6 +14,7 @@ import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 import { buttonVariants } from "@/components/ui/button";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
+import { BackgroundPattern } from "@/components/layout/background-pattern";
 import { useT } from "@/hooks/use-locale";
 import "./app.css";
 
@@ -55,6 +56,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        <BackgroundPattern />
         <Providers locale={locale}>{children}</Providers>
         <ScrollRestoration />
         <Scripts />

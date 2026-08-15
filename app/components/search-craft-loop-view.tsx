@@ -91,7 +91,7 @@ function SegmentedSearchString({
  * 単一ピル表示のまま。リマップが見つかった場合のみ複合ピルにする —
  * **主ラベル＝実際に押すキー**（外側、既存の単一ピルと同じ text-sm・info トーン）、
  * その中に「チップの中のチップ」として**出力操作**（BS 等）をミニチップ（text-[10px]）で添える。
- * 既存のリマップ用リング（ring-1 ring-primary ring-offset-1）を付け、
+ * 既存のリマップ用リング（ring-2 ring-primary ring-offset-1 ring-offset-background）を付け、
  * Tooltip も主従の入れ替えに合わせた文言に差し替える。
  */
 type ControlKeyKind = "backspace" | "arrowLeft" | "selectAll" | "home";
@@ -154,7 +154,7 @@ export function ControlKeyBadge({
           {actual?.isRemapped ? (
             // 複合ピル: 主ラベル＝実際に押すキー（既存の単一ピルと同じ text-sm）、
             // その中に「チップの中のチップ」として出力操作（BS 等）をミニチップで添える
-            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-1 ring-primary ring-offset-1">
+            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-2 ring-primary ring-offset-1 ring-offset-background">
               <span className="text-sm">
                 <KeyLabelText label={actual.displayLabel} />
               </span>

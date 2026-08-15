@@ -291,6 +291,22 @@ body {
 
   body {
     @apply bg-background text-foreground;
+    /* body を stacking context にして、背景 → .page-bg-pattern（z-index:-10）→
+       コンテンツの順で描画させる。html にも背景色があるため body 背景は canvas に
+       伝播せず、これが無いと body 背景が負 z-index の模様レイヤーを塗りつぶす */
+    isolation: isolate;
+  }
+
+  /* ページ背景の模様レイヤー（root.tsx の BackgroundPattern が描画）。
+     スクロールの約8%で追随させる視差用に viewport 固定で敷く。
+     高さの +272px は縦方向のオーバースキャン（16px と 34px のタイルの最小公倍数。
+     translateY を 272px 周期で巻き戻しても継ぎ目が見えない） */
+  .page-bg-pattern {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: calc(100vh + 272px);
+    z-index: -10;
+    pointer-events: none;
     background-image:
       radial-gradient(circle at 1px 1px,
         color-mix(in oklch, var(--border) 48%, transparent) 1.2px,
@@ -302,6 +318,7 @@ body {
         color-mix(in oklch, var(--border) 38%, transparent) 1px,
         transparent 1px);
     background-size: 16px 16px, 34px 34px, 34px 34px;
+    will-change: transform;
   }
 
   /* Interactive elements cursor styles */

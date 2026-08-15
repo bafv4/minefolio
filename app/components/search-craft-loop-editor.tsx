@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
 import {
-  TransitionOpsBadges,
   LoopKeySequence,
   type LoopCraftInfo,
 } from "@/components/search-craft-loop-view";
@@ -247,13 +246,11 @@ function TransitionRow({
   nextResolved,
   transition,
   onChange,
-  remaps,
 }: {
   prevResolved: ResolvedLoopStep;
   nextResolved: ResolvedLoopStep;
   transition: LoopTransition;
   onChange: (transition: LoopTransition) => void;
-  remaps?: RemapInfo[];
 }) {
   const t = useT();
   const prevStr = prevResolved.searchStr;
@@ -272,7 +269,6 @@ function TransitionRow({
   }, [prevStr, nextStr]);
 
   const invalidMessage = invalidTransitionMessage(t, prevResolved, nextResolved, transition);
-  const derived = prevStr && nextStr ? deriveTransition(prevStr, nextStr, transition) : null;
 
   const handleTypeChange = (type: LoopTransitionType) => {
     if (type === "backspace") {
@@ -378,17 +374,9 @@ function TransitionRow({
         )}
       </div>
 
-      {/* ライブプレビュー */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {t("meSearchCraft.loopPreviewLabel")}:
-        </span>
-        {invalidMessage ? (
-          <span className="text-xs text-destructive">{invalidMessage}</span>
-        ) : (
-          derived?.valid && <TransitionOpsBadges ops={derived.ops} remaps={remaps ?? []} />
-        )}
-      </div>
+      {/* 遷移が成立しない場合のみ理由を出す（キー操作のプレビューは行末尾の
+          Loop 全体プレビュー〈LoopKeySequence〉が担うため、遷移ごとには出さない） */}
+      {invalidMessage && <p className="text-xs text-destructive">{invalidMessage}</p>}
     </div>
   );
 }
@@ -397,31 +385,30 @@ function TransitionRow({
 // Loop 1件分の編集行
 // ============================================
 
-export function LoopEditorRow<T extends SearchCraftLoopDraft>({
+/**
+ * Loop 行の中身（ステップ・全体プレビュー・コメント）。
+ *
+ * ドラッグ中、dnd-kit は over（ホバー中のドロップ先）が変わるたびに useSortable を呼ぶ
+ * 全行を再レンダーする。重い中身をそこに直接置くと Select・キーバッジ列が行数分
+ * 巻き込まれるため、useSortable を持つシェル（LoopEditorRow）から分離して memo 化する。
+ */
+function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
   loop,
-  index,
   entries,
   remaps,
   onUpdate,
-  onDelete,
 }: {
   loop: T;
-  index: number;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
-  onUpdate: (updated: T) => void;
-  onDelete: () => void;
+  onUpdate: (id: string, updated: T) => void;
 }) {
   const t = useT();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: loop.id,
-  });
-  const style = { transform: CSS.Transform.toString(transform), transition };
 
   const entriesById = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
 
   const updateSteps = (steps: LoopStepData[]) => {
-    onUpdate({ ...loop, steps: normalizeFirstStep(steps) });
+    onUpdate(loop.id, { ...loop, steps: normalizeFirstStep(steps) });
   };
 
   const handleChangeSelection = (stepIndex: number, craftId: string, variationIndex: number) => {
@@ -460,50 +447,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   );
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "py-3 space-y-3",
-        isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
-      )}
-    >
-      {/* ヘッダ */}
-      <div className="flex flex-wrap items-center gap-1">
-        <button
-          {...attributes}
-          {...listeners}
-          type="button"
-          aria-label={t("meSearchCraft.dragHandle")}
-          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
-        >
-          <GripVertical className="h-5 w-5" />
-        </button>
-        <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground/60">
-          {index + 1}
-        </span>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="ml-auto shrink-0">
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("meSearchCraft.deleteLoopDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={onDelete}>{t("meSearchCraft.delete")}</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-
+    <>
       {/* ステップ */}
       <div className="space-y-2 pl-7">
         {loop.steps.map((step, stepIndex) => (
@@ -514,7 +458,6 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
                 nextResolved={resolved.steps[stepIndex]}
                 transition={step.transition}
                 onChange={(next) => handleChangeTransition(stepIndex, next)}
-                remaps={remaps}
               />
             )}
             <div className="flex items-center gap-1.5">
@@ -562,11 +505,92 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
       <div className="pl-7">
         <Input
           value={loop.comment || ""}
-          onChange={(e) => onUpdate({ ...loop, comment: e.target.value || null })}
+          onChange={(e) => onUpdate(loop.id, { ...loop, comment: e.target.value || null })}
           placeholder={t("meSearchCraft.commentOptional")}
           className="h-8 text-sm"
         />
       </div>
+    </>
+  );
+}
+
+// memo でジェネリクスは失われるため、元の呼び出しシグネチャへキャストして戻す
+const LoopRowBody = memo(LoopRowBodyInner) as typeof LoopRowBodyInner;
+
+/**
+ * Loop 1件分の編集行。useSortable・並べ替えハンドル・連番・削除・isDragging の見た目だけを
+ * 持つ薄いシェルで、重い中身は memo 化した LoopRowBody に委ねる。
+ * onUpdate / onDelete は id を引数に取り、親側の安定コールバックをそのまま渡せるようにしてある。
+ */
+export function LoopEditorRow<T extends SearchCraftLoopDraft>({
+  loop,
+  index,
+  entries,
+  remaps,
+  onUpdate,
+  onDelete,
+}: {
+  loop: T;
+  index: number;
+  entries: LoopEditorEntry[];
+  remaps?: RemapInfo[];
+  onUpdate: (id: string, updated: T) => void;
+  onDelete: (id: string) => void;
+}) {
+  const t = useT();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: loop.id,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "py-3 space-y-3",
+        isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
+      )}
+    >
+      {/* ヘッダ */}
+      <div className="flex flex-wrap items-center gap-1">
+        <button
+          {...attributes}
+          {...listeners}
+          type="button"
+          aria-label={t("meSearchCraft.dragHandle")}
+          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+        >
+          <GripVertical className="h-5 w-5" />
+        </button>
+        <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground/60">
+          {index + 1}
+        </span>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="ml-auto shrink-0">
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("meSearchCraft.deleteLoopDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onDelete(loop.id)}>
+                {t("meSearchCraft.delete")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
+      <LoopRowBody loop={loop} entries={entries} remaps={remaps} onUpdate={onUpdate} />
     </div>
   );
 }

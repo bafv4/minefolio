@@ -46,43 +46,54 @@ Minefolioにおけるアイテム配置（ホットバー構成）とサーチ�
 
 ```typescript
 type Slot = {
-  slot: number;     // スロット番号（0〜8）
+  slot: number;     // スロット番号（1〜9）
   items: string[];  // アイテムID配列（複数アイテムを格納可能）
 };
 ```
 
-- ホットバーは9スロット（slot 0〜8）
+- ホットバーは9スロット（slot 1〜9）
 - 各スロットに複数のアイテムを登録可能（状況に応じた代替アイテム）
 - オフハンドも同じJSON配列形式
 
 ### アイテムアイコン
 
-Minecraft 1.16のアイテムテクスチャを `@bafv4/mcitems` パッケージから取得して表示する。
+Minecraft 1.16のアイテムテクスチャを `@bafv4/mcitems` パッケージから取得して表示する。アイコンを描画する箇所はすべて `app/components/item-icon.tsx` の `ItemIcon` ラッパーを使う（`@bafv4/mcitems` の `MinecraftItemIcon` を直接呼ばない。テクスチャ配信元 `/mcitems`・`pixelated` 描画・読み込み中の円形プログレスをラッパー側で既定化している。詳細は `.claude/rules/ui.md`「Minecraft アイテムアイコン」節）。
 
 ```typescript
+import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
 import {
-  MinecraftItemIcon,
   searchItems,
-  formatItemName,
+  getCategoryName,
   ITEM_CATEGORIES,
   getItemsByCategory,
 } from "@bafv4/mcitems/1.16/react";
 ```
 
-- `MinecraftItemIcon`: アイテムアイコンコンポーネント
+- `ItemIcon`: アイテムアイコンコンポーネント（`@bafv4/mcitems` の `MinecraftItemIcon` のラッパー）
+- `getLocalizedItemName`: アイテムID → UIロケールに応じた表示名変換（英語ロケールは英語優先、日本語ロケールは和名優先。`item-icon.tsx` 内で `formatItemName`/`getItemNameJa` をラップ）
 - `searchItems`: アイテム名検索
-- `formatItemName`: アイテムID → 表示名変換
+- `getCategoryName`: カテゴリID → ロケールに応じたカテゴリ表示名
 - `ITEM_CATEGORIES` / `getItemsByCategory`: カテゴリ別アイテム取得
 
-テクスチャのベースURL: `/mcitems`
+テクスチャのベースURL: `/mcitems`（`ItemIcon` が既定で使用）
+
+### ホットバー表示コンポーネント
+
+ホットバーの描画は `app/components/item-hotbar.tsx` の `ItemHotbar`（`HotbarSlotTile` / `Slot` 型も export）に集約されており、編集ページ（`/me/items`）とプロフィールページの表示側（`/player/:slug?tab=items`）の両方が使用する。各タイルへのインタラクション注入は `renderSlotWrapper` render prop で行う（編集側は Dialog trigger ボタンで包む、表示側はアイテムがあるスロットのみ Tooltip で包む）。
+
+- **並び**: オフハンドを左端に固定し、縦の区切り線を挟んでスロット1〜9を続ける
+- **複数アイテムスロットの表示**: 1スロットに複数アイテムが登録されている場合、タイル右下に `+N` バッジを表示し、2.5秒間隔で表示アイコンを先頭から順に切り替える（全タイル共有の tick で同時に切り替わる。`useSyncExternalStore` ベースの pub/sub で `setInterval` を1つだけ保持する）。`prefers-reduced-motion: reduce` 環境では切り替えを行わず先頭アイテム固定にする
 
 ### 編集UI
 
-- Comboboxによるアイテム検索・選択
-- カテゴリ別フィルタリング
-- セグメントの追加・削除・並べ替え
-- プリセットからのセグメント選択
-- セグメントの複製機能
+全レイアウトを1枚のカード（`rounded-xl border border-border/70 bg-background/80`）にまとめ、セグメントごとに `divide-y divide-border/60` の行として表示する。各行は操作行（D&Dドラッグハンドル → セグメント名 Combobox → 複製/メモ展開/削除ボタン）+ `ItemHotbar` によるホットバー編集 + メモで構成し、カード最下部（`border-t` 区切り）に「配置を追加」ボタン（outline / sm）を置く。
+
+- **アイテム選択**: スロットタイルをクリックすると Dialog が開き、検索 Input + カテゴリ別フィルタでアイテムを複数選択できる
+- **セグメント**: Combobox（プリセット名 + カスタム入力）で選択・入力する。既に使用中のプリセット名は自分自身を除き候補から除外される
+- **並べ替え**: `@dnd-kit` によるドラッグハンドル（GripVertical）で行単位の縦並べ替え。保存時の配列順がそのまま `displayOrder` として永続化される
+- **複製**: 行の複製ボタン（Copy アイコン）でセグメントを複製する。複製後の行はセグメント名を空にした状態で直後に挿入され、保存時の「セグメント名必須・重複禁止」バリデーションが再命名を強制する
+- **削除**: 確認 `AlertDialog` を経て削除する
+- **メモ**: ブロックを展開するとメモ（`Textarea`、任意）を編集できる。折りたたみ時もメモがあれば下に表示される
 - `FloatingSaveBar` による変更の一括保存
 
 ---
@@ -286,7 +297,7 @@ type LoopStepData = {
 Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`、上記「[編集UI（タイミングブロック型）](#編集ui)」参照）に統合されている。各タイミングブロック内、クラフトリストの下に「繋ぎ方（Loop）」サブセクションとして表示・編集する。
 
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
-- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
+- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー。遷移ごとのライブプレビューは持たず、遷移が成立しない場合のみエラーテキストを表示する — キー操作の確認は行末尾の Loop 全体プレビューが担う）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
 - **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルはアイコン＋アイテム名＋`(str)`＋（`withShift` の場合）⇧マーク
 - BS ステッパーの範囲は `minBackspaceCount(prev, next)`〜`prev.length`（TransitionRow が自前で算出する。`deriveTransition()` の戻り値に min/max は含まれない）。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBackspaceCount()`/`minArrowLeftCount()`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
@@ -326,7 +337,10 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 `app/routes/player/profile.tsx` でプレイヤーのプロフィールページにアイテム配置とサーチクラフトを表示する。
 
-- アイテム配置: セグメントごとにホットバー9スロット + オフハンドのアイテムアイコンを表示
+- アイテム配置:
+  - 全セグメントを1枚のカード内の `divide-y` 行リストで表示する（サーチクラフトのグループカードと同じ文法）
+  - 行見出しはセグメント名のみ。既知のセグメント名（Overworld / Bastion / Bastion → Fort / Fortress / Blinded / Stronghold）は色ドット、それ以外（Common / Enter Nether / Enter End 系・カスタム名）は searchcraft の「その他」と同じグレードット（bg-muted-foreground）が付く
+  - 行内容はホットバー（`ItemHotbar`。詳細は「[ホットバー表示コンポーネント](#ホットバー表示コンポーネント)」参照）+ メモのみ。アイテム名はタイルの Tooltip でのみ提示する（スロットごとの詳細チップ一覧・サマリーバー・埋まりスロット数は v1.12 系の改修で廃止）
 - サーチクラフト（v1.6.0 で表示刷新）:
   - **サマリーバー**: ゲーム内言語（日本語名併記）・総件数・キーバッジの凡例（リマップ済み / Shift同時押し / 指割り当て色。指割り当ては設定がある場合のみ）
   - **タイミング別グループカード**: Bastion（金）/ Fortress（赤）/ その他（青）/ 指定なし の順に、色ドット + 件数付きヘッダーのカードでグループ表示。タイミング未設定のみの場合はヘッダーなしの1枚のカード
@@ -359,6 +373,8 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 |---|---|
 | `app/lib/schema.ts` | DBスキーマ定義（itemLayouts, searchCrafts, searchCraftLoops, searchCraftTemplates） |
 | `app/routes/me/items.tsx` | アイテム配置編集ページ |
+| `app/components/item-hotbar.tsx` | ホットバー描画の共通コンポーネント（`ItemHotbar` / `HotbarSlotTile` / `Slot` 型） |
+| `app/components/item-icon.tsx` | Minecraft アイテムアイコンの共通ラッパー（`ItemIcon` / `getLocalizedItemName`） |
 | `app/routes/me/search-craft.tsx` | サーチクラフト編集ページ（Loop の saveAll も含む） |
 | `app/routes/player/profile.tsx` | プロフィールページ（表示側。Loop セクションも含む） |
 | `app/lib/remap-utils.ts` | サーチクラフトのキーリマップ連携（`getActualKeyInfos()`） |

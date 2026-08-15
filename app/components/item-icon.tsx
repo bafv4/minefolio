@@ -8,15 +8,19 @@ export const TEXTURE_BASE_URL = "/mcitems";
 /**
  * テクスチャ読み込み中に表示する円形プログレス。
  * 外枠は size そのままにして、画像に差し替わったときのレイアウトのずれを防ぐ。
- * リング径・線幅はアイコンサイズ（16〜36px 程度）に追従させる
+ * リング径・線幅はアイコンサイズ（16〜36px 程度）に追従させる。
+ * className には消費側が ItemIcon に渡したクラスをそのまま引き継ぐ
+ * （MinecraftItemIcon は読み込み中 loadingPlaceholder を className なしの素で返すため、
+ * sm:hidden 等の表示切替クラスをここに乗せないと responsive 二重描画の両方の
+ * スピナーが同時に見えてしまう）
  */
-function ItemIconSpinner({ size }: { size: number }) {
+function ItemIconSpinner({ size, className }: { size: number; className?: string }) {
   const ringSize = Math.max(10, Math.round(size * 0.6));
   const borderWidth = size >= 28 ? 2.5 : size >= 20 ? 2 : 1.5;
 
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center align-middle"
+      className={cn("inline-flex shrink-0 items-center justify-center align-middle", className)}
       style={{ width: size, height: size }}
       aria-hidden
     >
@@ -55,7 +59,7 @@ export function ItemIcon({
     <MinecraftItemIcon
       size={size}
       textureBaseUrl={TEXTURE_BASE_URL}
-      loadingPlaceholder={loadingPlaceholder ?? <ItemIconSpinner size={size} />}
+      loadingPlaceholder={loadingPlaceholder ?? <ItemIconSpinner size={size} className={className} />}
       className={cn("pixelated", className)}
       {...props}
     />

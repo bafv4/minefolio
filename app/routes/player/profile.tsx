@@ -21,7 +21,8 @@ import {
   checkPaceManPlayer,
   fetchSpeedrunComStats,
 } from "@/lib/external-stats";
-import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
+import { getLocalizedItemName } from "@/components/item-icon";
+import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
@@ -1789,11 +1790,15 @@ export default function PlayerProfilePage() {
         {/* Item Layouts Tab */}
         <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.itemLayouts.length > 0 ? (
-            <div className="space-y-4">
-              {player.itemLayouts.map((layout) => (
-                <ItemLayoutCard key={layout.id} layout={layout} />
-              ))}
-            </div>
+            <Card className="gap-3 py-5">
+              <CardContent className="px-5">
+                <div className="divide-y">
+                  {player.itemLayouts.map((layout) => (
+                    <ItemLayoutRow key={layout.id} layout={layout} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             <EmptyState
               icon={<Package className="h-12 w-12" />}
@@ -2111,7 +2116,21 @@ function inputMethodLabel(t: Translator, value: string): string {
   }
 }
 
-function ItemLayoutCard({
+/**
+ * アイテム配置行のセグメント名 → 見出し色ドットのマップ（完全一致。新色は導入しない）。
+ * マップ外（Common / Enter Nether / Enter End 系・カスタム名）は searchcraft の
+ * 「その他」タイミングと同じグレードット（bg-muted-foreground）で統一する
+ */
+const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
+  Overworld: "bg-success",
+  Bastion: "bg-warning",
+  "Bastion → Fort": "bg-info",
+  Fortress: "bg-destructive",
+  "Blinded / Stronghold": "bg-primary",
+};
+
+/** アイテム配置カード内の1セグメント分の行（見出し + ホットバー + メモ）。アイテム名はホットバーの Tooltip でのみ提示する */
+function ItemLayoutRow({
   layout,
 }: {
   layout: {
@@ -2124,121 +2143,39 @@ function ItemLayoutCard({
 }) {
   const t = useT();
   const locale = useLocale();
-  const slots = JSON.parse(layout.slots) as { slot: number; items: string[] }[];
-  const offhand = layout.offhand ? JSON.parse(layout.offhand) as string[] : [];
-
-  // スロット番号をインデックスにマップ
-  const slotMap = new Map<number, string[]>();
-  for (const s of slots) {
-    slotMap.set(s.slot, s.items);
-  }
+  const slots = JSON.parse(layout.slots) as Slot[];
+  const offhand = layout.offhand ? (JSON.parse(layout.offhand) as string[]) : [];
+  const dotClass = ITEM_LAYOUT_SEGMENT_DOT_CLASSES[layout.segment] ?? "bg-muted-foreground";
 
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle className="text-base">{layout.segment}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-5">
-        <div className="space-y-4">
-          {/* ホットバー */}
-          <div className="custom-scrollbar overflow-x-auto pb-2">
-            <div className="flex items-center gap-2 w-fit">
-              <div className="flex gap-1.5">
-              {Array.from({ length: 9 }, (_, i) => {
-                const slotNum = i + 1;
-                const items = slotMap.get(slotNum) || [];
-                return (
-                  <Tooltip key={slotNum}>
-                    <TooltipTrigger asChild>
-                      <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
-                        {items.length > 0 ? (
-                          <>
-                            <ItemIcon itemId={items[0]} size={36} />
-                            {items.length > 1 && (
-                              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                                {items.length}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{slotNum}</span>
-                        )}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {items.map((item) => getLocalizedItemName(item, locale)).join(", ") || t("playerProfile.slot", { num: slotNum })}
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </div>
-            {/* オフハンド */}
-            <div className="w-px h-10 bg-border mx-1" />
+    <div className="py-4 first:pt-0 last:pb-0 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
+        {layout.segment}
+      </div>
+      <ItemHotbar
+        slots={slots}
+        offhand={offhand}
+        offhandLabel={t("playerProfile.offhandShort")}
+        renderSlotWrapper={({ items, tile }) =>
+          items.length === 0 ? (
+            tile
+          ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="w-12 h-12 rounded border bg-secondary/50 flex items-center justify-center relative">
-                  {offhand.length > 0 ? (
-                    <>
-                      <ItemIcon itemId={offhand[0]} size={36} />
-                      {offhand.length > 1 && (
-                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                          {offhand.length}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">OH</span>
-                  )}
-                </div>
+                <div>{tile}</div>
               </TooltipTrigger>
               <TooltipContent>
-                {offhand.map((item) => getLocalizedItemName(item, locale)).join(", ") || t("playerProfile.offhand")}
+                {items.map((item) => getLocalizedItemName(item, locale)).join(", ")}
               </TooltipContent>
             </Tooltip>
-            </div>
-          </div>
-
-          {/* アイテム詳細 */}
-          <div className="flex flex-wrap gap-2">
-            {slots.map(({ slot, items }) => (
-              <div key={slot} className="flex items-center gap-1 text-sm">
-                <Badge variant="outline" className="font-mono">
-                  {slot}
-                </Badge>
-                <span className="text-muted-foreground">:</span>
-                {items.map((item, idx) => (
-                  <span key={idx} className="flex items-center gap-1">
-                    {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getLocalizedItemName(item, locale)}</span>
-                  </span>
-                ))}
-              </div>
-            ))}
-            {offhand.length > 0 && (
-              <div className="flex items-center gap-1 text-sm">
-                <Badge variant="outline" className="font-mono">
-                  OH
-                </Badge>
-                <span className="text-muted-foreground">:</span>
-                {offhand.map((item, idx) => (
-                  <span key={idx} className="flex items-center gap-1">
-                    {idx > 0 && <span className="text-muted-foreground">/</span>}
-                    <ItemIcon itemId={item} size={16} />
-                    <span className="text-xs">{getLocalizedItemName(item, locale)}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* メモ */}
-          {layout.notes && (
-            <p className="text-sm text-muted-foreground">{layout.notes}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          )
+        }
+      />
+      {layout.notes && (
+        <p className="text-sm text-muted-foreground">{layout.notes}</p>
+      )}
+    </div>
   );
 }
 

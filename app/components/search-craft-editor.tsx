@@ -1,4 +1,13 @@
-import { useState, useId, useMemo, useCallback } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,7 +105,15 @@ import { useT } from "@/hooks/use-locale";
  * 1エントリは複数のサーチ文字列バリエーション（variations）を持てる。バリエーションごとに
  * withShift を設定できる（エントリ共通ではない）。並べ替えUIはなく、最低1件・上限
  * MAX_SEARCH_VARIATIONS（5）件。
+ *
+ * D&D 中の再レンダーについて: dnd-kit は over（ホバー中のドロップ先）が変わるたびに
+ * useSortable / useDroppable を呼ぶコンポーネントを再レンダーする。そのため行は
+ * 「useSortable を持つ薄いシェル」と「React.memo した重い中身」に分け、行へ渡す
+ * コールバックは id を引数に取る安定な関数に統一している。
  */
+
+/** SSR では no-op（useLayoutEffect の警告を避ける）。最新値 ref の反映に使う */
+const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
 /** 編集UIが必要とする最小のエントリ形状 */
 export type SearchCraftDraft = {
@@ -233,7 +250,232 @@ function ItemSelectDialog({
   );
 }
 
-// インライン編集可能なサーチクラフト行（ソータブル対応）
+/**
+ * サーチクラフト行の中身（アイテムチップ列・バリエーション行・コメント・削除・アイテム選択ダイアログ）。
+ *
+ * ドラッグ中、dnd-kit は over（ホバー中のドロップ先）が変わるたびに useSortable を呼ぶ
+ * 全行を再レンダーする。重い中身をそこに直接置くと ItemIcon・Input・ActualKeyBadges
+ * （リマップ逆引き）・ItemSelectDialog が行数分巻き込まれてカクつくため、
+ * useSortable を持つシェル（EditableSearchCraftRow）から分離して memo 化する。
+ * onUpdate / onDelete は id を引数に取り、ボード側の安定コールバックをそのまま渡せるようにしてある。
+ */
+function SearchCraftRowContentInner<T extends SearchCraftDraft>({
+  craft,
+  remaps,
+  onUpdate,
+  onDelete,
+  getDeleteWarning,
+}: {
+  craft: T;
+  remaps?: RemapInfo[];
+  onUpdate: (id: string, updated: T) => void;
+  onDelete: (id: string) => void;
+  /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
+  getDeleteWarning?: (craftId: string) => string | null;
+}) {
+  const t = useT();
+  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
+  // 削除確認ダイアログは制御化し、警告文は「開く瞬間」に評価する。
+  // getDeleteWarning は identity が安定（loops を deps に持たない）ため、render 中に
+  // 呼ぶと memo された出力に古い loops 基準の文字列が焼き込まれてしまう
+  // （Loop を後から追加しても「Loopで使用中」が出ない／削除後も残る）
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
+  const rowId = useId();
+
+  const removeItem = (itemIndex: number) => {
+    onUpdate(craft.id, { ...craft, items: craft.items.filter((_, i) => i !== itemIndex) });
+  };
+
+  const updateVariation = (variationIndex: number, patch: Partial<SearchCraftVariation>) => {
+    onUpdate(craft.id, {
+      ...craft,
+      variations: craft.variations.map((v, i) => (i === variationIndex ? { ...v, ...patch } : v)),
+    });
+  };
+
+  const addVariation = () => {
+    if (craft.variations.length >= MAX_SEARCH_VARIATIONS) return;
+    onUpdate(craft.id, { ...craft, variations: [...craft.variations, { str: "", withShift: false }] });
+  };
+
+  const removeVariation = (variationIndex: number) => {
+    if (craft.variations.length <= 1) return;
+    onUpdate(craft.id, {
+      ...craft,
+      variations: craft.variations.filter((_, i) => i !== variationIndex),
+    });
+  };
+
+  return (
+    <>
+      {/* Main content */}
+      <div className="flex-1 min-w-0 space-y-2">
+        {/* アイテム */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {craft.items.map((itemId, itemIndex) => (
+            <div
+              key={itemIndex}
+              className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
+            >
+              <ItemIcon itemId={itemId} size={20} />
+              <span className="text-sm">{formatItemName(itemId)}</span>
+              <button
+                type="button"
+                aria-label={t("meSearchCraft.removeItem")}
+                onClick={() => removeItem(itemIndex)}
+                className="p-1.5 rounded text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={() => setIsItemDialogOpen(true)}
+          >
+            <Plus className="size-3 mr-1" />
+            {t("meSearchCraft.add")}
+          </Button>
+        </div>
+
+        {/* サーチ文字列バリエーション（1件以上、上限 MAX_SEARCH_VARIATIONS）。並べ替えUIはなし */}
+        <div className="space-y-1.5">
+          {craft.variations.map((variation, variationIndex) => {
+            const checkboxId = `${rowId}-shift-${variationIndex}`;
+            return (
+              <div key={variationIndex} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">
+                    {t("meSearchCraft.searchLabel")}
+                  </Label>
+                  {/* Input＋削除ボタンは同じ折返し単位にまとめる（削除ボタンだけが
+                      次行に孤立してどのバリエーションのものか分からなくなるのを防ぐ） */}
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={variation.str}
+                      onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
+                      placeholder="scr"
+                      className="font-mono h-8 w-32"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                      disabled={craft.variations.length <= 1}
+                      onClick={() => removeVariation(variationIndex)}
+                      aria-label={t("meSearchCraft.removeVariation")}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                {/* Shiftを押しながらクラフトするか（バリエーションごと） */}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id={checkboxId}
+                    checked={variation.withShift}
+                    onCheckedChange={(checked) =>
+                      updateVariation(variationIndex, { withShift: checked === true })
+                    }
+                  />
+                  <Label
+                    htmlFor={checkboxId}
+                    className="text-xs text-muted-foreground cursor-pointer"
+                  >
+                    {t("meSearchCraft.withShift")}
+                  </Label>
+                </div>
+                {/* 入力キーのライブプレビュー（リマップ考慮） */}
+                {remaps && variation.str && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground shrink-0">
+                      {t("meSearchCraft.keyPreviewLabel")}
+                    </Label>
+                    <ActualKeyBadges
+                      searchStr={variation.str}
+                      remaps={remaps}
+                      shiftHeld={variation.withShift}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7"
+            disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
+            onClick={addVariation}
+          >
+            <Plus className="size-3 mr-1" />
+            {t("meSearchCraft.addVariation")}
+          </Button>
+        </div>
+
+        {/* コメント（常時表示） */}
+        <Input
+          value={craft.comment || ""}
+          onChange={(e) => onUpdate(craft.id, { ...craft, comment: e.target.value || null })}
+          placeholder={t("meSearchCraft.commentOptional")}
+          className="h-8 text-sm"
+        />
+      </div>
+
+      {/* Delete button */}
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (open) setDeleteWarning(getDeleteWarning?.(craft.id) ?? null);
+          setIsDeleteDialogOpen(open);
+        }}
+      >
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="sm" className="shrink-0">
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("meSearchCraft.deleteCraftTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteWarning ?? t("meSearchCraft.deleteCraftDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onDelete(craft.id)}>
+              {t("meSearchCraft.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* アイテム選択ダイアログ（DialogPortal 経由で body へ描画されるため、
+          この位置に DOM は生えない） */}
+      <ItemSelectDialog
+        isOpen={isItemDialogOpen}
+        onClose={() => setIsItemDialogOpen(false)}
+        selectedItems={craft.items}
+        onItemsChange={(items) => onUpdate(craft.id, { ...craft, items })}
+      />
+    </>
+  );
+}
+
+// memo でジェネリクスは失われるため、元の呼び出しシグネチャへキャストして戻す
+const SearchCraftRowContent = memo(SearchCraftRowContentInner) as typeof SearchCraftRowContentInner;
+
+/**
+ * インライン編集可能なサーチクラフト行（ソータブル対応）。
+ * useSortable・並べ替えハンドル・連番・isDragging の見た目だけを持つ薄いシェルで、
+ * 重い中身は memo 化した SearchCraftRowContent に委ねる。
+ */
 function EditableSearchCraftRow<T extends SearchCraftDraft>({
   craft,
   index,
@@ -245,14 +487,12 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   craft: T;
   index: number;
   remaps?: RemapInfo[];
-  onUpdate: (updated: T) => void;
-  onDelete: () => void;
+  onUpdate: (id: string, updated: T) => void;
+  onDelete: (id: string) => void;
   /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
   getDeleteWarning?: (craftId: string) => string | null;
 }) {
   const t = useT();
-  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
-  const rowId = useId();
 
   const {
     attributes,
@@ -268,200 +508,39 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
     transition,
   };
 
-  const removeItem = (itemIndex: number) => {
-    onUpdate({ ...craft, items: craft.items.filter((_, i) => i !== itemIndex) });
-  };
-
-  const updateVariation = (variationIndex: number, patch: Partial<SearchCraftVariation>) => {
-    onUpdate({
-      ...craft,
-      variations: craft.variations.map((v, i) => (i === variationIndex ? { ...v, ...patch } : v)),
-    });
-  };
-
-  const addVariation = () => {
-    if (craft.variations.length >= MAX_SEARCH_VARIATIONS) return;
-    onUpdate({ ...craft, variations: [...craft.variations, { str: "", withShift: false }] });
-  };
-
-  const removeVariation = (variationIndex: number) => {
-    if (craft.variations.length <= 1) return;
-    onUpdate({ ...craft, variations: craft.variations.filter((_, i) => i !== variationIndex) });
-  };
-
   return (
-    <>
-      <div
-        ref={setNodeRef}
-        style={style}
-        className={cn(
-          "py-3 flex items-start gap-2",
-          isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
-        )}
-      >
-        {/* Drag handle + 順番 */}
-        <div className="flex items-center gap-1 pt-1.5 shrink-0">
-          <button
-            {...attributes}
-            {...listeners}
-            type="button"
-            aria-label={t("meSearchCraft.dragHandle")}
-            className="flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
-          >
-            <GripVertical className="h-5 w-5" />
-          </button>
-          <span className="w-5 text-xs font-mono text-muted-foreground/60 text-right">
-            {index + 1}
-          </span>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-2">
-          {/* アイテム */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {craft.items.map((itemId, itemIndex) => (
-              <div
-                key={itemIndex}
-                className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
-              >
-                <ItemIcon itemId={itemId} size={20} />
-                <span className="text-sm">{formatItemName(itemId)}</span>
-                <button
-                  type="button"
-                  aria-label={t("meSearchCraft.removeItem")}
-                  onClick={() => removeItem(itemIndex)}
-                  className="p-1.5 rounded text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7"
-              onClick={() => setIsItemDialogOpen(true)}
-            >
-              <Plus className="size-3 mr-1" />
-              {t("meSearchCraft.add")}
-            </Button>
-          </div>
-
-          {/* サーチ文字列バリエーション（1件以上、上限 MAX_SEARCH_VARIATIONS）。並べ替えUIはなし */}
-          <div className="space-y-1.5">
-            {craft.variations.map((variation, variationIndex) => {
-              const checkboxId = `${rowId}-shift-${variationIndex}`;
-              return (
-                <div key={variationIndex} className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground shrink-0">
-                      {t("meSearchCraft.searchLabel")}
-                    </Label>
-                    {/* Input＋削除ボタンは同じ折返し単位にまとめる（削除ボタンだけが
-                        次行に孤立してどのバリエーションのものか分からなくなるのを防ぐ） */}
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={variation.str}
-                        onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
-                        placeholder="scr"
-                        className="font-mono h-8 w-32"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
-                        disabled={craft.variations.length <= 1}
-                        onClick={() => removeVariation(variationIndex)}
-                        aria-label={t("meSearchCraft.removeVariation")}
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                  {/* Shiftを押しながらクラフトするか（バリエーションごと） */}
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={checkboxId}
-                      checked={variation.withShift}
-                      onCheckedChange={(checked) =>
-                        updateVariation(variationIndex, { withShift: checked === true })
-                      }
-                    />
-                    <Label
-                      htmlFor={checkboxId}
-                      className="text-xs text-muted-foreground cursor-pointer"
-                    >
-                      {t("meSearchCraft.withShift")}
-                    </Label>
-                  </div>
-                  {/* 入力キーのライブプレビュー（リマップ考慮） */}
-                  {remaps && variation.str && (
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground shrink-0">
-                        {t("meSearchCraft.keyPreviewLabel")}
-                      </Label>
-                      <ActualKeyBadges
-                        searchStr={variation.str}
-                        remaps={remaps}
-                        shiftHeld={variation.withShift}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7"
-              disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
-              onClick={addVariation}
-            >
-              <Plus className="size-3 mr-1" />
-              {t("meSearchCraft.addVariation")}
-            </Button>
-          </div>
-
-          {/* コメント（常時表示） */}
-          <Input
-            value={craft.comment || ""}
-            onChange={(e) => onUpdate({ ...craft, comment: e.target.value || null })}
-            placeholder={t("meSearchCraft.commentOptional")}
-            className="h-8 text-sm"
-          />
-        </div>
-
-        {/* Delete button */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="shrink-0">
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("meSearchCraft.deleteCraftTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {getDeleteWarning?.(craft.id) ?? t("meSearchCraft.deleteCraftDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={onDelete}>{t("meSearchCraft.delete")}</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "py-3 flex items-start gap-2",
+        isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
+      )}
+    >
+      {/* Drag handle + 順番 */}
+      <div className="flex items-center gap-1 pt-1.5 shrink-0">
+        <button
+          {...attributes}
+          {...listeners}
+          type="button"
+          aria-label={t("meSearchCraft.dragHandle")}
+          className="flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+        >
+          <GripVertical className="h-5 w-5" />
+        </button>
+        <span className="w-5 text-xs font-mono text-muted-foreground/60 text-right">
+          {index + 1}
+        </span>
       </div>
 
-      <ItemSelectDialog
-        isOpen={isItemDialogOpen}
-        onClose={() => setIsItemDialogOpen(false)}
-        selectedItems={craft.items}
-        onItemsChange={(items) => onUpdate({ ...craft, items })}
+      <SearchCraftRowContent
+        craft={craft}
+        remaps={remaps}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        getDeleteWarning={getDeleteWarning}
       />
-    </>
+    </div>
   );
 }
 
@@ -590,15 +669,17 @@ type TimingBlockProps<T extends SearchCraftDraft, L extends SearchCraftLoopDraft
   getDeleteWarning?: (craftId: string) => string | null;
   totalCraftCount: number;
   isLoopDragging: boolean;
+  // ボード側の安定コールバックをそのまま受け取れるよう、対象は id / timing を引数で渡す
+  // （ブロックごとにインライン関数を作ると memo 化した行の中身まで再レンダーされてしまう）
   onUpdateCraft: (id: string, updated: T) => void;
   onDeleteCraft: (id: string) => void;
-  onAddCraft: () => void;
+  onAddCraft: (timing: SearchCraftTiming | null) => void;
   onUpdateLoop: (id: string, updated: L) => void;
   onDeleteLoop: (id: string) => void;
-  onAddLoop: () => void;
+  onAddLoop: (timing: SearchCraftTiming | null) => void;
 };
 
-function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>({
+function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>({
   timing,
   crafts,
   loops,
@@ -647,8 +728,8 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
                     craft={craft}
                     index={index}
                     remaps={remaps}
-                    onUpdate={(updated) => onUpdateCraft(craft.id, updated)}
-                    onDelete={() => onDeleteCraft(craft.id)}
+                    onUpdate={onUpdateCraft}
+                    onDelete={onDeleteCraft}
                     getDeleteWarning={getDeleteWarning}
                   />
                 ))}
@@ -666,7 +747,7 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
           </SortableContext>
         </div>
 
-        <Button type="button" variant="outline" size="sm" onClick={onAddCraft}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onAddCraft(timing)}>
           <Plus className="mr-2 h-4 w-4" />
           {t("meSearchCraft.addCraft")}
         </Button>
@@ -689,8 +770,8 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
                         index={index}
                         entries={entries}
                         remaps={remaps}
-                        onUpdate={(updated) => onUpdateLoop(loop.id, updated)}
-                        onDelete={() => onDeleteLoop(loop.id)}
+                        onUpdate={onUpdateLoop}
+                        onDelete={onDeleteLoop}
                       />
                     ))}
                   </div>
@@ -714,7 +795,7 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
             type="button"
             variant="outline"
             size="sm"
-            onClick={onAddLoop}
+            onClick={() => onAddLoop(timing)}
             disabled={totalCraftCount < 2}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -728,6 +809,12 @@ function TimingBlock<T extends SearchCraftDraft, L extends SearchCraftLoopDraft>
     </div>
   );
 }
+
+/**
+ * ブロック自体も memo 化する（useDroppable を2つ持つため over の変化では再レンダーされるが、
+ * ボードの再レンダー起因の分を削る）。memo でジェネリクスは失われるためキャストで戻す。
+ */
+const TimingBlock = memo(TimingBlockInner) as typeof TimingBlockInner;
 
 /**
  * サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型エディタ。
@@ -773,6 +860,15 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   const t = useT();
   const dndContextId = useId();
   const [activeDrag, setActiveDrag] = useState<{ type: "craft" | "loop"; id: string } | null>(null);
+
+  // 行・ブロックへ渡すコールバックが参照する最新値。crafts/loops を useCallback の deps に
+  // 入れると、ブロック間移動（handleDragOver）や1行の編集のたびに全行へ新しい関数が流れて
+  // memo が外れ、重い中身（ItemIcon・入力欄・キーバッジ）が全行分再レンダーされてしまう。
+  // 反映は layout effect（＝コミット時に同期実行）なので、イベントハンドラは常に最新値を見る
+  const latest = useRef({ crafts, loops, onCraftsChange, onLoopsChange, createCraft, createLoop });
+  useIsomorphicLayoutEffect(() => {
+    latest.current = { crafts, loops, onCraftsChange, onLoopsChange, createCraft, createLoop };
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -889,6 +985,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   //   remapVariationRefs 自身が担う）
   const handleUpdateCraft = useCallback(
     (id: string, updated: T) => {
+      const { crafts, loops, onCraftsChange, onLoopsChange } = latest.current;
       const prevCraft = crafts.find((c) => c.id === id);
       const nextCrafts = reorderByBlock(crafts.map((c) => (c.id === id ? updated : c)));
       onCraftsChange(nextCrafts);
@@ -923,13 +1020,14 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       });
       if (changed) onLoopsChange(nextLoops);
     },
-    [crafts, loops, onCraftsChange, onLoopsChange],
+    [],
   );
 
   // クラフト削除。参照している Loop ステップを連動して除去する（生存参照は温存、
   // remapLoopSteps が先頭 transition null 規則の維持・<2 になった Loop の自動除去も担う）
   const handleDeleteCraft = useCallback(
     (id: string) => {
+      const { crafts, loops, onCraftsChange, onLoopsChange } = latest.current;
       const nextCrafts = reorderByBlock(crafts.filter((c) => c.id !== id));
       onCraftsChange(nextCrafts);
       const idMap = new Map(nextCrafts.map((c) => [c.id, c.id]));
@@ -941,32 +1039,39 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
         .filter((loop): loop is L => loop !== null);
       onLoopsChange(nextLoops);
     },
-    [crafts, loops, onCraftsChange, onLoopsChange],
+    [],
   );
 
   // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
   const getDeleteWarning = useCallback(
     (craftId: string): string | null => {
+      const { loops } = latest.current;
       const count = loops.filter((loop) => loop.steps.some((s) => s.craftId === craftId)).length;
       return count > 0 ? t("meSearchCraft.deleteEntryUsedByLoops", { count }) : null;
     },
-    [loops, t],
+    [t],
   );
 
-  const handleAddCraft = useCallback(
-    (timing: SearchCraftTiming | null) => {
-      onCraftsChange(reorderByBlock([...crafts, createCraft(timing)]));
-    },
-    [crafts, createCraft, onCraftsChange],
-  );
+  const handleAddCraft = useCallback((timing: SearchCraftTiming | null) => {
+    const { crafts, createCraft, onCraftsChange } = latest.current;
+    onCraftsChange(reorderByBlock([...crafts, createCraft(timing)]));
+  }, []);
 
-  const handleAddLoop = useCallback(
-    (timing: SearchCraftTiming | null) => {
-      if (crafts.length < 2) return;
-      onLoopsChange(reorderByBlock([...loops, createLoop(timing)]));
-    },
-    [crafts.length, loops, createLoop, onLoopsChange],
-  );
+  const handleAddLoop = useCallback((timing: SearchCraftTiming | null) => {
+    const { crafts, loops, createLoop, onLoopsChange } = latest.current;
+    if (crafts.length < 2) return;
+    onLoopsChange(reorderByBlock([...loops, createLoop(timing)]));
+  }, []);
+
+  const handleUpdateLoop = useCallback((id: string, updated: L) => {
+    const { loops, onLoopsChange } = latest.current;
+    onLoopsChange(reorderByBlock(loops.map((l) => (l.id === id ? updated : l))));
+  }, []);
+
+  const handleDeleteLoop = useCallback((id: string) => {
+    const { loops, onLoopsChange } = latest.current;
+    onLoopsChange(reorderByBlock(loops.filter((l) => l.id !== id)));
+  }, []);
 
   const isLoopDragging = activeDrag?.type === "loop";
   const totalCraftCount = crafts.length;
@@ -995,12 +1100,10 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             isLoopDragging={isLoopDragging}
             onUpdateCraft={handleUpdateCraft}
             onDeleteCraft={handleDeleteCraft}
-            onAddCraft={() => handleAddCraft(timing)}
-            onUpdateLoop={(id, updated) =>
-              onLoopsChange(reorderByBlock(loops.map((l) => (l.id === id ? updated : l))))
-            }
-            onDeleteLoop={(id) => onLoopsChange(reorderByBlock(loops.filter((l) => l.id !== id)))}
-            onAddLoop={() => handleAddLoop(timing)}
+            onAddCraft={handleAddCraft}
+            onUpdateLoop={handleUpdateLoop}
+            onDeleteLoop={handleDeleteLoop}
+            onAddLoop={handleAddLoop}
           />
         ))}
       </div>

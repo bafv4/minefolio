@@ -781,6 +781,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noKeybindings: "This runner hasn't set up their controls yet.",
     noItemLayoutsTitle: "No item layouts",
     noItemLayouts: "This runner hasn't set up any item layouts yet.",
+    offhandShort: "OH",
     searchCraftNoneTitle: "No search-craft",
     gameLanguage: "Game language",
     noSearchCraft: "This runner hasn't set up search-craft yet.",
@@ -839,8 +840,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     customRecords: "Custom records",
     noStatsTitle: "No stats",
     noStatsDescription: "No statistics are available from external services.",
-    slot: "Slot {num}",
-    offhand: "Offhand",
     /** Playstyle tab (playstyle.* holds the option labels; these are item names, headings, empty state) */
     playstylePlayContent: "Play content",
     playstyleControls: "Controls",
@@ -966,6 +965,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     rtaStartedBothOrNone: "Select both year and month, or leave both unset",
     rtaStartedInvalid: "Invalid start month (must be between Jan 2009 and now)",
     speedrunUsernameMax: "Speedrun.com username must be 50 characters or fewer",
+    speedrunUsernameInvalid: "Speedrun.com username can only contain letters, numbers, hyphens, and underscores",
     socialDialogEditTitle: "Edit link",
     socialDialogAddTitle: "Add social link",
     socialDialogEditDesc: "Update the details of this link.",
@@ -1576,7 +1576,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     userNotFound: "User not found",
     saveFailed: "Failed to save the data",
     unknownAction: "Unknown action",
-    off: "Off",
+    off: "OH",
     offhand: "Offhand",
     slot: "Slot {slot}",
     slotItems: "Items in {name}",
@@ -1603,7 +1603,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     pageTitle: "Item layouts",
     pageDescription:
       "Set up your hotbar and inventory for each part of the run.",
-    add: "Add",
     noPresetWarning:
       "You have no presets, so settings can't be edited. Create a preset first.",
     createPreset: "Create a preset",
@@ -1627,6 +1626,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     errorTitle: "Something went wrong",
     errorDescription: "An error occurred while loading the page. Please reload.",
     reloadPage: "Reload page",
+    dragHandle: "Drag to reorder",
+    duplicate: "Duplicate",
   },
   meSearchCraft: {
     title: "Search-craft - Minefolio",
