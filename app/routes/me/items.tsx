@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useId, useRef, useMemo, useCallback, memo, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/items";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -485,7 +485,8 @@ function SegmentNameInput({
   existingSegments: string[];
 }) {
   const t = useT();
-  // 未使用のプリセットのみ表示
+  // 未使用のプリセットのみ表示（existingSegments には自分自身の値も含まれうるが、
+  // `preset === value` で常に残すため除外は不要）
   const availablePresets = SEGMENT_PRESETS.filter(
     (preset) => preset === value || !existingSegments.includes(preset)
   );
@@ -508,7 +509,162 @@ function SegmentNameInput({
   );
 }
 
-// インライン編集可能なレイアウト行（単一カード内の divide-y リスト行。操作行→ホットバー→メモ）
+/**
+ * 行ヘッダーの中身（セグメント名 Combobox + 操作ボタン群）。
+ *
+ * ドラッグ中、dnd-kit は over（ホバー中のドロップ先）が変わるたびに useSortable を呼ぶ
+ * 全行を再レンダーする。重い中身をそこに直接置くと行数分の Combobox / ItemIcon /
+ * ダイアログが巻き込まれてカクつくため、useSortable を持つシェル（EditableLayoutRow）から
+ * 分離して memo 化する。props は id ベースのパッチ更新（onUpdate(id, patch)）にして
+ * 親のコールバックをそのまま渡せる形にしてあり、行の値が変わらない限り再レンダーされない。
+ */
+const LayoutRowHeader = memo(function LayoutRowHeader({
+  layoutId,
+  segment,
+  existingSegments,
+  onToggleExpanded,
+  onUpdate,
+  onDelete,
+  onDuplicate,
+}: {
+  layoutId: string;
+  segment: string;
+  existingSegments: string[];
+  onToggleExpanded: () => void;
+  onUpdate: (id: string, patch: Partial<ItemLayout>) => void;
+  onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
+}) {
+  const t = useT();
+
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <SegmentNameInput
+          value={segment}
+          onChange={(next) => onUpdate(layoutId, { segment: next })}
+          existingSegments={existingSegments}
+        />
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDuplicate(layoutId)}
+              aria-label={t("meItems.duplicate")}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("meItems.duplicate")}</TooltipContent>
+        </Tooltip>
+        <Button variant="ghost" size="sm" onClick={onToggleExpanded}>
+          <Edit className="h-4 w-4" />
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("meItems.deleteLayoutTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("meItems.deleteLayoutDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("meItems.cancel")}</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onDelete(layoutId)}>
+                {t("meItems.delete")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </>
+  );
+});
+
+/**
+ * 行のホットバー + メモ（memo 化）。LayoutRowHeader と同じ理由で分離してある。
+ * セグメント名の編集でホットバー（ItemIcon × 10スロット）まで再レンダーしないよう、
+ * layout オブジェクトではなく必要なフィールドだけを受け取る。
+ */
+const LayoutRowBody = memo(function LayoutRowBody({
+  layoutId,
+  slots,
+  offhand,
+  notes,
+  isExpanded,
+  onUpdate,
+}: {
+  layoutId: string;
+  slots: Slot[];
+  offhand: string[];
+  notes: string | null;
+  isExpanded: boolean;
+  onUpdate: (id: string, patch: Partial<ItemLayout>) => void;
+}) {
+  const t = useT();
+
+  const updateSlot = (slotNum: number, items: string[]) => {
+    const newSlots = slots.map((s) => (s.slot === slotNum ? { ...s, items } : s));
+    // スロットが存在しない場合は追加
+    if (!slots.find((s) => s.slot === slotNum)) {
+      newSlots.push({ slot: slotNum, items });
+    }
+    onUpdate(layoutId, { slots: newSlots });
+  };
+
+  return (
+    <div className="mt-3">
+      {/* ホットバー編集 */}
+      <ItemHotbar
+        slots={slots}
+        offhand={offhand}
+        offhandLabel={t("meItems.off")}
+        renderSlotWrapper={({ slotKey, items, tile }) => (
+          <ItemSlotEditButton
+            slotKey={slotKey}
+            items={items}
+            tile={tile}
+            onItemsChange={(newItems) => {
+              if (slotKey === "offhand") onUpdate(layoutId, { offhand: newItems });
+              else updateSlot(slotKey, newItems);
+            }}
+          />
+        )}
+      />
+
+      {/* 展開時にメモ表示 */}
+      {isExpanded && (
+        <div className="mt-4 space-y-2">
+          <Label htmlFor={`notes-${layoutId}`}>{t("meItems.notesOptional")}</Label>
+          <Textarea
+            id={`notes-${layoutId}`}
+            value={notes || ""}
+            onChange={(e) => onUpdate(layoutId, { notes: e.target.value || null })}
+            placeholder={t("meItems.notesPlaceholder")}
+            rows={2}
+          />
+        </div>
+      )}
+
+      {/* メモがある場合は折りたたみ時も表示 */}
+      {!isExpanded && notes && <p className="text-xs text-muted-foreground mt-2">{notes}</p>}
+    </div>
+  );
+});
+
+/**
+ * インライン編集可能なレイアウト行（単一カード内の divide-y リスト行。操作行→ホットバー→メモ）。
+ * useSortable・並べ替えハンドル・isDragging の見た目だけを持つ薄いシェルで、
+ * 重い中身は memo 化した LayoutRowHeader / LayoutRowBody に委ねる。
+ */
 function EditableLayoutRow({
   layout,
   onUpdate,
@@ -517,13 +673,14 @@ function EditableLayoutRow({
   existingSegments,
 }: {
   layout: ItemLayout;
-  onUpdate: (updated: ItemLayout) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
+  onUpdate: (id: string, patch: Partial<ItemLayout>) => void;
+  onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
   existingSegments: string[];
 }) {
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(false);
+  const toggleExpanded = useCallback(() => setIsExpanded((prev) => !prev), []);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: layout.id,
@@ -532,27 +689,6 @@ function EditableLayoutRow({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
-
-  const handleSegmentChange = (segment: string) => {
-    onUpdate({ ...layout, segment });
-  };
-
-  const updateSlot = (slotNum: number, items: string[]) => {
-    const newSlots = layout.slots.map((s) => (s.slot === slotNum ? { ...s, items } : s));
-    // スロットが存在しない場合は追加
-    if (!layout.slots.find((s) => s.slot === slotNum)) {
-      newSlots.push({ slot: slotNum, items });
-    }
-    onUpdate({ ...layout, slots: newSlots });
-  };
-
-  const handleOffhandChange = (offhand: string[]) => {
-    onUpdate({ ...layout, offhand });
-  };
-
-  const handleNotesChange = (notes: string) => {
-    onUpdate({ ...layout, notes: notes || null });
   };
 
   return (
@@ -571,89 +707,25 @@ function EditableLayoutRow({
         >
           <GripVertical className="h-5 w-5" />
         </button>
-        <div className="min-w-0 flex-1">
-          <SegmentNameInput
-            value={layout.segment}
-            onChange={handleSegmentChange}
-            existingSegments={existingSegments.filter((s) => s !== layout.segment)}
-          />
-        </div>
-        <div className="flex shrink-0 gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={onDuplicate} aria-label={t("meItems.duplicate")}>
-                <Copy className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("meItems.duplicate")}</TooltipContent>
-          </Tooltip>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{t("meItems.deleteLayoutTitle")}</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("meItems.deleteLayoutDescription")}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{t("meItems.cancel")}</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete}>{t("meItems.delete")}</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        {/* ホットバー編集 */}
-        <ItemHotbar
-          slots={layout.slots}
-          offhand={layout.offhand}
-          offhandLabel={t("meItems.off")}
-          renderSlotWrapper={({ slotKey, items, tile }) => (
-            <ItemSlotEditButton
-              slotKey={slotKey}
-              items={items}
-              tile={tile}
-              onItemsChange={(newItems) => {
-                if (slotKey === "offhand") handleOffhandChange(newItems);
-                else updateSlot(slotKey, newItems);
-              }}
-            />
-          )}
+        <LayoutRowHeader
+          layoutId={layout.id}
+          segment={layout.segment}
+          existingSegments={existingSegments}
+          onToggleExpanded={toggleExpanded}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
         />
-
-        {/* 展開時にメモ表示 */}
-        {isExpanded && (
-          <div className="mt-4 space-y-2">
-            <Label htmlFor={`notes-${layout.id}`}>{t("meItems.notesOptional")}</Label>
-            <Textarea
-              id={`notes-${layout.id}`}
-              value={layout.notes || ""}
-              onChange={(e) => handleNotesChange(e.target.value)}
-              placeholder={t("meItems.notesPlaceholder")}
-              rows={2}
-            />
-          </div>
-        )}
-
-        {/* メモがある場合は折りたたみ時も表示 */}
-        {!isExpanded && layout.notes && (
-          <p className="text-xs text-muted-foreground mt-2">{layout.notes}</p>
-        )}
       </div>
+
+      <LayoutRowBody
+        layoutId={layout.id}
+        slots={layout.slots}
+        offhand={layout.offhand}
+        notes={layout.notes}
+        isExpanded={isExpanded}
+        onUpdate={onUpdate}
+      />
     </div>
   );
 }
@@ -713,21 +785,21 @@ export default function ItemLayoutsPage() {
     return JSON.stringify(layouts) !== JSON.stringify(initialLayouts);
   }, [layouts, initialLayouts]);
 
-  const handleUpdateLayout = useCallback((index: number, updated: ItemLayout) => {
-    setLayouts((prev) => {
-      const newLayouts = [...prev];
-      newLayouts[index] = updated;
-      return newLayouts;
-    });
+  // 行コンポーネントの memo を効かせるため、index クロージャではなく id ベースの
+  // 安定コールバック（依存なし）にして、そのまま行へ渡す
+  const handleUpdateLayout = useCallback((id: string, patch: Partial<ItemLayout>) => {
+    setLayouts((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }, []);
 
-  const handleDeleteLayout = useCallback((index: number) => {
-    setLayouts((prev) => prev.filter((_, i) => i !== index));
+  const handleDeleteLayout = useCallback((id: string) => {
+    setLayouts((prev) => prev.filter((l) => l.id !== id));
   }, []);
 
   // セグメント名を空にして直後に複製を挿入する（保存時の必須・重複バリデーションが命名を強制する）
-  const handleDuplicateLayout = useCallback((index: number) => {
+  const handleDuplicateLayout = useCallback((id: string) => {
     setLayouts((prev) => {
+      const index = prev.findIndex((l) => l.id === id);
+      if (index === -1) return prev;
       const cloned: ItemLayout = {
         ...structuredClone(prev[index]),
         // "new-" プレフィックスは action の新規判定に使う。連続クリックでも衝突しないよう cuid2 を使う
@@ -750,6 +822,10 @@ export default function ItemLayoutsPage() {
     };
     setLayouts((prev) => [...prev, newLayout]);
   }, []);
+
+  // DndContext の id は明示する。未指定だと dnd-kit が自動採番するため、
+  // aria-describedby が SSR とクライアントでずれて hydration mismatch になる
+  const dndContextId = useId();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -824,7 +900,8 @@ export default function ItemLayoutsPage() {
     setCopyDialogOpen(false);
   }, [presets]);
 
-  const existingSegments = layouts.map((l) => l.segment);
+  // 行へ渡す props は memo が効くよう identity を安定させる（毎レンダー新配列にしない）
+  const existingSegments = useMemo(() => layouts.map((l) => l.segment), [layouts]);
 
   return (
     <div className="space-y-6 pb-24">
@@ -854,16 +931,21 @@ export default function ItemLayoutsPage() {
       <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
       {layouts.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-background/80">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            id={dndContextId}
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
             <SortableContext items={layouts.map((l) => l.id)} strategy={verticalListSortingStrategy}>
               <div className="divide-y divide-border/60">
-                {layouts.map((layout, index) => (
+                {layouts.map((layout) => (
                   <EditableLayoutRow
                     key={layout.id}
                     layout={layout}
-                    onUpdate={(updated) => handleUpdateLayout(index, updated)}
-                    onDelete={() => handleDeleteLayout(index)}
-                    onDuplicate={() => handleDuplicateLayout(index)}
+                    onUpdate={handleUpdateLayout}
+                    onDelete={handleDeleteLayout}
+                    onDuplicate={handleDuplicateLayout}
                     existingSegments={existingSegments}
                   />
                 ))}
