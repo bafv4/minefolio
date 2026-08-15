@@ -605,14 +605,6 @@ export default function HomePage() {
 
   return (
     <div className="relative flex-1 space-y-7 sm:space-y-8">
-      <div
-        className="pointer-events-none absolute inset-x-0 -top-12 -z-10 h-80 rounded-[2.5rem] opacity-70 blur-2xl"
-        style={{
-          background:
-            "radial-gradient(60% 60% at 20% 20%, color-mix(in oklch, var(--info) 28%, transparent), transparent), radial-gradient(50% 50% at 80% 30%, color-mix(in oklch, var(--success) 30%, transparent), transparent)",
-        }}
-      />
-
       <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_40%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--border)_35%,transparent)_1px,transparent_1px)] bg-[size:26px_26px] opacity-25" />
         <div className="relative grid gap-7 lg:grid-cols-[1.3fr_1fr] lg:items-end">
