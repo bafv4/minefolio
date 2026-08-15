@@ -26,7 +26,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
 import {
-  TransitionOpsBadges,
   LoopKeySequence,
   type LoopCraftInfo,
 } from "@/components/search-craft-loop-view";
@@ -247,13 +246,11 @@ function TransitionRow({
   nextResolved,
   transition,
   onChange,
-  remaps,
 }: {
   prevResolved: ResolvedLoopStep;
   nextResolved: ResolvedLoopStep;
   transition: LoopTransition;
   onChange: (transition: LoopTransition) => void;
-  remaps?: RemapInfo[];
 }) {
   const t = useT();
   const prevStr = prevResolved.searchStr;
@@ -272,7 +269,6 @@ function TransitionRow({
   }, [prevStr, nextStr]);
 
   const invalidMessage = invalidTransitionMessage(t, prevResolved, nextResolved, transition);
-  const derived = prevStr && nextStr ? deriveTransition(prevStr, nextStr, transition) : null;
 
   const handleTypeChange = (type: LoopTransitionType) => {
     if (type === "backspace") {
@@ -378,17 +374,9 @@ function TransitionRow({
         )}
       </div>
 
-      {/* ライブプレビュー */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {t("meSearchCraft.loopPreviewLabel")}:
-        </span>
-        {invalidMessage ? (
-          <span className="text-xs text-destructive">{invalidMessage}</span>
-        ) : (
-          derived?.valid && <TransitionOpsBadges ops={derived.ops} remaps={remaps ?? []} />
-        )}
-      </div>
+      {/* 遷移が成立しない場合のみ理由を出す（キー操作のプレビューは行末尾の
+          Loop 全体プレビュー〈LoopKeySequence〉が担うため、遷移ごとには出さない） */}
+      {invalidMessage && <p className="text-xs text-destructive">{invalidMessage}</p>}
     </div>
   );
 }

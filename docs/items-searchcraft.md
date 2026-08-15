@@ -297,7 +297,7 @@ type LoopStepData = {
 Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`、上記「[編集UI（タイミングブロック型）](#編集ui)」参照）に統合されている。各タイミングブロック内、クラフトリストの下に「繋ぎ方（Loop）」サブセクションとして表示・編集する。
 
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
-- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー + ライブプレビュー）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
+- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー。遷移ごとのライブプレビューは持たず、遷移が成立しない場合のみエラーテキストを表示する — キー操作の確認は行末尾の Loop 全体プレビューが担う）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
 - **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルはアイコン＋アイテム名＋`(str)`＋（`withShift` の場合）⇧マーク
 - BS ステッパーの範囲は `minBackspaceCount(prev, next)`〜`prev.length`（TransitionRow が自前で算出する。`deriveTransition()` の戻り値に min/max は含まれない）。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBackspaceCount()`/`minArrowLeftCount()`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
