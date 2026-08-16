@@ -492,7 +492,7 @@ export function SearchCraftWorkbench({
             <DialogTitle>{t("playground.typingTestSection")}</DialogTitle>
             <DialogDescription>{t("playground.typingTestSectionDescription")}</DialogDescription>
           </DialogHeader>
-          <TypingTestArea remaps={effectiveRemaps} />
+          <TypingTestArea remaps={effectiveRemaps} crafts={crafts} />
         </DialogContent>
       </Dialog>
 
@@ -509,6 +509,7 @@ export function SearchCraftWorkbench({
             loops={loops}
             onLoopsChange={onLoopsChange}
             remaps={effectiveRemaps}
+            keyboardLayout={layout}
             createCraft={createCraft}
             createLoop={createLoop}
           />

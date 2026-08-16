@@ -1676,6 +1676,22 @@ export const PAGES_JA = {
     loopEntryRequired: "すべてのステップでエントリを選択してください",
     removeStep: "ステップを除去",
   },
+  /** キー入力順の可視化モーダル（search-craft-key-sequence-dialog.tsx）。
+   *  クラフト（バリエーション）・繋ぎ方（Loop）の両方のトリガー+ダイアログで共用する */
+  searchCraftKeySequence: {
+    triggerLabel: "キー入力順を表示",
+    dialogTitle: "キー入力順",
+    dialogDescription: "キーボード上でキーを押す順番を確認できます。",
+    modeLabel: "表示モード",
+    modeStatic: "静止",
+    modeAnimate: "アニメーション",
+    play: "再生",
+    pause: "一時停止",
+    reset: "リセット",
+    loop: "ループ再生",
+    speedLabel: "再生速度",
+    empty: "表示できるキー操作がありません",
+  },
   mePresets: {
     title: "設定プリセット - Minefolio",
     userNotFound: "ユーザーが見つかりません",
@@ -2360,6 +2376,7 @@ export const PAGES_JA = {
     typingTestPlaceholder: "ここをクリックしてキーを押すと、リマップ適用後の出力を確認できます",
     typingTestReady: "キーを押してください...",
     typingTestOutput: "出力",
+    typingTestCraftableItems: "クラフトできるアイテム",
     typingTestPressed: "押したキー",
     clearTypingTest: "入力をクリア",
     craftSection: "サーチクラフト",
@@ -2376,7 +2393,6 @@ export const PAGES_JA = {
     saveAsNewOption: "新規プリセットとして保存",
     saveToExistingOption: "既存のプリセットに保存",
     targetPresetLabel: "保存先プリセット",
-    typingTestCraftableItems: "クラフトできるアイテム",
     basePresetLabel: "元となるプリセット（任意）",
     basePresetNone: "なし",
     basePresetHint: "選んだプリセットの全設定（キー配置・デバイス設定等）をコピーした上で、サーチクラフト・リマップをこの内容で上書きします",

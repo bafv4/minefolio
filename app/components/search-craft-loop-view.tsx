@@ -20,6 +20,7 @@ import { getActualControlKeyInfo, type UiRemapInfo, type RemapInfo } from "@/lib
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { KeyLabelText } from "@/components/shift-mark";
+import { LoopKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";
@@ -249,14 +250,14 @@ export function TransitionOpsBadges({
   ops,
   remaps,
   fingerAssignments,
-}: {
   shiftHeld,
+}: {
   ops: LoopKeyOp[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-}) {
   /** 遷移先ステップの withShift。type op のキー列にのみ適用する */
   shiftHeld?: boolean;
+}) {
   return (
     <>
       {ops.map((op, idx) => {
@@ -276,8 +277,8 @@ export function TransitionOpsBadges({
                 searchStr={op.text}
                 remaps={remaps}
                 fingerAssignments={fingerAssignments}
-              />
                 shiftHeld={shiftHeld}
+              />
             );
           default:
             return null;
@@ -330,8 +331,8 @@ export function LoopKeySequence({
                   searchStr={step.searchStr}
                   remaps={remaps}
                   fingerAssignments={fingerAssignments}
-                />
                   shiftHeld={step.withShift}
+                />
               ) : (
                 <InvalidSegmentBadge />
               )
@@ -340,8 +341,8 @@ export function LoopKeySequence({
                 ops={step.derived.ops}
                 remaps={remaps}
                 fingerAssignments={fingerAssignments}
-              />
                 shiftHeld={step.withShift}
+              />
             ) : (
               <InvalidSegmentBadge />
             )}
@@ -370,12 +371,15 @@ export function SearchCraftLoopRow({
   crafts,
   remaps,
   fingerAssignments,
+  keyboardLayout = "US",
   showTiming = true,
 }: {
   loop: SearchCraftLoopRowData;
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   /** タイミンググループカード内に埋め込む場合は false（グループ見出しと重複するため） */
   showTiming?: boolean;
 }) {
@@ -418,6 +422,14 @@ export function SearchCraftLoopRow({
           />
         </div>
 
+        <LoopKeySequenceButton
+          steps={resolved.steps}
+          getCraft={(id) => craftsById.get(id)}
+          remaps={remaps}
+          layout={keyboardLayout}
+          fingerAssignments={fingerAssignments}
+        />
+
         {showTiming && timingMeta && (
           <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <span className={cn("h-2.5 w-2.5 rounded-full", timingMeta.dot)} />
@@ -442,11 +454,13 @@ export function SearchCraftLoopGroupSection({
   crafts,
   remaps,
   fingerAssignments,
+  keyboardLayout,
 }: {
   loops: SearchCraftLoopRowData[];
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
 }) {
   const t = useT();
   if (loops.length === 0) return null;
@@ -464,6 +478,7 @@ export function SearchCraftLoopGroupSection({
             crafts={crafts}
             remaps={remaps}
             fingerAssignments={fingerAssignments}
+            keyboardLayout={keyboardLayout}
             showTiming={false}
           />
         ))}
@@ -498,11 +513,13 @@ export function makeLoopGroupExtra({
   crafts,
   remaps,
   fingerAssignments,
+  keyboardLayout,
 }: {
   loops: SearchCraftLoopRowData[];
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
 }): (timing: string | null) => ReactNode {
   const byTiming = groupLoopsByTiming(loops);
   return (timing) => {
@@ -513,6 +530,7 @@ export function makeLoopGroupExtra({
         crafts={crafts}
         remaps={remaps}
         fingerAssignments={fingerAssignments}
+        keyboardLayout={keyboardLayout}
       />
     ) : null;
   };

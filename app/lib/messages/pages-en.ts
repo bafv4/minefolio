@@ -1717,6 +1717,22 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     loopEntryRequired: "Select an entry for every step",
     removeStep: "Remove step",
   },
+  /** Key-press-order visualization modal (search-craft-key-sequence-dialog.tsx). Shared by both
+   *  the craft (variation) and loop trigger+dialog. */
+  searchCraftKeySequence: {
+    triggerLabel: "Show key press order",
+    dialogTitle: "Key press order",
+    dialogDescription: "See the order to press keys on the keyboard.",
+    modeLabel: "Display mode",
+    modeStatic: "Static",
+    modeAnimate: "Animate",
+    play: "Play",
+    pause: "Pause",
+    reset: "Reset",
+    loop: "Loop playback",
+    speedLabel: "Playback speed",
+    empty: "No key presses to show",
+  },
   mePresets: {
     title: "Presets - Minefolio",
     userNotFound: "User not found",
@@ -2418,6 +2434,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Click here and press keys to see the output after remaps are applied",
     typingTestReady: "Press a key…",
     typingTestOutput: "Output",
+    typingTestCraftableItems: "Craftable items",
     typingTestPressed: "Keys pressed",
     clearTypingTest: "Clear input",
     craftSection: "Search-craft",
@@ -2434,7 +2451,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     saveDialogTitle: "Save your Playground setup",
     saveDialogDescription:
       "Save your current remaps and search-crafts as a preset",
-    typingTestCraftableItems: "Craftable items",
     saveAsNewOption: "Save as a new preset",
     saveToExistingOption: "Save to an existing preset",
     targetPresetLabel: "Target preset",

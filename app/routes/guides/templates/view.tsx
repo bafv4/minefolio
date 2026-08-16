@@ -400,6 +400,7 @@ export default function TemplateViewPage() {
     loops: searchCraftLoopRows,
     crafts: loopCraftRefs,
     remaps,
+    keyboardLayout,
   });
 
   return (
@@ -740,6 +741,7 @@ export default function TemplateViewPage() {
           crafts={parsedSearchCrafts}
           remaps={remaps}
           gameLanguage={template.gameLanguage}
+          keyboardLayout={keyboardLayout}
           extraTimings={searchCraftLoopTimings}
           renderGroupExtra={renderSearchCraftLoopExtra}
         />

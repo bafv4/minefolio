@@ -29,6 +29,7 @@ import {
   LoopKeySequence,
   type LoopCraftInfo,
 } from "@/components/search-craft-loop-view";
+import { LoopKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import {
   resolveLoopSteps,
   deriveTransition,
@@ -406,11 +407,14 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
   loop,
   entries,
   remaps,
+  keyboardLayout = "US",
   onUpdate,
 }: {
   loop: T;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   onUpdate: (id: string, updated: T) => void;
 }) {
   const t = useT();
@@ -506,9 +510,17 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
 
       {/* Loop 全体プレビュー */}
       <div className="pl-7">
-        <Label className="mb-1 block text-xs text-muted-foreground">
-          {t("meSearchCraft.loopPreviewLabel")}
-        </Label>
+        <div className="mb-1 flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">
+            {t("meSearchCraft.loopPreviewLabel")}
+          </Label>
+          <LoopKeySequenceButton
+            steps={resolved.steps}
+            getCraft={(id) => entriesById.get(id)}
+            remaps={remaps ?? []}
+            layout={keyboardLayout}
+          />
+        </div>
         <LoopKeySequence
           steps={resolved.steps}
           getCraft={(id) => entriesById.get(id)}
@@ -542,6 +554,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   index,
   entries,
   remaps,
+  keyboardLayout,
   onUpdate,
   onDelete,
 }: {
@@ -549,6 +562,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   index: number;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
 }) {
@@ -605,7 +620,13 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
         </AlertDialog>
       </div>
 
-      <LoopRowBody loop={loop} entries={entries} remaps={remaps} onUpdate={onUpdate} />
+      <LoopRowBody
+        loop={loop}
+        entries={entries}
+        remaps={remaps}
+        keyboardLayout={keyboardLayout}
+        onUpdate={onUpdate}
+      />
     </div>
   );
 }

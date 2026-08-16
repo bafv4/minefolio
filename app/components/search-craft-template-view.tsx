@@ -14,6 +14,7 @@ import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import { CraftKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import { cn } from "@/lib/utils";
 import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
@@ -330,6 +331,7 @@ export function SearchCraftGroupedList({
   remaps,
   fingerAssignments,
   gameLanguage,
+  keyboardLayout,
   renderGroupExtra,
   extraTimings,
 }: {
@@ -338,6 +340,8 @@ export function SearchCraftGroupedList({
   fingerAssignments?: Record<string, FingerType[]>;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   /**
    * 各グループカードの行リストの後（CardContent 内）に追加コンテンツを描画するフック
    * （繋ぎ方 Loop 表示などを疎結合に差し込むための拡張点。search-craft-loop-view.tsx を
@@ -366,6 +370,7 @@ export function SearchCraftGroupedList({
         crafts={crafts}
         remaps={remaps}
         fingerAssignments={fingerAssignments}
+        keyboardLayout={keyboardLayout}
         lang={lang}
         extra={renderGroupExtra?.(null)}
       />
@@ -401,6 +406,7 @@ export function SearchCraftGroupedList({
           crafts={grouped.get(timing)!}
           remaps={remaps}
           fingerAssignments={fingerAssignments}
+          keyboardLayout={keyboardLayout}
           lang={lang}
           extra={renderGroupExtra?.(timing)}
         />
@@ -416,6 +422,7 @@ function SearchCraftGroupCard({
   crafts,
   remaps,
   fingerAssignments,
+  keyboardLayout,
   lang,
   extra,
 }: {
@@ -424,6 +431,7 @@ function SearchCraftGroupCard({
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   lang: string;
   extra?: ReactNode;
 }) {
@@ -466,6 +474,7 @@ function SearchCraftGroupCard({
                   craft={craft}
                   remaps={remaps}
                   fingerAssignments={fingerAssignments}
+                  keyboardLayout={keyboardLayout}
                   lang={lang}
                 />
               ))}
@@ -482,11 +491,13 @@ function SearchCraftRow({
   craft,
   remaps,
   fingerAssignments,
+  keyboardLayout = "US",
   lang,
 }: {
   craft: SearchCraftRowData;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
   lang: string;
 }) {
   const t = useT();
@@ -554,12 +565,21 @@ function SearchCraftRow({
                   {t("playerProfile.inputKeysLabel")}
                 </span>
                 {variation.str ? (
-                  <ActualKeyBadges
-                    searchStr={variation.str}
-                    remaps={remaps}
-                    fingerAssignments={fingerAssignments}
-                    shiftHeld={variation.withShift}
-                  />
+                  <>
+                    <ActualKeyBadges
+                      searchStr={variation.str}
+                      remaps={remaps}
+                      fingerAssignments={fingerAssignments}
+                      shiftHeld={variation.withShift}
+                    />
+                    <CraftKeySequenceButton
+                      searchStr={variation.str}
+                      withShift={variation.withShift}
+                      remaps={remaps}
+                      layout={keyboardLayout}
+                      fingerAssignments={fingerAssignments}
+                    />
+                  </>
                 ) : variation.withShift ? (
                   <ShiftKeyGroup />
                 ) : (

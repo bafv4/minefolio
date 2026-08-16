@@ -334,6 +334,57 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 ---
 
+## キー入力順の可視化
+
+各クラフト（バリエーション）・繋ぎ方（Loop）の「キーを押す順番」をバーチャルキーボード上で可視化するモーダル。表示ビュー（プロフィール・テンプレート詳細・`/me`）と編集UI（`/me/search-craft`・Playground・テンプレートエディタ）の両方の行に、小さなキーボードアイコンのトリガーボタン（Tooltip 付き）として置かれている。
+
+### 押下シーケンスの導出: `app/lib/search-craft-key-sequence.ts`
+
+`.server` にしない純粋関数モジュール（`app/lib/remap-utils.ts`・`app/lib/search-craft-loops.ts` と同じ位置付け）。既存の逆引きロジック（`getActualKeyInfos()` / `getActualControlKeyInfo()`）をそのまま使い、リマップ解決自体はここでは行わない。
+
+| 関数 | 説明 |
+|---|---|
+| `buildCraftKeySequence(t, searchStr, remaps, withShift)` | 単一クラフト（バリエーション）の検索文字列から `KeySequence` を導出する |
+| `buildLoopKeySequence(t, resolvedSteps, getCraft, remaps)` | `resolveLoopSteps()` の戻り値（`ResolvedLoopStep[]`）から `KeySequence` を導出する。先頭ステップは自身の検索文字列、以降は `step.derived.ops`（`deriveTransition()` の結果）をそのまま押下操作へ変換し、各ステップの終わりにクラフト実行マーカー（`kind: "craft"`, `order: null`）を挿入する |
+| `physicalKeyForStep(step)` | ステップからキーボード上でハイライト・注釈すべき物理キー（修飾キー込み表記の最後のセグメント＝ベースキー）を取り出す。craft マーカーは `null` |
+| `heldKeysForStep(step)` | ステップ単体の「押しっぱなし」修飾キー（`KeySequenceStep.heldKeys`）を取り出す。craft マーカーはキーボード上で何も押していない扱いのため常に空配列（`heldKeys` フィールド自体を持たない） |
+| `buildKeyAnnotations(sequence)` | 静止表示用: 物理キーコード → 押す順番の注釈文字列（`"1"` または `"1,4"` のようなカンマ区切り）のマップを構築する。`VirtualKeyboard` の `keyAnnotations` にそのまま渡せる |
+| `stepDurationMs(step, speed)` | アニメーション再生用: 指定ステップを表示し続ける時間（ms）を返す。基本間隔は `ANIMATION_BASE_STEP_MS`（600ms）、craft（クラフト実行マーカー）ステップは `ANIMATION_CRAFT_STEP_MULTIPLIER`（2）倍長く取る。`speed`（`PLAYBACK_SPEED_MIN`〜`PLAYBACK_SPEED_MAX` の範囲の数値。スライダーで選択）で割った値を返す |
+
+設計方針:
+
+- **1ステップ＝1回のキー操作**（既存の `KeyBadge` / `ControlKeyBadge` が表示する1バッジと対応）。BS×n / ←×n は既存バッジと同様「1ステップ + count」で表現し、n個には展開しない
+- 修飾キー込みの keyCode（例: `"Shift+KeyA"`）は、キーボード上のハイライト・順番注釈の対象を**ベースキー（最後のセグメント）のみ**に絞る。修飾キー成分はバッジのラベル・ツールチップでのみ表現し、キーボード上には現さない（既存の `needsShift` バッジ表現と同じ簡略化方針）
+- 例外は Shift が「押しっぱなし」の意味を持つ2ケース（クラフト単位の `withShift`、繋ぎ方の ⇧Home の Shift 成分）。これらは番号を振らず、`KeySequence.heldKeys`（シーケンス全体で1つ。静止表示時の持続的な warning トーンのハイライト対象。代表物理キーは常に `ShiftLeft`、リマップによる実キー解決はしない）に集約する
+- 各非 craft ステップ（`type` / `backspace` / `arrowLeft` / `home` / `selectAll`）は、`KeySequence.heldKeys`（シーケンス全体で1つ）とは別に、**そのステップの間だけ押されている修飾キー**を `KeySequenceStep.heldKeys` として個別に持つ（アニメーション表示で「現在押しているキーだけ色付き」にする際、withShift/⇧Home のような Shift 同時押し状態をそのステップの間だけ維持するために使う）。`type` は withShift（クラフト/繋ぎ方遷移）または `info.needsShift`（withShift なしの単発大文字）で `["ShiftLeft"]`、`selectAll` は ⇧Home の Shift 成分、`backspace`/`arrowLeft`/`home` は常に空配列。craft マーカーはフィールド自体を持たない（`heldKeysForStep()` で常に空配列として扱う）
+
+### バーチャルキーボードの拡張: `app/components/virtual-keyboard.tsx`
+
+`VirtualKeyboard` に任意 prop を2つ追加している（メインレイアウト・ナビゲーションクラスタのキーのみ対応。カスタムキー・テンキー・JIS Enter は対象外）。
+
+- `keyAnnotations?: Record<string, string>`: キーごとの注釈（押す順番）。該当キー右上に小さな `bg-primary` の丸バッジとして重ねて表示する
+- `heldKeys?: string[]`: 持続的に warning トーンでハイライトするキー（`highlightedKeys` の primary リングとは別トーン。「押しっぱなし」状態を表現する）
+
+### ダイアログ: `app/components/search-craft-key-sequence-dialog.tsx`
+
+`CraftKeySequenceButton`（クラフト用）・`LoopKeySequenceButton`（Loop 用）としてトリガーボタン＋ダイアログを1コンポーネントに束ねている（`app/components/keybindings/keyboard-export-dialog.tsx` と同じ構成）。ダイアログを開いたときだけ `buildCraftKeySequence()`/`buildLoopKeySequence()` を呼ぶ（多数のクラフト行が並ぶ一覧で、初期描画時に全行分の逆引きを走らせないため）。
+
+- **静止表示（既定）**: シーケンス中の全物理キー（+ グローバル `heldKeys`）を `emphasizedKeys` で強調し、それ以外はグレーで減光する。各キーに押す順番の数字を `keyAnnotations` で注釈表示し、Shift の「押しっぱなし」（`heldKeys`）は数字ではなく持続的な warning トーンのハイライトで区別する
+- **アニメーション表示**: 再生ボタンで先頭から1ステップずつ `highlightedKeys` を進める。再生位置が有効なとき（未再生の `-1` を除く）は「**現在押している瞬間のキーだけ色付き**」に切り替わる: `emphasizedKeys` を現在ステップの物理キー（`physicalKeyForStep()`）＋そのステップの `heldKeys`（`heldKeysForStep()`。withShift/needsShift/⇧Home の Shift 成分をそのステップの間だけ維持する）に絞り込み、それ以外の全キーはグレーになる。craft（クラフト実行マーカー）ステップ中は物理キーを持たないため全キーがグレーになる（「キーボード上は何も押していない」表現）。未再生時（`-1`）は静止表示と同じ全体強調にフォールバックする
+  - 1ステップあたりの待機時間は `stepDurationMs()` が返す値（craft ステップは通常のキーステップの2倍長く表示し、「アイテムを選んでクラフトする」という時間的な区切りを伝える）。`setInterval` ではなくステップごとに `setTimeout` を連鎖させて実現している（ステップごとに待機時間が変わるため）
+  - **繰り返し再生**: Repeat アイコンのトグルボタン（既定OFF）。ON のときは末尾まで進んだら先頭から自動的に再生を続ける。OFF のときは末尾に達すると自動停止する（ハイライトは最後のまま残る）
+  - **速度調整**: shadcn `Slider`（0.5×〜2×、0.25刻み、既定1×。`PLAYBACK_SPEED_MIN`/`PLAYBACK_SPEED_MAX`/`PLAYBACK_SPEED_STEP`/`PLAYBACK_SPEED_DEFAULT`）で調整し、現在値のラベル（例: "1.25×"）を横に表示する。再生中に変更しても以降のステップから新しい速度が反映される
+  - キーボード下のシーケンス表示（キーバッジ列）にも現在位置を同期表示する（該当バッジに primary リングを重ねる）。`prefers-reduced-motion` 環境ではアニメーション表示自体を無効化する（静止表示は常に利用可能）。ダイアログを開き直す（シーケンスが変わる）と繰り返し・速度の設定も既定値にリセットされる
+- 下部のキーバッジ列は `search-craft-template-view.tsx` の `KeyBadge` / `search-craft-loop-view.tsx` の `ControlKeyBadge` と見た目を揃えたローカル実装（`TypeKeyBadge` / `ControlBadge`）を使う。**これらのビュー側コンポーネントは行UIに本ダイアログのトリガーボタンを埋め込むため、本ダイアログからそれらを import すると循環importになる**。ロジック（リマップ解決）自体は共有元の `getActualKeyInfos()`/`getActualControlKeyInfo()` の結果（`ActualKeyInfo` / `ActualControlKeyInfo`）をそのまま描画するだけで、二重実装はしていない（見た目のスタイルを変更する場合は両方を揃えること）
+
+### トリガーボタンの配置
+
+- 表示ビュー: `SearchCraftRow`（`search-craft-template-view.tsx`、バリエーションごと）・`SearchCraftLoopRow`（`search-craft-loop-view.tsx`、Loop 行ごと）
+- 編集UI: `SearchCraftTimingBoard` のクラフト行（`search-craft-editor.tsx`、バリエーションの入力キーライブプレビュー横）・Loop 行（`search-craft-loop-editor.tsx`、Loop 全体プレビューのラベル横）
+- キーボードレイアウトは、閲覧対象プレイヤーの `keyboardLayout`（プロフィール・テンプレート詳細）またはワークベンチの `layout` state（Playground・テンプレートエディタ・`SearchCraftWorkbench` 経由の `SearchCraftTimingBoard`）を使う。それ以外で取得できない文脈（`/me/search-craft` の `SearchCraftTimingBoard` 直接呼び出し）は `"US"` にフォールバックする
+
+---
+
 ## プロフィールページでの表示
 
 `app/routes/player/profile.tsx` でプレイヤーのプロフィールページにアイテム配置とサーチクラフトを表示する。
@@ -383,6 +434,9 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 | `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`） |
 | `app/components/search-craft-loop-editor.tsx` | Loop 行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
 | `app/components/search-craft-loop-view.tsx` | Loop 表示UI（`SearchCraftLoopRow` / `SearchCraftLoopGroupSection` 等） |
+| `app/lib/search-craft-key-sequence.ts` | キー入力順の押下シーケンス導出（`buildCraftKeySequence()` / `buildLoopKeySequence()`） |
+| `app/components/search-craft-key-sequence-dialog.tsx` | キー入力順の可視化モーダル（`CraftKeySequenceButton` / `LoopKeySequenceButton`） |
+| `app/components/virtual-keyboard.tsx` | バーチャルキーボード（`keyAnnotations` / `heldKeys` prop でキー入力順の可視化に対応） |
 | `docs/search-craft-templates.md` | テンプレート公開・適用・Playground 仕様（Loop の craftIndex 参照も含む） |
 | `docs/presets.md` | プリセットスナップショット仕様（Loop の craftSeq 参照も含む） |
 | `@bafv4/mcitems` | Minecraft 1.16アイテムアイコン・検索パッケージ |
