@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
-import { VirtualKeyboard } from "@/components/virtual-keyboard";
+import { VirtualKeyboard, VirtualMouse } from "@/components/virtual-keyboard";
 import {
   SearchCraftTimingBoard,
   type SearchCraftDraft,
@@ -293,15 +293,24 @@ export function SearchCraftWorkbench({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <VirtualKeyboard
-            layout={layout}
-            keybindings={{}}
-            remaps={effectiveRemaps}
-            onKeyClick={setEditingKeyCode}
-            showRemaps
-            hideNumpad
-          />
+        <CardContent>
+          <div className="flex flex-col items-start gap-4">
+            <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+              <VirtualKeyboard
+                layout={layout}
+                keybindings={{}}
+                remaps={effectiveRemaps}
+                onKeyClick={setEditingKeyCode}
+                showRemaps
+                hideNumpad
+              />
+            </div>
+            <VirtualMouse
+              remaps={effectiveRemaps}
+              onButtonClick={setEditingKeyCode}
+              showRemaps
+            />
+          </div>
         </CardContent>
       </Card>
 

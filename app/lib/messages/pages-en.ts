@@ -2404,12 +2404,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     clearAll: "Clear",
     remapSection: "Key remaps",
     remapSectionDescription:
-      "Add and edit remaps. You can also register one by clicking a key on the virtual keyboard. Remaps edited here are treated as Chat input (search-craft) remaps.",
-    remapDialogDescription: "Set the remap for this key",
+      "Add and edit remaps. You can also register one by clicking a key or button on the virtual keyboard/mouse. Remaps edited here are treated as Chat input (search-craft) remaps.",
+    remapDialogDescription: "Set the remap for this key/button",
     noRemaps: "No remaps have been set",
     addRemap: "Add a remap",
     keyboardSection: "Virtual keyboard",
-    keyboardSectionDescription: "Click a key to register a remap",
+    keyboardSectionDescription: "Click a key or mouse button to register a remap",
     typingTestSection: "Typing test",
     typingTestSectionDescription:
       "Click the area and press keys to see the output after remaps are applied",
