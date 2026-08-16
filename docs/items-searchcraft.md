@@ -160,15 +160,30 @@ Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中
 - `remapDetail` / `remapDetails`（`RemapDetail[]`）: リマップされている場合のみの「リマップ: 物理キー名称 → リマップ先」用の詳細（`sourceLabel`／`targetLabel`、いずれもフル名称）。プレイヤープロフィールの keybindings タブ（`key-info-trigger.tsx` の `RemapRow`）と同じ「物理 → 出力」の概念をテキスト版で踏襲したもの。`ActualControlKeyInfo` は `⇧Home` 合成時に成分ごと最大2件持つ
 - `ActualControlKeyInfo.tooltipLabel`: 実際に押すキーのフル名称（`⇧` を使わず「左Shift」「右Shift」等で表記。`⇧Home` 合成時は成分ごとのフル名称を `+` で連結、例: `左Shift+サイド1`）
 
-`KeyBadge`（`search-craft-template-view.tsx`）と `ControlKeyBadge`（`search-craft-loop-view.tsx`）はこれらを使い、リマップ時の Tooltip を「実際に押すキー — 操作を入力」＋「リマップ: 物理 → 出力」（成分が複数ならリマップ行を複数並べる）の構成にする。Tooltip 内は `⇧` への省略をせずフルネーム表記にする（バッジ本体の表示は `ShiftMark`/短縮記号のまま変更しない）。翻訳キーは `playerProfile.controlKeyActualTooltip`（`{key} — {op}` の主表記行）と `playerProfile.remapped`（`リマップ: {source} → {target}` のリマップ詳細行、両バッジで共用）。
+`KeyBadge` と `ControlKeyBadge`（`ControlKeyBadgeView` の remaps 解決ラッパー。いずれも `app/components/search-craft-badges.tsx` の葉モジュール。下記「共有バッジコンポーネント」節参照）はこれらを使い、リマップ時の Tooltip を「実際に押すキー — 操作を入力」＋「リマップ: 物理 → 出力」（成分が複数ならリマップ行を複数並べる）の構成にする。Tooltip 内は `⇧` への省略をせずフルネーム表記にする（バッジ本体の表示は `ShiftMark`/短縮記号のまま変更しない）。翻訳キーは `playerProfile.controlKeyActualTooltip`（`{key} — {op}` の主表記行）と `playerProfile.remapped`（`リマップ: {source} → {target}` のリマップ詳細行、両バッジで共用）。
+
+### 共有バッジコンポーネント: `app/components/search-craft-badges.tsx`
+
+サーチクラフトのキーバッジ系コンポーネントの葉モジュール。表示（`search-craft-template-view.tsx`）・Loop表示（`search-craft-loop-view.tsx`）・キー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）の3ファイルが共通で使う。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`FINGER_KEY_COLORS`）・`lib/keybindings`・`lib/remap-utils` のみで、上記3ファイルのいずれにも依存しない（＝どこから import しても循環importにならない）。以前はダイアログ側が循環import回避のため見た目だけを揃えたローカル実装（`TypeKeyBadge`/`ControlBadge`/`CraftMarkerPill` 等）を持っていたが、葉モジュール化によりこの二重実装を解消した。`.claude/rules/ui.md`「キーバッジ」節と同じ規格。見た目を変える場合はこのファイルだけを直せばよい。
+
+| エクスポート | 説明 |
+|---|---|
+| `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` は re-export で既存 import 元を保つ |
+| `KeyBadge` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ付き）。`search-craft-template-view.tsx` は re-export |
+| `ShiftKeyGroup` | 「Shiftを押しながら」入力するキー列全体を囲むラッパー。`search-craft-template-view.tsx` は re-export |
+| `getFingerForKeyCode(keyCode, fingerAssignments)` | キーコード（修飾キー込み表記を含む）から指割り当てを検索する共通ヘルパー（ベースキー＝最後のセグメントで引く）。以前は `search-craft-template-view.tsx`（`ActualKeyBadges`）とダイアログ（`SequenceStepBadge`）でほぼ同じロジックが重複していた |
+| `ControlKeyKind` / `CONTROL_KEY_META` | 制御キー（backspace/arrowLeft/selectAll/home）の種別と、種別ごとの keyCode・短縮ラベル・逆引き対象キーのメタ |
+| `ControlKeyBadgeView({ kind, info, count })` | 制御キーのバッジ描画部。解決済み `ActualControlKeyInfo` を直接受け取って描画するだけ（二重解決しない）。キー入力順ダイアログは既に解決済みの info を持つためこちらを直接使う |
+| `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持） |
+| `CraftMarker({ items, content, showItemBreakdown? })` | クラフト実行マーカーのチップ（ItemIcon 24px＋サーチ文字列部分）。`content` は呼び出し側が用意した描画済み ReactNode（`renderVisibleSpaces` の素の描画、または Loop 表示側の `SegmentedSearchString` 等、用途に応じて異なる）。`showItemBreakdown: true` のときだけ、複数アイテム（2件以上）の Tooltip に UI ロケール依存の表示名（`getLocalizedItemName`）で内訳を追加する。省略時（キー入力順ダイアログ）は内訳なしの単純表示のまま |
 
 ### Shiftを押しながらクラフト（withShift）
 
 スタック単位のクラフト（Shift+クリック）のために Shift を押しっぱなしでサーチ入力するエントリは、`withShift: true` を設定できる。
 
 - 編集UI（/me/search-craft・テンプレートエディタ・Playground）の各行に「Shiftを押しながら」チェックボックスがある
-- 表示行の入力キー列は、独立した「⇧ Shift」バッジを先頭に並べるのではなく、`ShiftKeyGroup`（`search-craft-template-view.tsx`）が実入力キー列（`KeyBadge` 列）全体を琥珀色の枠で囲み、その枠の先頭にコンパクトな「⇧」マークのみを置く（可視の "Shift" テキストは無し。`ShiftMark` の sr-only と Tooltip が意味を補う。凡例にも表示）。`ActualKeyBadges` は `shiftHeld` が true のとき自動的にこの枠で自身の `KeyBadge` 列を包む。**⇧ はフォント依存の Unicode 文字直書きではなく `app/components/shift-mark.tsx` の `ShiftMark`（lucide `ArrowBigUp`）で描画する**（データ層の `displayLabel` 等の文字列は "⇧" のまま。詳細は `.claude/rules/ui.md`「キーバッジ」節）
-- Loop（繋ぎ方）でも同じ扱いをする: 先頭ステップのキー列は自身のバリエーションの `withShift`、遷移の `type` op のキー列は**遷移先ステップ**のバリエーションの `withShift` で `ShiftKeyGroup` を適用する（制御キー・クラフト実行マーカーは対象外）。`resolveLoopSteps()` の `getCraft` が返す `withShifts`（`searchStrs` と同じ並びの `boolean[]`、任意フィールド）から `ResolvedLoopStep.withShift` として解決される（詳細は後述「[繋ぎ方（Loop）](#繋ぎ方loop)」）
+- 表示行の入力キー列は、独立した「⇧ Shift」バッジを先頭に並べるのではなく、`ShiftKeyGroup`（`search-craft-badges.tsx`）が実入力キー列（`KeyBadge` 列）全体を琥珀色の枠で囲み、その枠の先頭にコンパクトな「⇧」マークのみを置く（可視の "Shift" テキストは無し。`ShiftMark` の sr-only と Tooltip が意味を補う。凡例にも表示）。`ActualKeyBadges` は `shiftHeld` が true のとき自動的にこの枠で自身の `KeyBadge` 列を包む。**⇧ はフォント依存の Unicode 文字直書きではなく `app/components/shift-mark.tsx` の `ShiftMark`（lucide `ArrowBigUp`）で描画する**（データ層の `displayLabel` 等の文字列は "⇧" のまま。詳細は `.claude/rules/ui.md`「キーバッジ」節）
+- Loop（繋ぎ方）でも同じ扱いをする: 先頭ステップのキー列は自身のバリエーションの `withShift`、遷移の `type` op のキー列は**遷移先ステップ**のバリエーションの `withShift` で `ShiftKeyGroup` を適用する（制御キー・クラフト実行マーカーは対象外）。`resolveLoopSteps()` の `getCraft` が返す `variations[variationIndex].withShift` から `ResolvedLoopStep.withShift` として解決される（詳細は後述「[繋ぎ方（Loop）](#繋ぎ方loop)」）
 - 入力キーの逆引きは `getActualKeyInfos(searchStr, remaps, { shiftHeld: true })` となり、**Shift 押下中の出力文字で**解決する:
   - 単一キーソースのリマップは target キーのシフト後文字（例: target が `Semicolon` なら `:`）で逆引きする
   - `Shift+X` ソースの完全一致リマップは X 単独のバッジになる（Shift は押しっぱなしのため ⇧ プレフィックスなし）
@@ -285,7 +300,7 @@ type LoopStepData = {
 
 | 関数 | 説明 |
 |---|---|
-| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口）。`getCraft` は `{ searchStrs: string[]; withShifts?: boolean[] }`（対象クラフトの全バリエーションの文字列と、同じ並びの withShift。`withShifts` は任意＝省略した呼び出し元は withShift=false 扱いになる後方互換）を返す契約。各 `ResolvedLoopStep` は正規化済み `variationIndex` と、それに対応する `searchStr`（範囲外・参照切れなら `null`）・`withShift`（同条件で `false`）を持つ。**表示文字列は必ず `ResolvedLoopStep.searchStr` から取ること**（`getCraft` を呼び出し側で再度呼んで `searchStrs[0]` 等を参照すると、variationIndex を無視した誤表示になる） |
+| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口）。`getCraft` は `{ variations: Pick<SearchCraftVariation, "str" \| "withShift">[] }`（対象クラフトの全バリエーション。`str`/`withShift` を並行配列にせず1本の配列にまとめているため index がずれても型で守られる）を返す契約。呼び出し元は `craft.variations` をそのまま渡すだけでよい。各 `ResolvedLoopStep` は正規化済み `variationIndex` と、それに対応する `searchStr`（範囲外・参照切れなら `null`）・`withShift`（同条件で `false`）を持つ。**表示文字列は必ず `ResolvedLoopStep.searchStr` から取ること**（`getCraft` を呼び出し側で再度呼んで `variations[0]` 等を参照すると、variationIndex を無視した誤表示になる） |
 | `minArrowLeftCount(prev, next)` | `arrowLeft` 方式で `prev` → `next` に遷移できる、妥当な最小の `k`。見つからなければ `null` |
 | `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする。`variationIndex` は欠落・不正値を 0 に矯正する |
 | `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用）。`variationIndex` は存在する場合のみ非負整数であることを検証する |
@@ -309,9 +324,10 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 `app/components/search-craft-loop-view.tsx`:
 
+`ControlKeyBadge`（制御キー用バッジ。remaps 逆引きラッパー）は `app/components/search-craft-badges.tsx` の葉モジュール実体を re-export したもの（上記「共有バッジコンポーネント」節参照）。
+
 | コンポーネント | 説明 |
 |---|---|
-| `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系・角丸 `rounded`）と一目で区別できるよう、info トーン（`border-info/50 bg-info/10 text-info`）＋ **`rounded-full` のピル形状**で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策）。任意 prop `remaps` を渡すと、その制御キーの出力になっているリマップを `getActualControlKeyInfo()`（`app/lib/remap-utils.ts`）で逆引きする。リマップが見つかった場合のみ「実際に押すキーを主ラベル（外側）、出力操作（`BS` 等）をミニチップ（`text-[10px]`、チップの中のチップ）」の複合ピル表示＋リマップ用リングになる。リマップが無い（大多数）場合は非リマップ時と同一の単一ピルのまま |
 | `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon 24px＋サーチ文字列。同じサーチ文字列で複数アイテムが出せるクラフトは最初の1件だけでなく全アイテムのアイコンを並べる。通常のアイテムチップと同じ見た目でキー系バッジと同じ高さ h-7、専用アイコンなし・Tooltip 付き〈複数アイテム時は内訳を列挙〉）を `ChevronRight` を挟んで交互に描画。セグメント間は gap-2。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用。`shiftHeld` を渡すと `ShiftKeyGroup` でキー列全体を囲む）。先頭ステップは自身の、`type` op は遷移先ステップ（=そのステップ自身）の `ResolvedLoopStep.withShift` を `shiftHeld` に使う。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
 | `SearchCraftLoopRow` | Loop 一覧の行表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`h-2.5 w-2.5`、`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
 | `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。見出しと行リストの間は `space-y-2`（8px）で区切る。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
@@ -347,7 +363,6 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 | `buildCraftKeySequence(t, searchStr, remaps, withShift)` | 単一クラフト（バリエーション）の検索文字列から `KeySequence` を導出する |
 | `buildLoopKeySequence(t, resolvedSteps, getCraft, remaps)` | `resolveLoopSteps()` の戻り値（`ResolvedLoopStep[]`）から `KeySequence` を導出する。先頭ステップは自身の検索文字列、以降は `step.derived.ops`（`deriveTransition()` の結果）をそのまま押下操作へ変換し、各ステップの終わりにクラフト実行マーカー（`kind: "craft"`, `order: null`）を挿入する |
 | `physicalKeyForStep(step)` | ステップからキーボード上でハイライト・注釈すべき物理キー（修飾キー込み表記の最後のセグメント＝ベースキー）を取り出す。craft マーカーは `null` |
-| `heldKeysForStep(step)` | ステップ単体の「押しっぱなし」修飾キー（`KeySequenceStep.heldKeys`）を取り出す。craft マーカーはキーボード上で何も押していない扱いのため常に空配列（`heldKeys` フィールド自体を持たない） |
 | `buildKeyAnnotations(sequence)` | 静止表示用: 物理キーコード → 押す順番の注釈文字列（`"1"` または `"1,4"` のようなカンマ区切り）のマップを構築する。`VirtualKeyboard` の `keyAnnotations` にそのまま渡せる |
 | `stepDurationMs(step, speed)` | アニメーション再生用: 指定ステップを表示し続ける時間（ms）を返す。基本間隔は `ANIMATION_BASE_STEP_MS`（600ms）、craft（クラフト実行マーカー）ステップは `ANIMATION_CRAFT_STEP_MULTIPLIER`（2）倍長く取る。`speed`（`PLAYBACK_SPEED_MIN`〜`PLAYBACK_SPEED_MAX` の範囲の数値。スライダーで選択）で割った値を返す |
 
@@ -356,7 +371,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 - **1ステップ＝1回のキー操作**（既存の `KeyBadge` / `ControlKeyBadge` が表示する1バッジと対応）。BS×n / ←×n は既存バッジと同様「1ステップ + count」で表現し、n個には展開しない
 - 修飾キー込みの keyCode（例: `"Shift+KeyA"`）は、キーボード上のハイライト・順番注釈の対象を**ベースキー（最後のセグメント）のみ**に絞る。修飾キー成分はバッジのラベル・ツールチップでのみ表現し、キーボード上には現さない（既存の `needsShift` バッジ表現と同じ簡略化方針）
 - 例外は Shift が「押しっぱなし」の意味を持つ2ケース（クラフト単位の `withShift`、繋ぎ方の ⇧Home の Shift 成分）。これらは番号を振らず、`KeySequence.heldKeys`（シーケンス全体で1つ。静止表示時の持続的な warning トーンのハイライト対象。代表物理キーは常に `ShiftLeft`、リマップによる実キー解決はしない）に集約する
-- 各非 craft ステップ（`type` / `backspace` / `arrowLeft` / `home` / `selectAll`）は、`KeySequence.heldKeys`（シーケンス全体で1つ）とは別に、**そのステップの間だけ押されている修飾キー**を `KeySequenceStep.heldKeys` として個別に持つ（アニメーション表示で「現在押しているキーだけ色付き」にする際、withShift/⇧Home のような Shift 同時押し状態をそのステップの間だけ維持するために使う）。`type` は withShift（クラフト/繋ぎ方遷移）または `info.needsShift`（withShift なしの単発大文字）で `["ShiftLeft"]`、`selectAll` は ⇧Home の Shift 成分、`backspace`/`arrowLeft`/`home` は常に空配列。craft マーカーはフィールド自体を持たない（`heldKeysForStep()` で常に空配列として扱う）
+- 各ステップ（`type` / `backspace` / `arrowLeft` / `home` / `selectAll` / `craft`）は、`KeySequence.heldKeys`（シーケンス全体で1つ）とは別に、**そのステップの間だけ押されている修飾キー**を `KeySequenceStep.heldKeys` として個別に持つ（アニメーション表示で「現在押しているキーだけ色付き」にする際、withShift/⇧Home のような Shift 同時押し状態をそのステップの間だけ維持するために使う）。`type` は withShift（クラフト/繋ぎ方遷移）または `info.needsShift`（withShift なしの単発大文字）で `["ShiftLeft"]`、`selectAll` は ⇧Home の Shift 成分、`backspace`/`arrowLeft`/`home`/`craft` は常に空配列。craft マーカーもキーボード上で何も押していない扱いのため常に空配列だが、フィールド自体は他の kind と同じく持つ（呼び出し側が分岐関数を介さず `step.heldKeys` を直接参照できるようにするため。以前は craft だけ `heldKeys` を持たない型だったため専用の `heldKeysForStep()` ヘルパーが必要だったが、フィールドを共通化して廃止した）
 
 ### バーチャルキーボードの拡張: `app/components/virtual-keyboard.tsx`
 
@@ -370,12 +385,13 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 `CraftKeySequenceButton`（クラフト用）・`LoopKeySequenceButton`（Loop 用）としてトリガーボタン＋ダイアログを1コンポーネントに束ねている（`app/components/keybindings/keyboard-export-dialog.tsx` と同じ構成）。ダイアログを開いたときだけ `buildCraftKeySequence()`/`buildLoopKeySequence()` を呼ぶ（多数のクラフト行が並ぶ一覧で、初期描画時に全行分の逆引きを走らせないため）。
 
 - **静止表示（既定）**: シーケンス中の全物理キー（+ グローバル `heldKeys`）を `emphasizedKeys` で強調し、それ以外はグレーで減光する。各キーに押す順番の数字を `keyAnnotations` で注釈表示し、Shift の「押しっぱなし」（`heldKeys`）は数字ではなく持続的な warning トーンのハイライトで区別する
-- **アニメーション表示**: 再生ボタンで先頭から1ステップずつ `highlightedKeys` を進める。再生位置が有効なとき（未再生の `-1` を除く）は「**現在押している瞬間のキーだけ色付き**」に切り替わる: `emphasizedKeys` を現在ステップの物理キー（`physicalKeyForStep()`）＋そのステップの `heldKeys`（`heldKeysForStep()`。withShift/needsShift/⇧Home の Shift 成分をそのステップの間だけ維持する）に絞り込み、それ以外の全キーはグレーになる。craft（クラフト実行マーカー）ステップ中は物理キーを持たないため全キーがグレーになる（「キーボード上は何も押していない」表現）。未再生時（`-1`）は静止表示と同じ全体強調にフォールバックする
+- **アニメーション表示**: 再生ボタンで先頭から1ステップずつ `highlightedKeys` を進める。再生位置が有効なとき（未再生の `-1` を除く）は「**現在押している瞬間のキーだけ色付き**」に切り替わる: `emphasizedKeys` を現在ステップの物理キー（`physicalKeyForStep()`）＋そのステップの `heldKeys`（withShift/needsShift/⇧Home の Shift 成分をそのステップの間だけ維持する）に絞り込み、それ以外の全キーはグレーになる。craft（クラフト実行マーカー）ステップ中は物理キーを持たないため全キーがグレーになる（「キーボード上は何も押していない」表現）。未再生時（`-1`）は静止表示と同じ全体強調にフォールバックする（これらの派生値は `currentStep`/`sequence` 依存の1つの `useMemo` にまとめて計算し、物理キーの二重計算を避けている）
   - 1ステップあたりの待機時間は `stepDurationMs()` が返す値（craft ステップは通常のキーステップの2倍長く表示し、「アイテムを選んでクラフトする」という時間的な区切りを伝える）。`setInterval` ではなくステップごとに `setTimeout` を連鎖させて実現している（ステップごとに待機時間が変わるため）
   - **繰り返し再生**: Repeat アイコンのトグルボタン（既定OFF）。ON のときは末尾まで進んだら先頭から自動的に再生を続ける。OFF のときは末尾に達すると自動停止する（ハイライトは最後のまま残る）
   - **速度調整**: shadcn `Slider`（0.5×〜2×、0.25刻み、既定1×。`PLAYBACK_SPEED_MIN`/`PLAYBACK_SPEED_MAX`/`PLAYBACK_SPEED_STEP`/`PLAYBACK_SPEED_DEFAULT`）で調整し、現在値のラベル（例: "1.25×"）を横に表示する。再生中に変更しても以降のステップから新しい速度が反映される
-  - キーボード下のシーケンス表示（キーバッジ列）にも現在位置を同期表示する（該当バッジに primary リングを重ねる）。`prefers-reduced-motion` 環境ではアニメーション表示自体を無効化する（静止表示は常に利用可能）。ダイアログを開き直す（シーケンスが変わる）と繰り返し・速度の設定も既定値にリセットされる
-- 下部のキーバッジ列は `search-craft-template-view.tsx` の `KeyBadge` / `search-craft-loop-view.tsx` の `ControlKeyBadge` と見た目を揃えたローカル実装（`TypeKeyBadge` / `ControlBadge`）を使う。**これらのビュー側コンポーネントは行UIに本ダイアログのトリガーボタンを埋め込むため、本ダイアログからそれらを import すると循環importになる**。ロジック（リマップ解決）自体は共有元の `getActualKeyInfos()`/`getActualControlKeyInfo()` の結果（`ActualKeyInfo` / `ActualControlKeyInfo`）をそのまま描画するだけで、二重実装はしていない（見た目のスタイルを変更する場合は両方を揃えること）
+  - キーボード下のシーケンス表示（キーバッジ列）にも現在位置を同期表示する（該当バッジに primary リングを重ねる）。`prefers-reduced-motion` 環境ではアニメーション表示自体を無効化する（静止表示は常に利用可能）。ダイアログを開き直すと繰り返し・速度の設定も既定値に戻る（`KeySequencePlayer` は Radix Dialog が閉じるとアンマウントされるため、明示的なリセット処理は不要 — 再生 effect 側は `sequence` 差し替わり時の範囲外 index アクセスを防ぐ1行のガードのみ持つ）
+- 下部のキーバッジ列（`SequenceStepBadge`）は `app/components/search-craft-badges.tsx` の葉モジュール（`KeyBadge` / `ControlKeyBadgeView` / `CraftMarker`）をそのまま使う（上記「共有バッジコンポーネント」節参照）。この葉モジュールは `search-craft-template-view.tsx`/`search-craft-loop-view.tsx` のどちらにも依存しないため、本ダイアログ（逆に上記2ファイルから import される側）から import しても循環importにならない
+- トリガーボタン＋ダイアログの外殻（`Dialog`/`DialogContent`/`DialogHeader`/`KeySequencePlayer` の組み立て）は `KeySequenceDialogShell` に集約されており、`CraftKeySequenceButton`/`LoopKeySequenceButton` はそれぞれの `sequence`（`buildCraftKeySequence`/`buildLoopKeySequence` の結果。`open` 依存の `useMemo`）を用意して渡すだけになっている
 
 ### トリガーボタンの配置
 

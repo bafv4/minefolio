@@ -10,26 +10,28 @@ import {
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ItemIcon } from "@/components/item-icon";
-import { VirtualKeyboard, FINGER_KEY_COLORS, type FingerAssignment } from "@/components/virtual-keyboard";
-import { KeyLabelText } from "@/components/shift-mark";
-import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
-import type { ActualControlKeyInfo, ActualKeyInfo, RemapInfo, UiRemapInfo } from "@/lib/remap-utils";
+import { VirtualKeyboard, type FingerAssignment } from "@/components/virtual-keyboard";
+import {
+  renderVisibleSpaces,
+  KeyBadge,
+  ControlKeyBadgeView,
+  CraftMarker,
+  getFingerForKeyCode,
+} from "@/components/search-craft-badges";
+import type { KeyboardLayout } from "@/lib/keybindings";
+import type { RemapInfo, UiRemapInfo } from "@/lib/remap-utils";
 import {
   buildCraftKeySequence,
   buildLoopKeySequence,
   buildKeyAnnotations,
   physicalKeyForStep,
-  heldKeysForStep,
   stepDurationMs,
   PLAYBACK_SPEED_MIN,
   PLAYBACK_SPEED_MAX,
   PLAYBACK_SPEED_STEP,
   PLAYBACK_SPEED_DEFAULT,
   type KeySequence,
-  type KeySequenceCraftInfo,
   type KeySequenceStep,
-  type PlaybackSpeed,
 } from "@/lib/search-craft-key-sequence";
 import type { ResolvedLoopStep } from "@/lib/search-craft-loops";
 import { useT } from "@/hooks/use-locale";
@@ -43,168 +45,16 @@ import { cn } from "@/lib/utils";
  * `CraftKeySequenceButton` / `LoopKeySequenceButton` として呼ぶ（トリガーボタン+ダイアログを
  * 1コンポーネントに束ねる。app/components/keybindings/keyboard-export-dialog.tsx と同じ構成）。
  *
- * 注意: `search-craft-template-view.tsx`（`KeyBadge`）・`search-craft-loop-view.tsx`
- * （`ControlKeyBadge`）は、両方ともこのファイルをトリガーボタンとして import する側になる
- * （行UIにボタンを埋め込むため）。そのため、このファイルからそれらを import すると循環importに
- * なる。下記 `TypeKeyBadge`/`ControlBadge` は見た目を揃えた最小限のローカル実装
- * （`.claude/rules/ui.md`「キーバッジ」節と同じ規格。スタイルを変更する場合は両方を揃えること）。
- * ロジック（リマップ解決）自体は共有元の `app/lib/remap-utils.ts` の結果（`ActualKeyInfo` /
- * `ActualControlKeyInfo`）をそのまま描画するだけで、二重実装はしていない。
+ * 下部シーケンス表示のバッジ（`SequenceStepBadge`）は `app/components/search-craft-badges.tsx`
+ * の葉モジュール（`KeyBadge` / `ControlKeyBadgeView` / `CraftMarker`）をそのまま使う。
+ * これらは循環import回避のため `search-craft-template-view.tsx` / `search-craft-loop-view.tsx`
+ * のどちらにも依存していない（本ファイルは逆にそれらから import される側）ため、
+ * このファイルからも安全に import できる。
  */
-
-type KeyboardLayout = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 
 const EMPTY_SEQUENCE: KeySequence = { steps: [], heldKeys: [] };
 
 type SequenceDisplayMode = "static" | "animate";
-
-/** 半角スペースの連続を「␣」（U+2423）に置き換えて可視化する（search-craft-template-view.tsx の
- * renderVisibleSpaces と同じ表現。循環import回避のためのローカル実装 — 上部の注意書き参照）。 */
-function renderVisibleSpacesLocal(text: string, spaceClassName: string): ReactNode[] {
-  const parts = text.split(/( +)/);
-  return parts.map((part, i) =>
-    part.length > 0 && part[0] === " " ? (
-      <span key={i} aria-hidden="true" className={spaceClassName}>
-        {"␣".repeat(part.length)}
-      </span>
-    ) : (
-      part
-    ),
-  );
-}
-
-// ============================================
-// バッジ（search-craft-template-view.tsx の KeyBadge / search-craft-loop-view.tsx の
-// ControlKeyBadge と見た目を揃えたローカル実装。上部の注意書き参照）
-// ============================================
-
-/** 実入力キーのバッジ。ActualKeyInfo を直接受け取る（呼び出し側で解決済みのため再解決しない） */
-function TypeKeyBadge({ info, finger }: { info: ActualKeyInfo; finger?: FingerType }) {
-  const t = useT();
-  const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
-
-  const tooltipContent = (): ReactNode => {
-    if (info.isRemapped && info.remapDetail) {
-      return t("playerProfile.remapped", {
-        source: info.remapDetail.sourceLabel,
-        target: info.remapDetail.targetLabel,
-      });
-    }
-    if (info.keyCode.includes("+")) return getKeyCombinationLabel(t, info.keyCode);
-    return getKeyLabel(t, info.keyCode);
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-            finger ? fingerClass : "bg-secondary/50 border-border/50 text-muted-foreground",
-            info.isRemapped && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-            info.needsShift && !info.isRemapped && "border-warning/50 bg-warning/10",
-          )}
-        >
-          <KeyLabelText label={info.displayLabel} />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{tooltipContent()}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-type ControlBadgeKind = "backspace" | "arrowLeft" | "home" | "selectAll";
-
-/** 制御キー（Backspace/ArrowLeft/Home/⇧Home）の短縮ラベル・ツールチップ用フル表記のキーコード */
-const CONTROL_BADGE_META: Record<ControlBadgeKind, { shortLabel: string; opKeyCode: string }> = {
-  backspace: { shortLabel: "BS", opKeyCode: "Backspace" },
-  arrowLeft: { shortLabel: "←", opKeyCode: "ArrowLeft" },
-  home: { shortLabel: "Home", opKeyCode: "Home" },
-  selectAll: { shortLabel: "⇧Home", opKeyCode: "Shift+Home" },
-};
-
-/** 制御キーのバッジ。ActualControlKeyInfo を直接受け取る（呼び出し側で解決済みのため再解決しない） */
-function ControlBadge({
-  kind,
-  info,
-  count,
-}: {
-  kind: ControlBadgeKind;
-  info: ActualControlKeyInfo;
-  count?: number;
-}) {
-  const t = useT();
-  const meta = CONTROL_BADGE_META[kind];
-  const opFullLabel = meta.opKeyCode.includes("+")
-    ? getKeyCombinationLabel(t, meta.opKeyCode)
-    : getKeyLabel(t, meta.opKeyCode);
-
-  const tooltipContent = info.isRemapped ? (
-    <div className="space-y-1">
-      <p>{t("playerProfile.controlKeyActualTooltip", { key: info.tooltipLabel, op: opFullLabel })}</p>
-      <div className="space-y-0.5 border-t border-border/40 pt-1">
-        {info.remapDetails.map((detail, i) => (
-          <p key={i} className="text-muted-foreground">
-            {t("playerProfile.remapped", { source: detail.sourceLabel, target: detail.targetLabel })}
-          </p>
-        ))}
-      </div>
-    </div>
-  ) : (
-    opFullLabel
-  );
-
-  return (
-    <span className="relative inline-flex">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {info.isRemapped ? (
-            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-2 ring-primary ring-offset-1 ring-offset-background">
-              <span className="text-sm">
-                <KeyLabelText label={info.displayLabel} />
-              </span>
-              <span className="rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-info">
-                <KeyLabelText label={meta.shortLabel} shiftClassName="size-2.5" />
-              </span>
-            </span>
-          ) : (
-            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-2.5 font-mono text-sm font-semibold text-info">
-              <KeyLabelText label={meta.shortLabel} />
-            </span>
-          )}
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-      {(kind === "backspace" || kind === "arrowLeft") && (count ?? 0) > 1 && (
-        <span className="absolute -top-1.5 -right-1.5 rounded-full bg-muted-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background">
-          ×{count}
-        </span>
-      )}
-    </span>
-  );
-}
-
-/** クラフト実行マーカー（Loop 用の簡易バッジ） */
-function CraftMarkerPill({ craft }: { craft: KeySequenceCraftInfo }) {
-  const t = useT();
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2">
-          {craft.items.map((itemId, idx) => (
-            <ItemIcon key={idx} itemId={itemId} size={24} />
-          ))}
-          {craft.searchStr && (
-            <code className="font-mono text-sm">
-              {renderVisibleSpacesLocal(craft.searchStr, "text-muted-foreground/70")}
-            </code>
-          )}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{t("playerProfile.loopCraftMarker")}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 // ============================================
 // 下部シーケンス表示（キーバッジ列）
@@ -219,26 +69,35 @@ function SequenceStepBadge({
   fingerAssignments?: FingerAssignment;
   isCurrent: boolean;
 }) {
-  const getFinger = (keyCode: string): FingerType | undefined => {
-    if (!fingerAssignments) return undefined;
-    const baseKeyCode = keyCode.includes("+") ? (keyCode.split("+").pop() ?? keyCode) : keyCode;
-    const fingers = fingerAssignments[baseKeyCode] || fingerAssignments[baseKeyCode.toLowerCase()];
-    return fingers?.[0];
-  };
-
   let badge: ReactNode;
   switch (step.kind) {
     case "type":
-      badge = <TypeKeyBadge info={step.info} finger={getFinger(step.info.keyCode)} />;
+      badge = (
+        <KeyBadge
+          keyCode={step.info.keyCode}
+          label={step.info.displayLabel}
+          finger={getFingerForKeyCode(step.info.keyCode, fingerAssignments)}
+          isRemapped={step.info.isRemapped}
+          needsShift={step.info.needsShift}
+          remapDetail={step.info.remapDetail}
+        />
+      );
       break;
     case "backspace":
     case "arrowLeft":
     case "home":
     case "selectAll":
-      badge = <ControlBadge kind={step.kind} info={step.info} count={step.count} />;
+      badge = <ControlKeyBadgeView kind={step.kind} info={step.info} count={step.count} />;
       break;
     case "craft":
-      badge = <CraftMarkerPill craft={step.craft} />;
+      badge = (
+        <CraftMarker
+          items={step.craft.items}
+          content={
+            step.craft.searchStr ? renderVisibleSpaces(step.craft.searchStr, "text-muted-foreground/70") : null
+          }
+        />
+      );
       break;
   }
 
@@ -276,7 +135,8 @@ function KeySequencePlayer({
   fingerAssignments,
 }: {
   sequence: KeySequence;
-  layout: KeyboardLayout;
+  /** 未指定時は VirtualKeyboard 自身の既定値（"US"）にフォールバックする */
+  layout?: KeyboardLayout;
   remaps: RemapInfo[] | UiRemapInfo[];
   fingerAssignments?: FingerAssignment;
 }) {
@@ -287,19 +147,24 @@ function KeySequencePlayer({
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(false);
-  const [speed, setSpeed] = useState<PlaybackSpeed>(PLAYBACK_SPEED_DEFAULT);
+  const [speed, setSpeed] = useState(PLAYBACK_SPEED_DEFAULT);
 
   const totalSteps = sequence.steps.length;
 
   // 再生中はステップごとの持続時間（stepDurationMs。craft は基本間隔の2倍）だけ待って1ステップ進める
   // setInterval ではなく setTimeout の連鎖にしているのは、ステップごとに待機時間が変わるため。
-  // 末尾に達したら loop が ON なら先頭へ巻き戻して継続、OFF なら停止する（ハイライトは最後のまま残す）
+  // 末尾に達したら loop が ON なら先頭へ巻き戻して継続、OFF なら停止する（ハイライトは最後のまま残す）。
+  // このコンポーネントは Radix Dialog が閉じるとアンマウントされる（sequence が変わっても
+  // 状態を明示的にリセットする useEffect は不要 — 再度開いたときは useState の初期値から始まる）。
+  // currentIndex >= totalSteps のガードのみ、シーケンス差し替わりへの防御として残す
+  // （sequence.steps[currentIndex] を undefined のまま stepDurationMs に渡さないため）
   useEffect(() => {
     if (!playing || totalSteps === 0) return;
     if (currentIndex < 0) {
       setCurrentIndex(0);
       return;
     }
+    if (currentIndex >= totalSteps) return;
     const duration = stepDurationMs(sequence.steps[currentIndex], speed);
     const timer = setTimeout(() => {
       setCurrentIndex((prev) => {
@@ -314,15 +179,6 @@ function KeySequencePlayer({
     }, duration);
     return () => clearTimeout(timer);
   }, [playing, currentIndex, totalSteps, speed, loop, sequence]);
-
-  // シーケンスが変わったら（ダイアログを開き直す等）状態をリセットする
-  useEffect(() => {
-    setMode("static");
-    setCurrentIndex(-1);
-    setPlaying(false);
-    setLoop(false);
-    setSpeed(PLAYBACK_SPEED_DEFAULT);
-  }, [sequence]);
 
   const handleModeChange = (next: SequenceDisplayMode) => {
     setMode(next);
@@ -356,26 +212,32 @@ function KeySequencePlayer({
     return Array.from(keys);
   }, [sequence]);
   const currentStep = mode === "animate" && currentIndex >= 0 ? sequence.steps[currentIndex] : null;
-  // アニメーション再生中は「現在押している瞬間のキーだけ色付き」にする: 現在ステップの物理キー
-  // ＋そのステップの held キー（withShift/needsShift/⇧Home の Shift 成分）のみを強調対象にし、
-  // それ以外は全部グレーにする。craft ステップ中は物理キーを持たないため空配列（＝全キーグレー）になる
-  const currentPhysicalKey = currentStep ? physicalKeyForStep(currentStep) : null;
-  const currentHeldKeys = useMemo(() => (currentStep ? heldKeysForStep(currentStep) : []), [currentStep]);
-  const animatedEmphasizedKeys = useMemo(() => {
-    if (!currentStep) return [];
-    const keys = new Set(currentHeldKeys);
-    if (currentPhysicalKey) keys.add(currentPhysicalKey);
-    return Array.from(keys);
-  }, [currentStep, currentPhysicalKey, currentHeldKeys]);
-  // 再生位置が有効なとき（currentStep がある）だけ「現在キーのみ」表現に切り替える。
-  // 静止モード、およびアニメモードでも未再生（currentIndex === -1）のときは全体強調のまま
-  const keyboardHeldKeys = currentStep ? currentHeldKeys : sequence.heldKeys;
-  const keyboardEmphasizedKeys = currentStep ? animatedEmphasizedKeys : staticEmphasizedKeys;
-  const highlightedKeys = useMemo(() => {
-    if (!currentStep) return [];
-    const key = physicalKeyForStep(currentStep);
-    return key ? [key] : [];
-  }, [currentStep]);
+
+  // キーボード表示用の派生値（heldKeys/emphasizedKeys/highlightedKeys）をまとめて1つの useMemo
+  // で計算する。再生位置が有効なとき（currentStep がある）だけ「現在押している瞬間のキーだけ
+  // 色付き」表現に切り替える: 現在ステップの物理キー（physicalKeyForStep。1回だけ計算し
+  // held/highlighted の両方に使い回す）＋そのステップの heldKeys（withShift/needsShift/⇧Home
+  // の Shift 成分）を強調対象にし、それ以外は全部グレーにする。craft ステップ中は物理キーを
+  // 持たないため highlightedKeys は空（＝全キーグレー）になる。静止モード、およびアニメモード
+  // でも未再生（currentIndex === -1）のときは全体強調のまま（staticEmphasizedKeys）
+  const { keyboardHeldKeys, keyboardEmphasizedKeys, highlightedKeys } = useMemo(() => {
+    if (!currentStep) {
+      return {
+        keyboardHeldKeys: sequence.heldKeys,
+        keyboardEmphasizedKeys: staticEmphasizedKeys,
+        highlightedKeys: [] as string[],
+      };
+    }
+    const heldKeys = currentStep.heldKeys;
+    const physicalKey = physicalKeyForStep(currentStep);
+    const emphasizedKeys = new Set(heldKeys);
+    if (physicalKey) emphasizedKeys.add(physicalKey);
+    return {
+      keyboardHeldKeys: heldKeys,
+      keyboardEmphasizedKeys: Array.from(emphasizedKeys),
+      highlightedKeys: physicalKey ? [physicalKey] : [],
+    };
+  }, [currentStep, sequence.heldKeys, staticEmphasizedKeys]);
 
   return (
     // ダイアログ内でスクロールするのはキーボードビューのラッパ（min-h-0 overflow-auto）のみ。
@@ -527,34 +389,34 @@ function TriggerButton({ onClick, className }: { onClick: () => void; className?
   );
 }
 
-/** 単一クラフト（バリエーション）のキー押下順を可視化するトリガー+ダイアログ */
-export function CraftKeySequenceButton({
-  searchStr,
-  withShift,
-  remaps,
+/**
+ * トリガーボタン＋ダイアログの共通外殻（クラフト用/Loop用で丸コピーだった約40行を集約）。
+ * `sequence`（`buildCraftKeySequence`/`buildLoopKeySequence` の結果）と `open`/`onOpenChange`
+ * は各ボタン側が持つ（`sequence` の useMemo をここに引き取ると、buildSequence をコールバックで
+ * 渡す形になり毎レンダー新関数で memo が壊れるため、ボタン側に残す）。
+ */
+function KeySequenceDialogShell({
+  open,
+  onOpenChange,
+  sequence,
   layout,
+  remaps,
   fingerAssignments,
-  className,
+  triggerClassName,
 }: {
-  searchStr: string;
-  withShift: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sequence: KeySequence;
+  /** 未指定時は VirtualKeyboard 自身の既定値（"US"）にフォールバックする */
+  layout?: KeyboardLayout;
   remaps: RemapInfo[] | UiRemapInfo[];
-  layout: KeyboardLayout;
   fingerAssignments?: FingerAssignment;
-  className?: string;
+  triggerClassName?: string;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  // ダイアログを開いたときだけ導出する（多数のクラフト行が並ぶ一覧で、初期描画時に
-  // 全行分の逆引きを走らせないようにする）
-  const sequence = useMemo(
-    () => (open ? buildCraftKeySequence(t, searchStr, remaps, withShift) : EMPTY_SEQUENCE),
-    [open, t, searchStr, remaps, withShift],
-  );
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <TriggerButton onClick={() => setOpen(true)} className={className} />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <TriggerButton onClick={() => onOpenChange(true)} className={triggerClassName} />
       {/* スクロールはキーボードビューのエリア（KeySequencePlayer 内の overflow-auto ラッパ）だけに
           閉じ、ダイアログ全体では発生させない（grid 基底を flex 縦積みに上書きして min-h-0 を効かせる） */}
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -573,6 +435,45 @@ export function CraftKeySequenceButton({
   );
 }
 
+/** 単一クラフト（バリエーション）のキー押下順を可視化するトリガー+ダイアログ */
+export function CraftKeySequenceButton({
+  searchStr,
+  withShift,
+  remaps,
+  layout,
+  fingerAssignments,
+  className,
+}: {
+  searchStr: string;
+  withShift: boolean;
+  remaps: RemapInfo[] | UiRemapInfo[];
+  /** 未指定時は VirtualKeyboard 自身の既定値（"US"）にフォールバックする */
+  layout?: KeyboardLayout;
+  fingerAssignments?: FingerAssignment;
+  className?: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  // ダイアログを開いたときだけ導出する（多数のクラフト行が並ぶ一覧で、初期描画時に
+  // 全行分の逆引きを走らせないようにする）
+  const sequence = useMemo(
+    () => (open ? buildCraftKeySequence(t, searchStr, remaps, withShift) : EMPTY_SEQUENCE),
+    [open, t, searchStr, remaps, withShift],
+  );
+
+  return (
+    <KeySequenceDialogShell
+      open={open}
+      onOpenChange={setOpen}
+      sequence={sequence}
+      layout={layout}
+      remaps={remaps}
+      fingerAssignments={fingerAssignments}
+      triggerClassName={className}
+    />
+  );
+}
+
 /** 繋ぎ方（Loop）1件分のキー押下順を可視化するトリガー+ダイアログ */
 export function LoopKeySequenceButton({
   steps,
@@ -585,7 +486,8 @@ export function LoopKeySequenceButton({
   steps: ResolvedLoopStep[];
   getCraft: (craftId: string) => { items: string[] } | undefined;
   remaps: RemapInfo[] | UiRemapInfo[];
-  layout: KeyboardLayout;
+  /** 未指定時は VirtualKeyboard 自身の既定値（"US"）にフォールバックする */
+  layout?: KeyboardLayout;
   fingerAssignments?: FingerAssignment;
   className?: string;
 }) {
@@ -597,22 +499,14 @@ export function LoopKeySequenceButton({
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <TriggerButton onClick={() => setOpen(true)} className={className} />
-      {/* スクロールはキーボードビューのエリア（KeySequencePlayer 内の overflow-auto ラッパ）だけに
-          閉じ、ダイアログ全体では発生させない（grid 基底を flex 縦積みに上書きして min-h-0 を効かせる） */}
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>{t("searchCraftKeySequence.dialogTitle")}</DialogTitle>
-          <DialogDescription>{t("searchCraftKeySequence.dialogDescription")}</DialogDescription>
-        </DialogHeader>
-        <KeySequencePlayer
-          sequence={sequence}
-          layout={layout}
-          remaps={remaps}
-          fingerAssignments={fingerAssignments}
-        />
-      </DialogContent>
-    </Dialog>
+    <KeySequenceDialogShell
+      open={open}
+      onOpenChange={setOpen}
+      sequence={sequence}
+      layout={layout}
+      remaps={remaps}
+      fingerAssignments={fingerAssignments}
+      triggerClassName={className}
+    />
   );
 }

@@ -36,7 +36,13 @@ import {
   classifyTypingTestKey,
   INITIAL_TYPING_TEST_BUFFER_STATE,
 } from "@/lib/typing-test-buffer";
-import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
+import {
+  getKeyLabel,
+  parseKeyCombination,
+  KEYBOARD_LAYOUT_OPTIONS,
+  normalizeKeyboardLayout,
+  type KeyboardLayout,
+} from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
@@ -55,15 +61,11 @@ export type WorkbenchRemap = {
   targetKey: string | null;
 };
 
-export type KeyboardLayoutOption = "US" | "JIS" | "US_TKL" | "JIS_TKL";
-
-export const LAYOUT_OPTIONS: KeyboardLayoutOption[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
-
-export function normalizeLayout(value: string | null | undefined): KeyboardLayoutOption {
-  return LAYOUT_OPTIONS.includes(value as KeyboardLayoutOption)
-    ? (value as KeyboardLayoutOption)
-    : "US";
-}
+// キーボードレイアウトの型・選択肢・正規化は app/lib/keybindings.ts が単一ソース
+// （既存 importer を無改修で保つためのエイリアス re-export）
+export type KeyboardLayoutOption = KeyboardLayout;
+export const LAYOUT_OPTIONS = KEYBOARD_LAYOUT_OPTIONS;
+export const normalizeLayout = normalizeKeyboardLayout;
 
 /** 計算に使う有効なリマップ（未入力の行は除外、sourceKey 重複は先勝ち） */
 export function effectiveRemapsFrom(remaps: WorkbenchRemap[]): RemapInfo[] {

@@ -4,7 +4,7 @@ import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
@@ -365,7 +365,7 @@ type CustomKeyboardButton = {
 
 
 interface VirtualKeyboardProps {
-  layout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  layout?: KeyboardLayout;
   keybindings?: Record<string, KeybindingInfoList>;
   fingerAssignments?: FingerAssignment;
   remaps?: RemapInfo[]; // リマップ情報

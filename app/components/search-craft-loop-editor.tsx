@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,7 @@ import {
 } from "@/lib/search-craft-loops";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { KeyboardLayout } from "@/lib/keybindings";
 import { ShiftMark } from "@/components/shift-mark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -70,6 +71,9 @@ export type SearchCraftLoopDraft = {
 
 /** ステップのエントリ選択に使う、参照可能なサーチクラフトエントリ */
 export type LoopEditorEntry = LoopCraftInfo;
+
+/** remaps 未指定時のフォールバック（`remaps ?? []` の [] をレンダーのたびに新規生成しない） */
+const EMPTY_REMAPS: RemapInfo[] = [];
 
 /** Select の「未選択」を表す value */
 const UNSELECTED_ENTRY = "__unselected__";
@@ -407,19 +411,23 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
   loop,
   entries,
   remaps,
-  keyboardLayout = "US",
+  keyboardLayout,
   onUpdate,
 }: {
   loop: T;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
-  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * LoopKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
 }) {
   const t = useT();
 
   const entriesById = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
+  // entriesById が変わらない限り同一の関数を保つ（LoopKeySequenceButton 側の
+  // sequence useMemo が親の無関係な再レンダーで失効しないようにするため）
+  const getCraft = useCallback((id: string) => entriesById.get(id), [entriesById]);
 
   const updateSteps = (steps: LoopStepData[]) => {
     onUpdate(loop.id, { ...loop, steps: normalizeFirstStep(steps) });
@@ -455,15 +463,11 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const entry = entriesById.get(id);
-        return entry
-          ? {
-              searchStrs: entry.variations.map((v) => v.str),
-              withShifts: entry.variations.map((v) => v.withShift),
-            }
-          : undefined;
+        return entry ? { variations: entry.variations } : undefined;
       }),
     [loop.steps, entriesById],
   );
+  const effectiveRemaps = remaps ?? EMPTY_REMAPS;
 
   return (
     <>
@@ -516,15 +520,15 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
           </Label>
           <LoopKeySequenceButton
             steps={resolved.steps}
-            getCraft={(id) => entriesById.get(id)}
-            remaps={remaps ?? []}
+            getCraft={getCraft}
+            remaps={effectiveRemaps}
             layout={keyboardLayout}
           />
         </div>
         <LoopKeySequence
           steps={resolved.steps}
-          getCraft={(id) => entriesById.get(id)}
-          remaps={remaps ?? []}
+          getCraft={getCraft}
+          remaps={effectiveRemaps}
         />
       </div>
 
@@ -563,7 +567,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
 }) {

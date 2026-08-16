@@ -49,7 +49,7 @@ export type KeySequenceStep =
       /**
        * このステップの間、持続的に押されている（held）修飾キー。アニメーション再生で
        * 「現在押している瞬間のキーだけ色付き」にする際、withShift/⇧Home のような
-       * Shift 同時押し状態をそのステップの間だけ維持するために使う（`heldKeysForStep()` 参照）。
+       * Shift 同時押し状態をそのステップの間だけ維持するために使う。
        * - type: withShift（クラフト/繋ぎ方遷移の Shift 押しっぱなし）または needsShift
        *   （withShift なしの単発大文字）で `[HELD_SHIFT_KEY_CODE]`、それ以外は空配列
        * - selectAll（⇧Home）: `heldKeyForSelectAllKeyCode()` で取り出した Shift 成分
@@ -57,16 +57,15 @@ export type KeySequenceStep =
        */
       heldKeys: string[];
     }
-  | { kind: "craft"; order: null; craft: KeySequenceCraftInfo };
-
-/**
- * ステップ単体の「押しっぱなし」修飾キー（`KeySequenceStep.heldKeys`）を取り出す。
- * craft マーカーはキーボード上で何も押していない扱いのため常に空配列を返す
- * （`heldKeys` フィールド自体を持たないため型上も分岐が必要）。
- */
-export function heldKeysForStep(step: KeySequenceStep): string[] {
-  return step.kind === "craft" ? [] : step.heldKeys;
-}
+  | {
+      kind: "craft";
+      order: null;
+      craft: KeySequenceCraftInfo;
+      /** craft マーカーはキーボード上で何も押していない扱いのため常に空配列。他の kind と
+       * 同じ `heldKeys` フィールドを持たせることで、呼び出し側は分岐関数を介さず
+       * `step.heldKeys` を直接参照できる（craft だけ欠けている型だと都度の分岐が要る）。 */
+      heldKeys: string[];
+    };
 
 /** バーチャルキーボードで可視化する押下シーケンス全体 */
 export type KeySequence = {
@@ -111,6 +110,17 @@ function heldKeyForSelectAllKeyCode(keyCode: string): string | null {
 }
 
 /**
+ * type ステップ（`buildCraftKeySequence`/`buildLoopKeySequence` の `pushType` 共通）の
+ * ステップ単位 `heldKeys` を判定する。`getActualKeyInfos` の shiftHeld 仕様により、
+ * withShift 時は個々のキーの `needsShift` は常に false になるため、
+ * 「withShift か、その文字単体が needsShift（withShift なしの単発大文字）か」の
+ * 2条件で排他的に判定できる。
+ */
+function typeStepHeldKeys(withShift: boolean, info: ActualKeyInfo): string[] {
+  return withShift || info.needsShift ? [HELD_SHIFT_KEY_CODE] : [];
+}
+
+/**
  * 単一クラフト（バリエーション）の検索文字列から押下シーケンスを導出する。
  * `withShift` が true の場合、個々のキーには ⇧ を付けず（`getActualKeyInfos` の shiftHeld
  * 仕様どおり）、Shift 自体は `heldKeys`（持続的な held 表現）に集約する。
@@ -122,13 +132,11 @@ export function buildCraftKeySequence(
   withShift: boolean,
 ): KeySequence {
   const infos = getActualKeyInfos(t, searchStr, remaps, { shiftHeld: withShift });
-  // withShift 時は個々のキーの needsShift は常に false（getActualKeyInfos の shiftHeld 仕様）なので、
-  // ステップの heldKeys は「withShift か、その文字単体が needsShift（単発大文字）か」で決まる
   const steps: KeySequenceStep[] = infos.map((info, idx) => ({
     kind: "type",
     order: idx + 1,
     info,
-    heldKeys: withShift || info.needsShift ? [HELD_SHIFT_KEY_CODE] : [],
+    heldKeys: typeStepHeldKeys(withShift, info),
   }));
   return { steps, heldKeys: withShift && infos.length > 0 ? [HELD_SHIFT_KEY_CODE] : [] };
 }
@@ -156,11 +164,7 @@ export function buildLoopKeySequence(
     const infos = getActualKeyInfos(t, searchStr, remaps, { shiftHeld: withShift });
     for (const info of infos) {
       order += 1;
-      // withShift 時は個々のキーの needsShift は常に false（getActualKeyInfos の shiftHeld
-      // 仕様）なので、ステップの heldKeys は「withShift か、その文字単体が needsShift
-      // （単発大文字）か」で決まる
-      const stepHeldKeys = withShift || info.needsShift ? [HELD_SHIFT_KEY_CODE] : [];
-      steps.push({ kind: "type", order, info, heldKeys: stepHeldKeys });
+      steps.push({ kind: "type", order, info, heldKeys: typeStepHeldKeys(withShift, info) });
     }
     if (withShift && infos.length > 0) heldKeys.add(HELD_SHIFT_KEY_CODE);
   };
@@ -181,7 +185,7 @@ export function buildLoopKeySequence(
 
   const pushCraftMarker = (craftId: string, searchStr: string | null) => {
     const craft = getCraft(craftId);
-    steps.push({ kind: "craft", order: null, craft: { items: craft?.items ?? [], searchStr } });
+    steps.push({ kind: "craft", order: null, craft: { items: craft?.items ?? [], searchStr }, heldKeys: [] });
   };
 
   resolvedSteps.forEach((step, idx) => {
@@ -229,14 +233,14 @@ export const PLAYBACK_SPEED_MIN = 0.5;
 export const PLAYBACK_SPEED_MAX = 2;
 export const PLAYBACK_SPEED_STEP = 0.25;
 export const PLAYBACK_SPEED_DEFAULT = 1;
-export type PlaybackSpeed = number;
 
 /**
  * アニメーション再生時、指定ステップを表示し続ける時間（ms）を返す純粋関数。
  * craft（クラフト実行マーカー）ステップは `ANIMATION_CRAFT_STEP_MULTIPLIER` 倍長く取る。
- * `speed` は再生速度の倍率（大きいほど速い＝待機時間は短くなる）。
+ * `speed` は再生速度の倍率（`PLAYBACK_SPEED_MIN`〜`PLAYBACK_SPEED_MAX` の範囲の数値。
+ * 大きいほど速い＝待機時間は短くなる）。
  */
-export function stepDurationMs(step: KeySequenceStep, speed: PlaybackSpeed): number {
+export function stepDurationMs(step: KeySequenceStep, speed: number): number {
   const base =
     step.kind === "craft" ? ANIMATION_BASE_STEP_MS * ANIMATION_CRAFT_STEP_MULTIPLIER : ANIMATION_BASE_STEP_MS;
   return base / speed;

@@ -7,7 +7,6 @@ import {
   buildCraftKeySequence,
   buildLoopKeySequence,
   physicalKeyForStep,
-  heldKeysForStep,
   buildKeyAnnotations,
   stepDurationMs,
   ANIMATION_BASE_STEP_MS,
@@ -15,13 +14,17 @@ import {
 } from "../search-craft-key-sequence";
 import { resolveLoopSteps, type LoopStepData } from "../search-craft-loops";
 import type { RemapInfo } from "../remap-utils";
+import type { SearchCraftVariation } from "../search-craft-variations";
 
 // resolveLoopSteps 用（検索文字列の解決）
-type Craft = { searchStrs: string[]; withShifts?: boolean[] };
+type Craft = { variations: SearchCraftVariation[] };
 const makeGetCraft =
   (crafts: Record<string, Craft>) =>
   (id: string): Craft | undefined =>
     crafts[id];
+/** テスト用: 検索文字列だけから withShift: false の variations を組み立てる */
+const strVariations = (strs: string[]): SearchCraftVariation[] =>
+  strs.map((str) => ({ str, withShift: false }));
 
 // buildLoopKeySequence 用（クラフト実行マーカーのアイテム解決）
 type CraftInfo = { items: string[] };
@@ -67,7 +70,7 @@ describe("buildCraftKeySequence", () => {
       },
     ]);
     expect(withShift.heldKeys).toEqual(["ShiftLeft"]);
-    expect(withShift.steps.map((s) => heldKeysForStep(s))).toEqual([["ShiftLeft"], ["ShiftLeft"]]);
+    expect(withShift.steps.map((s) => s.heldKeys)).toEqual([["ShiftLeft"], ["ShiftLeft"]]);
   });
 
   it("withShift: true でも検索文字列が空なら steps 0件・heldKeys も空", () => {
@@ -109,7 +112,7 @@ describe("buildLoopKeySequence", () => {
         { craftId: "a", transition: null },
         { craftId: "b", transition: { type: "selectAll" } },
       ] satisfies LoopStepData[],
-      makeGetCraft({ a: { searchStrs: ["te"], withShifts: [true] }, b: { searchStrs: ["tor"] } }),
+      makeGetCraft({ a: { variations: [{ str: "te", withShift: true }] }, b: { variations: strVariations(["tor"]) } }),
     ).steps;
     const getCraft = makeGetCraftInfo({ a: { items: ["stick"] }, b: { items: ["torch"] } });
     const sequence = buildLoopKeySequence(t, resolved, getCraft, []);
@@ -129,11 +132,13 @@ describe("buildLoopKeySequence", () => {
       kind: "craft",
       order: null,
       craft: { items: ["stick"], searchStr: "te" },
+      heldKeys: [],
     });
     expect(sequence.steps[7]).toEqual({
       kind: "craft",
       order: null,
       craft: { items: ["torch"], searchStr: "tor" },
+      heldKeys: [],
     });
 
     const selectAllStep = sequence.steps[3];
@@ -147,8 +152,8 @@ describe("buildLoopKeySequence", () => {
     expect(sequence.heldKeys).toEqual(["ShiftLeft"]);
 
     // ステップ単位の heldKeys: 先頭2ステップ（craft "a" の withShift: true）は ShiftLeft を保持、
-    // 末尾3ステップ（craft "b" は withShifts 未指定＝ withShift: false）は空
-    expect(sequence.steps.map((s) => heldKeysForStep(s))).toEqual([
+    // 末尾3ステップ（craft "b" は withShift: false）は空
+    expect(sequence.steps.map((s) => s.heldKeys)).toEqual([
       ["ShiftLeft"],
       ["ShiftLeft"],
       [], // craft マーカー
@@ -166,7 +171,7 @@ describe("buildLoopKeySequence", () => {
         { craftId: "a", transition: null },
         { craftId: "b", transition: { type: "backspace", bsCount: 2 } },
       ] satisfies LoopStepData[],
-      makeGetCraft({ a: { searchStrs: ["er"] }, b: { searchStrs: ["en"] } }),
+      makeGetCraft({ a: { variations: strVariations(["er"]) }, b: { variations: strVariations(["en"]) } }),
     ).steps;
     const getCraft = makeGetCraftInfo({ a: { items: ["ender_pearl"] }, b: { items: ["enchanting_table"] } });
     const sequence = buildLoopKeySequence(t, resolved, getCraft, []);
@@ -195,7 +200,7 @@ describe("buildLoopKeySequence", () => {
         { craftId: "a", transition: null },
         { craftId: "missing", transition: { type: "backspace", bsCount: 1 } },
       ] satisfies LoopStepData[],
-      makeGetCraft({ a: { searchStrs: ["er"] } }),
+      makeGetCraft({ a: { variations: strVariations(["er"]) } }),
     ).steps;
     expect(resolved[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
 
@@ -207,6 +212,7 @@ describe("buildLoopKeySequence", () => {
       kind: "craft",
       order: null,
       craft: { items: [], searchStr: null },
+      heldKeys: [],
     });
   });
 
@@ -216,7 +222,7 @@ describe("buildLoopKeySequence", () => {
         { craftId: "a", transition: null },
         { craftId: "b", transition: { type: "selectAll" } },
       ] satisfies LoopStepData[],
-      makeGetCraft({ a: { searchStrs: ["ab"] }, b: { searchStrs: ["abc"] } }),
+      makeGetCraft({ a: { variations: strVariations(["ab"]) }, b: { variations: strVariations(["abc"]) } }),
     ).steps;
     // "b" は items 側のマップに存在しない
     const getCraft = makeGetCraftInfo({ a: { items: ["stick"] } });
@@ -228,6 +234,7 @@ describe("buildLoopKeySequence", () => {
       kind: "craft",
       order: null,
       craft: { items: [], searchStr: "abc" },
+      heldKeys: [],
     });
   });
 });
@@ -238,6 +245,7 @@ describe("physicalKeyForStep", () => {
       kind: "craft",
       order: null,
       craft: { items: [], searchStr: null },
+      heldKeys: [],
     };
     expect(physicalKeyForStep(craftStep)).toBeNull();
   });
@@ -253,26 +261,33 @@ describe("physicalKeyForStep", () => {
   });
 });
 
-describe("heldKeysForStep", () => {
+describe("KeySequenceStep.heldKeys（craft マーカー）", () => {
   it("craft マーカーはキーボード上で何も押していない扱いのため常に空配列", () => {
-    const craftStep: KeySequenceStep = {
-      kind: "craft",
-      order: null,
-      craft: { items: [], searchStr: null },
-    };
-    expect(heldKeysForStep(craftStep)).toEqual([]);
-  });
-
-  it("非 craft ステップはステップ自身の heldKeys をそのまま返す", () => {
-    const sequence = buildCraftKeySequence(t, "ab", [], true);
-    expect(heldKeysForStep(sequence.steps[0])).toEqual(["ShiftLeft"]);
-    expect(heldKeysForStep(sequence.steps[1])).toEqual(["ShiftLeft"]);
+    const sequence = buildLoopKeySequence(
+      t,
+      resolveLoopSteps(
+        [
+          { craftId: "a", transition: null },
+          { craftId: "b", transition: { type: "selectAll" } },
+        ] satisfies LoopStepData[],
+        makeGetCraft({ a: { variations: strVariations(["te"]) }, b: { variations: strVariations(["tor"]) } }),
+      ).steps,
+      makeGetCraftInfo({ a: { items: ["stick"] }, b: { items: ["torch"] } }),
+      [],
+    );
+    const craftStep = sequence.steps.find((s) => s.kind === "craft");
+    expect(craftStep?.heldKeys).toEqual([]);
   });
 });
 
 describe("stepDurationMs", () => {
   const typeStep: KeySequenceStep = buildCraftKeySequence(t, "a", [], false).steps[0];
-  const craftStep: KeySequenceStep = { kind: "craft", order: null, craft: { items: [], searchStr: null } };
+  const craftStep: KeySequenceStep = {
+    kind: "craft",
+    order: null,
+    craft: { items: [], searchStr: null },
+    heldKeys: [],
+  };
 
   it("速度1×では type ステップは基本間隔のまま", () => {
     expect(stepDurationMs(typeStep, 1)).toBe(ANIMATION_BASE_STEP_MS);
@@ -312,7 +327,7 @@ describe("buildKeyAnnotations", () => {
         { craftId: "a", transition: null },
         { craftId: "b", transition: { type: "selectAll" } },
       ] satisfies LoopStepData[],
-      makeGetCraft({ a: { searchStrs: ["te"] }, b: { searchStrs: ["tor"] } }),
+      makeGetCraft({ a: { variations: strVariations(["te"]) }, b: { variations: strVariations(["tor"]) } }),
     ).steps;
     const getCraft = makeGetCraftInfo({ a: { items: ["stick"] }, b: { items: ["torch"] } });
     const sequence = buildLoopKeySequence(t, resolved, getCraft, []);

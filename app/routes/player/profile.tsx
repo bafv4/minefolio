@@ -170,7 +170,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
@@ -712,7 +712,7 @@ export default function PlayerProfilePage() {
 
   // キーボードレイアウト判定（サーチクラフトのキー入力順ダイアログでも使うため、
   // 参照箇所より前で定義する）
-  const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as KeyboardLayout;
 
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
   const userFingerAssignments = useMemo(() => {

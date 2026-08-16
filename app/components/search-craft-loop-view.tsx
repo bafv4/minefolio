@@ -1,13 +1,15 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { formatItemName } from "@bafv4/mcitems/1.16/react";
-import { ItemIcon } from "@/components/item-icon";
 import {
   ActualKeyBadges,
   TIMING_META,
   timingLabel,
-  renderVisibleSpaces,
 } from "@/components/search-craft-template-view";
+import {
+  renderVisibleSpaces,
+  ControlKeyBadge,
+  CraftMarker,
+} from "@/components/search-craft-badges";
 import {
   resolveLoopSteps,
   typedCharSegments,
@@ -16,10 +18,9 @@ import {
   type ResolvedLoopStep,
   type TypedCharSegment,
 } from "@/lib/search-craft-loops";
-import { getActualControlKeyInfo, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
+import type { UiRemapInfo, RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
-import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
-import { KeyLabelText } from "@/components/shift-mark";
+import type { FingerType, KeyboardLayout } from "@/lib/keybindings";
 import { LoopKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -77,111 +78,9 @@ function SegmentedSearchString({
   );
 }
 
-// ============================================
-// 制御キーバッジ
-// ============================================
-
-/**
- * 制御キー（Backspace / ArrowLeft / Home / Shift+Home）のバッジ。
- * 文字入力キー（KeyBadge、secondary系の塗り）と区別できるよう info トーンで表示する
- * （⇧ Shift バッジ=warning・クラフト実行マーカー=破線チップと同じ「役割ごとに色調を変える」規則）。
- * BS×n / ←×n はバッジを n 個並べず、右肩に ×n を併記する（モバイル幅対策）。
- * ← のラベルは app/lib/keybindings.ts の KEY_LABELS.ArrowLeft と同じ "←" を使う。
- *
- * remaps を渡すと、その制御キーの出力になっているリマップを逆引きする
- * （getActualControlKeyInfo()）。リマップが無い場合（大多数）は非リマップ時と完全に同一の
- * 単一ピル表示のまま。リマップが見つかった場合のみ複合ピルにする —
- * **主ラベル＝実際に押すキー**（外側、既存の単一ピルと同じ text-sm・info トーン）、
- * その中に「チップの中のチップ」として**出力操作**（BS 等）をミニチップ（text-[10px]）で添える。
- * 既存のリマップ用リング（ring-2 ring-primary ring-offset-1 ring-offset-background）を付け、
- * Tooltip も主従の入れ替えに合わせた文言に差し替える。
- */
-type ControlKeyKind = "backspace" | "arrowLeft" | "selectAll" | "home";
-
-/** kind ごとの表示・逆引き設定を1箇所にまとめる（keyCode・バッジ短縮ラベル・逆引き対象キー） */
-const CONTROL_KEY_META: Record<
-  ControlKeyKind,
-  { keyCode: string; label: string; targetKeyCode: string }
-> = {
-  backspace: { keyCode: "Backspace", label: "BS", targetKeyCode: "Backspace" },
-  arrowLeft: { keyCode: "ArrowLeft", label: "←", targetKeyCode: "ArrowLeft" },
-  home: { keyCode: "Home", label: "Home", targetKeyCode: "Home" },
-  // ⇧Home は「1キーの出力」に単一化されないため、逆引きは Home 成分のみ渡し
-  // getActualControlKeyInfo 側の shiftHeld オプションで Shift 成分と合成する
-  selectAll: { keyCode: "Shift+Home", label: "⇧Home", targetKeyCode: "Home" },
-};
-
-export function ControlKeyBadge({
-  kind,
-  count,
-  remaps,
-}: {
-  kind: ControlKeyKind;
-  /** backspace / arrowLeft のときのみ意味を持つ。2以上のときだけ右肩に ×n を表示する */
-  count?: number;
-  /** 指定すると、この制御キーの出力になっているリマップを逆引きして複合ピル表示にする */
-  remaps?: UiRemapInfo[] | RemapInfo[];
-}) {
-  const t = useT();
-  const { keyCode, label, targetKeyCode } = CONTROL_KEY_META[kind];
-
-  const actual = remaps
-    ? getActualControlKeyInfo(t, targetKeyCode, remaps, { shiftHeld: kind === "selectAll" })
-    : null;
-
-  // 操作名のフル表記（⇧ 等の短縮記号を使わない。Tooltip 専用。Shift+Home も省略しない）
-  const opFullLabel = keyCode.includes("+") ? getKeyCombinationLabel(t, keyCode) : getKeyLabel(t, keyCode);
-
-  // 物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と同じ「リマップ: 物理 → 出力」形式。
-  // 1行目は実際に押すキー（フル名称）— 操作名、2行目以降は成分ごとのリマップ詳細（⇧Home は最大2行）
-  const tooltipContent = actual?.isRemapped ? (
-    <div className="space-y-1">
-      <p>{t("playerProfile.controlKeyActualTooltip", { key: actual.tooltipLabel, op: opFullLabel })}</p>
-      <div className="space-y-0.5 border-t border-border/40 pt-1">
-        {actual.remapDetails.map((detail, i) => (
-          <p key={i} className="text-muted-foreground">
-            {t("playerProfile.remapped", { source: detail.sourceLabel, target: detail.targetLabel })}
-          </p>
-        ))}
-      </div>
-    </div>
-  ) : (
-    opFullLabel
-  );
-
-  return (
-    <span className="relative inline-flex">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {actual?.isRemapped ? (
-            // 複合ピル: 主ラベル＝実際に押すキー（既存の単一ピルと同じ text-sm）、
-            // その中に「チップの中のチップ」として出力操作（BS 等）をミニチップで添える
-            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-2 ring-primary ring-offset-1 ring-offset-background">
-              <span className="text-sm">
-                <KeyLabelText label={actual.displayLabel} />
-              </span>
-              <span className="rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-info">
-                <KeyLabelText label={label} shiftClassName="size-2.5" />
-              </span>
-            </span>
-          ) : (
-            // 文字入力キー（角丸 rounded）と一目で区別できるよう、制御キーは rounded-full のピル形状にする
-            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-2.5 font-mono text-sm font-semibold text-info">
-              <KeyLabelText label={label} />
-            </span>
-          )}
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-      {(kind === "backspace" || kind === "arrowLeft") && (count ?? 0) > 1 && (
-        // aria-hidden を付けない: スクリーンリーダーにも「BS ×2」のように回数が伝わるようにする
-        <span className="absolute -top-1.5 -right-1.5 rounded-full bg-muted-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background">
-          ×{count}
-        </span>
-      )}
-    </span>
-  );
-}
+// 制御キーバッジ（ControlKeyBadge）は app/components/search-craft-badges.tsx が単一ソース
+// （既存 importer を無改修で保つための re-export。上部の import 済みバインディングを再公開する）
+export { ControlKeyBadge };
 
 /** 遷移・参照が無効なセグメントのプレースホルダーバッジ */
 function InvalidSegmentBadge() {
@@ -199,12 +98,12 @@ function InvalidSegmentBadge() {
 }
 
 /**
- * クラフト実行マーカー（通常のアイテムチップと同じ見た目のチップ。ItemIcon 24px＋サーチ文字列）。
- * 高さはキー系バッジ（h-7）に揃える。アイコン類（Hammer 等）は置かず、
- * 「ここでクラフトを実行する」ことの説明は Tooltip と凡例（KeyBadgeLegend）が担う。
- * サーチ文字列は typedCharSegments() の結果を渡すと、実際にタイプしない残存部分が薄く表示される。
+ * クラフト実行マーカーを表示する（実体は app/components/search-craft-badges.tsx の
+ * `CraftMarker`）。サーチ文字列部分は typedCharSegments() の結果（`SegmentedSearchString`）を
+ * 渡し、実際にタイプしない残存部分を薄く表示する。複数アイテム時の Tooltip 内訳は
+ * `showItemBreakdown` で有効化する（UI ロケール依存の表示名 = `getLocalizedItemName`）。
  */
-function CraftMarker({
+function LoopCraftMarker({
   craft,
   searchStr,
   segments,
@@ -214,31 +113,12 @@ function CraftMarker({
   searchStr: string | null;
   segments: TypedCharSegment[];
 }) {
-  const t = useT();
-  const items = craft?.items ?? [];
-  // 同じサーチ文字列で複数アイテムが出せるクラフト（items 2件以上）は、
-  // 最初の1アイテムだけでなく全アイテムのアイコンを並べる（チップは h-7 のまま横に伸びる）。
-  // Tooltip も複数件のときだけ内訳（アイテム名の列挙）を添えて識別できるようにする。
-  const tooltipContent =
-    items.length > 1
-      ? `${t("playerProfile.loopCraftMarker")}（${items.map((id) => formatItemName(id)).join(" / ")}）`
-      : t("playerProfile.loopCraftMarker");
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2">
-          {items.map((itemId, idx) => (
-            <ItemIcon key={idx} itemId={itemId} size={24} />
-          ))}
-          {searchStr && (
-            <code className="font-mono text-sm">
-              <SegmentedSearchString value={searchStr} segments={segments} />
-            </code>
-          )}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{tooltipContent}</TooltipContent>
-    </Tooltip>
+    <CraftMarker
+      items={craft?.items ?? []}
+      content={searchStr ? <SegmentedSearchString value={searchStr} segments={segments} /> : null}
+      showItemBreakdown
+    />
   );
 }
 
@@ -346,7 +226,7 @@ export function LoopKeySequence({
             ) : (
               <InvalidSegmentBadge />
             )}
-            <CraftMarker craft={craft} searchStr={step.searchStr} segments={segments} />
+            <LoopCraftMarker craft={craft} searchStr={step.searchStr} segments={segments} />
             {idx < steps.length - 1 && (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
@@ -371,30 +251,29 @@ export function SearchCraftLoopRow({
   crafts,
   remaps,
   fingerAssignments,
-  keyboardLayout = "US",
+  keyboardLayout,
   showTiming = true,
 }: {
   loop: SearchCraftLoopRowData;
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * LoopKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   /** タイミンググループカード内に埋め込む場合は false（グループ見出しと重複するため） */
   showTiming?: boolean;
 }) {
   const t = useT();
   const craftsById = useMemo(() => new Map(crafts.map((c) => [c.id, c])), [crafts]);
+  // craftsById が変わらない限り同一の関数を保つ（LoopKeySequenceButton 側の
+  // sequence useMemo が親の無関係な再レンダーで失効しないようにするため）
+  const getCraft = useCallback((id: string) => craftsById.get(id), [craftsById]);
   const resolved = useMemo(
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const craft = craftsById.get(id);
-        return craft
-          ? {
-              searchStrs: craft.variations.map((v) => v.str),
-              withShifts: craft.variations.map((v) => v.withShift),
-            }
-          : undefined;
+        return craft ? { variations: craft.variations } : undefined;
       }),
     [loop.steps, craftsById],
   );
@@ -416,7 +295,7 @@ export function SearchCraftLoopRow({
         <div className="min-w-0 flex-1">
           <LoopKeySequence
             steps={resolved.steps}
-            getCraft={(id) => craftsById.get(id)}
+            getCraft={getCraft}
             remaps={remaps}
             fingerAssignments={fingerAssignments}
           />
@@ -424,7 +303,7 @@ export function SearchCraftLoopRow({
 
         <LoopKeySequenceButton
           steps={resolved.steps}
-          getCraft={(id) => craftsById.get(id)}
+          getCraft={getCraft}
           remaps={remaps}
           layout={keyboardLayout}
           fingerAssignments={fingerAssignments}
@@ -460,7 +339,7 @@ export function SearchCraftLoopGroupSection({
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
 }) {
   const t = useT();
   if (loops.length === 0) return null;
@@ -519,7 +398,7 @@ export function makeLoopGroupExtra({
   crafts: LoopCraftInfo[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
 }): (timing: string | null) => ReactNode {
   const byTiming = groupLoopsByTiming(loops);
   return (timing) => {

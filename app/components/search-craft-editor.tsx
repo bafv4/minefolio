@@ -94,6 +94,7 @@ import { remapVariationRefs, remapLoopSteps } from "@/lib/search-craft-loops";
 import { MAX_SEARCH_VARIATIONS, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { KeyboardLayout } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -263,15 +264,16 @@ function ItemSelectDialog({
 function SearchCraftRowContentInner<T extends SearchCraftDraft>({
   craft,
   remaps,
-  keyboardLayout = "US",
+  keyboardLayout,
   onUpdate,
   onDelete,
   getDeleteWarning,
 }: {
   craft: T;
   remaps?: RemapInfo[];
-  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * CraftKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
   /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
@@ -499,7 +501,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   index: number;
   remaps?: RemapInfo[];
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
   /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
@@ -681,7 +683,7 @@ type TimingBlockProps<T extends SearchCraftDraft, L extends SearchCraftLoopDraft
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
   getDeleteWarning?: (craftId: string) => string | null;
   totalCraftCount: number;
   isLoopDragging: boolean;
@@ -865,7 +867,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   /** 指定すると各行に入力キーのライブプレビューを表示する */
   remaps?: RemapInfo[];
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
-  keyboardLayout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  keyboardLayout?: KeyboardLayout;
   /**
    * 新規クラフトのdraftファクトリ。timing にはクリックしたブロックの値を渡す
    * （id 生成・その他フィールドの初期値は呼び出し側が担う）。

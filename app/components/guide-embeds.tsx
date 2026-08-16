@@ -391,14 +391,10 @@ export function SearchCraftEmbedView({
   // Loop（繋ぎ方）の craft 参照解決キー。presetName 指定時は同スナップショット内の
   // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
   // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
-  const craftLookup = new Map<string, { items: string; searchStrs: string[]; withShifts: boolean[] }>(
+  const craftLookup = new Map<string, { items: string; variations: SearchCraftVariation[] }>(
     crafts.map((c) => [
       presetName ? String(c.sequence) : c.id,
-      {
-        items: c.items,
-        searchStrs: c.variations.map((v) => v.str),
-        withShifts: c.variations.map((v) => v.withShift),
-      },
+      { items: c.items, variations: c.variations },
     ]),
   );
   const getCraft = (craftId: string) => craftLookup.get(craftId);
