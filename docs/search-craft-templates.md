@@ -172,6 +172,40 @@ type TemplateLoop = {
 
 このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
 
+#### タイピングテストの編集モデル
+
+テキストは「バッファ＋カーソル位置＋選択範囲」で管理する（追記型ではない）。編集ロジックは
+`app/lib/typing-test-buffer.ts` の純粋関数に切り出されている（`TypingTestArea` の React 状態
+から分離。ユニットテスト対象）。
+
+- `applyTypingTestAction(state, action)`: バッファへの操作適用（reducer）。`insert` / `backspace` /
+  `arrowLeft` / `home` / `selectAll` / `clear` の6種
+- `classifyTypingTestKey(result, shiftHeld)`: `simulateRemapOutput()` の結果（`outputKeyCode` /
+  `output`）を上記アクションへ分類する。`outputKeyCode` は物理修飾キーの有無に関わらず正規化済み
+  キーコードを返すため（例: 物理 `Shift+Home` でも `outputKeyCode: "Home"`）、Home と
+  Shift+Home（全選択）の区別はこの関数だけでは付かない。呼び出し側がキー入力の瞬間の
+  `e.shiftKey` を `shiftHeld` として渡すことで判定する
+
+対応する操作（Minecraft のサーチ欄の挙動）:
+
+| 操作 | 挙動 |
+|---|---|
+| 文字入力 | カーソル位置に挿入してカーソルを進める。選択中は選択範囲を削除してから挿入（上書き） |
+| Backspace | カーソル直前の1文字を削除。選択中は選択範囲を削除 |
+| ArrowLeft | カーソルを1つ左へ（0未満にはならない）。選択中は選択解除してカーソルを左端（0）へ |
+| Home | カーソルを先頭へ。選択中は選択解除してカーソルを先頭へ |
+| Shift+Home（`selectAll`） | 先頭（0）から現在のカーソル位置までを選択する（カーソルが末尾なら全選択になる）。物理 `Shift+Home` に加え、リマップで Home に解決されるキー・Shift を押しながらリマップで Home に解決されるキー（⇧Home 相当）のいずれでも発動する |
+| ArrowRight / End / Delete | 非対応（アプリの遷移モデルに存在しない）。押下は履歴チップにのみ残る |
+
+出力テキスト表示は選択中のみハイライト背景（`bg-primary/20`）、非選択中は点滅カーソル
+（`animate-caret-blink`）を描画する。押されたキーの履歴チップ（時系列ログ）はテキストバッファと
+独立しており、Backspace・Home・← などの操作キーも含めてすべて追記のみで保持する（Backspace で
+過去のチップを取り消すことはしない）。
+
+さらに、現在のバッファ文字列が登録済みサーチクラフトのいずれかのバリエーション `str` と大文字
+小文字を無視した完全一致をする場合、そのクラフトのアイテム（`ItemIcon` + `formatItemName()`）を
+出力テキストの下に表示する（複数一致時はすべて表示。空文字列は一致扱いにしない）。
+
 ### simulateRemapOutput()（`app/lib/remap-utils.ts`）
 
 物理キー入力（修飾キー組み合わせ）にリマップを**順方向**に適用し出力文字を求める。`getActualKeyInfos()`（文字→押すキーの逆引き）の対になる関数。

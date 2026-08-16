@@ -2434,6 +2434,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     saveDialogTitle: "Save your Playground setup",
     saveDialogDescription:
       "Save your current remaps and search-crafts as a preset",
+    typingTestCraftableItems: "Craftable items",
     saveAsNewOption: "Save as a new preset",
     saveToExistingOption: "Save to an existing preset",
     targetPresetLabel: "Target preset",

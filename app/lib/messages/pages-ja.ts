@@ -2376,6 +2376,7 @@ export const PAGES_JA = {
     saveAsNewOption: "新規プリセットとして保存",
     saveToExistingOption: "既存のプリセットに保存",
     targetPresetLabel: "保存先プリセット",
+    typingTestCraftableItems: "クラフトできるアイテム",
     basePresetLabel: "元となるプリセット（任意）",
     basePresetNone: "なし",
     basePresetHint: "選んだプリセットの全設定（キー配置・デバイス設定等）をコピーした上で、サーチクラフト・リマップをこの内容で上書きします",
