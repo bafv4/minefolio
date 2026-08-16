@@ -9,13 +9,21 @@ import {
   isLangLoaded,
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
-import { getActualKeyInfos, type UiRemapInfo, type RemapInfo, type RemapDetail } from "@/lib/remap-utils";
+import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
-import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
-import { FingerLegend, FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import type { FingerType, KeyboardLayout } from "@/lib/keybindings";
+import { FingerLegend } from "@/components/virtual-keyboard";
+import { CraftKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
+import {
+  renderVisibleSpaces,
+  SearchStringText,
+  KeyBadge,
+  ShiftKeyGroup,
+  getFingerForKeyCode,
+} from "@/components/search-craft-badges";
 import { cn } from "@/lib/utils";
-import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
+import { ShiftMark } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
@@ -60,34 +68,9 @@ function useItemLang(gameLanguage: string | null | undefined): string {
   return lang;
 }
 
-/**
- * 半角スペースの連続を「␣」（U+2423）に置き換えて可視化しつつ、テキスト片を描画する
- * （全角スペースは対象外）。可視化用の span は常に aria-hidden にする（呼び出し側で
- * 読み上げテキストを別途 aria-label 等で提供すること）。search-craft-loop-view.tsx の
- * SegmentedSearchString と共用する。
- */
-export function renderVisibleSpaces(text: string, spaceClassName: string): ReactNode[] {
-  const parts = text.split(/( +)/);
-  return parts.map((part, i) =>
-    part.length > 0 && part[0] === " " ? (
-      <span key={i} aria-hidden="true" className={spaceClassName}>
-        {"␣".repeat(part.length)}
-      </span>
-    ) : (
-      part
-    ),
-  );
-}
-
-/**
- * サーチ文字列を表示する。半角スペースは視認できるよう「␣」（U+2423）に置き換えて
- * 描画する（全角スペースは対象外）。描画テキストは実データと異なるため、
- * コピー機能は必ず元の searchStr 文字列を使うこと（DOM のテキストから取らない）。
- * スクリーンリーダーには aria-label で元の文字列を提供する。
- */
-export function SearchStringText({ value }: { value: string }) {
-  return <span aria-label={value}>{renderVisibleSpaces(value, "text-muted-foreground/70")}</span>;
-}
+// renderVisibleSpaces / SearchStringText は app/components/search-craft-badges.tsx が単一ソース
+// （既存 importer — search-craft-loop-view.tsx・guide-embeds.tsx 等 — を無改修で保つための re-export）
+export { renderVisibleSpaces, SearchStringText };
 
 /**
  * タイミングの表示メタ（この配列順が表示順）。
@@ -139,78 +122,9 @@ export type SearchCraftRowData = {
   variations: SearchCraftVariation[];
 };
 
-// ============================================
-// キーバッジ
-// ============================================
-
-/** 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ付き） */
-export function KeyBadge({
-  keyCode,
-  label,
-  finger,
-  isRemapped,
-  needsShift,
-  remapDetail,
-}: {
-  keyCode: string;
-  label: string;
-  finger?: FingerType;
-  isRemapped?: boolean;
-  needsShift?: boolean;
-  /** リマップされている場合のツールチップ詳細（「リマップ: 物理 → 出力」表示用） */
-  remapDetail?: RemapDetail;
-}) {
-  const t = useT();
-  const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
-
-  // ツールチップのテキスト。物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と
-  // 同じ「リマップ: 物理 → 出力」形式（フル名称。⇧ 等の短縮記号は使わない）
-  const getTooltipContent = (): ReactNode => {
-    if (isRemapped && remapDetail) {
-      return t("playerProfile.remapped", { source: remapDetail.sourceLabel, target: remapDetail.targetLabel });
-    }
-    if (keyCode.includes("+")) {
-      // 修飾キー組み合わせの場合
-      return getKeyCombinationLabel(t, keyCode);
-    }
-    return getKeyLabel(t, keyCode);
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-            finger
-              ? fingerClass
-              : "bg-secondary/50 border-border/50 text-muted-foreground",
-            isRemapped && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-            needsShift && !isRemapped && "border-warning/50 bg-warning/10"
-          )}
-        >
-          <KeyLabelText label={label} />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{getTooltipContent()}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** 「Shiftを押しながらクラフト」を示すバッジ（入力キー列の先頭に表示） */
-export function ShiftCraftBadge() {
-  const t = useT();
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex items-center justify-center gap-1 rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
-          <ShiftMark /> Shift
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
-    </Tooltip>
-  );
-}
+// KeyBadge / ShiftKeyGroup は app/components/search-craft-badges.tsx が単一ソース
+// （既存 importer — guide-embeds.tsx 等 — を無改修で保つための re-export）
+export { KeyBadge, ShiftKeyGroup };
 
 /** サーチ文字列から導出した実入力キーのバッジ列 */
 export function ActualKeyBadges({
@@ -222,41 +136,29 @@ export function ActualKeyBadges({
   searchStr: string;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  /** Shiftを押しながらクラフトする前提で逆引きし、先頭に ⇧ Shift バッジを表示する */
+  /** Shiftを押しながらクラフトする前提で逆引きし、キー列全体を ShiftKeyGroup で囲む */
   shiftHeld?: boolean;
 }) {
   const t = useT();
   const keyInfos = getActualKeyInfos(t, searchStr, remaps, { shiftHeld });
 
-  // キーコードから指割り当てを取得
-  const getFingerForKey = (keyCode: string): FingerType | undefined => {
-    if (!fingerAssignments) return undefined;
-    const fingers = fingerAssignments[keyCode] || fingerAssignments[keyCode.toLowerCase()];
-    return fingers?.[0];
-  };
+  const badges = keyInfos.map((info, idx) => (
+    <KeyBadge
+      key={idx}
+      keyCode={info.keyCode}
+      label={info.displayLabel}
+      finger={getFingerForKeyCode(info.keyCode, fingerAssignments)}
+      isRemapped={info.isRemapped}
+      needsShift={info.needsShift}
+      remapDetail={info.remapDetail}
+    />
+  ));
 
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {shiftHeld && <ShiftCraftBadge />}
-      {keyInfos.map((info, idx) => {
-        // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
-        const baseKeyCode = info.keyCode.includes("+")
-          ? info.keyCode.split("+").pop() || info.keyCode
-          : info.keyCode;
-        return (
-          <KeyBadge
-            key={idx}
-            keyCode={info.keyCode}
-            label={info.displayLabel}
-            finger={getFingerForKey(baseKeyCode)}
-            isRemapped={info.isRemapped}
-            needsShift={info.needsShift}
-            remapDetail={info.remapDetail}
-          />
-        );
-      })}
-    </div>
-  );
+  if (shiftHeld) {
+    return <ShiftKeyGroup>{badges}</ShiftKeyGroup>;
+  }
+
+  return <div className="flex flex-wrap items-center gap-1">{badges}</div>;
 }
 
 /** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
@@ -278,7 +180,7 @@ export function KeyBadgeLegend({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
+        <span className="inline-flex h-3.5 items-center justify-center rounded-lg border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
           <ShiftMark className="size-2.5" />
         </span>
         <span className="text-[11px] text-muted-foreground">
@@ -317,6 +219,7 @@ export function SearchCraftGroupedList({
   remaps,
   fingerAssignments,
   gameLanguage,
+  keyboardLayout,
   renderGroupExtra,
   extraTimings,
 }: {
@@ -325,6 +228,8 @@ export function SearchCraftGroupedList({
   fingerAssignments?: Record<string, FingerType[]>;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: KeyboardLayout;
   /**
    * 各グループカードの行リストの後（CardContent 内）に追加コンテンツを描画するフック
    * （繋ぎ方 Loop 表示などを疎結合に差し込むための拡張点。search-craft-loop-view.tsx を
@@ -353,6 +258,7 @@ export function SearchCraftGroupedList({
         crafts={crafts}
         remaps={remaps}
         fingerAssignments={fingerAssignments}
+        keyboardLayout={keyboardLayout}
         lang={lang}
         extra={renderGroupExtra?.(null)}
       />
@@ -388,6 +294,7 @@ export function SearchCraftGroupedList({
           crafts={grouped.get(timing)!}
           remaps={remaps}
           fingerAssignments={fingerAssignments}
+          keyboardLayout={keyboardLayout}
           lang={lang}
           extra={renderGroupExtra?.(timing)}
         />
@@ -403,6 +310,7 @@ function SearchCraftGroupCard({
   crafts,
   remaps,
   fingerAssignments,
+  keyboardLayout,
   lang,
   extra,
 }: {
@@ -411,6 +319,7 @@ function SearchCraftGroupCard({
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  keyboardLayout?: KeyboardLayout;
   lang: string;
   extra?: ReactNode;
 }) {
@@ -453,6 +362,7 @@ function SearchCraftGroupCard({
                   craft={craft}
                   remaps={remaps}
                   fingerAssignments={fingerAssignments}
+                  keyboardLayout={keyboardLayout}
                   lang={lang}
                 />
               ))}
@@ -469,11 +379,15 @@ function SearchCraftRow({
   craft,
   remaps,
   fingerAssignments,
+  keyboardLayout,
   lang,
 }: {
   craft: SearchCraftRowData;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * CraftKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   lang: string;
 }) {
   const t = useT();
@@ -541,14 +455,23 @@ function SearchCraftRow({
                   {t("playerProfile.inputKeysLabel")}
                 </span>
                 {variation.str ? (
-                  <ActualKeyBadges
-                    searchStr={variation.str}
-                    remaps={remaps}
-                    fingerAssignments={fingerAssignments}
-                    shiftHeld={variation.withShift}
-                  />
+                  <>
+                    <ActualKeyBadges
+                      searchStr={variation.str}
+                      remaps={remaps}
+                      fingerAssignments={fingerAssignments}
+                      shiftHeld={variation.withShift}
+                    />
+                    <CraftKeySequenceButton
+                      searchStr={variation.str}
+                      withShift={variation.withShift}
+                      remaps={remaps}
+                      layout={keyboardLayout}
+                      fingerAssignments={fingerAssignments}
+                    />
+                  </>
                 ) : variation.withShift ? (
-                  <ShiftCraftBadge />
+                  <ShiftKeyGroup />
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}

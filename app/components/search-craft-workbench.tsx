@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useReducer } from "react";
+import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -16,9 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ItemIcon } from "@/components/item-icon";
 import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
-import { VirtualKeyboard } from "@/components/virtual-keyboard";
+import { VirtualKeyboard, VirtualMouse } from "@/components/virtual-keyboard";
 import {
   SearchCraftTimingBoard,
   type SearchCraftDraft,
@@ -29,7 +31,18 @@ import {
   type RemapInfo,
   type SimulatedKeyOutput,
 } from "@/lib/remap-utils";
-import { getKeyLabel, parseKeyCombination } from "@/lib/keybindings";
+import {
+  applyTypingTestAction,
+  classifyTypingTestKey,
+  INITIAL_TYPING_TEST_BUFFER_STATE,
+} from "@/lib/typing-test-buffer";
+import {
+  getKeyLabel,
+  parseKeyCombination,
+  KEYBOARD_LAYOUT_OPTIONS,
+  normalizeKeyboardLayout,
+  type KeyboardLayout,
+} from "@/lib/keybindings";
 import { draftId } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
 import { Eraser, Keyboard, Plus } from "lucide-react";
@@ -48,15 +61,11 @@ export type WorkbenchRemap = {
   targetKey: string | null;
 };
 
-export type KeyboardLayoutOption = "US" | "JIS" | "US_TKL" | "JIS_TKL";
-
-export const LAYOUT_OPTIONS: KeyboardLayoutOption[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
-
-export function normalizeLayout(value: string | null | undefined): KeyboardLayoutOption {
-  return LAYOUT_OPTIONS.includes(value as KeyboardLayoutOption)
-    ? (value as KeyboardLayoutOption)
-    : "US";
-}
+// キーボードレイアウトの型・選択肢・正規化は app/lib/keybindings.ts が単一ソース
+// （既存 importer を無改修で保つためのエイリアス re-export）
+export type KeyboardLayoutOption = KeyboardLayout;
+export const LAYOUT_OPTIONS = KEYBOARD_LAYOUT_OPTIONS;
+export const normalizeLayout = normalizeKeyboardLayout;
 
 /** 計算に使う有効なリマップ（未入力の行は除外、sourceKey 重複は先勝ち） */
 export function effectiveRemapsFrom(remaps: WorkbenchRemap[]): RemapInfo[] {
@@ -76,19 +85,32 @@ export function effectiveRemapsFrom(remaps: WorkbenchRemap[]): RemapInfo[] {
 // タイピングテスト
 // ============================================
 
-function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
+function TypingTestArea({
+  remaps,
+  crafts,
+}: {
+  remaps: RemapInfo[];
+  crafts: SearchCraftDraft[];
+}) {
   const t = useT();
-  const [entries, setEntries] = useState<SimulatedKeyOutput[]>([]);
+  // 押されたキーの時系列ログ（履歴チップ表示用。Backspace/Home/← などの操作キーも
+  // 含めて追記のみ・削除はしない。テキストバッファとは独立している）
+  const [history, setHistory] = useState<SimulatedKeyOutput[]>([]);
+  // テキスト本体（バッファ＋カーソル＋選択）は純粋関数の reducer に委譲する
+  // （app/lib/typing-test-buffer.ts）
+  const [buffer, dispatchBuffer] = useReducer(
+    applyTypingTestAction,
+    INITIAL_TYPING_TEST_BUFFER_STATE,
+  );
   const [isFocused, setIsFocused] = useState(false);
 
-  // 解決結果を反映する。Backspace（物理キー・またはBackspaceにリマップされたキー）は
-  // 直前の入力を1つ削除する。それ以外は履歴に追加する
-  const applyResult = useCallback((result: SimulatedKeyOutput) => {
-    if (result.outputKeyCode === "Backspace") {
-      setEntries((prev) => prev.slice(0, -1));
-    } else {
-      setEntries((prev) => [...prev, result]);
-    }
+  // キー入力の解決結果を履歴へ追加し、バッファへ反映する操作へ分類して適用する。
+  // shiftHeld はそのキー入力の瞬間に Shift が押されていたか（Home の出力を
+  // home / selectAll のどちらとして扱うかの判定に使う。classifyTypingTestKey 参照）
+  const applyResult = useCallback((result: SimulatedKeyOutput, shiftHeld: boolean) => {
+    setHistory((prev) => [...prev, result]);
+    const action = classifyTypingTestKey(result, shiftHeld);
+    if (action) dispatchBuffer(action);
   }, []);
 
   const handleKeyDown = useCallback(
@@ -98,7 +120,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
         const result = simulateRemapOutput(t, e.code, remaps);
         if (result.isRemapped) {
           e.preventDefault();
-          applyResult(result);
+          applyResult(result, false);
         }
         return;
       }
@@ -115,12 +137,27 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
       if (e.metaKey) modifiers.push("Meta");
       const combo = modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code;
 
-      applyResult(simulateRemapOutput(t, combo, remaps));
+      applyResult(simulateRemapOutput(t, combo, remaps), e.shiftKey);
     },
     [remaps, applyResult],
   );
 
-  const outputText = entries.map((entry) => entry.output ?? "").join("");
+  const clear = useCallback(() => {
+    setHistory([]);
+    dispatchBuffer({ type: "clear" });
+  }, []);
+
+  // 現在のバッファ文字列でクラフトできる登録済みサーチクラフト
+  // （バリエーションの str と大文字小文字を無視した完全一致。空文字列は一致扱いにしない）
+  const matchedCrafts = useMemo(() => {
+    if (!buffer.text) return [];
+    const lower = buffer.text.toLowerCase();
+    return crafts.filter(
+      (craft) =>
+        craft.items.length > 0 &&
+        craft.variations.some((v) => v.str !== "" && v.str.toLowerCase() === lower),
+    );
+  }, [buffer.text, crafts]);
 
   return (
     <div className="space-y-3">
@@ -135,7 +172,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
           isFocused ? "border-primary bg-primary/5" : "border-border bg-secondary/20"
         }`}
       >
-        {entries.length === 0 ? (
+        {history.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {isFocused ? t("playground.typingTestReady") : t("playground.typingTestPlaceholder")}
           </p>
@@ -145,16 +182,55 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
               <p className="text-xs text-muted-foreground mb-1">
                 {t("playground.typingTestOutput")}
               </p>
-              <p className="font-mono text-lg break-all">
-                {outputText || "—"}
+              <p className="font-mono text-lg break-all whitespace-pre-wrap">
+                {buffer.selection ? (
+                  <>
+                    {buffer.text.slice(0, buffer.selection.start)}
+                    <span className="rounded-sm bg-primary/20">
+                      {buffer.text.slice(buffer.selection.start, buffer.selection.end)}
+                    </span>
+                    {buffer.text.slice(buffer.selection.end)}
+                  </>
+                ) : (
+                  <>
+                    {buffer.text.slice(0, buffer.cursor)}
+                    <span
+                      aria-hidden
+                      className="inline-block h-[1.1em] w-px align-middle bg-primary animate-caret-blink"
+                    />
+                    {buffer.text.slice(buffer.cursor)}
+                  </>
+                )}
               </p>
             </div>
+            {matchedCrafts.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {t("playground.typingTestCraftableItems")}
+                </p>
+                <div className="space-y-1.5">
+                  {matchedCrafts.map((craft) => (
+                    <div key={craft.id} className="flex flex-wrap items-center gap-1.5">
+                      {craft.items.map((itemId, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2"
+                        >
+                          <ItemIcon itemId={itemId} size={24} />
+                          <span className="text-sm">{formatItemName(itemId)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <p className="text-xs text-muted-foreground mb-1">
                 {t("playground.typingTestPressed")}
               </p>
               <div className="flex flex-wrap gap-1">
-                {entries.map((entry, idx) => (
+                {history.map((entry, idx) => (
                   <kbd
                     key={idx}
                     className={
@@ -171,12 +247,7 @@ function TypingTestArea({ remaps }: { remaps: RemapInfo[] }) {
           </div>
         )}
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={entries.length === 0}
-        onClick={() => setEntries([])}
-      >
+      <Button variant="outline" size="sm" disabled={history.length === 0} onClick={clear}>
         <Eraser className="mr-2 h-4 w-4" />
         {t("playground.clearTypingTest")}
       </Button>
@@ -293,15 +364,24 @@ export function SearchCraftWorkbench({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <VirtualKeyboard
-            layout={layout}
-            keybindings={{}}
-            remaps={effectiveRemaps}
-            onKeyClick={setEditingKeyCode}
-            showRemaps
-            hideNumpad
-          />
+        <CardContent>
+          <div className="flex flex-col items-start gap-4">
+            <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+              <VirtualKeyboard
+                layout={layout}
+                keybindings={{}}
+                remaps={effectiveRemaps}
+                onKeyClick={setEditingKeyCode}
+                showRemaps
+                hideNumpad
+              />
+            </div>
+            <VirtualMouse
+              remaps={effectiveRemaps}
+              onButtonClick={setEditingKeyCode}
+              showRemaps
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -414,7 +494,7 @@ export function SearchCraftWorkbench({
             <DialogTitle>{t("playground.typingTestSection")}</DialogTitle>
             <DialogDescription>{t("playground.typingTestSectionDescription")}</DialogDescription>
           </DialogHeader>
-          <TypingTestArea remaps={effectiveRemaps} />
+          <TypingTestArea remaps={effectiveRemaps} crafts={crafts} />
         </DialogContent>
       </Dialog>
 
@@ -431,6 +511,7 @@ export function SearchCraftWorkbench({
             loops={loops}
             onLoopsChange={onLoopsChange}
             remaps={effectiveRemaps}
+            keyboardLayout={layout}
             createCraft={createCraft}
             createLoop={createLoop}
           />

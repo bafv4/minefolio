@@ -19,10 +19,11 @@ import { resolveVariations, type SearchCraftVariation } from "@/lib/search-craft
 import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
   SearchStringText,
+  ShiftKeyGroup,
   TIMING_META,
   timingLabelById,
 } from "@/components/search-craft-template-view";
-import { ShiftMark, KeyLabelText } from "@/components/shift-mark";
+import { KeyLabelText } from "@/components/shift-mark";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { ArrowRight } from "lucide-react";
@@ -390,10 +391,10 @@ export function SearchCraftEmbedView({
   // Loop（繋ぎ方）の craft 参照解決キー。presetName 指定時は同スナップショット内の
   // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
   // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
-  const craftLookup = new Map<string, { items: string; searchStrs: string[] }>(
+  const craftLookup = new Map<string, { items: string; variations: SearchCraftVariation[] }>(
     crafts.map((c) => [
       presetName ? String(c.sequence) : c.id,
-      { items: c.items, searchStrs: c.variations.map((v) => v.str) },
+      { items: c.items, variations: c.variations },
     ]),
   );
   const getCraft = (craftId: string) => craftLookup.get(craftId);
@@ -454,23 +455,20 @@ export function SearchCraftEmbedView({
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {variation.withShift && (
-                          <kbd
-                            className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-warning/50 bg-warning/10 text-warning font-mono text-xs"
-                            title={t("playerProfile.withShiftTooltip")}
-                          >
-                            <ShiftMark /> Shift
+                      {(() => {
+                        const keyKbds = getActualKeyInfos(t, variation.str, remaps, {
+                          shiftHeld: variation.withShift,
+                        }).map((info, i) => (
+                          <kbd key={i} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
+                            <KeyLabelText label={info.displayLabel} />
                           </kbd>
-                        )}
-                        {getActualKeyInfos(t, variation.str, remaps, { shiftHeld: variation.withShift }).map(
-                          (info, i) => (
-                            <kbd key={i} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-                              <KeyLabelText label={info.displayLabel} />
-                            </kbd>
-                          ),
-                        )}
-                      </div>
+                        ));
+                        return variation.withShift ? (
+                          <ShiftKeyGroup>{keyKbds}</ShiftKeyGroup>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1">{keyKbds}</div>
+                        );
+                      })()}
                     </div>
                   </div>
                 ) : null,
@@ -558,21 +556,30 @@ export function SearchCraftEmbedView({
     if (!step.searchStr) {
       return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
     }
-    return (
+    const keysKbd = (
       <kbd className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
         <SearchStringText value={step.searchStr} />
       </kbd>
     );
+    return step.withShift ? <ShiftKeyGroup>{keysKbd}</ShiftKeyGroup> : keysKbd;
   };
 
-  // ステップ間の遷移（先頭以外）。参照切れ・導出失敗（無効な遷移）は「?」kbd に留める
+  // ステップ間の遷移（先頭以外）。参照切れ・導出失敗（無効な遷移）は「?」kbd に留める。
+  // type op（打鍵セグメント）だけを、遷移先ステップ（=このステップ自身）の withShift に応じて
+  // ShiftKeyGroup で囲む（制御キー op・クラフト実行マーカーは対象外）
   const renderLoopStepOps = (step: ResolvedLoopStep) => {
     if (!step.derived || !step.derived.valid) {
       return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
     }
     return (
       <span className="flex flex-wrap items-center gap-1">
-        {step.derived.ops.map((op, i) => renderLoopOp(op, i))}
+        {step.derived.ops.map((op, i) =>
+          op.kind === "type" && step.withShift ? (
+            <ShiftKeyGroup key={i}>{renderLoopOp(op, i)}</ShiftKeyGroup>
+          ) : (
+            renderLoopOp(op, i)
+          ),
+        )}
       </span>
     );
   };
@@ -585,15 +592,21 @@ export function SearchCraftEmbedView({
       return <InvalidKbd key={key} dashed title={t("playerProfile.loopInvalidTransition")} />;
     }
     const items = coerceStringArray(craft.items);
-    const firstItem = items[0];
+    // 同じサーチ文字列で複数アイテムが出せるクラフトは、最初の1件だけでなく全アイテムの
+    // アイコンを並べる。title（native attribute。この軽量レンダラは Tooltip を使わない）も
+    // 複数件のときだけ内訳を添える
+    const title =
+      items.length > 1
+        ? `${t("playerProfile.loopCraftMarker")}（${items.map((id) => getLocalizedItemName(id, locale)).join(" / ")}）`
+        : t("playerProfile.loopCraftMarker");
     return (
       <span
         key={key}
         className="inline-flex items-center gap-1 rounded bg-secondary/50 px-1.5 py-0.5"
-        title={t("playerProfile.loopCraftMarker")}
+        title={title}
       >
-        {firstItem ? (
-          <ItemIcon itemId={firstItem} size={20} />
+        {items.length > 0 ? (
+          items.map((itemId, i) => <ItemIcon key={i} itemId={itemId} size={20} />)
         ) : (
           <span className="text-xs text-muted-foreground">?</span>
         )}

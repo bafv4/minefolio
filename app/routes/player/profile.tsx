@@ -170,7 +170,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
@@ -710,6 +710,10 @@ export default function PlayerProfilePage() {
     },
   ];
 
+  // キーボードレイアウト判定（サーチクラフトのキー入力順ダイアログでも使うため、
+  // 参照箇所より前で定義する）
+  const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as KeyboardLayout;
+
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
   const userFingerAssignments = useMemo(() => {
     if (!player.playerConfig?.fingerAssignments) return {};
@@ -745,8 +749,9 @@ export default function PlayerProfilePage() {
         crafts: parsedSearchCrafts,
         remaps: player.keyRemaps,
         fingerAssignments: userFingerAssignments,
+        keyboardLayout,
       }),
-    [player.searchCraftLoops, parsedSearchCrafts, player.keyRemaps, userFingerAssignments],
+    [player.searchCraftLoops, parsedSearchCrafts, player.keyRemaps, userFingerAssignments, keyboardLayout],
   );
 
   // 仮想キーボードの Trigger/Chat 表示切替。種別付きリマップがある場合のみ切替UIを出す
@@ -813,8 +818,6 @@ export default function PlayerProfilePage() {
     [player.rtaStartedYearMonth, locale, now],
   );
 
-  // キーボードレイアウト判定
-  const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
   const isTKL = keyboardLayout === "US_TKL" || keyboardLayout === "JIS_TKL";
 
 
@@ -1843,6 +1846,7 @@ export default function PlayerProfilePage() {
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
                 gameLanguage={player.playerConfig?.gameLanguage}
+                keyboardLayout={keyboardLayout}
                 extraTimings={searchCraftLoopTimings}
                 renderGroupExtra={renderSearchCraftLoopExtra}
               />

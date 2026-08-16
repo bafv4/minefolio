@@ -166,11 +166,45 @@ type TemplateLoop = {
 
 編集セクションは共有コンポーネント **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）に集約されており、**Playground とテンプレートエディタ（作成・編集）で同一構成**を共有する。crafts / remaps / loops / layout の状態は親が持ち、ワークベンチは制御コンポーネントとして動作する（`WorkbenchRemap` 型・`effectiveRemapsFrom()`・`normalizeLayout()` / `LAYOUT_OPTIONS` もここから export）。
 
-1. **バーチャルキーボード**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。**キーをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキーを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
+1. **バーチャルキーボード＋マウス**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。下段に `VirtualMouse`（`showRemaps`。`keybindings` / `fingerAssignments` / `customButtons` は Playground・テンプレートエディタに対応データが無いため渡さない）を並べ、Mouse0〜Mouse4 のリマップも同じ導線で扱える。**キー/ボタンをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキー/ボタンを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
 2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapOutputType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
 3. **サーチクラフト＋繋ぎ方（Loop）編集**: `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`）によるタイミングブロック型エディタ。「指定なし」+ 6種のタイミング、計7ブロックを常時表示し、各ブロック内でアイテムごとの登録・編集（アイテム選択ダイアログ・コメント・並べ替え・削除）と、その下の「繋ぎ方（Loop）」サブセクション（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` から再利用）でのステップ追加・並べ替え・削除を行う。timing の変更はブロック間D&D。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。サーチクラフト行の削除に連動して、削除された `craftId` を参照する Loop ステップを自動除去する（生存参照は温存、2件未満になった Loop は自動除去。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」「繋ぎ方（Loop）」参照）。
 
 このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
+
+#### タイピングテストの編集モデル
+
+テキストは「バッファ＋カーソル位置＋選択範囲」で管理する（追記型ではない）。編集ロジックは
+`app/lib/typing-test-buffer.ts` の純粋関数に切り出されている（`TypingTestArea` の React 状態
+から分離。ユニットテスト対象）。
+
+- `applyTypingTestAction(state, action)`: バッファへの操作適用（reducer）。`insert` / `backspace` /
+  `arrowLeft` / `home` / `selectAll` / `clear` の6種
+- `classifyTypingTestKey(result, shiftHeld)`: `simulateRemapOutput()` の結果（`outputKeyCode` /
+  `output`）を上記アクションへ分類する。`outputKeyCode` は物理修飾キーの有無に関わらず正規化済み
+  キーコードを返すため（例: 物理 `Shift+Home` でも `outputKeyCode: "Home"`）、Home と
+  Shift+Home（全選択）の区別はこの関数だけでは付かない。呼び出し側がキー入力の瞬間の
+  `e.shiftKey` を `shiftHeld` として渡すことで判定する
+
+対応する操作（Minecraft のサーチ欄の挙動）:
+
+| 操作 | 挙動 |
+|---|---|
+| 文字入力 | カーソル位置に挿入してカーソルを進める。選択中は選択範囲を削除してから挿入（上書き） |
+| Backspace | カーソル直前の1文字を削除。選択中は選択範囲を削除 |
+| ArrowLeft | カーソルを1つ左へ（0未満にはならない）。選択中は選択解除してカーソルを左端（0）へ |
+| Home | カーソルを先頭へ。選択中は選択解除してカーソルを先頭へ |
+| Shift+Home（`selectAll`） | 先頭（0）から現在のカーソル位置までを選択する（カーソルが末尾なら全選択になる）。物理 `Shift+Home` に加え、リマップで Home に解決されるキー・Shift を押しながらリマップで Home に解決されるキー（⇧Home 相当）のいずれでも発動する |
+| ArrowRight / End / Delete | 非対応（アプリの遷移モデルに存在しない）。押下は履歴チップにのみ残る |
+
+出力テキスト表示は選択中のみハイライト背景（`bg-primary/20`）、非選択中は点滅カーソル
+（`animate-caret-blink`）を描画する。押されたキーの履歴チップ（時系列ログ）はテキストバッファと
+独立しており、Backspace・Home・← などの操作キーも含めてすべて追記のみで保持する（Backspace で
+過去のチップを取り消すことはしない）。
+
+さらに、現在のバッファ文字列が登録済みサーチクラフトのいずれかのバリエーション `str` と大文字
+小文字を無視した完全一致をする場合、そのクラフトのアイテム（`ItemIcon` + `formatItemName()`）を
+出力テキストの下に表示する（複数一致時はすべて表示。空文字列は一致扱いにしない）。
 
 ### simulateRemapOutput()（`app/lib/remap-utils.ts`）
 

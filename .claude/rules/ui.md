@@ -52,16 +52,16 @@
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
 
 ### キーバッジ（サーチクラフト系）
-`search-craft-template-view.tsx` の `KeyBadge` と `search-craft-loop-view.tsx` の派生バッジ群で確立した規格。
+実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`FINGER_KEY_COLORS`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい（以前はダイアログ側が循環import回避のためローカルに見た目だけを揃えた実装を持っていたが、葉モジュール化によりこの二重実装は解消済み）。
 
 - 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
 - トーン:
   - 通常キー: `bg-secondary/50 border-border/50 text-muted-foreground`（指割り当てがあれば指色）
   - リマップ済み: `ring-2 ring-primary ring-offset-1 ring-offset-background`
-  - Shift 同時押し: `border-warning/50 bg-warning/10`（⇧ Shift バッジは `text-warning`）
+  - Shift 同時押し（`needsShift`＝非 shiftHeld 時の単発大文字の逆引き）: 個別 `KeyBadge` 自体に `border-warning/50 bg-warning/10` を付ける（変更なし）。一方 `shiftHeld`（行全体で Shift を押しっぱなし＝「Shiftを押しながら」バリエーション）は、キー列の先頭に独立バッジを置くのではなく `ShiftKeyGroup` で実入力キー列全体を1つの枠（`rounded-lg border-2 border-warning/50 bg-warning/10 px-2 py-1.5`。ネスト規則どおり内側の `rounded` チップの1段上。余白はリマップリングの外側はみ出し〈約3px〉が枠に触れない値）で囲み、先頭にコンパクトな「⇧」マークのみ（`text-warning`、可視の "Shift" テキストは置かない。`ShiftMark` 内部の sr-only と Tooltip=`playerProfile.withShiftTooltip` が意味を補う）を置く
   - 制御キー（BS/←/Home/⇧Home）: `rounded-full border-info/50 bg-info/10 text-info px-2.5`（文字入力キーの角丸 `rounded` と一目で区別するためのピル形状）。**リマップ考慮時（`remaps` を渡し、逆引きでリマップが見つかった場合のみ）**は「実キー主表記＋操作ラベルのミニチップ」の複合ピルにする — **主ラベル＝実際に押すキー**（既存の単一ピルと同じ `text-sm`、外側の見た目はそのまま）、その中に「チップの中のチップ」として**出力操作**（`BS` 等）を小さめの丸チップ（`rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px]`）で添える。ピル全体にリマップ用リング（`ring-2 ring-primary ring-offset-1 ring-offset-background`）を付ける。リマップが無い（大多数）場合は非リマップ時と1px も変わらない単一ピルのまま
   - 無効: `border-destructive/50 bg-destructive/10 text-destructive`
-- クラフト実行マーカー: 通常のアイテムチップと同じ見た目の `h-7 rounded bg-secondary/50 px-2`（`ItemIcon` 24px＋文字列。Hammer 等の専用アイコン・破線ボーダーは付けない。「ここでクラフト実行」の説明は Tooltip と凡例が担う）。キー操作列ではキー系バッジと高さ h-7 を揃え、セグメント（制御キー・打鍵キー・チップ）間は `gap-2`、キー同士は `gap-1`
+- クラフト実行マーカー: 通常のアイテムチップと同じ見た目の `h-7 rounded bg-secondary/50 px-2`（`ItemIcon` 24px＋文字列。同じサーチ文字列で複数アイテムが出せるクラフトは最初の1件だけでなく全アイテムのアイコンを並べる〈チップは横に伸びる〉。Hammer 等の専用アイコン・破線ボーダーは付けない。「ここでクラフト実行」の説明は Tooltip と凡例が担う）。キー操作列ではキー系バッジと高さ h-7 を揃え、セグメント（制御キー・打鍵キー・チップ）間は `gap-2`、キー同士は `gap-1`
 - 回数は右肩の `×n` カウンタで表す（バッジを並べない）
 - マイクロテキストは2値: バッジ肩・印 = `text-[10px]`、凡例ラベル = `text-[11px]`
 - Shift の「⇧」はフォント依存でグリフが揺れるため、Unicode 文字の直書きではなく `app/components/shift-mark.tsx` の

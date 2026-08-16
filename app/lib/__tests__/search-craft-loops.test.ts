@@ -13,6 +13,7 @@ import {
   normalizeVariationIndex,
   type LoopStepData,
 } from "../search-craft-loops";
+import type { SearchCraftVariation } from "../search-craft-variations";
 
 describe("commonPrefixLength", () => {
   it("共通接頭辞がない場合は 0", () => {
@@ -319,17 +320,20 @@ describe("deriveTransition - home", () => {
 });
 
 describe("resolveLoopSteps", () => {
-  type Craft = { searchStrs: string[] };
+  type Craft = { variations: SearchCraftVariation[] };
   const makeGetCraft =
     (crafts: Record<string, Craft>) =>
     (id: string): Craft | undefined =>
       crafts[id];
+  /** テスト用: 検索文字列だけから withShift: false の variations を組み立てる */
+  const strVariations = (strs: string[]): SearchCraftVariation[] =>
+    strs.map((str) => ({ str, withShift: false }));
 
   it("3ステップの正常系: 全ステップが解決し valid=true", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStrs: ["er"] },
-      c2: { searchStrs: ["en"] },
-      c3: { searchStrs: ["anything"] },
+      c1: { variations: strVariations(["er"]) },
+      c2: { variations: strVariations(["en"]) },
+      c3: { variations: strVariations(["anything"]) },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -352,7 +356,7 @@ describe("resolveLoopSteps", () => {
   });
 
   it("参照切れ（craftId が見つからない）は craft:null になり Loop 全体が invalid", () => {
-    const getCraft = makeGetCraft({ c1: { searchStrs: ["er"] } });
+    const getCraft = makeGetCraft({ c1: { variations: strVariations(["er"]) } });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
       { craftId: "missing", transition: { type: "backspace", bsCount: 1 } },
@@ -364,10 +368,10 @@ describe("resolveLoopSteps", () => {
     expect(result.steps[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
   });
 
-  it("craft は解決できても対象バリエーションが無い（searchStrs が空）場合も missing_search_str", () => {
+  it("craft は解決できても対象バリエーションが無い（variations が空）場合も missing_search_str", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStrs: ["er"] },
-      c2: { searchStrs: [] },
+      c1: { variations: strVariations(["er"]) },
+      c2: { variations: [] },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -375,15 +379,15 @@ describe("resolveLoopSteps", () => {
     ];
     const result = resolveLoopSteps(steps, getCraft);
     expect(result.valid).toBe(false);
-    expect(result.steps[1].craft).toEqual({ searchStrs: [] });
+    expect(result.steps[1].craft).toEqual({ variations: [] });
     expect(result.steps[1].searchStr).toBeNull();
     expect(result.steps[1].derived).toEqual({ valid: false, reason: "missing_search_str" });
   });
 
   it("非先頭ステップの transition が null（破損データ）は derived を計算せず invalid化する", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStrs: ["er"] },
-      c2: { searchStrs: ["en"] },
+      c1: { variations: strVariations(["er"]) },
+      c2: { variations: strVariations(["en"]) },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -396,8 +400,8 @@ describe("resolveLoopSteps", () => {
 
   it("同一 craft の複数回参照は許可される", () => {
     const getCraft = makeGetCraft({
-      c1: { searchStrs: ["er"] },
-      c2: { searchStrs: ["en"] },
+      c1: { variations: strVariations(["er"]) },
+      c2: { variations: strVariations(["en"]) },
     });
     const steps: LoopStepData[] = [
       { craftId: "c1", transition: null },
@@ -410,16 +414,16 @@ describe("resolveLoopSteps", () => {
   });
 
   it("ステップ数が2未満は invalid", () => {
-    const getCraft = makeGetCraft({ c1: { searchStrs: ["er"] } });
+    const getCraft = makeGetCraft({ c1: { variations: strVariations(["er"]) } });
     expect(resolveLoopSteps([], getCraft).valid).toBe(false);
     expect(resolveLoopSteps([{ craftId: "c1", transition: null }], getCraft).valid).toBe(false);
   });
 
   describe("variationIndex の解決", () => {
-    it("variationIndex が範囲内なら対応する searchStrs[index] を使う", () => {
+    it("variationIndex が範囲内なら対応する variations[index] を使う", () => {
       const getCraft = makeGetCraft({
-        c1: { searchStrs: ["en", "er"] },
-        c2: { searchStrs: ["cra", "craft"] },
+        c1: { variations: strVariations(["en", "er"]) },
+        c2: { variations: strVariations(["cra", "craft"]) },
       });
       const steps: LoopStepData[] = [
         { craftId: "c1", transition: null, variationIndex: 1 },
@@ -435,8 +439,8 @@ describe("resolveLoopSteps", () => {
 
     it("variationIndex が対象クラフトのバリエーション数以上（範囲外）は missing_search_str", () => {
       const getCraft = makeGetCraft({
-        c1: { searchStrs: ["er"] },
-        c2: { searchStrs: ["en", "er"] },
+        c1: { variations: strVariations(["er"]) },
+        c2: { variations: strVariations(["en", "er"]) },
       });
       const steps: LoopStepData[] = [
         { craftId: "c1", transition: null },
@@ -450,8 +454,8 @@ describe("resolveLoopSteps", () => {
 
     it("不正な variationIndex（負数・非整数）は 0 に正規化されて解決される", () => {
       const getCraft = makeGetCraft({
-        c1: { searchStrs: ["en", "er"] },
-        c2: { searchStrs: ["cra"] },
+        c1: { variations: strVariations(["en", "er"]) },
+        c2: { variations: strVariations(["cra"]) },
       });
       const steps: LoopStepData[] = [
         { craftId: "c1", transition: null, variationIndex: -1 },
@@ -462,6 +466,37 @@ describe("resolveLoopSteps", () => {
       expect(result.steps[0].searchStr).toBe("en");
       expect(result.steps[1].variationIndex).toBe(0);
       expect(result.steps[1].searchStr).toBe("cra");
+    });
+  });
+
+  describe("withShift の解決", () => {
+    it("variations ごとの withShift をそのまま解決する", () => {
+      const getCraft = makeGetCraft({
+        c1: { variations: [{ str: "en", withShift: false }, { str: "er", withShift: true }] },
+        c2: { variations: [{ str: "craft", withShift: true }] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null, variationIndex: 1 },
+        { craftId: "c2", transition: { type: "selectAll" } },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[0].withShift).toBe(true);
+      expect(result.steps[1].withShift).toBe(true);
+    });
+
+    it("参照切れ・variationIndex 範囲外は withShift=false になる", () => {
+      const getCraft = makeGetCraft({
+        c1: { variations: [{ str: "er", withShift: true }] },
+        c2: { variations: [{ str: "en", withShift: true }] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null },
+        { craftId: "c2", transition: { type: "selectAll" }, variationIndex: 5 },
+        { craftId: "missing", transition: { type: "selectAll" } },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[1].withShift).toBe(false);
+      expect(result.steps[2].withShift).toBe(false);
     });
   });
 });

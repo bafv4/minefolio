@@ -14,6 +14,7 @@ import {
   type RemapContext,
   type RemapInfo,
 } from "@/lib/remap-utils";
+import type { KeyboardLayout } from "@/lib/keybindings";
 import {
   Dialog,
   DialogClose,
@@ -40,7 +41,6 @@ import {
 } from "@/components/virtual-keyboard";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 
-type KeyboardLayout = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 type ExportTheme = "light" | "dark" | "ultra-dark";
 
 interface KeyboardExportDialogProps {

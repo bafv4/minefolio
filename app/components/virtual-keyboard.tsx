@@ -4,7 +4,7 @@ import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType } from "@/lib/keybindings";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
@@ -365,7 +365,7 @@ type CustomKeyboardButton = {
 
 
 interface VirtualKeyboardProps {
-  layout?: "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  layout?: KeyboardLayout;
   keybindings?: Record<string, KeybindingInfoList>;
   fingerAssignments?: FingerAssignment;
   remaps?: RemapInfo[]; // リマップ情報
@@ -373,6 +373,24 @@ interface VirtualKeyboardProps {
   customKeyNames?: Record<string, string>; // カスタムキーコード → 表示名のマップ
   customKeys?: CustomKeyboardButton[]; // カスタムキーボードキー
   highlightedKeys?: string[];
+  /**
+   * 持続的に（warning トーンで）ハイライトするキー。`highlightedKeys`（primary リング、
+   * 一時的な強調に使う）とは別トーンで、「押しっぱなし」状態を表現する
+   * （サーチクラフトのキー押下シーケンス可視化 `search-craft-key-sequence-dialog.tsx` で使用）。
+   */
+  heldKeys?: string[];
+  /**
+   * キーごとの注釈（例: 押す順番「1」「1,4」）。該当キー右上に小さなバッジとして重ねて表示する。
+   * `highlightedKeys`/`showRemaps` 等の既存描画とは独立に描画される
+   * （サーチクラフトのキー押下シーケンス可視化 `search-craft-key-sequence-dialog.tsx` で使用）。
+   */
+  keyAnnotations?: Record<string, string>;
+  /**
+   * 指定すると、このリストに含まれないキー（`heldKeys`・`highlightedKeys` 該当キーを除く）を
+   * グレー（opacity + grayscale）で減光する。「押すキーだけを目立たせる」用途
+   * （キー押下シーケンス可視化で使用）。undefined なら減光しない（既存動作）。
+   */
+  emphasizedKeys?: string[];
   onKeyClick?: (keyCode: string) => void;
   className?: string;
   showActionLabels?: boolean; // キーに操作名を表示
@@ -485,6 +503,9 @@ function VirtualKeyboardComponent({
   customKeyNames = {},
   customKeys = [],
   highlightedKeys = [],
+  heldKeys = [],
+  keyAnnotations = {},
+  emphasizedKeys,
   onKeyClick,
   className,
   showActionLabels = false,
@@ -569,6 +590,13 @@ function VirtualKeyboardComponent({
     // 複数リマップ対応: このキーに関連する全リマップを取得
     const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
     const isHighlighted = highlightedKeys.includes(key.code);
+    const isHeld = heldKeys.includes(key.code);
+    const annotation = keyAnnotations[key.code];
+    const isDimmed =
+      emphasizedKeys !== undefined &&
+      !emphasizedKeys.includes(key.code) &&
+      !isHeld &&
+      !isHighlighted;
     const displayLabel =
     (key.labelKey ? t(key.labelKey) : key.label) || getKeyLabel(t, key.code);
 
@@ -640,6 +668,8 @@ function VirtualKeyboardComponent({
             ? fingerKeyClass
             : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
           isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+          isHeld && "border-warning bg-warning/10 text-warning",
+          isDimmed && "opacity-40 grayscale",
           onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
           key.className
         )}
@@ -648,6 +678,16 @@ function VirtualKeyboardComponent({
           height: `${height}px`,
         }}
       >
+        {/* キー押下シーケンス可視化の順番注釈（例: "1", "1,4"）。キー面（40px超）に載せる数字の
+            ため、h-7 バッジ肩の text-[10px] 規格より1段大きい text-[11px] で視認性を優先する */}
+        {annotation && (
+          <span
+            aria-hidden="true"
+            className="absolute -top-2 -right-2 z-10 min-w-[18px] rounded-full bg-primary px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-primary-foreground"
+          >
+            {annotation}
+          </span>
+        )}
         {/* リマップがある場合 */}
         {keyRemaps.length > 0 ? (
           <div className="flex flex-col items-center justify-center gap-0 max-w-full overflow-visible">
@@ -747,11 +787,12 @@ function VirtualKeyboardComponent({
             </div>
           ) : null
         }
-        keyClass={
+        keyClass={cn(
           showFingerAssignments && finger
             ? fingerKeyClass
-            : "bg-secondary/50 border-border/50 text-muted-foreground"
-        }
+            : "bg-secondary/50 border-border/50 text-muted-foreground",
+          isDimmed && "opacity-40 grayscale",
+        )}
         isHighlighted={isHighlighted}
         clickable={!!onKeyClick}
         onClick={() => onKeyClick?.(key.code)}

@@ -891,3 +891,23 @@ export function hasModifiers(keyCode: string): boolean {
 export function keyCombinationsEqual(combo1: string, combo2: string): boolean {
   return normalizeKeyCombination(combo1) === normalizeKeyCombination(combo2);
 }
+
+// =====================================
+// キーボードレイアウト（配列 × フルサイズ/テンキーレス）
+// =====================================
+
+/**
+ * バーチャルキーボード（`VirtualKeyboard`）の描画・サーチクラフトのキー入力順ダイアログ等が
+ * 選択する物理配列。`app/lib/schema.ts` の `playerConfigs.keyboardLayout` enum と同じ値集合
+ * （単一ソース。以前は利用側ごとにインラインの union 型で重複定義されていた）。
+ */
+export type KeyboardLayout = "US" | "JIS" | "US_TKL" | "JIS_TKL";
+
+export const KEYBOARD_LAYOUT_OPTIONS: KeyboardLayout[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
+
+/** 不明・欠落値は既定の "US" に正規化する */
+export function normalizeKeyboardLayout(value: string | null | undefined): KeyboardLayout {
+  return KEYBOARD_LAYOUT_OPTIONS.includes(value as KeyboardLayout)
+    ? (value as KeyboardLayout)
+    : "US";
+}

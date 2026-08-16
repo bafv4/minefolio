@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import {
   LoopKeySequence,
   type LoopCraftInfo,
 } from "@/components/search-craft-loop-view";
+import { LoopKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import {
   resolveLoopSteps,
   deriveTransition,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/search-craft-loops";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { KeyboardLayout } from "@/lib/keybindings";
 import { ShiftMark } from "@/components/shift-mark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -69,6 +71,9 @@ export type SearchCraftLoopDraft = {
 
 /** ステップのエントリ選択に使う、参照可能なサーチクラフトエントリ */
 export type LoopEditorEntry = LoopCraftInfo;
+
+/** remaps 未指定時のフォールバック（`remaps ?? []` の [] をレンダーのたびに新規生成しない） */
+const EMPTY_REMAPS: RemapInfo[] = [];
 
 /** Select の「未選択」を表す value */
 const UNSELECTED_ENTRY = "__unselected__";
@@ -220,9 +225,19 @@ function EntrySelect({
           entry.variations.map((variation, idx) => (
             <SelectItem key={`${entry.id}:${idx}`} value={encodeSelection(entry.id, idx)}>
               <span className="flex min-w-0 items-center gap-1.5">
-                {entry.items[0] && <ItemIcon itemId={entry.items[0]} size={16} />}
+                {/* 同じサーチ文字列で複数アイテムが出せるクラフトも、全アイコン+全アイテム名を
+                    表示して識別できるようにする（最初の1件だけに省略しない） */}
+                {entry.items.length > 0 && (
+                  <span className="flex shrink-0 items-center gap-0.5">
+                    {entry.items.map((itemId, i) => (
+                      <ItemIcon key={i} itemId={itemId} size={16} />
+                    ))}
+                  </span>
+                )}
                 <span className="truncate">
-                  {entry.items[0] ? formatItemName(entry.items[0]) : "—"}
+                  {entry.items.length > 0
+                    ? entry.items.map((itemId) => formatItemName(itemId)).join(" / ")
+                    : "—"}
                 </span>
                 {variation.str && (
                   <code className="text-xs text-muted-foreground">({variation.str})</code>
@@ -396,16 +411,23 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
   loop,
   entries,
   remaps,
+  keyboardLayout,
   onUpdate,
 }: {
   loop: T;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * LoopKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
 }) {
   const t = useT();
 
   const entriesById = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
+  // entriesById が変わらない限り同一の関数を保つ（LoopKeySequenceButton 側の
+  // sequence useMemo が親の無関係な再レンダーで失効しないようにするため）
+  const getCraft = useCallback((id: string) => entriesById.get(id), [entriesById]);
 
   const updateSteps = (steps: LoopStepData[]) => {
     onUpdate(loop.id, { ...loop, steps: normalizeFirstStep(steps) });
@@ -441,10 +463,11 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const entry = entriesById.get(id);
-        return entry ? { searchStrs: entry.variations.map((v) => v.str) } : undefined;
+        return entry ? { variations: entry.variations } : undefined;
       }),
     [loop.steps, entriesById],
   );
+  const effectiveRemaps = remaps ?? EMPTY_REMAPS;
 
   return (
     <>
@@ -491,13 +514,21 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
 
       {/* Loop 全体プレビュー */}
       <div className="pl-7">
-        <Label className="mb-1 block text-xs text-muted-foreground">
-          {t("meSearchCraft.loopPreviewLabel")}
-        </Label>
+        <div className="mb-1 flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">
+            {t("meSearchCraft.loopPreviewLabel")}
+          </Label>
+          <LoopKeySequenceButton
+            steps={resolved.steps}
+            getCraft={getCraft}
+            remaps={effectiveRemaps}
+            layout={keyboardLayout}
+          />
+        </div>
         <LoopKeySequence
           steps={resolved.steps}
-          getCraft={(id) => entriesById.get(id)}
-          remaps={remaps ?? []}
+          getCraft={getCraft}
+          remaps={effectiveRemaps}
         />
       </div>
 
@@ -527,6 +558,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   index,
   entries,
   remaps,
+  keyboardLayout,
   onUpdate,
   onDelete,
 }: {
@@ -534,6 +566,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   index: number;
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
 }) {
@@ -590,7 +624,13 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
         </AlertDialog>
       </div>
 
-      <LoopRowBody loop={loop} entries={entries} remaps={remaps} onUpdate={onUpdate} />
+      <LoopRowBody
+        loop={loop}
+        entries={entries}
+        remaps={remaps}
+        keyboardLayout={keyboardLayout}
+        onUpdate={onUpdate}
+      />
     </div>
   );
 }

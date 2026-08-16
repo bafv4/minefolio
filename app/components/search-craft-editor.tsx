@@ -83,6 +83,7 @@ import {
   TIMING_META,
   timingLabel,
 } from "@/components/search-craft-template-view";
+import { CraftKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import {
   LoopEditorRow,
   resetTransitionCountsForCraft,
@@ -93,6 +94,7 @@ import { remapVariationRefs, remapLoopSteps } from "@/lib/search-craft-loops";
 import { MAX_SEARCH_VARIATIONS, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { RemapInfo } from "@/lib/remap-utils";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import type { KeyboardLayout } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -262,12 +264,16 @@ function ItemSelectDialog({
 function SearchCraftRowContentInner<T extends SearchCraftDraft>({
   craft,
   remaps,
+  keyboardLayout,
   onUpdate,
   onDelete,
   getDeleteWarning,
 }: {
   craft: T;
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定時のフォールバックは
+   * CraftKeySequenceButton → VirtualKeyboard の既定値 "US" に委ねる） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
   /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
@@ -400,6 +406,12 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                       remaps={remaps}
                       shiftHeld={variation.withShift}
                     />
+                    <CraftKeySequenceButton
+                      searchStr={variation.str}
+                      withShift={variation.withShift}
+                      remaps={remaps}
+                      layout={keyboardLayout}
+                    />
                   </div>
                 )}
               </div>
@@ -480,6 +492,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   craft,
   index,
   remaps,
+  keyboardLayout,
   onUpdate,
   onDelete,
   getDeleteWarning,
@@ -487,6 +500,8 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
   craft: T;
   index: number;
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
   /** 削除確認ダイアログの説明文を差し替える（Loop 参照時の警告表示等） */
@@ -536,6 +551,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
       <SearchCraftRowContent
         craft={craft}
         remaps={remaps}
+        keyboardLayout={keyboardLayout}
         onUpdate={onUpdate}
         onDelete={onDelete}
         getDeleteWarning={getDeleteWarning}
@@ -666,6 +682,8 @@ type TimingBlockProps<T extends SearchCraftDraft, L extends SearchCraftLoopDraft
   loops: L[];
   entries: LoopEditorEntry[];
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: KeyboardLayout;
   getDeleteWarning?: (craftId: string) => string | null;
   totalCraftCount: number;
   isLoopDragging: boolean;
@@ -685,6 +703,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   loops,
   entries,
   remaps,
+  keyboardLayout,
   getDeleteWarning,
   totalCraftCount,
   isLoopDragging,
@@ -728,6 +747,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                     craft={craft}
                     index={index}
                     remaps={remaps}
+                    keyboardLayout={keyboardLayout}
                     onUpdate={onUpdateCraft}
                     onDelete={onDeleteCraft}
                     getDeleteWarning={getDeleteWarning}
@@ -770,6 +790,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                         index={index}
                         entries={entries}
                         remaps={remaps}
+                        keyboardLayout={keyboardLayout}
                         onUpdate={onUpdateLoop}
                         onDelete={onDeleteLoop}
                       />
@@ -835,6 +856,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   loops,
   onLoopsChange,
   remaps,
+  keyboardLayout,
   createCraft,
   createLoop,
 }: {
@@ -844,6 +866,8 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   onLoopsChange: (next: L[]) => void;
   /** 指定すると各行に入力キーのライブプレビューを表示する */
   remaps?: RemapInfo[];
+  /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
+  keyboardLayout?: KeyboardLayout;
   /**
    * 新規クラフトのdraftファクトリ。timing にはクリックしたブロックの値を渡す
    * （id 生成・その他フィールドの初期値は呼び出し側が担う）。
@@ -1095,6 +1119,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             loops={loopsByBlock.get(timing) ?? []}
             entries={entries}
             remaps={remaps}
+            keyboardLayout={keyboardLayout}
             getDeleteWarning={getDeleteWarning}
             totalCraftCount={totalCraftCount}
             isLoopDragging={isLoopDragging}
