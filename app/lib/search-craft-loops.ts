@@ -287,7 +287,7 @@ export type ResolvedLoopStep = {
   /** 正規化済み（欠落・不正値は0に矯正）の参照先バリエーション index */
   variationIndex: number;
   /** 参照解決結果。null = 参照切れ（該当 craftId が見つからない） */
-  craft: { searchStrs: string[] } | null;
+  craft: { searchStrs: string[]; withShifts?: boolean[] } | null;
   /**
    * このステップで実際に使う searchStr（craft.searchStrs[variationIndex]）。
    * 参照切れ・variationIndex が範囲外なら null（missing_search_str 判定に使う）。
@@ -295,6 +295,14 @@ export type ResolvedLoopStep = {
    * variationIndex を無視した固定 index での再導出は誤表示のバグ原因になる）。
    */
   searchStr: string | null;
+  /**
+   * このステップで実際に使うバリエーションの withShift（craft.withShifts[variationIndex]）。
+   * 参照切れ・variationIndex が範囲外・呼び出し元が withShifts を渡していない（後方互換）場合は false。
+   * 表示コンポーネントはこれを「そのステップの打鍵キー逆引き・Shift ラッパー表示」に使う:
+   * 先頭ステップ（idx===0）は自身の値、以降のステップは「遷移先ステップ（=このステップ自身）」の
+   * 値を type op に適用する（search-craft-loop-view.tsx の LoopKeySequence/TransitionOpsBadges 参照）。
+   */
+  withShift: boolean;
   transition: LoopTransition | null;
   /** 先頭ステップは null。missing_search_str（searchStr 欠落）もここに反映する */
   derived: DerivedTransition | null;
@@ -307,8 +315,9 @@ export type ResolvedLoop = { steps: ResolvedLoopStep[]; valid: boolean };
  * 編集プレビュー・全表示コンポーネントの共通入口。
  *
  * getCraft は該当クラフトの全バリエーションの searchStr 配列（searchStrs）を返す。
- * ステップの variationIndex が範囲外（対象クラフトのバリエーション数以上）の場合は
- * missing_search_str 扱いにする（クラッシュ・黙った誤導出はしない）。
+ * withShifts（同じ並びの withShift 配列）は任意（後方互換のため省略可。省略時は各ステップの
+ * withShift は false 扱いになる）。ステップの variationIndex が範囲外（対象クラフトの
+ * バリエーション数以上）の場合は missing_search_str 扱いにする（クラッシュ・黙った誤導出はしない）。
  *
  * valid の条件:
  * - ステップ数が2以上
@@ -317,20 +326,20 @@ export type ResolvedLoop = { steps: ResolvedLoopStep[]; valid: boolean };
  */
 export function resolveLoopSteps(
   steps: LoopStepData[],
-  getCraft: (craftId: string) => { searchStrs: string[] } | undefined,
+  getCraft: (craftId: string) => { searchStrs: string[]; withShifts?: boolean[] } | undefined,
 ): ResolvedLoop {
   const resolvedSteps: ResolvedLoopStep[] = steps.map((step) => {
     const craft = getCraft(step.craftId) ?? null;
     const variationIndex = normalizeVariationIndex(step.variationIndex);
-    const searchStr =
-      craft && variationIndex >= 0 && variationIndex < craft.searchStrs.length
-        ? craft.searchStrs[variationIndex]
-        : null;
+    const inRange = !!craft && variationIndex >= 0 && variationIndex < craft.searchStrs.length;
+    const searchStr = inRange ? craft!.searchStrs[variationIndex] : null;
+    const withShift = inRange ? (craft!.withShifts?.[variationIndex] ?? false) : false;
     return {
       craftId: step.craftId,
       variationIndex,
       craft,
       searchStr,
+      withShift,
       transition: step.transition,
       derived: null,
     };

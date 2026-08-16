@@ -167,7 +167,8 @@ Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中
 スタック単位のクラフト（Shift+クリック）のために Shift を押しっぱなしでサーチ入力するエントリは、`withShift: true` を設定できる。
 
 - 編集UI（/me/search-craft・テンプレートエディタ・Playground）の各行に「Shiftを押しながら」チェックボックスがある
-- 表示行の入力キー列の先頭に琥珀色の「⇧ Shift」バッジが付く（凡例にも表示）。**⇧ はフォント依存の Unicode 文字直書きではなく `app/components/shift-mark.tsx` の `ShiftMark`（lucide `ArrowBigUp`）で描画する**（データ層の `displayLabel` 等の文字列は "⇧" のまま。詳細は `.claude/rules/ui.md`「キーバッジ」節）
+- 表示行の入力キー列は、独立した「⇧ Shift」バッジを先頭に並べるのではなく、`ShiftKeyGroup`（`search-craft-template-view.tsx`）が実入力キー列（`KeyBadge` 列）全体を琥珀色の枠で囲み、その枠の先頭にコンパクトな「⇧」マークのみを置く（可視の "Shift" テキストは無し。`ShiftMark` の sr-only と Tooltip が意味を補う。凡例にも表示）。`ActualKeyBadges` は `shiftHeld` が true のとき自動的にこの枠で自身の `KeyBadge` 列を包む。**⇧ はフォント依存の Unicode 文字直書きではなく `app/components/shift-mark.tsx` の `ShiftMark`（lucide `ArrowBigUp`）で描画する**（データ層の `displayLabel` 等の文字列は "⇧" のまま。詳細は `.claude/rules/ui.md`「キーバッジ」節）
+- Loop（繋ぎ方）でも同じ扱いをする: 先頭ステップのキー列は自身のバリエーションの `withShift`、遷移の `type` op のキー列は**遷移先ステップ**のバリエーションの `withShift` で `ShiftKeyGroup` を適用する（制御キー・クラフト実行マーカーは対象外）。`resolveLoopSteps()` の `getCraft` が返す `withShifts`（`searchStrs` と同じ並びの `boolean[]`、任意フィールド）から `ResolvedLoopStep.withShift` として解決される（詳細は後述「[繋ぎ方（Loop）](#繋ぎ方loop)」）
 - 入力キーの逆引きは `getActualKeyInfos(searchStr, remaps, { shiftHeld: true })` となり、**Shift 押下中の出力文字で**解決する:
   - 単一キーソースのリマップは target キーのシフト後文字（例: target が `Semicolon` なら `:`）で逆引きする
   - `Shift+X` ソースの完全一致リマップは X 単独のバッジになる（Shift は押しっぱなしのため ⇧ プレフィックスなし）
@@ -284,7 +285,7 @@ type LoopStepData = {
 
 | 関数 | 説明 |
 |---|---|
-| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口）。`getCraft` は `{ searchStrs: string[] }`（対象クラフトの全バリエーションの文字列）を返す契約。各 `ResolvedLoopStep` は正規化済み `variationIndex` と、それに対応する `searchStr`（範囲外・参照切れなら `null`）を持つ。**表示文字列は必ず `ResolvedLoopStep.searchStr` から取ること**（`getCraft` を呼び出し側で再度呼んで `searchStrs[0]` 等を参照すると、variationIndex を無視した誤表示になる） |
+| `resolveLoopSteps(steps, getCraft)` | ステップ列を craftId 参照解決し、全ステップの遷移導出と全体 valid を集約する（編集プレビュー・全表示コンポーネントの共通入口）。`getCraft` は `{ searchStrs: string[]; withShifts?: boolean[] }`（対象クラフトの全バリエーションの文字列と、同じ並びの withShift。`withShifts` は任意＝省略した呼び出し元は withShift=false 扱いになる後方互換）を返す契約。各 `ResolvedLoopStep` は正規化済み `variationIndex` と、それに対応する `searchStr`（範囲外・参照切れなら `null`）・`withShift`（同条件で `false`）を持つ。**表示文字列は必ず `ResolvedLoopStep.searchStr` から取ること**（`getCraft` を呼び出し側で再度呼んで `searchStrs[0]` 等を参照すると、variationIndex を無視した誤表示になる） |
 | `minArrowLeftCount(prev, next)` | `arrowLeft` 方式で `prev` → `next` に遷移できる、妥当な最小の `k`。見つからなければ `null` |
 | `parseLoopSteps(json)` | steps JSON 列の耐性パース。壊れた要素は除去し、フィルタ後に「先頭のみ transition null」という規則が成立しなければ配列ごと `[]` にする。`variationIndex` は欠落・不正値を 0 に矯正する |
 | `isValidLoopStepsShape(value)` | `LoopStepData[]` としての構造検証（保存action の受け口用）。`variationIndex` は存在する場合のみ非負整数であることを検証する |
@@ -298,7 +299,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
 - 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー。遷移ごとのライブプレビューは持たず、遷移が成立しない場合のみエラーテキストを表示する — キー操作の確認は行末尾の Loop 全体プレビューが担う）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
-- **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルはアイコン＋アイテム名＋`(str)`＋（`withShift` の場合）⇧マーク
+- **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルは全アイテムのアイコン＋全アイテム名（`/` 区切り。同じサーチ文字列で複数アイテムが出せるクラフトも、最初の1件だけでなく全件を表示する）＋`(str)`＋（`withShift` の場合）⇧マーク
 - BS ステッパーの範囲は `minBackspaceCount(prev, next)`〜`prev.length`（TransitionRow が自前で算出する。`deriveTransition()` の戻り値に min/max は含まれない）。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBackspaceCount()`/`minArrowLeftCount()`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
 - Loop の timing 変更はブロック間D&D（`SearchCraftTimingBoard` 内、クラフトとは別ドメインとして扱う `DndContext`）で行う。ドラッグ中のみ、Loop が0件のブロックにも破線のドロップゾーンが表示される
@@ -311,7 +312,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 | コンポーネント | 説明 |
 |---|---|
 | `ControlKeyBadge` | 制御キー（Backspace / ArrowLeft / Home / Shift+Home）用バッジ。文字入力キー（`KeyBadge`、secondary系・角丸 `rounded`）と一目で区別できるよう、info トーン（`border-info/50 bg-info/10 text-info`）＋ **`rounded-full` のピル形状**で表示する。BS×n / ←×n はバッジを n 個並べず右肩に `×n` を併記する（モバイル幅対策）。任意 prop `remaps` を渡すと、その制御キーの出力になっているリマップを `getActualControlKeyInfo()`（`app/lib/remap-utils.ts`）で逆引きする。リマップが見つかった場合のみ「実際に押すキーを主ラベル（外側）、出力操作（`BS` 等）をミニチップ（`text-[10px]`、チップの中のチップ）」の複合ピル表示＋リマップ用リングになる。リマップが無い（大多数）場合は非リマップ時と同一の単一ピルのまま |
-| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon 24px＋サーチ文字列。通常のアイテムチップと同じ見た目でキー系バッジと同じ高さ h-7、専用アイコンなし・Tooltip 付き）を `ChevronRight` を挟んで交互に描画。セグメント間は gap-2。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用）。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
+| `LoopKeySequence` | `LoopKeyOp[]` とクラフト実行マーカー（ItemIcon 24px＋サーチ文字列。同じサーチ文字列で複数アイテムが出せるクラフトは最初の1件だけでなく全アイテムのアイコンを並べる。通常のアイテムチップと同じ見た目でキー系バッジと同じ高さ h-7、専用アイコンなし・Tooltip 付き〈複数アイテム時は内訳を列挙〉）を `ChevronRight` を挟んで交互に描画。セグメント間は gap-2。`type` セグメントは `ActualKeyBadges`（リマップ・指色が自動適用。`shiftHeld` を渡すと `ShiftKeyGroup` でキー列全体を囲む）。先頭ステップは自身の、`type` op は遷移先ステップ（=そのステップ自身）の `ResolvedLoopStep.withShift` を `shiftHeld` に使う。マーカー内のサーチ文字列は `typedCharSegments()` で「実際にタイプする文字」と「前ステップから残存するだけの文字」に分け、後者を薄く表示する |
 | `SearchCraftLoopRow` | Loop 一覧の行表示。1行＝キー操作列（`LoopKeySequence`）に統合された単一表示＋timing色ドット（`h-2.5 w-2.5`、`showTiming={false}` で非表示）＋コメント。各ステップのアイテム＋サーチ文字列はキー操作列内のクラフト実行マーカーが担い、独立したステップ連鎖サマリー行・ステップ数バッジは置かない。無効な Loop は行頭に destructive の `AlertTriangle`、無効セグメントは `[?]` バッジで示す |
 | `SearchCraftLoopGroupSection` | タイミンググループカード埋め込み用の Loop サブセクション（Card なし）。`Repeat` アイコン＋`playerProfile.loopSectionTitle` の見出し＋`SearchCraftLoopRow`（`showTiming={false}`）の行リスト。見出しと行リストの間は `space-y-2`（8px）で区切る。グループ見出しと重複するため各行の timing 色ドットは出さない。loops が空なら何も描画しない |
 

@@ -1,5 +1,6 @@
 import { Fragment, useMemo, type ReactNode } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon } from "@/components/item-icon";
 import {
   ActualKeyBadges,
@@ -213,12 +214,21 @@ function CraftMarker({
   segments: TypedCharSegment[];
 }) {
   const t = useT();
-  const itemId = craft?.items[0];
+  const items = craft?.items ?? [];
+  // 同じサーチ文字列で複数アイテムが出せるクラフト（items 2件以上）は、
+  // 最初の1アイテムだけでなく全アイテムのアイコンを並べる（チップは h-7 のまま横に伸びる）。
+  // Tooltip も複数件のときだけ内訳（アイテム名の列挙）を添えて識別できるようにする。
+  const tooltipContent =
+    items.length > 1
+      ? `${t("playerProfile.loopCraftMarker")}（${items.map((id) => formatItemName(id)).join(" / ")}）`
+      : t("playerProfile.loopCraftMarker");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2">
-          {itemId && <ItemIcon itemId={itemId} size={24} />}
+          {items.map((itemId, idx) => (
+            <ItemIcon key={idx} itemId={itemId} size={24} />
+          ))}
           {searchStr && (
             <code className="font-mono text-sm">
               <SegmentedSearchString value={searchStr} segments={segments} />
@@ -226,22 +236,27 @@ function CraftMarker({
           )}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{t("playerProfile.loopCraftMarker")}</TooltipContent>
+      <TooltipContent>{tooltipContent}</TooltipContent>
     </Tooltip>
   );
 }
 
 /** 遷移1件分のキー操作列（backspace/selectAll/home は制御キーバッジ、type は ActualKeyBadges）。
- * 編集UI（search-craft-loop-editor.tsx の TransitionRow）のライブプレビューとも共用する */
+ * 編集UI（search-craft-loop-editor.tsx の TransitionRow）のライブプレビューとも共用する。
+ * shiftHeld は「遷移先ステップ（=このステップ自身）」の withShift を渡す想定で、type op の
+ * キー列だけを ShiftKeyGroup で囲む（制御キー・クラフト実行マーカーは対象外）。 */
 export function TransitionOpsBadges({
   ops,
   remaps,
   fingerAssignments,
 }: {
+  shiftHeld,
   ops: LoopKeyOp[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
 }) {
+  /** 遷移先ステップの withShift。type op のキー列にのみ適用する */
+  shiftHeld?: boolean;
   return (
     <>
       {ops.map((op, idx) => {
@@ -262,6 +277,7 @@ export function TransitionOpsBadges({
                 remaps={remaps}
                 fingerAssignments={fingerAssignments}
               />
+                shiftHeld={shiftHeld}
             );
           default:
             return null;
@@ -315,6 +331,7 @@ export function LoopKeySequence({
                   remaps={remaps}
                   fingerAssignments={fingerAssignments}
                 />
+                  shiftHeld={step.withShift}
               ) : (
                 <InvalidSegmentBadge />
               )
@@ -324,6 +341,7 @@ export function LoopKeySequence({
                 remaps={remaps}
                 fingerAssignments={fingerAssignments}
               />
+                shiftHeld={step.withShift}
             ) : (
               <InvalidSegmentBadge />
             )}
@@ -367,7 +385,12 @@ export function SearchCraftLoopRow({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const craft = craftsById.get(id);
-        return craft ? { searchStrs: craft.variations.map((v) => v.str) } : undefined;
+        return craft
+          ? {
+              searchStrs: craft.variations.map((v) => v.str),
+              withShifts: craft.variations.map((v) => v.withShift),
+            }
+          : undefined;
       }),
     [loop.steps, craftsById],
   );

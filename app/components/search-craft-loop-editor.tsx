@@ -220,9 +220,19 @@ function EntrySelect({
           entry.variations.map((variation, idx) => (
             <SelectItem key={`${entry.id}:${idx}`} value={encodeSelection(entry.id, idx)}>
               <span className="flex min-w-0 items-center gap-1.5">
-                {entry.items[0] && <ItemIcon itemId={entry.items[0]} size={16} />}
+                {/* 同じサーチ文字列で複数アイテムが出せるクラフトも、全アイコン+全アイテム名を
+                    表示して識別できるようにする（最初の1件だけに省略しない） */}
+                {entry.items.length > 0 && (
+                  <span className="flex shrink-0 items-center gap-0.5">
+                    {entry.items.map((itemId, i) => (
+                      <ItemIcon key={i} itemId={itemId} size={16} />
+                    ))}
+                  </span>
+                )}
                 <span className="truncate">
-                  {entry.items[0] ? formatItemName(entry.items[0]) : "—"}
+                  {entry.items.length > 0
+                    ? entry.items.map((itemId) => formatItemName(itemId)).join(" / ")
+                    : "—"}
                 </span>
                 {variation.str && (
                   <code className="text-xs text-muted-foreground">({variation.str})</code>
@@ -441,7 +451,12 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
     () =>
       resolveLoopSteps(loop.steps, (id) => {
         const entry = entriesById.get(id);
-        return entry ? { searchStrs: entry.variations.map((v) => v.str) } : undefined;
+        return entry
+          ? {
+              searchStrs: entry.variations.map((v) => v.str),
+              withShifts: entry.variations.map((v) => v.withShift),
+            }
+          : undefined;
       }),
     [loop.steps, entriesById],
   );

@@ -464,6 +464,57 @@ describe("resolveLoopSteps", () => {
       expect(result.steps[1].searchStr).toBe("cra");
     });
   });
+
+  describe("withShift の解決", () => {
+    type CraftWithShift = { searchStrs: string[]; withShifts?: boolean[] };
+    const makeGetCraftWithShift =
+      (crafts: Record<string, CraftWithShift>) =>
+      (id: string): CraftWithShift | undefined =>
+        crafts[id];
+
+    it("withShifts が渡されればバリエーションごとの withShift を解決する", () => {
+      const getCraft = makeGetCraftWithShift({
+        c1: { searchStrs: ["en", "er"], withShifts: [false, true] },
+        c2: { searchStrs: ["craft"], withShifts: [true] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null, variationIndex: 1 },
+        { craftId: "c2", transition: { type: "selectAll" } },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[0].withShift).toBe(true);
+      expect(result.steps[1].withShift).toBe(true);
+    });
+
+    it("withShifts を渡さない呼び出し元（後方互換）は withShift=false になる", () => {
+      const getCraft = makeGetCraft({
+        c1: { searchStrs: ["er"] },
+        c2: { searchStrs: ["en"] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null },
+        { craftId: "c2", transition: { type: "backspace", bsCount: 1 } },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[0].withShift).toBe(false);
+      expect(result.steps[1].withShift).toBe(false);
+    });
+
+    it("参照切れ・variationIndex 範囲外は withShift=false になる", () => {
+      const getCraft = makeGetCraftWithShift({
+        c1: { searchStrs: ["er"], withShifts: [true] },
+        c2: { searchStrs: ["en"], withShifts: [true] },
+      });
+      const steps: LoopStepData[] = [
+        { craftId: "c1", transition: null },
+        { craftId: "c2", transition: { type: "selectAll" }, variationIndex: 5 },
+        { craftId: "missing", transition: { type: "selectAll" } },
+      ];
+      const result = resolveLoopSteps(steps, getCraft);
+      expect(result.steps[1].withShift).toBe(false);
+      expect(result.steps[2].withShift).toBe(false);
+    });
+  });
 });
 
 describe("remapLoopSteps", () => {

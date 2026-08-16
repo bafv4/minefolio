@@ -197,18 +197,30 @@ export function KeyBadge({
   );
 }
 
-/** 「Shiftを押しながらクラフト」を示すバッジ（入力キー列の先頭に表示） */
-export function ShiftCraftBadge() {
+/**
+ * 「Shiftを押しながら」入力するキー列全体を囲むラッパー。
+ * 独立したバッジとして先頭に置くのではなく、先頭のコンパクトな「⇧」マーク + children
+ * （実入力キーの `KeyBadge` 列など）をひとつの枠（角丸ネスト規則: 内側の `rounded` チップの
+ * 1段上＝`rounded-lg`）で囲む。children を省略すると（バリエーションにサーチ文字列が無い等）
+ * ラベル単独の表示になる。
+ */
+export function ShiftKeyGroup({ children }: { children?: ReactNode }) {
   const t = useT();
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex items-center justify-center gap-1 rounded border-2 font-mono font-semibold text-sm h-7 px-1.5 border-warning/50 bg-warning/10 text-warning">
-          <ShiftMark /> Shift
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
-    </Tooltip>
+    // px-2 py-1.5: リマップ済みバッジのリング（ring-2 + ring-offset-1 ≒ 外側へ約3px）が
+    // 枠に触れない余白を確保する（px-1.5 py-1 だとリングと枠の角丸が至近で並び不協和に見える）。
+    // ラベルは ⇧ マークのみ（ShiftMark 内部の sr-only "Shift" と Tooltip が意味を補う）
+    <span className="inline-flex flex-wrap items-center gap-1 rounded-lg border-2 border-warning/50 bg-warning/10 px-2 py-1.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center text-warning">
+            <ShiftMark className="size-3.5" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t("playerProfile.withShiftTooltip")}</TooltipContent>
+      </Tooltip>
+      {children}
+    </span>
   );
 }
 
@@ -222,7 +234,7 @@ export function ActualKeyBadges({
   searchStr: string;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  /** Shiftを押しながらクラフトする前提で逆引きし、先頭に ⇧ Shift バッジを表示する */
+  /** Shiftを押しながらクラフトする前提で逆引きし、キー列全体を ShiftKeyGroup で囲む */
   shiftHeld?: boolean;
 }) {
   const t = useT();
@@ -235,28 +247,29 @@ export function ActualKeyBadges({
     return fingers?.[0];
   };
 
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {shiftHeld && <ShiftCraftBadge />}
-      {keyInfos.map((info, idx) => {
-        // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
-        const baseKeyCode = info.keyCode.includes("+")
-          ? info.keyCode.split("+").pop() || info.keyCode
-          : info.keyCode;
-        return (
-          <KeyBadge
-            key={idx}
-            keyCode={info.keyCode}
-            label={info.displayLabel}
-            finger={getFingerForKey(baseKeyCode)}
-            isRemapped={info.isRemapped}
-            needsShift={info.needsShift}
-            remapDetail={info.remapDetail}
-          />
-        );
-      })}
-    </div>
-  );
+  const badges = keyInfos.map((info, idx) => {
+    // 修飾キー組み合わせの場合、ベースキーで指割り当てを検索
+    const baseKeyCode = info.keyCode.includes("+")
+      ? info.keyCode.split("+").pop() || info.keyCode
+      : info.keyCode;
+    return (
+      <KeyBadge
+        key={idx}
+        keyCode={info.keyCode}
+        label={info.displayLabel}
+        finger={getFingerForKey(baseKeyCode)}
+        isRemapped={info.isRemapped}
+        needsShift={info.needsShift}
+        remapDetail={info.remapDetail}
+      />
+    );
+  });
+
+  if (shiftHeld) {
+    return <ShiftKeyGroup>{badges}</ShiftKeyGroup>;
+  }
+
+  return <div className="flex flex-wrap items-center gap-1">{badges}</div>;
 }
 
 /** キーバッジ装飾（リマップ/Shift/指割り当て）の凡例 */
@@ -278,7 +291,7 @@ export function KeyBadgeLegend({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-3.5 items-center justify-center rounded border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
+        <span className="inline-flex h-3.5 items-center justify-center rounded-lg border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
           <ShiftMark className="size-2.5" />
         </span>
         <span className="text-[11px] text-muted-foreground">
@@ -548,7 +561,7 @@ function SearchCraftRow({
                     shiftHeld={variation.withShift}
                   />
                 ) : variation.withShift ? (
-                  <ShiftCraftBadge />
+                  <ShiftKeyGroup />
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
