@@ -70,12 +70,10 @@ export function setBlockType(editor: Editor, type: BlockType): void {
       return;
     case "callout":
       // focus + wrap を 1 チェーンで原子的に実行（ドロップダウンからのフォーカス喪失対策）
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (chain as any).toggleCallout({ calloutType: "tip" }).run();
+      chain.toggleCallout({ calloutType: "tip" }).run();
       return;
     case "toggleList":
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (chain as any).setToggleList().run();
+      chain.setToggleList().run();
       return;
   }
 }
@@ -132,14 +130,12 @@ export type CalloutType = "tip" | "info" | "warning" | "danger";
 
 /** 指定タイプのコールアウトで現在ブロックを包む */
 export function insertCallout(editor: Editor, calloutType: CalloutType): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (editor.chain().focus() as any).toggleCallout({ calloutType }).run();
+  editor.chain().focus().toggleCallout({ calloutType }).run();
 }
 
 /** トグルリストで現在ブロックを包む */
 export function insertToggle(editor: Editor): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (editor.chain().focus() as any).setToggleList().run();
+  editor.chain().focus().setToggleList().run();
 }
 
 /** N カラム（2 or 3）の段組を挿入する */
