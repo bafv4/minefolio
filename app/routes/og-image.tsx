@@ -107,8 +107,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const mcid = url.searchParams.get("mcid");
   const slug = url.searchParams.get("slug");
-  const title = url.searchParams.get("title");
-  const description = url.searchParams.get("description");
   const type = url.searchParams.get("type");
 
   // トップページ用のブランドOGP画像（summary_large_image 向けの横長バナー）
@@ -123,8 +121,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
-      title: title || OG_BRAND,
-      description: description || OG_TAGLINE,
+      title: OG_BRAND,
+      description: OG_TAGLINE,
       iconDataUrl,
     });
   }
