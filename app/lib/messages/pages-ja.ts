@@ -1499,6 +1499,8 @@ export const PAGES_JA = {
     title: "記録 - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     categoryRequired: "カテゴリ名は必須です",
+    categoryTooLong: "カテゴリ名は100文字以内で入力してください",
+    errorLimitReached: "記録は50件まで登録できます",
     invalidTime: "時間形式が不正です。M:SS.mmm形式で入力してください（例: 14:32.500）",
     invalidVideoUrl: "動画URLは http:// または https:// で始まるURLを入力してください",
     recordIdRequired: "記録IDが必要です",
