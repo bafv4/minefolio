@@ -1429,6 +1429,8 @@ export const PAGES_JA = {
     invalidDpi: "DPI は正の整数で入力してください",
     invalidWindowsSpeed: "Windows ポインター速度は 1〜20 で選択してください",
     invalidWindowsSpeedMultiplier: "カスタム係数は 0 より大きい数値で入力してください",
+    fovInvalid: "FOVは30〜110の整数で入力してください",
+    guiScaleInvalid: "GUIスケールは0〜4の整数で入力してください",
     saveSuccess: "設定を保存しました",
     copiedFromPreset: "{name}からデバイス設定をコピーしました",
     deviceChangeHistory: "デバイス・設定を更新",
