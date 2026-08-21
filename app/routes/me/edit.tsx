@@ -696,7 +696,7 @@ const pronounOptions = [
 
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
-  { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
+  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@" },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
   { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
@@ -1480,8 +1480,8 @@ export default function EditProfilePage() {
                         type="button"
                         onClick={() => setSelectedPose(pose)}
                         className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
-                            ? "border-primary bg-primary/5"
-                            : "border-muted hover:border-muted-foreground/30"
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:border-muted-foreground/30"
                           }`}
                       >
                         <div className="w-16 h-24">
@@ -1520,8 +1520,8 @@ export default function EditProfilePage() {
                   type="button"
                   onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: false }))}
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelDefault")}
@@ -1530,8 +1530,8 @@ export default function EditProfilePage() {
                   type="button"
                   onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: true }))}
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelSlim")}
