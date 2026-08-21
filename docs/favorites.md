@@ -36,7 +36,7 @@
 | 未ログイン（Cookie 同意済み） | localStorage `minefolio_favorites` | （正本=ローカル） |
 | 未ログイン（Cookie 同意なし） | 利用不可 | — |
 
-最大件数は 50（`FAVORITES_LIMIT`）。
+最大件数は 50。
 
 ---
 
@@ -81,8 +81,7 @@
 ### `app/lib/favorites-client.ts`
 
 - `getLocalFavorites()` / `setLocalFavorites(slugs)` / `addLocalFavorite(slug)` / `removeLocalFavorite(slug)` / `clearLocalFavorites()`
-- `getSessionFavorites()` / `setSessionFavorites(slugs)` / `clearSessionFavorites()`
-- `FAVORITES_LIMIT` 定数のエクスポート
+- `getSessionFavorites()` / `setSessionFavorites(slugs)`
 - SSR セーフ（`typeof window === "undefined"` ガード、`try/catch` で QuotaExceeded 等を吸収）
 
 ### `app/lib/favorites.ts`

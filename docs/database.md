@@ -505,6 +505,8 @@ erDiagram
 
 #### `custom_fields`
 
+**未使用**（アプリコードからの参照なし。削除候補 — 実テーブルの drop はリモートDBのデータ確認の上で別途実施）。
+
 | カラム | 型 | 制約・参照 |
 |---|---|---|
 | `id` | text | PK |
@@ -644,6 +646,8 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 索引: `(user_id)` / `(ranking_type)` / `(category_id)` / `(time_ms)` / `(elo_rate)`
 
 #### `rankings_cache`
+
+**未使用**（アプリコードからの参照なし。削除候補 — 実テーブルの drop はリモートDBのデータ確認の上で別途実施）。
 
 | カラム | 型 | 制約・参照 |
 |---|---|---|

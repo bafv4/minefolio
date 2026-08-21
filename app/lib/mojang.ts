@@ -113,19 +113,6 @@ export async function fetchMcidFromUuid(uuid: string): Promise<string> {
   return data.name;
 }
 
-// MCIDの実在確認とUUID取得を同時に行う
-export async function validateAndGetUuid(mcid: string): Promise<{
-  mcid: string;
-  uuid: string;
-}> {
-  const uuid = await fetchUuidFromMcid(mcid);
-
-  return {
-    mcid, // 入力されたMCID（大文字小文字は保持）
-    uuid,
-  };
-}
-
 // MCIDの変更を検出（Cron用）
 export async function syncMcid(uuid: string, currentMcid: string): Promise<{
   changed: boolean;
@@ -207,34 +194,6 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-// Crafatar（顔アバター画像）URLを生成
-export function getCraftarAvatarUrl(
-  uuid: string,
-  size: number = 64,
-  overlay: boolean = true
-): string {
-  const uuidWithoutHyphens = uuid.replace(/-/g, "");
-  const params = new URLSearchParams({
-    size: size.toString(),
-    ...(overlay && { overlay: "true" }),
-  });
-  return `https://crafatar.com/avatars/${uuidWithoutHyphens}?${params}`;
-}
-
-// Crafatar（全身レンダリング画像）URLを生成
-export function getCraftarBodyUrl(
-  uuid: string,
-  size: number = 128,
-  overlay: boolean = true
-): string {
-  const uuidWithoutHyphens = uuid.replace(/-/g, "");
-  const params = new URLSearchParams({
-    size: size.toString(),
-    ...(overlay && { overlay: "true" }),
-  });
-  return `https://crafatar.com/renders/body/${uuidWithoutHyphens}?${params}`;
 }
 
 // UUIDをハイフン付きフォーマットに変換

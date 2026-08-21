@@ -406,16 +406,3 @@ export async function getVodsByIds(
 
   return existing;
 }
-
-/**
- * サムネイルURLを適切なサイズに変換
- */
-export function getThumbnailUrl(
-  templateUrl: string,
-  width: number,
-  height: number
-): string {
-  return templateUrl
-    .replace("{width}", String(width))
-    .replace("{height}", String(height));
-}
