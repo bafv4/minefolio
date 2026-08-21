@@ -7,7 +7,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
-import { eq, desc, asc, and, ne } from "drizzle-orm";
+import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
@@ -97,21 +97,20 @@ async function restoreRemapsFromSnapshot(
 ) {
   if (!remapsData) return;
   const remaps = dedupeSnapshotRemaps(JSON.parse(remapsData) as PresetRemapData[]);
-  for (const remap of remaps) {
-    await tx.insert(keyRemaps).values({
-      id: createId(),
-      userId,
-      sourceKey: remap.sourceKey,
-      targetKey: sanitizeRemapTargetKey(remap.targetKey),
-      software: remap.software,
-      notes: remap.notes,
-      outputMode: remap.outputMode ?? "key",
-      outputCharacter: remap.outputCharacter ?? null,
-      remapType: normalizeKeyRemapType(remap.remapType),
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  const rows = remaps.map((remap) => ({
+    id: createId(),
+    userId,
+    sourceKey: remap.sourceKey,
+    targetKey: sanitizeRemapTargetKey(remap.targetKey),
+    software: remap.software,
+    notes: remap.notes,
+    outputMode: remap.outputMode ?? "key",
+    outputCharacter: remap.outputCharacter ?? null,
+    remapType: normalizeKeyRemapType(remap.remapType),
+    createdAt: now,
+    updatedAt: now,
+  }));
+  if (rows.length > 0) await tx.insert(keyRemaps).values(rows);
 }
 
 /**
@@ -210,7 +209,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("mePresets.userNotFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得（メイン → 編集中 → 更新日時の順で表示）
+  // プリセット一覧を取得（メイン → 編集中 → 更新日時の順で表示）。
+  // コンポーネントは件数カウントと存在判定にしか使わないため、重量JSON列（*Data）は
+  // 取得せず存在フラグ・件数を DB 側で計算する（profile.tsx L390-404 と同じ2段フェッチ方針）
   const presets = await db.query.configPresets.findMany({
     where: eq(configPresets.userId, user.id),
     orderBy: [
@@ -218,6 +219,23 @@ export async function loader({ request }: Route.LoaderArgs) {
       desc(configPresets.isActive),
       desc(configPresets.updatedAt),
     ],
+    columns: {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      isMain: true,
+      updatedAt: true,
+    },
+    extras: {
+      hasKeybindings: sql<number>`(${configPresets.keybindingsData} is not null)`.as("has_keybindings"),
+      hasPlayerConfig: sql<number>`(${configPresets.playerConfigData} is not null)`.as("has_player_config"),
+      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
+      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
+      keybindingsCount: sql<number>`(case when json_valid(${configPresets.keybindingsData}) then json_array_length(${configPresets.keybindingsData}) else 0 end)`.as("keybindings_count"),
+      itemLayoutsCount: sql<number>`(case when json_valid(${configPresets.itemLayoutsData}) then json_array_length(${configPresets.itemLayoutsData}) else 0 end)`.as("item_layouts_count"),
+      searchCraftsCount: sql<number>`(case when json_valid(${configPresets.searchCraftsData}) then json_array_length(${configPresets.searchCraftsData}) else 0 end)`.as("search_crafts_count"),
+    },
   });
 
   // 変更履歴を取得（最新20件）
@@ -245,29 +263,21 @@ export async function action({ request }: Route.ActionArgs) {
 
   const session = await getSession(request, auth);
 
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+  const now = new Date();
+
+  // 全8リレーションが必要なのは create-preset の現設定分岐と apply-preset の
+  // user.keybindings（履歴バックアップ用）だけのため、ここでは id だけ取得し、
+  // 各 intent 分岐内で必要な分だけ2段目のフェッチを行う
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
-    with: {
-      keybindings: true,
-      playerConfig: true,
-      keyRemaps: true,
-      itemLayouts: true,
-      searchCrafts: true,
-      searchCraftLoops: {
-        orderBy: [asc(searchCraftLoops.sequence)],
-      },
-      customKeys: true,
-      customActions: true,
-    },
+    columns: { id: true },
   });
 
   if (!user) {
     return { error: t("mePresets.userNotFound") };
   }
-
-  const formData = await request.formData();
-  const intent = formData.get("intent") as string;
-  const now = new Date();
 
   // プリセット作成（現在の設定を保存 or 既存プリセットからコピー）
   if (intent === "create-preset") {
@@ -278,6 +288,27 @@ export async function action({ request }: Route.ActionArgs) {
 
     if (!name?.trim()) {
       return { error: t("mePresets.presetNameRequired") };
+    }
+
+    // 現在の設定から作成する分岐（コピー元指定なし）で使う8リレーション付きユーザーを取得
+    // （apply-preset は user.keybindings しか使わないため、ここでは create-preset でのみ取得する）
+    const live = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      with: {
+        keybindings: true,
+        playerConfig: true,
+        keyRemaps: true,
+        itemLayouts: true,
+        searchCrafts: true,
+        searchCraftLoops: {
+          orderBy: [asc(searchCraftLoops.sequence)],
+        },
+        customKeys: true,
+        customActions: true,
+      },
+    });
+    if (!live) {
+      return { error: t("mePresets.userNotFound") };
     }
 
     let sourcePreset: typeof configPresets.$inferSelect | undefined;
@@ -339,35 +370,33 @@ export async function action({ request }: Route.ActionArgs) {
         // ライブテーブルへの展開
         if (keybindingsData) {
           const kbData = JSON.parse(keybindingsData) as PresetKeybindingData[];
-          for (const kb of kbData) {
-            await tx.insert(keybindings).values({
-              id: createId(),
-              userId: user.id,
-              action: kb.action,
-              keyCode: kb.keyCode,
-              category: kb.category as "movement" | "combat" | "inventory" | "ui",
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
+          const rows = kbData.map((kb) => ({
+            id: createId(),
+            userId: user.id,
+            action: kb.action,
+            keyCode: kb.keyCode,
+            category: kb.category as "movement" | "combat" | "inventory" | "ui",
+            createdAt: now,
+            updatedAt: now,
+          }));
+          if (rows.length > 0) await tx.insert(keybindings).values(rows);
         }
         await restorePlayerConfigFromSnapshot(tx, user.id, playerConfigData, fingerAssignmentsData, now);
         await restoreRemapsFromSnapshot(tx, user.id, remapsData, now);
         if (itemLayoutsData) {
           const layoutData = JSON.parse(itemLayoutsData) as PresetItemLayoutData[];
-          for (const layout of layoutData) {
-            await tx.insert(itemLayouts).values({
-              id: createId(),
-              userId: user.id,
-              segment: layout.segment,
-              slots: layout.slots,
-              offhand: layout.offhand,
-              notes: layout.notes,
-              displayOrder: layout.displayOrder,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
+          const rows = layoutData.map((layout) => ({
+            id: createId(),
+            userId: user.id,
+            segment: layout.segment,
+            slots: layout.slots,
+            offhand: layout.offhand,
+            notes: layout.notes,
+            displayOrder: layout.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          }));
+          if (rows.length > 0) await tx.insert(itemLayouts).values(rows);
         }
         if (searchCraftsData) {
           const craftData = JSON.parse(searchCraftsData) as PresetSearchCraftData[];
@@ -396,132 +425,127 @@ export async function action({ request }: Route.ActionArgs) {
         }
         if (customKeysData) {
           const ckData = JSON.parse(customKeysData) as PresetCustomKeyData[];
-          for (const ck of ckData) {
-            await tx.insert(customKeys).values({
-              id: createId(),
-              userId: user.id,
-              keyCode: ck.keyCode,
-              keyName: ck.keyName,
-              category: ck.category,
-              position: ck.position,
-              size: ck.size,
-              notes: ck.notes,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
+          const rows = ckData.map((ck) => ({
+            id: createId(),
+            userId: user.id,
+            keyCode: ck.keyCode,
+            keyName: ck.keyName,
+            category: ck.category,
+            position: ck.position,
+            size: ck.size,
+            notes: ck.notes,
+            createdAt: now,
+            updatedAt: now,
+          }));
+          if (rows.length > 0) await tx.insert(customKeys).values(rows);
         }
         if (customActionsData) {
           const caData = JSON.parse(customActionsData) as PresetCustomActionData[];
-          for (const ca of caData) {
-            await tx.insert(customActions).values({
-              id: createId(),
-              userId: user.id,
-              actionName: ca.actionName,
-              description: ca.description,
-              category: ca.category,
-              triggerKey: ca.triggerKey,
-              displayOrder: ca.displayOrder,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
+          const rows = caData.map((ca) => ({
+            id: createId(),
+            userId: user.id,
+            actionName: ca.actionName,
+            description: ca.description,
+            category: ca.category,
+            triggerKey: ca.triggerKey,
+            displayOrder: ca.displayOrder,
+            createdAt: now,
+            updatedAt: now,
+          }));
+          if (rows.length > 0) await tx.insert(customActions).values(rows);
         }
       } else if (
-        user.keybindings.length > 0 ||
-        user.playerConfig ||
-        user.keyRemaps.length > 0 ||
-        user.itemLayouts.length > 0 ||
-        user.searchCrafts.length > 0 ||
-        user.customKeys.length > 0 ||
-        user.customActions.length > 0
+        live.keybindings.length > 0 ||
+        live.playerConfig ||
+        live.keyRemaps.length > 0 ||
+        live.itemLayouts.length > 0 ||
+        live.searchCrafts.length > 0 ||
+        live.customKeys.length > 0 ||
+        live.customActions.length > 0
       ) {
         // 現在のライブテーブル内容（メモリ上）から作成
         // キーバインド以外のライブデータ（アイテム配置・サーチクラフト等）しか持たない
         // ユーザーもここに入れる（デフォルト分岐に落ちると既存データが消失するため）
-        keybindingsData = user.keybindings.length > 0 ? serializeKeybindings(user.keybindings) : null;
-        playerConfigData = user.playerConfig ? serializePlayerConfig(user.playerConfig) : null;
-        remapsData = user.keyRemaps.length > 0 ? serializeRemaps(user.keyRemaps) : null;
-        fingerAssignmentsData = user.playerConfig?.fingerAssignments ?? null;
-        itemLayoutsData = user.itemLayouts.length > 0 ? serializeItemLayouts(user.itemLayouts) : null;
-        searchCraftsData = user.searchCrafts.length > 0 ? serializeSearchCrafts(user.searchCrafts) : null;
+        keybindingsData = live.keybindings.length > 0 ? serializeKeybindings(live.keybindings) : null;
+        playerConfigData = live.playerConfig ? serializePlayerConfig(live.playerConfig) : null;
+        remapsData = live.keyRemaps.length > 0 ? serializeRemaps(live.keyRemaps) : null;
+        fingerAssignmentsData = live.playerConfig?.fingerAssignments ?? null;
+        itemLayoutsData = live.itemLayouts.length > 0 ? serializeItemLayouts(live.itemLayouts) : null;
+        searchCraftsData = live.searchCrafts.length > 0 ? serializeSearchCrafts(live.searchCrafts) : null;
         // 元の（削除前の）searchCrafts をそのまま渡す — craftId→sequence の突合は削除前の行 id で行う
-        searchCraftLoopsData = serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts);
-        customKeysData = user.customKeys.length > 0 ? serializeCustomKeys(user.customKeys) : null;
-        customActionsData = user.customActions.length > 0 ? serializeCustomActions(user.customActions) : null;
+        searchCraftLoopsData = serializeSearchCraftLoops(live.searchCraftLoops, live.searchCrafts);
+        customKeysData = live.customKeys.length > 0 ? serializeCustomKeys(live.customKeys) : null;
+        customActionsData = live.customActions.length > 0 ? serializeCustomActions(live.customActions) : null;
 
         // 既存設定をライブテーブルに再挿入（削除後の復元）
-        for (const kb of user.keybindings) {
-          await tx.insert(keybindings).values({
-            id: createId(),
-            userId: user.id,
-            action: kb.action,
-            keyCode: kb.keyCode,
-            category: kb.category,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-        if (user.playerConfig) {
+        const keybindingRows = live.keybindings.map((kb) => ({
+          id: createId(),
+          userId: user.id,
+          action: kb.action,
+          keyCode: kb.keyCode,
+          category: kb.category,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (keybindingRows.length > 0) await tx.insert(keybindings).values(keybindingRows);
+        if (live.playerConfig) {
           await tx.insert(playerConfigs).values({
             id: createId(),
             userId: user.id,
-            keyboardLayout: user.playerConfig.keyboardLayout,
-            keyboardModel: user.playerConfig.keyboardModel,
-            mouseDpi: user.playerConfig.mouseDpi,
-            gameSensitivity: user.playerConfig.gameSensitivity,
-            rawInput: user.playerConfig.rawInput,
-            mouseAcceleration: user.playerConfig.mouseAcceleration,
-            toggleSprint: user.playerConfig.toggleSprint,
-            toggleSneak: user.playerConfig.toggleSneak,
-            autoJump: user.playerConfig.autoJump,
-            fov: user.playerConfig.fov,
-            guiScale: user.playerConfig.guiScale,
-            gameLanguage: user.playerConfig.gameLanguage,
-            mouseModel: user.playerConfig.mouseModel,
-            windowsSpeed: user.playerConfig.windowsSpeed,
-            windowsSpeedMultiplier: user.playerConfig.windowsSpeedMultiplier,
-            cm360: user.playerConfig.cm360,
-            notes: user.playerConfig.notes,
-            controllerSettings: user.playerConfig.controllerSettings,
-            fingerAssignments: user.playerConfig.fingerAssignments,
+            keyboardLayout: live.playerConfig.keyboardLayout,
+            keyboardModel: live.playerConfig.keyboardModel,
+            mouseDpi: live.playerConfig.mouseDpi,
+            gameSensitivity: live.playerConfig.gameSensitivity,
+            rawInput: live.playerConfig.rawInput,
+            mouseAcceleration: live.playerConfig.mouseAcceleration,
+            toggleSprint: live.playerConfig.toggleSprint,
+            toggleSneak: live.playerConfig.toggleSneak,
+            autoJump: live.playerConfig.autoJump,
+            fov: live.playerConfig.fov,
+            guiScale: live.playerConfig.guiScale,
+            gameLanguage: live.playerConfig.gameLanguage,
+            mouseModel: live.playerConfig.mouseModel,
+            windowsSpeed: live.playerConfig.windowsSpeed,
+            windowsSpeedMultiplier: live.playerConfig.windowsSpeedMultiplier,
+            cm360: live.playerConfig.cm360,
+            notes: live.playerConfig.notes,
+            controllerSettings: live.playerConfig.controllerSettings,
+            fingerAssignments: live.playerConfig.fingerAssignments,
             createdAt: now,
             updatedAt: now,
           });
         }
-        for (const remap of user.keyRemaps) {
-          await tx.insert(keyRemaps).values({
-            id: createId(),
-            userId: user.id,
-            sourceKey: remap.sourceKey,
-            targetKey: sanitizeRemapTargetKey(remap.targetKey),
-            software: remap.software,
-            notes: remap.notes,
-            outputMode: remap.outputMode ?? "key",
-            outputCharacter: remap.outputCharacter ?? null,
-            remapType: remap.remapType,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-        for (const layout of user.itemLayouts) {
-          await tx.insert(itemLayouts).values({
-            id: createId(),
-            userId: user.id,
-            segment: layout.segment,
-            slots: layout.slots,
-            offhand: layout.offhand,
-            notes: layout.notes,
-            displayOrder: layout.displayOrder,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const keyRemapRows = live.keyRemaps.map((remap) => ({
+          id: createId(),
+          userId: user.id,
+          sourceKey: remap.sourceKey,
+          targetKey: sanitizeRemapTargetKey(remap.targetKey),
+          software: remap.software,
+          notes: remap.notes,
+          outputMode: remap.outputMode ?? "key",
+          outputCharacter: remap.outputCharacter ?? null,
+          remapType: remap.remapType,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (keyRemapRows.length > 0) await tx.insert(keyRemaps).values(keyRemapRows);
+        const itemLayoutRows = live.itemLayouts.map((layout) => ({
+          id: createId(),
+          userId: user.id,
+          segment: layout.segment,
+          slots: layout.slots,
+          offhand: layout.offhand,
+          notes: layout.notes,
+          displayOrder: layout.displayOrder,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (itemLayoutRows.length > 0) await tx.insert(itemLayouts).values(itemLayoutRows);
         // Loop 復元用に旧craftId→新craftId を記録する（ライブ再挿入は毎回新idを振るため）
-        const oldToNewCraftId = new Map(user.searchCrafts.map((craft) => [craft.id, createId()]));
-        if (user.searchCrafts.length > 0) {
+        const oldToNewCraftId = new Map(live.searchCrafts.map((craft) => [craft.id, createId()]));
+        if (live.searchCrafts.length > 0) {
           await tx.insert(searchCrafts).values(
-            user.searchCrafts.map((craft) => ({
+            live.searchCrafts.map((craft) => ({
               id: oldToNewCraftId.get(craft.id)!,
               userId: user.id,
               sequence: craft.sequence,
@@ -535,7 +559,7 @@ export async function action({ request }: Route.ActionArgs) {
             })),
           );
         }
-        const remappedLoopRows = user.searchCraftLoops.flatMap((loop) => {
+        const remappedLoopRows = live.searchCraftLoops.flatMap((loop) => {
           const remappedSteps = remapLoopSteps(parseLoopSteps(loop.steps), oldToNewCraftId);
           if (!remappedSteps) return [];
           return [{
@@ -552,33 +576,31 @@ export async function action({ request }: Route.ActionArgs) {
         if (remappedLoopRows.length > 0) {
           await tx.insert(searchCraftLoops).values(remappedLoopRows);
         }
-        for (const ck of user.customKeys) {
-          await tx.insert(customKeys).values({
-            id: createId(),
-            userId: user.id,
-            keyCode: ck.keyCode,
-            keyName: ck.keyName,
-            category: ck.category,
-            position: ck.position,
-            size: ck.size,
-            notes: ck.notes,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-        for (const ca of user.customActions) {
-          await tx.insert(customActions).values({
-            id: createId(),
-            userId: user.id,
-            actionName: ca.actionName,
-            description: ca.description,
-            category: ca.category,
-            triggerKey: ca.triggerKey,
-            displayOrder: ca.displayOrder,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const customKeyRows = live.customKeys.map((ck) => ({
+          id: createId(),
+          userId: user.id,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category,
+          position: ck.position,
+          size: ck.size,
+          notes: ck.notes,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (customKeyRows.length > 0) await tx.insert(customKeys).values(customKeyRows);
+        const customActionRows = live.customActions.map((ca) => ({
+          id: createId(),
+          userId: user.id,
+          actionName: ca.actionName,
+          description: ca.description,
+          category: ca.category,
+          triggerKey: ca.triggerKey,
+          displayOrder: ca.displayOrder,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (customActionRows.length > 0) await tx.insert(customActions).values(customActionRows);
       } else {
         // デフォルト設定から作成
         const defaultKbs = DEFAULT_KEYBINDINGS.map((kb) => ({
@@ -588,17 +610,16 @@ export async function action({ request }: Route.ActionArgs) {
         }));
         keybindingsData = JSON.stringify(defaultKbs);
 
-        for (const kb of DEFAULT_KEYBINDINGS) {
-          await tx.insert(keybindings).values({
-            id: createId(),
-            userId: user.id,
-            action: kb.action,
-            keyCode: kb.keyCode,
-            category: kb.category,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const defaultKeybindingRows = DEFAULT_KEYBINDINGS.map((kb) => ({
+          id: createId(),
+          userId: user.id,
+          action: kb.action,
+          keyCode: kb.keyCode,
+          category: kb.category,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (defaultKeybindingRows.length > 0) await tx.insert(keybindings).values(defaultKeybindingRows);
 
         await tx.insert(playerConfigs).values({
           id: createId(),
@@ -788,8 +809,12 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
 
-    // 現在の設定をバックアップ（履歴用）
-    const previousKeybindings = JSON.stringify(user.keybindings);
+    // 現在の設定をバックアップ（履歴用）。apply-preset で必要なのは
+    // user.keybindings だけのため、8リレーション付きではなくこの1本だけ取得する
+    const liveKeybindings = await db.query.keybindings.findMany({
+      where: eq(keybindings.userId, user.id),
+    });
+    const previousKeybindings = JSON.stringify(liveKeybindings);
 
     await db.transaction(async (tx) => {
       // ライブテーブル全クリア（フルシンク）
@@ -807,17 +832,16 @@ export async function action({ request }: Route.ActionArgs) {
       // キーバインドを復元
       if (preset.keybindingsData) {
         const keybindingsFromPreset = JSON.parse(preset.keybindingsData) as PresetKeybindingData[];
-        for (const kbData of keybindingsFromPreset) {
-          await tx.insert(keybindings).values({
-            id: createId(),
-            userId: user.id,
-            action: kbData.action,
-            keyCode: kbData.keyCode,
-            category: kbData.category as "movement" | "combat" | "inventory" | "ui",
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const rows = keybindingsFromPreset.map((kbData) => ({
+          id: createId(),
+          userId: user.id,
+          action: kbData.action,
+          keyCode: kbData.keyCode,
+          category: kbData.category as "movement" | "combat" | "inventory" | "ui",
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (rows.length > 0) await tx.insert(keybindings).values(rows);
       }
 
       // 走者設定を復元（コピー経路と同じく削除済みテーブルへの insert で統一。
@@ -836,19 +860,18 @@ export async function action({ request }: Route.ActionArgs) {
       // アイテム配置を復元
       if (preset.itemLayoutsData) {
         const layoutsFromPreset = JSON.parse(preset.itemLayoutsData) as PresetItemLayoutData[];
-        for (const layoutData of layoutsFromPreset) {
-          await tx.insert(itemLayouts).values({
-            id: createId(),
-            userId: user.id,
-            segment: layoutData.segment,
-            slots: layoutData.slots,
-            offhand: layoutData.offhand,
-            notes: layoutData.notes,
-            displayOrder: layoutData.displayOrder,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const rows = layoutsFromPreset.map((layoutData) => ({
+          id: createId(),
+          userId: user.id,
+          segment: layoutData.segment,
+          slots: layoutData.slots,
+          offhand: layoutData.offhand,
+          notes: layoutData.notes,
+          displayOrder: layoutData.displayOrder,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (rows.length > 0) await tx.insert(itemLayouts).values(rows);
       }
 
       // サーチクラフトを復元
@@ -887,38 +910,36 @@ export async function action({ request }: Route.ActionArgs) {
       // カスタムキー定義を復元
       if (preset.customKeysData) {
         const ckFromPreset = JSON.parse(preset.customKeysData) as PresetCustomKeyData[];
-        for (const ck of ckFromPreset) {
-          await tx.insert(customKeys).values({
-            id: createId(),
-            userId: user.id,
-            keyCode: ck.keyCode,
-            keyName: ck.keyName,
-            category: ck.category,
-            position: ck.position,
-            size: ck.size,
-            notes: ck.notes,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const rows = ckFromPreset.map((ck) => ({
+          id: createId(),
+          userId: user.id,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category,
+          position: ck.position,
+          size: ck.size,
+          notes: ck.notes,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (rows.length > 0) await tx.insert(customKeys).values(rows);
       }
 
       // カスタムアクションを復元
       if (preset.customActionsData) {
         const caFromPreset = JSON.parse(preset.customActionsData) as PresetCustomActionData[];
-        for (const ca of caFromPreset) {
-          await tx.insert(customActions).values({
-            id: createId(),
-            userId: user.id,
-            actionName: ca.actionName,
-            description: ca.description,
-            category: ca.category,
-            triggerKey: ca.triggerKey,
-            displayOrder: ca.displayOrder,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+        const rows = caFromPreset.map((ca) => ({
+          id: createId(),
+          userId: user.id,
+          actionName: ca.actionName,
+          description: ca.description,
+          category: ca.category,
+          triggerKey: ca.triggerKey,
+          displayOrder: ca.displayOrder,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (rows.length > 0) await tx.insert(customActions).values(rows);
       }
 
       // 全てのプリセットを非アクティブに
@@ -1145,36 +1166,15 @@ export default function PresetsPage() {
           {presets.length > 0 ? (
             <div className="space-y-3">
               {presets.map((preset) => {
-                // プリセットに含まれる内容を計算
-                const hasKeybindings = !!preset.keybindingsData;
-                const hasPlayerConfig = !!preset.playerConfigData;
-                const hasRemaps = !!preset.remapsData;
-                const hasItemLayouts = !!preset.itemLayoutsData;
-                const hasSearchCrafts = !!preset.searchCraftsData;
-
-                // キーバインド数を計算
-                let keybindingsCount = 0;
-                if (preset.keybindingsData) {
-                  try {
-                    keybindingsCount = JSON.parse(preset.keybindingsData).length;
-                  } catch {}
-                }
-
-                // アイテム配置数を計算
-                let itemLayoutsCount = 0;
-                if (preset.itemLayoutsData) {
-                  try {
-                    itemLayoutsCount = JSON.parse(preset.itemLayoutsData).length;
-                  } catch {}
-                }
-
-                // サーチクラフト数を計算
-                let searchCraftsCount = 0;
-                if (preset.searchCraftsData) {
-                  try {
-                    searchCraftsCount = JSON.parse(preset.searchCraftsData).length;
-                  } catch {}
-                }
+                // プリセットに含まれる内容を計算（extras は 0/1 の number を返すため boolean 化する。
+                // JSX で `{0 && ...}` が "0" を描画してしまうのを防ぐため）
+                const hasKeybindings = preset.hasKeybindings === 1;
+                const hasPlayerConfig = preset.hasPlayerConfig === 1;
+                const hasItemLayouts = preset.hasItemLayouts === 1;
+                const hasSearchCrafts = preset.hasSearchCrafts === 1;
+                const keybindingsCount = preset.keybindingsCount;
+                const itemLayoutsCount = preset.itemLayoutsCount;
+                const searchCraftsCount = preset.searchCraftsCount;
 
                 return (
                   <div
