@@ -962,6 +962,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     bioMax: "About must be 500 characters or fewer",
     locationMax: "Location must be 100 characters or fewer",
     shortBioMax: "Tagline must be 50 characters or fewer",
+    pronounsMax: "Pronouns must be 20 characters or fewer",
+    invalidOption: "Invalid option",
     rtaStartedBothOrNone: "Select both year and month, or leave both unset",
     rtaStartedInvalid: "Invalid start month (must be between Jan 2009 and now)",
     speedrunUsernameMax: "Speedrun.com username must be 50 characters or fewer",
