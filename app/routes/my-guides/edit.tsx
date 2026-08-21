@@ -138,10 +138,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const content = (formData.get("content") as string) ?? guide.content;
   const summary = (formData.get("summary") as string) || null;
 
-  if (title.length > 200) {
+  // 検証導入前に保存された上限超過の既存ガイドを救済するため、値が変更された場合のみ検証する
+  // （フィールドを触っていない保存は通し、変更した時点で上限を強制する）
+  if (title !== guide.title && title.length > 200) {
     return { error: t("meGuides.errorTitleTooLong") };
   }
-  if (summary && summary.length > 500) {
+  if (summary && summary !== guide.summary && summary.length > 500) {
     return { error: t("meGuides.errorSummaryTooLong") };
   }
 

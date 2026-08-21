@@ -37,9 +37,14 @@ import {
   Copy,
   Smartphone,
 } from "lucide-react";
-import { type ControllerSettings, DEFAULT_CONTROLLER_SETTINGS } from "@/lib/keybindings";
+import {
+  type ControllerSettings,
+  DEFAULT_CONTROLLER_SETTINGS,
+  KEYBOARD_LAYOUT_OPTIONS,
+} from "@/lib/keybindings";
 import {
   fromSensitivityPercent,
+  MOUSE_SETTINGS_FIELDS,
   parseMouseSettingsInput,
   toSensitivityPercent,
   validateMouseSettings,
@@ -183,9 +188,6 @@ export function HydrateFallback() {
   );
 }
 
-// keyboardLayout の許可値（DBの text({enum}) は CHECK 制約を作らないため、action 側で allowlist 検証する）
-const KEYBOARD_LAYOUTS = ["JIS", "US", "JIS_TKL", "US_TKL"] as const;
-
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -254,15 +256,19 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t(validationError.messageKey), field: validationError.field };
   }
 
-  // fov / guiScale の範囲チェック（同上の理由で inputMethod の更新より前に検証する）
+  // fov / guiScale の範囲チェック（同上の理由で inputMethod の更新より前に検証する）。
+  // parseInt は "70.9" や "70abc" を先頭だけ読んで 70 として黙って受理してしまい、
+  // 「整数で入力してください」というメッセージと矛盾するため Number() + Number.isInteger で検証する
+  // （NaN は isInteger が false を返すため個別の Number.isFinite チェックは不要）。
   const fovStr = formData.get("fov") as string;
   const guiScaleStr = formData.get("guiScale") as string;
-  const fov = fovStr ? parseInt(fovStr) : null;
-  const guiScale = guiScaleStr ? parseInt(guiScaleStr) : null;
-  if (fov !== null && (!Number.isFinite(fov) || fov < 30 || fov > 110)) {
+  const fov = fovStr ? Number(fovStr) : null;
+  const guiScale = guiScaleStr ? Number(guiScaleStr) : null;
+  if (fov !== null && (!Number.isInteger(fov) || fov < 30 || fov > 110)) {
     return { error: t("meDevices.fovInvalid"), field: "fov" };
   }
-  if (guiScale !== null && (!Number.isFinite(guiScale) || guiScale < 0 || guiScale > 4)) {
+  // バニラは高解像度環境で GUI スケール 5〜9 が正当値になりうるため上限は 10 まで許容する
+  if (guiScale !== null && (!Number.isInteger(guiScale) || guiScale < 0 || guiScale > 10)) {
     return { error: t("meDevices.guiScaleInvalid"), field: "guiScale" };
   }
 
@@ -285,11 +291,17 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true };
   }
 
+  // keyboardLayout: DBの text({enum}) は CHECK 制約を作らないため、action 側で allowlist
+  // （@/lib/keybindings の KEYBOARD_LAYOUT_OPTIONS）検証する。
+  // 不正値（allowlist 外）は null 上書きにせず configData から除外し、DB の既存値を保持する。
+  // 有効値・明示的な未設定（空文字→null）は従来どおり書き込む。
   const keyboardLayoutRaw = (formData.get("keyboardLayout") as string) || null;
-  const keyboardLayout =
-    keyboardLayoutRaw && (KEYBOARD_LAYOUTS as readonly string[]).includes(keyboardLayoutRaw)
-      ? (keyboardLayoutRaw as (typeof KEYBOARD_LAYOUTS)[number])
-      : null;
+  const keyboardLayoutIsValid =
+    keyboardLayoutRaw === null ||
+    (KEYBOARD_LAYOUT_OPTIONS as readonly string[]).includes(keyboardLayoutRaw);
+  const keyboardLayout = keyboardLayoutIsValid
+    ? (keyboardLayoutRaw as (typeof KEYBOARD_LAYOUT_OPTIONS)[number] | null)
+    : null;
   const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
   const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
   const toggleSprint = formData.get("toggleSprint") === "true";
@@ -300,19 +312,27 @@ export async function action({ request }: Route.ActionArgs) {
   const gameLanguage = (formData.get("gameLanguage") as string)?.trim() || null;
   const notes = (formData.get("notes") as string)?.trim() || null;
 
-  // コントローラー設定
-  const controllerSettingsJson = formData.get("controllerSettings") as string;
-  let controllerSettings = controllerSettingsJson ? controllerSettingsJson : null;
-  if (controllerSettings) {
+  // コントローラー設定（JSON文字列としてそのまま保存する）。
+  // JSON.parse が通るだけでなくオブジェクト（配列・null を除く）であることまで検証し、
+  // "123" や "\"x\"" のような非オブジェクト JSON を弾く。
+  // 不正時は null 上書きにせず configData から除外し、DB の既存値を保持する（keyboardLayout と同方針）。
+  const controllerSettingsJson = formData.get("controllerSettings") as string | null;
+  let controllerSettingsIsValid = true;
+  let controllerSettings: string | null = null;
+  if (controllerSettingsJson) {
     try {
-      JSON.parse(controllerSettings);
+      const parsed = JSON.parse(controllerSettingsJson);
+      if (typeof parsed === "object" && parsed !== null) {
+        controllerSettings = controllerSettingsJson;
+      } else {
+        controllerSettingsIsValid = false;
+      }
     } catch {
-      controllerSettings = null;
+      controllerSettingsIsValid = false;
     }
   }
 
-  const configData = {
-    keyboardLayout,
+  const configData: Partial<typeof playerConfigs.$inferInsert> = {
     keyboardModel,
     mouseModel,
     mouseDpi,
@@ -328,9 +348,14 @@ export async function action({ request }: Route.ActionArgs) {
     fov,
     guiScale,
     notes,
-    controllerSettings,
     updatedAt: new Date(),
   };
+  if (keyboardLayoutIsValid) {
+    configData.keyboardLayout = keyboardLayout;
+  }
+  if (controllerSettingsIsValid) {
+    configData.controllerSettings = controllerSettings;
+  }
 
   // upsert: ライブの playerConfig 行が無い場合は insert する
   // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
@@ -370,12 +395,7 @@ type FieldErrorState = { field: MouseSettingsField; message: string };
  * インライン表示・スクロール対象（fieldRefs で ref を持つ欄）だけに絞り込む。
  */
 function isMouseSettingsField(field: string): field is MouseSettingsField {
-  return (
-    field === "gameSensitivity" ||
-    field === "mouseDpi" ||
-    field === "windowsSpeed" ||
-    field === "windowsSpeedMultiplier"
-  );
+  return (MOUSE_SETTINGS_FIELDS as readonly string[]).includes(field);
 }
 
 /** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
@@ -1072,7 +1092,7 @@ export default function DevicesPage() {
                   id="guiScale"
                   type="number"
                   min="0"
-                  max="4"
+                  max="10"
                   value={formValues.guiScale}
                   onChange={(e) => handleChange("guiScale", e.target.value)}
                   placeholder={t("meDevices.guiScaleExample")}

@@ -159,12 +159,17 @@ export function calculateCursorSpeed(
 /**
  * マウス設定フォームのバリデーション対象欄。action の返り値（field）と
  * クライアント側検証で共有する。値は該当 Input の id と揃えている。
+ * 配列を単一情報源とし、型はそこから導出する（`isMouseSettingsField` 等の
+ * allowlist 判定と二重管理にならないようにするため）。
  */
-export type MouseSettingsField =
-  | "gameSensitivity"
-  | "mouseDpi"
-  | "windowsSpeed"
-  | "windowsSpeedMultiplier";
+export const MOUSE_SETTINGS_FIELDS = [
+  "gameSensitivity",
+  "mouseDpi",
+  "windowsSpeed",
+  "windowsSpeedMultiplier",
+] as const;
+
+export type MouseSettingsField = (typeof MOUSE_SETTINGS_FIELDS)[number];
 
 export type MouseSettingsValidationError = {
   field: MouseSettingsField;

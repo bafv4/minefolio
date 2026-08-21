@@ -64,9 +64,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const { authorSlug } = params as { authorSlug: string };
 
-  // セッション解決と著者取得は互いに独立なので並行する
-  const [session, author] = await Promise.all([
-    getOptionalSession(request, auth),
+  // セッション解決（→ isOwner 判定用の currentUser 取得へ連鎖）と著者取得は互いに独立なので並行する
+  const [currentUser, author] = await Promise.all([
+    getOptionalSession(request, auth).then((session) =>
+      session?.user?.id
+        ? db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          })
+        : null
+    ),
     db.query.users.findFirst({
       where: eq(users.slug, authorSlug),
       columns: {
@@ -88,14 +95,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   // プライベートプロフィールの著者のガイド一覧は本人以外に404を返す（プロフィール本体と挙動を揃える）
-  let isOwner = false;
-  if (session) {
-    const currentUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: { id: true },
-    });
-    isOwner = currentUser?.id === author.id;
-  }
+  const isOwner = currentUser?.id === author.id;
   if (author.profileVisibility === "private" && !isOwner) {
     throw new Response("Not Found", { status: 404 });
   }

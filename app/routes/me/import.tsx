@@ -2,7 +2,7 @@ import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useRevalidator } from "react-router";
 import type { Route } from "./+types/import";
-import { createDb } from "@/lib/db";
+import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -56,6 +56,62 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+/**
+ * インポート（import-remaps / import-minecraft 共通）の書き込み後にプリセットへ反映する。
+ * - 初回インポート（hasPresets=false）: 最新データ7種を並列取得してプリセットを新規作成する。
+ *   syncActivePresetSnapshot と異なり createPresetFromImport は呼び出し側から値を渡す必要があるため、
+ *   ここでのみ取得する（hasPresets=true 側は syncActivePresetSnapshot が自力で最新値を読むため不要）。
+ * - 2回目以降（hasPresets=true）: アクティブプリセットのスナップショットを同期する
+ *   （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）。
+ * 戻り値はレスポンスの presetCreated にそのまま使う。
+ */
+async function syncPresetAfterImport(db: Database, userId: string, hasPresets: boolean): Promise<boolean> {
+  if (!hasPresets) {
+    const [
+      updatedKeybindings,
+      updatedPlayerConfig,
+      updatedKeyRemaps,
+      updatedItemLayouts,
+      updatedSearchCrafts,
+      updatedCustomKeys,
+      updatedCustomActions,
+    ] = await Promise.all([
+      db.query.keybindings.findMany({ where: eq(keybindings.userId, userId) }),
+      db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, userId) }),
+      db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, userId) }),
+      db.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, userId) }),
+      db.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, userId) }),
+      db.query.customKeys.findMany({ where: eq(customKeys.userId, userId) }),
+      db.query.customActions.findMany({ where: eq(customActions.userId, userId) }),
+    ]);
+
+    await createPresetFromImport(
+      db,
+      userId,
+      updatedKeybindings,
+      updatedPlayerConfig ?? null,
+      updatedKeyRemaps,
+      updatedItemLayouts,
+      updatedSearchCrafts,
+      updatedCustomKeys,
+      updatedCustomActions,
+    );
+  } else {
+    await syncActivePresetSnapshot(db, userId, [
+      "keybindings",
+      "playerConfig",
+      "remaps",
+      "fingers",
+      "itemLayouts",
+      "searchCrafts",
+      "customKeys",
+      "customActions",
+    ]);
+  }
+
+  return !hasPresets;
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -90,12 +146,34 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "import-remaps") {
     // 旧形式バックアップは remapType フィールド欠落 → unset 扱い
-    type ImportRemap = ParsedRemap & { remapType?: string | null };
+    // targetKey/software/notes はいずれも nullable 列（key_remaps）なので、非文字列値は
+    // 書き込みエラーにせず null へ矯正する。一方 sourceKey は一意インデックスの構成要素かつ
+    // NOT NULL のため、欠落・非文字列の要素があればインポート全体を invalidData で拒否する
+    // （playground.tsx / search-craft-templates.ts の要素シェイプガードと同じ考え方）。
+    type ImportRemap = Omit<ParsedRemap, "targetKey" | "software" | "notes"> & {
+      targetKey: string | null;
+      software: string | null;
+      notes: string | null;
+      remapType?: string | null;
+    };
     let remaps: ImportRemap[];
     try {
       const parsed = JSON.parse((formData.get("remaps") as string) ?? "");
       if (!Array.isArray(parsed)) throw new Error("not an array");
-      remaps = parsed as ImportRemap[];
+      remaps = (parsed as unknown[]).map((r) => {
+        if (!r || typeof r !== "object") throw new Error("invalid element");
+        const rec = r as Record<string, unknown>;
+        if (typeof rec.sourceKey !== "string" || !rec.sourceKey) {
+          throw new Error("missing sourceKey");
+        }
+        return {
+          sourceKey: rec.sourceKey,
+          targetKey: typeof rec.targetKey === "string" ? rec.targetKey : null,
+          software: typeof rec.software === "string" ? rec.software : null,
+          notes: typeof rec.notes === "string" ? rec.notes : null,
+          remapType: rec.remapType as string | null | undefined,
+        };
+      });
     } catch {
       return { success: false, error: t("meImport.invalidData") };
     }
@@ -137,55 +215,10 @@ export async function action({ request }: Route.ActionArgs) {
       }
     });
 
-    // インポート後にプリセットを自動作成
-    // 更新されたデータを取得（互いに独立したクエリなので並列化する）
-    const [
-      updatedKeybindings,
-      updatedPlayerConfig,
-      updatedKeyRemaps,
-      updatedItemLayouts,
-      updatedSearchCrafts,
-      updatedCustomKeys,
-      updatedCustomActions,
-    ] = await Promise.all([
-      db.query.keybindings.findMany({ where: eq(keybindings.userId, user.id) }),
-      db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id) }),
-      db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, user.id) }),
-      db.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, user.id) }),
-      db.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, user.id) }),
-      db.query.customKeys.findMany({ where: eq(customKeys.userId, user.id) }),
-      db.query.customActions.findMany({ where: eq(customActions.userId, user.id) }),
-    ]);
+    // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
+    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
 
-    // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
-    if (!hasPresets) {
-      await createPresetFromImport(
-        db,
-        user.id,
-        updatedKeybindings,
-        updatedPlayerConfig ?? null,
-        updatedKeyRemaps,
-        updatedItemLayouts,
-        updatedSearchCrafts,
-        updatedCustomKeys,
-        updatedCustomActions,
-      );
-    } else {
-      // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
-      // （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）
-      await syncActivePresetSnapshot(db, user.id, [
-        "keybindings",
-        "playerConfig",
-        "remaps",
-        "fingers",
-        "itemLayouts",
-        "searchCrafts",
-        "customKeys",
-        "customActions",
-      ]);
-    }
-
-    return { success: true, type: "remaps", count: remaps.length, presetCreated: !hasPresets };
+    return { success: true, type: "remaps", count: remaps.length, presetCreated };
   }
 
   if (intent === "import-minecraft") {
@@ -203,13 +236,36 @@ export async function action({ request }: Route.ActionArgs) {
       rawInput?: boolean;
       gameLanguage?: string;
     };
+    // category は keybindings.category 列の enum を allowlist として検証する
+    // （SQLite側にCHECK制約が無いため、ここで弾かないと未知の文字列がそのままDBへ入り、
+    // カテゴリ別グルーピング等の表示側が前提とする4値のいずれかという不変条件が崩れる）。
+    // action/keyCode/category いずれかが不正な要素があれば、書き込みゼロでインポート全体を拒否する
+    // （playground.tsx / search-craft-templates.ts の要素シェイプガードと同じ考え方）。
+    const allowedCategories = keybindings.category.enumValues;
     try {
       const kb = JSON.parse((formData.get("keybindings") as string) ?? "");
       const gs = JSON.parse((formData.get("gameSettings") as string) ?? "");
       if (!Array.isArray(kb) || typeof gs !== "object" || gs === null) {
         throw new Error("invalid shape");
       }
-      keybindingsList = kb;
+      keybindingsList = (kb as unknown[]).map((item) => {
+        if (!item || typeof item !== "object") throw new Error("invalid element");
+        const rec = item as Record<string, unknown>;
+        if (typeof rec.action !== "string" || !rec.action) {
+          throw new Error("missing action");
+        }
+        if (typeof rec.keyCode !== "string" || !rec.keyCode) {
+          throw new Error("missing keyCode");
+        }
+        if (typeof rec.category !== "string" || !(allowedCategories as readonly string[]).includes(rec.category)) {
+          throw new Error("invalid category");
+        }
+        return {
+          action: rec.action,
+          keyCode: rec.keyCode,
+          category: rec.category as (typeof allowedCategories)[number],
+        };
+      });
       gameSettings = gs;
     } catch {
       return { success: false, error: t("meImport.invalidData") };
@@ -294,60 +350,15 @@ export async function action({ request }: Route.ActionArgs) {
       }
     });
 
-    // インポート後にプリセットを自動作成
-    // 更新されたデータを取得（互いに独立したクエリなので並列化する）
-    const [
-      updatedKeybindings,
-      updatedPlayerConfig,
-      updatedKeyRemaps,
-      updatedItemLayouts,
-      updatedSearchCrafts,
-      updatedCustomKeys,
-      updatedCustomActions,
-    ] = await Promise.all([
-      db.query.keybindings.findMany({ where: eq(keybindings.userId, user.id) }),
-      db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id) }),
-      db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, user.id) }),
-      db.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, user.id) }),
-      db.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, user.id) }),
-      db.query.customKeys.findMany({ where: eq(customKeys.userId, user.id) }),
-      db.query.customActions.findMany({ where: eq(customActions.userId, user.id) }),
-    ]);
-
-    // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
-    if (!hasPresets) {
-      await createPresetFromImport(
-        db,
-        user.id,
-        updatedKeybindings,
-        updatedPlayerConfig ?? null,
-        updatedKeyRemaps,
-        updatedItemLayouts,
-        updatedSearchCrafts,
-        updatedCustomKeys,
-        updatedCustomActions,
-      );
-    } else {
-      // 既存プリセットが存在する場合はアクティブプリセットのスナップショットを更新
-      // （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）
-      await syncActivePresetSnapshot(db, user.id, [
-        "keybindings",
-        "playerConfig",
-        "remaps",
-        "fingers",
-        "itemLayouts",
-        "searchCrafts",
-        "customKeys",
-        "customActions",
-      ]);
-    }
+    // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
+    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
 
     return {
       success: true,
       type: "minecraft",
       keybindingsCount: keybindingsList.length,
       gameSettingsCount: Object.keys(gameSettings).length,
-      presetCreated: !hasPresets,
+      presetCreated,
     };
   }
 

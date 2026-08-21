@@ -30,8 +30,10 @@ import {
   toSubmittableLoops,
   draftId,
   MAX_TEMPLATE_CRAFTS,
+  SEARCH_CRAFT_TIMINGS,
   type TemplateCraft,
   type TemplateLoop,
+  type SearchCraftTiming,
 } from "@/lib/search-craft-templates";
 import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { resolveVariations } from "@/lib/search-craft-variations";
@@ -273,7 +275,10 @@ export async function action({ request }: Route.ActionArgs) {
   const crafts: TemplateCraft[] = (craftsRaw as Array<Record<string, unknown>>).map((c) => ({
     items: Array.isArray(c.items) ? (c.items as unknown[]).filter((i): i is string => typeof i === "string") : [],
     comment: typeof c.comment === "string" ? c.comment : null,
-    timing: (c.timing ?? null) as TemplateCraft["timing"],
+    // parseEditorSubmission と同じ allowlist 検証（SEARCH_CRAFT_TIMINGS）。許可外・非文字列は null に落とす
+    timing: SEARCH_CRAFT_TIMINGS.includes(c.timing as SearchCraftTiming)
+      ? (c.timing as SearchCraftTiming)
+      : null,
     variations: resolveVariations({
       variations: c.variations,
       searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
@@ -288,15 +293,18 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const now = new Date();
-  // リマップ: includeRemaps=false のときは変更しない（null）
+  // リマップ: includeRemaps=false のときは変更しない（null）。
+  // sourceKey は非空 string を要求する（非文字列だと remapSourceMatchKey 経由の
+  // normalizeKeyCombination が TypeError を投げ 500 になるため）。targetKey/software/notes は
+  // クライアント由来の JSON のため string | null に矯正する
   const remapInput = includeRemaps
-    ? remaps
-        .filter((r) => r.sourceKey)
+    ? (remaps as unknown as Array<Record<string, unknown>>)
+        .filter((r) => typeof r.sourceKey === "string" && r.sourceKey !== "")
         .map((r) => ({
-          sourceKey: r.sourceKey,
-          targetKey: r.targetKey,
-          software: r.software ?? null,
-          notes: r.notes ?? null,
+          sourceKey: r.sourceKey as string,
+          targetKey: typeof r.targetKey === "string" ? r.targetKey : null,
+          software: typeof r.software === "string" ? r.software : null,
+          notes: typeof r.notes === "string" ? r.notes : null,
         }))
     : null;
 

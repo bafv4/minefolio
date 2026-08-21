@@ -262,12 +262,13 @@ async function persistRemaps(
 
   try {
     await db.transaction(async (tx) => {
-      for (const remap of remapsData) {
-        if (remap._delete && remap.id) {
-          await tx
-            .delete(keyRemaps)
-            .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
-        }
+      const deleteIds = remapsData
+        .filter((remap) => remap._delete && remap.id)
+        .map((remap) => remap.id!);
+      if (deleteIds.length > 0) {
+        await tx
+          .delete(keyRemaps)
+          .where(and(eq(keyRemaps.userId, userId), inArray(keyRemaps.id, deleteIds)));
       }
 
       const existingRows = await tx.query.keyRemaps.findMany({

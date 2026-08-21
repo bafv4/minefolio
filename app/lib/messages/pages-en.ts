@@ -1459,7 +1459,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     invalidWindowsSpeedMultiplier:
       "Custom multiplier must be a number greater than 0",
     fovInvalid: "FOV must be an integer between 30 and 110",
-    guiScaleInvalid: "GUI scale must be an integer between 0 and 4",
+    guiScaleInvalid: "GUI scale must be an integer between 0 and 10",
     saveSuccess: "Settings saved",
     copiedFromPreset: "Copied device settings from {name}",
     deviceChangeHistory: "Update devices & settings",

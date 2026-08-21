@@ -81,20 +81,46 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // POST: カスタムスキンURLを保存
   if (method === "POST") {
+    let body: unknown;
     try {
-      const body = await request.json();
-      const { url, model } = body as {
-        url: string;
-        model?: "default" | "slim";
-      };
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (body === null || typeof body !== "object") {
+      return new Response(JSON.stringify({ error: "Invalid request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-      if (!url) {
-        return new Response(JSON.stringify({ error: "URL is required" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+    const { url, model } = body as { url?: unknown; model?: unknown };
 
+    if (!url || typeof url !== "string") {
+      return new Response(JSON.stringify({ error: "URL is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // model は列の enum 許可リスト（schema.ts の customSkinModel: "default" | "slim"）
+    // でのみ受け付ける。任意文字列が enum 列に永続化されるのを防ぐ。
+    const allowedModels: readonly string[] = users.customSkinModel.enumValues;
+    if (
+      model !== undefined &&
+      (typeof model !== "string" || !allowedModels.includes(model))
+    ) {
+      return new Response(JSON.stringify({ error: "Invalid model" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const validatedModel = (model as "default" | "slim" | undefined) ?? "default";
+
+    try {
       // URLがVercel Blobのものか確認。
       // 部分文字列一致（includes）はフラグメント等ですり抜けられるため、
       // new URL() でパースしてホスト名を許可リスト判定する（SSRF 対策）。
@@ -119,7 +145,7 @@ export async function action({ request }: ActionFunctionArgs) {
         .update(users)
         .set({
           customSkinUrl: url,
-          customSkinModel: model ?? "default",
+          customSkinModel: validatedModel,
           customSkinUpdatedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -129,7 +155,7 @@ export async function action({ request }: ActionFunctionArgs) {
         JSON.stringify({
           success: true,
           customSkinUrl: url,
-          customSkinModel: model ?? "default",
+          customSkinModel: validatedModel,
         }),
         {
           headers: { "Content-Type": "application/json" },

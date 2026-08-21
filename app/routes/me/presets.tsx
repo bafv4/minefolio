@@ -203,54 +203,58 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
+    columns: { id: true },
   });
 
   if (!user) {
     throw new Response(t("mePresets.userNotFound"), { status: 404 });
   }
 
-  // プリセット一覧を取得（メイン → 編集中 → 更新日時の順で表示）。
-  // コンポーネントは件数カウントと存在判定にしか使わないため、重量JSON列（*Data）は
-  // 取得せず存在フラグ・件数を DB 側で計算する（profile.tsx L390-404 と同じ2段フェッチ方針）
-  const presets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, user.id),
-    orderBy: [
-      desc(configPresets.isMain),
-      desc(configPresets.isActive),
-      desc(configPresets.updatedAt),
-    ],
-    columns: {
-      id: true,
-      name: true,
-      description: true,
-      isActive: true,
-      isMain: true,
-      updatedAt: true,
-    },
-    extras: {
-      hasKeybindings: sql<number>`(${configPresets.keybindingsData} is not null)`.as("has_keybindings"),
-      hasPlayerConfig: sql<number>`(${configPresets.playerConfigData} is not null)`.as("has_player_config"),
-      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
-      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
-      keybindingsCount: sql<number>`(case when json_valid(${configPresets.keybindingsData}) then json_array_length(${configPresets.keybindingsData}) else 0 end)`.as("keybindings_count"),
-      itemLayoutsCount: sql<number>`(case when json_valid(${configPresets.itemLayoutsData}) then json_array_length(${configPresets.itemLayoutsData}) else 0 end)`.as("item_layouts_count"),
-      searchCraftsCount: sql<number>`(case when json_valid(${configPresets.searchCraftsData}) then json_array_length(${configPresets.searchCraftsData}) else 0 end)`.as("search_crafts_count"),
-    },
-  });
-
-  // 変更履歴を取得（最新20件）
-  const history = await db.query.configHistory.findMany({
-    where: eq(configHistory.userId, user.id),
-    orderBy: [desc(configHistory.createdAt)],
-    limit: 20,
-    with: {
-      preset: {
-        columns: {
-          name: true,
+  // プリセット一覧（メイン → 編集中 → 更新日時の順で表示）と変更履歴（最新20件）は互いに
+  // 依存しないクエリのため並列実行する
+  const [presets, history] = await Promise.all([
+    // コンポーネントは件数カウントと存在判定にしか使わないため、重量JSON列（*Data）は
+    // 取得せず存在フラグ・件数を DB 側で計算する（profile.tsx L390-404 と同じ2段フェッチ方針）
+    db.query.configPresets.findMany({
+      where: eq(configPresets.userId, user.id),
+      orderBy: [
+        desc(configPresets.isMain),
+        desc(configPresets.isActive),
+        desc(configPresets.updatedAt),
+      ],
+      columns: {
+        id: true,
+        name: true,
+        description: true,
+        isActive: true,
+        isMain: true,
+        updatedAt: true,
+      },
+      extras: {
+        // 空文字列（旧実装 `!!data` は false 判定）が保存された *Data 列で判定が反転しないよう、
+        // is not null に加えて空文字列でないことも確認する
+        hasKeybindings: sql<number>`(${configPresets.keybindingsData} is not null and ${configPresets.keybindingsData} <> '')`.as("has_keybindings"),
+        hasPlayerConfig: sql<number>`(${configPresets.playerConfigData} is not null and ${configPresets.playerConfigData} <> '')`.as("has_player_config"),
+        hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null and ${configPresets.itemLayoutsData} <> '')`.as("has_item_layouts"),
+        hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null and ${configPresets.searchCraftsData} <> '')`.as("has_search_crafts"),
+        keybindingsCount: sql<number>`(case when json_valid(${configPresets.keybindingsData}) then json_array_length(${configPresets.keybindingsData}) else 0 end)`.as("keybindings_count"),
+        itemLayoutsCount: sql<number>`(case when json_valid(${configPresets.itemLayoutsData}) then json_array_length(${configPresets.itemLayoutsData}) else 0 end)`.as("item_layouts_count"),
+        searchCraftsCount: sql<number>`(case when json_valid(${configPresets.searchCraftsData}) then json_array_length(${configPresets.searchCraftsData}) else 0 end)`.as("search_crafts_count"),
+      },
+    }),
+    db.query.configHistory.findMany({
+      where: eq(configHistory.userId, user.id),
+      orderBy: [desc(configHistory.createdAt)],
+      limit: 20,
+      with: {
+        preset: {
+          columns: {
+            name: true,
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
 
   return { userId: user.id, presets, history };
 }
@@ -290,27 +294,6 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNameRequired") };
     }
 
-    // 現在の設定から作成する分岐（コピー元指定なし）で使う8リレーション付きユーザーを取得
-    // （apply-preset は user.keybindings しか使わないため、ここでは create-preset でのみ取得する）
-    const live = await db.query.users.findFirst({
-      where: eq(users.id, user.id),
-      with: {
-        keybindings: true,
-        playerConfig: true,
-        keyRemaps: true,
-        itemLayouts: true,
-        searchCrafts: true,
-        searchCraftLoops: {
-          orderBy: [asc(searchCraftLoops.sequence)],
-        },
-        customKeys: true,
-        customActions: true,
-      },
-    });
-    if (!live) {
-      return { error: t("mePresets.userNotFound") };
-    }
-
     let sourcePreset: typeof configPresets.$inferSelect | undefined;
     if (sourceType === "copy" && sourcePresetId) {
       sourcePreset = await db.query.configPresets.findFirst({
@@ -319,6 +302,30 @@ export async function action({ request }: Route.ActionArgs) {
       if (!sourcePreset || sourcePreset.userId !== user.id) {
         return { error: t("mePresets.sourcePresetNotFound") };
       }
+    }
+
+    // 現在の設定から作成する分岐（コピー元指定なし）でのみ8リレーション付きユーザーを取得する。
+    // copy 経路は sourcePreset のスナップショット列から展開するため live は参照しない
+    // （apply-preset は user.keybindings しか使わないため、ここでは create-preset でのみ取得する）
+    const live = sourcePreset
+      ? null
+      : await db.query.users.findFirst({
+          where: eq(users.id, user.id),
+          with: {
+            keybindings: true,
+            playerConfig: true,
+            keyRemaps: true,
+            itemLayouts: true,
+            searchCrafts: true,
+            searchCraftLoops: {
+              orderBy: [asc(searchCraftLoops.sequence)],
+            },
+            customKeys: true,
+            customActions: true,
+          },
+        });
+    if (!sourcePreset && !live) {
+      return { error: t("mePresets.userNotFound") };
     }
 
     const presetId = createId();
@@ -455,13 +462,14 @@ export async function action({ request }: Route.ActionArgs) {
           if (rows.length > 0) await tx.insert(customActions).values(rows);
         }
       } else if (
-        live.keybindings.length > 0 ||
-        live.playerConfig ||
-        live.keyRemaps.length > 0 ||
-        live.itemLayouts.length > 0 ||
-        live.searchCrafts.length > 0 ||
-        live.customKeys.length > 0 ||
-        live.customActions.length > 0
+        live &&
+        (live.keybindings.length > 0 ||
+          live.playerConfig ||
+          live.keyRemaps.length > 0 ||
+          live.itemLayouts.length > 0 ||
+          live.searchCrafts.length > 0 ||
+          live.customKeys.length > 0 ||
+          live.customActions.length > 0)
       ) {
         // 現在のライブテーブル内容（メモリ上）から作成
         // キーバインド以外のライブデータ（アイテム配置・サーチクラフト等）しか持たない

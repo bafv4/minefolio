@@ -77,12 +77,12 @@ import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
 
-// enum系フィールドのallowlist（実際の有効値は app/lib/schema.ts の enum 定義を正とする）
-const VISIBILITIES = ["public", "unlisted", "private"] as const;
-const POSES = ["standing", "walking", "waving"] as const;
-const PLATFORMS = ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] as const;
-const ROLES = ["viewer", "runner"] as const;
-const SOCIAL_PLATFORMS = ["speedruncom", "youtube", "twitch", "twitter", "custom"] as const;
+// enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
+const VISIBILITIES = users.profileVisibility.enumValues;
+const POSES = users.profilePose.enumValues;
+const PLATFORMS = users.mainPlatform.enumValues;
+const ROLES = users.role.enumValues;
+const SOCIAL_PLATFORMS = socialLinks.platform.enumValues;
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
