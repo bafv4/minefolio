@@ -1,7 +1,7 @@
 // DBキャッシュとインメモリキャッシュのハイブリッド実装
 // Vercel環境ではDBキャッシュを使用し、インメモリはフォールバック
 
-import { eq, lt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDb } from "./db";
 import { apiCache } from "./schema";
 import { createId } from "@paralleldrive/cuid2";
@@ -278,44 +278,3 @@ export async function invalidateDbCacheByType(cacheType: CacheType): Promise<voi
   }
 }
 
-/**
- * 期限切れのDBキャッシュを削除
- */
-export async function cleanupExpiredDbCache(): Promise<number> {
-  try {
-    const db = createDb();
-    const result = await db
-      .delete(apiCache)
-      .where(lt(apiCache.expiresAt, new Date()));
-    return result.rowsAffected;
-  } catch (error) {
-    console.error("DB cache cleanup error:", error);
-    return 0;
-  }
-}
-
-/**
- * DBキャッシュを取得、なければフェッチして保存
- * @param cacheKey - キャッシュキー
- * @param cacheType - キャッシュタイプ
- * @param fetcher - データ取得関数
- * @param ttlMs - Time To Live（ミリ秒）
- * @returns キャッシュまたは新規取得したデータ
- */
-export async function getOrFetchDbCached<T>(
-  cacheKey: string,
-  cacheType: CacheType,
-  fetcher: () => Promise<T>,
-  ttlMs: number
-): Promise<T> {
-  // まずDBキャッシュを確認
-  const cached = await getDbCached<T>(cacheKey);
-  if (cached !== null) {
-    return cached;
-  }
-
-  // キャッシュがなければ取得して保存
-  const data = await fetcher();
-  await setDbCached(cacheKey, cacheType, data, ttlMs);
-  return data;
-}
