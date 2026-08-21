@@ -39,6 +39,9 @@ export async function action({ request }: Route.ActionArgs) {
   } catch {
     return apiJsonResponse({ error: "Invalid JSON" }, { status: 400 });
   }
+  if (body === null || typeof body !== "object") {
+    return apiJsonResponse({ error: "Invalid request" }, { status: 400 });
+  }
 
   const targetType = body.targetType;
   const targetId = typeof body.targetId === "string" ? body.targetId : "";

@@ -126,11 +126,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
-  const saveMode = action === "draft" ? "draft" : "publish";
+  // _action は allowlist で判定する（discard は上で処理済み）。未知・欠落値は
+  // publish に倒さず拒否する — 誤って publish 扱いすると公開版を意図せず
+  // 上書きしてしまうため（クライアント側の _action typo・送信漏れ対策）。
+  if (action !== "draft" && action !== "publish") {
+    return { error: t("meGuides.errorInvalidAction") };
+  }
+  const saveMode = action;
 
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;
   const summary = (formData.get("summary") as string) || null;
+
+  // 検証導入前に保存された上限超過の既存ガイドを救済するため、値が変更された場合のみ検証する
+  // （フィールドを触っていない保存は通し、変更した時点で上限を強制する）
+  if (title !== guide.title && title.length > 200) {
+    return { error: t("meGuides.errorTitleTooLong") };
+  }
+  if (summary && summary !== guide.summary && summary.length > 500) {
+    return { error: t("meGuides.errorSummaryTooLong") };
+  }
+
   const tagsRaw = (formData.get("tags") as string) || "[]";
   const isPublished = formData.get("isPublished") === "true";
   const coverImageUrl = formData.has("coverImageUrl")

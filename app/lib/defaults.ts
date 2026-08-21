@@ -1,6 +1,4 @@
-import { createId } from "@paralleldrive/cuid2";
 import type { Database } from "./db";
-import { keybindings, playerConfigs } from "./schema";
 
 // デフォルトキーバインド定義
 export const DEFAULT_KEYBINDINGS = [
@@ -39,84 +37,6 @@ export const DEFAULT_KEYBINDINGS = [
   { action: "command", keyCode: "Slash", category: "ui" as const },
   { action: "toggleHud", keyCode: "F1", category: "ui" as const },
 ] as const;
-
-// キーバインドアクションの表示名
-export const KEYBINDING_LABELS: Record<string, string> = {
-  // Movement
-  forward: "Forward",
-  back: "Back",
-  left: "Left",
-  right: "Right",
-  jump: "Jump",
-  sneak: "Sneak",
-  sprint: "Sprint",
-  // Combat
-  attack: "Attack",
-  use: "Use Item",
-  pickBlock: "Pick Block",
-  drop: "Drop",
-  // Inventory
-  inventory: "Inventory",
-  swapHands: "Swap Hands",
-  hotbar1: "Hotbar 1",
-  hotbar2: "Hotbar 2",
-  hotbar3: "Hotbar 3",
-  hotbar4: "Hotbar 4",
-  hotbar5: "Hotbar 5",
-  hotbar6: "Hotbar 6",
-  hotbar7: "Hotbar 7",
-  hotbar8: "Hotbar 8",
-  hotbar9: "Hotbar 9",
-  // UI
-  togglePerspective: "Perspective",
-  fullscreen: "Fullscreen",
-  chat: "Chat",
-  command: "Command",
-  toggleHud: "Toggle HUD",
-};
-
-// カテゴリの表示名
-export const CATEGORY_LABELS: Record<string, string> = {
-  movement: "Movement",
-  combat: "Combat",
-  inventory: "Inventory",
-  ui: "UI",
-};
-
-// デフォルトキーバインドを作成
-export async function createDefaultKeybindings(db: Database, userId: string) {
-  const now = new Date();
-  const values = DEFAULT_KEYBINDINGS.map((kb) => ({
-    id: createId(),
-    userId,
-    action: kb.action,
-    keyCode: kb.keyCode,
-    category: kb.category,
-    createdAt: now,
-    updatedAt: now,
-  }));
-
-  // D1のSQL変数制限を回避するため、バッチで挿入
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < values.length; i += BATCH_SIZE) {
-    const batch = values.slice(i, i + BATCH_SIZE);
-    await db.insert(keybindings).values(batch);
-  }
-}
-
-// デフォルトプレイヤー設定を作成
-export async function createDefaultPlayerConfig(db: Database, userId: string) {
-  const now = new Date();
-  await db.insert(playerConfigs).values({
-    id: createId(),
-    userId,
-    keyboardLayout: "US",
-    mouseAcceleration: false,
-    rawInput: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-}
 
 // 新規ユーザーのデフォルト設定を一括作成
 // 注: 現在は何も作成しない（ユーザーが自分で設定する）

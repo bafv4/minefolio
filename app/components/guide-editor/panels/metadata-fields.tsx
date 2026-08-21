@@ -64,6 +64,7 @@ export function MetadataFields({
           onChange={(e) => onTitleChange(e.target.value)}
           placeholder={t("guideEditor.titlePlaceholder")}
           spellCheck={false}
+          maxLength={200}
         />
       </div>
 
@@ -77,6 +78,7 @@ export function MetadataFields({
           placeholder={t("guideEditor.summaryPlaceholder")}
           spellCheck={false}
           rows={3}
+          maxLength={500}
         />
       </div>
 

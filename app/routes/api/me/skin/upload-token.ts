@@ -3,7 +3,6 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
-import { getSession } from "@/lib/session";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 

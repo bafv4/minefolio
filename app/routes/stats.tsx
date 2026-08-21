@@ -149,28 +149,45 @@ export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
 
+  // 互いに独立な4クエリ（総ユーザー数・KB保有ユーザー数・全キーバインド・全マウス設定）を並列実行
+  const [
+    [{ totalUsers }],
+    [{ usersWithKeybindings }],
+    allKeybindings,
+    mouseConfigs,
+  ] = await Promise.all([
+    // 総ユーザー数
+    db.select({ totalUsers: count() }).from(users),
+    // キーバインドを持つユーザー数
+    db
+      .select({
+        usersWithKeybindings: sql<number>`COUNT(DISTINCT ${keybindings.userId})`,
+      })
+      .from(keybindings),
+    // 全キーバインドデータを取得
+    db
+      .select({
+        action: keybindings.action,
+        keyCode: keybindings.keyCode,
+      })
+      .from(keybindings),
+    // マウス設定の統計
+    db
+      .select({
+        mouseDpi: playerConfigs.mouseDpi,
+        gameSensitivity: playerConfigs.gameSensitivity,
+        cm360: playerConfigs.cm360,
+        rawInput: playerConfigs.rawInput,
+        mouseAcceleration: playerConfigs.mouseAcceleration,
+        toggleSprint: playerConfigs.toggleSprint,
+      })
+      .from(playerConfigs),
+  ]);
+
   // 分布グラフの区間ラベル。単位は文字列として渡す（"5%" / "10cm" / "" ）
   const binUpTo = (max: string) => t("stats.binUpTo", { max });
   const binRange = (min: number, max: string) => t("stats.binRange", { min, max });
   const binFrom = (min: string) => t("stats.binFrom", { min });
-
-  // 総ユーザー数
-  const [{ totalUsers }] = await db.select({ totalUsers: count() }).from(users);
-
-  // キーバインドを持つユーザー数
-  const [{ usersWithKeybindings }] = await db
-    .select({
-      usersWithKeybindings: sql<number>`COUNT(DISTINCT ${keybindings.userId})`,
-    })
-    .from(keybindings);
-
-  // 全キーバインドデータを取得
-  const allKeybindings = await db
-    .select({
-      action: keybindings.action,
-      keyCode: keybindings.keyCode,
-    })
-    .from(keybindings);
 
   // 操作 → キー の統計（各操作にどのキーが割り当てられているか）
   const actionToKeyStats: Record<string, Record<string, number>> = {};
@@ -200,18 +217,6 @@ export async function loader({ request }: Route.LoaderArgs) {
         (keyToActionStats[normalizedKey][kb.action] || 0) + 1;
     }
   }
-
-  // マウス設定の統計
-  const mouseConfigs = await db
-    .select({
-      mouseDpi: playerConfigs.mouseDpi,
-      gameSensitivity: playerConfigs.gameSensitivity,
-      cm360: playerConfigs.cm360,
-      rawInput: playerConfigs.rawInput,
-      mouseAcceleration: playerConfigs.mouseAcceleration,
-      toggleSprint: playerConfigs.toggleSprint,
-    })
-    .from(playerConfigs);
 
   // DPI分布（参考: mchotkeys）
   const dpiDistribution: Record<string, number> = {};

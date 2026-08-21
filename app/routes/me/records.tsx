@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords } from "@/lib/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, count } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
@@ -156,6 +156,9 @@ export function HydrateFallback() {
   );
 }
 
+/** create 分岐のトランザクションを、登録上限到達時にユーザー向けエラーメッセージ付きで中断するための例外 */
+class RecordLimitError extends Error {}
+
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -188,6 +191,10 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meRecords.categoryRequired") };
     }
 
+    if (category.length > 100 || categoryDisplayName.length > 100) {
+      return { error: t("meRecords.categoryTooLong") };
+    }
+
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
     if (personalBestStr && personalBest === null) {
       return { error: t("meRecords.invalidTime") };
@@ -198,17 +205,36 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     if (action === "create") {
-      await db.insert(categoryRecords).values({
-        id: createId(),
-        userId: user.id,
-        category,
-        categoryDisplayName,
-        recordType: "custom",
-        personalBest,
-        pbVideoUrl,
-        isVisible,
-        isPinned,
-      });
+      // 件数チェック→insert を同一トランザクションで行い、並行リクエストでの
+      // 上限突破（read-then-insert の競合）を防ぐ
+      try {
+        await db.transaction(async (tx) => {
+          const [{ n }] = await tx
+            .select({ n: count() })
+            .from(categoryRecords)
+            .where(eq(categoryRecords.userId, user.id));
+          if (n >= 50) {
+            throw new RecordLimitError();
+          }
+
+          await tx.insert(categoryRecords).values({
+            id: createId(),
+            userId: user.id,
+            category,
+            categoryDisplayName,
+            recordType: "custom",
+            personalBest,
+            pbVideoUrl,
+            isVisible,
+            isPinned,
+          });
+        });
+      } catch (e) {
+        if (e instanceof RecordLimitError) {
+          return { error: t("meRecords.errorLimitReached") };
+        }
+        throw e;
+      }
     } else if (id) {
       await db
         .update(categoryRecords)
@@ -371,6 +397,7 @@ export default function RecordsPage() {
                     name="category"
                     defaultValue={editingRecord?.category ?? ""}
                     placeholder={t("meRecords.categoryIdPlaceholder")}
+                    maxLength={100}
                     required
                   />
                 </div>
@@ -381,6 +408,7 @@ export default function RecordsPage() {
                     name="categoryDisplayName"
                     defaultValue={editingRecord?.categoryDisplayName ?? ""}
                     placeholder={t("meRecords.displayNamePlaceholder")}
+                    maxLength={100}
                     required
                   />
                 </div>

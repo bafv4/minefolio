@@ -136,6 +136,21 @@ type ItemLayout = {
   notes: string | null;
 };
 
+/**
+ * slots 配列内の1エントリが `{ slot: number, items: string[] }`（Slot 型）の形をしているか。
+ * action の保存前検証（saveAll）から使う。公開プロフィール側の ItemHotbar（slots.find・
+ * items.map／CyclingSlotIcon の items.map）が想定する形で、崩れていると SSR が落ちる。
+ */
+function isValidSlotShape(slot: unknown): boolean {
+  if (!slot || typeof slot !== "object") return false;
+  const s = slot as Record<string, unknown>;
+  return (
+    typeof s.slot === "number" &&
+    Array.isArray(s.items) &&
+    (s.items as unknown[]).every((item) => typeof item === "string")
+  );
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -284,7 +299,31 @@ export async function action({ request }: Route.ActionArgs) {
     const layoutsJson = formData.get("layouts") as string;
 
     try {
-      const layouts = JSON.parse(layoutsJson) as ItemLayout[];
+      const layoutsRaw = JSON.parse(layoutsJson) as Array<Record<string, unknown>>;
+
+      // slots / offhand の中身の形を検証する。非配列・スロット番号や items が想定外の型のまま
+      // 永続化されると、公開プロフィール側の ItemHotbar（slots.find／items.map）が TypeError を
+      // 投げて SSR が 500 になるため、ここで拒否する
+      // （search-craft.tsx の items が string[] であることの検証と同じ考え方・粒度）
+      if (
+        !Array.isArray(layoutsRaw) ||
+        layoutsRaw.some(
+          (layout) =>
+            !layout ||
+            typeof layout.id !== "string" ||
+            !layout.id ||
+            typeof layout.segment !== "string" ||
+            !Array.isArray(layout.slots) ||
+            (layout.slots as unknown[]).some((slot) => !isValidSlotShape(slot)) ||
+            !Array.isArray(layout.offhand) ||
+            (layout.offhand as unknown[]).some((item) => typeof item !== "string") ||
+            (layout.notes !== null && typeof layout.notes !== "string"),
+        )
+      ) {
+        return { error: t("meItems.invalidLayoutData") };
+      }
+
+      const layouts = layoutsRaw as unknown as ItemLayout[];
 
       const now = new Date();
       await db.transaction(async (tx) => {

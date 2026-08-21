@@ -962,6 +962,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     bioMax: "About must be 500 characters or fewer",
     locationMax: "Location must be 100 characters or fewer",
     shortBioMax: "Tagline must be 50 characters or fewer",
+    pronounsMax: "Pronouns must be 20 characters or fewer",
+    invalidOption: "Invalid option",
     rtaStartedBothOrNone: "Select both year and month, or leave both unset",
     rtaStartedInvalid: "Invalid start month (must be between Jan 2009 and now)",
     speedrunUsernameMax: "Speedrun.com username must be 50 characters or fewer",
@@ -1456,6 +1458,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     invalidWindowsSpeed: "Windows pointer speed must be between 1 and 20",
     invalidWindowsSpeedMultiplier:
       "Custom multiplier must be a number greater than 0",
+    fovInvalid: "FOV must be an integer between 30 and 110",
+    guiScaleInvalid: "GUI scale must be an integer between 0 and 10",
     saveSuccess: "Settings saved",
     copiedFromPreset: "Copied device settings from {name}",
     deviceChangeHistory: "Update devices & settings",
@@ -1525,6 +1529,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Records - Minefolio",
     userNotFound: "User not found",
     categoryRequired: "Category name is required",
+    categoryTooLong: "Category name must be 100 characters or fewer",
+    errorLimitReached: "You can register up to 50 records",
     invalidTime:
       "Invalid time format. Use M:SS.mmm (for example, 14:32.500)",
     invalidVideoUrl: "Video URLs must start with http:// or https://",
@@ -1575,6 +1581,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Item layouts - Minefolio",
     userNotFound: "User not found",
     saveFailed: "Failed to save the data",
+    invalidLayoutData: "The item layout data format is invalid",
     unknownAction: "Unknown action",
     off: "OH",
     offhand: "Offhand",
@@ -2032,6 +2039,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     editTitle: "Edit guide",
     errorTitleRequired: "Enter a title",
     errorTitleTooLong: "Title must be 200 characters or fewer",
+    errorSummaryTooLong: "Summary must be 500 characters or fewer",
     errorLimitReached: "You've reached the guide limit (100)",
     errorTagsInvalid: "The tag format is invalid",
     errorTagsTooMany: "You can add up to 10 tags",
@@ -2043,6 +2051,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "The content is too long (the publishing limit is 500,000 characters). You can still save it as a draft — split or trim the content before publishing.",
     errorUnauthorized: "You need to be signed in",
     errorNotFound: "Guide not found",
+    errorInvalidAction: "Invalid action. Please reload the page and try again",
   },
   guideEditor: {
     slash: {

@@ -364,48 +364,46 @@ export async function syncActivePresetSnapshot(
 
   const active = await db.query.configPresets.findFirst({
     where: (p, { and, eq }) => and(eq(p.userId, userId), eq(p.isActive, true)),
+    columns: { id: true },
   });
   if (!active) return;
 
-  const updates: Partial<typeof configPresets.$inferInsert> = {};
   const now = new Date();
 
-  for (const kind of kinds) {
+  // kind ごとの読み取りは互いに独立（書き込みキーも kind ごとに排他）なので並列実行する
+  const resolveKind = async (
+    kind: PresetSyncKind,
+  ): Promise<Partial<typeof configPresets.$inferInsert>> => {
     switch (kind) {
       case "keybindings": {
         const rows = await db.query.keybindings.findMany({
           where: eq(keybindings.userId, userId),
         });
-        updates.keybindingsData = rows.length > 0 ? serializeKeybindings(rows) : null;
-        break;
+        return { keybindingsData: rows.length > 0 ? serializeKeybindings(rows) : null };
       }
       case "playerConfig": {
         const config = await db.query.playerConfigs.findFirst({
           where: eq(playerConfigs.userId, userId),
         });
-        updates.playerConfigData = config ? serializePlayerConfig(config) : null;
-        break;
+        return { playerConfigData: config ? serializePlayerConfig(config) : null };
       }
       case "remaps": {
         const rows = await db.query.keyRemaps.findMany({
           where: eq(keyRemaps.userId, userId),
         });
-        updates.remapsData = rows.length > 0 ? serializeRemaps(rows) : null;
-        break;
+        return { remapsData: rows.length > 0 ? serializeRemaps(rows) : null };
       }
       case "fingers": {
         const config = await db.query.playerConfigs.findFirst({
           where: eq(playerConfigs.userId, userId),
         });
-        updates.fingerAssignmentsData = config?.fingerAssignments ?? null;
-        break;
+        return { fingerAssignmentsData: config?.fingerAssignments ?? null };
       }
       case "itemLayouts": {
         const rows = await db.query.itemLayouts.findMany({
           where: eq(itemLayouts.userId, userId),
         });
-        updates.itemLayoutsData = rows.length > 0 ? serializeItemLayouts(rows) : null;
-        break;
+        return { itemLayoutsData: rows.length > 0 ? serializeItemLayouts(rows) : null };
       }
       case "searchCrafts": {
         // crafts と loops のスキューを防ぐため、常に両列を同時に書く（loops 専用の同期 kind は作らない）。
@@ -419,26 +417,28 @@ export async function syncActivePresetSnapshot(
             orderBy: [asc(searchCraftLoops.sequence)],
           }),
         ]);
-        updates.searchCraftsData = rows.length > 0 ? serializeSearchCrafts(rows) : null;
-        updates.searchCraftLoopsData = serializeSearchCraftLoops(loopRows, rows);
-        break;
+        return {
+          searchCraftsData: rows.length > 0 ? serializeSearchCrafts(rows) : null,
+          searchCraftLoopsData: serializeSearchCraftLoops(loopRows, rows),
+        };
       }
       case "customKeys": {
         const rows = await db.query.customKeys.findMany({
           where: eq(customKeys.userId, userId),
         });
-        updates.customKeysData = rows.length > 0 ? serializeCustomKeys(rows) : null;
-        break;
+        return { customKeysData: rows.length > 0 ? serializeCustomKeys(rows) : null };
       }
       case "customActions": {
         const rows = await db.query.customActions.findMany({
           where: eq(customActions.userId, userId),
         });
-        updates.customActionsData = rows.length > 0 ? serializeCustomActions(rows) : null;
-        break;
+        return { customActionsData: rows.length > 0 ? serializeCustomActions(rows) : null };
       }
     }
-  }
+  };
+
+  const parts = await Promise.all(kinds.map((kind) => resolveKind(kind)));
+  const updates: Partial<typeof configPresets.$inferInsert> = Object.assign({}, ...parts);
 
   updates.updatedAt = now;
   await db.update(configPresets).set(updates).where(eq(configPresets.id, active.id));

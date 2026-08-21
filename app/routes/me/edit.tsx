@@ -77,6 +77,13 @@ import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
 
+// enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
+const VISIBILITIES = users.profileVisibility.enumValues;
+const POSES = users.profilePose.enumValues;
+const PLATFORMS = users.mainPlatform.enumValues;
+const ROLES = users.role.enumValues;
+const SOCIAL_PLATFORMS = socialLinks.platform.enumValues;
+
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meEdit.title") }];
@@ -301,6 +308,10 @@ export async function action({ request }: Route.ActionArgs) {
 
     if (!platform || !identifier) {
       return { error: t("meEdit.platformAndIdRequired") };
+    }
+
+    if (!(SOCIAL_PLATFORMS as readonly string[]).includes(platform)) {
+      return { error: t("meEdit.invalidOption") };
     }
 
     // 長さチェック
@@ -613,6 +624,26 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.shortBioMax") };
   }
 
+  if (pronouns && pronouns.length > 20) {
+    return { error: t("meEdit.pronounsMax") };
+  }
+
+  if (!VISIBILITIES.includes(profileVisibility)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (profilePose !== null && !POSES.includes(profilePose)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (role !== null && !ROLES.includes(role)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
   if (speedruncomUsername && speedruncomUsername.length > 50) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
@@ -696,7 +727,7 @@ const pronounOptions = [
 
 const platformOptions = [
   { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
-  { value: "youtube", label: "YouTube", placeholder: "e.g. @couriern3w", prefix: "youtube.com/" },
+  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@" },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
   { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
   { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
@@ -1480,8 +1511,8 @@ export default function EditProfilePage() {
                         type="button"
                         onClick={() => setSelectedPose(pose)}
                         className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
-                            ? "border-primary bg-primary/5"
-                            : "border-muted hover:border-muted-foreground/30"
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:border-muted-foreground/30"
                           }`}
                       >
                         <div className="w-16 h-24">
@@ -1520,8 +1551,8 @@ export default function EditProfilePage() {
                   type="button"
                   onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: false }))}
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelDefault")}
@@ -1530,8 +1561,8 @@ export default function EditProfilePage() {
                   type="button"
                   onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: true }))}
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelSlim")}

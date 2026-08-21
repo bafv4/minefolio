@@ -3,7 +3,16 @@
 // 非表示・ピン留めのトグル（サーバーaction / クライアント楽観的更新）で共用する。
 
 export function parseRunIdList(json: string | null): string[] {
-  return json ? JSON.parse(json) : [];
+  if (!json) return [];
+  // 列の値が壊れていても loader（プロフィール・記録ページ）を 500 にしない
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export function toggleRunId(list: string[], runId: string): string[] {

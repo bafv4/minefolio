@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useLocale } from "@/hooks/use-locale";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Eye, FileText, Pin } from "lucide-react";
@@ -57,7 +58,7 @@ export function GuideCardGrid({
   return (
     <div className={`grid gap-4 ${gridCols}`}>
       {guides.map((guide) => {
-        const tags = JSON.parse(guide.tags) as string[];
+        const tags = parseGuideTags(guide.tags);
         return (
           // カード全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
           // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
@@ -176,7 +177,7 @@ export function GuideListView({
   return (
     <div className="divide-y">
       {guides.map((guide) => {
-        const tags = JSON.parse(guide.tags) as string[];
+        const tags = parseGuideTags(guide.tags);
         return (
           // カード全体のクリックはオーバーレイのリンクが担う（カード表示と同じ理由）
           <div

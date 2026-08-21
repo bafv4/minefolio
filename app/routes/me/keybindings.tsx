@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
-import { eq, asc, and, or, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, getFingerLabel, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
@@ -262,13 +262,18 @@ async function persistRemaps(
 
   try {
     await db.transaction(async (tx) => {
-      for (const remap of remapsData) {
-        if (remap._delete && remap.id) {
-          await tx
-            .delete(keyRemaps)
-            .where(and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId)));
-        }
+      const deleteIds = remapsData
+        .filter((remap) => remap._delete && remap.id)
+        .map((remap) => remap.id!);
+      if (deleteIds.length > 0) {
+        await tx
+          .delete(keyRemaps)
+          .where(and(eq(keyRemaps.userId, userId), inArray(keyRemaps.id, deleteIds)));
       }
+
+      const existingRows = await tx.query.keyRemaps.findMany({
+        where: eq(keyRemaps.userId, userId),
+      });
 
       // 各行を既存行（あれば）へ解決してから「一括削除→挿入」で書き戻す。
       // 逐次 update だと同一 sourceKey の2行で種別を入れ替えた際に
@@ -292,18 +297,13 @@ async function persistRemaps(
           remapType: normalizeKeyRemapType(remap.remapType),
         };
 
-        const existing = await tx.query.keyRemaps.findFirst({
-          where: remap.id
-            ? and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId))
-            : and(
-                eq(keyRemaps.userId, userId),
-                eq(keyRemaps.remapType, payload.remapType),
-                or(
-                  eq(keyRemaps.sourceKey, sourceKeyNormalized),
-                  eq(keyRemaps.sourceKey, sourceKeyUpper)
-                )
-              ),
-        });
+        const existing = remap.id
+          ? existingRows.find((r) => r.id === remap.id)
+          : existingRows.find(
+              (r) =>
+                r.remapType === payload.remapType &&
+                (r.sourceKey === sourceKeyNormalized || r.sourceKey === sourceKeyUpper)
+            );
 
         resolved.push({
           id: existing?.id ?? createId(),
@@ -319,15 +319,15 @@ async function persistRemaps(
             inArray(keyRemaps.id, resolved.map((r) => r.id))
           )
         );
-        for (const row of resolved) {
-          await tx.insert(keyRemaps).values({
+        await tx.insert(keyRemaps).values(
+          resolved.map((row) => ({
             id: row.id,
             userId,
             ...row.payload,
             createdAt: row.createdAt,
             updatedAt: now,
-          });
-        }
+          }))
+        );
       }
     });
   } catch (e) {
@@ -449,7 +449,9 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
   if (!raw) return null;
   try {
     const v = JSON.parse(raw);
-    return Array.isArray(v) ? (v as T[]) : null;
+    return Array.isArray(v) && v.every((el) => el !== null && typeof el === "object")
+      ? (v as T[])
+      : null;
   } catch {
     return null;
   }
@@ -774,6 +776,9 @@ const categoryColors: Record<string, string> = {
   inventory: "text-category-inventory",
   ui: "text-category-ui",
 };
+
+// 廃止済みアクション（表示から除外）
+const deprecatedActions = ["toggleHud"];
 
 // 操作割り当てタブの表示グループ。公開プロフィール
 // （app/routes/player/profile.tsx の keybindingDisplayGroups）と同一の
@@ -1343,7 +1348,6 @@ export default function KeybindingsPage() {
   }, [data, fetcher.state, initialRemaps, playerConfig?.fingerAssignments, initialCustomActions, initialCustomKeys]);
 
   // ========== Computed Values ==========
-  const deprecatedActions = ["toggleHud"];
   const isControllerMode = inputMethod === "controller";
 
   // 入力方法に応じたアクションをフィルタリング
@@ -1351,8 +1355,12 @@ export default function KeybindingsPage() {
     ? (CONTROLLER_ACTIONS as readonly string[])
     : (KEYBOARD_MOUSE_ACTIONS as readonly string[]);
 
-  const validKeybindings = kbs.filter((kb) =>
-    !deprecatedActions.includes(kb.action) && allowedActions.includes(kb.action)
+  const validKeybindings = useMemo(
+    () =>
+      kbs.filter(
+        (kb) => !deprecatedActions.includes(kb.action) && allowedActions.includes(kb.action)
+      ),
+    [kbs, isControllerMode]
   );
 
   // ローカル変更を適用したキーバインドリスト
@@ -1362,6 +1370,12 @@ export default function KeybindingsPage() {
       keyCode: keybindingChanges[kb.id] ?? kb.keyCode,
     })),
     [validKeybindings, keybindingChanges]
+  );
+
+  // キーバインドの action → keyCode マップ（VirtualKeyboard/Numpad/Mouse 共通）
+  const keybindingsMap = useMemo(
+    () => keybindingsToMap(keybindingsWithLocalChanges),
+    [keybindingsWithLocalChanges]
   );
 
   // Group by category
@@ -1526,6 +1540,26 @@ export default function KeybindingsPage() {
   const activeCustomKeys = useMemo(
     () => localCustomKeys.filter((ck) => !ck._delete),
     [localCustomKeys]
+  );
+
+  // キーボードカテゴリのカスタムキー（VirtualKeyboard）
+  const keyboardCustomKeys = useMemo(
+    () =>
+      activeCustomKeys
+        .filter((ck) => ck.category === "keyboard")
+        .map((ck) => ({ code: ck.keyCode, label: ck.keyName })),
+    [activeCustomKeys]
+  );
+
+  // 全カスタムボタン（VirtualMouse）
+  const mouseCustomButtons = useMemo(
+    () =>
+      activeCustomKeys.map((ck) => ({
+        code: ck.keyCode,
+        label: ck.keyName,
+        category: ck.category,
+      })),
+    [activeCustomKeys]
   );
 
   // カスタムキーのキーコードを名前に変換するマップ
@@ -2335,10 +2369,10 @@ export default function KeybindingsPage() {
               <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                 <VirtualKeyboard
                   layout={keyboardLayout}
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
-                  customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                  customKeys={keyboardCustomKeys}
                   onKeyClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments
@@ -2349,7 +2383,7 @@ export default function KeybindingsPage() {
               {/* テンキーとマウスを横並び */}
               <div className="flex items-start gap-6">
                 <VirtualNumpad
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
                   onKeyClick={handleKeyClick}
@@ -2358,10 +2392,10 @@ export default function KeybindingsPage() {
                   showRemaps
                 />
                 <VirtualMouse
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
-                  customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
+                  customButtons={mouseCustomButtons}
                   onButtonClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments

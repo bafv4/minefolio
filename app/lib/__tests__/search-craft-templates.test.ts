@@ -411,6 +411,22 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
       parseEditorSubmission(t, buildForm({ title: "a", crafts: "oops", remaps: "[]" })),
     ).toHaveProperty("error");
   });
+
+  it("crafts=[null] は invalidTemplateData エラーになる", () => {
+    const result = parseEditorSubmission(t,
+      buildForm({ title: "a", crafts: JSON.stringify([null]), remaps: "[]" }),
+    );
+    expect(result).toEqual({ error: "テンプレートのデータが不正です" });
+  });
+
+  it("remaps=[null] はその行だけ無視されて成功する", () => {
+    const result = parseEditorSubmission(t,
+      buildForm({ title: "a", crafts: validCrafts, remaps: JSON.stringify([null]) }),
+    );
+    expect("error" in result).toBe(false);
+    if ("error" in result) return;
+    expect(result.remapsData).toBeNull();
+  });
 });
 
 describe("serializeTemplateLoops / parseTemplateLoops", () => {

@@ -33,13 +33,6 @@ export type UiRemapInfo = {
   remapType: KeyRemapType;
 };
 
-export type PersistedRemapPayload = {
-  sourceKey: string;
-  targetKey: string | null;
-  software: string | null;
-  notes: string | null;
-};
-
 export function sanitizeRemapTargetKey(targetKey: string | null | undefined): string | null {
   if (targetKey == null) return null;
   if (targetKey === "" || /^__.*__$/.test(targetKey)) return null;
@@ -163,18 +156,6 @@ export function findRemapConflict(
     types.add(type);
   }
   return null;
-}
-
-export function toPersistedRemapPayload(remap: RemapInfo): PersistedRemapPayload {
-  const targetKey = sanitizeRemapTargetKey(remap.targetKey);
-  return {
-    sourceKey: normalizeKeyCombination(remap.sourceKey),
-    targetKey: targetKey == null
-      ? null
-      : (isKeyRemapTarget(targetKey) ? normalizeKeyCode(targetKey) : targetKey),
-    software: remap.software ?? null,
-    notes: remap.notes ?? null,
-  };
 }
 
 /** 単一キーの表示ラベル。customKeyNames があれば標準ラベルより優先する。 */
@@ -834,12 +815,4 @@ export function simulateRemapOutput(
 
   // Ctrl/Alt/Meta を含む未定義の組み合わせは文字出力なし
   return { pressedLabel, output: null, isRemapped: false, outputKeyCode: null };
-}
-
-export function matchesRemapSourceKey(remapSourceKey: string, keyCode: string): boolean {
-  if (remapSourceKey.includes("+")) {
-    const parsed = parseKeyCombination(remapSourceKey);
-    return parsed.keyCode === keyCode;
-  }
-  return normalizeKeyCode(remapSourceKey) === normalizeKeyCode(keyCode);
 }

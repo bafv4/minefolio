@@ -135,6 +135,13 @@ describe("入力検証", () => {
     expect(await res.json()).toEqual({ error: "Invalid JSON" });
   });
 
+  it("JSON の null ボディ（構文的には正しいがオブジェクトでない）は 400", async () => {
+    const res = await callAction(null);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    expect(await reactionRowCount(profile.id)).toBe(0);
+  });
+
   it.each([
     ["allowlist外の絵文字（VS16なしのハート単体）", { emoji: "❤" }],
     ["allowlist外の絵文字（デビル）", { emoji: "😈" }],

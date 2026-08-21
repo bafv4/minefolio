@@ -1,7 +1,7 @@
 // DBキャッシュとインメモリキャッシュのハイブリッド実装
 // Vercel環境ではDBキャッシュを使用し、インメモリはフォールバック
 
-import { eq, lt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDb } from "./db";
 import { apiCache } from "./schema";
 import { createId } from "@paralleldrive/cuid2";
@@ -57,16 +57,6 @@ function maybeCleanup(): void {
 }
 
 /**
- * ユーザー固有のキャッシュキーを生成
- * @param userId - ユーザーID
- * @param page - ページ識別子
- * @returns キャッシュキー文字列
- */
-export function getCacheKey(userId: string, page: string): string {
-  return `minefolio:${userId}:${page}`;
-}
-
-/**
  * キャッシュからデータを取得（インメモリ）
  * @param key - キャッシュキー
  * @returns キャッシュされたデータ、または有効期限切れ/存在しない場合はnull
@@ -110,19 +100,6 @@ export async function invalidateCache(key: string): Promise<void> {
 }
 
 /**
- * ユーザーに関連するすべてのキャッシュを削除
- * @param userId - ユーザーID
- */
-export async function invalidateUserCache(userId: string): Promise<void> {
-  const prefix = `minefolio:${userId}:`;
-  for (const key of memoryCache.keys()) {
-    if (key.startsWith(prefix)) {
-      memoryCache.delete(key);
-    }
-  }
-}
-
-/**
  * 外部API用のキャッシュTTLプリセット
  * - SHORT: 1分（ライブデータ用）
  * - MEDIUM: 15分（外部API用）
@@ -150,15 +127,6 @@ export function getMojangCacheKey(identifier: string): string {
  */
 export function getTwitchCacheKey(userLogins: string[]): string {
   return `twitch:${userLogins.sort().join(",")}`;
-}
-
-/**
- * YouTube API用のキャッシュキーを生成
- * @param channelIds - YouTubeチャンネルIDの配列
- * @returns キャッシュキー（ソート済み）
- */
-export function getYouTubeCacheKey(channelIds: string[]): string {
-  return `youtube:${channelIds.sort().join(",")}`;
 }
 
 /**
@@ -252,70 +220,3 @@ export async function setDbCached<T>(
   }
 }
 
-/**
- * 特定のDBキャッシュを削除
- * @param cacheKey - キャッシュキー
- */
-export async function invalidateDbCache(cacheKey: string): Promise<void> {
-  try {
-    const db = createDb();
-    await db.delete(apiCache).where(eq(apiCache.cacheKey, cacheKey));
-  } catch (error) {
-    console.error("DB cache invalidation error:", error);
-  }
-}
-
-/**
- * 特定タイプの全DBキャッシュを削除
- * @param cacheType - キャッシュタイプ
- */
-export async function invalidateDbCacheByType(cacheType: CacheType): Promise<void> {
-  try {
-    const db = createDb();
-    await db.delete(apiCache).where(eq(apiCache.cacheType, cacheType));
-  } catch (error) {
-    console.error("DB cache type invalidation error:", error);
-  }
-}
-
-/**
- * 期限切れのDBキャッシュを削除
- */
-export async function cleanupExpiredDbCache(): Promise<number> {
-  try {
-    const db = createDb();
-    const result = await db
-      .delete(apiCache)
-      .where(lt(apiCache.expiresAt, new Date()));
-    return result.rowsAffected;
-  } catch (error) {
-    console.error("DB cache cleanup error:", error);
-    return 0;
-  }
-}
-
-/**
- * DBキャッシュを取得、なければフェッチして保存
- * @param cacheKey - キャッシュキー
- * @param cacheType - キャッシュタイプ
- * @param fetcher - データ取得関数
- * @param ttlMs - Time To Live（ミリ秒）
- * @returns キャッシュまたは新規取得したデータ
- */
-export async function getOrFetchDbCached<T>(
-  cacheKey: string,
-  cacheType: CacheType,
-  fetcher: () => Promise<T>,
-  ttlMs: number
-): Promise<T> {
-  // まずDBキャッシュを確認
-  const cached = await getDbCached<T>(cacheKey);
-  if (cached !== null) {
-    return cached;
-  }
-
-  // キャッシュがなければ取得して保存
-  const data = await fetcher();
-  await setDbCached(cacheKey, cacheType, data, ttlMs);
-  return data;
-}

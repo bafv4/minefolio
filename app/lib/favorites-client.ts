@@ -94,15 +94,3 @@ export function getSessionFavorites(): string[] {
 export function setSessionFavorites(slugs: string[]): void {
   writeArray(safeSession(), SESSION_KEY, slugs);
 }
-
-export function clearSessionFavorites(): void {
-  const storage = safeSession();
-  if (!storage) return;
-  try {
-    storage.removeItem(SESSION_KEY);
-  } catch {
-    // 無視
-  }
-}
-
-export const FAVORITES_LIMIT = MAX_FAVORITES;

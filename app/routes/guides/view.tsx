@@ -5,7 +5,7 @@ import {
   Link,
   type LoaderFunctionArgs,
 } from "react-router";
-import { createDb } from "@/lib/db";
+import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -16,6 +16,7 @@ import { resolveRowVariations } from "@/lib/search-craft-variations";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -75,102 +76,13 @@ export function meta({
   ];
 }
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
-  const env = getEnv();
-  const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-
-  const { authorSlug, guideSlug } = params as {
-    authorSlug: string;
-    guideSlug: string;
-  };
-
-  const author = await db.query.users.findFirst({
-    where: eq(users.slug, authorSlug),
-    columns: {
-      id: true,
-      slug: true,
-      mcid: true,
-      uuid: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      discordAvatar: true,
-      customSkinUrl: true,
-      slimSkin: true,
-      profileVisibility: true,
-    },
-  });
-
-  if (!author) {
-    throw new Response("Not Found", { status: 404 });
-  }
-
-  // 著者本人なら ?draft=1 でドラフト（仮保存）内容をプレビューできる
-  const wantDraft = new URL(request.url).searchParams.get("draft") === "1";
-  let isOwner = false;
-  if (session) {
-    const currentUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: { id: true },
-    });
-    isOwner = currentUser?.id === author.id;
-  }
-
-  // プライベートプロフィールの著者のガイドは本人以外に404を返す（プロフィール本体と挙動を揃える）
-  if (author.profileVisibility === "private" && !isOwner) {
-    throw new Response("Not Found", { status: 404 });
-  }
-
-  const draftPreview = wantDraft && isOwner;
-
-  const guideConditions = [eq(guides.authorId, author.id), eq(guides.slug, guideSlug)];
-  // ドラフトプレビュー時は未公開でも取得可。それ以外は公開済みのみ。
-  if (!draftPreview) guideConditions.push(eq(guides.isPublished, true));
-
-  const guide = await db.query.guides.findFirst({ where: and(...guideConditions) });
-
-  if (!guide) {
-    throw new Response("Not Found", { status: 404 });
-  }
-
-  // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
-  const previewingDraft = draftPreview && guide.draftUpdatedAt !== null;
-  const viewTitle = previewingDraft ? guide.draftTitle ?? guide.title : guide.title;
-  const viewSummary = previewingDraft ? guide.draftSummary : guide.summary;
-  const viewCover = previewingDraft ? guide.draftCoverImageUrl : guide.coverImageUrl;
-  const viewTags = previewingDraft ? guide.draftTags ?? guide.tags : guide.tags;
-  const viewContent = previewingDraft ? guide.draftContent ?? guide.content : guide.content;
-
-  // ドラフトプレビューでは閲覧数を増やさない
-  if (!draftPreview) {
-    db.update(guides)
-      .set({ viewCount: sql`${guides.viewCount} + 1` })
-      .where(eq(guides.id, guide.id))
-      .then(() => {})
-      .catch(() => {});
-  }
-
-  // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
-  const sanitizedContent = sanitizeGuideHtml(viewContent);
-
-  // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
-  const normalizedContent = normalizeGuideTables(sanitizedContent);
-
-  // Wrap <table> in a scrollable container so wide tables scroll on mobile
-  const wrappedContent = normalizedContent.replace(
-    /<table(\s|>)/g,
-    '<div class="table-scroll-wrapper"><table$1'
-  ).replace(/<\/table>/g, '</table></div>');
-
-  // 見出し(h1〜h3)に id を付与し、目次データを生成する
-  const { html: contentWithIds, toc } = buildTableOfContents(wrappedContent);
-
-  // Extract embed references and fetch user data
-  const embedRefs = extractEmbedRefs(contentWithIds);
-  const embedSlugs = getUniqueEmbedSlugs(embedRefs);
+// ガイド本文に埋め込まれた（キーバインド/サーチクラフト）ユーザーのデータを解決する。
+// slug 一致 → 未マッチ分は mcid 一致でも再試行し、両方の結果を統合する。
+async function resolveEmbedUsers(
+  db: Database,
+  embedSlugs: string[]
+): Promise<Record<string, EmbedUserData>> {
   const embedUsers: Record<string, EmbedUserData> = {};
-
   if (embedSlugs.length > 0) {
     // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
     const embedUserRows = await db.query.users.findMany({
@@ -315,9 +227,112 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       if (u.mcid) embedUsers[u.mcid] = data;
     }
   }
+  return embedUsers;
+}
 
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+
+  const { authorSlug, guideSlug } = params as {
+    authorSlug: string;
+    guideSlug: string;
+  };
+
+  // セッション解決（→ isOwner 判定用の currentUser 取得へ連鎖）と著者取得は互いに独立なので並行する
+  const [currentUser, author] = await Promise.all([
+    getOptionalSession(request, auth).then((session) =>
+      session?.user?.id
+        ? db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          })
+        : null
+    ),
+    db.query.users.findFirst({
+      where: eq(users.slug, authorSlug),
+      columns: {
+        id: true,
+        slug: true,
+        mcid: true,
+        uuid: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        discordAvatar: true,
+        customSkinUrl: true,
+        slimSkin: true,
+        profileVisibility: true,
+      },
+    }),
+  ]);
+
+  if (!author) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  // 著者本人なら ?draft=1 でドラフト（仮保存）内容をプレビューできる
+  const wantDraft = new URL(request.url).searchParams.get("draft") === "1";
+  const isOwner = currentUser?.id === author.id;
+
+  // プライベートプロフィールの著者のガイドは本人以外に404を返す（プロフィール本体と挙動を揃える）
+  if (author.profileVisibility === "private" && !isOwner) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  const draftPreview = wantDraft && isOwner;
+
+  const guideConditions = [eq(guides.authorId, author.id), eq(guides.slug, guideSlug)];
+  // ドラフトプレビュー時は未公開でも取得可。それ以外は公開済みのみ。
+  if (!draftPreview) guideConditions.push(eq(guides.isPublished, true));
+
+  const guide = await db.query.guides.findFirst({ where: and(...guideConditions) });
+
+  if (!guide) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
+  const previewingDraft = draftPreview && guide.draftUpdatedAt !== null;
+  const viewTitle = previewingDraft ? guide.draftTitle ?? guide.title : guide.title;
+  const viewSummary = previewingDraft ? guide.draftSummary : guide.summary;
+  const viewCover = previewingDraft ? guide.draftCoverImageUrl : guide.coverImageUrl;
+  const viewTags = previewingDraft ? guide.draftTags ?? guide.tags : guide.tags;
+  const viewContent = previewingDraft ? guide.draftContent ?? guide.content : guide.content;
+
+  // ドラフトプレビューでは閲覧数を増やさない
+  if (!draftPreview) {
+    db.update(guides)
+      .set({ viewCount: sql`${guides.viewCount} + 1` })
+      .where(eq(guides.id, guide.id))
+      .then(() => {})
+      .catch(() => {});
+  }
+
+  // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
+  const sanitizedContent = sanitizeGuideHtml(viewContent);
+
+  // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
+  const normalizedContent = normalizeGuideTables(sanitizedContent);
+
+  // Wrap <table> in a scrollable container so wide tables scroll on mobile
+  const wrappedContent = normalizedContent.replace(
+    /<table(\s|>)/g,
+    '<div class="table-scroll-wrapper"><table$1'
+  ).replace(/<\/table>/g, '</table></div>');
+
+  // 見出し(h1〜h3)に id を付与し、目次データを生成する
+  const { html: contentWithIds, toc } = buildTableOfContents(wrappedContent);
+
+  // Extract embed references and fetch user data
+  const embedRefs = extractEmbedRefs(contentWithIds);
+  const embedSlugs = getUniqueEmbedSlugs(embedRefs);
   const appUrl = env.APP_URL || "https://minefolio.app";
-  const likeCount = await getGuideLikeCount(db, guide.id);
+  // likeCount（guide.id にのみ依存）と埋め込みユーザー取得は互いに独立なので並行する
+  const [likeCount, embedUsers] = await Promise.all([
+    getGuideLikeCount(db, guide.id),
+    resolveEmbedUsers(db, embedSlugs),
+  ]);
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
@@ -356,12 +371,7 @@ export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
   const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
-  let tags: string[] = [];
-  try {
-    tags = JSON.parse(guide.tags) as string[];
-  } catch {
-    // invalid JSON in tags — fallback to empty
-  }
+  const tags = parseGuideTags(guide.tags);
   const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
 

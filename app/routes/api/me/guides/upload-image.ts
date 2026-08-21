@@ -29,7 +29,22 @@ export async function action({ request }: ActionFunctionArgs) {
     });
   }
 
-  const body = (await request.json()) as HandleUploadBody;
+  let parsedBody: unknown;
+  try {
+    parsedBody = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (parsedBody === null || typeof parsedBody !== "object") {
+    return new Response(JSON.stringify({ error: "Invalid request" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const body = parsedBody as HandleUploadBody;
 
   return handleUpload({
     body,
