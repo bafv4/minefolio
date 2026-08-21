@@ -2039,6 +2039,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     editTitle: "Edit guide",
     errorTitleRequired: "Enter a title",
     errorTitleTooLong: "Title must be 200 characters or fewer",
+    errorSummaryTooLong: "Summary must be 500 characters or fewer",
     errorLimitReached: "You've reached the guide limit (100)",
     errorTagsInvalid: "The tag format is invalid",
     errorTagsTooMany: "You can add up to 10 tags",

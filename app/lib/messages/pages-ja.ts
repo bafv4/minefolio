@@ -1974,6 +1974,7 @@ export const PAGES_JA = {
     editTitle: "ガイドを編集",
     errorTitleRequired: "タイトルを入力してください",
     errorTitleTooLong: "タイトルは200文字以内で入力してください",
+    errorSummaryTooLong: "概要は500文字以内で入力してください",
     errorLimitReached: "ガイドの上限（100件）に達しています",
     errorTagsInvalid: "タグの形式が不正です",
     errorTagsTooMany: "タグは10件までです",
