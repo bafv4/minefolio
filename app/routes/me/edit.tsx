@@ -77,6 +77,13 @@ import { SkinUploader } from "@/components/skin-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
 
+// enum系フィールドのallowlist（実際の有効値は app/lib/schema.ts の enum 定義を正とする）
+const VISIBILITIES = ["public", "unlisted", "private"] as const;
+const POSES = ["standing", "walking", "waving"] as const;
+const PLATFORMS = ["pc_windows", "pc_mac", "pc_linux", "switch", "mobile", "other"] as const;
+const ROLES = ["viewer", "runner"] as const;
+const SOCIAL_PLATFORMS = ["speedruncom", "youtube", "twitch", "twitter", "custom"] as const;
+
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
   return [{ title: t("meEdit.title") }];
@@ -301,6 +308,10 @@ export async function action({ request }: Route.ActionArgs) {
 
     if (!platform || !identifier) {
       return { error: t("meEdit.platformAndIdRequired") };
+    }
+
+    if (!(SOCIAL_PLATFORMS as readonly string[]).includes(platform)) {
+      return { error: t("meEdit.invalidOption") };
     }
 
     // 長さチェック
@@ -611,6 +622,26 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (shortBio && shortBio.length > 50) {
     return { error: t("meEdit.shortBioMax") };
+  }
+
+  if (pronouns && pronouns.length > 20) {
+    return { error: t("meEdit.pronounsMax") };
+  }
+
+  if (!VISIBILITIES.includes(profileVisibility)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (profilePose !== null && !POSES.includes(profilePose)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (role !== null && !ROLES.includes(role)) {
+    return { error: t("meEdit.invalidOption") };
   }
 
   if (speedruncomUsername && speedruncomUsername.length > 50) {
