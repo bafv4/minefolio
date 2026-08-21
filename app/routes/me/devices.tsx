@@ -183,6 +183,9 @@ export function HydrateFallback() {
   );
 }
 
+// keyboardLayout の許可値（DBの text({enum}) は CHECK 制約を作らないため、action 側で allowlist 検証する）
+const KEYBOARD_LAYOUTS = ["JIS", "US", "JIS_TKL", "US_TKL"] as const;
+
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -251,6 +254,18 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t(validationError.messageKey), field: validationError.field };
   }
 
+  // fov / guiScale の範囲チェック（同上の理由で inputMethod の更新より前に検証する）
+  const fovStr = formData.get("fov") as string;
+  const guiScaleStr = formData.get("guiScale") as string;
+  const fov = fovStr ? parseInt(fovStr) : null;
+  const guiScale = guiScaleStr ? parseInt(guiScaleStr) : null;
+  if (fov !== null && (!Number.isFinite(fov) || fov < 30 || fov > 110)) {
+    return { error: t("meDevices.fovInvalid"), field: "fov" };
+  }
+  if (guiScale !== null && (!Number.isFinite(guiScale) || guiScale < 0 || guiScale > 4)) {
+    return { error: t("meDevices.guiScaleInvalid"), field: "guiScale" };
+  }
+
   // 入力方法の更新（users.inputMethod はプリセット非依存）。
   // 許可リストと "" → null 変換は /me/playstyle と共有（app/lib/playstyle.ts）。
   // フィールド欠落時は更新せず、不正値は従来どおり黙って無視する
@@ -270,7 +285,11 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true };
   }
 
-  const keyboardLayout = (formData.get("keyboardLayout") as string) || null;
+  const keyboardLayoutRaw = (formData.get("keyboardLayout") as string) || null;
+  const keyboardLayout =
+    keyboardLayoutRaw && (KEYBOARD_LAYOUTS as readonly string[]).includes(keyboardLayoutRaw)
+      ? (keyboardLayoutRaw as (typeof KEYBOARD_LAYOUTS)[number])
+      : null;
   const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
   const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
   const toggleSprint = formData.get("toggleSprint") === "true";
@@ -279,19 +298,21 @@ export async function action({ request }: Route.ActionArgs) {
   const rawInput = formData.get("rawInput") === "true";
   const mouseAcceleration = formData.get("mouseAcceleration") === "true";
   const gameLanguage = (formData.get("gameLanguage") as string)?.trim() || null;
-  const fovStr = formData.get("fov") as string;
-  const guiScaleStr = formData.get("guiScale") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
 
   // コントローラー設定
   const controllerSettingsJson = formData.get("controllerSettings") as string;
-  const controllerSettings = controllerSettingsJson ? controllerSettingsJson : null;
-
-  const fov = fovStr ? parseInt(fovStr) : null;
-  const guiScale = guiScaleStr ? parseInt(guiScaleStr) : null;
+  let controllerSettings = controllerSettingsJson ? controllerSettingsJson : null;
+  if (controllerSettings) {
+    try {
+      JSON.parse(controllerSettings);
+    } catch {
+      controllerSettings = null;
+    }
+  }
 
   const configData = {
-    keyboardLayout: keyboardLayout as "JIS" | "US" | "JIS_TKL" | "US_TKL" | null,
+    keyboardLayout,
     keyboardModel,
     mouseModel,
     mouseDpi,
@@ -343,6 +364,19 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 type FieldErrorState = { field: MouseSettingsField; message: string };
+
+/**
+ * action が返す field はマウス設定欄以外（"fov" / "guiScale" 等）も含みうるため、
+ * インライン表示・スクロール対象（fieldRefs で ref を持つ欄）だけに絞り込む。
+ */
+function isMouseSettingsField(field: string): field is MouseSettingsField {
+  return (
+    field === "gameSensitivity" ||
+    field === "mouseDpi" ||
+    field === "windowsSpeed" ||
+    field === "windowsSpeedMultiplier"
+  );
+}
 
 /** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
 function FieldErrorText({ id, message }: { id: string; message: string | null }) {
@@ -631,7 +665,8 @@ export default function DevicesPage() {
     } else if ("error" in data) {
       toast.error(data.error);
       // どの欄が弾かれたか分かるエラーはインライン表示＋該当欄へスクロール
-      if ("field" in data && data.field) {
+      // （fov/guiScale 等 fieldRefs に ref を持たない欄はトーストのみで通知する）
+      if ("field" in data && data.field && isMouseSettingsField(data.field)) {
         showFieldError({ field: data.field, message: data.error });
       }
     }
