@@ -18,16 +18,6 @@ interface PaceEntry {
   is2ndStructureOrLater: boolean;
 }
 
-// キャッシュから取得されるペースエントリの型
-export interface CachedPaceEntry {
-  id: number;
-  mcid: string;
-  timeline: string;
-  rta: number;
-  igt: number | null;
-  date: string; // ISO string
-}
-
 // グループ化されたペース（同じランの複数スプリットをまとめたもの）
 export interface GroupedPaceEntry {
   mcid: string;
@@ -221,35 +211,6 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
     await tx.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart));
   });
-}
-
-/**
- * キャッシュから最近のペース情報を取得
- * @param limit 取得件数
- */
-export async function getRecentPacesFromCache(limit: number = 20): Promise<CachedPaceEntry[]> {
-  const db = createDb();
-
-  const paces = await db.query.pacemanPaces.findMany({
-    orderBy: [desc(pacemanPaces.date)],
-    limit,
-    columns: {
-      mcid: true,
-      timeline: true,
-      rta: true,
-      igt: true,
-      date: true,
-    },
-  });
-
-  return paces.map((p) => ({
-    id: 0, // キャッシュには不要だが型に合わせる
-    mcid: p.mcid,
-    timeline: p.timeline,
-    rta: p.rta,
-    igt: p.igt,
-    date: p.date.toISOString(),
-  }));
 }
 
 // フィード用ペースエントリ（ホームフィード・ペース一覧で共用）
