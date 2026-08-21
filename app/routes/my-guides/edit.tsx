@@ -131,6 +131,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;
   const summary = (formData.get("summary") as string) || null;
+
+  if (title.length > 200) {
+    return { error: t("meGuides.errorTitleTooLong") };
+  }
+  if (summary && summary.length > 500) {
+    return { error: t("meGuides.errorSummaryTooLong") };
+  }
+
   const tagsRaw = (formData.get("tags") as string) || "[]";
   const isPublished = formData.get("isPublished") === "true";
   const coverImageUrl = formData.has("coverImageUrl")
