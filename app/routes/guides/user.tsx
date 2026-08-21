@@ -61,24 +61,27 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
 
   const { authorSlug } = params as { authorSlug: string };
 
-  const author = await db.query.users.findFirst({
-    where: eq(users.slug, authorSlug),
-    columns: {
-      id: true,
-      slug: true,
-      mcid: true,
-      uuid: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      discordAvatar: true,
-      customSkinUrl: true,
-      profileVisibility: true,
-    },
-  });
+  // セッション解決と著者取得は互いに独立なので並行する
+  const [session, author] = await Promise.all([
+    getOptionalSession(request, auth),
+    db.query.users.findFirst({
+      where: eq(users.slug, authorSlug),
+      columns: {
+        id: true,
+        slug: true,
+        mcid: true,
+        uuid: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        discordAvatar: true,
+        customSkinUrl: true,
+        profileVisibility: true,
+      },
+    }),
+  ]);
 
   if (!author) {
     throw new Response("Not Found", { status: 404 });

@@ -16,6 +16,7 @@ import { resolveRowVariations } from "@/lib/search-craft-variations";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -79,28 +80,31 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
 
   const { authorSlug, guideSlug } = params as {
     authorSlug: string;
     guideSlug: string;
   };
 
-  const author = await db.query.users.findFirst({
-    where: eq(users.slug, authorSlug),
-    columns: {
-      id: true,
-      slug: true,
-      mcid: true,
-      uuid: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      discordAvatar: true,
-      customSkinUrl: true,
-      slimSkin: true,
-      profileVisibility: true,
-    },
-  });
+  // セッション解決と著者取得は互いに独立なので並行する
+  const [session, author] = await Promise.all([
+    getOptionalSession(request, auth),
+    db.query.users.findFirst({
+      where: eq(users.slug, authorSlug),
+      columns: {
+        id: true,
+        slug: true,
+        mcid: true,
+        uuid: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        discordAvatar: true,
+        customSkinUrl: true,
+        slimSkin: true,
+        profileVisibility: true,
+      },
+    }),
+  ]);
 
   if (!author) {
     throw new Response("Not Found", { status: 404 });
@@ -169,155 +173,159 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Extract embed references and fetch user data
   const embedRefs = extractEmbedRefs(contentWithIds);
   const embedSlugs = getUniqueEmbedSlugs(embedRefs);
-  const embedUsers: Record<string, EmbedUserData> = {};
-
-  if (embedSlugs.length > 0) {
-    // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
-    const embedUserRows = await db.query.users.findMany({
-      where: and(inArray(users.slug, embedSlugs), publiclyReferencableCondition),
-      columns: {
-        id: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        mcid: true,
-      },
-      with: {
-        keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
-        keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
-        playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
-        searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-        searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-        configPresets: {
+  const appUrl = env.APP_URL || "https://minefolio.app";
+  // likeCount（guide.id にのみ依存）と埋め込みユーザー取得は互いに独立なので並行する
+  const [likeCount, embedUsers] = await Promise.all([
+    getGuideLikeCount(db, guide.id),
+    (async () => {
+      const embedUsers: Record<string, EmbedUserData> = {};
+      if (embedSlugs.length > 0) {
+        // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
+        const embedUserRows = await db.query.users.findMany({
+          where: and(inArray(users.slug, embedSlugs), publiclyReferencableCondition),
           columns: {
-            name: true,
-            isActive: true,
-            isMain: true,
-            keybindingsData: true,
-            remapsData: true,
-            playerConfigData: true,
-            fingerAssignmentsData: true,
-            searchCraftsData: true,
-            searchCraftLoopsData: true,
+            id: true,
+            slug: true,
+            displayName: true,
+            displayNameAlphabet: true,
+            mcid: true,
           },
-        },
-      },
-    });
-
-    // Also try matching by mcid for slugs that didn't match
-    const matchedSlugs = new Set(embedUserRows.map((u) => u.slug));
-    const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
-    if (unmatchedSlugs.length > 0) {
-      const byMcid = await db.query.users.findMany({
-        where: and(inArray(users.mcid, unmatchedSlugs), publiclyReferencableCondition),
-        columns: {
-          id: true,
-          slug: true,
-          displayName: true,
-          displayNameAlphabet: true,
-          mcid: true,
-        },
-        with: {
-          keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
-          keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
-          playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
-          searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-          searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-          configPresets: {
-            columns: {
-              name: true,
-              isActive: true,
-              isMain: true,
-              keybindingsData: true,
-              remapsData: true,
-              playerConfigData: true,
-              fingerAssignmentsData: true,
-              searchCraftsData: true,
-              searchCraftLoopsData: true,
+          with: {
+            keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
+            keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
+            playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
+            searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+            searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
+            configPresets: {
+              columns: {
+                name: true,
+                isActive: true,
+                isMain: true,
+                keybindingsData: true,
+                remapsData: true,
+                playerConfigData: true,
+                fingerAssignmentsData: true,
+                searchCraftsData: true,
+                searchCraftLoopsData: true,
+              },
             },
           },
-        },
-      });
-      embedUserRows.push(...byMcid);
-    }
+        });
 
-    for (const u of embedUserRows) {
-      // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
-      // メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
-      // ユーザーはライブ（従来挙動）。スナップショットを使う場合、null の種別は「空」
-      const mainPreset = u.configPresets.find((p) => p.isMain);
-      let display: Pick<
-        EmbedUserData,
-        "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts" | "searchCraftLoops"
-      >;
-      if (shouldUsePresetSnapshot(mainPreset)) {
-        const decoded = decodePresetConfig(mainPreset, u.id);
-        display = {
-          keybindings: decoded.keybindings,
-          keyRemaps: decoded.keyRemaps,
-          playerConfig: decoded.playerConfig
-            ? {
-                keyboardLayout: decoded.playerConfig.keyboardLayout ?? null,
-                fingerAssignments: decoded.fingerAssignments,
-              }
-            : null,
-          searchCrafts: decoded.searchCrafts,
-          // decodePresetSearchCraftLoops は既に craftId をこのスナップショットの
-          // searchCrafts（合成id）へ解決済み。timing はスナップショットに欠落していると
-          // undefined になり得るため null へ正規化する
-          searchCraftLoops: decoded.searchCraftLoops.map((l) => ({
-            id: l.id,
-            sequence: l.sequence,
-            steps: l.steps,
-            comment: l.comment,
-            timing: l.timing ?? null,
-          })),
-        };
-      } else {
-        display = {
-          keybindings: u.keybindings,
-          keyRemaps: u.keyRemaps,
-          playerConfig: u.playerConfig,
-          // ライブ行の search_variations 列（旧データは null）を正準の variations へ解決する
-          // （必ず resolveRowVariations() を経由 — 手書きのフォールバック合成はしない）
-          searchCrafts: u.searchCrafts.map((c) => ({
-            ...c,
-            variations: resolveRowVariations(c),
-          })),
-          searchCraftLoops: u.searchCraftLoops.map((row) => ({
-            id: row.id,
-            sequence: row.sequence,
-            steps: parseLoopSteps(row.steps),
-            comment: row.comment,
-            timing: row.timing,
-          })),
-        };
+        // Also try matching by mcid for slugs that didn't match
+        const matchedSlugs = new Set(embedUserRows.map((u) => u.slug));
+        const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
+        if (unmatchedSlugs.length > 0) {
+          const byMcid = await db.query.users.findMany({
+            where: and(inArray(users.mcid, unmatchedSlugs), publiclyReferencableCondition),
+            columns: {
+              id: true,
+              slug: true,
+              displayName: true,
+              displayNameAlphabet: true,
+              mcid: true,
+            },
+            with: {
+              keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
+              keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
+              playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
+              searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
+              searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
+              configPresets: {
+                columns: {
+                  name: true,
+                  isActive: true,
+                  isMain: true,
+                  keybindingsData: true,
+                  remapsData: true,
+                  playerConfigData: true,
+                  fingerAssignmentsData: true,
+                  searchCraftsData: true,
+                  searchCraftLoopsData: true,
+                },
+              },
+            },
+          });
+          embedUserRows.push(...byMcid);
+        }
+
+        for (const u of embedUserRows) {
+          // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
+          // メインが無いユーザー、およびメインが編集中（isActive＝ライブが現在適用中の設定そのもの）の
+          // ユーザーはライブ（従来挙動）。スナップショットを使う場合、null の種別は「空」
+          const mainPreset = u.configPresets.find((p) => p.isMain);
+          let display: Pick<
+            EmbedUserData,
+            "keybindings" | "keyRemaps" | "playerConfig" | "searchCrafts" | "searchCraftLoops"
+          >;
+          if (shouldUsePresetSnapshot(mainPreset)) {
+            const decoded = decodePresetConfig(mainPreset, u.id);
+            display = {
+              keybindings: decoded.keybindings,
+              keyRemaps: decoded.keyRemaps,
+              playerConfig: decoded.playerConfig
+                ? {
+                    keyboardLayout: decoded.playerConfig.keyboardLayout ?? null,
+                    fingerAssignments: decoded.fingerAssignments,
+                  }
+                : null,
+              searchCrafts: decoded.searchCrafts,
+              // decodePresetSearchCraftLoops は既に craftId をこのスナップショットの
+              // searchCrafts（合成id）へ解決済み。timing はスナップショットに欠落していると
+              // undefined になり得るため null へ正規化する
+              searchCraftLoops: decoded.searchCraftLoops.map((l) => ({
+                id: l.id,
+                sequence: l.sequence,
+                steps: l.steps,
+                comment: l.comment,
+                timing: l.timing ?? null,
+              })),
+            };
+          } else {
+            display = {
+              keybindings: u.keybindings,
+              keyRemaps: u.keyRemaps,
+              playerConfig: u.playerConfig,
+              // ライブ行の search_variations 列（旧データは null）を正準の variations へ解決する
+              // （必ず resolveRowVariations() を経由 — 手書きのフォールバック合成はしない）
+              searchCrafts: u.searchCrafts.map((c) => ({
+                ...c,
+                variations: resolveRowVariations(c),
+              })),
+              searchCraftLoops: u.searchCraftLoops.map((row) => ({
+                id: row.id,
+                sequence: row.sequence,
+                steps: parseLoopSteps(row.steps),
+                comment: row.comment,
+                timing: row.timing,
+              })),
+            };
+          }
+          const data: EmbedUserData = {
+            slug: u.slug,
+            displayName: u.displayName,
+            displayNameAlphabet: u.displayNameAlphabet,
+            mcid: u.mcid,
+            // クライアント（guide-embeds）が使うフィールドのみ渡す
+            // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
+            presets: u.configPresets.map((p) => ({
+              name: p.name,
+              isActive: p.isActive,
+              keybindingsData: p.keybindingsData,
+              remapsData: p.remapsData,
+              playerConfigData: p.playerConfigData,
+              searchCraftsData: p.searchCraftsData,
+              searchCraftLoopsData: p.searchCraftLoopsData,
+            })),
+            ...display,
+          };
+          embedUsers[u.slug] = data;
+          if (u.mcid) embedUsers[u.mcid] = data;
+        }
       }
-      const data: EmbedUserData = {
-        slug: u.slug,
-        displayName: u.displayName,
-        displayNameAlphabet: u.displayNameAlphabet,
-        mcid: u.mcid,
-        // クライアント（guide-embeds）が使うフィールドのみ渡す
-        // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
-        presets: u.configPresets.map((p) => ({
-          name: p.name,
-          isActive: p.isActive,
-          keybindingsData: p.keybindingsData,
-          remapsData: p.remapsData,
-          playerConfigData: p.playerConfigData,
-          searchCraftsData: p.searchCraftsData,
-          searchCraftLoopsData: p.searchCraftLoopsData,
-        })),
-        ...display,
-      };
-      embedUsers[u.slug] = data;
-      if (u.mcid) embedUsers[u.mcid] = data;
-    }
-  }
-
-  const appUrl = env.APP_URL || "https://minefolio.app";
-  const likeCount = await getGuideLikeCount(db, guide.id);
+      return embedUsers;
+    })(),
+  ]);
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
@@ -356,12 +364,7 @@ export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
   const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
-  let tags: string[] = [];
-  try {
-    tags = JSON.parse(guide.tags) as string[];
-  } catch {
-    // invalid JSON in tags — fallback to empty
-  }
+  const tags = parseGuideTags(guide.tags);
   const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
 
