@@ -8,6 +8,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { Badge } from "@/components/ui/badge";
@@ -127,7 +128,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let filtered = allGuides;
   if (tag) {
     filtered = filtered.filter((g) => {
-      const tags = JSON.parse(g.guide.tags) as string[];
+      const tags = parseGuideTags(g.guide.tags);
       return tags.includes(tag);
     });
   }
@@ -143,7 +144,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Collect all tags for filter UI
   const tagCounts: Record<string, number> = {};
   allGuides.forEach((g) => {
-    const tags = JSON.parse(g.guide.tags) as string[];
+    const tags = parseGuideTags(g.guide.tags);
     tags.forEach((t) => {
       tagCounts[t] = (tagCounts[t] || 0) + 1;
     });

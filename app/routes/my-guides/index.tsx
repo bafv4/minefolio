@@ -13,6 +13,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { Button } from "@/components/ui/button";
@@ -158,7 +159,7 @@ export default function MyGuidesPage() {
       ) : (
         <div className="space-y-3">
           {userGuides.map((guide) => {
-            const tags = JSON.parse(guide.tags) as string[];
+            const tags = parseGuideTags(guide.tags);
             return (
               <Card key={guide.id} className="py-0">
                 <CardContent className="flex items-center gap-4 p-4">
