@@ -2044,6 +2044,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "The content is too long (the publishing limit is 500,000 characters). You can still save it as a draft — split or trim the content before publishing.",
     errorUnauthorized: "You need to be signed in",
     errorNotFound: "Guide not found",
+    errorInvalidAction: "Invalid action. Please reload the page and try again",
   },
   guideEditor: {
     slash: {

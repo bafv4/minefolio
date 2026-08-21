@@ -126,7 +126,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
-  const saveMode = action === "draft" ? "draft" : "publish";
+  // _action は allowlist で判定する（discard は上で処理済み）。未知・欠落値は
+  // publish に倒さず拒否する — 誤って publish 扱いすると公開版を意図せず
+  // 上書きしてしまうため（クライアント側の _action typo・送信漏れ対策）。
+  if (action !== "draft" && action !== "publish") {
+    return { error: t("meGuides.errorInvalidAction") };
+  }
+  const saveMode = action;
 
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;

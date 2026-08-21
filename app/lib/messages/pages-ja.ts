@@ -1978,6 +1978,7 @@ export const PAGES_JA = {
       "本文が長すぎます（公開できる上限は50万文字です）。下書きとしては保存できます。内容を分割・整理してから公開してください。",
     errorUnauthorized: "ログインが必要です",
     errorNotFound: "ガイドが見つかりません",
+    errorInvalidAction: "不正な操作です。ページを再読み込みしてから、もう一度お試しください",
   },
   guideEditor: {
     /** スラッシュコマンド（/ メニュー） */
