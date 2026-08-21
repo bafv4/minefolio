@@ -80,9 +80,6 @@ const SHORT_ACTION_LABEL_KEYS = {
   command: "shortActionLabels.command",
 } as const satisfies Record<string, MessageKey>;
 
-/** 表示対象のアクション一覧（順序は上の定義順） */
-export const ACTION_KEYS = Object.keys(ACTION_LABEL_KEYS);
-
 // =====================================
 // キーコード正規化・表示ラベル
 // =====================================
@@ -561,9 +558,6 @@ export function getFingerLabel(t: Translator, finger: FingerType): string {
   return t(FINGER_LABEL_KEYS[finger]);
 }
 
-/** 指の一覧（表示順） */
-export const FINGER_TYPES = Object.keys(FINGER_LABEL_KEYS) as FingerType[];
-
 // デフォルトの指割り当て（一般的なWASD配置）
 export const DEFAULT_FINGER_ASSIGNMENTS: Record<string, FingerType[]> = {
   // 左手小指
@@ -670,37 +664,6 @@ export const DEFAULT_CONTROLLER_SETTINGS: ControllerSettings = {
   invertYAxis: false,
   vibration: true,
 };
-
-/** コントローラーアクションのカテゴリ */
-export type ControllerActionCategory = "movement" | "combat" | "inventory" | "ui";
-
-/** コントローラーキーバインド定義 */
-export type ControllerKeybinding = {
-  action: string;
-  keyCode: string;
-  category: ControllerActionCategory;
-};
-
-/** デフォルトコントローラーキー配置（Bedrock準拠） */
-export const DEFAULT_CONTROLLER_KEYBINDINGS: ControllerKeybinding[] = [
-  // 移動（forward/back/left/rightは左スティックで行うため省略）
-  { action: "jump", keyCode: "GamepadA", category: "movement" },
-  { action: "sneak", keyCode: "GamepadB", category: "movement" },
-  { action: "sprint", keyCode: "GamepadL3", category: "movement" },
-  // 戦闘
-  { action: "attack", keyCode: "GamepadRT", category: "combat" },
-  { action: "use", keyCode: "GamepadLT", category: "combat" },
-  { action: "pickBlock", keyCode: "GamepadR3", category: "combat" },
-  { action: "drop", keyCode: "GamepadDpadDown", category: "inventory" },
-  // インベントリ
-  { action: "inventory", keyCode: "GamepadY", category: "inventory" },
-  { action: "swapHands", keyCode: "GamepadX", category: "inventory" },
-  { action: "hotbarLeft", keyCode: "GamepadLB", category: "inventory" },
-  { action: "hotbarRight", keyCode: "GamepadRB", category: "inventory" },
-  // UI
-  { action: "togglePerspective", keyCode: "GamepadDpadUp", category: "ui" },
-  { action: "chat", keyCode: "GamepadDpadRight", category: "ui" },
-];
 
 /** コントローラー用アクション一覧（ホットバーはLB/RB方式のみ） */
 export const CONTROLLER_ACTIONS = [
@@ -882,18 +845,6 @@ export function isSingleKey(keyCode: string): boolean {
  */
 export function hasModifiers(keyCode: string): boolean {
   return !isSingleKey(keyCode);
-}
-
-/**
- * 2つのキー組み合わせが同一かを比較
- * 修飾キーの順序とキーコード部の表記揺れ（大文字/Minecraft形式）を吸収する。
- * 修飾キー自体は正規表記（"Ctrl" / "Shift" 等）である必要がある（normalizeKeyCombination 参照）。
- *
- * @example
- * keyCombinationsEqual("Ctrl+Shift+KeyA", "Shift+Ctrl+KEYA") // => true
- */
-export function keyCombinationsEqual(combo1: string, combo2: string): boolean {
-  return normalizeKeyCombination(combo1) === normalizeKeyCombination(combo2);
 }
 
 // =====================================

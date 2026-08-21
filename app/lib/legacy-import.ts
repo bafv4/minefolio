@@ -147,21 +147,6 @@ const KEYBIND_ACTION_MAP: Record<string, { action: string; category: "movement" 
 };
 
 /**
- * MCSRer Hotkeys APIからレガシーデータが存在するか確認
- */
-export async function checkLegacyData(
-  legacyApiUrl: string,
-  mcid: string
-): Promise<boolean> {
-  try {
-    const response = await fetch(`${legacyApiUrl}/api/player/${mcid}`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * MCSRer Hotkeys APIからデータを取得
  */
 export async function fetchLegacyData(
