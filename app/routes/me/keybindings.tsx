@@ -776,6 +776,9 @@ const categoryColors: Record<string, string> = {
   ui: "text-category-ui",
 };
 
+// 廃止済みアクション（表示から除外）
+const deprecatedActions = ["toggleHud"];
+
 // 操作割り当てタブの表示グループ。公開プロフィール
 // （app/routes/player/profile.tsx の keybindingDisplayGroups）と同一の
 // グルーピング・並び順にする（DB カテゴリではなく意味順の手書き分類）
@@ -1344,7 +1347,6 @@ export default function KeybindingsPage() {
   }, [data, fetcher.state, initialRemaps, playerConfig?.fingerAssignments, initialCustomActions, initialCustomKeys]);
 
   // ========== Computed Values ==========
-  const deprecatedActions = ["toggleHud"];
   const isControllerMode = inputMethod === "controller";
 
   // 入力方法に応じたアクションをフィルタリング
@@ -1352,8 +1354,12 @@ export default function KeybindingsPage() {
     ? (CONTROLLER_ACTIONS as readonly string[])
     : (KEYBOARD_MOUSE_ACTIONS as readonly string[]);
 
-  const validKeybindings = kbs.filter((kb) =>
-    !deprecatedActions.includes(kb.action) && allowedActions.includes(kb.action)
+  const validKeybindings = useMemo(
+    () =>
+      kbs.filter(
+        (kb) => !deprecatedActions.includes(kb.action) && allowedActions.includes(kb.action)
+      ),
+    [kbs, isControllerMode]
   );
 
   // ローカル変更を適用したキーバインドリスト
@@ -1363,6 +1369,12 @@ export default function KeybindingsPage() {
       keyCode: keybindingChanges[kb.id] ?? kb.keyCode,
     })),
     [validKeybindings, keybindingChanges]
+  );
+
+  // キーバインドの action → keyCode マップ（VirtualKeyboard/Numpad/Mouse 共通）
+  const keybindingsMap = useMemo(
+    () => keybindingsToMap(keybindingsWithLocalChanges),
+    [keybindingsWithLocalChanges]
   );
 
   // Group by category
@@ -1527,6 +1539,26 @@ export default function KeybindingsPage() {
   const activeCustomKeys = useMemo(
     () => localCustomKeys.filter((ck) => !ck._delete),
     [localCustomKeys]
+  );
+
+  // キーボードカテゴリのカスタムキー（VirtualKeyboard）
+  const keyboardCustomKeys = useMemo(
+    () =>
+      activeCustomKeys
+        .filter((ck) => ck.category === "keyboard")
+        .map((ck) => ({ code: ck.keyCode, label: ck.keyName })),
+    [activeCustomKeys]
+  );
+
+  // 全カスタムボタン（VirtualMouse）
+  const mouseCustomButtons = useMemo(
+    () =>
+      activeCustomKeys.map((ck) => ({
+        code: ck.keyCode,
+        label: ck.keyName,
+        category: ck.category,
+      })),
+    [activeCustomKeys]
   );
 
   // カスタムキーのキーコードを名前に変換するマップ
@@ -2336,10 +2368,10 @@ export default function KeybindingsPage() {
               <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
                 <VirtualKeyboard
                   layout={keyboardLayout}
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
-                  customKeys={activeCustomKeys.filter((ck) => ck.category === "keyboard").map((ck) => ({ code: ck.keyCode, label: ck.keyName }))}
+                  customKeys={keyboardCustomKeys}
                   onKeyClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments
@@ -2350,7 +2382,7 @@ export default function KeybindingsPage() {
               {/* テンキーとマウスを横並び */}
               <div className="flex items-start gap-6">
                 <VirtualNumpad
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
                   onKeyClick={handleKeyClick}
@@ -2359,10 +2391,10 @@ export default function KeybindingsPage() {
                   showRemaps
                 />
                 <VirtualMouse
-                  keybindings={keybindingsToMap(keybindingsWithLocalChanges)}
+                  keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
                   remaps={keyboardRemaps}
-                  customButtons={activeCustomKeys.map((ck) => ({ code: ck.keyCode, label: ck.keyName, category: ck.category }))}
+                  customButtons={mouseCustomButtons}
                   onButtonClick={handleKeyClick}
                   showActionLabels
                   showFingerAssignments
