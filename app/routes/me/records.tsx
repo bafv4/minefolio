@@ -188,6 +188,10 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meRecords.categoryRequired") };
     }
 
+    if (category.length > 100 || categoryDisplayName.length > 100) {
+      return { error: t("meRecords.categoryTooLong") };
+    }
+
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
     if (personalBestStr && personalBest === null) {
       return { error: t("meRecords.invalidTime") };
@@ -198,6 +202,14 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     if (action === "create") {
+      const userRecords = await db.query.categoryRecords.findMany({
+        where: eq(categoryRecords.userId, user.id),
+        columns: { id: true },
+      });
+      if (userRecords.length >= 50) {
+        return { error: t("meRecords.errorLimitReached") };
+      }
+
       await db.insert(categoryRecords).values({
         id: createId(),
         userId: user.id,
@@ -371,6 +383,7 @@ export default function RecordsPage() {
                     name="category"
                     defaultValue={editingRecord?.category ?? ""}
                     placeholder={t("meRecords.categoryIdPlaceholder")}
+                    maxLength={100}
                     required
                   />
                 </div>
@@ -381,6 +394,7 @@ export default function RecordsPage() {
                     name="categoryDisplayName"
                     defaultValue={editingRecord?.categoryDisplayName ?? ""}
                     placeholder={t("meRecords.displayNamePlaceholder")}
+                    maxLength={100}
                     required
                   />
                 </div>

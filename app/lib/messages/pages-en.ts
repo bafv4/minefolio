@@ -1525,6 +1525,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Records - Minefolio",
     userNotFound: "User not found",
     categoryRequired: "Category name is required",
+    categoryTooLong: "Category name must be 100 characters or fewer",
+    errorLimitReached: "You can register up to 50 records",
     invalidTime:
       "Invalid time format. Use M:SS.mmm (for example, 14:32.500)",
     invalidVideoUrl: "Video URLs must start with http:// or https://",
