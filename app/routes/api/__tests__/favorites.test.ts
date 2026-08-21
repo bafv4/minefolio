@@ -87,6 +87,30 @@ describe("action - 認証ゲート", () => {
   });
 });
 
+describe("action - JSON null ボディ", () => {
+  it("POST は 400、DB は無変更", async () => {
+    await seedUser(db, { slug: "me", discordId: "discord-me" });
+    signInAs("discord-me");
+
+    const res = await callAction("POST", null);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    expect(await favoriteRows()).toHaveLength(0);
+  });
+
+  it("PUT は 400、DB は無変更", async () => {
+    await seedUser(db, { slug: "me", discordId: "discord-me" });
+    signInAs("discord-me");
+
+    const res = await callAction("PUT", null);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    expect(await favoriteRows()).toHaveLength(0);
+  });
+});
+
 describe("action - POST add/remove", () => {
   it("架空 slug への add は 404", async () => {
     await seedUser(db, { slug: "me", discordId: "discord-me" });

@@ -300,6 +300,26 @@ describe("action - import-remaps の入力検証", () => {
     expect(await findRemaps(user.id)).toHaveLength(0);
   });
 
+  it("要素が null（[null]）は invalidData で拒否し、1件も書き込まない", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    const res = await callAction(remapForm([null]));
+
+    expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
+    expect(await findRemaps(user.id)).toHaveLength(0);
+  });
+
+  it("sourceKey が欠落した要素があれば invalidData で拒否し、他の正常な要素も書き込まない", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    const res = await callAction(remapForm([CAPSLOCK_REMAP, { targetKey: "Escape", software: "PowerToys" }]));
+
+    expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
+    expect(await findRemaps(user.id)).toHaveLength(0);
+  });
+
   it("1000件を超える payload は tooManyItems で拒否し、1件も書き込まない", async () => {
     const user = await setupUser();
     await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
@@ -413,6 +433,32 @@ describe("action - import-minecraft", () => {
     await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
 
     const res = await callAction(minecraftForm({ action: "key.attack" }, {}));
+
+    expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
+    expect(
+      await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) }),
+    ).toHaveLength(0);
+  });
+
+  it("category が allowlist 外（keybindings.category enum 以外）の要素は invalidData で拒否する", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    const res = await callAction(
+      minecraftForm([{ action: "key.attack", keyCode: "mouse_left", category: "bogus" }], {}),
+    );
+
+    expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
+    expect(
+      await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) }),
+    ).toHaveLength(0);
+  });
+
+  it("要素が null を含む payload（[null]）は invalidData で拒否する", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    const res = await callAction(minecraftForm([null], {}));
 
     expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
     expect(

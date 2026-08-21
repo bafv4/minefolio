@@ -199,6 +199,19 @@ describe("公開プロフィール（対照）", () => {
   });
 });
 
+describe("mcid・slug なし（デフォルト画像）", () => {
+  it("title / description クエリを付けてもブランド固定のまま（クエリ値が ImageResponse に渡らない）", async () => {
+    const res = await callLoader("?title=Leaked&description=LeakedDescription");
+
+    expect(res.status).toBe(200);
+    const text = renderedText();
+    expect(text).not.toContain("Leaked");
+    expect(text).not.toContain("LeakedDescription");
+    expect(text).toContain("Minefolio");
+    expect(text).toContain("Minecraft Speedrunning + Portfolio");
+  });
+});
+
 describe("存在しないユーザー", () => {
   it("404 を返し、画像を生成しない", async () => {
     const res = await callLoader("?slug=no-such-user");

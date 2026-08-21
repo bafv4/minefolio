@@ -185,6 +185,53 @@ describe("POST の URL 検証（isVercelBlobUrl の配線）", () => {
   });
 });
 
+describe("POST のボディ検証", () => {
+  it("ボディが null（JSON としては妥当）は 400 で DB を更新しない", async () => {
+    const user = await setupUser(OLD_BLOB_URL);
+
+    const res = await callAction("POST", null);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    const row = await findUser(user.id);
+    expect(row?.customSkinUrl).toBe(OLD_BLOB_URL);
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("壊れた JSON は 400 で DB を更新しない", async () => {
+    const user = await setupUser(OLD_BLOB_URL);
+
+    const res = await action({
+      request: new Request("https://minefolio.app/api/me/skin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not valid json",
+      }),
+      params: {},
+      context: {},
+    } as never);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid JSON" });
+    const row = await findUser(user.id);
+    expect(row?.customSkinUrl).toBe(OLD_BLOB_URL);
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("model が許可リスト外の文字列は 400 で DB を更新しない", async () => {
+    const user = await setupUser(OLD_BLOB_URL);
+
+    const res = await callAction("POST", { url: NEW_BLOB_URL, model: "evil" });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid model" });
+    const row = await findUser(user.id);
+    expect(row?.customSkinUrl).toBe(OLD_BLOB_URL);
+    expect(row?.customSkinModel).toBe("slim");
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+});
+
 describe("DELETE", () => {
   it("カスタムスキンの列が null に戻り、Blob 実体も削除される", async () => {
     const user = await setupUser(OLD_BLOB_URL);

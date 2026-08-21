@@ -129,6 +129,13 @@ describe("入力検証", () => {
     expect(await res.json()).toEqual({ error: "Invalid JSON" });
   });
 
+  it("JSON の null ボディ（構文的には正しいがオブジェクトでない）は 400", async () => {
+    const res = await callAction(null);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    expect(await guideLikeRowCount()).toBe(0);
+  });
+
   it.each([
     ["未知の targetType", { targetType: "video", targetId: "x", action: "like" }],
     ["targetId 欠落", { targetType: "guide", action: "like" }],

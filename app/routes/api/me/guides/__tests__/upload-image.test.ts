@@ -135,6 +135,44 @@ describe("認証ゲート", () => {
   });
 });
 
+describe("POST のボディ検証", () => {
+  it("壊れた JSON は 400 で handleUpload を呼ばない", async () => {
+    await setupUser();
+
+    const res = (await action({
+      request: new Request("https://minefolio.app/api/me/guides/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not valid json",
+      }),
+      params: {},
+      context: {},
+    } as never)) as Response;
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid JSON" });
+    expect(blobClientMocks.handleUpload).not.toHaveBeenCalled();
+  });
+
+  it("ボディが null（JSON としては妥当）は 400 で handleUpload を呼ばない", async () => {
+    await setupUser();
+
+    const res = (await action({
+      request: new Request("https://minefolio.app/api/me/guides/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "null",
+      }),
+      params: {},
+      context: {},
+    } as never)) as Response;
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+    expect(blobClientMocks.handleUpload).not.toHaveBeenCalled();
+  });
+});
+
 describe("onBeforeGenerateToken のパス検証", () => {
   it("他ユーザーの guides 配下は拒否する", async () => {
     const user = await setupUser();

@@ -368,6 +368,41 @@ describe("action - tags の検証", () => {
   });
 });
 
+describe("action - タイトル・概要の長さ検証", () => {
+  it("201文字のタイトルは draft でも publish でも errorTitleTooLong を返し、ガイド行を変更しない", async () => {
+    const { guide } = await setupAuthorWithGuide();
+    const before = await findGuide(guide.id);
+    const longTitle = "a".repeat(201);
+
+    const draftRes = await callAction(
+      "my-guide",
+      baseFormData({ _action: "draft", title: longTitle }),
+    );
+    expect(draftRes).toEqual({ error: "タイトルは200文字以内で入力してください" });
+    expect(await findGuide(guide.id)).toEqual(before);
+
+    const publishRes = await callAction(
+      "my-guide",
+      baseFormData({ _action: "publish", title: longTitle }),
+    );
+    expect(publishRes).toEqual({ error: "タイトルは200文字以内で入力してください" });
+    expect(await findGuide(guide.id)).toEqual(before);
+  });
+
+  it("501文字の概要は errorSummaryTooLong を返し、ガイド行を変更しない", async () => {
+    const { guide } = await setupAuthorWithGuide();
+    const before = await findGuide(guide.id);
+
+    const res = await callAction(
+      "my-guide",
+      baseFormData({ _action: "publish", summary: "a".repeat(501) }),
+    );
+
+    expect(res).toEqual({ error: "概要は500文字以内で入力してください" });
+    expect(await findGuide(guide.id)).toEqual(before);
+  });
+});
+
 describe("action - スラッグと所有権", () => {
   it("同一著者内で既存スラッグと重複する場合は拒否し、ガイド行を変更しない", async () => {
     const { author, guide } = await setupAuthorWithGuide();

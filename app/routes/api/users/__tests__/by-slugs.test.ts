@@ -158,4 +158,10 @@ describe("action - メソッド・入力検証", () => {
     const res = await action({ request, params: {}, context: {} } as never);
     expect(res.status).toBe(400);
   });
+
+  it("JSON の null ボディ（構文的には正しいがオブジェクトでない）は 400", async () => {
+    const res = await callAction(null);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid request" });
+  });
 });

@@ -265,6 +265,31 @@ describe("action - save-remaps（一括削除→挿入）", () => {
 
     expect(res).toEqual({ error: "送信データの形式が不正です。" });
   });
+
+  it("要素に null を含む配列は invalidPayload を返し、既存行を変更しない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const existing = await seedRemap(user.id, {
+      sourceKey: "KeyA",
+      remapType: "trigger",
+      targetKey: "KeyX",
+    });
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-remaps",
+        presetId: preset.id,
+        remaps: JSON.stringify([
+          { id: existing.id, sourceKey: "KeyA", targetKey: "KeyX", remapType: "trigger" },
+          null,
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    const rows = await findRemaps(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].targetKey).toBe("KeyX");
+  });
 });
 
 describe("action - save-all の原子性", () => {

@@ -217,3 +217,124 @@ describe("action - 正常系", () => {
     expect(config?.windowsSpeed).toBe(11);
   });
 });
+
+describe("action - keyboardLayout の検証", () => {
+  it("allowlist 外の値（AZERTY）はエラーにせず既存値を保持する（null 上書きしない）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    // 既存値を先に保存しておく
+    await callAction(baseFormData(preset.id, { keyboardLayout: "JIS" }));
+    expect((await findConfig(user.id))?.keyboardLayout).toBe("JIS");
+
+    const res = await callAction(baseFormData(preset.id, { keyboardLayout: "AZERTY" }));
+
+    expect(res).toEqual({ success: true });
+    expect((await findConfig(user.id))?.keyboardLayout).toBe("JIS");
+  });
+
+  it("明示的な未設定（空文字）は従来どおり null として保存する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await callAction(baseFormData(preset.id, { keyboardLayout: "JIS" }));
+    expect((await findConfig(user.id))?.keyboardLayout).toBe("JIS");
+
+    const res = await callAction(baseFormData(preset.id, { keyboardLayout: "" }));
+
+    expect(res).toEqual({ success: true });
+    expect((await findConfig(user.id))?.keyboardLayout).toBeNull();
+  });
+});
+
+describe("action - fov の検証", () => {
+  it("数値でない文字列（parseInt が NaN を返す）は拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { fov: "abc" }));
+
+    expect(res).toEqual({ error: "FOVは30〜110の整数で入力してください", field: "fov" });
+  });
+
+  it("小数（70.9）は Number ベースの Number.isInteger 判定で拒否する（parseInt の黙った切り捨て受理を防ぐ）", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { fov: "70.9" }));
+
+    expect(res).toEqual({ error: "FOVは30〜110の整数で入力してください", field: "fov" });
+  });
+
+  it("範囲外（999）は拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { fov: "999" }));
+
+    expect(res).toEqual({ error: "FOVは30〜110の整数で入力してください", field: "fov" });
+  });
+
+  it("境界値 30 と 110 は許可される", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const min = await callAction(baseFormData(preset.id, { fov: "30" }));
+    expect(min).toEqual({ success: true });
+    expect((await findConfig(user.id))?.fov).toBe(30);
+
+    const max = await callAction(baseFormData(preset.id, { fov: "110" }));
+    expect(max).toEqual({ success: true });
+    expect((await findConfig(user.id))?.fov).toBe(110);
+  });
+});
+
+describe("action - guiScale の検証", () => {
+  it("5〜10 は許可される（バニラは高解像度環境で 5〜9 が正当値になりうるため）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    for (const value of [5, 6, 7, 8, 9, 10]) {
+      const res = await callAction(baseFormData(preset.id, { guiScale: String(value) }));
+      expect(res).toEqual({ success: true });
+      expect((await findConfig(user.id))?.guiScale).toBe(value);
+    }
+  });
+
+  it("範囲外（11）は拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { guiScale: "11" }));
+
+    expect(res).toEqual({ error: "GUIスケールは0〜10の整数で入力してください", field: "guiScale" });
+  });
+
+  it("境界値 0 と 10 は許可される", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const min = await callAction(baseFormData(preset.id, { guiScale: "0" }));
+    expect(min).toEqual({ success: true });
+    expect((await findConfig(user.id))?.guiScale).toBe(0);
+
+    const max = await callAction(baseFormData(preset.id, { guiScale: "10" }));
+    expect(max).toEqual({ success: true });
+    expect((await findConfig(user.id))?.guiScale).toBe(10);
+  });
+});
+
+describe("action - controllerSettings の検証", () => {
+  it("不正な JSON（パース不可）はエラーにせず既存値を保持する（null 上書きしない）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const validJson = JSON.stringify({ controllerModel: "Xbox", lookSensitivity: 50, invertYAxis: false, vibration: true });
+    await callAction(baseFormData(preset.id, { controllerSettings: validJson }));
+    expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
+
+    const res = await callAction(baseFormData(preset.id, { controllerSettings: "{ not json" }));
+
+    expect(res).toEqual({ success: true });
+    expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
+  });
+
+  it("パースは通るが非オブジェクト（\"123\"）もエラーにせず既存値を保持する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const validJson = JSON.stringify({ controllerModel: "Xbox", lookSensitivity: 50, invertYAxis: false, vibration: true });
+    await callAction(baseFormData(preset.id, { controllerSettings: validJson }));
+    expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
+
+    const res = await callAction(baseFormData(preset.id, { controllerSettings: "123" }));
+
+    expect(res).toEqual({ success: true });
+    expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
+  });
+});

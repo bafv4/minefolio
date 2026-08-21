@@ -144,3 +144,40 @@ describe("action - rtaStartedYearMonth の検証", () => {
     expect(await findRtaStartedYearMonth(user.id)).toBe("2020-06");
   });
 });
+
+describe("action - pronouns の検証", () => {
+  it("21文字は pronounsMax エラーになる", async () => {
+    await setupUser();
+
+    const res = await callAction(baseFormData({ pronouns: "a".repeat(21) }));
+
+    expect(res).toEqual({ error: "代名詞は20文字以内で入力してください" });
+  });
+});
+
+describe("action - profileVisibility の検証", () => {
+  it("allowlist 外の値（foo）は invalidOption エラーになり、DB は無変更", async () => {
+    const user = await setupUser();
+    const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+    const res = await callAction(baseFormData({ profileVisibility: "foo" }));
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+  });
+});
+
+describe("action - socialLinks の platform 検証", () => {
+  it("allowlist 外の platform（evil）は invalidOption エラーになる", async () => {
+    await setupUser();
+
+    const fd = new FormData();
+    fd.set("_action", "create_link");
+    fd.set("platform", "evil");
+    fd.set("identifier", "runner");
+
+    const res = await callAction(fd);
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+  });
+});
