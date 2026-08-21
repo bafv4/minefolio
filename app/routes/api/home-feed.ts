@@ -5,9 +5,9 @@
 import type { Route } from "./+types/home-feed";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { fetchLiveRuns } from "@/lib/paceman";
+import { fetchLiveRuns, type PaceManLiveRun } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
-import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
+import { getTwitchAppToken, getLiveStreams, type TwitchStream } from "@/lib/twitch";
 import { getCached, setCached } from "@/lib/cache";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getUserData } from "@/lib/home-user-data.server";
@@ -92,7 +92,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     case "live-runs": {
       // 共通キャッシュキー（ユーザーに依存しない）
       const cacheKey = "home-feed:live-runs:all";
-      type LiveRunsCache = { liveRuns: any[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
+      type LiveRunsCache = { liveRuns: PaceManLiveRun[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
 
       const cached = await getCached<LiveRunsCache>(cacheKey);
       if (cached) {
@@ -181,7 +181,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       // 共通キャッシュキー
       const cacheKey = "home-feed:twitch:all";
-      type TwitchCache = { liveStreams: any[] };
+      type HomeTwitchStream = {
+        stream: TwitchStream;
+        mcid: string | null;
+        uuid: string | null;
+        slug: string;
+        displayName: string | null;
+        discordAvatar: string | null;
+        customSkinUrl: string | null;
+      };
+      type TwitchCache = { liveStreams: HomeTwitchStream[] };
 
       const cached = await getCached<TwitchCache>(cacheKey);
       if (cached) {
