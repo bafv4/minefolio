@@ -65,6 +65,9 @@ export async function action({ request }: Route.ActionArgs) {
     } catch {
       return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
     }
+    if (body === null || typeof body !== "object") {
+      return jsonResponse({ error: "Invalid request" }, { status: 400 });
+    }
     const slug = typeof body.slug === "string" ? body.slug : "";
     const actionType = body.action;
     if (!slug || (actionType !== "add" && actionType !== "remove")) {
@@ -93,6 +96,9 @@ export async function action({ request }: Route.ActionArgs) {
       body = (await request.json()) as typeof body;
     } catch {
       return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
+    }
+    if (body === null || typeof body !== "object") {
+      return jsonResponse({ error: "Invalid request" }, { status: 400 });
     }
     // 巨大配列による過負荷を防ぐため、妥当な slug のみを最大500件に制限する。
     const slugs = Array.isArray(body.slugs)
