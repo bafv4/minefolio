@@ -449,7 +449,9 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
   if (!raw) return null;
   try {
     const v = JSON.parse(raw);
-    return Array.isArray(v) ? (v as T[]) : null;
+    return Array.isArray(v) && v.every((el) => el !== null && typeof el === "object")
+      ? (v as T[])
+      : null;
   } catch {
     return null;
   }
