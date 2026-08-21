@@ -259,13 +259,19 @@ export async function action({ request }: Route.ActionArgs) {
   } catch {
     return { error: t("playground.saveFailed") };
   }
-  if (!Array.isArray(craftsRaw) || !Array.isArray(remaps) || craftsRaw.length > MAX_TEMPLATE_CRAFTS) {
+  if (
+    !Array.isArray(craftsRaw) ||
+    !Array.isArray(remaps) ||
+    craftsRaw.length > MAX_TEMPLATE_CRAFTS ||
+    (craftsRaw as unknown[]).some((c) => !c || typeof c !== "object") ||
+    (remaps as unknown[]).some((r) => !r || typeof r !== "object")
+  ) {
     return { error: t("playground.saveFailed") };
   }
   // クライアント由来のJSONのため variations を正準化する（旧クライアント由来の
   // searchStr/withShift のみのペイロードも resolveVariations で1件合成して受理する）
   const crafts: TemplateCraft[] = (craftsRaw as Array<Record<string, unknown>>).map((c) => ({
-    items: Array.isArray(c.items) ? (c.items as string[]) : [],
+    items: Array.isArray(c.items) ? (c.items as unknown[]).filter((i): i is string => typeof i === "string") : [],
     comment: typeof c.comment === "string" ? c.comment : null,
     timing: (c.timing ?? null) as TemplateCraft["timing"],
     variations: resolveVariations({
