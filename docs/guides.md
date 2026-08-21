@@ -15,12 +15,12 @@
 | id | string (PK) | ガイドID |
 | authorId | string (FK) | 著者のユーザーID |
 | slug | string | URLスラッグ。作成時にユーザーが必ず入力し（自動生成しない）、以降は編集画面の設定モーダルの「URL」欄で変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化。入力欄では `softNormalizeSlug()`） |
-| title | string | タイトル |
-| summary | string | 概要・要約 |
+| title | string | タイトル。最大**200文字**（作成時 `new.tsx` ・編集時 `edit.tsx` の両方で検証。draft保存でも同じ上限を適用する） |
+| summary | string | 概要・要約。最大**500文字**（`edit.tsx` で検証。作成時 `new.tsx` には入力欄が無く、後から編集で追加する） |
 | content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。仮保存（draft）には上限を適用しない |
 | coverImageUrl | string | カバー画像URL（Vercel Blob） |
 | isPublished | boolean | 公開状態 |
-| tags | JSON配列 | タグ一覧 |
+| tags | JSON配列 | タグ一覧。読み出し側は `app/lib/guide-tags.ts` の `parseGuideTags()` で防御的にパースする（不正なJSONが1行混入していても、その行だけ空配列に落ちて一覧・詳細全体が500にならない） |
 | draftTitle / draftSummary / draftContent / draftCoverImageUrl / draftTags | nullable | 仮保存（ドラフト）用。公開版と独立して編集中の内容を保持 |
 | draftUpdatedAt | timestamp (nullable) | ドラフト保存日時。非 null = 未コミットのドラフトあり |
 | viewCount | integer | 閲覧数 |
