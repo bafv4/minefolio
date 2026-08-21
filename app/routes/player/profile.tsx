@@ -324,18 +324,40 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
 
   const { slug } = params;
   const url = new URL(request.url);
   const presetId = url.searchParams.get("preset");
   const normalizedSlug = slug?.toLowerCase();
 
-  // Fetch player with all related data (slugで検索)
+  // 非公開プロフィールへのアクセスは、重い with クエリを実行する前に判定する（パフォーマンス）。
+  // session の取得と軽量ゲートクエリを並列化し、404となるアクセスでは12リレーション付きの
+  // 重いクエリを走らせない
+  const [session, gate] = await Promise.all([
+    getOptionalSession(request, auth),
+    db.query.users.findFirst({
+      where: normalizedSlug
+        ? sql`lower(${users.slug}) = ${normalizedSlug}`
+        : sql`0 = 1`,
+      columns: { id: true, discordId: true, profileVisibility: true },
+    }),
+  ]);
+
+  if (!gate) {
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
+  }
+
+  // プライベートプロフィールは本人以外に404を返す
+  if (
+    gate.profileVisibility === "private" &&
+    session?.user?.id !== gate.discordId
+  ) {
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
+  }
+
+  // Fetch player with all related data（ゲートを通過した場合のみ、内部IDで重いクエリを実行）
   const player = await db.query.users.findFirst({
-    where: normalizedSlug
-      ? sql`lower(${users.slug}) = ${normalizedSlug}`
-      : sql`0 = 1`,
+    where: eq(users.id, gate.id),
     with: {
       playerConfig: true,
       playstyle: true,
@@ -373,15 +395,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
+  // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
   if (!player) {
-    throw new Response(t("playerProfile.notFound"), { status: 404 });
-  }
-
-  // プライベートプロフィールは本人以外に404を返す
-  if (
-    player.profileVisibility === "private" &&
-    session?.user?.id !== player.discordId
-  ) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
