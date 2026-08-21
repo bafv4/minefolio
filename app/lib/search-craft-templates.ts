@@ -452,6 +452,9 @@ export function parseEditorSubmission(
   for (const raw of craftsRaw as Array<
     Partial<TemplateCraft> & { searchStr?: unknown; withShift?: unknown }
   >) {
+    if (!raw || typeof raw !== "object") {
+      return { error: t("templates.invalidTemplateData") };
+    }
     const items = Array.isArray(raw.items)
       ? raw.items.filter((i): i is string => typeof i === "string")
       : [];
@@ -486,6 +489,7 @@ export function parseEditorSubmission(
   const seenSources = new Set<string>();
   const remaps: { sourceKey: string; targetKey: string | null }[] = [];
   for (const raw of remapsRaw as Array<{ sourceKey?: unknown; targetKey?: unknown }>) {
+    if (!raw || typeof raw !== "object") continue;
     if (typeof raw.sourceKey !== "string" || !raw.sourceKey) continue;
     if (raw.targetKey !== null && typeof raw.targetKey !== "string") continue;
     if (raw.targetKey === "") continue;

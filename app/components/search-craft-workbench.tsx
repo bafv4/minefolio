@@ -369,7 +369,6 @@ export function SearchCraftWorkbench({
             <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
               <VirtualKeyboard
                 layout={layout}
-                keybindings={{}}
                 remaps={effectiveRemaps}
                 onKeyClick={setEditingKeyCode}
                 showRemaps
