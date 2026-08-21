@@ -8,6 +8,7 @@
  * - DBに保存
  */
 
+import { createId } from "@paralleldrive/cuid2";
 import { createDb } from "@/lib/db";
 import { users, speedrunCategories, playerRankings, type User } from "@/lib/schema";
 import { eq, and, inArray } from "drizzle-orm";
@@ -237,6 +238,19 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 // メイン処理
 // ============================================
 
+// ユーザー1人分の playerRankings を1回のクエリでメモリに引き当て、
+// ユーザー×カテゴリの二重ループ内での N+1 lookup を避けるためのローカルミラー行。
+// 以後このユーザーのイテレーション内では、このミラー配列のみを更新/削除/挿入の
+// 判定ソースとし、DBへの読み取りは行わない（書き込みSQLは従来どおり都度実行する）。
+interface LocalRankingRow {
+  id: string;
+  rankingType: "speedruncom" | "ranked_pb" | "ranked_elo";
+  categoryId: string | null;
+  speedruncomRunId: string | null;
+  verificationStatus: "verified" | "new" | "rejected" | null;
+  timeMs: number | null;
+}
+
 export async function loader({ request }: { request: Request }) {
   // セキュリティ: Vercel Cron認証（fail closed）。
   // CRON_SECRET が未設定の場合はチェックを飛ばさず拒否する。飛ばすと、
@@ -317,6 +331,24 @@ export async function loader({ request }: { request: Request }) {
         }
       }
 
+      // このユーザーの playerRankings を1回だけ取得し、以降のループ内 lookup は
+      // すべてこのメモリ配列に対して行う（N+1 解消。書き込みSQLは従来どおり実行し、
+      // その都度このミラー配列も更新する）。
+      let userRankings: LocalRankingRow[] = [];
+      if (speedruncomId || user.uuid) {
+        userRankings = await db.query.playerRankings.findMany({
+          where: eq(playerRankings.userId, user.id),
+          columns: {
+            id: true,
+            rankingType: true,
+            categoryId: true,
+            speedruncomRunId: true,
+            verificationStatus: true,
+            timeMs: true,
+          },
+        });
+      }
+
       // Speedrun.com ランキング
       if (speedruncomId) {
         try {
@@ -365,14 +397,12 @@ export async function loader({ request }: { request: Request }) {
               const timeMs = matchingPb.run.times.primary_t * 1000;
               const videoUrl = matchingPb.run.videos?.links?.[0]?.uri;
 
-              const existing = await db.query.playerRankings.findFirst({
-                where: and(
-                  eq(playerRankings.userId, user.id),
-                  eq(playerRankings.rankingType, "speedruncom"),
-                  eq(playerRankings.categoryId, category.id),
-                  eq(playerRankings.speedruncomRunId, matchingPb.run.id)
-                ),
-              });
+              const existing = userRankings.find(
+                (r) =>
+                  r.rankingType === "speedruncom" &&
+                  r.categoryId === category.id &&
+                  r.speedruncomRunId === matchingPb.run.id
+              );
 
               if (existing) {
                 await db
@@ -390,9 +420,15 @@ export async function loader({ request }: { request: Request }) {
                     updatedAt: new Date(),
                   })
                   .where(eq(playerRankings.id, existing.id));
+
+                // ミラー更新: 直後の承認済み重複判定・未承認整理が最新状態を見られるようにする
+                existing.speedruncomRunId = matchingPb.run.id;
+                existing.verificationStatus = "verified";
+                existing.timeMs = timeMs;
               } else {
                 // 同じカテゴリの古い承認済み記録を削除してから新規作成。
                 // 削除と挿入をトランザクションで原子化し、並行 cron での孤児化を防ぐ。
+                const newId = createId();
                 await db.transaction(async (tx) => {
                   await tx.delete(playerRankings).where(
                     and(
@@ -404,6 +440,7 @@ export async function loader({ request }: { request: Request }) {
                   );
 
                   await tx.insert(playerRankings).values({
+                    id: newId,
                     userId: user.id,
                     rankingType: "speedruncom",
                     categoryId: category.id,
@@ -418,6 +455,24 @@ export async function loader({ request }: { request: Request }) {
                     lastFetched: new Date(),
                   });
                 });
+
+                // ミラー更新: 削除された旧・承認済み記録を配列から除去し、新規行を追加
+                userRankings = userRankings.filter(
+                  (r) =>
+                    !(
+                      r.rankingType === "speedruncom" &&
+                      r.categoryId === category.id &&
+                      r.verificationStatus === "verified"
+                    )
+                );
+                userRankings.push({
+                  id: newId,
+                  rankingType: "speedruncom",
+                  categoryId: category.id,
+                  speedruncomRunId: matchingPb.run.id,
+                  verificationStatus: "verified",
+                  timeMs,
+                });
               }
 
               speedruncomUpdates++;
@@ -428,13 +483,9 @@ export async function loader({ request }: { request: Request }) {
               const timeMs = pendingRun.times.primary_t * 1000;
               const videoUrl = pendingRun.videos?.links?.[0]?.uri;
 
-              const existingPending = await db.query.playerRankings.findFirst({
-                where: and(
-                  eq(playerRankings.userId, user.id),
-                  eq(playerRankings.rankingType, "speedruncom"),
-                  eq(playerRankings.speedruncomRunId, pendingRun.id)
-                ),
-              });
+              const existingPending = userRankings.find(
+                (r) => r.rankingType === "speedruncom" && r.speedruncomRunId === pendingRun.id
+              );
 
               if (existingPending) {
                 await db
@@ -450,8 +501,14 @@ export async function loader({ request }: { request: Request }) {
                     updatedAt: new Date(),
                   })
                   .where(eq(playerRankings.id, existingPending.id));
+
+                // ミラー更新: verificationStatus を維持更新（既に "new" の想定だが明示的に反映）
+                existingPending.verificationStatus = "new";
+                existingPending.timeMs = timeMs;
               } else {
+                const newId = createId();
                 await db.insert(playerRankings).values({
+                  id: newId,
                   userId: user.id,
                   rankingType: "speedruncom",
                   categoryId: category.id,
@@ -465,20 +522,29 @@ export async function loader({ request }: { request: Request }) {
                   runWeblink: pendingRun.weblink,
                   lastFetched: new Date(),
                 });
+
+                // ミラー更新: 同一イテレーション内の承認済み未承認整理（下記）が
+                // この新規未承認記録を認識できるよう配列に追加する
+                userRankings.push({
+                  id: newId,
+                  rankingType: "speedruncom",
+                  categoryId: category.id,
+                  speedruncomRunId: pendingRun.id,
+                  verificationStatus: "new",
+                  timeMs,
+                });
               }
 
               speedruncomUpdates++;
             }
 
             // 承認済みになった未承認記録を削除（APIで未承認として返ってこなくなった記録）
-            const existingPendingRecords = await db.query.playerRankings.findMany({
-              where: and(
-                eq(playerRankings.userId, user.id),
-                eq(playerRankings.rankingType, "speedruncom"),
-                eq(playerRankings.categoryId, category.id),
-                eq(playerRankings.verificationStatus, "new")
-              ),
-            });
+            const existingPendingRecords = userRankings.filter(
+              (r) =>
+                r.rankingType === "speedruncom" &&
+                r.categoryId === category.id &&
+                r.verificationStatus === "new"
+            );
 
             for (const existingPending of existingPendingRecords) {
               const stillPending = matchingPendingRuns.some(
@@ -487,6 +553,9 @@ export async function loader({ request }: { request: Request }) {
               if (!stillPending) {
                 // 未承認でなくなった記録を削除（承認済みまたはリジェクトされた）
                 await db.delete(playerRankings).where(eq(playerRankings.id, existingPending.id));
+
+                // ミラー更新: 削除した行を配列からも除去
+                userRankings = userRankings.filter((r) => r.id !== existingPending.id);
               }
             }
           }
@@ -508,12 +577,7 @@ export async function loader({ request }: { request: Request }) {
             // PBランキング
             const bestTime = stats?.bestTime?.ranked;
             if (bestTime) {
-              const existingPb = await db.query.playerRankings.findFirst({
-                where: and(
-                  eq(playerRankings.userId, user.id),
-                  eq(playerRankings.rankingType, "ranked_pb")
-                ),
-              });
+              const existingPb = userRankings.find((r) => r.rankingType === "ranked_pb");
 
               if (existingPb) {
                 await db
@@ -525,13 +589,28 @@ export async function loader({ request }: { request: Request }) {
                     updatedAt: new Date(),
                   })
                   .where(eq(playerRankings.id, existingPb.id));
+
+                // ミラー更新
+                existingPb.timeMs = bestTime;
               } else {
+                const newId = createId();
                 await db.insert(playerRankings).values({
+                  id: newId,
                   userId: user.id,
                   rankingType: "ranked_pb",
                   timeMs: bestTime,
                   timeFormatted: formatTimeMs(bestTime),
                   lastFetched: new Date(),
+                });
+
+                // ミラー更新
+                userRankings.push({
+                  id: newId,
+                  rankingType: "ranked_pb",
+                  categoryId: null,
+                  speedruncomRunId: null,
+                  verificationStatus: "verified",
+                  timeMs: bestTime,
                 });
               }
 
@@ -551,12 +630,7 @@ export async function loader({ request }: { request: Request }) {
               const totalGames = wins + losses;
               const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 1000) / 10 : 0;
 
-              const existingElo = await db.query.playerRankings.findFirst({
-                where: and(
-                  eq(playerRankings.userId, user.id),
-                  eq(playerRankings.rankingType, "ranked_elo")
-                ),
-              });
+              const existingElo = userRankings.find((r) => r.rankingType === "ranked_elo");
 
               if (existingElo) {
                 await db
@@ -571,7 +645,9 @@ export async function loader({ request }: { request: Request }) {
                   })
                   .where(eq(playerRankings.id, existingElo.id));
               } else {
+                const newId = createId();
                 await db.insert(playerRankings).values({
+                  id: newId,
                   userId: user.id,
                   rankingType: "ranked_elo",
                   eloRate: userData.eloRate,
@@ -579,6 +655,16 @@ export async function loader({ request }: { request: Request }) {
                   losses,
                   winRate,
                   lastFetched: new Date(),
+                });
+
+                // ミラー更新
+                userRankings.push({
+                  id: newId,
+                  rankingType: "ranked_elo",
+                  categoryId: null,
+                  speedruncomRunId: null,
+                  verificationStatus: "verified",
+                  timeMs: null,
                 });
               }
 
