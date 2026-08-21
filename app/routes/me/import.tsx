@@ -7,7 +7,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { ImportDialog } from "@/components/import-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -106,27 +106,31 @@ export async function action({ request }: Route.ActionArgs) {
     // 一意インデックス (userId, sourceKey, remapType) に対する upsert なので、
     // ループ内の冗長な findFirst は不要。onConflictDoUpdate に一本化する。
     // 途中失敗で部分適用にならないよう、インポート単位をトランザクションで原子化する。
+    // SQLite の multi-row upsert は values 内を行順に処理するため、同一 conflict target が
+    // 重複していても後勝ち＝逐次実行と同一結果になる。1000行上限に対し500行チャンクで往復を抑える。
+    const remapRows = remaps.map((remap) => ({
+      userId: user.id,
+      sourceKey: remap.sourceKey,
+      targetKey: remap.targetKey,
+      software: remap.software,
+      notes: remap.notes,
+      remapType: normalizeKeyRemapType(remap.remapType),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
     await db.transaction(async (tx) => {
-      for (const remap of remaps) {
+      for (let i = 0; i < remapRows.length; i += 500) {
+        const chunk = remapRows.slice(i, i + 500);
         await tx
           .insert(keyRemaps)
-          .values({
-            userId: user.id,
-            sourceKey: remap.sourceKey,
-            targetKey: remap.targetKey,
-            software: remap.software,
-            notes: remap.notes,
-            remapType: normalizeKeyRemapType(remap.remapType),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
+          .values(chunk)
           .onConflictDoUpdate({
             target: [keyRemaps.userId, keyRemaps.sourceKey, keyRemaps.remapType],
             // remapType は conflict target に含まれるため set 不要（衝突行と常に同値）
             set: {
-              targetKey: remap.targetKey,
-              software: remap.software,
-              notes: remap.notes,
+              targetKey: sql`excluded.target_key`,
+              software: sql`excluded.software`,
+              notes: sql`excluded.notes`,
               updatedAt: new Date(),
             },
           });
@@ -134,28 +138,24 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットを自動作成
-    // 更新されたデータを取得
-    const updatedKeybindings = await db.query.keybindings.findMany({
-      where: eq(keybindings.userId, user.id),
-    });
-    const updatedPlayerConfig = await db.query.playerConfigs.findFirst({
-      where: eq(playerConfigs.userId, user.id),
-    });
-    const updatedKeyRemaps = await db.query.keyRemaps.findMany({
-      where: eq(keyRemaps.userId, user.id),
-    });
-    const updatedItemLayouts = await db.query.itemLayouts.findMany({
-      where: eq(itemLayouts.userId, user.id),
-    });
-    const updatedSearchCrafts = await db.query.searchCrafts.findMany({
-      where: eq(searchCrafts.userId, user.id),
-    });
-    const updatedCustomKeys = await db.query.customKeys.findMany({
-      where: eq(customKeys.userId, user.id),
-    });
-    const updatedCustomActions = await db.query.customActions.findMany({
-      where: eq(customActions.userId, user.id),
-    });
+    // 更新されたデータを取得（互いに独立したクエリなので並列化する）
+    const [
+      updatedKeybindings,
+      updatedPlayerConfig,
+      updatedKeyRemaps,
+      updatedItemLayouts,
+      updatedSearchCrafts,
+      updatedCustomKeys,
+      updatedCustomActions,
+    ] = await Promise.all([
+      db.query.keybindings.findMany({ where: eq(keybindings.userId, user.id) }),
+      db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id) }),
+      db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, user.id) }),
+      db.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, user.id) }),
+      db.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, user.id) }),
+      db.query.customKeys.findMany({ where: eq(customKeys.userId, user.id) }),
+      db.query.customActions.findMany({ where: eq(customActions.userId, user.id) }),
+    ]);
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
     if (!hasPresets) {
@@ -220,24 +220,28 @@ export async function action({ request }: Route.ActionArgs) {
 
     // キーバインドとゲーム設定のインポートを1トランザクションで原子化する
     // （途中失敗による部分適用を防ぐ）
+    // SQLite の multi-row upsert は values 内を行順に処理するため、同一 conflict target が
+    // 重複していても後勝ち＝逐次実行と同一結果になる。1000行上限に対し500行チャンクで往復を抑える。
+    const keybindingRows = keybindingsList.map((kb) => ({
+      userId: user.id,
+      action: kb.action,
+      keyCode: kb.keyCode,
+      category: kb.category,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
     await db.transaction(async (tx) => {
       // キーバインドをインポート
-      for (const kb of keybindingsList) {
+      for (let i = 0; i < keybindingRows.length; i += 500) {
+        const chunk = keybindingRows.slice(i, i + 500);
         await tx
           .insert(keybindings)
-          .values({
-            userId: user.id,
-            action: kb.action,
-            keyCode: kb.keyCode,
-            category: kb.category,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
+          .values(chunk)
           .onConflictDoUpdate({
             target: [keybindings.userId, keybindings.action],
             set: {
-              keyCode: kb.keyCode,
-              category: kb.category,
+              keyCode: sql`excluded.key_code`,
+              category: sql`excluded.category`,
               updatedAt: new Date(),
             },
           });
@@ -291,28 +295,24 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットを自動作成
-    // 更新されたデータを取得
-    const updatedKeybindings = await db.query.keybindings.findMany({
-      where: eq(keybindings.userId, user.id),
-    });
-    const updatedPlayerConfig = await db.query.playerConfigs.findFirst({
-      where: eq(playerConfigs.userId, user.id),
-    });
-    const updatedKeyRemaps = await db.query.keyRemaps.findMany({
-      where: eq(keyRemaps.userId, user.id),
-    });
-    const updatedItemLayouts = await db.query.itemLayouts.findMany({
-      where: eq(itemLayouts.userId, user.id),
-    });
-    const updatedSearchCrafts = await db.query.searchCrafts.findMany({
-      where: eq(searchCrafts.userId, user.id),
-    });
-    const updatedCustomKeys = await db.query.customKeys.findMany({
-      where: eq(customKeys.userId, user.id),
-    });
-    const updatedCustomActions = await db.query.customActions.findMany({
-      where: eq(customActions.userId, user.id),
-    });
+    // 更新されたデータを取得（互いに独立したクエリなので並列化する）
+    const [
+      updatedKeybindings,
+      updatedPlayerConfig,
+      updatedKeyRemaps,
+      updatedItemLayouts,
+      updatedSearchCrafts,
+      updatedCustomKeys,
+      updatedCustomActions,
+    ] = await Promise.all([
+      db.query.keybindings.findMany({ where: eq(keybindings.userId, user.id) }),
+      db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id) }),
+      db.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, user.id) }),
+      db.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, user.id) }),
+      db.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, user.id) }),
+      db.query.customKeys.findMany({ where: eq(customKeys.userId, user.id) }),
+      db.query.customActions.findMany({ where: eq(customActions.userId, user.id) }),
+    ]);
 
     // プリセットが既に存在する場合は作成しない（最初のインポートのみ）
     if (!hasPresets) {
