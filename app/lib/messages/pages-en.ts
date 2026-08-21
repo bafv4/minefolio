@@ -1575,6 +1575,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Item layouts - Minefolio",
     userNotFound: "User not found",
     saveFailed: "Failed to save the data",
+    invalidLayoutData: "The item layout data format is invalid",
     unknownAction: "Unknown action",
     off: "OH",
     offhand: "Offhand",

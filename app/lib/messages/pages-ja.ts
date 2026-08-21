@@ -1543,6 +1543,7 @@ export const PAGES_JA = {
     title: "アイテム配置 - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     saveFailed: "データの保存に失敗しました",
+    invalidLayoutData: "アイテム配置のデータ形式が不正です",
     unknownAction: "不明なアクション",
     off: "OH",
     offhand: "オフハンド",
