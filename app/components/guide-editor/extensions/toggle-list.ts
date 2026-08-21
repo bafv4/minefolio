@@ -1,8 +1,19 @@
 // トグルリスト拡張。<details><summary> + div.toggle-content。
 // 旧 index.tsx ToggleListExtension から逐語移植。
-import { Node as TiptapNode, mergeAttributes } from "@tiptap/core";
+import { Node as TiptapNode, mergeAttributes, type CommandProps } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { ToggleListNodeView } from "../node-views/toggle-node-view";
+
+// 「toggleList」という namespace キーは @tiptap/core 標準の toggleList コマンド
+// （リスト種別の切替）が既に使用しているため、型の重複宣言エラーを避けて
+// 「toggleListBlock」という別名を使う（実行時には影響しない型上のグルーピングキー）。
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    toggleListBlock: {
+      setToggleList: () => ReturnType;
+    };
+  }
+}
 
 export const ToggleListExtension = TiptapNode.create({
   name: "toggleList",
@@ -50,13 +61,13 @@ export const ToggleListExtension = TiptapNode.create({
     return ReactNodeViewRenderer(ToggleListNodeView as any);
   },
 
-  // @ts-expect-error custom commands not in RawCommands
   addCommands() {
     return {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setToggleList: () => ({ commands }: any) => {
-        return commands.wrapIn(this.name);
-      },
+      setToggleList:
+        () =>
+        ({ commands }: CommandProps) => {
+          return commands.wrapIn(this.name);
+        },
     };
   },
 });
