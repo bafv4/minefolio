@@ -236,7 +236,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { getNetherEnterCount, getRecentPacesForPlayer } from "@/lib/paceman-cache";
+import { getNetherEnterCount, getRecentPacesForPlayer, type GroupedPaceEntry } from "@/lib/paceman-cache";
 import {
   calculateCm360,
   calculateCursorSpeed,
@@ -2213,21 +2213,23 @@ function isHttpVideoUrl(value: string): boolean {
   return parsed.protocol === "http:" || parsed.protocol === "https:";
 }
 
+type RecordCardRecord = {
+  id: string;
+  category: string;
+  categoryDisplayName: string;
+  subcategory: string | null;
+  personalBest: number | null;
+  targetTime: number | null;
+  achieved: boolean;
+  pbVideoUrl: string | null;
+  pbNotes: string | null;
+  isPinned?: boolean;
+};
+
 function RecordCard({
   record,
 }: {
-  record: {
-    id: string;
-    category: string;
-    categoryDisplayName: string;
-    subcategory: string | null;
-    personalBest: number | null;
-    targetTime: number | null;
-    achieved: boolean;
-    pbVideoUrl: string | null;
-    pbNotes: string | null;
-    isPinned?: boolean;
-  };
+  record: RecordCardRecord;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2641,6 +2643,15 @@ function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "sma
   );
 }
 
+// Stats タブで参照するプレイヤー情報の型（categoryRecords は RecordCard の型に揃える）
+type StatsPlayer = {
+  mcid: string | null;
+  speedruncomUsername: string | null;
+  showRankedStats: boolean | null;
+  showPacemanStats: boolean | null;
+  categoryRecords: RecordCardRecord[];
+};
+
 // Stats タブのコンテナ（クライアント側でデータ取得）
 function StatsTabContent({
   player,
@@ -2648,10 +2659,10 @@ function StatsTabContent({
   pinnedSpeedrunRecords,
   pacemanStats,
 }: {
-  player: any;
+  player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
-  pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
+  pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
@@ -2671,7 +2682,10 @@ function StatsTabContent({
       });
 
       const tasks: Promise<void>[] = [
-        fetchMCSRRankedStats(player.mcid)
+        // mcid が未設定でも従来から無条件に呼び出している（各関数側が未登録相当を返す）。
+        // StatsPlayer.mcid は users テーブルに合わせ string | null だが、呼び出しはその挙動を
+        // 変えないための型上の非nullアサーション
+        fetchMCSRRankedStats(player.mcid!)
           .then((ranked) => {
             if (cancelled) return;
             setExternalStats((prev) => ({ ...prev, ranked }));
@@ -2682,7 +2696,7 @@ function StatsTabContent({
             if (cancelled) return;
             setLoadState((prev) => ({ ...prev, ranked: "error" }));
           }),
-        checkPaceManPlayer(player.mcid)
+        checkPaceManPlayer(player.mcid!)
           .then((paceman) => {
             if (cancelled) return;
             setExternalStats((prev) => ({ ...prev, paceman }));
@@ -2733,7 +2747,7 @@ function StatsTabContent({
   );
 }
 
-function filterWeeklyMainPaces(mainPaces: any[]): any[] {
+function filterWeeklyMainPaces(mainPaces: GroupedPaceEntry[]): GroupedPaceEntry[] {
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   return mainPaces.filter((pace) => {
     const date = pace?.date ? new Date(pace.date).getTime() : NaN;
@@ -2751,10 +2765,10 @@ function StatsContent({
   loadState,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
-  player: any;
+  player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
-  pacemanStats: { netherEnterCount: number; mainPaces: any[] } | null;
+  pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   loadState: {
     ranked: "loading" | "done" | "error";
     paceman: "loading" | "done" | "error";
@@ -2832,7 +2846,7 @@ function StatsContent({
           </CardHeader>
           <CardContent className="px-5">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {player.categoryRecords.map((record: any) => (
+              {player.categoryRecords.map((record) => (
                 <RecordCard key={record.id} record={record} />
               ))}
             </div>
