@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
-import { eq, asc, and, or, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray } from "drizzle-orm";
 import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, getFingerLabel, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
@@ -270,6 +270,10 @@ async function persistRemaps(
         }
       }
 
+      const existingRows = await tx.query.keyRemaps.findMany({
+        where: eq(keyRemaps.userId, userId),
+      });
+
       // 各行を既存行（あれば）へ解決してから「一括削除→挿入」で書き戻す。
       // 逐次 update だと同一 sourceKey の2行で種別を入れ替えた際に
       // 一時的な UNIQUE 衝突が起き、正当な最終状態でも保存できなくなるため
@@ -292,18 +296,13 @@ async function persistRemaps(
           remapType: normalizeKeyRemapType(remap.remapType),
         };
 
-        const existing = await tx.query.keyRemaps.findFirst({
-          where: remap.id
-            ? and(eq(keyRemaps.id, remap.id), eq(keyRemaps.userId, userId))
-            : and(
-                eq(keyRemaps.userId, userId),
-                eq(keyRemaps.remapType, payload.remapType),
-                or(
-                  eq(keyRemaps.sourceKey, sourceKeyNormalized),
-                  eq(keyRemaps.sourceKey, sourceKeyUpper)
-                )
-              ),
-        });
+        const existing = remap.id
+          ? existingRows.find((r) => r.id === remap.id)
+          : existingRows.find(
+              (r) =>
+                r.remapType === payload.remapType &&
+                (r.sourceKey === sourceKeyNormalized || r.sourceKey === sourceKeyUpper)
+            );
 
         resolved.push({
           id: existing?.id ?? createId(),
@@ -319,15 +318,15 @@ async function persistRemaps(
             inArray(keyRemaps.id, resolved.map((r) => r.id))
           )
         );
-        for (const row of resolved) {
-          await tx.insert(keyRemaps).values({
+        await tx.insert(keyRemaps).values(
+          resolved.map((row) => ({
             id: row.id,
             userId,
             ...row.payload,
             createdAt: row.createdAt,
             updatedAt: now,
-          });
-        }
+          }))
+        );
       }
     });
   } catch (e) {
