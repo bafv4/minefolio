@@ -8,7 +8,7 @@ import type { Translator } from "@/lib/messages";
 export function formatRelativeDate(t: Translator, date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - new Date(date).getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
   if (diffDays === 0) return t("relativeDate.today");
   if (diffDays === 1) return t("relativeDate.yesterday");

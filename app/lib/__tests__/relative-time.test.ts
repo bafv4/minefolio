@@ -54,11 +54,10 @@ describe("formatRelativeDate（日単位）", () => {
     expect(formatRelativeDate(t, ago(365 * DAY_MS))).toBe("1年前");
   });
 
-  it("未来日時（負の差分）でも例外にならず現行挙動（負のdaysAgo表記）のまま", () => {
-    // 現在の実装は diffDays===0/1 判定のあと即 diffDays<7 に落ちるため、
-    // 未来日時は負の日数がそのまま daysAgo に埋め込まれる。
+  it("未来日時（負の差分）は「今日」にクランプされる", () => {
+    // diffDays は Math.max(0, ...) でクランプされるため、未来日時は常に diffDays===0 扱いになる。
     const future = new Date(NOW.getTime() + 5 * DAY_MS);
-    expect(formatRelativeDate(t, future)).toBe("-5日前");
+    expect(formatRelativeDate(t, future)).toBe("今日");
   });
 });
 
