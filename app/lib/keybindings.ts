@@ -818,8 +818,11 @@ export function formatKeyCombination(combo: KeyCombination): string {
  * キー組み合わせ文字列を正規化
  * 修飾キーを正しい順序に並べ、キーコードを正規化
  *
+ * 修飾キーの判定は "Ctrl" / "Shift" / "Alt" / "Meta" の完全一致（大文字小文字を区別）。
+ * 小文字表記（"shift+ctrl+keya" 等）は修飾キーとして認識されない。
+ *
  * @example
- * normalizeKeyCombination("shift+ctrl+keya")
+ * normalizeKeyCombination("Shift+Ctrl+KeyA")
  * // => "Ctrl+Shift+KeyA"
  */
 export function normalizeKeyCombination(input: string): string {
@@ -883,10 +886,11 @@ export function hasModifiers(keyCode: string): boolean {
 
 /**
  * 2つのキー組み合わせが同一かを比較
- * 修飾キーの順序や大文字/小文字の違いを吸収
+ * 修飾キーの順序とキーコード部の表記揺れ（大文字/Minecraft形式）を吸収する。
+ * 修飾キー自体は正規表記（"Ctrl" / "Shift" 等）である必要がある（normalizeKeyCombination 参照）。
  *
  * @example
- * keyCombinationsEqual("Ctrl+Shift+KeyA", "shift+ctrl+KEYA") // => true
+ * keyCombinationsEqual("Ctrl+Shift+KeyA", "Shift+Ctrl+KEYA") // => true
  */
 export function keyCombinationsEqual(combo1: string, combo2: string): boolean {
   return normalizeKeyCombination(combo1) === normalizeKeyCombination(combo2);

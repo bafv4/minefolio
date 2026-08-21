@@ -416,7 +416,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     null;
 
   // Check if current user is viewing their own profile
-  // （285行目の非公開判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
+  // （上の非公開プロフィール判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
   const isOwner = session?.user?.id === player.discordId;
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、

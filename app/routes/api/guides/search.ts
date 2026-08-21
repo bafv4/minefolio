@@ -1,13 +1,11 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
-import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const env = getEnv();
   const db = createDb();
   const locale = resolveLocale(request);
 
