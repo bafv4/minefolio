@@ -38,6 +38,9 @@ export async function action({ request }: Route.ActionArgs) {
   } catch {
     return apiJsonResponse({ error: "Invalid JSON" }, { status: 400 });
   }
+  if (body === null || typeof body !== "object") {
+    return apiJsonResponse({ error: "Invalid request" }, { status: 400 });
+  }
 
   const profileUserId = typeof body.profileUserId === "string" ? body.profileUserId : "";
   const emoji = typeof body.emoji === "string" ? body.emoji : "";

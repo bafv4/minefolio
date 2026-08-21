@@ -31,6 +31,12 @@ export async function action({ request }: ActionFunctionArgs) {
       headers: { "Content-Type": "application/json" },
     });
   }
+  if (body === null || typeof body !== "object") {
+    return new Response(JSON.stringify({ error: "Invalid request" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const slugs = Array.isArray(body.slugs)
     ? body.slugs
