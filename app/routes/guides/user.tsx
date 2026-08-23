@@ -6,6 +6,7 @@ import {
   useLoaderData,
   Link,
   useNavigation,
+  redirect,
   type LoaderFunctionArgs,
 } from "react-router";
 import { useState } from "react";
@@ -14,7 +15,8 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
+import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,6 +65,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const auth = createAuth(db, env);
 
   const { authorSlug } = params as { authorSlug: string };
+  const url = new URL(request.url);
 
   // セッション解決（→ isOwner 判定用の currentUser 取得へ連鎖）と著者取得は互いに独立なので並行する
   const [currentUser, author] = await Promise.all([
@@ -75,7 +78,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         : null
     ),
     db.query.users.findFirst({
-      where: eq(users.slug, authorSlug),
+      // slug の大文字小文字を区別せず一致させる（/player/:slug と同じポリシー）
+      where: sql`lower(${users.slug}) = ${authorSlug.toLowerCase()}`,
       columns: {
         id: true,
         slug: true,
@@ -91,6 +95,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   ]);
 
   if (!author) {
+    // MCID変更等でslugが変わった旧URLを、slug_history → Mojang API の順で救済する
+    // （publicly referencable なユーザーのみ。private は漏らさない）
+    const target = await resolvePlayerSlugFallback(db, authorSlug);
+    if (target) {
+      throw redirect(`/guides/${encodeURIComponent(target)}${url.search}`);
+    }
     throw new Response("Not Found", { status: 404 });
   }
 

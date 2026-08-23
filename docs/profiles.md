@@ -106,6 +106,12 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 いるため、404直前にこの履歴・Mojang API の順で解決を試みる2段フォールバックを挟む
 （`app/lib/player-slug-fallback.server.ts` の `resolvePlayerSlugFallback(db, requestedSlug)`）。
 
+同じポリシーは `/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`（著者slugの解決）にも
+適用されている（`app/routes/guides/user.tsx` / `app/routes/guides/view.tsx`）。著者が見つからない
+場合、解決できた現slugへ記事slug・クエリ文字列を維持したままリダイレクトする
+（`/guides/:authorSlug/:guideSlug` は `/guides/<現slug>/<guideSlug>?...`）。「著者が private で
+本人以外」の404分岐ではこのフォールバックを呼ばない点も `/player/:slug` と同様。
+
 **解決手順**:
 
 1. `users.slug` の完全一致検索（既存の主経路）
