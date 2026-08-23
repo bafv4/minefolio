@@ -536,6 +536,17 @@ CREATE TABLE `search_crafts` (
 );
 
 CREATE UNIQUE INDEX `idx_search_crafts_user_sequence` ON `search_crafts` (`user_id`,`sequence`);
+CREATE TABLE `slug_history` (
+	`id` text PRIMARY KEY NOT NULL,
+	`slug` text NOT NULL,
+	`user_id` text NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `slug_history_slug_uniq` ON `slug_history` (`slug`);
+CREATE INDEX `idx_slug_history_user_id` ON `slug_history` (`user_id`);
 CREATE TABLE `social_links` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

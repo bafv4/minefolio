@@ -249,6 +249,16 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
 - **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
 
+### 著者slugの解決（`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug` 共通）
+
+`users.slug` の照合は `/player/:slug` と同じ大文字小文字無視の完全一致で、一致しなければ404を
+投げる直前に `resolvePlayerSlugFallback(db, authorSlug)`（slug_history → Mojang API の2段）を
+試み、解決できれば現slugへ302リダイレクトする（記事slug・クエリ文字列は維持）。private な著者は
+フォールバック対象外。詳細なポリシー・救済できる/できないケースは
+[`docs/profiles.md`「スラッグ解決とフォールバックリダイレクト」](./profiles.md#スラッグ解決とフォールバックリダイレクト)を参照。
+ガイド記事本体の `slug`（`guides.slug`）は保存時に小文字正規化された別スコープの値で、この
+フォールバックの対象外（完全一致のまま）。
+
 ---
 
 ## 管理ページ（ルーティング）

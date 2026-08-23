@@ -95,6 +95,31 @@
 - `buildLegacyFavoritesCookieDeletion()` — 旧 Cookie 削除用 `Set-Cookie` ヘッダー値
 - `LEGACY_FAVORITES_COOKIE_NAME` 定数
 - `isFavorite(list, slug)` — クライアント・サーバー両用の純関数
+- `retargetFavoritesOnSlugChange(tx, { oldSlug, newSlug })` — slug 変更時の追従更新（下記「slug 変更時の追従更新」参照）
+
+---
+
+## slug 変更時の追従更新
+
+`favorites.favoriteSlug` は `users.slug` への弱参照（FK 制約なし。整合性ポリシーは `app/lib/schema.ts` の
+favorites コメントおよび [database.md](./database.md#弱参照fk-を張らない参照) 参照）。MCID の設定・変更・削除で
+`users.slug` が再生成されると、他ユーザーが持つ `favorites` 行が古い slug を指したまま孤児化し、
+`/favorites`（`inArray(users.slug, slugs)` の完全一致で解決）から黙って消える。これを防ぐため、
+`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid` アクションは `users` 更新と同じトランザクション内で
+`retargetFavoritesOnSlugChange(tx, { oldSlug, newSlug })` を呼ぶ。
+
+処理順（`app/lib/favorites.ts`）:
+
+1. `oldSlug === newSlug`（完全一致）なら何もしない
+2. `newSlug` を `favoriteSlug` に持つ既存行を削除する — 以前その slug を持っていた別ユーザーへの
+   孤児参照であり、そのまま残すと次の UPDATE が `(userId, favoriteSlug)` の UNIQUE 制約
+   （`idx_favorites_user_slug`）に衝突しうるため（`slug-history.server.ts` の `claimSlug` と同じ意味論）
+3. `oldSlug` を `favoriteSlug` に持つ行を `newSlug` へ更新する（追従更新本体）
+
+比較は **完全一致**（大文字小文字を区別）。`favoriteSlug` は登録時点の `users.slug` の正確な値を保存しており、
+`/favorites` 側の解決も完全一致のため、大文字小文字だけの slug 変更（例: `"alice"` → `"Alice"`）でも追従が必要
+になる。これは `slug_history`（小文字化して比較し、大文字小文字だけの変更は no-op とする）とは判定基準が
+異なる点に注意。
 
 ---
 
@@ -153,7 +178,8 @@
 | ファイル | 役割 |
 |---|---|
 | `app/lib/schema.ts` | `favorites` テーブル定義 |
-| `app/lib/favorites.ts` | サーバー側 DB CRUD + 旧 Cookie 削除ヘッダー |
+| `app/lib/favorites.ts` | サーバー側 DB CRUD + 旧 Cookie 削除ヘッダー + slug 変更時の追従更新（`retargetFavoritesOnSlugChange`） |
+| `app/routes/me/edit.tsx` | `set_mcid` / `remove_mcid` アクションから `retargetFavoritesOnSlugChange` を呼び出し |
 | `app/lib/favorites-client.ts` | クライアント側 localStorage / sessionStorage 操作 |
 | `app/hooks/use-favorites.tsx` | `FavoritesProvider` + `useFavorites` |
 | `app/routes/api/favorites.ts` | GET / POST / PUT のお気に入り API |

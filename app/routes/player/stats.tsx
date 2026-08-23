@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, Link } from "react-router";
+import { useLoaderData, Link, redirect } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -16,6 +16,7 @@ import { MCSRRankedCard, PaceManStatsCard, SpeedrunComCard } from "@/components/
 import { Trophy, ArrowLeft } from "lucide-react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 
 export const meta: Route.MetaFunction = ({ matches, params, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -66,6 +67,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   });
 
   if (!player) {
+    if (slug) {
+      const target = await resolvePlayerSlugFallback(db, slug);
+      if (target) {
+        throw redirect(`/player/${encodeURIComponent(target)}/stats${new URL(request.url).search}`);
+      }
+    }
     throw new Response(t("playerStats.notFound"), { status: 404 });
   }
 

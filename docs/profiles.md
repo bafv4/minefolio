@@ -98,6 +98,74 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
   これらは `displayName` と `displayNameAlphabet` の両方を持ち回り、描画直前に `useLocale()` で解決する
 - **OGP画像（`/og-image`）は対象外**: クローラーはロケール Cookie を送らないため、常に `displayName` を使う
 
+### スラッグ解決とフォールバックリダイレクト
+
+`/player/:slug`・`/player/:slug/stats` は `users.slug` の大文字小文字無視の完全一致で検索し、
+一致しなければ404を返す。slug は MCID 変更（`/me/edit` の MCID設定/削除）のたびに上書きされるが、
+変更のたびに **`slug_history` テーブル**（`app/lib/slug-history.server.ts`）へ旧slugを記録して
+いるため、404直前にこの履歴・Mojang API の順で解決を試みる2段フォールバックを挟む
+（`app/lib/player-slug-fallback.server.ts` の `resolvePlayerSlugFallback(db, requestedSlug)`）。
+
+同じポリシーは `/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`（著者slugの解決）にも
+適用されている（`app/routes/guides/user.tsx` / `app/routes/guides/view.tsx`）。著者が見つからない
+場合、解決できた現slugへ記事slug・クエリ文字列を維持したままリダイレクトする
+（`/guides/:authorSlug/:guideSlug` は `/guides/<現slug>/<guideSlug>?...`）。「著者が private で
+本人以外」の404分岐ではこのフォールバックを呼ばない点も `/player/:slug` と同様。
+
+**解決手順**:
+
+1. `users.slug` の完全一致検索（既存の主経路）
+2. 一致しなければ `slug_history` から `requestedSlug`（小文字化）を検索する
+   （`resolveSlugFromHistory`）。ヒットし、参照先ユーザーが `public` / `unlisted`
+   （`publiclyReferencableCondition`）なら、そのユーザーの現在の `slug` へ **302** リダイレクトする。
+   `@discordId` 形式の旧slug（MCID削除時に発生）も対象で、MCID形状ガードは適用しない
+3. 履歴でもヒットしなければ、`requestedSlug` が MCID として解釈可能な形状
+   （`/^[A-Za-z0-9_]{3,16}$/`）かを確認する。`@discordId` 形式の自動生成 slug やランダムパスへの
+   無差別アクセスはここで弾かれ、Mojang API は呼ばれない
+4. Mojang API（`fetchUuidFromMcid`、フォールバック用に3秒タイムアウト）で `requestedSlug` を
+   MCID とみなして現在の UUID を取得する
+5. その UUID を持つユーザーが `public` / `unlisted`ならその現在の `slug` へ **302** リダイレクトする。
+   `private` は一致しても存在を漏らさないため404のまま
+
+**302を使う理由**: どちらの段も「現在の所有者」を指し示すものであり、slug の再利用によって
+将来別ユーザーに移りうる（恒久的な対応関係ではない）ため、恒久リダイレクト（301）は使わない。
+
+**slug_history の記録・整理**（詳細は `app/lib/slug-history.server.ts` と `docs/database.md` の
+`slug_history` 節）:
+- `/me/edit` の `set_mcid` / `remove_mcid` アクションは、`users` 更新と `recordSlugChange()` を
+  同一トランザクションでまとめて実行する（Mojang検証はトランザクションの外）
+- `recordSlugChange` は旧slugを小文字化して upsert（1つの旧slugは常に最新の元所有者1人だけを
+  指す）し、新slugが過去に別ユーザーの旧slugとして記録されていればその履歴行を削除する
+  （クレームによるクリーンアップ）
+- オンボーディングでの初回 slug 取得時は `claimSlug()` で同様のクリーンアップを行う
+- ユーザー退会（`users` 行削除）時は FK cascade で該当ユーザーの履歴も自動的に消える
+  （退会者の旧slugへのリダイレクトは自然消滅する）
+
+**救済できるケース**:
+- 改名・MCID削除によって Minefolio 側の slug が変わったプロフィールへの旧slugアクセス
+  （`slug_history` 導入後に発生した変更はすべて対象）
+- Mojang側で改名済み・Minefolio側の slug が未更新のプロフィールに、新しい MCID
+  （＝現在のMojang名）でアクセスされた場合（Mojangフォールバック）
+
+**救済できないケース（仕様）**:
+- `slug_history` 導入前に発生した slug 変更（履歴が存在しない）
+- `private` プロフィールへの旧slugアクセス（存在を漏らさないため404のまま）
+- 旧slugが別ユーザーの現役slugとして再利用されている場合（`slug_history` は新slug確定時に
+  該当履歴を削除するため、この場合はそもそも履歴に残らず主経路の完全一致検索で現所有者の
+  プロフィールが表示される＝正しい挙動）
+
+**キャッシュ**（Mojangフォールバック段のみ。`slug_history` 検索はDB直接参照でキャッシュしない）:
+- 正引き（MCID→UUID）は `fetchUuidFromMcid` 自体が1日（`CacheTTL.LONG`）キャッシュする
+- Mojang側に存在しない MCID（`MojangError` の `MCID_NOT_FOUND`）は15分（`CacheTTL.MEDIUM`）の
+  ネガティブキャッシュを積み、無差別アクセスによる繰り返しの API 呼び出しを抑える
+- タイムアウトや Mojang 側の一時障害（`API_ERROR`）はキャッシュしない（次回のアクセスで再試行できるようにする）
+
+このフォールバックは例外を投げない。失敗時（履歴なし・形状不一致・Mojang未登録・一時障害・
+該当ユーザーなし）は常に `null` を返し、呼び出し側は従来どおり404にフォールバックする。
+
+「本人以外に404を返すプライベートプロフィール」判定の分岐ではこのフォールバックを呼ばない
+（同一ユーザーの slug/UUID に解決されるだけで、履歴検索・Mojang API 呼び出しが無駄になるため）。
+
 ---
 
 ## プロフィール表示タブ
@@ -583,6 +651,8 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 |---|---|
 | `app/lib/schema.ts` | DBスキーマ定義 (`users`, `social_links` 等) |
 | `app/lib/slug.ts` | スラッグ生成ユーティリティ |
+| `app/lib/player-slug-fallback.server.ts` | 404時のフォールバックリダイレクト解決（`resolvePlayerSlugFallback`。slug_history → Mojangの2段） |
+| `app/lib/slug-history.server.ts` | 旧slug→現ユーザーの履歴管理（`recordSlugChange` / `claimSlug` / `resolveSlugFromHistory`） |
 | `app/routes/player/profile.tsx` | プロフィール表示ページ |
 | `app/routes/me/edit.tsx` | プロフィール編集ページ |
 | `app/routes/me/playstyle.tsx` | プレイスタイル編集ページ (`/me/playstyle`) |

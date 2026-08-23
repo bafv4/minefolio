@@ -3,6 +3,7 @@ import { localeFromMatches } from "@/lib/locale";
 import {
   useLoaderData,
   Link,
+  redirect,
   type LoaderFunctionArgs,
 } from "react-router";
 import { createDb, type Database } from "@/lib/db";
@@ -11,6 +12,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { resolveRowVariations } from "@/lib/search-craft-variations";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "@/lib/preset-read";
@@ -240,6 +242,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     guideSlug: string;
   };
 
+  const url = new URL(request.url);
+
   // セッション解決（→ isOwner 判定用の currentUser 取得へ連鎖）と著者取得は互いに独立なので並行する
   const [currentUser, author] = await Promise.all([
     getOptionalSession(request, auth).then((session) =>
@@ -251,7 +255,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         : null
     ),
     db.query.users.findFirst({
-      where: eq(users.slug, authorSlug),
+      // slug の大文字小文字を区別せず一致させる（/player/:slug と同じポリシー）
+      where: sql`lower(${users.slug}) = ${authorSlug.toLowerCase()}`,
       columns: {
         id: true,
         slug: true,
@@ -268,11 +273,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   ]);
 
   if (!author) {
+    // MCID変更等でslugが変わった旧URLを、slug_history → Mojang API の順で救済する
+    // （publicly referencable なユーザーのみ。private は漏らさない）
+    const target = await resolvePlayerSlugFallback(db, authorSlug);
+    if (target) {
+      throw redirect(
+        `/guides/${encodeURIComponent(target)}/${encodeURIComponent(guideSlug)}${url.search}`
+      );
+    }
     throw new Response("Not Found", { status: 404 });
   }
 
   // 著者本人なら ?draft=1 でドラフト（仮保存）内容をプレビューできる
-  const wantDraft = new URL(request.url).searchParams.get("draft") === "1";
+  const wantDraft = url.searchParams.get("draft") === "1";
   const isOwner = currentUser?.id === author.id;
 
   // プライベートプロフィールの著者のガイドは本人以外に404を返す（プロフィール本体と挙動を揃える）

@@ -8,6 +8,9 @@ import { eq, and } from "drizzle-orm";
 import { favorites } from "./schema";
 import type { Database } from "./db";
 
+/** drizzle のトランザクション内外どちらでも使える最小インターフェース（slug-history.server.ts と同じ方式） */
+type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
+
 /** 旧 Cookie 名（互換削除のため使用） */
 export const LEGACY_FAVORITES_COOKIE_NAME = "minefolio_favorites";
 
@@ -101,4 +104,39 @@ export async function syncLocalFavoritesToDb(
  */
 export function isFavorite(list: string[], slug: string): boolean {
   return list.includes(slug);
+}
+
+/**
+ * MCID変更（set_mcid）・MCID削除（remove_mcid）で users.slug が変わる際に呼ぶ。
+ * schema.ts の favorites ポリシーコメントに定める「slug 変更時はアプリケーション層で
+ * 旧 slug → 新 slug の追従更新を行う」の実装。
+ *
+ * - oldSlug を favoriteSlug に持つ既存行を newSlug へ更新する（追従更新本体）
+ * - newSlug を既に favoriteSlug に持つ行は、以前その slug を持っていた別ユーザーへの
+ *   孤児参照（slug-history.server.ts の claimSlug と同じ意味論）なので先に削除する。
+ *   これにより (userId, favoriteSlug) の UNIQUE 制約（idx_favorites_user_slug）との
+ *   衝突も避けられる
+ *
+ * 比較は完全一致（大文字小文字を区別）で行う。favoriteSlug は登録時点の users.slug を
+ * そのまま保存しており、favorites.tsx の解決も完全一致のため、lower() マッチにすると
+ * 同一ユーザーの大文字小文字違い重複行が同じ newSlug に更新されてユニーク制約違反に
+ * なりうる上、大文字小文字違いの行はそもそも現行の解決ロジックでも救済されない死に行
+ * のため対象外でよい。大文字小文字だけの slug 変更（例: "alice" → "Alice"）でも
+ * favorites の解決自体は完全一致で行われるため、この関数では追従させる
+ * （recordSlugChange の小文字化 no-op とは判定基準が異なる点に注意）。
+ */
+export async function retargetFavoritesOnSlugChange(
+  tx: DatabaseOrTransaction,
+  { oldSlug, newSlug }: { oldSlug: string; newSlug: string },
+): Promise<void> {
+  if (oldSlug === newSlug) {
+    return;
+  }
+
+  await tx.delete(favorites).where(eq(favorites.favoriteSlug, newSlug));
+
+  await tx
+    .update(favorites)
+    .set({ favoriteSlug: newSlug })
+    .where(eq(favorites.favoriteSlug, oldSlug));
 }

@@ -4,7 +4,7 @@ Minefolio の DB スキーマ全体を俯瞰するためのドキュメント。
 
 - DBMS: **libSQL（Turso）／ SQLite 方言**、ORM は **Drizzle ORM**
 - 主キーは原則 `text` の **CUID2**（`@paralleldrive/cuid2` の `createId()`）。例外は `app_meta`（`key` が PK）と better-auth 管理テーブル
-- テーブル数: **39**
+- テーブル数: **40**
 - スキーマ変更の反映手順は [CLAUDE.md](../CLAUDE.md) の「データベース」節（`db:push` / `db:push:remote`）を参照
 
 ## 凡例
@@ -53,6 +53,7 @@ erDiagram
     users ||--o{ custom_fields : user_id
     users ||--o{ external_stats : user_id
     users ||--o{ favorites : user_id
+    users ||--o{ slug_history : user_id
 
     users ||--o{ config_presets : user_id
     users ||--o{ config_history : user_id
@@ -146,6 +147,7 @@ erDiagram
 | 37 | [`content_translations`](#content_translations) | 15 | 利用者コンテンツの自動翻訳 | なし（弱参照） |
 | 38 | [`page_view_stats`](#page_view_stats) | 7 | ページビュー集計スナップショット | なし（弱参照） |
 | 39 | [`app_meta`](#app_meta) | 3 | アプリ全体の key-value | なし |
+| 40 | [`slug_history`](#slug_history) | 5 | 旧 slug からのリダイレクト解決 | 1 : N |
 
 ---
 
@@ -163,7 +165,7 @@ erDiagram
 
 | 参照元 | 参照先 | FK を張らない理由 |
 |---|---|---|
-| `favorites.favorite_slug` | `users.slug` | `slug` は MCID 変更等で再生成される可変値。FK にすると変更追従が複雑化する |
+| `favorites.favorite_slug` | `users.slug` | `slug` は MCID 変更等で再生成される可変値。FK にすると変更追従が複雑化する（追従は下記のとおりアプリ層で実装済み） |
 | `paceman_paces.mcid` | `users.mcid` | 未登録ランナーのペースも保持するため |
 | `youtube_video_cache.minefolio_mcid`<br>`youtube_live_cache.minefolio_mcid` | `users.mcid` | cron が外部 API 起点で蓄積するキャッシュのため |
 | `twitch_vod_cache.user_login` | `social_links.identifier` | MCID を持たないユーザーの VOD も扱うため（小文字で突合） |
@@ -172,8 +174,21 @@ erDiagram
 | `category_records.category_ref_id` | `speedrun_categories.id` | 列は用意しているが制約は張っていない |
 | `auth_accounts.account_id` | `users.discord_id` | better-auth 側のテーブル。アプリは `eq(users.discordId, session.user.id)` で毎回引き直す |
 
-副作用として `favorites` は参照先ユーザーの削除・`slug` 変更で孤児化しうる。必要なら
+副作用として `favorites` は参照先ユーザーの削除・`slug` 変更で孤児化しうる。
+`slug` 変更（MCID の設定・変更・削除、`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid`）による
+追従更新はアプリケーション層で実装済み（`app/lib/favorites.ts` の `retargetFavoritesOnSlugChange`。
+`users` 更新と同じトランザクション内で旧 slug → 新 slug へ更新し、新 slug を指す孤児行は先に削除する。
+詳細は [favorites.md](./favorites.md#slug-変更時の追従更新)）。ユーザー削除時（cascade 対象外の孤児）は
+未実装のため、必要なら
 `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` で GC する。
+
+### `slug_history` の一意性
+
+`slug_history.slug` は必ず小文字化して保存し、UNIQUE 索引で「1 slug（小文字）＝常に最新の
+元所有者 1 人だけ」を保証する。同じ旧 slug を別ユーザーが再度手放した場合は
+`onConflictDoUpdate` で上書きする（履歴を積み増さない）。`user_id` は `users.id` への
+FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの履歴も自動的に消える。
+読み書きは [`app/lib/slug-history.server.ts`](../app/lib/slug-history.server.ts) に集約する。
 
 ### better-auth テーブルとの関係
 
@@ -544,6 +559,24 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 | `created_at` | ts | |
 
 索引: **UNIQUE** `(user_id, favorite_slug)` / `(user_id)`
+
+#### `slug_history`
+
+MCID 登録（`set_mcid`）・削除（`remove_mcid`）で `users.slug` が変わるたびに旧 slug を記録し、
+`/player/:slug` 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴
+（[`app/lib/slug-history.server.ts`](../app/lib/slug-history.server.ts)）。Mojang API 起点の
+フォールバック（`player-slug-fallback.server.ts`）より優先して解決する。詳細は
+[profiles.md](./profiles.md)、一意性の運用は [整合性ポリシー](#slug_history-の一意性)を参照。
+
+| カラム | 型 | 制約・参照 |
+|---|---|---|
+| `id` | text | PK |
+| `slug` | text | UNIQUE。旧 slug。小文字化して保存（検索は常に小文字一致） |
+| `user_id` | text | → `users.id` (cascade) |
+| `created_at` | ts | |
+| `updated_at` | ts | |
+
+索引: **UNIQUE** `(slug)` / `(user_id)`
 
 ---
 

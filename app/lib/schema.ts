@@ -780,9 +780,11 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 // 【整合性ポリシー】favoriteSlug は users.slug を参照する弱参照（外部キー制約なし）。
 // 理由: slug はユーザー側で変更可能（MCID 変更などにより再生成される）であり、
 //   FK 制約を付けると slug 変更時の更新パスが複雑化するため。
-// 副作用: 参照先 user の削除 / slug 変更で favorites が孤児化する可能性がある。
+// 副作用: 参照先 user の削除で favorites が孤児化する可能性がある。
 //   - GC: 必要に応じて `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` を別途実行
-//   - slug 変更時は アプリケーション層で旧 slug → 新 slug の追従更新を行う
+//   - slug 変更時の旧 slug → 新 slug の追従更新はアプリケーション層で実装済み
+//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。me/edit.tsx の set_mcid / remove_mcid の
+//      トランザクション内で users 更新・slug_history 記録とともに呼ばれる）
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1417,3 +1419,35 @@ export const playstylesRelations = relations(playstyles, ({ one }) => ({
 
 export type Playstyle = typeof playstyles.$inferSelect;
 export type NewPlaystyle = typeof playstyles.$inferInsert;
+
+// ============================================
+// slug_history（旧slugからのリダイレクト解決）
+// ============================================
+// MCID登録（set_mcid）・MCID削除（remove_mcid）で users.slug が変わるたびに旧 slug を記録し、
+// /player/:slug 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴。
+// 読み書きは app/lib/slug-history.server.ts に集約する。
+// Mojang API 起点のフォールバック（player-slug-fallback.server.ts）より優先して解決する
+// （DB 内で完結し確実。かつ Mojang 版は「改名後の新MCIDでのアクセス」しか救済できないのに対し、
+//  こちらは「改名前の旧MCIDでのアクセス」を救済できる）。
+//
+// 【整合性ポリシー】
+//   - slug は必ず小文字化して保存する（検索は常に小文字一致。users.slug 自体は大文字小文字を
+//     保持したまま格納されるため、履歴側で正規化して吸収する）
+//   - 1 slug（小文字）＝常に最新の元所有者 1 人だけを指す。同じ旧 slug を別ユーザーが再度
+//     手放した場合は upsert（onConflictDoUpdate）で上書きする（履歴を積み増さない）
+//   - userId は users.id への FK（onDelete: cascade）。退会（users 行削除）で該当ユーザーの
+//     履歴も自動的に消える＝退会者の旧 slug へのリダイレクトは自然消滅する
+export const slugHistory = sqliteTable("slug_history", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  slug: text("slug").notNull(), // 旧slug。小文字化して保存（検索は常に小文字一致）
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("slug_history_slug_uniq").on(table.slug),
+  index("idx_slug_history_user_id").on(table.userId),
+]);
+
+export type SlugHistory = typeof slugHistory.$inferSelect;
+export type NewSlugHistory = typeof slugHistory.$inferInsert;
