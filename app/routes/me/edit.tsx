@@ -17,6 +17,7 @@ import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
+import { recordSlugChange } from "@/lib/slug-history.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -260,15 +261,19 @@ export async function action({ request }: Route.ActionArgs) {
       const uuid = await fetchUuidFromMcid(mcid);
       const newSlug = generateSlug(mcid, session.user.id);
 
-      await db
-        .update(users)
-        .set({
-          mcid,
-          uuid,
-          slug: newSlug,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(users)
+          .set({
+            mcid,
+            uuid,
+            slug: newSlug,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id));
+
+        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+      });
 
       return { success: true, action: "mcid", newSlug };
     } catch (error) {
@@ -285,15 +290,19 @@ export async function action({ request }: Route.ActionArgs) {
   if (actionType === "remove_mcid") {
     const newSlug = generateSlug(null, session.user.id);
 
-    await db
-      .update(users)
-      .set({
-        mcid: null,
-        uuid: null,
-        slug: newSlug,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          mcid: null,
+          uuid: null,
+          slug: newSlug,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+    });
 
     return { success: true, action: "mcid_removed", newSlug };
   }

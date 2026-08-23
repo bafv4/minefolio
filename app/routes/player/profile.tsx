@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
-import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
@@ -72,6 +72,7 @@ import type { ProfileReactionCount } from "@/lib/profile-reactions";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
+import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -344,6 +345,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   if (!gate) {
+    if (slug) {
+      const target = await resolvePlayerSlugFallback(db, slug);
+      if (target) {
+        throw redirect(`/player/${encodeURIComponent(target)}${url.search}`);
+      }
+    }
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 

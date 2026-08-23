@@ -15,6 +15,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug } from "@/lib/slug";
 import { sanitizeReturnTo } from "@/lib/return-to";
+import { claimSlug } from "@/lib/slug-history.server";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -181,6 +182,9 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("onboarding.errorAlreadyRegistered") };
     }
 
+    // このslugが過去に別ユーザーの旧slugとして記録されていれば掃除する（挿入成功時のみ）
+    await claimSlug(db, slug);
+
     await createDefaultsForNewUser(db, userId);
 
     return redirect(returnTo || `/player/${slug}`);
@@ -206,6 +210,9 @@ export async function action({ request }: Route.ActionArgs) {
       // discordId UNIQUE 制約違反（二重 onboarding）
       return { error: t("onboarding.errorAlreadyRegistered") };
     }
+
+    // このslugが過去に別ユーザーの旧slugとして記録されていれば掃除する（挿入成功時のみ）
+    await claimSlug(db, slug);
 
     // Create defaults
     await createDefaultsForNewUser(db, userId);

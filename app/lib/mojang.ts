@@ -50,7 +50,7 @@ export interface MojangSessionProfile {
 }
 
 // MCIDからUUIDを取得
-export async function fetchUuidFromMcid(mcid: string): Promise<string> {
+export async function fetchUuidFromMcid(mcid: string, timeoutMs = 10000): Promise<string> {
   // キャッシュチェック
   const cacheKey = getMojangCacheKey(`mcid:${mcid.toLowerCase()}`);
   const cached = await getCached<string>(cacheKey);
@@ -60,7 +60,7 @@ export async function fetchUuidFromMcid(mcid: string): Promise<string> {
 
   const response = await fetch(
     `${MOJANG_API_BASE}/users/profiles/minecraft/${encodeURIComponent(mcid)}`,
-    { signal: AbortSignal.timeout(10000) }
+    { signal: AbortSignal.timeout(timeoutMs) }
   );
 
   if (!response.ok) {
