@@ -780,9 +780,11 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 // 【整合性ポリシー】favoriteSlug は users.slug を参照する弱参照（外部キー制約なし）。
 // 理由: slug はユーザー側で変更可能（MCID 変更などにより再生成される）であり、
 //   FK 制約を付けると slug 変更時の更新パスが複雑化するため。
-// 副作用: 参照先 user の削除 / slug 変更で favorites が孤児化する可能性がある。
+// 副作用: 参照先 user の削除で favorites が孤児化する可能性がある。
 //   - GC: 必要に応じて `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` を別途実行
-//   - slug 変更時は アプリケーション層で旧 slug → 新 slug の追従更新を行う
+//   - slug 変更時の旧 slug → 新 slug の追従更新はアプリケーション層で実装済み
+//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。me/edit.tsx の set_mcid / remove_mcid の
+//      トランザクション内で users 更新・slug_history 記録とともに呼ばれる）
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

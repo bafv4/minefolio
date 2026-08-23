@@ -18,6 +18,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
 import { recordSlugChange } from "@/lib/slug-history.server";
+import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -273,6 +274,7 @@ export async function action({ request }: Route.ActionArgs) {
           .where(eq(users.id, user.id));
 
         await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       });
 
       return { success: true, action: "mcid", newSlug };
@@ -302,6 +304,7 @@ export async function action({ request }: Route.ActionArgs) {
         .where(eq(users.id, user.id));
 
       await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+      await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
     });
 
     return { success: true, action: "mcid_removed", newSlug };

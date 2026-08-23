@@ -1,5 +1,6 @@
 // /me/edit の set_mcid / remove_mcid が recordSlugChange で slug_history に旧slugを
-// 記録することの回帰テスト。db.transaction を使う経路なので createTestDbAt(SHARED_MEMORY_URL)
+// 記録すること、および retargetFavoritesOnSlugChange で favorites.favoriteSlug が新slugへ
+// 追従更新されることの回帰テスト。db.transaction を使う経路なので createTestDbAt(SHARED_MEMORY_URL)
 // を使う（app/routes/me/__tests__/edit.test.ts と同じ方針）。
 //
 // @/lib/mojang のモック方針は app/routes/__tests__/onboarding.test.ts と同じ（fetchUuidFromMcid のみ
@@ -12,7 +13,7 @@ import {
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { users, slugHistory } from "@/lib/schema";
+import { users, slugHistory, favorites } from "@/lib/schema";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -128,5 +129,60 @@ describe("action - remove_mcid の履歴記録", () => {
 
     const historyRow = await findHistoryBySlug("somemcid");
     expect(historyRow?.userId).toBe(user.id);
+  });
+});
+
+async function findFavoriteByUserId(userId: string) {
+  return db.query.favorites.findFirst({ where: eq(favorites.userId, userId) });
+}
+
+describe("action - set_mcid の favorites 追従", () => {
+  it("MCID変更で旧slugを指すfavorites行が新slugへ追従更新される", async () => {
+    await seedUser(db, {
+      slug: "old-mcid-slug",
+      discordId: "discord-runner",
+      mcid: "OldMcid",
+    });
+    const fan = await seedUser(db, { slug: "fan" });
+    await db.insert(favorites).values({ userId: fan.id, favoriteSlug: "old-mcid-slug" });
+
+    signInAs("discord-runner");
+    mojangMocks.fetchUuidFromMcid.mockResolvedValue("11111111-1111-1111-1111-111111111111");
+
+    const fd = new FormData();
+    fd.set("_action", "set_mcid");
+    fd.set("mcid", "NewMcid");
+
+    const res = await callAction(fd);
+
+    expect(res).toEqual({ success: true, action: "mcid", newSlug: "NewMcid" });
+
+    const favRow = await findFavoriteByUserId(fan.id);
+    expect(favRow?.favoriteSlug).toBe("NewMcid");
+  });
+});
+
+describe("action - remove_mcid の favorites 追従", () => {
+  it("MCID削除で旧slugを指すfavorites行が新slug（@discordId形式）へ追従更新される", async () => {
+    await seedUser(db, {
+      slug: "somemcid",
+      discordId: "discord-runner",
+      mcid: "SomeMcid",
+      uuid: "22222222-2222-2222-2222-222222222222",
+    });
+    const fan = await seedUser(db, { slug: "fan2" });
+    await db.insert(favorites).values({ userId: fan.id, favoriteSlug: "somemcid" });
+
+    signInAs("discord-runner");
+
+    const fd = new FormData();
+    fd.set("_action", "remove_mcid");
+
+    const res = await callAction(fd);
+
+    expect(res).toEqual({ success: true, action: "mcid_removed", newSlug: "@discord-runner" });
+
+    const favRow = await findFavoriteByUserId(fan.id);
+    expect(favRow?.favoriteSlug).toBe("@discord-runner");
   });
 });
