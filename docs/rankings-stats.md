@@ -36,6 +36,7 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 - 外部API経由でランク・統計情報を取得
 - Eloレーティング、勝敗数等の統計データ
 - プロフィールの活動・記録タブ（`/player/:slug`）と `/player/:slug/stats` の MCSR Ranked カードで、Eloレーティングに加えて以下を表示する（カード実装は共有コンポーネント。下記「関連ファイル」参照）
+- `users.show_ranked_stats = false` のユーザーは**両ルートとも** MCSR Ranked カード自体を表示しない（活動・記録タブはタブ内の表示条件で非表示、`/player/:slug/stats` は loader で `externalStats.ranked` を落として非表示。閲覧者が本人でも同じ）
 
 #### レート帯チップ
 

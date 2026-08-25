@@ -90,7 +90,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // 外部サービス・PaceManキャッシュから統計情報を並列取得（MCIDがある場合のみ。直列待ちを解消）。
   // Minefolio内順位（cron キャッシュ基準）は公開プロフィール かつ Ranked統計を
   // 非表示にしていない場合のみ取得する（profile.tsx と同じ判定）
-  const [externalStats, netherEnterCount, recentPaces, minefolioEloRank] = await Promise.all([
+  const [externalStatsRaw, netherEnterCount, recentPaces, minefolioEloRank] = await Promise.all([
     player.mcid
       ? fetchAllExternalStats(player.mcid)
       : Promise.resolve({ paceman: null, ranked: null, speedruncom: null }),
@@ -102,6 +102,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       ? getMinefolioEloRank(db, player.id)
       : Promise.resolve(null),
   ]);
+
+  // Ranked統計を非表示設定にしているユーザーは、profile.tsx の活動・記録タブと同様に
+  // MCSR Ranked カードを表示しない。非表示の統計データを loader ペイロードで配らないよう
+  // ここで ranked を落とす（コンポーネント側のカード表示条件・hasAnyData 判定はそのまま連動する）
+  const externalStats =
+    player.showRankedStats === false ? { ...externalStatsRaw, ranked: null } : externalStatsRaw;
 
   return {
     mcid: player.mcid,
