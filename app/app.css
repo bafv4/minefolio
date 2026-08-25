@@ -80,6 +80,12 @@ body {
   --color-twitch: var(--twitch);
   --color-gold: var(--gold);
   --color-bronze: var(--bronze);
+  --color-rank-coal: var(--rank-coal);
+  --color-rank-iron: var(--rank-iron);
+  --color-rank-gold: var(--rank-gold);
+  --color-rank-emerald: var(--rank-emerald);
+  --color-rank-diamond: var(--rank-diamond);
+  --color-rank-netherite: var(--rank-netherite);
 }
 
 /* :root（既定=ライト）と .light クラス（画像出力プレビュー等で局所的にライトを強制）で共有 */
@@ -163,6 +169,15 @@ body {
      yellow-500 相当だとライトの白背景で埋もれるため、金は yellow-600 相当まで落として濃くする */
   --gold: oklch(0.681 0.162 75.834);
   --bronze: oklch(0.666 0.179 58.318);
+
+  /* MCSR Ranked のレート帯（階級）色（公式ゲーム内UIから抽出）。
+     ライトは白背景での可読性のため明度を落とした変種（色相は抽出色と同一） */
+  --rank-coal: oklch(0.48 0 0);
+  --rank-iron: oklch(0.65 0 0);
+  --rank-gold: oklch(0.66 0.155 73.3);
+  --rank-emerald: oklch(0.6 0.19 143.1);
+  --rank-diamond: oklch(0.6 0.115 195);
+  --rank-netherite: oklch(0.526 0.224 314.5);
 }
 
 .dark,
@@ -222,6 +237,14 @@ body {
   /* ランキング1位・3位のメダル色（dark mode adjustments） */
   --gold: oklch(0.795 0.184 86.047);
   --bronze: oklch(0.769 0.188 70.08);
+
+  /* MCSR Ranked のレート帯（階級）色（dark mode adjustments、画像からの抽出色そのまま） */
+  --rank-coal: oklch(0.738 0 0);        /* #AAAAAA */
+  --rank-iron: oklch(1 0 0);            /* #FFFFFF */
+  --rank-gold: oklch(0.802 0.171 73.3); /* #FFAA00 */
+  --rank-emerald: oklch(0.88 0.252 143.1); /* #55FF55 */
+  --rank-diamond: oklch(0.915 0.136 195);  /* #55FFFF */
+  --rank-netherite: oklch(0.526 0.224 314.5); /* #982BC1（ダークも同値） */
 
   /* Keybinding category colors (brighter for dark mode) */
   --key-movement: oklch(0.792 0.209 151.711);

@@ -10,6 +10,7 @@ import { users } from "@/lib/schema";
 import { sql } from "drizzle-orm";
 import { fetchAllExternalStats } from "@/lib/external-stats";
 import { getNetherEnterCount, getMainPaces, type GroupedPaceEntry } from "@/lib/paceman-cache";
+import { getMinefolioEloRank } from "@/lib/rankings-query.server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { MCSRRankedCard, PaceManStatsCard, SpeedrunComCard } from "@/components/player-stats-cards";
@@ -57,12 +58,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       ? sql`lower(${users.slug}) = ${normalizedSlug}`
       : sql`0 = 1`,
     columns: {
+      id: true,
       mcid: true,
       slug: true,
       displayName: true,
       displayNameAlphabet: true,
       profileVisibility: true,
       discordId: true,
+      showRankedStats: true,
     },
   });
 
@@ -84,8 +87,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response(t("playerStats.notFound"), { status: 404 });
   }
 
-  // 外部サービス・PaceManキャッシュから統計情報を並列取得（MCIDがある場合のみ。直列待ちを解消）
-  const [externalStats, netherEnterCount, recentPaces] = await Promise.all([
+  // 外部サービス・PaceManキャッシュから統計情報を並列取得（MCIDがある場合のみ。直列待ちを解消）。
+  // Minefolio内順位（cron キャッシュ基準）は公開プロフィール かつ Ranked統計を
+  // 非表示にしていない場合のみ取得する（profile.tsx と同じ判定）
+  const [externalStats, netherEnterCount, recentPaces, minefolioEloRank] = await Promise.all([
     player.mcid
       ? fetchAllExternalStats(player.mcid)
       : Promise.resolve({ paceman: null, ranked: null, speedruncom: null }),
@@ -93,6 +98,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     player.mcid
       ? getMainPaces(player.mcid, 10)
       : Promise.resolve<GroupedPaceEntry[]>([]),
+    player.profileVisibility === "public" && player.showRankedStats !== false
+      ? getMinefolioEloRank(db, player.id)
+      : Promise.resolve(null),
   ]);
 
   return {
@@ -103,6 +111,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     externalStats,
     netherEnterCount,
     recentPaces,
+    minefolioEloRank,
     appUrl,
   };
 }
@@ -110,7 +119,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export default function PlayerStatsPage() {
   const t = useT();
   const locale = useLocale();
-  const { mcid, slug, displayName, displayNameAlphabet, externalStats, netherEnterCount, recentPaces } = useLoaderData<typeof loader>();
+  const { mcid, slug, displayName, displayNameAlphabet, externalStats, netherEnterCount, recentPaces, minefolioEloRank } = useLoaderData<typeof loader>();
 
   // 表示名の優先順位: （英語表示なら）アルファベット表記 > displayName > mcid > slug
   const playerDisplayName = getLocalizedDisplayName(
@@ -153,7 +162,9 @@ export default function PlayerStatsPage() {
       ) : (
         <>
           {/* MCSR Ranked Section */}
-          {externalStats.ranked?.isRegistered && <MCSRRankedCard ranked={externalStats.ranked} />}
+          {externalStats.ranked?.isRegistered && (
+            <MCSRRankedCard ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
+          )}
 
           {/* PaceMan Section */}
           {hasPacemanData && (

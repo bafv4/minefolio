@@ -554,6 +554,10 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 - **Win Sens が係数テーブル（1〜20）外**: `x1.000` と断定せず警告アイコン + ヒント（`WinSensValue`）を表示する
 - **振り向き（cm/360）・カーソル速度が計算できない**: 行自体は残し、「-」+ 理由（DPI未設定・感度未設定・感度範囲外・Windows乗数未設定/不明など、`TurnDistanceValue` / `CursorSpeedValue`）を `HintTip` で表示する（以前は該当行そのものを非表示にしていた）
 
+### 活動・記録タブの外部統計カード
+
+`stats` タブの MCSR Ranked カード（レート帯チップ・Win Rate/FF Rate・国内順位・Minefolio内順位・最近のマッチ）は `/player/:slug/stats` と共通の表示コンポーネントで、算出ロジックの詳細は [`docs/rankings-stats.md`](./rankings-stats.md#mcsr-ranked連携)「MCSR Ranked連携」を参照。
+
 ### モバイルタブ選択ドロワー
 
 モバイル表示時の上部スティッキーボタンには `ChevronsDown` アイコンを使用（v1.4.0 でハンバーガー `Menu` から変更）。展開中は `X` アイコンに切り替わる。

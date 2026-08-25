@@ -254,3 +254,37 @@ export async function loadRankings(
   }));
   return { rankings };
 }
+
+/**
+ * Minefolio 登録ユーザー内での Elo 順位を返す。
+ * `loadRankings` の ranked_elo タブと同じ絞り込み（rankingType='ranked_elo'、eloRate not null、
+ * 公開プロフィール、Ranked統計公開ON）で全件を取得し、対象ユーザーの順位（同率同順位）と総数を返す。
+ * 対象ユーザーが絞り込み条件に含まれない（未登録・非公開等）場合は null。
+ */
+export async function getMinefolioEloRank(
+  db: Database,
+  userId: string,
+): Promise<{ rank: number; total: number } | null> {
+  const rows = await db
+    .select({
+      userId: playerRankings.userId,
+      eloRate: playerRankings.eloRate,
+    })
+    .from(playerRankings)
+    .innerJoin(users, eq(playerRankings.userId, users.id))
+    .where(
+      and(
+        eq(playerRankings.rankingType, "ranked_elo"),
+        isNotNull(playerRankings.eloRate),
+        eq(users.profileVisibility, "public"),
+        eq(users.showRankedStats, true),
+      ),
+    )
+    .orderBy(desc(playerRankings.eloRate));
+
+  const targetRow = rows.find((r) => r.userId === userId);
+  if (!targetRow) return null;
+
+  const rank = rows.filter((r) => (r.eloRate ?? 0) > (targetRow.eloRate ?? 0)).length + 1;
+  return { rank, total: rows.length };
+}

@@ -900,6 +900,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     pacemanOpenDetails: "See details on PaceMan Stats",
     officialRecords: "Official records (Minecraft)",
     viewRecord: "View record",
+    winRate: "Win Rate",
+    ffRate: "FF Rate",
+    jpRank: "Japan Rank",
+    minefolioRank: "Minefolio Rank",
+    minefolioRankOutOf: "of {total} players",
   },
   stats: {
     binUpTo: "Under {max}",
