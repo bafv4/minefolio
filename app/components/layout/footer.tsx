@@ -14,7 +14,7 @@ export function Footer() {
               <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
               <span className="text-xl font-bold">Minefolio</span>
               <span className="text-xs text-muted-foreground ml-1">{packageJson.version}</span>
-              <span className="text-xs text-muted-foreground ml-1">by bafv4</span>
+              <span className="text-xs text-muted-foreground ml-1">by bfmkn</span>
             </div>
           </div>
 
@@ -25,6 +25,13 @@ export function Footer() {
             >
               <MessageSquare className="h-3 w-3" />
               <span>{t("nav.feedback")}</span>
+            </Link>
+            <Link
+              to="/developers"
+              className="hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <Code className="h-3 w-3" />
+              <span>{t("nav.developers")}</span>
             </Link>
             <a
               href="https://github.com/bafv4/minefolio"
@@ -46,13 +53,6 @@ export function Footer() {
               <Heart className="h-3 w-3" />
               <span>{t("nav.donate")}</span>
             </a>
-            <Link
-              to="/developers"
-              className="hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <Code className="h-3 w-3" />
-              <span>{t("nav.developers")}</span>
-            </Link>
           </div>
         </div>
       </div>
