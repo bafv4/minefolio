@@ -1,9 +1,15 @@
 export function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
+  // DB の型崩れ（integer 列に文字列が入っている等）や外部APIの欠損値が
+  // 「NaN:NaN.NaN」として画面に出ないよう、数値化できない値は "-" に落とす
+  // （数値文字列は Number() で従来どおり数値として扱う）
+  const totalMs = Number(ms);
+  if (!Number.isFinite(totalMs)) return "-";
+
+  const totalSeconds = Math.floor(totalMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  const milliseconds = ms % 1000;
-  
+  const milliseconds = totalMs % 1000;
+
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 }
 

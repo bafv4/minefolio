@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  getMinefolioEloRank,
   loadRankingCategories,
   loadRankings,
   parseRankingsParams,
@@ -158,6 +159,54 @@ describe("loadRankings - ranked タブ", () => {
     );
     expect(rankings.map((r) => r.slug)).toEqual(["high", "low"]);
     expect(rankings.map((r) => r.eloRate)).toEqual([2000, 1000]);
+  });
+});
+
+describe("getMinefolioEloRank", () => {
+  it("同率Eloは同順位になる（次点は同率人数ぶん飛ぶ）", async () => {
+    const db = await createTestDb();
+    const top = await seedUser(db, { slug: "top", mcid: "Top", showRankedStats: true });
+    const tiedA = await seedUser(db, { slug: "tied-a", mcid: "TiedA", showRankedStats: true });
+    const tiedB = await seedUser(db, { slug: "tied-b", mcid: "TiedB", showRankedStats: true });
+    const last = await seedUser(db, { slug: "last", mcid: "Last", showRankedStats: true });
+
+    await seedPlayerRanking(db, top.id, { rankingType: "ranked_elo", eloRate: 2000 });
+    await seedPlayerRanking(db, tiedA.id, { rankingType: "ranked_elo", eloRate: 1500 });
+    await seedPlayerRanking(db, tiedB.id, { rankingType: "ranked_elo", eloRate: 1500 });
+    await seedPlayerRanking(db, last.id, { rankingType: "ranked_elo", eloRate: 1000 });
+
+    expect(await getMinefolioEloRank(db, top.id)).toEqual({ rank: 1, total: 4 });
+    expect(await getMinefolioEloRank(db, tiedA.id)).toEqual({ rank: 2, total: 4 });
+    expect(await getMinefolioEloRank(db, tiedB.id)).toEqual({ rank: 2, total: 4 });
+    expect(await getMinefolioEloRank(db, last.id)).toEqual({ rank: 4, total: 4 });
+  });
+
+  it("対象ユーザーが非公開プロフィールなら null", async () => {
+    const db = await createTestDb();
+    const hidden = await seedUser(db, {
+      slug: "hidden",
+      mcid: "Hidden",
+      profileVisibility: "private",
+      showRankedStats: true,
+    });
+    await seedPlayerRanking(db, hidden.id, { rankingType: "ranked_elo", eloRate: 1800 });
+
+    expect(await getMinefolioEloRank(db, hidden.id)).toBeNull();
+  });
+
+  it("対象ユーザーが showRankedStats=false なら null", async () => {
+    const db = await createTestDb();
+    const off = await seedUser(db, { slug: "off", mcid: "Off", showRankedStats: false });
+    await seedPlayerRanking(db, off.id, { rankingType: "ranked_elo", eloRate: 1800 });
+
+    expect(await getMinefolioEloRank(db, off.id)).toBeNull();
+  });
+
+  it("対象ユーザーの ranked_elo 行が無ければ null", async () => {
+    const db = await createTestDb();
+    const noRanking = await seedUser(db, { slug: "no-ranking", mcid: "NoRanking", showRankedStats: true });
+
+    expect(await getMinefolioEloRank(db, noRanking.id)).toBeNull();
   });
 });
 

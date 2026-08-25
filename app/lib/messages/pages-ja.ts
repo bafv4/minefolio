@@ -882,6 +882,11 @@ export const PAGES_JA = {
     pacemanOpenDetails: "PaceMan Statsで詳細を見る",
     officialRecords: "公式記録（Minecraft関連）",
     viewRecord: "記録を見る",
+    winRate: "勝率",
+    ffRate: "FF率",
+    jpRank: "国内順位",
+    minefolioRank: "Minefolio内順位",
+    minefolioRankOutOf: "{total}人中",
   },
   stats: {
     /** 分布グラフの区間ラベル。単位は max / min に含めて渡す */

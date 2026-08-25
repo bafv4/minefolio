@@ -56,6 +56,7 @@ import { RemapTypeBadge } from "@/components/remap-type-badge";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-url";
 import { parseRunIdList } from "@/lib/run-id-list";
+import { getMinefolioEloRank } from "@/lib/rankings-query.server";
 import {
   hasRtaCareerRemainder,
   rtaCareerExactLabel,
@@ -503,10 +504,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }
   };
 
-  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計は
-  // 互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
+  // Minefolio内 Elo 順位（rankings-query.server.ts の cron キャッシュ基準）。
+  // 公開プロフィール かつ Ranked統計を非表示にしていない場合のみ取得する
+  // （/rankings ranked_elo タブと同じ絞り込み条件 = getMinefolioEloRank 内で判定）
+  const resolveMinefolioEloRank = async () => {
+    if (player.profileVisibility !== "public" || player.showRankedStats === false) return null;
+    return getMinefolioEloRank(db, player.id);
+  };
+
+  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計・
+  // Minefolio内順位は互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
   // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
-  const [presetOverride, profileReactions, playerGuides, pacemanStats] = await Promise.all([
+  const [presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank] = await Promise.all([
     resolvePresetOverride(),
     resolveProfileReactions(),
     // プレイヤーの公開ガイドを取得
@@ -528,6 +537,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       extras: { likeCount: guideLikeCountSql().as("like_count") },
     }),
     resolvePacemanStats(),
+    resolveMinefolioEloRank(),
   ]);
 
   let displayKeybindings = player.keybindings;
@@ -599,6 +609,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     hiddenSpeedrunRecords,
     pinnedSpeedrunRecords,
     pacemanStats,
+    minefolioEloRank,
     presets: presets.map((p) => ({
       id: p.id,
       name: p.name,
@@ -616,7 +627,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, minefolioEloRank, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
@@ -1731,6 +1742,7 @@ export default function PlayerProfilePage() {
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             pacemanStats={pacemanStats}
+            minefolioEloRank={minefolioEloRank}
           />
         </TabsContent>
 
@@ -2665,11 +2677,13 @@ function StatsTabContent({
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
   pacemanStats,
+  minefolioEloRank,
 }: {
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
+  minefolioEloRank: { rank: number; total: number } | null;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
@@ -2749,6 +2763,7 @@ function StatsTabContent({
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
       pinnedSpeedrunRecords={pinnedSpeedrunRecords}
       pacemanStats={pacemanStats}
+      minefolioEloRank={minefolioEloRank}
       loadState={loadState}
     />
   );
@@ -2769,6 +2784,7 @@ function StatsContent({
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
   pacemanStats,
+  minefolioEloRank,
   loadState,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
@@ -2776,6 +2792,7 @@ function StatsContent({
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
+  minefolioEloRank: { rank: number; total: number } | null;
   loadState: {
     ranked: "loading" | "done" | "error";
     paceman: "loading" | "done" | "error";
@@ -2805,7 +2822,7 @@ function StatsContent({
         />
       )}
       {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
-        <MCSRRankedCard ranked={externalStats.ranked} />
+        <MCSRRankedCard ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
       )}
 
       {/* PaceMan Section - リンクのみ（週間統計とは独立にロード状態を持つため別カード） */}

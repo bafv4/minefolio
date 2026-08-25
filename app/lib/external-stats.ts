@@ -86,6 +86,8 @@ export interface MCSRRankedUser {
   roleType: number;
   eloRate: number | null;
   eloRank: number | null;
+  /** 小文字ISO 3166-1 alpha-2（APIの `data.country`）。未設定はnull */
+  country: string | null;
   badge?: {
     uuid: string;
     name: string;
@@ -108,6 +110,10 @@ export interface MCSRRankedSeasonData {
   };
   highestWinStreak: number;
   currentWinStreak: number;
+  /** 今シーズンの不戦敗（forfeit）数 */
+  forfeits: number;
+  /** 今シーズンの対戦数 */
+  playedMatches: number;
   lastMatchDecay?: {
     decayDate: string;
     decayAmount: number;
@@ -119,6 +125,8 @@ export interface MCSRRankedStats {
   user: MCSRRankedUser | null;
   seasonData: MCSRRankedSeasonData | null;
   recentMatches: MCSRRankedMatch[];
+  /** 国内（`country === "jp"`）Eloランキングの順位。取得不可・非対象はnull */
+  countryRank: number | null;
   error?: string;
 }
 
@@ -126,7 +134,8 @@ export interface MCSRRankedMatch {
   id: string;
   type: number;
   season: number;
-  date: string;
+  /** epoch秒（実APIの値。旧実装ではstring型だったが実データと不一致のため修正） */
+  date: number;
   result: "win" | "lose" | "draw";
   time: number | null;
   opponentUuid: string;
@@ -270,17 +279,17 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     // ユーザー情報を取得（存在確認を兼ねる）
     const userRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}`, { signal: AbortSignal.timeout(10000) });
     if (!userRes.ok) {
-      return { isRegistered: false, user: null, seasonData: null, recentMatches: [] };
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
     }
 
     const userData = (await userRes.json()) as RankedApiResponse | null;
     if (!userData || userData.status !== "success" || !userData.data) {
-      return { isRegistered: false, user: null, seasonData: null, recentMatches: [] };
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
     }
 
     // UUIDがない場合は未登録
     if (!userData.data.uuid) {
-      return { isRegistered: false, user: null, seasonData: null, recentMatches: [] };
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
     }
 
     const user: MCSRRankedUser = {
@@ -289,6 +298,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
       roleType: userData.data.roleType ?? 0,
       eloRate: userData.data.eloRate ?? null,
       eloRank: userData.data.eloRank ?? null,
+      country: userData.data.country ?? null,
       badge: userData.data.badge,
     };
 
@@ -326,66 +336,94 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
         },
         highestWinStreak: extractRankedNumber(stats.season?.highestWinStreak) ?? 0,
         currentWinStreak: extractRankedNumber(stats.season?.currentWinStreak) ?? 0,
+        forfeits: extractRankedNumber(stats.season?.forfeits) ?? 0,
+        playedMatches: extractRankedNumber(stats.season?.playedMatches) ?? 0,
       };
     }
 
     // 最近のRankedマッチ履歴を取得（type=2でRankedモードのみ、30件）
-    const matchesRes = await fetch(
-      `${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30&type=${MATCH_TYPE_RANKED}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
-    let recentMatches: MCSRRankedMatch[] = [];
+    const fetchRecentMatches = async (): Promise<MCSRRankedMatch[]> => {
+      const matchesRes = await fetch(
+        `${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}/matches?count=30&type=${MATCH_TYPE_RANKED}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!matchesRes.ok) return [];
 
-    if (matchesRes.ok) {
       const matchesData = (await matchesRes.json()) as RankedApiResponse | null;
-      if (matchesData && matchesData.status === "success" && Array.isArray(matchesData.data)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recentMatches = matchesData.data
-          .filter((m: any) => m && m.id && Array.isArray(m.players) && m.type === MATCH_TYPE_RANKED)
-          .map((m: any) => {
-            // 自分のUUIDを特定
-            const playerIndex = m.players?.findIndex((p: any) => p?.uuid === user.uuid) ?? -1;
-            const opponentIndex = playerIndex === 0 ? 1 : 0;
-            const opponentData = m.players?.[opponentIndex];
+      if (!matchesData || matchesData.status !== "success" || !Array.isArray(matchesData.data)) return [];
 
-            // 勝敗判定: result.uuid が勝者
-            let result: "win" | "lose" | "draw" = "draw";
-            if (m.result?.uuid) {
-              result = m.result.uuid === user.uuid ? "win" : "lose";
-            } else if (m.forfeited && m.result?.uuid) {
-              result = m.result.uuid === user.uuid ? "win" : "lose";
-            }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return matchesData.data
+        .filter((m: any) => m && m.id && Array.isArray(m.players) && m.type === MATCH_TYPE_RANKED)
+        .map((m: any) => {
+          // 自分のUUIDを特定
+          const playerIndex = m.players?.findIndex((p: any) => p?.uuid === user.uuid) ?? -1;
+          const opponentIndex = playerIndex === 0 ? 1 : 0;
+          const opponentData = m.players?.[opponentIndex];
 
-            // 自分のタイム: 勝者のみtimeが記録される
-            const playerTime = m.result?.uuid === user.uuid ? m.result?.time : null;
+          // 勝敗判定: result.uuid が勝者
+          let result: "win" | "lose" | "draw" = "draw";
+          if (m.result?.uuid) {
+            result = m.result.uuid === user.uuid ? "win" : "lose";
+          } else if (m.forfeited && m.result?.uuid) {
+            result = m.result.uuid === user.uuid ? "win" : "lose";
+          }
 
-            // Elo変動: changes配列から自分のデータを取得
-            const playerChange = Array.isArray(m.changes)
-              ? m.changes.find((c: any) => c?.uuid === user.uuid)
-              : null;
-            const eloChange = playerChange?.change ?? 0;
-            const eloAfter = playerChange?.eloRate ? playerChange.eloRate + eloChange : 0;
+          // 自分のタイム: 勝者のみtimeが記録される
+          const playerTime = m.result?.uuid === user.uuid ? m.result?.time : null;
 
-            return {
-              id: String(m.id),
-              type: m.type ?? 0,
-              season: m.season ?? 0,
-              date: m.date ?? "",
-              result,
-              time: playerTime ?? null,
-              opponentUuid: opponentData?.uuid ?? "",
-              opponentNickname: opponentData?.nickname ?? "Unknown",
-              eloChange,
-              eloAfter,
-            };
-          });
+          // Elo変動: changes配列から自分のデータを取得
+          const playerChange = Array.isArray(m.changes)
+            ? m.changes.find((c: any) => c?.uuid === user.uuid)
+            : null;
+          const eloChange = playerChange?.change ?? 0;
+          const eloAfter = playerChange?.eloRate ? playerChange.eloRate + eloChange : 0;
+
+          return {
+            id: String(m.id),
+            type: m.type ?? 0,
+            season: m.season ?? 0,
+            date: typeof m.date === "number" ? m.date : 0,
+            result,
+            time: playerTime ?? null,
+            opponentUuid: opponentData?.uuid ?? "",
+            opponentNickname: opponentData?.nickname ?? "Unknown",
+            eloChange,
+            eloAfter,
+          };
+        });
+    };
+
+    // 国内（JP）Eloランキング順位を取得。対象は country==="jp" かつ eloRate が確定している場合のみ。
+    // マッチ履歴取得とは独立したリクエストのため並列化する（Promise.all）。
+    const fetchCountryRank = async (): Promise<number | null> => {
+      if (user.country !== "jp" || user.eloRate === null) return null;
+      try {
+        const leaderboardRes = await fetch(`${RANKED_API_BASE}/leaderboard?country=jp`, { signal: AbortSignal.timeout(10000) });
+        if (!leaderboardRes.ok) return null;
+
+        const leaderboardData = (await leaderboardRes.json()) as
+          | { status: string; data?: { users?: { uuid?: string }[] } }
+          | null;
+        if (!leaderboardData || leaderboardData.status !== "success") return null;
+
+        const leaderboardUsers = leaderboardData.data?.users;
+        if (!Array.isArray(leaderboardUsers)) return null;
+
+        // 上位150件（APIの打ち切り件数）に自分が含まれなければ圏外扱い
+        const index = leaderboardUsers.findIndex((u) => u?.uuid === user.uuid);
+        return index === -1 ? null : index + 1;
+      } catch {
+        return null;
       }
-    }
+    };
 
-    return { isRegistered: true, user, seasonData, recentMatches };
+    const [recentMatches, countryRank] = await Promise.all([fetchRecentMatches(), fetchCountryRank()]);
+
+    return { isRegistered: true, user, seasonData, recentMatches, countryRank };
   } catch (error) {
     console.error("MCSR Ranked API error:", error);
-    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], error: "APIエラーが発生しました" };
+    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "APIエラーが発生しました" };
   }
 }
 

@@ -39,18 +39,34 @@ function rankedUserBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** users/:identifier と users/:identifier/matches の両方をURLで振り分けてスタブする */
+/** leaderboard?country=jp のレスポンスをスタブする */
+function leaderboardBody(users: { uuid?: string }[]) {
+  return { status: "success", data: { users } };
+}
+
+/** users/:identifier と users/:identifier/matches・leaderboard の3種をURLで振り分けてスタブする */
 function stubRankedFetch(opts: {
   user?: unknown;
   userOk?: boolean;
   matches?: unknown;
   matchesOk?: boolean;
   throwOnUser?: Error;
+  leaderboard?: unknown;
+  leaderboardOk?: boolean;
+  throwOnLeaderboard?: Error;
 }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL) => {
       const url = String(input);
+      if (url.includes("/leaderboard")) {
+        if (opts.throwOnLeaderboard) throw opts.throwOnLeaderboard;
+        return {
+          ok: opts.leaderboardOk ?? true,
+          status: opts.leaderboardOk === false ? 500 : 200,
+          json: async () => opts.leaderboard ?? { status: "success", data: { users: [] } },
+        };
+      }
       if (url.includes("/matches")) {
         return {
           ok: opts.matchesOk ?? true,
@@ -72,7 +88,7 @@ describe("fetchMCSRRankedStats - 登録確認", () => {
   it("ユーザー取得が非2xxなら未登録として扱う", async () => {
     stubRankedFetch({ user: undefined, userOk: false });
     const result = await fetchMCSRRankedStats("nobody");
-    expect(result).toEqual({ isRegistered: false, user: null, seasonData: null, recentMatches: [] });
+    expect(result).toEqual({ isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null });
   });
 
   it("status が success 以外なら未登録として扱う", async () => {
@@ -96,6 +112,7 @@ describe("fetchMCSRRankedStats - 登録確認", () => {
       user: null,
       seasonData: null,
       recentMatches: [],
+      countryRank: null,
       error: "APIエラーが発生しました",
     });
   });
@@ -112,7 +129,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "m-win",
             type: 2,
             season: 1,
-            date: "d1",
+            date: 1700000001,
             players: [
               { uuid: "user-uuid", nickname: "Runner" },
               { uuid: "opp-uuid", nickname: "Opp" },
@@ -124,7 +141,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "m-lose",
             type: 2,
             season: 1,
-            date: "d2",
+            date: 1700000002,
             players: [
               { uuid: "user-uuid", nickname: "Runner" },
               { uuid: "opp-uuid", nickname: "Opp" },
@@ -136,7 +153,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "m-draw",
             type: 2,
             season: 1,
-            date: "d3",
+            date: 1700000003,
             players: [
               { uuid: "user-uuid", nickname: "Runner" },
               { uuid: "opp-uuid", nickname: "Opp" },
@@ -169,7 +186,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "m-self-second",
             type: 2,
             season: 1,
-            date: "d1",
+            date: 1700000001,
             players: [
               { uuid: "opp-uuid", nickname: "Opponent" },
               { uuid: "user-uuid", nickname: "Runner" },
@@ -196,7 +213,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "m1",
             type: 2,
             season: 1,
-            date: "d1",
+            date: 1700000001,
             players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
             result: { uuid: "user-uuid", time: 1 },
             changes: [],
@@ -219,7 +236,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "with-change",
             type: 2,
             season: 1,
-            date: "d1",
+            date: 1700000001,
             players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
             result: { uuid: "user-uuid", time: 1 },
             changes: [{ uuid: "user-uuid", change: 20, eloRate: 1480 }],
@@ -228,7 +245,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "no-changes-field",
             type: 2,
             season: 1,
-            date: "d2",
+            date: 1700000002,
             players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
             result: { uuid: "user-uuid", time: 1 },
             // changes フィールド自体が無い
@@ -237,7 +254,7 @@ describe("fetchMCSRRankedStats - マッチの勝敗判定と相手解決", () =>
             id: "empty-changes",
             type: 2,
             season: 1,
-            date: "d3",
+            date: 1700000003,
             players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
             result: null,
             changes: [], // 自分のエントリが見つからない
@@ -289,7 +306,15 @@ describe("fetchMCSRRankedStats - extractRankedNumber と seasonData 組み立て
       user: rankedUserBody({
         statistics: {
           total: { bestTime: 123000 },
-          season: { bestTime: 100000, wins: 5, loses: 2, highestWinStreak: 3, currentWinStreak: 1 },
+          season: {
+            bestTime: 100000,
+            wins: 5,
+            loses: 2,
+            highestWinStreak: 3,
+            currentWinStreak: 1,
+            forfeits: 4,
+            playedMatches: 11,
+          },
         },
       }),
     });
@@ -300,6 +325,8 @@ describe("fetchMCSRRankedStats - extractRankedNumber と seasonData 組み立て
     expect(result.seasonData?.records).toEqual({ win: 5, lose: 2, draw: 0 });
     expect(result.seasonData?.highestWinStreak).toBe(3);
     expect(result.seasonData?.currentWinStreak).toBe(1);
+    expect(result.seasonData?.forfeits).toBe(4);
+    expect(result.seasonData?.playedMatches).toBe(11);
   });
 
   it("{ranked, casual} オブジェクトの場合は ranked 側の値を使う", async () => {
@@ -311,6 +338,8 @@ describe("fetchMCSRRankedStats - extractRankedNumber と seasonData 組み立て
             bestTime: { ranked: 95000, casual: 60000 },
             wins: { ranked: 8, casual: 20 },
             loses: { ranked: 3, casual: 1 },
+            forfeits: { ranked: 2, casual: 9 },
+            playedMatches: { ranked: 13, casual: 30 },
           },
         },
       }),
@@ -321,14 +350,24 @@ describe("fetchMCSRRankedStats - extractRankedNumber と seasonData 組み立て
     expect(result.seasonData?.bestTime).toBe(95000);
     expect(result.seasonData?.records.win).toBe(8);
     expect(result.seasonData?.records.lose).toBe(3);
+    expect(result.seasonData?.forfeits).toBe(2);
+    expect(result.seasonData?.playedMatches).toBe(13);
   });
 
-  it("null の場合は undefined（bestTime系）または 0（勝敗・連勝数）にフォールバックする", async () => {
+  it("null の場合は undefined（bestTime系）または 0（勝敗・連勝数・forfeits/playedMatches）にフォールバックする", async () => {
     stubRankedFetch({
       user: rankedUserBody({
         statistics: {
           total: { bestTime: null },
-          season: { bestTime: null, wins: null, loses: null, highestWinStreak: null, currentWinStreak: null },
+          season: {
+            bestTime: null,
+            wins: null,
+            loses: null,
+            highestWinStreak: null,
+            currentWinStreak: null,
+            forfeits: null,
+            playedMatches: null,
+          },
         },
       }),
     });
@@ -339,12 +378,189 @@ describe("fetchMCSRRankedStats - extractRankedNumber と seasonData 組み立て
     expect(result.seasonData?.records).toEqual({ win: 0, lose: 0, draw: 0 });
     expect(result.seasonData?.highestWinStreak).toBe(0);
     expect(result.seasonData?.currentWinStreak).toBe(0);
+    expect(result.seasonData?.forfeits).toBe(0);
+    expect(result.seasonData?.playedMatches).toBe(0);
   });
 
   it("statistics 自体が無ければ seasonData は null", async () => {
     stubRankedFetch({ user: rankedUserBody() });
     const result = await fetchMCSRRankedStats("runner");
     expect(result.seasonData).toBeNull();
+  });
+});
+
+describe("fetchMCSRRankedStats - マッチの date フィールド（epoch秒）", () => {
+  it("number 型の date はそのまま採用する", async () => {
+    stubRankedFetch({
+      user: rankedUserBody(),
+      matches: {
+        status: "success",
+        data: [
+          {
+            id: "m1",
+            type: 2,
+            season: 1,
+            date: 1735689600,
+            players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
+            result: null,
+            changes: [],
+          },
+        ],
+      },
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.recentMatches[0].date).toBe(1735689600);
+  });
+
+  it("number 以外（旧APIのstring等）の date は 0 にフォールバックする", async () => {
+    stubRankedFetch({
+      user: rankedUserBody(),
+      matches: {
+        status: "success",
+        data: [
+          {
+            id: "m1",
+            type: 2,
+            season: 1,
+            date: "2024-01-01T00:00:00Z",
+            players: [{ uuid: "user-uuid" }, { uuid: "opp-uuid" }],
+            result: null,
+            changes: [],
+          },
+        ],
+      },
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.recentMatches[0].date).toBe(0);
+  });
+});
+
+describe("fetchMCSRRankedStats - countryRank（国内Eloランキング順位）", () => {
+  it("country=jp かつ eloRate 確定済みで leaderboard.users に自分がいれば index+1 を返す", async () => {
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      leaderboard: leaderboardBody([
+        { uuid: "other-1" },
+        { uuid: "user-uuid" },
+        { uuid: "other-2" },
+      ]),
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBe(2);
+  });
+
+  it("leaderboard.users に自分が含まれない（圏外）場合は null", async () => {
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      leaderboard: leaderboardBody([{ uuid: "other-1" }, { uuid: "other-2" }]),
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
+  });
+
+  it("country が jp 以外なら leaderboard を取得せず countryRank は null", async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/matches")) {
+        return { ok: true, status: 200, json: async () => ({ status: "success", data: [] }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => rankedUserBody({ country: "us", eloRate: 1500 }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/leaderboard"))).toBe(false);
+  });
+
+  it("country が null なら leaderboard を取得せず countryRank は null", async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/matches")) {
+        return { ok: true, status: 200, json: async () => ({ status: "success", data: [] }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => rankedUserBody({ country: null, eloRate: 1500 }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/leaderboard"))).toBe(false);
+  });
+
+  it("country=jp でも eloRate が null（未確定）なら leaderboard を取得せず countryRank は null", async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/matches")) {
+        return { ok: true, status: 200, json: async () => ({ status: "success", data: [] }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => rankedUserBody({ country: "jp", eloRate: null }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/leaderboard"))).toBe(false);
+  });
+
+  it("leaderboard 取得が非2xxでも他のデータは正常に返り countryRank のみ null", async () => {
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      leaderboardOk: false,
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.isRegistered).toBe(true);
+    expect(result.user?.uuid).toBe("user-uuid");
+    expect(result.countryRank).toBeNull();
+  });
+
+  it("leaderboard 取得が例外を投げても他のデータは正常に返り countryRank のみ null", async () => {
+    silenceConsole();
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      throwOnLeaderboard: new Error("network down"),
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.isRegistered).toBe(true);
+    expect(result.countryRank).toBeNull();
+  });
+
+  it("leaderboard の status が success 以外なら users 配列があっても countryRank は null", async () => {
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      leaderboard: { status: "error", data: { users: [{ uuid: "user-uuid" }] } },
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
+  });
+
+  it("leaderboard.data.users が配列でなければ countryRank は null", async () => {
+    stubRankedFetch({
+      user: rankedUserBody({ country: "jp", eloRate: 1500 }),
+      leaderboard: { status: "success", data: {} },
+    });
+
+    const result = await fetchMCSRRankedStats("runner");
+    expect(result.countryRank).toBeNull();
   });
 });
 

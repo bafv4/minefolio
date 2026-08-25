@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/time-utils";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { formatRelativeTimeInHours, formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
 import type { MCSRRankedStats, SpeedrunComStats } from "@/lib/external-stats";
+import { getRankTier, type RankTierKey } from "@/lib/mcsr-ranked-tiers";
 import type { GroupedPaceEntry } from "@/lib/paceman-cache";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,8 +24,40 @@ import { useT } from "@/hooks/use-locale";
 // ============================================
 // MCSR Ranked
 // ============================================
-export function MCSRRankedCard({ ranked }: { ranked: MCSRRankedStats }) {
+
+// Tailwind は動的クラス名構築を検出できないため、階級ごとの完全なクラス文字列を静的に定義する
+// （--rank-coal〜--rank-netherite トークン。app.css の --color-rank-* により
+// border-rank-X / bg-rank-X / text-rank-X ユーティリティが使える）
+const RANK_TIER_CHIP_CLASSES: Record<RankTierKey, string> = {
+  coal: "border-rank-coal/40 bg-rank-coal/10 text-rank-coal",
+  iron: "border-rank-iron/40 bg-rank-iron/10 text-rank-iron",
+  gold: "border-rank-gold/40 bg-rank-gold/10 text-rank-gold",
+  emerald: "border-rank-emerald/40 bg-rank-emerald/10 text-rank-emerald",
+  diamond: "border-rank-diamond/40 bg-rank-diamond/10 text-rank-diamond",
+  netherite: "border-rank-netherite/40 bg-rank-netherite/10 text-rank-netherite",
+};
+
+export function MCSRRankedCard({
+  ranked,
+  minefolioRank,
+}: {
+  ranked: MCSRRankedStats;
+  /** Minefolio 登録ユーザー内での Elo 順位（rankings-query.server.ts の cron キャッシュ基準。
+   *  非公開プロフィール・Ranked統計非公開・Minefolio未登録などは null/undefined） */
+  minefolioRank?: { rank: number; total: number } | null;
+}) {
   const t = useT();
+
+  // Win Rate / FF Rate: 分母が0（対戦データ無し）の場合は非表示（null）
+  const seasonWins = ranked.seasonData?.records.win ?? 0;
+  const seasonLoses = ranked.seasonData?.records.lose ?? 0;
+  const seasonGames = seasonWins + seasonLoses;
+  const winRatePercent = seasonGames > 0 ? (seasonWins / seasonGames) * 100 : null;
+
+  const forfeits = ranked.seasonData?.forfeits ?? 0;
+  const playedMatches = ranked.seasonData?.playedMatches ?? 0;
+  const ffRatePercent = playedMatches > 0 ? (forfeits / playedMatches) * 100 : null;
+
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
@@ -40,6 +73,19 @@ export function MCSRRankedCard({ ranked }: { ranked: MCSRRankedStats }) {
             <div className="text-center p-3 bg-secondary/50 rounded-lg">
               <p className="text-2xl font-bold">{ranked.user.eloRate}</p>
               <p className="text-xs text-muted-foreground">{t("playerStatsCards.eloRate")}</p>
+              {(() => {
+                const tier = getRankTier(ranked.user.eloRate);
+                return (
+                  <span
+                    className={cn(
+                      "mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                      RANK_TIER_CHIP_CLASSES[tier.key],
+                    )}
+                  >
+                    {tier.label}
+                  </span>
+                );
+              })()}
             </div>
           )}
           {ranked.user?.eloRank && (
@@ -54,6 +100,35 @@ export function MCSRRankedCard({ ranked }: { ranked: MCSRRankedStats }) {
                 {ranked.seasonData.records.win}W - {ranked.seasonData.records.lose}L
               </p>
               <p className="text-xs text-muted-foreground">{t("playerStatsCards.seasonRecord")}</p>
+            </div>
+          )}
+          {winRatePercent !== null && (
+            <div className="text-center p-3 bg-secondary/50 rounded-lg">
+              <p className="text-2xl font-bold">{winRatePercent.toFixed(1)}%</p>
+              <p className="text-xs text-muted-foreground">{t("playerStatsCards.winRate")}</p>
+            </div>
+          )}
+          {ffRatePercent !== null && (
+            <div className="text-center p-3 bg-secondary/50 rounded-lg">
+              <p className="text-2xl font-bold">{ffRatePercent.toFixed(1)}%</p>
+              <p className="text-xs text-muted-foreground">{t("playerStatsCards.ffRate")}</p>
+            </div>
+          )}
+          {ranked.countryRank !== null && (
+            <div className="text-center p-3 bg-secondary/50 rounded-lg">
+              <p className="text-2xl font-bold">#{ranked.countryRank}</p>
+              <p className="text-xs text-muted-foreground">{t("playerStatsCards.jpRank")}</p>
+            </div>
+          )}
+          {minefolioRank && (
+            <div className="text-center p-3 bg-secondary/50 rounded-lg">
+              <p className="text-2xl font-bold">#{minefolioRank.rank}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("playerStatsCards.minefolioRank")}
+                <span className="block">
+                  {t("playerStatsCards.minefolioRankOutOf", { total: minefolioRank.total })}
+                </span>
+              </p>
             </div>
           )}
         </div>
@@ -90,22 +165,22 @@ export function MCSRRankedCard({ ranked }: { ranked: MCSRRankedStats }) {
                 <div
                   key={match.id}
                   className={cn(
-                    "flex items-center justify-between p-2 rounded text-sm",
+                    "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-2 rounded text-sm",
                     match.result === "win" && "bg-success/10",
                     match.result === "lose" && "bg-destructive/10",
                     match.result === "draw" && "bg-warning/10",
                   )}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Badge
                       variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
-                      className="w-12 justify-center"
+                      className="w-12 shrink-0 justify-center"
                     >
                       {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
                     </Badge>
-                    <span>vs {match.opponentNickname}</span>
+                    <span className="truncate">vs {match.opponentNickname}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     {match.time && (
                       <span className="font-mono text-muted-foreground">{formatTime(match.time)}</span>
                     )}
@@ -120,6 +195,11 @@ export function MCSRRankedCard({ ranked }: { ranked: MCSRRankedStats }) {
                       {match.eloChange}
                     </span>
                   </div>
+                  {match.date > 0 && (
+                    <span className="w-full text-xs text-muted-foreground">
+                      {formatRelativeTimeInHours(t, new Date(match.date * 1000))}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

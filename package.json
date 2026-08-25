@@ -1,7 +1,7 @@
 {
   "name": "minefolio",
   "private": false,
-  "version": "v1.12.4",
+  "version": "v1.12.5",
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
