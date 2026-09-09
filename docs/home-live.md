@@ -78,6 +78,21 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
   統一形式 `FeedVideo`（`app/components/feed-video-card.tsx`）にマージして新しい順に表示する
 - **どちらも cron 蓄積の専用テーブル読み**（YouTube: `youtube-update` 2時間毎 / Twitch: `twitch-update` 30分毎）。
   保持期間は**90日**（`app/lib/feed-video.ts` の `VIDEO_FEED_RETENTION_DAYS`。cron がそれ以前の行を削除）
+  - **Twitch VOD取得**（`getRecentVods()`、`app/lib/twitch.ts`）: 連携済み全チャンネルが対象（旧: 先頭10件のみ）。
+    チャンネルごとに `/videos?type=archive` を保持期間（90日）に達するまでページング取得する
+    （1ページ100件、安全上限500件/チャンネル＝最大5ページ。同時5チャンネルまで並列。Helixレート制限
+    800pt/分への配慮）。`viewable === "private"` のVODを除外してキャッシュする（フィールド欠落は
+    public 扱い＝欠落時に差分削除で全消ししないための安全側）。API呼び出しに成功し全件取得しきれた
+    チャンネル（0件応答も含む）は取得結果との差分でキャッシュ行を削除し、VOD削除・非公開化・
+    チャンネル全体の非公開化を反映する。login解決不可・API呼び出し失敗など判定不能なチャンネルと、
+    安全上限（500件）で打ち切られ未取得分が残りうるチャンネル（`incompleteLogins`）は削除しない
+    （フェイルオープン）。`verify` cron（8時間毎、VOD IDの存在確認）はこの差分削除の取りこぼしに対する
+    安全網として引き続き稼働する
+  - **YouTube動画取得**（`resolveUploadsPlaylists()` + `fetchUploadsPlaylistItems()`、`app/lib/youtube.ts`）:
+    Search API（1回100ユニット）ではなく、アップロード再生リスト方式（`channels.list` でチャンネルの
+    uploadsプレイリストIDを解決 + `playlistItems.list` で最新10件取得。いずれも1ユニット/リクエスト）で
+    クォータを節約する。連携済み全チャンネルを毎回処理し、`privacyStatus === "public"` の動画のみ
+    キャッシュする。非公開化・削除の検知は従来どおり `verify` cron（12時間毎、動画IDの存在確認）が担う
 - **ホームは新着6件のみ表示**（`HOME_VIDEO_DISPLAY_COUNT`。新着順で切り出してからお気に入りを先頭に並べ替え）。
   セクションヘッダーの「すべて見る」から動画一覧ページ（`/videos`）へ遷移できる
 - カードは `FeedVideoCard`:
@@ -87,6 +102,25 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
   - **タイトル・外部リンクアイコンからプラットフォームの視聴ページへ**（新規タブ）
   - プラットフォームバッジ（YouTube=赤 / Twitch=紫）、Twitch VOD は配信時間バッジを表示
 - セクションのスケルトンは両方の読み込みが完了するまで表示。マージ後0件ならセクション非表示
+
+### 設定変更時の自動リフレッシュ（cronを待たない反映）
+
+プロフィール編集の保存時、cronの次回実行（YouTube最大2時間・Twitch最大30分）を待たずに**対象ユーザー分だけ**
+即時反映するトリガーが `app/lib/targeted-refresh.server.ts` に集約されている。action がレスポンスを返した
+「後」に `runAfterResponse()`（内部は `@vercel/functions` の `waitUntil()`）でバックグラウンド実行するため、
+保存の応答速度には影響しない。各関数は内部でエラーを握り、失敗しても action を失敗・ブロックさせない
+（fire-and-forget）。呼び出し元は `app/routes/me/edit.tsx`。
+
+| トリガー | 実行内容 |
+|---|---|
+| Twitch/YouTubeリンクの追加・変更 | 新チャンネルのVOD/動画を即時取得（`refreshTwitchVodsForLogin` / `refreshYoutubeForChannel`） |
+| Twitch/YouTubeリンクの変更・削除 | 旧チャンネルのキャッシュ行を削除（`deleteTwitchVodsForLogin` / `deleteYoutubeVideosForChannelIdentifier`） |
+| Speedrun.comユーザー名の変更（ソーシャルリンク欄・基本情報フォームのどちらの経路でも） | Speedrun.com/MCSR Rankedランキングを即時更新（`refreshSrcRankingsForUser`） |
+| MCID変更 | `youtube_video_cache.minefolio_mcid` の紐付けを新MCIDへ更新（`updateYoutubeCacheMcid`。旧MCIDのまま残ると一覧から消えるため）＋YouTube連携があれば新MCIDで即時再取得 |
+| プロフィールを非公開→公開へ再公開 | 非公開中は cron の走査対象外（`getPublicTwitchLinks` / `getRegisteredYouTubeChannels` は公開プロフィールのみを走査）だったため取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる |
+
+cron（YouTube 2時間毎・Twitch 30分毎）は全体の定期同期として引き続き稼働し、この即時リフレッシュを
+置き換えるものではない（未ログイン操作や外部サービス側での削除・非公開化は cron 側の `verify` が拾う）。
 
 ### 表示制御フラグ
 
@@ -259,7 +293,11 @@ Twitch配信アーカイブ（VOD）のキャッシュ。cron `/api/cron/twitch-
 
 ### youtubeLiveCache
 
-YouTubeライブ配信のキャッシュ。
+YouTubeライブ配信のキャッシュ。**既知の制限: 現在このテーブルへの書き込みは停止中**（YouTube Search API の
+クォータコスト〈1リクエスト100ユニット〉が高く、日次クォータ〈10,000ユニット〉をすぐ消費してしまうため、
+更新ロジック自体〈`fetchAndCacheLiveStreams()`、`app/lib/youtube-cache.ts`〉は残存するが `vercel.json` の
+crons から `action=live` を外してある）。`/api/home-feed?type=youtube-live` は常に空配列を返し、ホームに
+YouTubeライブ配信は表示されない。将来的にRSS/Atomフィード等での再実装を検討中。
 
 | カラム | 型 | 説明 |
 |--------|-----|------|
@@ -307,12 +345,14 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/routes/api/paces.ts` - ペース一覧のページング+検索API
 - `app/routes/api/videos.ts` - 動画一覧のページング+検索API
 - `app/routes/api/cron/twitch-update.ts` - Twitch VODキャッシュ更新Cron
+- `app/routes/api/cron/youtube-update.ts` - YouTube動画キャッシュ更新Cron
 
 ### ライブラリ
-- `app/lib/youtube.ts` - YouTube API連携
+- `app/lib/youtube.ts` - YouTube API連携（アップロード再生リスト解決・取得、チャンネル統計）
 - `app/lib/youtube-cache.ts` - YouTube動画・ライブキャッシュ管理
-- `app/lib/twitch.ts` - Twitch API連携（トークン取得、ストリーム取得、VOD取得）
-- `app/lib/twitch-vod-cache.ts` - Twitch VODキャッシュ管理（蓄積・存在確認・クリーンアップ）
+- `app/lib/twitch.ts` - Twitch API連携（トークン取得、ストリーム取得、VODページング取得）
+- `app/lib/twitch-vod-cache.ts` - Twitch VODキャッシュ管理（蓄積・差分削除・存在確認・クリーンアップ）
+- `app/lib/targeted-refresh.server.ts` - 設定変更時の1ユーザー/1チャンネル単位の即時リフレッシュ（`runAfterResponse` 経由）
 - `app/lib/feed-video.ts` - 動画フィードの共有ドメイン型・ユーティリティ（`FeedVideo` / 保持期間定数 / 自分の動画非表示フィルタ）
 - `app/lib/videos-feed.server.ts` - 動画一覧の共通ロジック（マージ・可視性・検索条件解析）
 - `app/lib/paceman.ts` - PaceMan API連携（ライブラン取得）

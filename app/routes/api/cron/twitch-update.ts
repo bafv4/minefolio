@@ -52,6 +52,7 @@ export async function loader({ request }: { request: Request }) {
       channels: result.channels,
       added: result.added,
       updated: result.updated,
+      deleted: result.deleted,
       cleaned,
     });
   } catch (error) {

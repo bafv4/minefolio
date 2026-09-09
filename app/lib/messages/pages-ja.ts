@@ -1304,6 +1304,11 @@ export const PAGES_JA = {
     notConfigured: "フィードバック機能が設定されていません",
     sendFailed: "送信に失敗しました。しばらく経ってから再度お試しください。",
     userNotFound: "ユーザーが見つかりません",
+    createIssueLabel: "フィードバックをGitHubのIssueに発行する",
+    createIssueHint1: "件名と内容が、そのまま公開リポジトリのIssueとして投稿されます。",
+    createIssueHint2: "バグ報告や機能リクエストの場合は、Issueの発行をおすすめします。",
+    viewIssue: "作成されたIssueを見る",
+    issueCreateFailedToast: "フィードバックは送信されましたが、Issueの作成に失敗しました",
   },
   rankings: {
     title: "ランキング - Minefolio",

@@ -10,7 +10,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, inArray } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { isHttpUrl } from "@/lib/safe-url";
 import { importFromLegacy } from "@/lib/legacy-import";
@@ -19,6 +19,15 @@ import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
 import { recordSlugChange } from "@/lib/slug-history.server";
 import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import {
+  runAfterResponse,
+  refreshTwitchVodsForLogin,
+  deleteTwitchVodsForLogin,
+  refreshYoutubeForChannel,
+  deleteYoutubeVideosForChannelIdentifier,
+  updateYoutubeCacheMcid,
+  refreshSrcRankingsForUser,
+} from "@/lib/targeted-refresh.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -85,6 +94,68 @@ const POSES = users.profilePose.enumValues;
 const PLATFORMS = users.mainPlatform.enumValues;
 const ROLES = users.role.enumValues;
 const SOCIAL_PLATFORMS = socialLinks.platform.enumValues;
+
+/**
+ * ソーシャルリンクの追加/変更/削除に応じて、外部キャッシュ（Twitch VOD / YouTube 動画 /
+ * Speedrun.com・MCSR Rankedランキング）の即時リフレッシュ・削除を `runAfterResponse()` 経由でキックする。
+ * action のレスポンスは待たせない・失敗させない（各関数は内部でエラーを握る）。
+ * 変更が無ければ何もしない。作成時は oldPlatform/oldIdentifier を null で呼ぶ
+ */
+function scheduleSocialLinkKicks({
+  userId,
+  mcid,
+  oldPlatform,
+  oldIdentifier,
+  newPlatform,
+  newIdentifier,
+}: {
+  userId: string;
+  mcid: string | null;
+  oldPlatform: string | null;
+  oldIdentifier: string | null;
+  newPlatform: string;
+  newIdentifier: string;
+}) {
+  const changed = oldPlatform !== newPlatform || oldIdentifier !== newIdentifier;
+  if (!changed) return;
+
+  // Twitch: 旧がtwitchで(削除またはtwitch以外へ変更/identifier変更)なら旧を削除。新がtwitchなら即時取得。
+  // 旧新が同一チャンネルを指す変更（大文字小文字のみ等）で refresh 完了後に delete が走ると
+  // 次のcronまでキャッシュが空になるため、両方行う場合は必ず削除→取得の順に直列化する
+  const deleteOldTwitch =
+    oldPlatform === "twitch" && oldIdentifier && (newPlatform !== "twitch" || newIdentifier !== oldIdentifier)
+      ? () => deleteTwitchVodsForLogin(oldIdentifier)
+      : null;
+  const refreshNewTwitch =
+    newPlatform === "twitch" ? () => refreshTwitchVodsForLogin(newIdentifier) : null;
+  if (deleteOldTwitch && refreshNewTwitch) {
+    runAfterResponse(deleteOldTwitch().then(refreshNewTwitch));
+  } else if (deleteOldTwitch) {
+    runAfterResponse(deleteOldTwitch());
+  } else if (refreshNewTwitch) {
+    runAfterResponse(refreshNewTwitch());
+  }
+
+  // YouTube: 同上（@ハンドル↔UC-IDの変更も同一チャンネルでありうるため直列化。mcid未設定ユーザーは新規取得をスキップ）
+  const deleteOldYoutube =
+    oldPlatform === "youtube" && oldIdentifier && (newPlatform !== "youtube" || newIdentifier !== oldIdentifier)
+      ? () => deleteYoutubeVideosForChannelIdentifier(oldIdentifier)
+      : null;
+  const refreshNewYoutube =
+    newPlatform === "youtube" && mcid ? () => refreshYoutubeForChannel(newIdentifier, mcid) : null;
+  if (deleteOldYoutube && refreshNewYoutube) {
+    runAfterResponse(deleteOldYoutube().then(refreshNewYoutube));
+  } else if (deleteOldYoutube) {
+    runAfterResponse(deleteOldYoutube());
+  } else if (refreshNewYoutube) {
+    runAfterResponse(refreshNewYoutube());
+  }
+
+  // Speedrun.com: リンクの追加/変更/削除いずれも speedruncomUsername の変更を伴うためランキングを更新
+  if (newPlatform === "speedruncom" || oldPlatform === "speedruncom") {
+    runAfterResponse(refreshSrcRankingsForUser(userId));
+  }
+}
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -277,6 +348,23 @@ export async function action({ request }: Route.ActionArgs) {
         await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       });
 
+      // MCID変更に伴う外部キャッシュの紐付け追従（YouTube動画キャッシュのMCID列を新値へ）。
+      // YouTube連携があれば新MCIDで即時取得もキックする（連携有無の検索もレスポンスを遅らせないようbackground側で行う）
+      const oldMcid = user.mcid;
+      runAfterResponse(
+        (async () => {
+          if (oldMcid) {
+            await updateYoutubeCacheMcid(oldMcid, mcid);
+          }
+          const youtubeLink = await db.query.socialLinks.findFirst({
+            where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "youtube")),
+          });
+          if (youtubeLink) {
+            await refreshYoutubeForChannel(youtubeLink.identifier, mcid);
+          }
+        })()
+      );
+
       return { success: true, action: "mcid", newSlug };
     } catch (error) {
       if (error instanceof MojangError) {
@@ -389,12 +477,22 @@ export async function action({ request }: Route.ActionArgs) {
         });
 
         // Speedrun.comの場合、speedruncomUsernameも自動設定
+        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
         if (platform === "speedruncom") {
           await db
             .update(users)
-            .set({ speedruncomUsername: identifier, updatedAt: new Date() })
+            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
             .where(eq(users.id, user.id));
         }
+
+        scheduleSocialLinkKicks({
+          userId: user.id,
+          mcid: user.mcid,
+          oldPlatform: null,
+          oldIdentifier: null,
+          newPlatform: platform,
+          newIdentifier: identifier,
+        });
       } else if (id) {
         // カスタム以外は更新時に別のプラットフォームに変更する場合、重複チェック
         if (platform !== "custom") {
@@ -432,18 +530,28 @@ export async function action({ request }: Route.ActionArgs) {
           .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
 
         // Speedrun.comの場合、speedruncomUsernameも自動更新
+        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
         if (platform === "speedruncom") {
           await db
             .update(users)
-            .set({ speedruncomUsername: identifier, updatedAt: new Date() })
+            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
             .where(eq(users.id, user.id));
         } else if (oldLink?.platform === "speedruncom") {
           // Speedrun.comから別のプラットフォームに変更した場合、クリア
           await db
             .update(users)
-            .set({ speedruncomUsername: null, updatedAt: new Date() })
+            .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
             .where(eq(users.id, user.id));
         }
+
+        scheduleSocialLinkKicks({
+          userId: user.id,
+          mcid: user.mcid,
+          oldPlatform: oldLink.platform,
+          oldIdentifier: oldLink.identifier,
+          newPlatform: platform,
+          newIdentifier: identifier,
+        });
       }
 
       return { success: true, action: "link" };
@@ -472,12 +580,21 @@ export async function action({ request }: Route.ActionArgs) {
         .delete(socialLinks)
         .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
 
-      // Speedrun.comリンクを削除した場合、speedruncomUsernameもクリア
+      // Speedrun.comリンクを削除した場合、speedruncomUsername・speedruncomIdもクリア
       if (linkToDelete.platform === "speedruncom") {
         await db
           .update(users)
-          .set({ speedruncomUsername: null, updatedAt: new Date() })
+          .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
           .where(eq(users.id, user.id));
+      }
+
+      // 削除したプラットフォームの外部キャッシュも削除する
+      if (linkToDelete.platform === "twitch") {
+        runAfterResponse(deleteTwitchVodsForLogin(linkToDelete.identifier));
+      } else if (linkToDelete.platform === "youtube") {
+        runAfterResponse(deleteYoutubeVideosForChannelIdentifier(linkToDelete.identifier));
+      } else if (linkToDelete.platform === "speedruncom") {
+        runAfterResponse(refreshSrcRankingsForUser(user.id));
       }
     }
     return { success: true, action: "link" };
@@ -686,6 +803,8 @@ export async function action({ request }: Route.ActionArgs) {
       shortBio,
       rtaStartedYearMonth,
       speedruncomUsername,
+      // ユーザー名が変わったら解決済みIDもリセットする（残すと cron/即時更新が旧アカウントを見続ける）
+      ...(speedruncomUsername !== user.speedruncomUsername ? { speedruncomId: null } : {}),
       showPacemanOnHome,
       showTwitchOnHome,
       showYoutubeOnHome,
@@ -718,6 +837,33 @@ export async function action({ request }: Route.ActionArgs) {
     }
   } else if (existingSpeedruncomLink) {
     await db.delete(socialLinks).where(eq(socialLinks.id, existingSpeedruncomLink.id));
+  }
+
+  // speedruncomUsername を基本情報フォーム側（連携欄を介さず）で直接変更した場合もランキングを即時更新する
+  if (speedruncomUsername !== user.speedruncomUsername) {
+    runAfterResponse(refreshSrcRankingsForUser(user.id));
+  }
+
+  // 非公開→公開への切り替え時は、非公開中はcron対象外で取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる
+  // （連携有無の検索もレスポンスを遅らせないようbackground側で行う）
+  if (user.profileVisibility !== "public" && profileVisibility === "public") {
+    const mcidAtSave = user.mcid;
+    runAfterResponse(
+      (async () => {
+        const externalLinksOnPublish = await db.query.socialLinks.findMany({
+          where: and(eq(socialLinks.userId, user.id), inArray(socialLinks.platform, ["twitch", "youtube"])),
+        });
+        for (const link of externalLinksOnPublish) {
+          if (link.platform === "twitch") {
+            await refreshTwitchVodsForLogin(link.identifier);
+          } else if (link.platform === "youtube" && mcidAtSave) {
+            await refreshYoutubeForChannel(link.identifier, mcidAtSave);
+          }
+        }
+        // SRC/MCSR Rankedランキングも非公開中はcron対象外のため追いつかせる
+        await refreshSrcRankingsForUser(user.id);
+      })()
+    );
   }
 
   return { success: true, action: "profile" };

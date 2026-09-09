@@ -1333,6 +1333,13 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     notConfigured: "Feedback isn't configured",
     sendFailed: "Failed to send. Please try again in a little while.",
     userNotFound: "User not found",
+    createIssueLabel: "Post this feedback as a GitHub Issue",
+    createIssueHint1:
+      "The subject and message will be posted as-is to a public GitHub repository as an issue.",
+    createIssueHint2: "Recommended for bug reports and feature requests.",
+    viewIssue: "View the created issue",
+    issueCreateFailedToast:
+      "Your feedback was sent, but creating the GitHub Issue failed.",
   },
   rankings: {
     title: "Rankings - Minefolio",

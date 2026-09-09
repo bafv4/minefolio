@@ -1,13 +1,17 @@
 // YouTube動画キャッシュ管理
 // Cronで定期的に更新される
 
-import { eq, desc, asc, and, lt, ne, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, lt, ne, inArray, sql } from "drizzle-orm";
 import { createDb } from "./db";
 import { youtubeVideoCache, youtubeLiveCache, users, socialLinks } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
 import { createId } from "@paralleldrive/cuid2";
 import { videoRetentionCutoff } from "./feed-video";
-import type { YouTubeSearchResult } from "./youtube";
+import {
+  resolveUploadsPlaylists,
+  fetchUploadsPlaylistItems,
+  type YouTubePlaylistItem,
+} from "./youtube";
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
@@ -21,76 +25,152 @@ const CACHE_CONFIG = {
 // 読み出し（ユーザー紐付け・可視性ゲート・FeedVideo変換）は videos-feed.server.ts の
 // getPublicVideoFeed に集約されている。このモジュールは cron の書き込み経路のみを担う
 
+export interface PendingVideoUpsert {
+  videoId: string;
+  channelId: string;
+  mcid: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  channelTitle: string | null;
+  publishedAt: string;
+}
+
+/** playlistItems.list の応答から、公開動画のみキャッシュ書き込み用の形に変換する */
+function toPendingVideos(
+  items: YouTubePlaylistItem[],
+  channelId: string,
+  mcid: string
+): PendingVideoUpsert[] {
+  const pending: PendingVideoUpsert[] = [];
+  for (const item of items) {
+    // unlisted/private を除外し、公開動画のみキャッシュする
+    if (item.status?.privacyStatus !== "public") continue;
+    const videoId = item.snippet.resourceId?.videoId;
+    if (!videoId) continue;
+
+    pending.push({
+      videoId,
+      channelId,
+      mcid,
+      title: item.snippet.title,
+      description: item.snippet.description ?? null,
+      thumbnailUrl:
+        item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.default?.url ?? null,
+      channelTitle: item.snippet.channelTitle ?? null,
+      publishedAt: item.snippet.publishedAt,
+    });
+  }
+  return pending;
+}
+
 /**
- * 新しい動画をAPIから取得してキャッシュに保存
+ * 1チャンネル分の公開動画を最新 maxResults 件取得する（アップロード再生リスト方式）。
+ * targeted-refresh.server.ts の1チャンネル即時更新からも使う
+ */
+export async function fetchChannelUploadsForCache(
+  apiKey: string,
+  identifier: string,
+  mcid: string,
+  maxResults: number
+): Promise<PendingVideoUpsert[]> {
+  const playlists = await resolveUploadsPlaylists(apiKey, [identifier]);
+  const info = playlists.get(identifier);
+  if (!info) return [];
+
+  try {
+    const items = await fetchUploadsPlaylistItems(apiKey, info.uploadsPlaylistId, maxResults);
+    return toPendingVideos(items, info.channelId, mcid);
+  } catch (error) {
+    console.error(`Failed to fetch videos for channel ${identifier}:`, error);
+    return [];
+  }
+}
+
+/**
+ * 取得済みの動画一覧をキャッシュへ書き込む（videoId は UNIQUE のため1回のバッチupsertで書き込む。
+ * twitch-vod-cache.ts の vodId UNIQUE upsert と同じパターン）
+ */
+export async function upsertVideoCache(
+  pending: PendingVideoUpsert[]
+): Promise<{ added: number; updated: number }> {
+  if (pending.length === 0) return { added: 0, updated: 0 };
+
+  const db = createDb();
+  const existingRows = await db.query.youtubeVideoCache.findMany({
+    where: inArray(youtubeVideoCache.videoId, pending.map((v) => v.videoId)),
+    columns: { videoId: true },
+  });
+  const existingIds = new Set(existingRows.map((r) => r.videoId));
+
+  const now = new Date();
+  await db
+    .insert(youtubeVideoCache)
+    .values(
+      pending.map((v) => ({
+        id: createId(),
+        videoId: v.videoId,
+        channelId: v.channelId,
+        minefolioMcid: v.mcid,
+        title: v.title,
+        description: v.description,
+        thumbnailUrl: v.thumbnailUrl,
+        channelTitle: v.channelTitle,
+        publishedAt: new Date(v.publishedAt),
+        isAvailable: true,
+        lastVerifiedAt: now,
+      }))
+    )
+    .onConflictDoUpdate({
+      target: youtubeVideoCache.videoId,
+      set: {
+        title: sql`excluded.title`,
+        description: sql`excluded.description`,
+        thumbnailUrl: sql`excluded.thumbnail_url`,
+        channelTitle: sql`excluded.channel_title`,
+        isAvailable: true,
+        lastVerifiedAt: now,
+        updatedAt: now,
+      },
+    });
+
+  return {
+    added: pending.length - existingIds.size,
+    updated: existingIds.size,
+  };
+}
+
+/**
+ * 新しい動画をAPIから取得してキャッシュに保存。
+ * クォータ効率重視: Search API（1リクエスト100ユニット）ではなく、channels.list（1ユニット）で
+ * アップロード再生リストIDを取得し、playlistItems.list（1ユニット）で最新10件を読む方式を使う
  */
 export async function fetchAndCacheNewVideos(
   apiKey: string,
   channels: Array<{ channelId: string; mcid: string }>
 ): Promise<{ added: number; updated: number }> {
   console.log(`[YouTube API] Starting fetchAndCacheNewVideos for ${channels.length} channels`);
-  const db = createDb();
-  let added = 0;
-  let updated = 0;
+  if (channels.length === 0) return { added: 0, updated: 0 };
 
-  for (const { channelId: identifier, mcid } of channels.slice(0, 10)) {
+  // channels.list（UC形式は最大50件バッチ、ハンドルは個別）でアップロード再生リストIDを一括解決
+  const playlists = await resolveUploadsPlaylists(apiKey, channels.map((c) => c.channelId));
+
+  const pending: PendingVideoUpsert[] = [];
+  for (const { channelId: identifier, mcid } of channels) {
+    const info = playlists.get(identifier);
+    if (!info) continue;
+
     try {
-      // チャンネルIDを解決
-      const channelId = await resolveChannelIdInternal(apiKey, identifier);
-      if (!channelId) continue;
-
-      // 最新動画を取得
-      const videos = await fetchChannelVideos(apiKey, channelId, 3);
-
-      for (const video of videos) {
-        const videoId = video.id.videoId;
-        if (!videoId) continue;
-
-        // 既存のキャッシュを確認
-        const existing = await db.query.youtubeVideoCache.findFirst({
-          where: eq(youtubeVideoCache.videoId, videoId),
-        });
-
-        if (existing) {
-          // 既存の場合は更新（タイトルなどが変わっている可能性）
-          await db
-            .update(youtubeVideoCache)
-            .set({
-              title: video.snippet.title,
-              description: video.snippet.description,
-              thumbnailUrl: video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default?.url,
-              channelTitle: video.snippet.channelTitle,
-              isAvailable: true,
-              lastVerifiedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(youtubeVideoCache.videoId, videoId));
-          updated++;
-        } else {
-          // 新規追加
-          await db.insert(youtubeVideoCache).values({
-            id: createId(),
-            videoId,
-            channelId,
-            minefolioMcid: mcid,
-            title: video.snippet.title,
-            description: video.snippet.description,
-            thumbnailUrl: video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default?.url,
-            channelTitle: video.snippet.channelTitle,
-            publishedAt: new Date(video.snippet.publishedAt),
-            lastVerifiedAt: new Date(),
-            isAvailable: true,
-          });
-          added++;
-        }
-      }
+      const items = await fetchUploadsPlaylistItems(apiKey, info.uploadsPlaylistId, 10);
+      pending.push(...toPendingVideos(items, info.channelId, mcid));
     } catch (error) {
       console.error(`Failed to fetch videos for channel ${identifier}:`, error);
     }
   }
 
-  console.log(`[YouTube API] fetchAndCacheNewVideos completed: added=${added}, updated=${updated}`);
-  return { added, updated };
+  const result = await upsertVideoCache(pending);
+  console.log(`[YouTube API] fetchAndCacheNewVideos completed: added=${result.added}, updated=${result.updated}`);
+  return result;
 }
 
 /**
@@ -175,48 +255,8 @@ export async function cleanupOldVideos(): Promise<number> {
 // 内部ヘルパー関数
 // ========================================
 
-async function fetchChannelVideos(
-  apiKey: string,
-  channelId: string,
-  maxResults: number
-): Promise<YouTubeSearchResult[]> {
-  try {
-    const params = new URLSearchParams({
-      key: apiKey,
-      channelId,
-      part: "snippet",
-      type: "video",
-      order: "date",
-      maxResults: String(maxResults),
-    });
-
-    console.log(`[YouTube API] Fetching videos for channel: ${channelId}`);
-    const res = await fetch(`${YOUTUBE_API}/search?${params}`, { signal: AbortSignal.timeout(10000) });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[YouTube API] Search failed (${res.status}): ${errorText}`);
-      return [];
-    }
-
-    const data = await res.json();
-    console.log(`[YouTube API] Search response for ${channelId}:`, JSON.stringify({
-      totalResults: data.pageInfo?.totalResults,
-      resultsPerPage: data.pageInfo?.resultsPerPage,
-      itemCount: data.items?.length || 0,
-      items: data.items?.map((item: any) => ({
-        videoId: item.id?.videoId,
-        title: item.snippet?.title,
-        publishedAt: item.snippet?.publishedAt,
-      })),
-    }));
-    return data.items || [];
-  } catch (error) {
-    console.error(`[YouTube API] Search error for channel ${channelId}:`, error);
-    return [];
-  }
-}
-
+// resolveChannelIdInternal は fetchAndCacheLiveStreams（停止中のライブ配信機能）専用。
+// 新着動画の取得は resolveUploadsPlaylists / fetchUploadsPlaylistItems（youtube.ts）に置き換え済み
 async function resolveChannelIdInternal(
   apiKey: string,
   identifier: string
