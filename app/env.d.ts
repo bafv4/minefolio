@@ -19,6 +19,10 @@ export interface Env {
   // Feedback
   FEEDBACK_EMAIL?: string;
   RESEND_API_KEY?: string;
+  // フィードバックのGitHub Issue自動作成（オプトイン）。未設定なら機能ごと無効
+  GITHUB_FEEDBACK_TOKEN?: string;
+  /** 省略時は "bafv4/minefolio" */
+  GITHUB_FEEDBACK_REPO?: string;
   // Release notification (Vercel Webhook → Discord)
   VERCEL_WEBHOOK_SECRET?: string;
   DISCORD_RELEASE_WEBHOOK_URL?: string;

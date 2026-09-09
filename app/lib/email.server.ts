@@ -9,9 +9,11 @@ interface FeedbackEmailParams {
   category: string;
   message: string;
   resendApiKey: string;
+  /** 送信者とGitHub Issueを突き合わせるための相関ID（createId().slice(0, 8)想定）。Issue本文にも同じ値を入れる */
+  feedbackId: string;
 }
 
-const categoryLabels: Record<string, string> = {
+export const categoryLabels: Record<string, string> = {
   bug: "バグ報告",
   feature: "機能リクエスト",
   other: "その他",
@@ -40,6 +42,10 @@ export async function sendFeedbackEmail(params: FeedbackEmailParams) {
       <tr>
         <th style="background: #f0f0f0;">表示名</th>
         <td>${escapeHtml(params.displayName ?? "未設定")}</td>
+      </tr>
+      <tr>
+        <th style="background: #f0f0f0;">Feedback ID</th>
+        <td>${escapeHtml(params.feedbackId)}</td>
       </tr>
     </table>
     <h3>メッセージ</h3>

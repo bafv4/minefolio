@@ -131,14 +131,35 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 
 ### フィードバックフォーム (/feedback)
 
-- ユーザーからのフィードバックを受け付けるフォーム
-- カテゴリ選択、メッセージ入力
+- ユーザーからのフィードバックを受け付けるフォーム（ログイン必須）
+- カテゴリ選択（`bug` / `feature` / `other`）、件名（5〜100文字）、本文（10〜2000文字）入力
+- バリデーションは `app/lib/feedback-schema.ts`（zod）
 
 ### メール送信
 
-- **Resend API** でフィードバック内容をメール送信
+- **Resend API** でフィードバック内容をメール送信（主経路・必須）
 - 環境変数: `FEEDBACK_EMAIL`（送信先）、`RESEND_API_KEY`（APIキー）
-- `app/lib/email.server.ts` でメール送信処理
+- `app/lib/email.server.ts` でメール送信処理。送信者の Discord ID / MCID / 表示名はメール本文にのみ含まれる
+
+### GitHub Issue の自動作成（オプトイン）
+
+- フォームに「フィードバックをGitHubのIssueに発行する」チェックボックスを表示する（既定オフ）。表示条件は
+  `GITHUB_FEEDBACK_TOKEN` が設定されていること（loader の `canCreateIssue`）
+- **Issue本文には個人情報を一切含めない**: タイトル＝件名そのまま、本文＝カテゴリ表記＋本文＋末尾に
+  相関ID行（`Feedback-ID: <8文字>`）のみ。discordId / mcid / displayName は載せない
+- 相関ID（`createId().slice(0, 8)`）は action 内で1つ生成し、**メール本文（送信者特定用）と Issue 本文
+  （突き合わせ用）の両方**に入れる
+- ラベル: 常に `feedback` ＋ `category === "bug"` なら `bug`、`category === "feature"` なら `enhancement`
+  （`other` は `feedback` のみ）
+- 処理順: **メール送信（常に必須の主経路）→ 成功した場合のみ Issue 作成**。チェックボックスがオンかつ
+  `GITHUB_FEEDBACK_TOKEN` 設定時のみ Issue 作成を試み、**失敗してもフィードバック送信全体は成功扱い**
+  （`console.error` に残すのみ、UIには警告トーストを出す）。Issue を先に作るとメール失敗時に
+  突き合わせ先のない公開 Issue が残り、再送信で重複 Issue が生まれるため、この順序は変えない
+- クライアント: `app/lib/github.server.ts` の `createFeedbackIssue()`（`POST /repos/{repo}/issues`、
+  fine-grained PAT・`AbortSignal.timeout(10000)`）
+- 環境変数: `GITHUB_FEEDBACK_TOKEN`（fine-grained PAT。未設定なら機能自体が無効）、
+  `GITHUB_FEEDBACK_REPO`（省略時 `"bafv4/minefolio"`）
+- 作成に成功した場合、送信成功画面（`sent` 表示）に Issue へのリンクを表示する
 
 ---
 
@@ -206,6 +227,8 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 | `RESEND_API_KEY` | Resend メール送信APIキー |
 | `ANTHROPIC_API_KEY` | 利用者コンテンツの自動翻訳（`docs/translation.md`）。未設定なら機能ごと無効 |
 | `FEEDBACK_EMAIL` | フィードバック送信先メールアドレス |
+| `GITHUB_FEEDBACK_TOKEN` | フィードバックのGitHub Issue自動作成用トークン（fine-grained PAT）。未設定なら機能自体が無効 |
+| `GITHUB_FEEDBACK_REPO` | Issue作成先リポジトリ（`owner/repo`形式）。省略時 `"bafv4/minefolio"` |
 | `LEGACY_API_URL` | レガシーAPI（MCSRer Hotkeys）のURL |
 | `VERCEL_WEBHOOK_SECRET` | Vercel Webhook の署名検証シークレット（リリース通知） |
 | `DISCORD_RELEASE_WEBHOOK_URL` | リリース通知先の Discord Webhook URL |
@@ -310,6 +333,8 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/lib/env.server.ts` - サーバーサイド環境変数アクセス
 - `app/env.d.ts` - 環境変数の型定義（`Env`）
 - `app/lib/email.server.ts` - メール送信（Resend）
+- `app/lib/github.server.ts` - GitHub Issues APIクライアント（フィードバックのIssue自動作成）
+- `app/lib/feedback-schema.ts` - フィードバックフォームのバリデーション（zod）
 - `app/lib/import-parser.ts` - レガシーインポートパーサー
 - `app/lib/legacy-import.ts` - レガシーインポートロジック
 - `app/routes/api/keybindings-csv.ts` - CSVエクスポートAPI
