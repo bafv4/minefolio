@@ -1,6 +1,7 @@
 // Twitch API - 配信状態取得
 
 import { getCached, setCached, getTwitchCacheKey, CacheTTL } from "./cache";
+import { videoRetentionCutoff } from "./feed-video";
 
 const TWITCH_API = "https://api.twitch.tv/helix";
 const TWITCH_AUTH = "https://id.twitch.tv/oauth2/token";
@@ -256,97 +257,208 @@ function resolveVodThumbnail(templateUrl: string): string | null {
   return templateUrl.replace("%{width}", "640").replace("%{height}", "360");
 }
 
-interface TwitchVideoResponse {
-  data?: Array<{
-    id: string;
-    user_login: string;
-    user_name: string;
-    title: string;
-    thumbnail_url: string;
-    published_at: string;
-    created_at: string;
-    duration: string;
-    type: string;
-  }>;
+interface TwitchVideoApiItem {
+  id: string;
+  user_login: string;
+  user_name: string;
+  title: string;
+  thumbnail_url: string;
+  published_at: string;
+  created_at: string;
+  duration: string;
+  type: string;
+  /** "public" | "private"（非公開VODの防御用フィルタに使用） */
+  viewable: string;
 }
 
-// VOD取得の上限（youtube-cache.ts の「チャンネルごと3件・最大10チャンネル」と同水準）
-const VODS_PER_CHANNEL = 3;
-const VOD_MAX_CHANNELS = 10;
+interface TwitchVideosPageResponse {
+  data?: TwitchVideoApiItem[];
+  pagination?: { cursor?: string };
+}
+
+// VODページング設定
+const VOD_PAGE_SIZE = 100; // /videos の1リクエストあたり最大件数
+const VOD_MAX_PAGES_PER_CHANNEL = 5; // 安全上限（500件/チャンネル）
+const VOD_FETCH_CONCURRENCY = 5; // Helixレート制限（800pt/分）への配慮
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
 
 /**
- * 指定した配信者たちの最近の配信アーカイブ（VOD）を取得
- * /users は最大100件バッチ、/videos は配信者ごとに1リクエスト
+ * 1チャンネル分の archive VOD を保持期間（cutoff）に達するまでページングして取得。
+ * API呼び出しが失敗した場合は null（判定不能）を返す。
+ * `complete: false` は安全上限（VOD_MAX_PAGES_PER_CHANNEL）による打ち切りで、
+ * 保持期間内に未取得のVODが残っている可能性を表す（差分削除の対象にしてはならない）
+ */
+async function fetchChannelVodsPaged(
+  headers: Record<string, string>,
+  broadcasterId: string,
+  cutoff: Date
+): Promise<{ items: TwitchVideoApiItem[]; complete: boolean } | null> {
+  const items: TwitchVideoApiItem[] = [];
+  let cursor: string | undefined;
+  let complete = false;
+
+  for (let page = 0; page < VOD_MAX_PAGES_PER_CHANNEL; page++) {
+    const params = new URLSearchParams({
+      user_id: broadcasterId,
+      type: "archive",
+      first: String(VOD_PAGE_SIZE),
+      sort: "time",
+    });
+    if (cursor) params.set("after", cursor);
+
+    try {
+      const res = await fetch(`${TWITCH_API}/videos?${params}`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        console.error("Twitch videos API failed:", res.status);
+        return null;
+      }
+      const data = (await res.json()) as TwitchVideosPageResponse;
+      const pageItems = data.data ?? [];
+
+      let reachedCutoff = false;
+      for (const item of pageItems) {
+        const publishedAt = new Date(item.published_at || item.created_at);
+        if (publishedAt < cutoff) {
+          reachedCutoff = true;
+          break;
+        }
+        items.push(item);
+      }
+      if (reachedCutoff) {
+        complete = true;
+        break;
+      }
+
+      cursor = data.pagination?.cursor;
+      if (!cursor || pageItems.length === 0) {
+        complete = true;
+        break;
+      }
+    } catch (error) {
+      console.error("Twitch videos error:", error);
+      return null;
+    }
+  }
+
+  return { items, complete };
+}
+
+/** チャンネル単位でのVOD取得結果。判定不能（login解決不可・API失敗）と空配列を区別する */
+export interface TwitchVodFetchResult {
+  /** login（小文字）→ 取得成功した公開VOD一覧（0件でも「成功」を表す） */
+  vods: Map<string, TwitchVod[]>;
+  /** 判定不能な login（/users で解決できなかった、または /videos 呼び出しが失敗した） */
+  failedLogins: Set<string>;
+  /**
+   * 取得は成功したが安全上限（5ページ=500件）で打ち切られ、保持期間内に未取得のVODが
+   * 残っている可能性がある login。取得分の upsert は行うが、差分削除の対象にしてはならない
+   */
+  incompleteLogins: Set<string>;
+}
+
+/**
+ * 指定した配信者たちの最近の配信アーカイブ（VOD、保持期間内・public のみ）を取得。
+ * /users は最大100件ずつバッチ解決、/videos はチャンネルごとに保持期間に達するまでページングし、
+ * 同時5チャンネル程度に制限して並列実行する（Helixレート制限800pt/分への配慮）。
  * @param clientId Twitch Client ID
  * @param accessToken App Access Token
- * @param userLogins Twitchユーザー名の配列
+ * @param userLogins Twitchユーザー名の配列（件数上限なし）
  */
 export async function getRecentVods(
   clientId: string,
   accessToken: string,
   userLogins: string[]
-): Promise<TwitchVod[]> {
-  if (userLogins.length === 0) return [];
+): Promise<TwitchVodFetchResult> {
+  const vods = new Map<string, TwitchVod[]>();
+  const failedLogins = new Set<string>();
+  const incompleteLogins = new Set<string>();
+  if (userLogins.length === 0) return { vods, failedLogins, incompleteLogins };
 
   const headers = {
     "Client-ID": clientId,
     Authorization: `Bearer ${accessToken}`,
   };
 
-  try {
-    // login → broadcaster id をバッチ解決（最大100件/リクエスト）
-    const limitedLogins = userLogins.slice(0, VOD_MAX_CHANNELS);
-    const params = limitedLogins
-      .map((u) => `login=${encodeURIComponent(u)}`)
-      .join("&");
-    const usersRes = await fetch(`${TWITCH_API}/users?${params}`, {
-      headers,
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!usersRes.ok) {
-      console.error("Twitch users API failed:", usersRes.status);
-      return [];
+  // login → broadcaster id をバッチ解決（最大100件/リクエスト）
+  const requestedLogins = [...new Set(userLogins.map((l) => l.toLowerCase()))];
+  const broadcasters: Array<{ id: string; login: string }> = [];
+
+  for (const batch of chunk(requestedLogins, 100)) {
+    try {
+      const params = batch.map((u) => `login=${encodeURIComponent(u)}`).join("&");
+      const usersRes = await fetch(`${TWITCH_API}/users?${params}`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!usersRes.ok) {
+        console.error("Twitch users API failed:", usersRes.status);
+        for (const login of batch) failedLogins.add(login);
+        continue;
+      }
+      const usersData = (await usersRes.json()) as {
+        data?: Array<{ id: string; login: string }>;
+      };
+      const resolved = usersData.data ?? [];
+      const resolvedLogins = new Set(resolved.map((b) => b.login.toLowerCase()));
+      broadcasters.push(...resolved);
+      // /users解決で返ってこなかったlogin（改名・凍結等）は判定不能
+      for (const login of batch) {
+        if (!resolvedLogins.has(login)) failedLogins.add(login);
+      }
+    } catch (error) {
+      console.error("Twitch users error:", error);
+      for (const login of batch) failedLogins.add(login);
     }
-    const usersData = (await usersRes.json()) as {
-      data?: Array<{ id: string; login: string }>;
-    };
-    const broadcasters = usersData.data ?? [];
-    if (broadcasters.length === 0) return [];
-
-    // 配信者ごとに最新アーカイブを取得（/videos は user_id 単位のため並列化）
-    const results = await Promise.all(
-      broadcasters.map(async ({ id }) => {
-        try {
-          const res = await fetch(
-            `${TWITCH_API}/videos?user_id=${id}&type=archive&first=${VODS_PER_CHANNEL}`,
-            { headers, signal: AbortSignal.timeout(10000) }
-          );
-          if (!res.ok) {
-            console.error("Twitch videos API failed:", res.status);
-            return [];
-          }
-          const data = (await res.json()) as TwitchVideoResponse;
-          return data.data ?? [];
-        } catch (error) {
-          console.error("Twitch videos error:", error);
-          return [];
-        }
-      })
-    );
-
-    return results.flat().map((v) => ({
-      id: v.id,
-      userLogin: v.user_login.toLowerCase(),
-      userName: v.user_name,
-      title: v.title,
-      thumbnailUrl: resolveVodThumbnail(v.thumbnail_url),
-      publishedAt: v.published_at || v.created_at,
-      durationSeconds: parseTwitchDuration(v.duration),
-    }));
-  } catch (error) {
-    console.error("Twitch VODs error:", error);
-    return [];
   }
+
+  if (broadcasters.length === 0) return { vods, failedLogins, incompleteLogins };
+
+  // 配信者ごとに最新アーカイブをページング取得（同時 VOD_FETCH_CONCURRENCY 件に制限）
+  const cutoff = videoRetentionCutoff();
+  const queue = [...broadcasters];
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const broadcaster = queue.shift();
+      if (!broadcaster) return;
+      const login = broadcaster.login.toLowerCase();
+      const result = await fetchChannelVodsPaged(headers, broadcaster.id, cutoff);
+      if (result === null) {
+        failedLogins.add(login);
+        continue;
+      }
+      if (!result.complete) incompleteLogins.add(login);
+      // 非公開VODの防御フィルタ。Helixの viewable は現状常に "public" で、フィールド自体が
+      // 応答から消えた場合に全件除外→差分削除で全消し、とならないよう欠落時は public 扱いにする
+      const publicVods = result.items
+        .filter((v) => v.viewable !== "private")
+        .map((v) => ({
+          id: v.id,
+          userLogin: login,
+          userName: v.user_name,
+          title: v.title,
+          thumbnailUrl: resolveVodThumbnail(v.thumbnail_url),
+          publishedAt: v.published_at || v.created_at,
+          durationSeconds: parseTwitchDuration(v.duration),
+        }));
+      vods.set(login, publicVods);
+    }
+  }
+
+  const workerCount = Math.min(VOD_FETCH_CONCURRENCY, broadcasters.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return { vods, failedLogins, incompleteLogins };
 }
 
 /**

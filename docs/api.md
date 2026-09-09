@@ -113,7 +113,7 @@ Minecraftスキン画像を返す。
 | `twitch-streams` | Twitchライブ配信 | 30秒 / 60秒 | 60秒 |
 | `youtube-videos` | YouTube動画 | 30分 / 1日 | DB依存 |
 | `twitch-vods` | Twitch配信アーカイブ（VOD） | 15分 / 1日（空は60秒） | DB依存（cronが30分毎に更新） |
-| `youtube-live` | YouTubeライブ（現在無効） | 60秒 / 2分 | — |
+| `youtube-live` | YouTubeライブ（現在無効。常に空配列） | 60秒 / 2分 | — |
 
 **レスポンス例（live-runs）:**
 ```json
@@ -398,7 +398,7 @@ better-authが提供する認証エンドポイント。すべてのリクエス
 
 ### `GET /api/cron/youtube-update`
 
-YouTube動画・ライブ配信のキャッシュを更新する。
+YouTube動画のキャッシュを更新する。
 
 **パラメータ:**
 | 名前 | 型 | 説明 |
@@ -409,9 +409,9 @@ YouTube動画・ライブ配信のキャッシュを更新する。
 
 | action | 実行内容 | 推奨間隔 |
 |---|---|---|
-| `update` | 登録チャンネルの新着動画取得・キャッシュ | 2時間 |
+| `update` | 連携済み全チャンネルの新着動画取得・キャッシュ | 2時間 |
 | `verify` | キャッシュ済み動画の存在確認・削除 | 12時間 |
-| `live` | ライブ配信状況の確認・キャッシュ | 5分 |
+| `live` | ライブ配信状況の確認・キャッシュ（**現在 `vercel.json` の crons に未登録・停止中**。下記注記参照） | — |
 
 **必須環境変数:** `YOUTUBE_API_KEY`
 
@@ -426,9 +426,18 @@ YouTube動画・ライブ配信のキャッシュを更新する。
 }
 ```
 
-**関連ファイル:** `app/routes/api/cron/youtube-update.ts`
+**関連ファイル:** `app/routes/api/cron/youtube-update.ts`, `app/lib/youtube.ts`, `app/lib/youtube-cache.ts`
 
 - `update` は保持期間（90日）を超えた動画キャッシュ行の削除も行う
+- **取得方式**: Search API（1回100ユニット）ではなく、アップロード再生リスト方式（`channels.list` で
+  チャンネルの uploads プレイリストIDを解決 + `playlistItems.list` で最新10件取得。いずれも1ユニット/
+  リクエスト）でクォータを節約する（`resolveUploadsPlaylists()` / `fetchUploadsPlaylistItems()`）。
+  連携済み全チャンネルを毎回処理し、`privacyStatus === "public"` の動画のみキャッシュする。非公開化・
+  削除の検知は `verify`（動画IDの存在確認）が担う
+- **`live` は現在停止中**: YouTube Search API のクォータコスト（1リクエスト100ユニット）が高く、日次
+  クォータ（10,000ユニット）をすぐ消費してしまうため `vercel.json` の crons から外してある（実装自体は
+  `fetchAndCacheLiveStreams()` に残存）。`/api/home-feed?type=youtube-live` は常に空配列を返す。将来的に
+  RSS/Atomフィード等での再実装を検討
 
 ---
 
@@ -445,7 +454,7 @@ Twitch配信アーカイブ（VOD）のキャッシュを更新する。
 
 | action | 実行内容 | 推奨間隔 |
 |---|---|---|
-| `update` | 公開プロフィールのTwitchリンクを対象に新着VOD取得・upsert + 保持期間（90日）超過分の削除 | 30分 |
+| `update` | 公開プロフィールの連携済み全Twitchチャンネル（旧: 先頭10件のみ）を対象に新着VOD取得・upsert + 保持期間（90日）超過分の削除 | 30分 |
 | `verify` | キャッシュ済みVODの存在確認（最大100件/回。Twitch VODは配信者設定により14〜60日で自動削除されるため）| 8時間 |
 
 **必須環境変数:** `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`
@@ -458,11 +467,22 @@ Twitch配信アーカイブ（VOD）のキャッシュを更新する。
   "channels": 12,
   "added": 3,
   "updated": 1,
+  "deleted": 0,
   "cleaned": 0
 }
 ```
 
-**関連ファイル:** `app/routes/api/cron/twitch-update.ts`, `app/lib/twitch-vod-cache.ts`
+**関連ファイル:** `app/routes/api/cron/twitch-update.ts`, `app/lib/twitch.ts`, `app/lib/twitch-vod-cache.ts`
+
+- **取得方式**: チャンネルごとに `/videos?type=archive` を保持期間（90日）に達するまでページング取得する
+  （1ページ100件、安全上限500件/チャンネル＝最大5ページ。同時5チャンネルまで並列取得し、Helixレート制限
+  800pt/分に配慮する）。`viewable === "private"` のVODを除外してキャッシュする（フィールド欠落は
+  public 扱い。`app/lib/twitch.ts` の `getRecentVods()`）
+- **差分削除（フェイルオープン）**: API呼び出しに成功し全件取得しきれたチャンネル（0件応答も含む）は、
+  取得結果とキャッシュ済み行との差分で今回含まれなくなったVOD（削除・非公開化・チャンネル全体の非公開化）を削除する。
+  login解決不可・API呼び出し失敗などで判定不能なチャンネルと、安全上限（500件/チャンネル）で打ち切られた
+  チャンネル（`incompleteLogins`。未取得分が残りうる）は削除しない（誤削除より残留を優先）。
+  `verify`（8時間毎）はこの取りこぼしに対する安全網として引き続き稼働する
 
 ---
 

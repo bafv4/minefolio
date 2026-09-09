@@ -170,7 +170,8 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 | エンドポイント | 説明 |
 |----------------|------|
-| `/api/cron/youtube-update` | YouTube動画・ライブ配信のキャッシュ更新 |
+| `/api/cron/youtube-update` | YouTube動画のキャッシュ更新（ライブ配信確認は現在停止中。詳細は [`docs/home-live.md`](./home-live.md#youtubelivecache)） |
+| `/api/cron/twitch-update` | Twitch配信アーカイブ（VOD）のキャッシュ更新（詳細は [`docs/home-live.md`](./home-live.md#twitchvodcache)） |
 | `/api/cron/update-paceman-cache` | PaceManペースデータのキャッシュ更新 |
 | `/api/cron/update-rankings` | ランキングデータの更新 |
 

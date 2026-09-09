@@ -150,3 +150,148 @@ export async function getChannelStats(
     return null;
   }
 }
+
+// ============================================
+// アップロード再生リスト方式（Search API の代替。クォータ節約用）
+// Search API（channelId + type=video）は1リクエスト100ユニットで日次クォータ（10,000ユニット）を
+// すぐに消費してしまうため、動画一覧の取得は channels.list（1ユニット）で
+// uploads プレイリストIDを取得し、playlistItems.list（1ユニット）でその中身を読む方式に切り替える
+// ============================================
+
+export interface YouTubeUploadsPlaylistInfo {
+  channelId: string;
+  uploadsPlaylistId: string;
+}
+
+function isChannelIdFormat(identifier: string): boolean {
+  return identifier.startsWith("UC") && identifier.length === 24;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * 複数チャンネル識別子（UCチャンネルID or @ハンドル）からアップロード再生リストIDを一括解決する。
+ * UC形式は channels.list の id= で最大50件バッチ（1ユニット/リクエスト）、
+ * ハンドルは forHandle で1件ずつ（1ユニット/リクエスト。forHandle はバッチ指定不可のため）。
+ * 戻り値は呼び出し側が渡した識別子そのものをキーにする（UC形式はそのまま、ハンドルは元の文字列）
+ */
+export async function resolveUploadsPlaylists(
+  apiKey: string,
+  identifiers: string[]
+): Promise<Map<string, YouTubeUploadsPlaylistInfo>> {
+  const result = new Map<string, YouTubeUploadsPlaylistInfo>();
+  const uniqueIdentifiers = [...new Set(identifiers)];
+  const channelIdEntries = uniqueIdentifiers.filter(isChannelIdFormat);
+  const handleEntries = uniqueIdentifiers.filter((id) => !isChannelIdFormat(id));
+
+  type ChannelsListItem = {
+    id: string;
+    contentDetails?: { relatedPlaylists?: { uploads?: string } };
+  };
+
+  for (const batch of chunk(channelIdEntries, 50)) {
+    try {
+      const params = new URLSearchParams({
+        key: apiKey,
+        id: batch.join(","),
+        part: "id,contentDetails",
+      });
+      const res = await fetch(`${YOUTUBE_API}/channels?${params}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        console.error(`[YouTube API] channels.list (batch) failed: ${res.status}`);
+        continue;
+      }
+      const data = (await res.json()) as { items?: ChannelsListItem[] };
+      for (const item of data.items ?? []) {
+        const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+        if (item.id && uploads) {
+          result.set(item.id, { channelId: item.id, uploadsPlaylistId: uploads });
+        }
+      }
+    } catch (error) {
+      console.error("[YouTube API] channels.list (batch) error:", error);
+    }
+  }
+
+  for (const handle of handleEntries) {
+    try {
+      const username = handle.startsWith("@") ? handle.slice(1) : handle;
+      const params = new URLSearchParams({
+        key: apiKey,
+        forHandle: username,
+        part: "id,contentDetails",
+      });
+      const res = await fetch(`${YOUTUBE_API}/channels?${params}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        console.error(`[YouTube API] channels.list (forHandle) failed: ${res.status}`);
+        continue;
+      }
+      const data = (await res.json()) as { items?: ChannelsListItem[] };
+      const item = data.items?.[0];
+      const uploads = item?.contentDetails?.relatedPlaylists?.uploads;
+      if (item?.id && uploads) {
+        result.set(handle, { channelId: item.id, uploadsPlaylistId: uploads });
+      }
+    } catch (error) {
+      console.error(`[YouTube API] channels.list (forHandle) error for ${handle}:`, error);
+    }
+  }
+
+  return result;
+}
+
+export interface YouTubePlaylistItem {
+  snippet: {
+    title: string;
+    description: string;
+    channelTitle: string;
+    publishedAt: string;
+    thumbnails?: {
+      default?: { url: string };
+      medium?: { url: string };
+    };
+    resourceId?: { videoId?: string };
+  };
+  status?: { privacyStatus?: string };
+}
+
+/**
+ * アップロード再生リストから最新動画を取得する（1ユニット/リクエスト）。
+ * part=snippet,status。unlisted/private の除外（privacyStatus !== "public"）は呼び出し側で行う
+ */
+export async function fetchUploadsPlaylistItems(
+  apiKey: string,
+  playlistId: string,
+  maxResults: number
+): Promise<YouTubePlaylistItem[]> {
+  try {
+    const params = new URLSearchParams({
+      key: apiKey,
+      playlistId,
+      part: "snippet,status",
+      maxResults: String(maxResults),
+    });
+    const res = await fetch(`${YOUTUBE_API}/playlistItems?${params}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.error(`[YouTube API] playlistItems.list failed (${res.status}) for playlist ${playlistId}`);
+      return [];
+    }
+    const data = (await res.json()) as { items?: YouTubePlaylistItem[] };
+    return data.items ?? [];
+  } catch (error) {
+    console.error(`[YouTube API] playlistItems.list error for playlist ${playlistId}:`, error);
+    return [];
+  }
+}
