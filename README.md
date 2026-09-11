@@ -157,3 +157,15 @@ pnpm db:migrate
 pnpm db:push
 pnpm db:studio
 ```
+
+## ライセンス
+
+このリポジトリのソースコードは [Apache License 2.0](./LICENSE) で公開しています（Copyright 2026 bfmkn (bafv4)。[NOTICE](./NOTICE) も参照）。
+
+以下はライセンスの**対象外**です:
+
+- `public/mcitems/` — Minecraft のアイテムテクスチャ。Mojang / Microsoft の資産であり、[Minecraft 利用ガイドライン](https://www.minecraft.net/usage-guidelines)の範囲で使用しています。再利用する場合は同ガイドラインに従ってください
+- `public/fonts/` — Zen Kaku Gothic New（SIL Open Font License 1.1。同梱の [`OFL.txt`](./public/fonts/OFL.txt) 参照）
+- 「Minefolio」の名称・アイコン等のブランド要素（Apache License 2.0 第6条のとおり、商標の使用は許諾されません）
+
+Minefolio は Mojang / Microsoft とは無関係の非公式ファンサイトです。NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.

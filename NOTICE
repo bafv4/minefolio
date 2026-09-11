@@ -1,0 +1,10 @@
+Minefolio
+Copyright 2026 bfmkn (bafv4)
+
+This repository contains third-party assets that are NOT covered by the
+Apache License 2.0. See the "ライセンス" section of README.md for details:
+
+- public/mcitems/  : Minecraft item textures (assets of Mojang / Microsoft,
+                     used under the Minecraft Usage Guidelines)
+- public/fonts/    : Zen Kaku Gothic New (SIL Open Font License 1.1, see
+                     public/fonts/OFL.txt)

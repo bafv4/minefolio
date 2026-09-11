@@ -1,6 +1,7 @@
 {
   "name": "minefolio",
   "private": false,
+  "license": "Apache-2.0",
   "version": "v1.12.6",
   "type": "module",
   "scripts": {
