@@ -113,11 +113,17 @@ describe("resolveLocale", () => {
 });
 
 describe("localeCookieValue", () => {
-  it("パス全体・1年有効の Cookie を作る", () => {
+  it("パス全体・1年有効・HttpOnly の Cookie を作る", () => {
     const value = localeCookieValue("en");
     expect(value).toContain("minefolio_locale=en");
     expect(value).toContain("Path=/");
     expect(value).toContain("SameSite=Lax");
+    expect(value).toContain("HttpOnly");
+    expect(value).not.toContain("Secure");
+  });
+
+  it("secure 指定で Secure 属性を付ける（https 配信時用）", () => {
+    expect(localeCookieValue("ja", { secure: true })).toContain("Secure");
   });
 });
 

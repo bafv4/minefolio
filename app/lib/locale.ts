@@ -105,7 +105,12 @@ export function localeFromMatches(matches: ReadonlyArray<MetaMatch> | undefined)
   return isLocale(data?.locale) ? data.locale : DEFAULT_LOCALE;
 }
 
-/** 選択したロケールを保存する Set-Cookie の値 */
-export function localeCookieValue(locale: Locale): string {
-  return `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
+/**
+ * 選択したロケールを保存する Set-Cookie の値。
+ * この Cookie はサーバー側（resolveLocale）でのみ読むため常に HttpOnly。
+ * Secure は https 配信時だけ付ける（ローカル開発の http では Cookie が保存されなくなるため、
+ * 書き込み側でリクエストのプロトコルから判定して渡す）。
+ */
+export function localeCookieValue(locale: Locale, { secure = false }: { secure?: boolean } = {}): string {
+  return `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly${secure ? "; Secure" : ""}`;
 }

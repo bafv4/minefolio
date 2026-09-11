@@ -31,7 +31,9 @@ export async function action({ request }: { request: Request }) {
     status: 302,
     headers: {
       Location: redirectUrl,
-      "Set-Cookie": localeCookieValue(locale),
+      "Set-Cookie": localeCookieValue(locale, {
+        secure: new URL(request.url).protocol === "https:",
+      }),
     },
   });
 }
