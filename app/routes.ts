@@ -109,6 +109,7 @@ export default [
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
   route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
   route("api/cron/update-page-views", "routes/api/cron/update-page-views.ts"),
+  route("api/cron/cleanup-auth", "routes/api/cron/cleanup-auth.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),

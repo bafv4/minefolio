@@ -30,6 +30,8 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/cron/twitch-update` | GET | CRON_SECRET | Twitch VODキャッシュ更新 |
 | `/api/cron/update-paceman-cache` | GET | CRON_SECRET | PaceManキャッシュ更新 |
 | `/api/cron/update-rankings` | GET | CRON_SECRET | ランキングデータ更新 |
+| `/api/cron/update-page-views` | GET | CRON_SECRET | Vercel Web Analytics からページビュー集計を更新 |
+| `/api/cron/cleanup-auth` | GET | CRON_SECRET | 期限切れ認証セッション・検証トークンの削除 |
 
 ---
 
@@ -542,3 +544,52 @@ PaceManのペースデータをキャッシュする。
 ```
 
 **関連ファイル:** `app/routes/api/cron/update-rankings.ts`, `app/lib/external-stats.ts`
+
+---
+
+### `GET /api/cron/update-page-views`
+
+Vercel Web Analytics から直近ウィンドウ（`PAGE_VIEW_WINDOW_DAYS`）のページビューを取得し、`page_view_stats` を全置換する。ガイド一覧・走者一覧の「人気順」がこのスナップショットを読む。
+
+**処理内容:**
+1. プロフィール（`/player/:slug`）とガイド（`/guides/:authorSlug/:guideSlug`）のパス別PVを Vercel Web Analytics API から取得
+2. slug からユーザー/ガイドのIDへ解決し、`page_view_stats` を対象種別ごとに delete → insert で全置換
+3. 種別（profiles / guides）は独立して成否を返す。片側が失敗してももう片側は更新し、失敗した種別は旧スナップショットを残す（stale > empty）
+
+**必須環境変数:** `VERCEL_API_TOKEN`, `VERCEL_PROJECT_ID`（未設定時は 500 で同期しない）
+
+**レスポンス例:**
+```json
+{
+  "success": true,
+  "profiles": { "ok": true, "count": 42 },
+  "guides": { "ok": true, "count": 18 },
+  "timestamp": "2026-04-05T12:00:00.000Z"
+}
+```
+
+**関連ファイル:** `app/routes/api/cron/update-page-views.ts`, `app/lib/page-view-stats.server.ts`, `app/lib/vercel-analytics.server.ts`
+
+---
+
+### `GET /api/cron/cleanup-auth`
+
+期限切れの認証データ（`auth_sessions` の IPアドレス・User-Agent を含む行、`auth_verifications` の検証トークン）を物理削除する。better-auth は `expires_at` を過ぎた行を無効扱いにするだけで DB からは削除しないため、保持期間をポリシー通りに担保するための日次バッチ。
+
+**処理内容:**
+1. `auth_sessions` の `expires_at < now` の行を削除
+2. `auth_verifications` の `expires_at < now` の行を削除
+
+猶予期間は設けず即時削除する。better-auth のセッションは `updateAge`（1日ごと）で `expires_at` が延長され続けるため、現役セッションの `expires_at` は常に未来であり誤削除は起きない（詳細は [`docs/auth.md`](./auth.md#セッション管理) 参照）。
+
+**レスポンス例:**
+```json
+{
+  "success": true,
+  "deletedSessions": 3,
+  "deletedVerifications": 1,
+  "timestamp": "2026-04-05T12:00:00.000Z"
+}
+```
+
+**関連ファイル:** `app/routes/api/cron/cleanup-auth.ts`, `app/lib/auth-cleanup.server.ts`

@@ -844,6 +844,8 @@ better-auth が管理するテーブル群。`users` との FK はない（→ [
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
+期限切れ行（`expires_at < now`）は cron `/api/cron/cleanup-auth` が日次削除する（[`docs/api.md`](./api.md#get-apicroncleanup-auth)）。
+
 #### `auth_accounts`
 
 | カラム | 型 | 制約・参照 |
@@ -872,6 +874,8 @@ better-auth が管理するテーブル群。`users` との FK はない（→ [
 | `expires_at` | ts | |
 | `created_at` | ts | |
 | `updated_at` | ts | |
+
+期限切れ行（`expires_at < now`）は cron `/api/cron/cleanup-auth` が日次削除する（[`docs/api.md`](./api.md#get-apicroncleanup-auth)）。
 
 ---
 

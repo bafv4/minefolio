@@ -105,6 +105,10 @@ better-authが管理する4テーブル:
 
 これらはアプリケーション独自の `users` テーブルとは別で、`discordId` を介して紐付ける。
 
+### 期限切れ行のクリーンアップ
+
+better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` を無効扱いにするだけで DB から削除しない。IPアドレス・User-Agent を含む `authSessions` が残り続けないよう、cron `/api/cron/cleanup-auth` が日次で期限切れ行を物理削除する（猶予なし即時削除。詳細は [`docs/api.md`](./api.md#get-apicroncleanup-auth) 参照）。
+
 ---
 
 ## セッション取得ヘルパー
