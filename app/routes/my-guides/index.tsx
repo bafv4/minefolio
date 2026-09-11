@@ -15,7 +15,8 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
-import { del } from "@vercel/blob";
+import { deleteTranslationsForGuide, cleanupGuideBlobs } from "@/lib/content-cleanup.server";
+import { runAfterResponse } from "@/lib/targeted-refresh.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,12 +85,21 @@ export async function action({ request }: ActionFunctionArgs) {
       where: and(eq(guides.id, guideId), eq(guides.authorId, user.id)),
     });
     if (guide) {
-      if (guide.coverImageUrl) {
-        try {
-          await del(guide.coverImageUrl);
-        } catch {}
-      }
+      await deleteTranslationsForGuide(db, guide.id);
       await db.delete(guides).where(eq(guides.id, guideId));
+      // Vercel Blob 実体（本文画像・カバー・ドラフトカバー）はレスポンス後に best-effort で削除する
+      runAfterResponse(
+        cleanupGuideBlobs({
+          userId: user.id,
+          guideId: guide.id,
+          guideColumns: {
+            content: guide.content,
+            draftContent: guide.draftContent,
+            coverImageUrl: guide.coverImageUrl,
+            draftCoverImageUrl: guide.draftCoverImageUrl,
+          },
+        })
+      );
     }
   }
 

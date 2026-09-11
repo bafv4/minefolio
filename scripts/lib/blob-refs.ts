@@ -9,6 +9,7 @@
 // 全件を孤児と誤判定する。
 import type { Client } from "@libsql/client";
 import { list, type ListBlobResultBlob } from "@vercel/blob";
+import { blobUrlToPathname, collectBlobPathnames } from "../../app/lib/blob-url";
 
 /** Blob のパス分類（プレフィックスは各アップロード経路の実装と対） */
 export type BlobCategory = "guideInline" | "guideCover" | "skin" | "unknown";
@@ -32,25 +33,11 @@ export function categorize(pathname: string): BlobCategory {
 /**
  * Blob の URL からパスを取り出して正規化する。
  * list() が返す pathname は先頭スラッシュ無し・デコード済みなので、それに揃える。
+ *
+ * 実装本体は app/lib/blob-url.ts の blobUrlToPathname（アカウント/ガイド削除の
+ * 削除経路と共有）。ここでは既存の import 元向けに同名を re-export する。
  */
-export function toPathname(rawUrl: string): string | null {
-  try {
-    return decodeURIComponent(new URL(rawUrl).pathname).replace(/^\//, "");
-  } catch {
-    return null;
-  }
-}
-
-/** 本文 HTML などから Blob URL を全部拾う */
-const BLOB_URL_RE = /https:\/\/[a-z0-9.-]*\.?blob\.vercel-storage\.com\/[^\s"'<>)\\]+/gi;
-
-function collectInto(text: string | null | undefined, into: Set<string>): void {
-  if (!text) return;
-  for (const match of text.matchAll(BLOB_URL_RE)) {
-    const pathname = toPathname(match[0]);
-    if (pathname) into.add(pathname);
-  }
-}
+export { blobUrlToPathname as toPathname };
 
 export interface ReferenceScan {
   /** 参照されている Blob のパス */
@@ -76,14 +63,13 @@ export async function collectReferences(client: Client): Promise<ReferenceScan> 
   );
   let imgTagCount = 0;
   for (const row of guides.rows) {
-    for (const column of [
+    const columns = [
       row.content,
       row.draft_content,
       row.cover_image_url,
       row.draft_cover_image_url,
-    ]) {
-      collectInto(column as string | null, referenced);
-    }
+    ] as (string | null)[];
+    for (const pathname of collectBlobPathnames(columns)) referenced.add(pathname);
     for (const body of [row.content, row.draft_content]) {
       imgTagCount += (((body as string | null) ?? "").match(/<img\b/g) ?? []).length;
     }
@@ -93,7 +79,9 @@ export async function collectReferences(client: Client): Promise<ReferenceScan> 
     "SELECT custom_skin_url FROM users WHERE custom_skin_url IS NOT NULL",
   );
   for (const row of users.rows) {
-    collectInto(row.custom_skin_url as string | null, referenced);
+    for (const pathname of collectBlobPathnames([row.custom_skin_url as string | null])) {
+      referenced.add(pathname);
+    }
   }
 
   return {

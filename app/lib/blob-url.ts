@@ -64,3 +64,41 @@ export function parseVercelBlobUrl(value: string | null | undefined): string | n
 export function isVercelBlobUrl(value: string | null | undefined): boolean {
   return parseVercelBlobUrl(value) !== null;
 }
+
+// ── Blob URL → pathname 変換・本文からの抽出 ──────────────────────────
+//
+// 監査/削除スクリプト（scripts/lib/blob-refs.ts）と削除経路
+// （app/lib/content-cleanup.server.ts）の双方が使う「参照判定」の単一実装。
+// list() が返す pathname（先頭スラッシュ無し・デコード済み）に揃える。
+
+/**
+ * Blob の URL からパスを取り出して正規化する。
+ * list() が返す pathname は先頭スラッシュ無し・デコード済みなので、それに揃える。
+ * パース不能な URL は null を返す。
+ */
+export function blobUrlToPathname(rawUrl: string): string | null {
+  try {
+    return decodeURIComponent(new URL(rawUrl).pathname).replace(/^\//, "");
+  } catch {
+    return null;
+  }
+}
+
+/** 本文 HTML などから Blob URL を全部拾う */
+const BLOB_URL_RE = /https:\/\/[a-z0-9.-]*\.?blob\.vercel-storage\.com\/[^\s"'<>)\\]+/gi;
+
+/**
+ * 複数のテキスト（本文・カバー画像URL列など）から Blob URL を全て拾い、
+ * pathname の集合にして返す（null/undefined は無視、重複は自動で排除）。
+ */
+export function collectBlobPathnames(texts: ReadonlyArray<string | null | undefined>): Set<string> {
+  const pathnames = new Set<string>();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const match of text.matchAll(BLOB_URL_RE)) {
+      const pathname = blobUrlToPathname(match[0]);
+      if (pathname) pathnames.add(pathname);
+    }
+  }
+  return pathnames;
+}

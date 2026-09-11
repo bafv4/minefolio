@@ -607,6 +607,19 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 - **ライブプレビュー**: 年・月が両方揃うと、その場でプロフィールに表示される文言をそのままプレビューする（`rtaCareerExactLabel()` を使い端数月まで表示、例: 「RTA歴 6年2か月（2020/6〜）」）。未入力時のヒントテキスト（`meEdit.rtaStartedHint`）も「設定するとプロフィールに『RTA歴 6年（2020/6〜）』のように公開表示されます」と、保存後の見え方が事前に伝わる文言にしている
 - 各 Select には個別の `aria-label`（`meEdit.rtaStartedYearAria` / `rtaStartedMonthAria`）を持たせ、スクリーンリーダーで年・月を区別できるようにしている
 
+### アカウント削除
+
+`/me/edit` の `_action="delete_account"`（confirmText に MCID または slug の入力一致を要求）で実行する。処理本体は 2 段階:
+
+1. **派生データの削除**（`users` 行の削除前。削除後は cascade で `guides` が消え、著者のガイド一覧を後から引けなくなるため）
+   - `content_translations` の翻訳キャッシュ行（`userBio` 分 + 著者だった全ガイドの `guide` 分）を `app/lib/content-cleanup.server.ts` の `deleteTranslationsForUser()` で削除
+   - 他ユーザーが自分を favorite していた孤児行を `favoriteSlug`（削除対象ユーザーの `slug` と完全一致・大文字小文字を区別）で削除（自分が押した側の `favorites` 行は `userId` の FK cascade で別途消える）。詳細は [database.md](./database.md#弱参照fk-を張らない参照)
+2. **本体の削除**: `users` 行の削除（cascade で大半の関連テーブルが消える）→ better-auth の `authSessions` / `authAccounts` / `authUsers` を削除 → `/` へリダイレクト
+
+Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` の2 prefix 配下 = 著者の全ガイドの本文画像・カバー・ドラフト分とカスタムスキン）は、レスポンスを返した後に `runAfterResponse()` 経由で best-effort 削除する（`app/lib/content-cleanup.server.ts` の `cleanupUserBlobs()`）。失敗してもアカウント削除自体は完了しており、消し残しは `scripts/audit-orphan-blobs.ts` / `delete-orphan-blobs.ts` が後から拾える（[guides.md](./guides.md#参照されなくなった-blob-の回収)参照）。ローカル開発など `BLOB_READ_WRITE_TOKEN` 未設定時は no-op。
+
+**残るもの**: `paceman_paces` の当該ユーザー分は `user_id` が `set null` になるだけで行自体は残る（MCID 起点の設計。同じ MCID で再登録されれば再リンクされる。[database.md](./database.md#ondelete-の使い分け)参照）。他ユーザーのガイドへコピーされた画像参照は、コピー元の Blob が削除されるため壊れる（cross-user 参照は保護対象外。ガイド個別削除時のカバー画像即時削除と同じ意味論として許容）。
+
 ---
 
 ## OGP画像生成
