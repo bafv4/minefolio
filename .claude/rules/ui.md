@@ -89,8 +89,11 @@
 - inline style で色を書く場合もトークンをそのまま参照する（例: `var(--muted)`）。`hsl(var(--token))` で包むのは oklch 定義のため無効色になるので禁止
 
 ## フォント
-- 本文: `Zen Kaku Gothic New`, `Inter`（sans-serif）
+- 本文: `Zen Kaku Gothic New`（sans-serif）
 - コード: `JetBrains Mono`, `Fira Code`（monospace）
+- いずれもセルフホスト（`@fontsource/*` を `app/app.css` で import。OGP 用 TTF は `public/fonts/`）。
+  **Google Fonts 等の外部配信は使わない**（プライバシーポリシーの外部送信記載と連動するため、
+  外部フォント配信を追加する場合はポリシー改定が必要）
 
 ## レスポンシブ
 - モバイルファーストでTailwindブレークポイントを使用（`sm:`, `md:`, `lg:`）

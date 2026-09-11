@@ -101,6 +101,19 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 
 ---
 
+## Webフォント
+
+外部（Google Fonts等）への通信を排除するため、ページ用フォントはすべて npm パッケージとしてセルフホストしている。
+
+- **本文**: Zen Kaku Gothic New（ウェイト 400 / 500 / 700）— `@fontsource/zen-kaku-gothic-new`
+- **等幅**: JetBrains Mono（ウェイト 400 / 500 / 600）— `@fontsource/jetbrains-mono`
+- 読み込みは `app/app.css` 冒頭の `@import "@fontsource/.../{weight}.css"`（ウェイトごと）。各 `{weight}.css` は unicode-range で分割された `@font-face` 群を含み、ブラウザは実際に使う文字範囲のサブセットのみを取得する
+- `--font-sans` / `--font-mono`（`@theme` ブロック）でフォールバックチェーンを定義。フォント本体を伴わない未使用のフォールバック名（旧 `Inter`）は削除済み
+- `app/root.tsx` の `links` に Google Fonts の `preconnect` / `stylesheet` は置かない（過去に置いていたが撤去済み）
+- ライセンス: 両パッケージとも OFL-1.1（パッケージ内に LICENSE 同梱）
+
+---
+
 ## OGP・メタタグ
 
 ### 全公開ルート共通
@@ -124,6 +137,16 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 - プレイヤーページ: アバター、プレイヤー名、バッジを含む専用OGP画像
 - Discordアバター: `fetchImageAsDataUrl()` で外部画像をBase64データURLに変換（Edge Runtime対応）
 - その他ページ: デフォルト画像（`/icon.png`）
+- **描画フォント（Zen Kaku Gothic New 400/700）**: `@vercel/og`（satori）は woff2 非対応（TTF/OTF/WOFF のみ）のため、
+  `@fontsource` のサブセット済み woff2 は使えない。代わりに unicode-range 分割前の完全グリフセットの TTF を
+  `public/fonts/ZenKakuGothicNew-{Regular,Bold}.ttf`（OFL-1.1、ライセンスは同ディレクトリの `OFL.txt`）として同梱し、
+  `loadOgFonts(origin)` が自ホストへ `fetch(`${origin}/fonts/...`)` で self-fetch する。両ウェイトとも 2xx で
+  取得できた場合のみモジュールスコープの `cachedOgFontsPromise` に成功結果をキャッシュし（同一関数インスタンスが
+  ウォームな間は以後の呼び出しで再取得しない）、非2xx応答や例外の場合はキャッシュに残さず空配列を返して
+  `@vercel/og` のバンドル既定フォントにフォールバックする（次回リクエストで再取得を試みる）。
+  外部（Google Fonts）への通信は行わない。JetBrains Mono は OGP 描画では未使用のため同梱していない
+- 旧実装（Google Fonts css2 API に描画テキスト全体を `text=` クエリで渡してサブセット TTF を取得する方式）は、
+  表示名・MCID・bio 等の PII を外部送信していたため撤去済み
 
 ---
 
@@ -315,8 +338,12 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/_layout.tsx` - メインレイアウト（ヘッダー/フッター）
 - `app/routes/me/_layout.tsx` - ダッシュボードレイアウト（サイドバー）
 
+### Webフォント
+- `app/app.css` - `@fontsource/zen-kaku-gothic-new` / `@fontsource/jetbrains-mono` の `@import`、`--font-sans` / `--font-mono`
+- `public/fonts/` - OGP描画用 TTF（`ZenKakuGothicNew-{Regular,Bold}.ttf`）と `OFL.txt`
+
 ### OGP
-- `app/routes/og-image.tsx` - 動的OGP画像生成
+- `app/routes/og-image.tsx` - 動的OGP画像生成（`loadOgFonts` が `public/fonts/` を self-fetch）
 
 ### リリース通知
 - `app/routes/api/webhooks/vercel.ts` - Vercel Webhook 受信エンドポイント

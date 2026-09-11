@@ -45,50 +45,47 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-/**
- * Google Fonts から指定ウェイト・指定文字だけのサブセット TTF を取得する。
- * text= でサブセット化することで CJK フォント（Zen Kaku Gothic New）も軽量に読み込める。
- * UA を指定しない（woff2 非対応とみなされ ttf が返る）Next.js 公式の手法。
- * 失敗時は null（呼び出し側は @vercel/og のバンドル既定フォントにフォールバック）。
- */
-async function fetchGoogleFont(
-  family: string,
-  weight: number,
-  text: string,
-): Promise<ArrayBuffer | null> {
-  try {
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${family}:wght@${weight}&text=${encodeURIComponent(text)}`;
-    const cssRes = await fetch(cssUrl);
-    if (!cssRes.ok) return null;
-    const css = await cssRes.text();
-    const match = css.match(/src:\s*url\(([^)]+)\)\s*format\(['"]?(?:truetype|opentype)['"]?\)/);
-    if (!match) return null;
-    const fontRes = await fetch(match[1]);
-    if (!fontRes.ok) return null;
-    return await fontRes.arrayBuffer();
-  } catch {
-    return null;
-  }
-}
-
 type OgFont = { name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" };
 
+// self-fetch した OGP 用フォントのキャッシュ（同一関数インスタンスがウォームな間、初回のみ取得）
+let cachedOgFontsPromise: Promise<OgFont[]> | null = null;
+
 /**
- * OGP画像に使うアプリのフォント（Zen Kaku Gothic New）を、描画テキストのサブセットで読み込む。
- * アプリ本体と同じフォントで、ラテン・日本語の両方をカバーする。
- * 取得できたウェイトのみ返す（空配列ならバンドル既定フォントを使用）。
+ * OGP画像に使うアプリのフォント（Zen Kaku Gothic New）を、自ホストの public/fonts から取得する。
+ * アプリ本体と同じフォントで、ラテン・日本語の両方をカバーする static TTF（unicode-range分割前の
+ * 完全グリフセット、OFLライセンス）。外部（Google Fonts）へは一切通信しない。
+ * 両ウェイトとも取得できた場合のみ返す（all-or-nothing）。一方でも非2xx応答・例外なら空配列を返し
+ * @vercel/og のバンドル既定フォントにフォールバックする。失敗結果はキャッシュせず、次回リクエストで
+ * 再取得を試みる（一過性の取得失敗でウォームなインスタンス上の以後の生成が失敗し続けるのを防ぐ）。
  */
-async function loadAppFonts(text: string): Promise<OgFont[]> {
-  const weights: Array<400 | 700> = [400, 700];
-  const loaded = await Promise.all(
-    weights.map(async (weight) => {
-      const data = await fetchGoogleFont("Zen+Kaku+Gothic+New", weight, text);
-      return data
-        ? ({ name: "Zen Kaku Gothic New", data, weight, style: "normal" } as OgFont)
-        : null;
-    }),
-  );
-  return loaded.filter((f): f is OgFont => f !== null);
+function loadOgFonts(origin: string): Promise<OgFont[]> {
+  if (!cachedOgFontsPromise) {
+    const fetchFontFile = async (path: string): Promise<ArrayBuffer> => {
+      const response = await fetch(`${origin}${path}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch OGP font ${path}: ${response.status}`);
+      }
+      return response.arrayBuffer();
+    };
+
+    cachedOgFontsPromise = Promise.all([
+      fetchFontFile("/fonts/ZenKakuGothicNew-Regular.ttf"),
+      fetchFontFile("/fonts/ZenKakuGothicNew-Bold.ttf"),
+    ])
+      .then(
+        ([regular, bold]) =>
+          [
+            { name: "Zen Kaku Gothic New", data: regular, weight: 400, style: "normal" },
+            { name: "Zen Kaku Gothic New", data: bold, weight: 700, style: "normal" },
+          ] as OgFont[],
+      )
+      .catch(() => {
+        // 失敗結果はキャッシュに残さず、次回リクエストで再取得できるようにする
+        cachedOgFontsPromise = null;
+        return [] as OgFont[];
+      });
+  }
+  return cachedOgFontsPromise;
 }
 
 /** 全OGP共通の ImageResponse オプション（1200x630 + 1日キャッシュ + アプリフォント） */
@@ -109,18 +106,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const slug = url.searchParams.get("slug");
   const type = url.searchParams.get("type");
 
+  const origin = url.origin;
+
   // トップページ用のブランドOGP画像（summary_large_image 向けの横長バナー）
   if (type === "home") {
-    const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
-    return generateHomeOgp({ iconDataUrl });
+    return generateHomeOgp({ origin, iconDataUrl });
   }
 
   // mcidもslugもない場合はデフォルトのOGP画像を生成
   if (!mcid && !slug) {
-    const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
+      origin,
       title: OG_BRAND,
       description: OG_TAGLINE,
       iconDataUrl,
@@ -140,9 +138,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // 非公開プロフィールのPIIを公開OGP画像に含めない（本人判定不可のため常にデフォルト画像）
   if (user.profileVisibility === "private") {
-    const origin = new URL(request.url).origin;
     const iconDataUrl = await fetchImageAsDataUrl(`${origin}/icon.png`);
     return generateDefaultOgp({
+      origin,
       title: OG_BRAND,
       description: OG_TAGLINE,
       iconDataUrl,
@@ -151,10 +149,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // アプリの一覧と同じく、スキンPNGから顔（正面 + 帽子レイヤー）を合成する。
   // /api/skin がカスタムスキン > Mojang > Steve の順で解決するため、カスタムスキンも反映される。
-  const origin = new URL(request.url).origin;
   const avatarDataUrl = await fetchSkinFaceDataUrl(origin, user.id, 180);
 
   return generatePlayerOgp({
+    origin,
     displayName: user.displayName || user.mcid || user.slug,
     mcid: user.mcid || user.slug,
     uuid: user.uuid || "",
@@ -166,6 +164,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 interface OgpData {
+  origin: string;
   displayName: string;
   mcid: string;
   uuid: string;
@@ -180,11 +179,12 @@ interface OgpData {
  * 1200x630px (Twitter/OGP標準サイズ)
  */
 async function generateDefaultOgp(data: {
+  origin: string;
   title: string;
   description: string;
   iconDataUrl: string | null;
 }) {
-  const fonts = await loadAppFonts(`${data.title} ${data.description}`);
+  const fonts = await loadOgFonts(data.origin);
   return new ImageResponse(
     (
       <div
@@ -275,8 +275,8 @@ async function generateDefaultOgp(data: {
  * トップページ用のブランドOGP画像を生成（summary_large_image 向けの横長バナー）
  * 1200x630px (Twitter/OGP標準サイズ)
  */
-async function generateHomeOgp(data: { iconDataUrl: string | null }) {
-  const fonts = await loadAppFonts(`${OG_BRAND} ${OG_TAGLINE} ${OG_SITE}`);
+async function generateHomeOgp(data: { origin: string; iconDataUrl: string | null }) {
+  const fonts = await loadOgFonts(data.origin);
   return new ImageResponse(
     (
       <div
@@ -408,9 +408,7 @@ async function generatePlayerOgp(data: OgpData) {
         ? "Bedrock Edition"
         : "";
 
-  const fonts = await loadAppFonts(
-    `${data.displayName} @${data.mcid} ${data.bio} ${roleLabel} ${editionLabel} ${OG_BRAND} ${OG_TAGLINE}`,
-  );
+  const fonts = await loadOgFonts(data.origin);
 
   return new ImageResponse(
     (
