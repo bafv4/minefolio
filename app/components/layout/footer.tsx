@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useT } from "@/hooks/use-locale";
-import { Github, MessageSquare, Heart, Code } from "lucide-react";
+import { Github, MessageSquare, Heart, Code, Shield, ScrollText } from "lucide-react";
 import packageJson from "../../../package.json";
 
 export function Footer() {
@@ -18,7 +18,7 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
             <Link
               to="/feedback"
               className="hover:text-foreground transition-colors flex items-center gap-1"
@@ -32,6 +32,20 @@ export function Footer() {
             >
               <Code className="h-3 w-3" />
               <span>{t("nav.developers")}</span>
+            </Link>
+            <Link
+              to="/privacy"
+              className="hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <Shield className="h-3 w-3" />
+              <span>{t("nav.privacy")}</span>
+            </Link>
+            <Link
+              to="/terms"
+              className="hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <ScrollText className="h-3 w-3" />
+              <span>{t("nav.terms")}</span>
             </Link>
             <a
               href="https://github.com/bafv4/minefolio"

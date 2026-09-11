@@ -40,6 +40,8 @@ export default [
     route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),
     route("feedback", "routes/feedback.tsx"),
+    route("privacy", "routes/privacy.tsx"),
+    route("terms", "routes/terms.tsx"),
     route("developers", "routes/developers/index.tsx"),
     route("developers/api", "routes/developers/api.tsx"),
     route("developers/changelog", "routes/developers/changelog.tsx"),

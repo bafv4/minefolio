@@ -291,6 +291,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     favorites: "Favorites",
     feedback: "Feedback",
     developers: "Developers",
+    privacy: "Privacy Policy",
+    terms: "Terms of Service",
     playground: "Playground",
     donate: "Donate",
     logout: "Log out",
@@ -1300,6 +1302,18 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     errorInvalidRequest: "Invalid request. Please start over.",
     errorInvalidAction: "Invalid action",
     errorAlreadyRegistered: "You're already registered. Please reload the page.",
+  },
+  privacy: {
+    metaTitle: "Privacy Policy - Minefolio",
+    metaDescription:
+      "How Minefolio collects, uses, and manages your personal information.",
+    heading: "Privacy Policy",
+  },
+  terms: {
+    metaTitle: "Terms of Service - Minefolio",
+    metaDescription:
+      "The terms of service for using Minefolio. Please read them before using the site.",
+    heading: "Terms of Service",
   },
   feedback: {
     subjectRequired: "Enter a subject",

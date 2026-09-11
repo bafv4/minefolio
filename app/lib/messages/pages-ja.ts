@@ -290,6 +290,8 @@ export const PAGES_JA = {
     favorites: "お気に入り",
     feedback: "フィードバック",
     developers: "Developers",
+    privacy: "プライバシーポリシー",
+    terms: "利用規約",
     playground: "Playground",
     donate: "支援する",
     logout: "ログアウト",
@@ -1272,6 +1274,18 @@ export const PAGES_JA = {
     errorInvalidRequest: "無効なリクエストです。最初からやり直してください。",
     errorInvalidAction: "無効な操作です",
     errorAlreadyRegistered: "すでに登録が完了しています。ページを再読み込みしてください。",
+  },
+  /** プライバシーポリシー（/privacy）。本文は app/content/privacy.md */
+  privacy: {
+    metaTitle: "プライバシーポリシー - Minefolio",
+    metaDescription: "Minefolioにおける個人情報の取得・利用・管理方針について説明します。",
+    heading: "プライバシーポリシー",
+  },
+  /** 利用規約（/terms）。本文は app/content/terms.md */
+  terms: {
+    metaTitle: "利用規約 - Minefolio",
+    metaDescription: "Minefolioの利用規約です。ご利用前に必ずお読みください。",
+    heading: "利用規約",
   },
   feedback: {
     subjectRequired: "件名を入力してください",

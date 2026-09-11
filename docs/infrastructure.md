@@ -150,6 +150,30 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 
 ---
 
+## 法務ページ（プライバシーポリシー・利用規約）
+
+### 概要
+
+- `/privacy`（プライバシーポリシー）・`/terms`（利用規約）は、フッターの「プライバシーポリシー」「利用規約」リンクから遷移できる公開ページ
+- 本文の正本は `app/content/privacy.md` / `app/content/terms.md`。**この2ファイルはポリシー文言そのものであり、内容変更は法務的な判断を要するため、実装作業のついでに書き換えない**
+- ルート実装は `app/routes/privacy.tsx` / `app/routes/terms.tsx`。レンダリング方式は `/developers/api` `/developers/changelog` と同じ（`?raw` import + `react-markdown` + `remark-gfm` + `rehype-sanitize`、`prose prose-sm dark:prose-invert max-w-none`）
+- 認証不要・`app/routes.ts` の公開レイアウト（`routes/_layout.tsx`）配下に登録
+
+### 冒頭のドラフトメモ（HTML コメント）
+
+両 md ファイルの冒頭には、公開前に運営者が確認すべき事項を記した HTML コメント（`<!-- ... -->`）が入っている。
+`react-markdown` は `allowDangerousHtml` を指定しない既定設定では mdast の `html` ノードをそのまま破棄する
+（`mdast-util-to-hast` の挙動）ため、このコメントは**レンダリング結果に一切出力されない**。今後この方式を変更する
+（`rehype-raw` の導入や `allowDangerousHtml: true` 化など）場合は、コメントが可視化されないことを都度確認すること。
+
+### 関連リンク
+
+md 内の `[フィードバックフォーム](/feedback)` のような相対リンクは、`react-markdown` により通常の `<a href="/feedback">`
+としてレンダリングされる（React Router の `Link` には変換されないため、クリック時はフルページ遷移になる。既存の
+`/developers/*` ページと同じ挙動）。
+
+---
+
 ## フィードバック
 
 ### フィードバックフォーム (/feedback)
@@ -367,4 +391,7 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/api/keybindings-csv.ts` - CSVエクスポートAPI
 - `app/routes/api/set-locale.ts` - ロケール設定API
 - `app/routes/feedback.tsx` - フィードバックフォーム
-- `app/components/layout/footer.tsx` - フッター（CSVエクスポートモーダル含む）
+- `app/routes/privacy.tsx` - プライバシーポリシー（`app/content/privacy.md` をレンダリング）
+- `app/routes/terms.tsx` - 利用規約（`app/content/terms.md` をレンダリング）
+- `app/content/privacy.md` / `app/content/terms.md` - プライバシーポリシー・利用規約の本文（正本）
+- `app/components/layout/footer.tsx` - フッター（CSVエクスポートモーダル含む。プライバシーポリシー・利用規約リンクも配置）
