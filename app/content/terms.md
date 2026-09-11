@@ -1,7 +1,6 @@
 <!--
   【たたき台】公開前に要確認:
   - 禁止事項・アカウント停止基準はコミュニティの実情に合わせて調整する
-  - ソースコードを正式にオープンソース化する場合は LICENSE ファイルを整備し、必要なら第6条にその旨を追記
 -->
 
 # 利用規約
@@ -51,11 +50,14 @@
 
 1. 本サイトは Mojang および Microsoft とは関係のない非公式のファンサイトです。NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 2. Minecraft に関する商標・アセットの権利は Mojang / Microsoft に帰属します
+3. 本サイトのソースコードは、GitHub 上で Apache License 2.0 により公開されています（Minecraft 由来のアセット等、ライセンス対象外の範囲を含む詳細はリポジトリの LICENSE / README を参照）。本規約は本サイトの利用条件を定めるものであり、ソースコードのライセンスとは独立に適用されます
+4. 本サイトは、オープンソースソフトウェア（MIT ライセンス等）および SIL Open Font License 1.1 のフォントを、それぞれのライセンス条件に従って利用しています
 
 ## 7. 外部サービスのデータ
 
 1. 本サイトは、Speedrun.com、MCSR Ranked、PaceMan、Twitch、YouTube 等の外部サービスから取得した情報を表示します。運営者はこれらの情報の正確性・最新性を保証しません
 2. 各外部サービスの利用には、それぞれのサービスの規約が適用されます
+3. 本サイトは YouTube API サービスを使用しています。本サイトの YouTube 関連機能（動画一覧の表示・埋め込み再生）を利用することにより、ユーザーは [YouTube 利用規約](https://www.youtube.com/t/terms)に同意したものとみなされます
 
 ## 8. サービスの提供・変更・終了
 
