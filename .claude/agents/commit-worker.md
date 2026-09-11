@@ -50,6 +50,13 @@ tools: Read, Grep, Glob, Bash, PowerShell, TaskCreate, TaskUpdate
 - `type` は `feat` / `fix` / `perf` / `refactor` / `chore` / `docs` などから変更の性質に合ったものを選ぶ。
 - `scope` は機能ドメイン（`keybindings` / `me` / `guides` / `presets` / `home` / `dev` / `db` 等）に合わせる。
 - 要約は日本語・簡潔に。「何を」より「なぜ」が分かる場合はそちらを優先する。
+- **ポリシー改定フラグ**: コミットする変更がプライバシーポリシー・利用規約
+  （`app/content/privacy.md` / `terms.md`）の改定を必要とする場合（外部送信の追加、取得する
+  個人情報の追加、Cookie/localStorage の変更、削除・公開範囲等の管理機能の挙動変更、
+  新しい投稿コンテンツ種別など）、本文末尾（`Co-Authored-By` の直前）にトレーラーを付ける:
+  `Policy-Revision: privacy（理由）` / `Policy-Revision: terms（理由）` / `Policy-Revision: privacy, terms（理由）`。
+  ポリシー本文の改定自体はここでは行わない（リリース時に `release` スキルがフラグを拾ってまとめて改定する）。
+  呼び出し元のプロンプトに判断材料が無く自分でも判定できない場合は、フラグの要否を呼び出し元に確認する。
 
 ## Git Safety Protocol（厳守）
 
