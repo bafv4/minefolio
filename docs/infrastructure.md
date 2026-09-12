@@ -163,7 +163,7 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 
 - `/privacy`（プライバシーポリシー）・`/terms`（利用規約）は、フッターの「プライバシーポリシー」「利用規約」リンクから遷移できる公開ページ
 - 本文の正本は `app/content/privacy.md` / `app/content/terms.md`。**この2ファイルはポリシー文言そのものであり、内容変更は法務的な判断を要するため、実装作業のついでに書き換えない**
-- ルート実装は `app/routes/privacy.tsx` / `app/routes/terms.tsx`。レンダリング方式は `/developers/api` `/developers/changelog` と同じ（`?raw` import + `react-markdown` + `remark-gfm` + `rehype-sanitize`、`prose prose-sm dark:prose-invert max-w-none`）
+- ルート実装は `app/routes/privacy.tsx` / `app/routes/terms.tsx`。アイコン + h1 + prose シェル（`?raw` import + `react-markdown` + `remark-gfm` + `rehype-sanitize`、`prose prose-sm dark:prose-invert max-w-none`）は `/developers/api` `/developers/changelog` と共通の `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）を使う。OGP meta（title/description/og:image）の組み立ても5ページ共通で `app/lib/og-meta.ts`（`buildOgMeta`）を使う
 - 認証不要・`app/routes.ts` の公開レイアウト（`routes/_layout.tsx`）配下に登録
 
 ### 冒頭のドラフトメモ（HTML コメント）
@@ -402,3 +402,5 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/terms.tsx` - 利用規約（`app/content/terms.md` をレンダリング）
 - `app/content/privacy.md` / `app/content/terms.md` - プライバシーポリシー・利用規約の本文（正本）
 - `app/components/layout/footer.tsx` - フッター（CSVエクスポートモーダル含む。プライバシーポリシー・利用規約リンクも配置）
+- `app/components/markdown-doc-page.tsx` - markdown 静的ドキュメントページ共通シェル（privacy / terms / developers/changelog / developers/api）
+- `app/lib/og-meta.ts` - OGP meta 配列ビルダー（privacy / terms / developers/{index,api,changelog}）
