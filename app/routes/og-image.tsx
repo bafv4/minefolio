@@ -45,47 +45,111 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-type OgFont = { name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" };
+type OgFontWeight = 400 | 700;
+type OgFont = { name: string; data: ArrayBuffer; weight: OgFontWeight; style: "normal" };
 
-// self-fetch した OGP 用フォントのキャッシュ（同一関数インスタンスがウォームな間、初回のみ取得）
-let cachedOgFontsPromise: Promise<OgFont[]> | null = null;
+const OG_FONT_PATHS: Record<OgFontWeight, string> = {
+  400: "/fonts/ZenKakuGothicNew-Regular.ttf",
+  700: "/fonts/ZenKakuGothicNew-Bold.ttf",
+};
+
+// TTF（sfnt version 1.0）のマジックバイト。200応答でも中身がHTML（リライト誤設定・保護画面等）の
+// 場合に弾くための検証に使う（そのまま通すと成功として恒久キャッシュされ、そのインスタンス上の
+// 全OGP生成がsatoriのthrowで500固定になってしまう）。
+const TTF_MAGIC_BYTES = [0x00, 0x01, 0x00, 0x00] as const;
+
+// ウェイトごとに独立した取得 Promise のキャッシュ（同一関数インスタンスがウォームな間、成功した
+// ウェイトのみ保持）。失敗したウェイトはキャッシュに残さず、次回リクエストで再取得する。
+const weightFontPromises: Partial<Record<OgFontWeight, Promise<OgFont>>> = {};
+
+// 両ウェイトとも成功したときの組み合わせ配列。satori 内部の WeakMap フォントキャッシュが fonts
+// 配列の同一性をキーにしているため、使用した weightFontPromises の組み合わせが前回と同一なら
+// 新しい配列を作らずそのまま返す。いずれかのウェイトが再取得された場合のみ作り直す。
+let cachedFontsArray: {
+  fromPromises: readonly [Promise<OgFont> | undefined, Promise<OgFont> | undefined];
+  fonts: OgFont[];
+} | null = null;
+
+/**
+ * フォントファイルを fetch し、TTF として妥当かをマジックバイトで検証する。
+ * 非2xx応答、またはマジックバイトが sfnt version 1.0 (00 01 00 00) と一致しない場合は throw する
+ * （後者は HTML 応答等の 200+非TTF を弾くためのガード）。
+ */
+async function fetchFontFile(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch OGP font ${url}: HTTP ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const head = new Uint8Array(arrayBuffer.slice(0, 4));
+  const isTtf = TTF_MAGIC_BYTES.every((byte, i) => head[i] === byte);
+  if (!isTtf) {
+    const contentType = response.headers.get("content-type") ?? "unknown";
+    throw new Error(
+      `OGP font ${url} is not a TTF file (first bytes: [${Array.from(head).join(", ")}], content-type: ${contentType})`
+    );
+  }
+
+  return arrayBuffer;
+}
+
+/**
+ * OGP画像に使うアプリのフォント（Zen Kaku Gothic New）の1ウェイトを、自ホストの public/fonts から
+ * 取得する。取得結果（成功時の Promise）はウェイト単位でキャッシュし、失敗時はキャッシュに残さず
+ * 次回リクエストで再取得を試みる（一過性の取得失敗でウォームなインスタンス上の以後の生成が
+ * 失敗し続けるのを防ぐ）。失敗は console.error に記録する。
+ */
+function loadOgFontWeight(origin: string, weight: OgFontWeight): Promise<OgFont> {
+  const cached = weightFontPromises[weight];
+  if (cached) return cached;
+
+  const promise: Promise<OgFont> = fetchFontFile(`${origin}${OG_FONT_PATHS[weight]}`)
+    .then((data): OgFont => ({ name: "Zen Kaku Gothic New", data, weight, style: "normal" }))
+    .catch((error: unknown) => {
+      console.error(`[og-image] Failed to load OGP font (weight ${weight}, origin ${origin}):`, error);
+      if (weightFontPromises[weight] === promise) {
+        delete weightFontPromises[weight];
+      }
+      throw error;
+    });
+
+  weightFontPromises[weight] = promise;
+  return promise;
+}
 
 /**
  * OGP画像に使うアプリのフォント（Zen Kaku Gothic New）を、自ホストの public/fonts から取得する。
  * アプリ本体と同じフォントで、ラテン・日本語の両方をカバーする static TTF（unicode-range分割前の
  * 完全グリフセット、OFLライセンス）。外部（Google Fonts）へは一切通信しない。
- * 両ウェイトとも取得できた場合のみ返す（all-or-nothing）。一方でも非2xx応答・例外なら空配列を返し
- * @vercel/og のバンドル既定フォントにフォールバックする。失敗結果はキャッシュせず、次回リクエストで
- * 再取得を試みる（一過性の取得失敗でウォームなインスタンス上の以後の生成が失敗し続けるのを防ぐ）。
+ * Regular(400) / Bold(700) はウェイト単位で独立に取得し、**成功したウェイトだけ**を返す
+ * （どちらか一方が一過性に失敗しても、もう一方は使える＝日本語が全滅しない）。両方成功した場合は
+ * 配列オブジェクトの同一性を保ってキャッシュする（satori の WeakMap フォントキャッシュ対策。
+ * 上記 `cachedFontsArray` 参照）。空配列なら呼び出し側で @vercel/og のバンドル既定フォントに
+ * フォールバックする。
  */
-function loadOgFonts(origin: string): Promise<OgFont[]> {
-  if (!cachedOgFontsPromise) {
-    const fetchFontFile = async (path: string): Promise<ArrayBuffer> => {
-      const response = await fetch(`${origin}${path}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch OGP font ${path}: ${response.status}`);
-      }
-      return response.arrayBuffer();
-    };
+async function loadOgFonts(origin: string): Promise<OgFont[]> {
+  const regularPromise = loadOgFontWeight(origin, 400);
+  const boldPromise = loadOgFontWeight(origin, 700);
 
-    cachedOgFontsPromise = Promise.all([
-      fetchFontFile("/fonts/ZenKakuGothicNew-Regular.ttf"),
-      fetchFontFile("/fonts/ZenKakuGothicNew-Bold.ttf"),
-    ])
-      .then(
-        ([regular, bold]) =>
-          [
-            { name: "Zen Kaku Gothic New", data: regular, weight: 400, style: "normal" },
-            { name: "Zen Kaku Gothic New", data: bold, weight: 700, style: "normal" },
-          ] as OgFont[],
-      )
-      .catch(() => {
-        // 失敗結果はキャッシュに残さず、次回リクエストで再取得できるようにする
-        cachedOgFontsPromise = null;
-        return [] as OgFont[];
-      });
+  if (
+    cachedFontsArray &&
+    cachedFontsArray.fromPromises[0] === regularPromise &&
+    cachedFontsArray.fromPromises[1] === boldPromise
+  ) {
+    return cachedFontsArray.fonts;
   }
-  return cachedOgFontsPromise;
+
+  const results = await Promise.allSettled([regularPromise, boldPromise]);
+  const fonts = results
+    .filter((result): result is PromiseFulfilledResult<OgFont> => result.status === "fulfilled")
+    .map((result) => result.value);
+
+  cachedFontsArray = results.every((result) => result.status === "fulfilled")
+    ? { fromPromises: [regularPromise, boldPromise], fonts }
+    : null;
+
+  return fonts;
 }
 
 /** 全OGP共通の ImageResponse オプション（1200x630 + 1日キャッシュ + アプリフォント） */

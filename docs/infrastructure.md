@@ -140,11 +140,18 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 - **描画フォント（Zen Kaku Gothic New 400/700）**: `@vercel/og`（satori）は woff2 非対応（TTF/OTF/WOFF のみ）のため、
   `@fontsource` のサブセット済み woff2 は使えない。代わりに unicode-range 分割前の完全グリフセットの TTF を
   `public/fonts/ZenKakuGothicNew-{Regular,Bold}.ttf`（OFL-1.1、ライセンスは同ディレクトリの `OFL.txt`）として同梱し、
-  `loadOgFonts(origin)` が自ホストへ `fetch(`${origin}/fonts/...`)` で self-fetch する。両ウェイトとも 2xx で
-  取得できた場合のみモジュールスコープの `cachedOgFontsPromise` に成功結果をキャッシュし（同一関数インスタンスが
-  ウォームな間は以後の呼び出しで再取得しない）、非2xx応答や例外の場合はキャッシュに残さず空配列を返して
-  `@vercel/og` のバンドル既定フォントにフォールバックする（次回リクエストで再取得を試みる）。
-  外部（Google Fonts）への通信は行わない。JetBrains Mono は OGP 描画では未使用のため同梱していない
+  `loadOgFonts(origin)` が自ホストへ `fetch(`${origin}/fonts/...`)` で self-fetch する。
+  - **ウェイト単位の独立キャッシュ**: Regular(400) / Bold(700) をそれぞれ独立の Promise でキャッシュし、
+    成功したウェイトだけを返す。片方が一過性に失敗しても、もう片方は使える（日本語が全滅しない）。
+    失敗したウェイトはキャッシュに残さず、次回リクエストで再取得を試みる
+  - **TTF マジックバイト検証**: 取得した応答の先頭4バイトが sfnt version 1.0（`00 01 00 00`）と
+    一致しない場合は例外にする。200 応答でも中身が HTML（リライト誤設定・保護画面等）のケースを
+    成功として恒久キャッシュしてしまうのを防ぐ
+  - 両ウェイトとも成功した場合は、返却する配列オブジェクトの同一性を保ってキャッシュする
+    （satori 内部の WeakMap フォントキャッシュが fonts 配列の同一性をキーにしているため）
+  - 取得失敗（非2xx・TTF検証失敗等）は `console.error` に記録する
+  - 空配列（全ウェイト失敗）の場合は呼び出し側で `@vercel/og` のバンドル既定フォントにフォールバックする
+  - 外部（Google Fonts）への通信は行わない。JetBrains Mono は OGP 描画では未使用のため同梱していない
 - 旧実装（Google Fonts css2 API に描画テキスト全体を `text=` クエリで渡してサブセット TTF を取得する方式）は、
   表示名・MCID・bio 等の PII を外部送信していたため撤去済み
 
