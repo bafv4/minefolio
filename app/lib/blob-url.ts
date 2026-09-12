@@ -84,8 +84,15 @@ export function blobUrlToPathname(rawUrl: string): string | null {
   }
 }
 
-/** 本文 HTML などから Blob URL を全部拾う */
-const BLOB_URL_RE = /https:\/\/[a-z0-9.-]*\.?blob\.vercel-storage\.com\/[^\s"'<>)\\]+/gi;
+/**
+ * 本文 HTML などから Blob URL を全部拾う。
+ *
+ * ホスト部は `(?:[a-z0-9-]+\.)*blob\.vercel-storage\.com`（サブドメインは必ず `.` で
+ * 区切られたラベルの連続）で、サブドメイン境界を強制する。旧パターン
+ * `[a-z0-9.-]*\.?blob\.vercel-storage\.com` は `.` 無しでも任意の文字列を直前に置けたため、
+ * `evilblob.vercel-storage.com` のようなドット境界の無い偽ホストにも一致してしまっていた。
+ */
+const BLOB_URL_RE = /https:\/\/(?:[a-z0-9-]+\.)*blob\.vercel-storage\.com\/[^\s"'<>)\\]+/gi;
 
 /**
  * 複数のテキスト（本文・カバー画像URL列など）から Blob URL を全て拾い、

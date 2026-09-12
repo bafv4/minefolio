@@ -137,4 +137,22 @@ describe("collectBlobPathnames", () => {
     expect(collectBlobPathnames([])).toEqual(new Set());
     expect(collectBlobPathnames(["no urls here", null])).toEqual(new Set());
   });
+
+  it("does not match dot-boundary-less fake hosts (BLOB_URL_RE host boundary)", () => {
+    // "evilblob.vercel-storage.com" / "notblob.vercel-storage.com" literally end with
+    // "blob.vercel-storage.com" as a substring, but are not the real host or a subdomain of it.
+    const html =
+      '<img src="https://evilblob.vercel-storage.com/skins/u1/skin.png">' +
+      '<img src="https://notblob.vercel-storage.com/skins/u1/skin.png">';
+    expect(collectBlobPathnames([html])).toEqual(new Set());
+  });
+
+  it("matches legit hosts: store subdomain and the apex host directly", () => {
+    const html =
+      '<img src="https://xxx.public.blob.vercel-storage.com/skins/u1/skin.png">' +
+      '<img src="https://blob.vercel-storage.com/skins/u2/skin.png">';
+    expect(collectBlobPathnames([html])).toEqual(
+      new Set(["skins/u1/skin.png", "skins/u2/skin.png"])
+    );
+  });
 });
