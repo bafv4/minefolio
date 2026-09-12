@@ -2060,6 +2060,7 @@ export const PAGES_JA = {
       toggleSummaryDefault: "トグル",
       uploadUnsupportedFormat: "この画像形式には対応していません。JPEG / PNG などで保存し直してからお試しください。",
       uploadTooLarge: "画像サイズが大きすぎます（上限 {mb}MB）。",
+      linkDialogTitle: "リンクを挿入",
       linkUrlPrompt: "URLを入力してください",
       linkTextPrompt: "リンクテキストを入力してください",
       imageUploadFailed: "画像のアップロードに失敗しました",

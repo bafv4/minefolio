@@ -2124,6 +2124,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       uploadUnsupportedFormat:
         "This image format isn't supported. Re-save it as JPEG or PNG and try again.",
       uploadTooLarge: "That image is too large (max {mb}MB).",
+      linkDialogTitle: "Insert link",
       linkUrlPrompt: "Enter a URL",
       linkTextPrompt: "Enter the link text",
       imageUploadFailed: "Failed to upload the image",

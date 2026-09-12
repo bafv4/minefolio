@@ -72,7 +72,7 @@
 | `node-views/` | React NodeView（表示 + 属性編集） |
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
-| `panels/` | metadata-fields / color-picker / font-size-picker / embed-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
+| `panels/` | metadata-fields / color-picker / font-size-picker / settings-dialog / embed-dialog / youtube-dialog / link-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
 | `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
 | `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
