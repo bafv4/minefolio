@@ -1,10 +1,15 @@
 # Minefolio
 
-Minecraftスピードランナー向けのポートフォリオ/設定共有アプリです。
+[English](./README.en.md)
+
+Minecraft RTA走者向けのポートフォリオ/設定共有アプリです。
+
+- ライセンス: [Apache License 2.0](./LICENSE)（対象外のアセット等は[ライセンス](#ライセンス)節を参照）
+- [プライバシーポリシー](./app/content/privacy.md) ／ [利用規約](./app/content/terms.md)（サイト上では `/privacy` `/terms` で公開）
 
 ## サイト概要
 
-Minefolio は、Minecraft スピードランナーが自分のプロフィールやプレイ設定を整理し、他の走者と共有するためのサイトです。  
+Minefolio は、Minecraft RTA走者が自分のプロフィールやプレイ設定を整理し、他の走者と共有するためのサイトです。  
 「どんな環境で、どんなキー配置で、どんな操作をしているか」を見やすく可視化し、学習・比較・自己紹介に使えることを目的としています。
 
 主な利用シーン:
@@ -24,7 +29,7 @@ Minefolio は、Minecraft スピードランナーが自分のプロフィール
   - ロール（例: 走者）
   - 一言（short bio）や自己紹介
   - エディション、入力方法、プラットフォームなどのバッジ
-- 公開/非公開設定に応じて一覧ページでの露出を制御します
+- 公開範囲設定（`public` / `unlisted` / `private`、下記「権限と公開範囲」参照）に応じて一覧ページでの露出・閲覧可否を制御します
 
 ### 2. キー配置管理
 
@@ -69,8 +74,8 @@ Minefolio は、Minecraft スピードランナーが自分のプロフィール
 ### 7. プリセット
 
 - 現在設定をプリセットとして保存できます
-- プリセットの複製・復元に対応しています
-- 必要な設定単位（キー配置、リマップ等）でコピー可能です
+- プリセットの複製・切替（復元）に対応しています
+- プリセットはキー配置・リマップ・指割り当て・アイテム配置・サーチクラフト・カスタムアクションなど全設定種別をまとめて1単位として保存・復元します（種別単位での部分コピーは非対応）
 
 ## 画面構成（代表）
 
@@ -78,22 +83,35 @@ Minefolio は、Minecraft スピードランナーが自分のプロフィール
 - `/browse` : 走者一覧
 - `/keybindings` : キー配置一覧
 - `/player/:slug` : 公開プロフィール
+- `/guides` : ガイド記事一覧
+- `/rankings` : ランキング
+- `/stats` : 統計
+- `/privacy` `/terms` : プライバシーポリシー・利用規約
 - `/me/*` : 自分の設定管理（編集・キー配置・プリセット など）
+- `/my-guides/*` : 自分のガイド記事の執筆・管理
+
+ルートの完全な一覧は [`app/routes.ts`](./app/routes.ts) に定義されています（手動管理）。
 
 ## 権限と公開範囲（仕様）
 
 - 認証ユーザーは自分の設定を編集可能
-- 一覧系は公開プロフィールを対象に表示
-- 非公開プロフィールは一覧検索に出ない想定です
+- プロフィールの公開範囲（`profileVisibility`）は3段階:
+  - `public` : 誰でも閲覧可能、一覧・検索の対象
+  - `unlisted` : URLを知っていれば閲覧可能、一覧・検索の対象外
+  - `private` : 本人のみ閲覧可能
+- 一覧・ランキング系は `public` のプロフィールのみを対象に表示
 
 ## 技術スタック
 
-- React 19 + React Router 8
+- React 19 + React Router 8（SSR、Vite）
 - TypeScript
-- Tailwind CSS 4
-- Drizzle ORM
-- better-auth
-- libSQL（Turso）/ `@libsql/client`
+- Tailwind CSS 4 + shadcn/ui（Radix UI）
+- Drizzle ORM + libSQL（Turso）/ `@libsql/client`
+- better-auth（Discord OAuth）
+- TipTap（ガイドエディタ）
+- デプロイ: Vercel（Cron、Blob Storage、OG画像生成）
+
+詳細は [`docs/tech-stack.md`](./docs/tech-stack.md) を参照してください。
 
 ## セットアップ
 
@@ -111,21 +129,29 @@ pnpm install
 cp .env.example .env
 ```
 
-主な環境変数:
+必須:
 
-- `TURSO_DATABASE_URL`
-- `TURSO_AUTH_TOKEN`
-- `DISCORD_CLIENT_ID`
-- `DISCORD_CLIENT_SECRET`
-- `BETTER_AUTH_SECRET`
+- `TURSO_DATABASE_URL`（未設定時は `file:local.db` にフォールバック）
+- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`
 - `APP_URL`
-- `TWITCH_CLIENT_ID`
-- `TWITCH_CLIENT_SECRET`
-- `YOUTUBE_API_KEY`
-- `LEGACY_API_URL`（任意）
-- `CRON_SECRET`（必要な環境のみ）
+- `BETTER_AUTH_SECRET`
 
-`TURSO_DATABASE_URL` 未設定時は `file:local.db` が使われます。
+任意（機能ごとに有効化。未設定でも起動は可能）:
+
+- `TURSO_AUTH_TOKEN` — 本番Turso（リモート）接続時
+- `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` — Twitch連携
+- `YOUTUBE_API_KEY` — YouTube連携
+- `ANTHROPIC_API_KEY` — ガイド・自己紹介の自動翻訳。未設定なら機能ごと無効
+- `RESEND_API_KEY` / `FEEDBACK_EMAIL` — フィードバックのメール送信
+- `GITHUB_FEEDBACK_TOKEN` / `GITHUB_FEEDBACK_REPO` — フィードバックのGitHub Issue自動作成（オプトイン機能。未設定なら機能自体が無効）
+- `CRON_SECRET` — Vercel Cronの認証（Vercelへデプロイする場合は必須）
+- `VERCEL_API_TOKEN` / `VERCEL_PROJECT_ID` / `VERCEL_TEAM_ID` — Vercel Web Analyticsのページビュー集計
+- `VERCEL_WEBHOOK_SECRET` / `DISCORD_RELEASE_WEBHOOK_URL` — 本番デプロイ時のリリース通知
+- `BLOB_READ_WRITE_TOKEN` — Vercel Blob（スキン・ガイド画像のアップロード）。Vercel上では自動付与
+- `LEGACY_API_URL` — レガシーサービス（MCSRer Hotkeys）からのインポート
+- `DEV_AUTH=1` — ローカル専用の簡易ログイン（`/dev/login`）を有効化。詳細は [`docs/local-development.md`](./docs/local-development.md)
+
+環境変数の完全な一覧は [`docs/infrastructure.md`](./docs/infrastructure.md#環境変数) を参照してください。
 
 ### 3. 開発サーバー起動
 
@@ -140,6 +166,7 @@ pnpm dev
 ```bash
 # 開発
 pnpm dev
+pnpm dev:remote       # リモートTursoに接続した開発サーバー（.env.remote が必要）
 
 # ビルド / 実行
 pnpm build
@@ -154,6 +181,27 @@ pnpm test:coverage
 # DB（Drizzle）
 pnpm db:generate
 pnpm db:migrate
-pnpm db:push
+pnpm db:push          # ローカルDB（.env = file:local.db）へスキーマ反映
+pnpm db:push:remote   # リモートTurso（.env.remote）へスキーマ反映
 pnpm db:studio
+pnpm db:studio:remote
 ```
+
+## プライバシーポリシー・利用規約
+
+- [プライバシーポリシー](./app/content/privacy.md) — 取得する情報・利用目的・外部サービスへの送信先・Cookie・アカウント削除など。電気通信事業法の外部送信規律に基づく公表（アクセス解析・動画埋め込みで端末から送信される情報）も含みます
+- [利用規約](./app/content/terms.md) — アカウント・投稿コンテンツの権利・禁止事項・免責など
+
+いずれも本サイト上で `/privacy` `/terms` として公開しているものと同じ内容です（リポジトリ内の md ファイルが正本）。ソースコードのライセンス（下記）とは独立に適用されます。
+
+## ライセンス
+
+このリポジトリのソースコードは [Apache License 2.0](./LICENSE) で公開しています（Copyright 2026 bfmkn (bafv4)。[NOTICE](./NOTICE) も参照）。
+
+以下はライセンスの**対象外**です:
+
+- `public/mcitems/` — Minecraft のアイテムテクスチャ。Mojang / Microsoft の資産であり、[Minecraft 利用ガイドライン](https://www.minecraft.net/usage-guidelines)の範囲で使用しています。再利用する場合は同ガイドラインに従ってください
+- `public/fonts/` — Zen Kaku Gothic New（SIL Open Font License 1.1。同梱の [`OFL.txt`](./public/fonts/OFL.txt) 参照）
+- 「Minefolio」の名称・アイコン等のブランド要素（Apache License 2.0 第6条のとおり、商標の使用は許諾されません）
+
+Minefolio は Mojang / Microsoft とは無関係の非公式ファンサイトです。NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.

@@ -291,6 +291,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     favorites: "Favorites",
     feedback: "Feedback",
     developers: "Developers",
+    privacy: "Privacy Policy",
+    terms: "Terms of Service",
     playground: "Playground",
     donate: "Donate",
     logout: "Log out",
@@ -1301,6 +1303,18 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     errorInvalidAction: "Invalid action",
     errorAlreadyRegistered: "You're already registered. Please reload the page.",
   },
+  privacy: {
+    metaTitle: "Privacy Policy - Minefolio",
+    metaDescription:
+      "How Minefolio collects, uses, and manages your personal information.",
+    heading: "Privacy Policy",
+  },
+  terms: {
+    metaTitle: "Terms of Service - Minefolio",
+    metaDescription:
+      "The terms of service for using Minefolio. Please read them before using the site.",
+    heading: "Terms of Service",
+  },
   feedback: {
     subjectRequired: "Enter a subject",
     subjectTooShort: "The subject must be at least 5 characters",
@@ -1433,31 +1447,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Importing overwrites existing settings for the same key or action. We recommend saving a preset first.",
     invalidData: "The file format is invalid. Please try again.",
     tooManyItems: "Too many entries. Please reduce the count and try again.",
-  },
-  meExport: {
-    title: "Export data",
-    jsonFormat: "JSON",
-    jsonDescription: "Export all of your data",
-    downloadJson: "Download JSON",
-    csvFormat: "CSV",
-    csvDescription: "Keybind settings only, in spreadsheet form",
-    downloadCsv: "Download CSV",
-    includedData: "Included data:",
-    includeProfile: "Profile info",
-    includeKeybindings: "Keybind settings",
-    includeDevices: "Device settings",
-    includePresets: "Presets",
-    includeRecords: "Records",
-    includeSocialLinks: "Social links",
-    includeKeybindingList: "Keybind list",
-    includeCategory: "Category grouping",
-    includeKeyCode: "Key codes",
-    privacyTitle: "Privacy and security",
-    privacy1:
-      "Exported data includes personal information (Discord ID, email address, and so on)",
-    privacy2: "Keep the downloaded file somewhere safe",
-    privacy3: "The data is not encrypted. Take care when sharing it",
-    privacy4: "JSON files can be loaded back in with the import feature",
   },
   meDevices: {
     title: "Devices - Minefolio",
@@ -2135,6 +2124,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       uploadUnsupportedFormat:
         "This image format isn't supported. Re-save it as JPEG or PNG and try again.",
       uploadTooLarge: "That image is too large (max {mb}MB).",
+      linkDialogTitle: "Insert link",
       linkUrlPrompt: "Enter a URL",
       linkTextPrompt: "Enter the link text",
       imageUploadFailed: "Failed to upload the image",

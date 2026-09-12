@@ -103,7 +103,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 | **@tiptap/core** / **@tiptap/react** / **@tiptap/pm** / **@tiptap/starter-kit** | リッチテキストエディタ本体（ProseMirror ベース） |
 | **@tiptap/extension-bubble-menu** ほか各種拡張 | コードブロック・カラー・ハイライト・画像・リンク・プレースホルダー・テーブル・YouTube 等 |
 | **xss** | サーバ側で表示時に HTML をサニタイズ（`app/lib/guide-sanitize.server.ts`） |
-| **react-markdown** + **remark-gfm** + **rehype-sanitize** | `/developers/api` `/developers/changelog` で `app/content/*.md` をレンダリング |
+| **react-markdown** + **remark-gfm** + **rehype-sanitize** | `/developers/api` `/developers/changelog` `/privacy` `/terms` で `app/content/*.md` をレンダリング |
 
 ### ドラッグ&ドロップ
 

@@ -101,6 +101,19 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 
 ---
 
+## Webフォント
+
+外部（Google Fonts等）への通信を排除するため、ページ用フォントはすべて npm パッケージとしてセルフホストしている。
+
+- **本文**: Zen Kaku Gothic New（ウェイト 400 / 500 / 700）— `@fontsource/zen-kaku-gothic-new`
+- **等幅**: JetBrains Mono（ウェイト 400 / 500 / 600）— `@fontsource/jetbrains-mono`
+- 読み込みは `app/app.css` 冒頭の `@import "@fontsource/.../{weight}.css"`（ウェイトごと）。各 `{weight}.css` は unicode-range で分割された `@font-face` 群を含み、ブラウザは実際に使う文字範囲のサブセットのみを取得する
+- `--font-sans` / `--font-mono`（`@theme` ブロック）でフォールバックチェーンを定義。フォント本体を伴わない未使用のフォールバック名（旧 `Inter`）は削除済み
+- `app/root.tsx` の `links` に Google Fonts の `preconnect` / `stylesheet` は置かない（過去に置いていたが撤去済み）
+- ライセンス: 両パッケージとも OFL-1.1（パッケージ内に LICENSE 同梱）
+
+---
+
 ## OGP・メタタグ
 
 ### 全公開ルート共通
@@ -124,6 +137,53 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 - プレイヤーページ: アバター、プレイヤー名、バッジを含む専用OGP画像
 - Discordアバター: `fetchImageAsDataUrl()` で外部画像をBase64データURLに変換（Edge Runtime対応）
 - その他ページ: デフォルト画像（`/icon.png`）
+- **描画フォント（Zen Kaku Gothic New 400/700）**: `@vercel/og`（satori）は woff2 非対応（TTF/OTF/WOFF のみ）のため、
+  `@fontsource` のサブセット済み woff2 は使えない。代わりに unicode-range 分割前の完全グリフセットの TTF を
+  `public/fonts/ZenKakuGothicNew-{Regular,Bold}.ttf`（OFL-1.1、ライセンスは同ディレクトリの `OFL.txt`）として同梱し、
+  `loadOgFonts(origin)` が自ホストへ `fetch(`${origin}/fonts/...`)` で self-fetch する。
+  - **ウェイト単位の独立キャッシュ**: Regular(400) / Bold(700) をそれぞれ独立の Promise でキャッシュし、
+    成功したウェイトだけを返す。片方が一過性に失敗しても、もう片方は使える（日本語が全滅しない）。
+    失敗したウェイトはキャッシュに残さず、次回リクエストで再取得を試みる
+  - **TTF マジックバイト検証**: 取得した応答の先頭4バイトが sfnt version 1.0（`00 01 00 00`）と
+    一致しない場合は例外にする。200 応答でも中身が HTML（リライト誤設定・保護画面等）のケースを
+    成功として恒久キャッシュしてしまうのを防ぐ
+  - 両ウェイトとも成功した場合は、返却する配列オブジェクトの同一性を保ってキャッシュする
+    （satori 内部の WeakMap フォントキャッシュが fonts 配列の同一性をキーにしているため）
+  - 取得失敗（非2xx・TTF検証失敗等）は `console.error` に記録する
+  - 空配列（全ウェイト失敗）の場合は呼び出し側で `@vercel/og` のバンドル既定フォントにフォールバックする
+  - 外部（Google Fonts）への通信は行わない。JetBrains Mono は OGP 描画では未使用のため同梱していない
+- 旧実装（Google Fonts css2 API に描画テキスト全体を `text=` クエリで渡してサブセット TTF を取得する方式）は、
+  表示名・MCID・bio 等の PII を外部送信していたため撤去済み
+
+---
+
+## 法務ページ（プライバシーポリシー・利用規約）
+
+### 概要
+
+- `/privacy`（プライバシーポリシー）・`/terms`（利用規約）は、フッターの「プライバシーポリシー」「利用規約」リンクから遷移できる公開ページ
+- 本文の正本は `app/content/privacy.md` / `app/content/terms.md`。**この2ファイルはポリシー文言そのものであり、内容変更は法務的な判断を要するため、実装作業のついでに書き換えない**
+- ルート実装は `app/routes/privacy.tsx` / `app/routes/terms.tsx`。アイコン + h1 + prose シェル（`?raw` import + `react-markdown` + `remark-gfm` + `rehype-sanitize`、`prose prose-sm dark:prose-invert max-w-none`）は `/developers/api` `/developers/changelog` と共通の `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）を使う。OGP meta（title/description/og:image）の組み立ても5ページ共通で `app/lib/og-meta.ts`（`buildOgMeta`）を使う
+- 認証不要・`app/routes.ts` の公開レイアウト（`routes/_layout.tsx`）配下に登録
+
+### 外部送信規律（電気通信事業法 第27条の12）に基づく公表
+
+- 本サイトは投稿・閲覧の「場」を提供するため同規律の対象になりうる。規律が求める「送信される情報の内容／送信先の名称／利用目的」の公表は、**別ページではなく `app/content/privacy.md` の「5. 利用者の端末から外部へ送信される情報」に同梱**している（フッターの「プライバシーポリシー」から1回の操作で到達でき、独立した章として先頭付近に置くことで「奥深くに埋め込む形式」を避けている）
+- 現時点の掲載対象（利用者の端末から直接送信されるものだけが対象。サーバー間通信は対象外）: Vercel Web Analytics（Cookie 不使用）、YouTube 埋め込みプレーヤー（`getYouTubeEmbedUrl()` と TipTap の YouTube 拡張は `youtube-nocookie.com` のプライバシー強化モードを使用。動画カードはクリックまで非読み込み）、Twitch 埋め込みプレーヤー（クリックまで非読み込み）
+- 解析タグ・埋め込みプレーヤー・外部配信のフォント/ウィジェット等、利用者の端末から外部へ情報を送信させる仕組みを追加・変更したら、privacy.md の「4.」の表と「5.」の一覧の両方を更新する（`.claude/rules/general.md`「ポリシー準拠」節、コミット時の `Policy-Revision` トレーラー参照）
+
+### 冒頭のメモ（HTML コメント）
+
+両 md ファイルの冒頭には、運営者向けのメモ（公開前の確認事項・メンテナンス注記）を記した HTML コメント（`<!-- ... -->`）が入っている。
+`react-markdown` は `allowDangerousHtml` を指定しない既定設定では mdast の `html` ノードをそのまま破棄する
+（`mdast-util-to-hast` の挙動）ため、このコメントは**レンダリング結果に一切出力されない**。今後この方式を変更する
+（`rehype-raw` の導入や `allowDangerousHtml: true` 化など）場合は、コメントが可視化されないことを都度確認すること。
+
+### 関連リンク
+
+md 内の `[フィードバックフォーム](/feedback)` のような相対リンクは、`react-markdown` により通常の `<a href="/feedback">`
+としてレンダリングされる（React Router の `Link` には変換されないため、クリック時はフルページ遷移になる。既存の
+`/developers/*` ページと同じ挙動）。
 
 ---
 
@@ -315,8 +375,12 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/_layout.tsx` - メインレイアウト（ヘッダー/フッター）
 - `app/routes/me/_layout.tsx` - ダッシュボードレイアウト（サイドバー）
 
+### Webフォント
+- `app/app.css` - `@fontsource/zen-kaku-gothic-new` / `@fontsource/jetbrains-mono` の `@import`、`--font-sans` / `--font-mono`
+- `public/fonts/` - OGP描画用 TTF（`ZenKakuGothicNew-{Regular,Bold}.ttf`）と `OFL.txt`
+
 ### OGP
-- `app/routes/og-image.tsx` - 動的OGP画像生成
+- `app/routes/og-image.tsx` - 動的OGP画像生成（`loadOgFonts` が `public/fonts/` を self-fetch）
 
 ### リリース通知
 - `app/routes/api/webhooks/vercel.ts` - Vercel Webhook 受信エンドポイント
@@ -340,4 +404,9 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `app/routes/api/keybindings-csv.ts` - CSVエクスポートAPI
 - `app/routes/api/set-locale.ts` - ロケール設定API
 - `app/routes/feedback.tsx` - フィードバックフォーム
-- `app/components/layout/footer.tsx` - フッター（CSVエクスポートモーダル含む）
+- `app/routes/privacy.tsx` - プライバシーポリシー（`app/content/privacy.md` をレンダリング）
+- `app/routes/terms.tsx` - 利用規約（`app/content/terms.md` をレンダリング）
+- `app/content/privacy.md` / `app/content/terms.md` - プライバシーポリシー・利用規約の本文（正本）
+- `app/components/layout/footer.tsx` - フッター（CSVエクスポートモーダル含む。プライバシーポリシー・利用規約リンクも配置）
+- `app/components/markdown-doc-page.tsx` - markdown 静的ドキュメントページ共通シェル（privacy / terms / developers/changelog / developers/api）
+- `app/lib/og-meta.ts` - OGP meta 配列ビルダー（privacy / terms / developers/{index,api,changelog}）

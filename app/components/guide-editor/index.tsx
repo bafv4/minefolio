@@ -41,6 +41,7 @@ import { insertEmbed, insertGuideLink } from "./lib/block-commands";
 import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
 import { YoutubeDialog } from "./panels/youtube-dialog";
+import { LinkDialog } from "./panels/link-dialog";
 import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
@@ -85,6 +86,9 @@ export function GuideEditor({
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
   const [videoToGifOpen, setVideoToGifOpen] = useState(false);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  // リンクダイアログを開いた時点の選択範囲が空か（空ならダイアログにテキスト欄を出す）
+  const [linkSelectionEmpty, setLinkSelectionEmpty] = useState(true);
 
   const isTouch = useMediaQuery("(hover: none)");
 
@@ -177,17 +181,31 @@ export function GuideEditor({
   const blocker = useUnsavedWarning(dirty);
 
   // ── ハンドラ ──────────────────────────────
+  // リンク挿入はダイアログ（panels/link-dialog.tsx）で URL / テキストを受け取る。
+  // 開いた時点の選択範囲の有無をここで確定し、確定処理（handleInsertLink）に引き渡す。
   const handleLinkInsert = useCallback(() => {
     if (!editor) return;
-    const href = window.prompt(t("guideEditor.ui.linkUrlPrompt"), "https://");
-    if (!href) return;
-    if (editor.state.selection.empty) {
-      const text = window.prompt(t("guideEditor.ui.linkTextPrompt"), href) || href;
-      editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
-    } else {
-      editor.chain().focus().setLink({ href }).run();
-    }
+    setLinkSelectionEmpty(editor.state.selection.empty);
+    setLinkDialogOpen(true);
   }, [editor]);
+
+  const handleInsertLink = useCallback(
+    (href: string, text: string) => {
+      if (!editor) return;
+      if (linkSelectionEmpty) {
+        // 生 HTML 文字列の組み立てではなく JSON 形式で渡すことで、テキストに
+        // `<` や `"` が含まれてもエスケープ不要で安全に挿入できる。
+        editor
+          .chain()
+          .focus()
+          .insertContent({ type: "text", text, marks: [{ type: "link", attrs: { href } }] })
+          .run();
+      } else {
+        editor.chain().focus().setLink({ href }).run();
+      }
+    },
+    [editor, linkSelectionEmpty],
+  );
 
   const handleImageUpload = useCallback(
     async (file: File) => {
@@ -415,6 +433,12 @@ export function GuideEditor({
         open={youtubeDialogOpen}
         onOpenChange={setYoutubeDialogOpen}
         onInsert={handleInsertYoutube}
+      />
+      <LinkDialog
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        selectionEmpty={linkSelectionEmpty}
+        onInsert={handleInsertLink}
       />
       <VideoToGifDialog
         open={videoToGifOpen}

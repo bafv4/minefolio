@@ -780,7 +780,7 @@ describe("getSpeedrunComVideoEmbedUrl", () => {
         videos: { links: [{ uri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }] },
       },
     });
-    expect(getSpeedrunComVideoEmbedUrl(pb)).toBe("https://www.youtube.com/embed/dQw4w9WgXcQ");
+    expect(getSpeedrunComVideoEmbedUrl(pb)).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ");
   });
 
   it("複数リンクのうち最初にYouTubeへ変換できたものを返す", () => {
@@ -795,7 +795,7 @@ describe("getSpeedrunComVideoEmbedUrl", () => {
         },
       },
     });
-    expect(getSpeedrunComVideoEmbedUrl(pb)).toBe("https://www.youtube.com/embed/abcdefghijk");
+    expect(getSpeedrunComVideoEmbedUrl(pb)).toBe("https://www.youtube-nocookie.com/embed/abcdefghijk");
   });
 
   it("YouTube以外のリンクしか無い場合は null", () => {

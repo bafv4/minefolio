@@ -40,6 +40,8 @@ export default [
     route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),
     route("feedback", "routes/feedback.tsx"),
+    route("privacy", "routes/privacy.tsx"),
+    route("terms", "routes/terms.tsx"),
     route("developers", "routes/developers/index.tsx"),
     route("developers/api", "routes/developers/api.tsx"),
     route("developers/changelog", "routes/developers/changelog.tsx"),
@@ -109,6 +111,7 @@ export default [
   route("api/cron/update-paceman-cache", "routes/api/cron/update-paceman-cache.ts"),
   route("api/cron/update-rankings", "routes/api/cron/update-rankings.ts"),
   route("api/cron/update-page-views", "routes/api/cron/update-page-views.ts"),
+  route("api/cron/cleanup-auth", "routes/api/cron/cleanup-auth.ts"),
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),

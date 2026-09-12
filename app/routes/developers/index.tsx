@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/index";
 import { getEnv } from "@/lib/env.server";
+import { buildOgMeta } from "@/lib/og-meta";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Code, FileText, History, Download, Github, MessageSquare, ChevronRight } from "lucide-react";
@@ -11,23 +12,18 @@ import { useT } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
-  const title = t("developers.title");
-  const description = t("developers.metaDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
-  const ogImage = `${appUrl}/icon.png`;
-  return [
-    { title },
-    { name: "description", content: description },
-    { property: "og:type", content: "website" },
-    { property: "og:title", content: title },
-    { property: "og:description", content: description },
-    { property: "og:image", content: ogImage },
-  ];
+  return buildOgMeta({
+    title: t("developers.title"),
+    description: t("developers.metaDescription"),
+    appUrl,
+    ogType: "website",
+  });
 };
 
 export async function loader() {
   const env = getEnv();
-  return { appUrl: env?.APP_URL ?? "https://minefolio.app" };
+  return { appUrl: env.APP_URL ?? "https://minefolio.app" };
 }
 
 // 文言は描画時に t() で解決する（モジュール評価時はロケールが未確定のため）

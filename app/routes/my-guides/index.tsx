@@ -15,7 +15,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
-import { del } from "@vercel/blob";
+import { deleteGuide } from "@/lib/content-cleanup.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,12 +84,10 @@ export async function action({ request }: ActionFunctionArgs) {
       where: and(eq(guides.id, guideId), eq(guides.authorId, user.id)),
     });
     if (guide) {
-      if (guide.coverImageUrl) {
-        try {
-          await del(guide.coverImageUrl);
-        } catch {}
-      }
-      await db.delete(guides).where(eq(guides.id, guideId));
+      // 翻訳キャッシュ削除 + guides 行削除を単一トランザクションで原子化する
+      // （app/lib/content-cleanup.server.ts）。Vercel Blob 実体の削除は内部で
+      // runAfterResponse 経由でレスポンス後にスケジュールされる。
+      await deleteGuide(db, guide);
     }
   }
 

@@ -2,11 +2,19 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
+/* Webフォントはセルフホスト（Google Fontsへの通信を排除するため @fontsource を使用） */
+@import "@fontsource/zen-kaku-gothic-new/400.css";
+@import "@fontsource/zen-kaku-gothic-new/500.css";
+@import "@fontsource/zen-kaku-gothic-new/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
 /* ダーク variant は通常ダーク（.dark）とウルトラダーク（.ultra-dark）の両方に適用 */
 @custom-variant dark (&:is(.dark *, .ultra-dark *));
 
 @theme {
-  --font-sans: "Zen Kaku Gothic New", "Inter", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Zen Kaku Gothic New", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
     "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;

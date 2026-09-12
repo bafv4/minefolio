@@ -169,7 +169,7 @@ erDiagram
 | `paceman_paces.mcid` | `users.mcid` | 未登録ランナーのペースも保持するため |
 | `youtube_video_cache.minefolio_mcid`<br>`youtube_live_cache.minefolio_mcid` | `users.mcid` | cron が外部 API 起点で蓄積するキャッシュのため |
 | `twitch_vod_cache.user_login` | `social_links.identifier` | MCID を持たないユーザーの VOD も扱うため（小文字で突合） |
-| `content_translations.target_id` | `guides.id` / `users.id` | `target_type` で参照先が変わる多態参照 |
+| `content_translations.target_id` | `guides.id` / `users.id` | `target_type` で参照先が変わる多態参照。対象の削除時（ガイド削除・アカウント削除）はアプリ層で明示的に削除する（`app/lib/content-cleanup.server.ts` の `deleteGuide()` / `deleteUserAccount()` が内部で呼ぶ `deleteTranslationsForGuide` / `deleteTranslationsForUser`、本体削除と同じ `db.transaction()` 内） |
 | `page_view_stats.target_id` | `users.id` / `guides.id` | 同上。cron が `target_type` 単位で全置換するので孤児は次回同期で消える |
 | `category_records.category_ref_id` | `speedrun_categories.id` | 列は用意しているが制約は張っていない |
 | `auth_accounts.account_id` | `users.discord_id` | better-auth 側のテーブル。アプリは `eq(users.discordId, session.user.id)` で毎回引き直す |
@@ -178,9 +178,10 @@ erDiagram
 `slug` 変更（MCID の設定・変更・削除、`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid`）による
 追従更新はアプリケーション層で実装済み（`app/lib/favorites.ts` の `retargetFavoritesOnSlugChange`。
 `users` 更新と同じトランザクション内で旧 slug → 新 slug へ更新し、新 slug を指す孤児行は先に削除する。
-詳細は [favorites.md](./favorites.md#slug-変更時の追従更新)）。ユーザー削除時（cascade 対象外の孤児）は
-未実装のため、必要なら
-`DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` で GC する。
+詳細は [favorites.md](./favorites.md#slug-変更時の追従更新)）。ユーザー削除時（cascade 対象外の孤児）も
+`app/lib/content-cleanup.server.ts` の `deleteUserAccount()` で実装済み: 削除対象ユーザーの
+`slug`（完全一致・大文字小文字を区別）を `favoriteSlug` に持つ行を、`users` 行の削除と同じ
+`db.transaction()` 内で削除する（自分が押した側の `favorites` 行は `userId` の FK cascade で別途消える）。
 
 ### `slug_history` の一意性
 
@@ -843,6 +844,8 @@ better-auth が管理するテーブル群。`users` との FK はない（→ [
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
+期限切れ行（`expires_at < now`）は cron `/api/cron/cleanup-auth` が日次削除する（[`docs/api.md`](./api.md#get-apicroncleanup-auth)）。
+
 #### `auth_accounts`
 
 | カラム | 型 | 制約・参照 |
@@ -871,6 +874,8 @@ better-auth が管理するテーブル群。`users` との FK はない（→ [
 | `expires_at` | ts | |
 | `created_at` | ts | |
 | `updated_at` | ts | |
+
+期限切れ行（`expires_at < now`）は cron `/api/cron/cleanup-auth` が日次削除する（[`docs/api.md`](./api.md#get-apicroncleanup-auth)）。
 
 ---
 

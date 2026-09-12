@@ -7,11 +7,28 @@
 // の2段で防いでいるので、どちらが欠けても落ちるようにケースを並べる。
 //
 // DB もセッションも使わないルートなので、Request を直接組んで action を呼ぶ。
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { LOCALE_COOKIE } from "@/lib/locale";
 import { action } from "../set-locale";
 
 const ROUTE_URL = "https://minefolio.app/api/set-locale";
+
+const ENV_KEYS = ["APP_URL"] as const;
+const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
+
+beforeEach(() => {
+  for (const key of ENV_KEYS) originalEnv[key] = process.env[key];
+  // Secure 判定は APP_URL 基準。既定は本番相当（https）にしておき、分岐そのものを見る
+  // テストだけ個別に上書きする
+  process.env.APP_URL = "https://minefolio.app";
+});
+
+afterEach(() => {
+  for (const key of ENV_KEYS) {
+    if (originalEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = originalEnv[key];
+  }
+});
 
 function makeRequest(locale: string | null, referer?: string): Request {
   const formData = new FormData();
@@ -117,5 +134,24 @@ describe("locale の検証と Cookie 発行", () => {
 
     expect(res.status).toBe(400);
     expect(res.headers.get("Location")).toBeNull();
+  });
+});
+
+describe("Secure 属性は APP_URL 基準（request.url のプロトコルではない）", () => {
+  it("APP_URL が https なら Secure を付ける", async () => {
+    process.env.APP_URL = "https://minefolio.app";
+
+    const res = await callAction("ja");
+
+    expect(res.headers.get("Set-Cookie")).toContain("Secure");
+  });
+
+  it("APP_URL が http（ローカル開発）なら Secure を付けない（request.url は https でも判定は APP_URL 基準）", async () => {
+    process.env.APP_URL = "http://localhost:5173";
+
+    // ROUTE_URL（makeRequest 内）は https だが、判定基準は APP_URL であって request.url ではない
+    const res = await callAction("ja");
+
+    expect(res.headers.get("Set-Cookie")).not.toContain("Secure");
   });
 });

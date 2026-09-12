@@ -27,8 +27,8 @@
 import { resolve } from "node:path";
 import { config } from "dotenv";
 import { createClient } from "@libsql/client";
-import { del } from "@vercel/blob";
 import { loadDbEnv } from "./lib/db-env";
+import { delBlobsInBatches } from "../app/lib/blob-storage.server";
 import {
   collectReferences,
   listAllBlobs,
@@ -195,22 +195,20 @@ await runScript(client, async () => {
   }
 
   // del() は配列を受け取れる。1 件ずつだとリクエストが多くなるためまとめて送る
-  const BATCH_SIZE = 100;
-  let deleted = 0;
-  let failed = 0;
-
-  for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-    const batch = targets.slice(i, i + BATCH_SIZE);
-    try {
-      await del(batch.map((o) => o.url), { token });
-      deleted += batch.length;
-    } catch (e) {
-      // バッチ単位で失敗しても残りは続行する（失敗分は再実行で拾える）
-      failed += batch.length;
-      console.error(`\n⚠️  ${batch.length} 件の削除に失敗しました: ${String(e)}`);
-    }
-    process.stdout.write(`\r削除中... ${deleted + failed}/${targets.length}`);
-  }
+  // （バッチサイズ・バッチ単位での失敗続行は app/lib/blob-storage.server.ts の
+  // delBlobsInBatches に集約。失敗分は再実行で拾える）
+  const { deleted, failed } = await delBlobsInBatches(
+    targets.map((o) => o.url),
+    {
+      token,
+      onBatchError: (batch, e) => {
+        console.error(`\n⚠️  ${batch.length} 件の削除に失敗しました: ${String(e)}`);
+      },
+      onBatchSettled: (processed) => {
+        process.stdout.write(`\r削除中... ${processed}/${targets.length}`);
+      },
+    },
+  );
 
   console.log(`\n\n✅ 削除完了: ${deleted} 件 / ${formatBytes(targets.reduce((s, o) => s + o.size, 0))}`);
   if (failed > 0) {

@@ -27,19 +27,6 @@ export function loader({ request }: Route.LoaderArgs) {
   return { locale: resolveLocale(request) };
 }
 
-export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
-  },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap",
-  },
-];
-
 export function Layout({ children }: { children: React.ReactNode }) {
   // Layout はエラー時にも描画され、その場合 root ローダーのデータが無い。
   // useLoaderData だと例外になるため useRouteLoaderData で取り、既定へ落とす。

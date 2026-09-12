@@ -40,8 +40,7 @@
 
 - ソース: `app/content/api.md`
 - Vite の `?raw` import でファイル内容を JS バンドルに埋め込み
-- `react-markdown` + `remark-gfm` + `rehype-sanitize` でレンダリング
-- `prose prose-sm dark:prose-invert max-w-none` クラスでスタイル適用
+- 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`prose prose-sm dark:prose-invert max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）
 
 掲載対象は **認証不要の公開 API のみ**。`/api/me/*` や `/api/auth/*` などの認証必須 API、`/api/cron/*` の Cron 専用 API は掲載しない。
 
@@ -54,7 +53,7 @@
 `app/routes/developers/changelog.tsx`。
 
 - ソース: `app/content/changelog.md`
-- レンダリング方式は `/developers/api` と同じ（`?raw` + `react-markdown`）
+- レンダリング方式は `/developers/api` と同じ（`?raw` + `MarkdownDocPage`）
 - 一般ユーザー向けに、技術用語を抑えた文体で記述する方針
 
 ---
@@ -142,4 +141,6 @@ GET /api/keybindings-csv?sections=actions,remaps&userSlugs=alice,bob
 | `app/content/changelog.md` | 公開更新履歴の正本 |
 | `app/routes/api/keybindings-csv.ts` | CSV エクスポート API（`sections` + `userSlugs` パラメータ対応） |
 | `app/components/layout/footer.tsx` | フッター（Developers リンク） |
+| `app/components/markdown-doc-page.tsx` | `/developers/api` `/developers/changelog`（`/privacy` `/terms` も）共通の markdown 表示シェル |
+| `app/lib/og-meta.ts` | ハブ・api・changelog（`/privacy` `/terms` も）共通の OGP meta ビルダー |
 | `app/routes.ts` | 4 ルートの登録 |

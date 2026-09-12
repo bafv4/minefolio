@@ -49,7 +49,7 @@ pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直�
 
 | 依頼 | スキル |
 |---|---|
-| バージョンリリース（changelog 作成 + version 更新） | `release` |
+| バージョンリリース（changelog 作成 + version 更新 + ポリシー改定要否の判定） | `release` |
 | DBスキーマのローカル/リモート反映、`db:push` の TRUNCATE 回避 | `db-apply` |
 | Vercel でだけ落ちる（ERR_REQUIRE_ESM / FUNCTION_INVOCATION_FAILED 等） | `vercel-triage` |
 | フォルダ型タブの改修・タブ周りの表示崩れ | `ui-tabs` |

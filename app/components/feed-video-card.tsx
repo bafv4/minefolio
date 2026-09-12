@@ -20,7 +20,7 @@ function getFeedVideoUrl(video: FeedVideo): string {
  */
 function getEmbedUrl(video: FeedVideo): string {
   if (video.platform === "youtube") {
-    return `https://www.youtube.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1`;
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1`;
   }
   const parent = encodeURIComponent(window.location.hostname);
   return `https://player.twitch.tv/?video=${encodeURIComponent(video.videoId)}&parent=${parent}&autoplay=true`;

@@ -8,7 +8,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts } from "@/lib/schema";
+import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
@@ -28,6 +28,7 @@ import {
   updateYoutubeCacheMcid,
   refreshSrcRankingsForUser,
 } from "@/lib/targeted-refresh.server";
+import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -691,13 +692,10 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meEdit.deleteConfirmMismatch"), action: "delete" };
     }
 
-    // Delete user data (cascades to related tables)
-    await db.delete(users).where(eq(users.id, user.id));
-
-    // Delete auth data
-    await db.delete(authSessions).where(eq(authSessions.userId, session.user.id));
-    await db.delete(authAccounts).where(eq(authAccounts.userId, session.user.id));
-    await db.delete(authUsers).where(eq(authUsers.id, session.user.id));
+    // 派生データの削除（翻訳キャッシュ・favorites孤児行）と本体削除（users + better-auth
+    // 3テーブル）を単一トランザクションで原子化する（app/lib/content-cleanup.server.ts）。
+    // トランザクション成功後、Vercel Blob 実体の削除は内部で runAfterResponse 経由でスケジュールされる。
+    await deleteUserAccount(db, { user, sessionUserId: session.user.id });
 
     // Redirect to home after deletion
     return redirect("/");

@@ -38,10 +38,14 @@ export function getYouTubeVideoId(url: string): string | null {
   return candidate && VIDEO_ID_PATTERN.test(candidate) ? candidate : null;
 }
 
-/** 埋め込み用URL。変換できないURLは null（生URLを iframe に渡してはならない） */
+/**
+ * 埋め込み用URL。変換できないURLは null（生URLを iframe に渡してはならない）。
+ * プライバシー強化モード（youtube-nocookie.com）を使う: 再生されるまで閲覧者の端末に
+ * Cookie を保存しないため、外部送信を最小限にできる（/external-transmission の公表内容と連動）
+ */
 export function getYouTubeEmbedUrl(url: string): string | null {
   const videoId = getYouTubeVideoId(url);
-  return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : null;
 }
 
 /** サムネイル画像URL。動画IDを解決できない場合は null */

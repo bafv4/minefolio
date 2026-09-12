@@ -199,6 +199,7 @@ sourceHash === 現在の原文のハッシュ
 | `app/lib/schema.ts` | `contentTranslations` テーブル |
 | `scripts/add-content-translations-table.ts` | テーブル追加の一回限りスクリプト（dry-run 既定 / `--apply` / `--remote`） |
 | `app/lib/__tests__/translate.server.test.ts` | 契約（要素数一致・壊れた応答の拒否・フォールバック）の回帰テスト |
+| `app/lib/content-cleanup.server.ts` | 対象削除時の `content_translations` 削除（`deleteTranslationsForGuide` / `deleteTranslationsForUser`）。schema.ts のコメントにある「対象の削除時は明示的に消す」契約の実装。Phase 0 時点では書き込み経路が無く実データには当たらないが、Phase 1/2 で bio・ガイド翻訳の書き込みが入った後はこの削除経路が前提になる |
 
 `translateTexts()` の契約:
 
