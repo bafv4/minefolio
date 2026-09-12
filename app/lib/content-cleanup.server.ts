@@ -1,27 +1,35 @@
 // アカウント削除・ガイド削除時の派生データ（Vercel Blob 実体・翻訳キャッシュ）の掃除。
 //
-// DB 系（deleteTranslationsFor*）は呼び出し側の action 内で await する同期処理。
-// 失敗したら action ごと失敗してよい（本体の削除トランザクションと一貫性を保つため）。
+// 呼び出し側（action）は合成ドメイン操作の `deleteUserAccount()` / `deleteGuide()` を
+// 1回呼ぶだけでよい。内部で以下の2段階を行う:
 //
-// Blob 系（cleanup*Blobs）は絶対に throw しない best-effort。失敗しても
-// アカウント削除・ガイド削除の本体（DB 行の削除）は完了させる方針
-// （app/lib/targeted-refresh.server.ts の「絶対ブロック・失敗させない」設計を踏襲）。
-// 呼び出し側は runAfterResponse() でレスポンス後に実行すること。
+// 1. DB 系（deleteTranslationsFor* + 本体行の削除 + favorites孤児行削除等）は単一の
+//    db.transaction() 内で原子化する。どこかが失敗すれば全体がロールバックされる
+//    （「他ユーザーが押した favorites 行だけ消えた」のような部分状態を防ぐ）。
+// 2. トランザクション成功後、Blob 系（cleanup*Blobs）を runAfterResponse() 経由で
+//    レスポンス後に実行する。これは絶対に throw しない best-effort で、失敗しても
+//    アカウント削除・ガイド削除の本体（DB 行の削除）は完了済みのため影響しない
+//    （app/lib/targeted-refresh.server.ts の「絶対ブロック・失敗させない」設計を踏襲）。
 // 消し残した Blob は scripts/audit-orphan-blobs.ts / delete-orphan-blobs.ts が
 // 後から拾える（docs/guides.md「参照されなくなった Blob の回収」参照）。
+//
+// deleteTranslationsForGuide / deleteTranslationsForUser / cleanupUserBlobs /
+// cleanupGuideBlobs は上記2関数の内部実装（個別のテスト対象として export は維持）。
 
-import { eq, and, inArray } from "drizzle-orm";
-import { del, list } from "@vercel/blob";
+import { eq, and, or, like, inArray } from "drizzle-orm";
+import { del } from "@vercel/blob";
 import type { Database } from "./db";
 import { createDb } from "./db";
-import { contentTranslations, guides } from "./schema";
+import { contentTranslations, guides, users, favorites, authSessions, authAccounts, authUsers } from "./schema";
 import { isVercelBlobUrl, collectBlobPathnames } from "./blob-url";
+import { listAllBlobs, delBlobsInBatches } from "./blob-storage.server";
+import { runAfterResponse } from "./targeted-refresh.server";
 
-/** Blob 削除のバッチサイズ（scripts/delete-orphan-blobs.ts と同じ値） */
-const DELETE_BATCH_SIZE = 100;
+/** drizzle のトランザクション内外どちらでも使える最小インターフェース（app/lib/favorites.ts と同じ方式） */
+type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-/** guides.id に紐づく翻訳キャッシュ行を削除する（ガイド削除時に呼ぶ） */
-export async function deleteTranslationsForGuide(db: Database, guideId: string): Promise<void> {
+/** guides.id に紐づく翻訳キャッシュ行を削除する（ガイド削除時に呼ぶ。deleteGuide() の内部実装） */
+export async function deleteTranslationsForGuide(db: DatabaseOrTransaction, guideId: string): Promise<void> {
   await db
     .delete(contentTranslations)
     .where(and(eq(contentTranslations.targetType, "guide"), eq(contentTranslations.targetId, guideId)));
@@ -29,10 +37,10 @@ export async function deleteTranslationsForGuide(db: Database, guideId: string):
 
 /**
  * ユーザー本体（userBio）+ そのユーザーが著者だった全ガイドの翻訳キャッシュ行を削除する
- * （アカウント削除時に呼ぶ）。guideIds が空なら guide 側の削除はスキップする。
+ * （アカウント削除時に呼ぶ。deleteUserAccount() の内部実装）。guideIds が空なら guide 側の削除はスキップする。
  */
 export async function deleteTranslationsForUser(
-  db: Database,
+  db: DatabaseOrTransaction,
   userId: string,
   guideIds: string[],
 ): Promise<void> {
@@ -48,14 +56,8 @@ export async function deleteTranslationsForUser(
 
 /** list() をページングしながら指定 prefix の Blob の pathname を全件列挙する */
 async function listAllPathnamesByPrefix(prefix: string): Promise<string[]> {
-  const pathnames: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await list({ prefix, cursor, limit: 1000 });
-    for (const blob of page.blobs) pathnames.push(blob.pathname);
-    cursor = page.hasMore ? page.cursor : undefined;
-  } while (cursor);
-  return pathnames;
+  const blobs = await listAllBlobs({ prefix });
+  return blobs.map((blob) => blob.pathname);
 }
 
 /**
@@ -64,14 +66,11 @@ async function listAllPathnamesByPrefix(prefix: string): Promise<string[]> {
  * 手動回収に委ねる）。
  */
 async function deleteBlobsInBatches(urlsOrPathnames: string[]): Promise<void> {
-  for (let i = 0; i < urlsOrPathnames.length; i += DELETE_BATCH_SIZE) {
-    const batch = urlsOrPathnames.slice(i, i + DELETE_BATCH_SIZE);
-    try {
-      await del(batch);
-    } catch (error) {
+  await delBlobsInBatches(urlsOrPathnames, {
+    onBatchError: (batch, error) => {
       console.error(`[content-cleanup] Failed to delete ${batch.length} blob(s):`, error);
-    }
-  }
+    },
+  });
 }
 
 /**
@@ -159,10 +158,21 @@ export async function cleanupGuideBlobs({
     if (candidates.size === 0) return;
 
     // 保護: 著者の残ガイド（呼び出し時点で対象行は削除済みなので、残存全件=他ガイド）が
-    // 参照しているパスは削除対象から外す
+    // 参照しているパスは削除対象から外す。
+    // Blob ホスト文字列を含まない行は保護判定に影響しないため、事前に LIKE で絞り込んで
+    // 本文転送を削減する（候補 pathname ごとの LIKE 絞りは percent-encoding 不一致で
+    // 誤削除を招くため行わない。ホスト文字列一致のみの粗い絞り込み）
     const db = createDb();
     const remainingGuides = await db.query.guides.findMany({
-      where: eq(guides.authorId, userId),
+      where: and(
+        eq(guides.authorId, userId),
+        or(
+          like(guides.content, "%blob.vercel-storage.com%"),
+          like(guides.draftContent, "%blob.vercel-storage.com%"),
+          like(guides.coverImageUrl, "%blob.vercel-storage.com%"),
+          like(guides.draftCoverImageUrl, "%blob.vercel-storage.com%"),
+        ),
+      ),
       columns: {
         content: true,
         draftContent: true,
@@ -181,4 +191,91 @@ export async function cleanupGuideBlobs({
   } catch (error) {
     console.error(`[content-cleanup] Failed to clean up blobs for guide ${guideId}:`, error);
   }
+}
+
+/**
+ * アカウント削除の合成ドメイン操作。派生データの削除（著者だったガイドの翻訳キャッシュ +
+ * userBio翻訳 + favorites孤児行）と本体削除（users + better-auth 3テーブル）を単一の
+ * db.transaction() で原子化する。どこかが失敗すれば全体がロールバックされ、
+ * 「他ユーザーが押した favorites 行だけ消えた」のような復元不能な部分状態を防ぐ。
+ *
+ * トランザクション成功後、Vercel Blob 実体の削除（cleanupUserBlobs）を runAfterResponse()
+ * 経由でスケジュールする（呼び出し側で別途 runAfterResponse を呼ぶ必要はない）。
+ *
+ * `user` は `db.query.users.findFirst({ where: eq(users.discordId, session.user.id) })` 等で
+ * 取得した本人の行（id/slug/customSkinUrl を使う）。`sessionUserId` は better-auth 側の
+ * ユーザーID（session.user.id。users とは FK で結ばれておらず、通常 user.discordId と同値）。
+ */
+export async function deleteUserAccount(
+  db: Database,
+  {
+    user,
+    sessionUserId,
+  }: {
+    user: { id: string; slug: string; customSkinUrl: string | null };
+    sessionUserId: string;
+  },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    // 派生データの掃除は users 削除より前に実施する（users を消すと guides が cascade で
+    // 消えてしまい、著者のガイド一覧を後から引けなくなるため）
+    const userGuides = await tx.query.guides.findMany({
+      where: eq(guides.authorId, user.id),
+      columns: { id: true },
+    });
+    await deleteTranslationsForUser(tx, user.id, userGuides.map((g) => g.id));
+    // 他ユーザーが自分を favorite していた孤児行を削除（自分が押した側は userId FK cascade で消える）
+    await tx.delete(favorites).where(eq(favorites.favoriteSlug, user.slug));
+
+    // users 本体（cascade で大半の関連テーブルが消える）
+    await tx.delete(users).where(eq(users.id, user.id));
+
+    // better-auth 側のテーブル（users と FK 無し。discordId = sessionUserId で引く）
+    await tx.delete(authSessions).where(eq(authSessions.userId, sessionUserId));
+    await tx.delete(authAccounts).where(eq(authAccounts.userId, sessionUserId));
+    await tx.delete(authUsers).where(eq(authUsers.id, sessionUserId));
+  });
+
+  // Vercel Blob 実体（ガイド一式・カスタムスキン）はレスポンス後に best-effort で削除する
+  runAfterResponse(cleanupUserBlobs({ userId: user.id, customSkinUrl: user.customSkinUrl }));
+}
+
+/**
+ * ガイド削除の合成ドメイン操作。翻訳キャッシュ行の削除と guides 行本体の削除を単一の
+ * db.transaction() で原子化する。トランザクション成功後、Vercel Blob 実体の削除
+ * （cleanupGuideBlobs）を runAfterResponse() 経由でスケジュールする（呼び出し側で別途
+ * runAfterResponse を呼ぶ必要はない）。
+ *
+ * `guide` は所有権確認込みで取得済みの行（`db.query.guides.findFirst({ where: and(eq(guides.id, ...),
+ * eq(guides.authorId, ...)) })` 等）をそのまま渡す。
+ */
+export async function deleteGuide(
+  db: Database,
+  guide: {
+    id: string;
+    authorId: string;
+    content: string;
+    draftContent: string | null;
+    coverImageUrl: string | null;
+    draftCoverImageUrl: string | null;
+  },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await deleteTranslationsForGuide(tx, guide.id);
+    await tx.delete(guides).where(eq(guides.id, guide.id));
+  });
+
+  // Vercel Blob 実体（本文画像・カバー・ドラフトカバー）はレスポンス後に best-effort で削除する
+  runAfterResponse(
+    cleanupGuideBlobs({
+      userId: guide.authorId,
+      guideId: guide.id,
+      guideColumns: {
+        content: guide.content,
+        draftContent: guide.draftContent,
+        coverImageUrl: guide.coverImageUrl,
+        draftCoverImageUrl: guide.draftCoverImageUrl,
+      },
+    }),
+  );
 }

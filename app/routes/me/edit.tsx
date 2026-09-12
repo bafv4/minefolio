@@ -8,7 +8,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, socialLinks, profileVideos, authUsers, authSessions, authAccounts, guides, favorites } from "@/lib/schema";
+import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
@@ -28,7 +28,7 @@ import {
   updateYoutubeCacheMcid,
   refreshSrcRankingsForUser,
 } from "@/lib/targeted-refresh.server";
-import { deleteTranslationsForUser, cleanupUserBlobs } from "@/lib/content-cleanup.server";
+import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -692,26 +692,10 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meEdit.deleteConfirmMismatch"), action: "delete" };
     }
 
-    // 派生データの掃除は users 削除より前に実施する（users を消すと guides が cascade で
-    // 消えてしまい、著者のガイド一覧を後から引けなくなるため）
-    const userGuides = await db.query.guides.findMany({
-      where: eq(guides.authorId, user.id),
-      columns: { id: true },
-    });
-    await deleteTranslationsForUser(db, user.id, userGuides.map((g) => g.id));
-    // 他ユーザーが自分を favorite していた孤児行を削除（自分が押した側は userId FK cascade で消える）
-    await db.delete(favorites).where(eq(favorites.favoriteSlug, user.slug));
-
-    // Delete user data (cascades to related tables)
-    await db.delete(users).where(eq(users.id, user.id));
-
-    // Delete auth data
-    await db.delete(authSessions).where(eq(authSessions.userId, session.user.id));
-    await db.delete(authAccounts).where(eq(authAccounts.userId, session.user.id));
-    await db.delete(authUsers).where(eq(authUsers.id, session.user.id));
-
-    // Vercel Blob 実体（ガイド一式・カスタムスキン）はレスポンス後に best-effort で削除する
-    runAfterResponse(cleanupUserBlobs({ userId: user.id, customSkinUrl: user.customSkinUrl }));
+    // 派生データの削除（翻訳キャッシュ・favorites孤児行）と本体削除（users + better-auth
+    // 3テーブル）を単一トランザクションで原子化する（app/lib/content-cleanup.server.ts）。
+    // トランザクション成功後、Vercel Blob 実体の削除は内部で runAfterResponse 経由でスケジュールされる。
+    await deleteUserAccount(db, { user, sessionUserId: session.user.id });
 
     // Redirect to home after deletion
     return redirect("/");

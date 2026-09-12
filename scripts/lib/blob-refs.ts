@@ -8,8 +8,9 @@
 // ストア ID を含むホスト名を持つため、文字列比較だと将来ホストが変わったときに
 // 全件を孤児と誤判定する。
 import type { Client } from "@libsql/client";
-import { list, type ListBlobResultBlob } from "@vercel/blob";
+import type { ListBlobResultBlob } from "@vercel/blob";
 import { blobUrlToPathname, collectBlobPathnames } from "../../app/lib/blob-url";
+import { listAllBlobs as listAllBlobsShared } from "../../app/lib/blob-storage.server";
 
 /** Blob のパス分類（プレフィックスは各アップロード経路の実装と対） */
 export type BlobCategory = "guideInline" | "guideCover" | "skin" | "unknown";
@@ -92,20 +93,17 @@ export async function collectReferences(client: Client): Promise<ReferenceScan> 
   };
 }
 
-/** Blob をページングしながら全件列挙する */
+/**
+ * Blob をページングしながら全件列挙する。
+ *
+ * 実装本体は app/lib/blob-storage.server.ts の listAllBlobs（アカウント/ガイド削除の
+ * 削除経路と共有）。ここでは既存の呼び出し元（位置引数 token/onProgress）向けの薄いラッパー。
+ */
 export async function listAllBlobs(
   token: string,
   onProgress?: (count: number) => void,
 ): Promise<ListBlobResultBlob[]> {
-  const blobs: ListBlobResultBlob[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await list({ token, cursor, limit: 1000 });
-    blobs.push(...page.blobs);
-    cursor = page.hasMore ? page.cursor : undefined;
-    onProgress?.(blobs.length);
-  } while (cursor);
-  return blobs;
+  return listAllBlobsShared({ token, onProgress });
 }
 
 export interface OrphanBlob {

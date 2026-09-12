@@ -139,9 +139,9 @@
 
 #### 参照されなくなった Blob の回収
 
-**ガイド削除時**（`app/routes/my-guides/index.tsx` の `_action="delete"`）は `app/lib/content-cleanup.server.ts` の `cleanupGuideBlobs()` が、`guides/<userId>/<guideId>/` 配下の Blob（本文画像・カバー・ドラフトカバー）と、削除された行の本文/カバー/ドラフト列が参照していた `guides/<userId>/` 配下の Blob をあわせて削除する。ただし著者の残ガイド（他ガイド・ドラフト）がまだ参照しているパスは保護し、削除対象から外す（同一著者内のコピー参照を壊さないため）。**他ユーザーのガイドへコピーされた画像参照までは保護しない**（cross-user 参照は現状のカバー画像即時削除と同じ意味論として許容する）。削除はレスポンス後の best-effort（`runAfterResponse`）で、`BLOB_READ_WRITE_TOKEN` 未設定なら no-op。
+**ガイド削除時**（`app/routes/my-guides/index.tsx` の `_action="delete"` → `app/lib/content-cleanup.server.ts` の `deleteGuide()`）は、翻訳キャッシュ削除 + `guides` 行削除を `db.transaction()` で原子化したうえで、トランザクション成功後に `cleanupGuideBlobs()` を `runAfterResponse()` 経由で呼ぶ。`cleanupGuideBlobs()` は `guides/<userId>/<guideId>/` 配下の Blob（本文画像・カバー・ドラフトカバー）と、削除された行の本文/カバー/ドラフト列が参照していた `guides/<userId>/` 配下の Blob をあわせて削除する。ただし著者の残ガイド（他ガイド・ドラフト）がまだ参照しているパスは保護し、削除対象から外す（同一著者内のコピー参照を壊さないため）。この保護判定用クエリは、著者の残ガイドのうち本文/カバー/ドラフト列のいずれかが Blob ホスト文字列（`%blob.vercel-storage.com%`）を含む行だけを対象にする LIKE 事前絞り込みを行う（Blob 参照ゼロのガイドの本文転送を削減する最適化。**候補 pathname ごとの LIKE 絞りは percent-encoding 不一致で誤削除を招くため行わない**）。**他ユーザーのガイドへコピーされた画像参照までは保護しない**（cross-user 参照は現状のカバー画像即時削除と同じ意味論として許容する）。`BLOB_READ_WRITE_TOKEN` 未設定なら no-op。
 
-**アカウント削除時**（`app/routes/me/edit.tsx` の `_action="delete_account"`）は `cleanupUserBlobs()` が `guides/<userId>/` と `skins/<userId>/` の2 prefix を丸ごと削除する（著者の全ガイド・カスタムスキンをまとめて消す）。
+**アカウント削除時**（`app/routes/me/edit.tsx` の `_action="delete_account"` → `deleteUserAccount()`）は、本体削除のトランザクション成功後に `cleanupUserBlobs()` を `runAfterResponse()` 経由で呼ぶ。`cleanupUserBlobs()` は `guides/<userId>/` と `skins/<userId>/` の2 prefix を丸ごと削除する（著者の全ガイド・カスタムスキンをまとめて消す）。
 
 上記2経路でカバーしきれない残骸（トリミングで残る元画像・差し替えで参照が外れた画像・cross-user 参照の孤児など）は、cron を置かず **`scripts/` のスクリプトを必要なときに手で実行**して回収する。トリミングは元画像を残す（同じ Blob が他のガイドやドラフト/公開版から参照されている可能性があり、参照追跡なしに消すと表示が壊れるため）。
 
@@ -152,6 +152,7 @@ pnpm exec tsx scripts/delete-orphan-blobs.ts --remote --apply  # 実際に削除
 ```
 
 - **参照判定は `scripts/lib/blob-refs.ts` に集約**している（Blob URL → pathname 変換・本文からの URL 抽出そのものは `app/lib/blob-url.ts` の `blobUrlToPathname` / `collectBlobPathnames` が実装元で、`cleanupGuideBlobs()` の削除判定とも共有している）。監査と削除で別実装にすると「監査では参照ありなのに削除側では孤児」という食い違いが画像消失に直結するため、必ずここを共有すること。走査対象には**ドラフト列（`draft_content` / `draft_cover_image_url`）を必ず含める**（公開版から消しただけでドラフトがまだ参照している状態がある）
+- **Blob の列挙（cursorページング）・バッチ削除（100件ずつ・バッチ単位で失敗続行）の実装は `app/lib/blob-storage.server.ts` に集約**している。`app/lib/content-cleanup.server.ts`（アプリ内の削除経路）と `scripts/lib/blob-refs.ts` / `scripts/delete-orphan-blobs.ts`（本スクリプト）の両方がこれを呼ぶ
 - 突き合わせは URL 文字列ではなく**パス（pathname）**。Blob の URL はストア ID をホスト名に含むため、文字列比較だとホストが変わった瞬間に全件を孤児と誤判定する
 - 削除スクリプトの安全装置:
   - **既定は dry-run**（`--apply` を付けたときだけ削除）
