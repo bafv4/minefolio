@@ -109,7 +109,9 @@ export function localeFromMatches(matches: ReadonlyArray<MetaMatch> | undefined)
  * 選択したロケールを保存する Set-Cookie の値。
  * この Cookie はサーバー側（resolveLocale）でのみ読むため常に HttpOnly。
  * Secure は https 配信時だけ付ける（ローカル開発の http では Cookie が保存されなくなるため、
- * 書き込み側でリクエストのプロトコルから判定して渡す）。
+ * 書き込み側で判定して渡す。判定は `request.url` のプロトコルではなく `APP_URL`（環境変数）基準で
+ * 行う — ランタイムが `request.url` を https で再構成する前提に依存すると、x-forwarded-proto を
+ * 反映しない構成で https 配信時でも Secure なし Cookie を無言で発行してしまうため）。
  */
 export function localeCookieValue(locale: Locale, { secure = false }: { secure?: boolean } = {}): string {
   return `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly${secure ? "; Secure" : ""}`;

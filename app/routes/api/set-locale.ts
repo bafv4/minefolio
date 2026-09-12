@@ -1,4 +1,5 @@
 // 表示ロケールを Cookie に保存し、元のページへ戻す。
+import { getEnv } from "@/lib/env.server";
 import { isLocale, localeCookieValue } from "@/lib/locale";
 
 export async function action({ request }: { request: Request }) {
@@ -32,7 +33,7 @@ export async function action({ request }: { request: Request }) {
     headers: {
       Location: redirectUrl,
       "Set-Cookie": localeCookieValue(locale, {
-        secure: new URL(request.url).protocol === "https:",
+        secure: getEnv().APP_URL.startsWith("https"),
       }),
     },
   });
