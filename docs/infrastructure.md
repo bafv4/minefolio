@@ -166,9 +166,15 @@ t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
 - ルート実装は `app/routes/privacy.tsx` / `app/routes/terms.tsx`。アイコン + h1 + prose シェル（`?raw` import + `react-markdown` + `remark-gfm` + `rehype-sanitize`、`prose prose-sm dark:prose-invert max-w-none`）は `/developers/api` `/developers/changelog` と共通の `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）を使う。OGP meta（title/description/og:image）の組み立ても5ページ共通で `app/lib/og-meta.ts`（`buildOgMeta`）を使う
 - 認証不要・`app/routes.ts` の公開レイアウト（`routes/_layout.tsx`）配下に登録
 
-### 冒頭のドラフトメモ（HTML コメント）
+### 外部送信規律（電気通信事業法 第27条の12）に基づく公表
 
-両 md ファイルの冒頭には、公開前に運営者が確認すべき事項を記した HTML コメント（`<!-- ... -->`）が入っている。
+- 本サイトは投稿・閲覧の「場」を提供するため同規律の対象になりうる。規律が求める「送信される情報の内容／送信先の名称／利用目的」の公表は、**別ページではなく `app/content/privacy.md` の「5. 利用者の端末から外部へ送信される情報」に同梱**している（フッターの「プライバシーポリシー」から1回の操作で到達でき、独立した章として先頭付近に置くことで「奥深くに埋め込む形式」を避けている）
+- 現時点の掲載対象（利用者の端末から直接送信されるものだけが対象。サーバー間通信は対象外）: Vercel Web Analytics（Cookie 不使用）、YouTube 埋め込みプレーヤー（`getYouTubeEmbedUrl()` と TipTap の YouTube 拡張は `youtube-nocookie.com` のプライバシー強化モードを使用。動画カードはクリックまで非読み込み）、Twitch 埋め込みプレーヤー（クリックまで非読み込み）
+- 解析タグ・埋め込みプレーヤー・外部配信のフォント/ウィジェット等、利用者の端末から外部へ情報を送信させる仕組みを追加・変更したら、privacy.md の「4.」の表と「5.」の一覧の両方を更新する（`.claude/rules/general.md`「ポリシー準拠」節、コミット時の `Policy-Revision` トレーラー参照）
+
+### 冒頭のメモ（HTML コメント）
+
+両 md ファイルの冒頭には、運営者向けのメモ（公開前の確認事項・メンテナンス注記）を記した HTML コメント（`<!-- ... -->`）が入っている。
 `react-markdown` は `allowDangerousHtml` を指定しない既定設定では mdast の `html` ノードをそのまま破棄する
 （`mdast-util-to-hast` の挙動）ため、このコメントは**レンダリング結果に一切出力されない**。今後この方式を変更する
 （`rehype-raw` の導入や `allowDangerousHtml: true` 化など）場合は、コメントが可視化されないことを都度確認すること。
