@@ -31,9 +31,9 @@ describe("getYouTubeVideoId", () => {
 });
 
 describe("getYouTubeEmbedUrl", () => {
-  it("embed URL へ変換し、変換できなければ null", () => {
+  it("プライバシー強化モードの embed URL へ変換し、変換できなければ null", () => {
     expect(getYouTubeEmbedUrl("https://www.youtube.com/live/dQw4w9WgXcQ")).toBe(
-      "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
     );
     expect(getYouTubeEmbedUrl("https://example.com/video")).toBeNull();
   });
