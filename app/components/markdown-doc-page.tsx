@@ -38,7 +38,13 @@ export function MarkdownDocPage({ icon: Icon, heading, markdown, backLink }: Mar
       </div>
 
       <article className="prose prose-sm dark:prose-invert max-w-none">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+        {/* ページタイトルは上の h1（アイコン付き）が担う。md 側の `# タイトル` は GitHub 等で
+            単体閲覧するときのために残しているので、描画時には出力しない（二重表示の防止） */}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeSanitize]}
+          components={{ h1: () => null }}
+        >
           {markdown}
         </ReactMarkdown>
       </article>
