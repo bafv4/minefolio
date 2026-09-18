@@ -518,6 +518,13 @@ sequenceDiagram
 | **Phase 2（Java 切替）** | 同じルートに `mode=java` を足し、XSTS の RelyingParty を `rp://api.minecraftservices.com/` に変え、`login_with_xbox` → `minecraft/profile` を追加。`set_mcid` の本人優先ロジック（§7.2）とセットで入れる | **Mojang 承認が下りていること** |
 | **Phase 3（任意）** | 検証済みユーザーの UUID → 現在名の定期追従 cron、検証済みのみを対象にした部分ユニーク制約の強化 | Phase 2 後 |
 
+**Phase 0 の実測スクリプト**: `scripts/probe-microsoft-auth.ts`
+（`pnpm exec tsx scripts/probe-microsoft-auth.ts --client-id <APP_ID> [--client-secret <SECRET>] [--java]`）。
+本番と同じ authorization code + PKCE の Web フローを localhost のコールバック（既定 `http://localhost:5180/callback`。
+Azure 側のリダイレクト URI に登録が必要）で受け、①同意 → ②トークン交換 → ③Xbox Live → ④XSTS（`http://xboxlive.com`、
+`gtg`/`umg`/`xid` の有無）を順に判定する。`--java` を付けると ⑤XSTS（`rp://api.minecraftservices.com/`）→
+⑥`login_with_xbox`（未承認なら 403）→ ⑦`minecraft/profile` → ⑧`entitlements/mcstore` まで試す。トークンは保存せず、表示もマスクする。
+
 Phase 1 → 2 の差分はトークン交換の末尾2ステップと DB 更新先だけなので、**`verifyOwnership(accessToken, mode)` の内部分岐として最初から設計しておけば切り替えコストは小さい**。
 
 ### 担当の割り当て（`.claude/rules/README.md` のルーティング表より）
