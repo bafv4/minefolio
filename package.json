@@ -2,7 +2,7 @@
   "name": "minefolio",
   "private": false,
   "license": "Apache-2.0",
-  "version": "v1.12.7",
+  "version": "v1.13.0",
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
