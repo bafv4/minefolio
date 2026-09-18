@@ -61,6 +61,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -397,6 +408,44 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     return { success: true, action: "mcid_removed", newSlug };
+  }
+
+  // Bedrock版MCID（Xboxゲーマータグ）の設定/変更
+  // 自己申告の表示用テキスト。所有確認APIが存在しないためMojang検証は行わず、
+  // uuid・スキン・slug などJava MCIDに紐づく処理には一切関与させない（slugは変わらない）
+  if (actionType === "set_bedrock_mcid") {
+    const bedrockMcid = (formData.get("bedrockMcid") as string)?.trim();
+
+    if (!bedrockMcid) {
+      return { error: t("meEdit.bedrockMcidRequired"), action: "bedrock_mcid" };
+    }
+
+    // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
+    if (bedrockMcid.length < 3 || bedrockMcid.length > 24) {
+      return { error: t("meEdit.bedrockMcidLength"), action: "bedrock_mcid" };
+    }
+
+    // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
+    if (/[\u0000-\u001f\u007f]/.test(bedrockMcid)) {
+      return { error: t("meEdit.bedrockMcidInvalid"), action: "bedrock_mcid" };
+    }
+
+    await db
+      .update(users)
+      .set({ bedrockMcid, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    return { success: true, action: "bedrock_mcid" };
+  }
+
+  // Bedrock版MCID削除
+  if (actionType === "remove_bedrock_mcid") {
+    await db
+      .update(users)
+      .set({ bedrockMcid: null, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    return { success: true, action: "bedrock_mcid_removed" };
   }
 
   // ソーシャルリンクの操作
@@ -1115,15 +1164,18 @@ export default function EditProfilePage() {
   const deleteFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const mcidFetcher = useFetcher<typeof action>();
+  const bedrockMcidFetcher = useFetcher<typeof action>();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMcidDialogOpen, setIsMcidDialogOpen] = useState(false);
+  const [isBedrockMcidDialogOpen, setIsBedrockMcidDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<typeof links[0] | null>(null);
   const [editingVideo, setEditingVideo] = useState<typeof videos[0] | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [newMcid, setNewMcid] = useState("");
+  const [newBedrockMcid, setNewBedrockMcid] = useState("");
   const [selectedPose, setSelectedPose] = useState<PoseName>(
     (user.profilePose as PoseName) ?? "waving"
   );
@@ -1307,18 +1359,21 @@ export default function EditProfilePage() {
   const isDeleting = deleteFetcher.state === "submitting";
   const isImporting = importFetcher.state === "submitting";
   const isMcidSubmitting = mcidFetcher.state === "submitting";
+  const isBedrockMcidSubmitting = bedrockMcidFetcher.state === "submitting";
   const data = fetcher.data;
   const linkData = linkFetcher.data;
   const videoData = videoFetcher.data;
   const deleteData = deleteFetcher.data;
   const importData = importFetcher.data;
   const mcidData = mcidFetcher.data;
+  const bedrockMcidData = bedrockMcidFetcher.data;
 
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const prevLinkDataRef = useRef<typeof linkFetcher.data>(undefined);
   const prevVideoDataRef = useRef<typeof videoFetcher.data>(undefined);
   const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
   const prevMcidDataRef = useRef<typeof mcidFetcher.data>(undefined);
+  const prevBedrockMcidDataRef = useRef<typeof bedrockMcidFetcher.data>(undefined);
 
   // 保存成功後に初期値を更新
   useEffect(() => {
@@ -1413,6 +1468,20 @@ export default function EditProfilePage() {
       window.location.reload();
     }
   }, [mcidData]);
+
+  // Bedrock版MCID変更結果のトースト（slugは変わらないためリロードは不要）
+  useEffect(() => {
+    if (!bedrockMcidData || bedrockMcidData === prevBedrockMcidDataRef.current) return;
+    prevBedrockMcidDataRef.current = bedrockMcidData;
+
+    if ("success" in bedrockMcidData && bedrockMcidData.action === "bedrock_mcid") {
+      toast.success(t("meEdit.bedrockMcidChanged"));
+      setIsBedrockMcidDialogOpen(false);
+      setNewBedrockMcid("");
+    } else if ("success" in bedrockMcidData && bedrockMcidData.action === "bedrock_mcid_removed") {
+      toast.success(t("meEdit.bedrockMcidRemoved"));
+    }
+  }, [bedrockMcidData]);
 
   const handleOpenCreate = () => {
     setEditingLink(null);
@@ -1623,6 +1692,121 @@ export default function EditProfilePage() {
                   </Dialog>
                 </div>
               )}
+            </div>
+
+            <Separator />
+
+            {/* Bedrock版MCID（Xboxゲーマータグ）。自己申告のためMojang検証はせず、slug・スキンには影響しない */}
+            <div className="space-y-3">
+              <Label>{t("meEdit.bedrockMcidTitle")}</Label>
+              <p className="text-sm text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
+              <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
+                {user.bedrockMcid ? (
+                  <p className="min-w-0 truncate font-medium">@{user.bedrockMcid}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("meEdit.bedrockMcidNotConfigured")}</p>
+                )}
+                <div className="flex shrink-0 gap-2">
+                  <Dialog
+                    open={isBedrockMcidDialogOpen}
+                    onOpenChange={(open) => {
+                      setIsBedrockMcidDialogOpen(open);
+                      if (open) {
+                        setNewBedrockMcid(user.bedrockMcid ?? "");
+                      } else {
+                        setNewBedrockMcid("");
+                      }
+                    }}
+                  >
+                    <DialogTrigger asChild>
+                      <Button variant={user.bedrockMcid ? "outline" : "default"} size="sm">
+                        {user.bedrockMcid ? (
+                          <Pencil className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Plus className="mr-2 h-4 w-4" />
+                        )}
+                        {user.bedrockMcid ? t("meEdit.change") : t("meEdit.setBedrockMcid")}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {user.bedrockMcid
+                            ? t("meEdit.changeBedrockMcidTitle")
+                            : t("meEdit.setBedrockMcidTitle")}
+                        </DialogTitle>
+                        <DialogDescription>{t("meEdit.setBedrockMcidDesc")}</DialogDescription>
+                      </DialogHeader>
+                      <bedrockMcidFetcher.Form method="post">
+                        <input type="hidden" name="_action" value="set_bedrock_mcid" />
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="new-bedrock-mcid">{t("meEdit.newBedrockMcid")}</Label>
+                            <Input
+                              id="new-bedrock-mcid"
+                              name="bedrockMcid"
+                              value={newBedrockMcid}
+                              onChange={(e) => setNewBedrockMcid(e.target.value)}
+                              placeholder={t("meEdit.bedrockMcidExample")}
+                              minLength={3}
+                              maxLength={24}
+                            />
+                          </div>
+                          {bedrockMcidData &&
+                            "error" in bedrockMcidData &&
+                            bedrockMcidData.action === "bedrock_mcid" && (
+                              <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>{bedrockMcidData.error}</AlertDescription>
+                              </Alert>
+                            )}
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            type="submit"
+                            disabled={isBedrockMcidSubmitting || !newBedrockMcid.trim()}
+                          >
+                            {isBedrockMcidSubmitting ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            {t("meEdit.saveBedrockMcid")}
+                          </Button>
+                        </DialogFooter>
+                      </bedrockMcidFetcher.Form>
+                    </DialogContent>
+                  </Dialog>
+                  {user.bedrockMcid && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="sm" disabled={isBedrockMcidSubmitting}>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {t("meEdit.delete")}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t("meEdit.removeBedrockMcidTitle")}</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t("meEdit.removeBedrockMcidConfirm")}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("meEdit.cancel")}</AlertDialogCancel>
+                          <bedrockMcidFetcher.Form method="post">
+                            <input type="hidden" name="_action" value="remove_bedrock_mcid" />
+                            <AlertDialogAction
+                              type="submit"
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {t("meEdit.delete")}
+                            </AlertDialogAction>
+                          </bedrockMcidFetcher.Form>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
+              </div>
             </div>
 
             <Separator />

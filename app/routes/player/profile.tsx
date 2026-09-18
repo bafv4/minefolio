@@ -1102,6 +1102,11 @@ export default function PlayerProfilePage() {
           <div className="text-left">
             <p className="font-medium text-sm">{playerName}</p>
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
+            {player.bedrockMcid && (
+              <p className="text-xs text-muted-foreground">
+                {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
+              </p>
+            )}
           </div>
         </div>
         {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
@@ -1154,6 +1159,11 @@ export default function PlayerProfilePage() {
               <div className="text-left min-w-0 flex-1">
                 <p className="font-medium text-sm truncate">{playerName}</p>
                 {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
+                {player.bedrockMcid && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
+                  </p>
+                )}
                 {player.shortBio && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
                 )}
@@ -1349,6 +1359,11 @@ export default function PlayerProfilePage() {
                       <p className="text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
                     )}
                     {player.mcid && <p className="text-muted-foreground">@{player.mcid}</p>}
+                    {player.bedrockMcid && (
+                      <p className="text-muted-foreground">
+                        {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
+                      </p>
+                    )}
                     {player.shortBio && (
                       <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
                     )}

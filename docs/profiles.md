@@ -15,6 +15,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `id` | text (PK) | CUID2で自動生成 |
 | `discordId` | text (unique, NOT NULL) | Discord OAuth ID |
 | `mcid` | text (unique, nullable) | Minecraft Java Edition ID |
+| `bedrockMcid` | text (nullable) | Bedrock Edition の MCID（Xbox ゲーマータグ）。自己申告の表示用テキストで **Mojang 検証なし・UNIQUE なし**。`slug` / `uuid` / スキン / PaceMan などには一切関与しない |
 | `uuid` | text (unique, nullable) | Minecraft UUID |
 | `slug` | text (unique, NOT NULL) | URL用スラッグ |
 | `displayName` | text | 表示名 |
@@ -570,6 +571,14 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 （`playerProfile.noMcidNote`）を中央寄せ・`text-xs text-muted-foreground` で添える。3D 表示のダイアログは開けない
 （見るべきスキンが無いため、トリガーごと出さない）。`uuid` か `customSkinUrl` のどちらかがある場合は従来どおり。
 
+### Bedrock版 MCID の表示
+
+`bedrockMcid` が登録されている場合、`/player/:slug` の3箇所（モバイルのタブ選択ボタン・デスクトップサイドバーの
+プロフィールタブ・ヘッダーカードの基本情報）で、Java版 MCID の `@{mcid}` 行と同じ `text-muted-foreground` の
+スタイルで `playerProfile.bedrockMcidLine`（ja: `Bedrock版: {id}` / en: `Bedrock: {id}`）を追加表示する。
+Java版 MCID が未登録で Bedrock版だけがある場合も、その行だけを表示する。
+OGP画像・`/compare`・`/browse` のカードは対象外。
+
 ### RTA歴
 
 `rtaStartedYearMonth` を登録している場合のみ、基本情報のメタ情報行（居住地・代名詞と同じ並び）に History アイコン付きで表示する。文言の組み立ては `app/lib/rta-career.ts`（`rtaCareerView()` / `rtaCareerLabel()` / `rtaCareerExactLabel()`）に集約されており、プロフィール・比較ページ（[`docs/browse-compare.md`](./browse-compare.md#プレイヤー比較-compare)）の双方から共有する。
@@ -633,6 +642,20 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
 
 「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
+
+### Bedrock版 MCID（Xbox ゲーマータグ）
+
+「MCID・スキン」カードの Java版 MCID ブロックの下で登録・変更・削除する。
+
+- action: `set_bedrock_mcid`（`bedrockMcid`）/ `remove_bedrock_mcid`。`users.bedrockMcid` を更新するだけで、
+  `recordSlugChange` などの slug 関連処理・Mojang 検証・YouTubeキャッシュ追従は**一切呼ばない**
+- **Mojang 検証はしない**（Xbox ゲーマータグの所有確認 API が存在しないため）。あくまで自己申告の表示用テキスト
+- **重複チェックもしない**（未検証値のため UNIQUE 制約も張っていない）
+- 検証: `trim` 後 3〜24文字（ゲーマータグ最大12文字＋新形式の `#1234` サフィックスを見込んだ上限）。
+  制御文字（`U+0000`〜`U+001F` / `U+007F`）を含む場合のみ拒否し、それ以外の文字種は制限しない
+- **`slug`・`uuid`・スキン表示には影響しない**（プロフィールURLは変わらない）。そのため Java版 MCID 変更時のような
+  URL変更警告・ページリロードは行わず、トーストのみで完結する
+- 削除は `AlertDialog` の確認を挟む
 
 ### 代名詞（pronouns）の入力
 
