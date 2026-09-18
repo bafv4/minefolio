@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from "react";
-import { getRenderableAvatar, renderAvatar } from "@/lib/avatar-cache";
+import { getRenderableAvatar, isMissingSkinSource, renderAvatar, NO_MCID_FACE_URL } from "@/lib/avatar-cache";
 import { useT } from "@/hooks/use-locale";
 
 interface MinecraftAvatarProps {
@@ -20,16 +20,30 @@ const MinecraftAvatarComponent = ({
   className = "",
 }: MinecraftAvatarProps) => {
   const t = useT();
+  // MCID未登録（uuid も customSkinUrl も無い）はスキンPNGが存在しないため、
+  // 頭部を切り出すキャッシュ経路を通さずプレースホルダーSVGをそのまま <img> で描く
+  const missingSkinSource = isMissingSkinSource({ uuid, skinUrl });
+  const altText = missingSkinSource
+    ? t("fullbodyViewer.noMcidAvatarLabel")
+    : mcid
+      ? t("fullbodyViewer.avatarLabelOf", { name: mcid })
+      : t("fullbodyViewer.avatarLabel");
   // スキンが取得済み（別サイズ・別ページ含む）なら初期描画から即座に表示（ちらつき防止）
   const [imgSrc, setImgSrc] = useState<string | null>(
-    () => getRenderableAvatar({ uuid, skinUrl, size, overlay }) ?? null
+    () => (missingSkinSource ? null : getRenderableAvatar({ uuid, skinUrl, size, overlay }) ?? null)
   );
   const [isLoading, setIsLoading] = useState(
-    () => !getRenderableAvatar({ uuid, skinUrl, size, overlay })
+    () => !missingSkinSource && !getRenderableAvatar({ uuid, skinUrl, size, overlay })
   );
   const [error, setError] = useState(false);
 
+  // 他のアバターと見かけの大きさを揃えるための内側余白（composite() と同じ 5%）
+  const padding = Math.ceil(size * 0.05);
+  const drawArea = size - padding * 2;
+
   useEffect(() => {
+    if (missingSkinSource) return;
+
     let cancelled = false;
 
     const cached = getRenderableAvatar({ uuid, skinUrl, size, overlay });
@@ -59,7 +73,7 @@ const MinecraftAvatarComponent = ({
     return () => {
       cancelled = true;
     };
-  }, [uuid, skinUrl, size, overlay]);
+  }, [uuid, skinUrl, size, overlay, missingSkinSource]);
 
   return (
     <div
@@ -70,10 +84,29 @@ const MinecraftAvatarComponent = ({
         position: "relative",
       }}
     >
-      {imgSrc && !isLoading && (
+      {missingSkinSource && (
+        <img
+          src={NO_MCID_FACE_URL}
+          alt={altText}
+          width={drawArea}
+          height={drawArea}
+          style={{
+            imageRendering: "pixelated",
+            width: drawArea,
+            height: drawArea,
+            position: "absolute",
+            top: padding,
+            left: padding,
+            backgroundColor: "transparent",
+            filter:
+              "drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28))",
+          }}
+        />
+      )}
+      {!missingSkinSource && imgSrc && !isLoading && (
         <img
           src={imgSrc}
-          alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
+          alt={altText}
           width={size}
           height={size}
           style={{

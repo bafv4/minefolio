@@ -680,6 +680,7 @@ export const PAGES_JA = {
   playerProfile: {
     viewSkin3d: "スキンを 3D で表示",
     skinDialogTitle: "{name} のスキン",
+    noMcidNote: "このユーザーはMCIDを登録していません",
     noGuidesTitle: "ガイドがありません",
     noGuidesDescription: "このプレイヤーはまだガイドを公開していません。",
     /** プラットフォーム名（me/edit の選択肢と共有） */
@@ -2245,6 +2246,7 @@ export const PAGES_JA = {
   fullbodyViewer: {
     avatarLabel: "Minecraftアバター",
     avatarLabelOf: "{name}のMinecraftアバター",
+    noMcidAvatarLabel: "MCID未登録プレイヤーのアバター",
     showHint: "操作ヒントを表示",
     hideHint: "操作ヒントを閉じる",
     reset: "表示をリセット",

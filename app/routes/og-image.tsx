@@ -5,7 +5,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/schema";
 import { createDb } from "@/lib/db";
-import { fetchSkinFaceDataUrl } from "@/lib/skin-face.server";
+import { fetchNoMcidFaceDataUrl, fetchSkinFaceDataUrl } from "@/lib/skin-face.server";
 
 // OGP画像に入るブランド文字列（全画像で表記を統一する）
 const OG_BRAND = "Minefolio";
@@ -213,7 +213,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // アプリの一覧と同じく、スキンPNGから顔（正面 + 帽子レイヤー）を合成する。
   // /api/skin がカスタムスキン > Mojang > Steve の順で解決するため、カスタムスキンも反映される。
-  const avatarDataUrl = await fetchSkinFaceDataUrl(origin, user.id, 180);
+  // MCID未登録（uuid も customSkinUrl も無い）は /api/skin では判別できない（Steve が返る）ため、
+  // ここで判定してアプリ側と同じプレースホルダーの顔を使う。
+  const avatarDataUrl = user.uuid || user.customSkinUrl
+    ? await fetchSkinFaceDataUrl(origin, user.id, 180)
+    : await fetchNoMcidFaceDataUrl(origin);
 
   return generatePlayerOgp({
     origin,

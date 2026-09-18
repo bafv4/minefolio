@@ -1091,23 +1091,14 @@ export default function PlayerProfilePage() {
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
       >
         <div className="flex items-center gap-3">
-          {player.uuid ? (
-            <MinecraftAvatar
-              uuid={player.uuid}
-              skinUrl={player.customSkinUrl}
-              mcid={player.mcid}
-              size={32}
-              className="rounded"
-            />
-          ) : player.discordAvatar ? (
-            <img
-              src={player.discordAvatar}
-              alt={playerName}
-              className="w-8 h-8 rounded"
-            />
-          ) : (
-            <div className="w-8 h-8 bg-muted rounded" />
-          )}
+          {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く */}
+          <MinecraftAvatar
+            uuid={player.uuid}
+            skinUrl={player.customSkinUrl}
+            mcid={player.mcid}
+            size={32}
+            className="rounded"
+          />
           <div className="text-left">
             <p className="font-medium text-sm">{playerName}</p>
             {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
@@ -1153,23 +1144,13 @@ export default function PlayerProfilePage() {
               value="profile"
               className="h-auto w-full justify-start gap-3 rounded-md px-3 py-3 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
             >
-              {player.uuid ? (
-                <MinecraftAvatar
-                  uuid={player.uuid}
-                  skinUrl={player.customSkinUrl}
-                  mcid={player.mcid}
-                  size={40}
-                  className="rounded shrink-0"
-                />
-              ) : player.discordAvatar ? (
-                <img
-                  src={player.discordAvatar}
-                  alt={playerName}
-                  className="w-10 h-10 rounded shrink-0"
-                />
-              ) : (
-                <div className="w-10 h-10 bg-muted rounded shrink-0" />
-              )}
+              <MinecraftAvatar
+                uuid={player.uuid}
+                skinUrl={player.customSkinUrl}
+                mcid={player.mcid}
+                size={40}
+                className="rounded shrink-0"
+              />
               <div className="text-left min-w-0 flex-1">
                 <p className="font-medium text-sm truncate">{playerName}</p>
                 {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
@@ -1275,11 +1256,13 @@ export default function PlayerProfilePage() {
           <Card className="py-5">
             <CardContent className="px-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-                {/* Skin - only show when uuid exists */}
-                {player.uuid && (() => {
+                {/* Skin - uuid か customSkinUrl があれば従来どおり。どちらも無い（MCID未登録）なら
+                    黒スキンのプレースホルダーを静止画で出し、直下に注釈を添える（3D 閲覧は無し） */}
+                {player.uuid || player.customSkinUrl ? (() => {
                   // 静止画と interactive で共通の MinecraftFullBody プロパティ
                   const skinProps = {
-                    uuid: player.uuid,
+                    // customSkinUrl だけのユーザーもここに来るので uuid は null を許容する
+                    uuid: player.uuid ?? undefined,
                     skinUrl: player.customSkinUrl ?? undefined,
                     mcid: player.mcid ?? undefined,
                     pose: (player.profilePose as PoseName) ?? "waving",
@@ -1335,7 +1318,27 @@ export default function PlayerProfilePage() {
                       </Dialog>
                     </div>
                   );
-                })()}
+                })() : (
+                  <div className="flex justify-center sm:justify-start shrink-0">
+                    <div className="flex flex-col items-center gap-2">
+                      <MinecraftFullBody
+                        pose={(player.profilePose as PoseName) ?? "waving"}
+                        angle={-35}
+                        elevation={5}
+                        zoom={0.9}
+                        width={skinViewSize.width}
+                        height={skinViewSize.height}
+                        asImage
+                      />
+                      <p
+                        className="max-w-full text-center text-xs text-muted-foreground"
+                        style={{ width: skinViewSize.width }}
+                      >
+                        {t("playerProfile.noMcidNote")}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Info */}
                 <div className="flex-1 space-y-4">

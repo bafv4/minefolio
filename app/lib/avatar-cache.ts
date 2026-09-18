@@ -12,11 +12,29 @@ const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 const HEAD_BASE = { x: 8, y: 8, width: 8, height: 8 };
 const HEAD_OVERLAY = { x: 40, y: 8, width: 8, height: 8 };
 
+/**
+ * MCID未登録ユーザー向けの顔プレースホルダー（16x16・ラッキーブロック風の「?」ブロック。色は --brand 基調）。
+ * 実体は手描きのドット絵 SVG（public/skins/no-mcid-face.svg）。
+ *
+ * この画像は**このキャッシュを通さず** MinecraftAvatar が <img> で直接描画する。
+ * スキンPNGから頭部を切り出す必要がなく、ベクタなので任意サイズでそのまま綺麗に出せるため
+ * （canvas 経由にすると SVG のラスタライズ挙動がブラウザ依存になる）。
+ */
+export const NO_MCID_FACE_URL = "/skins/no-mcid-face.svg";
+
 export interface RenderAvatarOptions {
   uuid: string | null | undefined;
   skinUrl?: string | null;
   size?: number;
   overlay?: boolean;
+}
+
+/**
+ * MCID未登録（Mojang の UUID もカスタムスキンも無い）かどうか。
+ * この場合だけ Steve ではなく NO_MCID_FACE_URL のプレースホルダーを表示する（描画は呼び出し側）。
+ */
+export function isMissingSkinSource({ uuid, skinUrl }: RenderAvatarOptions): boolean {
+  return !uuid && !skinUrl;
 }
 
 // スキン画像キャッシュ（キー: 解決済みスキンURL）— サイズ非依存
@@ -198,6 +216,8 @@ export function warmAvatars(
   (async () => {
     for (const player of players) {
       if (cancelled) break;
+      // MCID未登録はこのキャッシュを使わず <img> で直接描画するため、ウォームアップ不要
+      if (isMissingSkinSource({ uuid: player.uuid, skinUrl: player.customSkinUrl })) continue;
       try {
         await loadSkin({ uuid: player.uuid, skinUrl: player.customSkinUrl });
       } catch {

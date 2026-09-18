@@ -7,6 +7,13 @@ import { useT } from "@/hooks/use-locale";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 
+/**
+ * MCID未登録（uuid も skinUrl も無い）ユーザー向けの全身プレースホルダー。
+ * default モデルのベースレイヤーだけを黒（#1a1a1a）で塗った 64x64 スキン。
+ * 生成元は scripts/generate-placeholder-skins.ts。
+ */
+const NO_MCID_SKIN_URL = "/skins/no-mcid.png";
+
 const ICON_BUTTON_CLASS =
   "flex items-center justify-center w-7 h-7 rounded-full border transition-colors backdrop-blur-sm";
 
@@ -181,7 +188,16 @@ const MinecraftFullBodyComponent = ({
   showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
   const t = useT();
-  const skinIdentifier = skinUrl || uuid || STEVE_UUID;
+  // MCID未登録はプレースホルダーの黒スキン（default モデル固定）を表示する。
+  // skinIdentifier が Steve と別URLになるため、静止画キャッシュキーも衝突しない。
+  const missingSkinSource = !uuid && !skinUrl;
+  const effectiveSlim = missingSkinSource ? false : slim;
+  const skinIdentifier = skinUrl || uuid || (missingSkinSource ? NO_MCID_SKIN_URL : STEVE_UUID);
+  const avatarLabel = missingSkinSource
+    ? t("fullbodyViewer.noMcidAvatarLabel")
+    : mcid
+      ? t("fullbodyViewer.avatarLabelOf", { name: mcid })
+      : t("fullbodyViewer.avatarLabel");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -191,7 +207,7 @@ const MinecraftFullBodyComponent = ({
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
 
-  const requestKey = getRequestKey(skinIdentifier, pose, angle, elevation, zoom, background, walk, run, rotate, slim);
+  const requestKey = getRequestKey(skinIdentifier, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveSlim);
   // imageEntry が現在の props に対応していない場合（uuid/skinUrl 変更直後など）は無効化し、
   // 前ユーザーの静止画をそのまま表示し続けないようにする
   const imageSrc = effectiveAsImage && imageEntry?.requestKey === requestKey ? imageEntry.src : null;
@@ -201,7 +217,7 @@ const MinecraftFullBodyComponent = ({
     if (!canvas) return;
 
     if (effectiveAsImage) {
-      const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
+      const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim);
       const cachedImage = getCachedImage(cacheKey);
       if (cachedImage) {
         setImageEntry({ requestKey, src: cachedImage });
@@ -244,9 +260,9 @@ const MinecraftFullBodyComponent = ({
           return true;
         };
 
-        // スキンURLを決定（カスタムスキンURL > UUID > Steve）
-        const skinModel = slim ? "slim" : "default";
-        const skinUrlToLoad = skinUrl || (uuid ? `/api/skin?uuid=${uuid}` : `/api/skin?uuid=${STEVE_UUID}`);
+        // スキンURLを決定（カスタムスキンURL > UUID > MCID未登録のプレースホルダー）
+        const skinModel = effectiveSlim ? "slim" : "default";
+        const skinUrlToLoad = skinUrl || (uuid ? `/api/skin?uuid=${uuid}` : NO_MCID_SKIN_URL);
 
         try {
           await viewer.loadSkin(skinUrlToLoad, { model: skinModel });
@@ -332,7 +348,7 @@ const MinecraftFullBodyComponent = ({
 
           const dataUrl = canvas.toDataURL("image/png");
 
-          const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, slim);
+          const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim);
           setCachedImage(cacheKey, dataUrl);
 
           setImageEntry({ requestKey, src: dataUrl });
@@ -358,7 +374,7 @@ const MinecraftFullBodyComponent = ({
       }
     };
     // skinIdentifier / requestKey は uuid/skinUrl 等（すべて依存配列に列挙済み）から派生する値なので除外。
-    // interactive は effectiveAsImage に内包されるので除外。
+    // interactive は effectiveAsImage に内包されるので除外。effectiveSlim は uuid/skinUrl/slim 由来なので除外。
     // width/height は別 effect で setSize() を呼んで再初期化を回避するため依存に含めない。
   }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim]);
 
@@ -434,7 +450,7 @@ const MinecraftFullBodyComponent = ({
         {imageSrc ? (
           <img
             src={imageSrc}
-            alt={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
+            alt={avatarLabel}
             width={width}
             height={height}
             className={className}
@@ -478,7 +494,7 @@ const MinecraftFullBodyComponent = ({
           touchAction: interactive ? "none" : undefined,
           cursor: interactive ? "grab" : undefined,
         }}
-        aria-label={mcid ? t("fullbodyViewer.avatarLabelOf", { name: mcid }) : t("fullbodyViewer.avatarLabel")}
+        aria-label={avatarLabel}
       />
       {isLoading && skeleton}
 

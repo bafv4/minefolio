@@ -512,6 +512,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   fullbodyViewer: {
     avatarLabel: "Minecraft avatar",
     avatarLabelOf: "{name}'s Minecraft avatar",
+    noMcidAvatarLabel: "Avatar for a player without an MCID",
     showHint: "Show controls",
     hideHint: "Hide controls",
     reset: "Reset view",
@@ -704,6 +705,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   playerProfile: {
     viewSkin3d: "View skin in 3D",
     skinDialogTitle: "{name}'s skin",
+    noMcidNote: "This user hasn't registered an MCID",
     noGuidesTitle: "No guides",
     noGuidesDescription: "This player hasn't published any guides yet.",
     platformPcWindows: "PC (Windows)",

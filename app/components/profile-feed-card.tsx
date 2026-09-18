@@ -49,13 +49,8 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
       {/* flex-1 でヘッダー側が余白を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
       <div className="flex flex-1 items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
-          {player.uuid ? (
-            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-semibold text-muted-foreground">
-              {displayName[0]?.toUpperCase() ?? "?"}
-            </div>
-          )}
+          {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く */}
+          <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={48} />
         </div>
         {/* min-h-12 keeps header block height == avatar height, so rows stay aligned across cards
             even when optional fields (@mcid / bio) are missing */}
@@ -126,13 +121,7 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
       className="flex items-center gap-3 py-3 px-1 -mx-1 rounded hover:bg-muted/50 transition-colors group"
     >
       <div className="h-9 w-9 shrink-0 rounded-lg overflow-hidden">
-        {player.uuid ? (
-          <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={36} />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-muted text-xs font-semibold text-muted-foreground">
-            {displayName[0]?.toUpperCase() ?? "?"}
-          </div>
-        )}
+        <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={36} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">

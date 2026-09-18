@@ -320,6 +320,29 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 レスポンスヘッダ: `Cache-Control: public, max-age=3600` (1時間)
 
+**MCID未登録ユーザーの扱いは表示側で分岐する。** `/api/skin` は `uuid` も `customSkinUrl` も無いユーザーに対しても
+Steve を返す（この API の挙動は変えていない）。「MCID未登録（`uuid` も `customSkinUrl` も無い）」の判定と
+プレースホルダー表示は、この API を呼ぶ前に表示側（`MinecraftAvatar` / `MinecraftFullBody` / OGP生成）で行う。
+
+### MCID未登録ユーザーのプレースホルダー
+
+`uuid` も `customSkinUrl` も無いユーザーは Steve ではなく専用のプレースホルダーを表示する
+（カスタムスキンは MCID 無しでもアップロードできるため、`customSkinUrl` があればそちらを従来どおり表示する）。
+
+| 用途 | アセット | 内容 |
+|---|---|---|
+| 顔（`MinecraftAvatar`・OGPのアバター） | `public/skins/no-mcid-face.svg` | 16x16。ラッキーブロック風の「?」ブロックのドット絵（色は `--brand` 基調の緑）。1px ごとの `<rect>` を手描きした SVG |
+| 全身（`/player/:slug` プロフィールタブ） | `public/skins/no-mcid.png` | 64x64。default モデルのベースレイヤーだけを `#1a1a1a` で塗り、オーバーレイ層は透明 |
+
+- どちらもオリジナルのピクセルアート（第三者 Mod のテクスチャは使わない）
+- **顔（SVG）は手描きなので直接編集する**。`shape-rendering="crispEdges"` と `width`/`height` 属性（intrinsic size 16x16）は
+  拡大表示・OGP 合成の前提なので外さないこと
+- **黒スキン（PNG）は `scripts/generate-placeholder-skins.ts` が生成する**（`pnpm exec tsx scripts/generate-placeholder-skins.ts`。出力は決定的）。
+  skinview3d のテクスチャはラスタでないと扱えないため PNG のまま。生成物もリポジトリに含める
+- 配信は `public/` の静的配信に任せる（専用のキャッシュヘッダ設定は持たない）
+- **`uuid` か `customSkinUrl` のどちらかがあるユーザーの挙動は従来どおり**。読み込み失敗時の Steve フォールバックも維持する
+  （ただしプレースホルダー自体の読み込みに失敗した場合は、顔の切り出し方が異なるため Steve へは落とさない）
+
 ---
 
 ## スキン表示コンポーネント
@@ -342,6 +365,13 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 3. 読み込み失敗時は `/api/skin?uuid={STEVE_UUID}` にフォールバック
 4. ベースレイヤー (8x8, 座標 8,8) + オーバーレイレイヤー (8x8, 座標 40,8) を合成
 5. ドロップシャドウ付きで描画
+
+**MCID未登録（`uuid` も `skinUrl` も無い）の場合は上記の canvas 経路を通らない。**
+`MinecraftAvatar` が `/skins/no-mcid-face.svg` を `<img>` で直接描画する（`imageRendering: pixelated`・
+同じドロップシャドウ・`composite()` と同じ5%の内側余白で、他のアバターと見かけの大きさを揃える）。
+切り出す頭部が無い上、ベクタなので任意サイズでそのまま綺麗に出せる（canvas に通すと SVG のラスタライズ挙動が
+ブラウザ依存になる）ため。判定と URL は `app/lib/avatar-cache.ts` の `isMissingSkinSource()` / `NO_MCID_FACE_URL`。
+`warmAvatars()` は未登録ユーザーをスキップする。
 
 ### `MinecraftFullBody`
 
@@ -367,6 +397,10 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 ポーズ種別: `standing`, `walking`, `running`, `waving`, `sitting`, `custom`
 
+スキンURLの決定: `skinUrl` > `/api/skin?uuid={uuid}` > `/skins/no-mcid.png`（`uuid` も `skinUrl` も無い場合）。
+プレースホルダー時は `slim` を無視して default モデルで読み込む。静止画キャッシュキーに使う識別子も
+`/skins/no-mcid.png` になるため、Steve の静止画とは衝突しない。読み込み自体に失敗した場合のみ Steve に落とす。
+
 #### 静止画像モード (`asImage: true`)
 
 - レンダリング後に Canvas を PNG 化して `<img>` として出力
@@ -391,7 +425,7 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 
 #### i18n
 
-`fullbodyViewer.*`（`avatarLabel` / `avatarLabelOf` / `showHint` / `hideHint` / `reset` / `hintText`）に集約。
+`fullbodyViewer.*`（`avatarLabel` / `avatarLabelOf` / `noMcidAvatarLabel` / `showHint` / `hideHint` / `reset` / `hintText`）に集約。
 
 ---
 
@@ -519,7 +553,8 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ### スキン表示
 
-`/player/:slug` ではスキン全身表示を **インタラクティブモード**（`interactive` + `showInteractiveHint`）で描画する。サイズはレスポンシブ：
+`/player/:slug` のプロフィールタブでは、ページ上は**静止画**（`asImage`）で描画し、クリックでダイアログを開いたときだけ
+**インタラクティブモード**（`interactive` + `showInteractiveHint`）をマウントする（WebGL を常駐させないため）。サイズはレスポンシブ：
 
 | 画面幅 | サイズ |
 |---|---|
@@ -529,6 +564,11 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 判定には `app/hooks/use-media-query.ts` の `useMediaQuery(query, ssrDefault)` フックを使用。SSR セーフ。
 
 スキンと右側の基本情報は `flex-col sm:flex-row sm:items-center` で、デスクトップ時は上下中央揃え。
+
+**MCID未登録（`uuid` も `customSkinUrl` も無い）の場合**は、スキン領域を消さずに黒スキンのプレースホルダー
+（`/skins/no-mcid.png`）を静止画で表示し、その直下に注釈「このユーザーはMCIDを登録していません」
+（`playerProfile.noMcidNote`）を中央寄せ・`text-xs text-muted-foreground` で添える。3D 表示のダイアログは開けない
+（見るべきスキンが無いため、トリガーごと出さない）。`uuid` か `customSkinUrl` のどちらかがある場合は従来どおり。
 
 ### RTA歴
 
@@ -647,14 +687,20 @@ Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` の2 prefix 配下
 **プレイヤーOGP** (`mcid` または `slug` あり):
 - アバター画像 + 表示名 + MCID + ロールバッジ + エディションバッジ + bio
 
-### アバター画像取得の優先順位
+### アバター画像の生成
 
-1. Discordアバター (`cdn.discordapp.com/avatars/{discordId}/{hash}.png`)
-2. Crafatar (`crafatar.com/avatars/{uuid}`)
-3. mc-heads.net (`mc-heads.net/avatar/{uuid}`)
-4. minotar.net (`minotar.net/avatar/{uuid}`)
+顔は `app/lib/skin-face.server.ts` が純JS（`pngjs`）で合成する。WebGL / Canvas の無い OGP 生成環境（satori）でも
+アプリ一覧（`MinecraftAvatar`）と同じ見た目になるようにするため。
 
-全てBase64データURLに変換して `ImageResponse` に埋め込む。
+1. `uuid` か `customSkinUrl` があるユーザー … `fetchSkinFaceDataUrl()` が `/api/skin?userId=` を取得し、
+   頭の正面 (8,8) + 帽子レイヤー (40,8) をアルファ合成して 180x180 に拡大（失敗時は Steve にフォールバック）
+2. どちらも無い（MCID未登録）ユーザー … `fetchNoMcidFaceDataUrl()` が `/skins/no-mcid-face.svg` を取得し、
+   `data:image/svg+xml;base64,...` の data URL にしてそのまま返す（satori は `<img src>` の SVG data URL を
+   描画でき、表示サイズは `<img width={180} height={180}>` に従うのでサーバー側でのラスタ化は不要）。
+   **`/api/skin?userId=` は未登録ユーザーにも Steve を返すため、この分岐は `og-image.tsx` 側で
+   `user.uuid` / `user.customSkinUrl` を見て決める**
+
+いずれもBase64データURLに変換して `ImageResponse` に埋め込む。両方失敗した場合は `null`（アバターなしで描画）。
 
 ### キャッシュ
 
@@ -680,6 +726,10 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/routes/og-image.tsx` | OGP画像生成API |
 | `app/components/minecraft-avatar.tsx` | 顔アイコンコンポーネント (2D) |
 | `app/components/minecraft-fullbody.tsx` | 全身コンポーネント (3D, skinview3d) |
+| `app/lib/avatar-cache.ts` | 顔アバターのスキン画像・描画結果キャッシュ、URL解決（MCID未登録判定を含む） |
+| `app/lib/skin-face.server.ts` | OGP向けの顔合成（純JS・`pngjs`）とプレースホルダー顔の拡大 |
+| `public/skins/no-mcid-face.svg` | MCID未登録の顔プレースホルダー（手描き。生成スクリプトの対象外） |
+| `scripts/generate-placeholder-skins.ts` | MCID未登録の全身プレースホルダー（`public/skins/no-mcid.png`）の生成 |
 | `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
