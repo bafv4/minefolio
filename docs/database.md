@@ -108,7 +108,7 @@ erDiagram
 
 | # | テーブル | 列数 | 用途 | `users` との関係 |
 |---|---|---|---|---|
-| 1 | [`users`](#users) | 41 | ユーザー基本情報（中心テーブル） | — |
+| 1 | [`users`](#users) | 42 | ユーザー基本情報（中心テーブル） | — |
 | 2 | [`player_configs`](#player_configs) | 23 | デバイス・ゲーム内設定 | 1 : 1 |
 | 3 | [`playstyles`](#playstyles) | 20 | プレイスタイル回答 | 1 : 1 |
 | 4 | [`keybindings`](#keybindings) | 7 | キーバインド | 1 : N |
@@ -213,6 +213,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `discord_id` | text | UNIQUE |
 | `mcid` | text? | UNIQUE |
 | `uuid` | text? | UNIQUE |
+| `bedrock_mcid` | text? | （制約なし） Xbox ゲーマータグ。所有確認 API が無いため自己申告・UNIQUE なし。uuid/スキン/slug には無関係 |
 | `slug` | text | UNIQUE |
 | `display_name` | text? | |
 | `display_name_alphabet` | text? | 英語ロケールでの表示名。未入力なら `display_name` にフォールバック |
