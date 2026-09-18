@@ -605,6 +605,7 @@ CREATE TABLE `users` (
 	`discord_id` text NOT NULL,
 	`mcid` text,
 	`uuid` text,
+	`bedrock_mcid` text,
 	`slug` text NOT NULL,
 	`display_name` text,
 	`display_name_alphabet` text,

@@ -8,8 +8,12 @@ import { PNG } from "pngjs";
 const HEAD_BASE = { x: 8, y: 8, w: 8, h: 8 };
 const HEAD_OVERLAY = { x: 40, y: 8, w: 8, h: 8 };
 
-// アプリ一覧と同じフォールバック用 Steve UUID（MCID未登録・スキン解決失敗時）
+// スキン解決に失敗したときのフォールバック用 Steve UUID
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
+
+// MCID未登録（uuid も customSkinUrl も無い）ユーザー向けの顔プレースホルダー（16x16）。
+// アプリ側の MinecraftAvatar が使うものと同じ手描きドット絵 SVG。
+const NO_MCID_FACE_PATH = "/skins/no-mcid-face.svg";
 
 /** 8x8領域を size×size にニアレストネイバー拡大したときの、出力(ox,oy)に対応する元ピクセルのインデックス */
 function sampleIndex(
@@ -78,8 +82,9 @@ async function faceFromSkinApi(skinApiUrl: string, size: number): Promise<string
 
 /**
  * ユーザーのスキンPNG（カスタムスキン > Mojang(UUID) の順で `/api/skin` が解決）から顔を合成する。
- * カスタムスキンも UUID も無い（MCID未登録）場合は、アプリ一覧と同じく Steve の顔にフォールバックする。
- * すべて失敗した場合のみ null（呼び出し側はプレースホルダーを表示）。
+ * MCID未登録（uuid も customSkinUrl も無い）ユーザーは `/api/skin` が Steve を返してしまい
+ * ここでは判別できないため、呼び出し側で先に fetchNoMcidFaceDataUrl() を選ぶこと。
+ * 取得・合成に失敗した場合は Steve の顔にフォールバックし、それも失敗したときだけ null を返す。
  */
 export async function fetchSkinFaceDataUrl(
   origin: string,
@@ -91,6 +96,39 @@ export async function fetchSkinFaceDataUrl(
     size,
   );
   if (primary) return primary;
-  // MCID未登録などでスキンを解決できない場合は Steve にフォールバック
+  // スキンを解決できない場合は Steve にフォールバック
   return faceFromSkinApi(`${origin}/api/skin?uuid=${STEVE_UUID}`, size);
+}
+
+/**
+ * satori（@vercel/og）に渡す SVG から XML コメントを取り除く。
+ *
+ * satori の data URL 解決は `atob()` / `btoa()`（= Latin-1 専用）を通るため、SVG 内に非ASCII文字が
+ * 1つでもあると内部のラスタライザ（resvg）が `Failed to parse SVG image: Invalid character` で
+ * 失敗し、`<img>` が**例外にならず黙って描画されない**（OGPのアバターが空になる）。
+ * `no-mcid-face.svg` は日本語の説明コメントを持つが、コメントは描画に影響しないので落として渡す。
+ * 逆に言うと、この SVG の**描画される要素には非ASCII文字を入れられない**。
+ */
+function stripXmlComments(svg: string): string {
+  return svg.replace(/<!--[\s\S]*?-->/g, "");
+}
+
+/**
+ * MCID未登録ユーザー向けの顔プレースホルダーを data URL で返す（失敗時 null）。
+ *
+ * `public/skins/no-mcid-face.svg` を静的配信から取得して SVG の data URL にする。
+ * satori は `<img src>` の SVG data URL を描画でき、表示サイズは呼び出し側の `width` / `height`
+ * 指定に従うため、ここでラスタ化・拡大する必要はない。
+ */
+export async function fetchNoMcidFaceDataUrl(origin: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${origin}${NO_MCID_FACE_PATH}`, {
+      headers: { "User-Agent": "Minefolio/1.0" },
+    });
+    if (!res.ok) return null;
+    const svg = stripXmlComments(await res.text());
+    return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+  } catch {
+    return null;
+  }
 }

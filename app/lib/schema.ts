@@ -15,6 +15,10 @@ export const users = sqliteTable("users", {
   // MCID/UUID（任意）- MCIDがない場合でも登録可能
   mcid: text("mcid").unique(),
   uuid: text("uuid").unique(),
+  // Bedrock Edition の MCID（Xbox ゲーマータグ。任意）。
+  // 所有確認できる公開 API が無いため Mojang 連携（uuid・スキン・slug・PaceMan）には一切関与しない表示用の自己申告値。
+  // 未検証値のため UNIQUE は付けない（他人のタグを先に登録して本人を締め出せてしまうのを避ける）。
+  bedrockMcid: text("bedrock_mcid"),
 
   // URL用スラッグ（必須）- MCIDがある場合はMCID、ない場合は@{内部ID}形式
   slug: text("slug").unique().notNull(),
