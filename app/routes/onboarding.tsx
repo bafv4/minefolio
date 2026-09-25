@@ -14,7 +14,7 @@ import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, isRegistered } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -70,13 +71,24 @@ const TOTAL_STEPS = 5;
 // 連携ステップで扱うプラットフォーム（custom は扱わない）。
 // label / placeholder / prefix は edit.tsx の platformOptions に倣う
 const LINK_PLATFORMS = [
-  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@" },
-  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
-  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
-  { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
+  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@", icon: Youtube },
+  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/", icon: Twitch },
+  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/", icon: Twitter },
+  {
+    value: "speedruncom",
+    label: "Speedrun.com",
+    placeholder: "e.g. couriern3w",
+    prefix: "speedrun.com/users/",
+    icon: ExternalLink,
+  },
 ] as const;
 type LinkPlatform = (typeof LINK_PLATFORMS)[number]["value"];
 const LINK_PLATFORM_VALUES = LINK_PLATFORMS.map((p) => p.value);
+
+/** プラットフォームごとの ID（未設定は空文字）の初期値 */
+function emptyLinks(): Record<LinkPlatform, string> {
+  return { youtube: "", twitch: "", twitter: "", speedruncom: "" };
+}
 
 // 代名詞のプリセット選択肢（edit.tsx の pronounOptions と同じ。値=表示、ロケール非依存）
 const pronounOptions = [
@@ -103,7 +115,9 @@ const DISPLAY_TOGGLES = [
   { name: "showTwitchOnHome", labelKey: "meEdit.showTwitchOnHome" },
   { name: "showYoutubeOnHome", labelKey: "meEdit.showYoutubeOnHome" },
 ] as const;
-type DisplayToggleName = (typeof DISPLAY_TOGGLES)[number]["name"];
+
+// 印字可能な ASCII のみ（英数字・空白・基本記号）。アルファベット表記の表示名の規則（edit.tsx と同じ）
+const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
 
 /**
  * Discord 表示名を「アルファベット表記の表示名」の既定値に使えるなら返す。
@@ -113,7 +127,7 @@ type DisplayToggleName = (typeof DISPLAY_TOGGLES)[number]["name"];
  */
 function discordNameAsAlphabet(name: string | null | undefined): string | null {
   const value = name?.trim();
-  if (!value || value.length > 50 || !/^[\x20-\x7E]+$/.test(value)) {
+  if (!value || value.length > 50 || !PRINTABLE_ASCII_RE.test(value)) {
     return null;
   }
   return value;
@@ -193,13 +207,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
   });
 
-  if (existingUser && existingUser.onboardingCompleted) {
+  if (isRegistered(existingUser)) {
     // 登録済み — ログイン前にいたページ（returnTo）があればそこへ、なければプロフィールへ
     return redirect(returnTo || `/player/${existingUser.slug}`);
   }
 
   // 連携ステップの初期値（プラットフォームごとに先頭の1件）
-  const links: Record<LinkPlatform, string> = { youtube: "", twitch: "", twitter: "", speedruncom: "" };
+  const links = emptyLinks();
   for (const link of existingUser?.socialLinks ?? []) {
     const platform = LINK_PLATFORM_VALUES.find((p) => p === link.platform);
     if (platform && !links[platform]) {
@@ -209,7 +223,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     discordUser: {
-      id: session.user.id,
       name: session.user.name,
       image: session.user.image,
     },
@@ -320,7 +333,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
-    if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
+    if (displayNameAlphabet && !PRINTABLE_ASCII_RE.test(displayNameAlphabet)) {
       return { error: t("meEdit.displayNameAlphabetInvalid") };
     }
 
@@ -376,62 +389,46 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const bedrockMcid = bedrockMcidInput || null;
 
-    if (mcid && mcid !== user.mcid) {
-      // Java版MCIDの設定/変更: edit.tsx の set_mcid と同じ処理
-      if (mcid.length < 3 || mcid.length > 16) {
-        return { error: t("meEdit.mcidLength") };
-      }
+    // Java版MCIDが変わるか（入力があり現在値と異なる＝設定/変更、空欄で現在値がある＝解除）
+    const mcidChanged = mcid ? mcid !== user.mcid : !!user.mcid;
 
-      // 既に同じMCIDが登録されていないかチェック
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.mcid, mcid),
-      });
+    if (mcidChanged) {
+      // 設定/変更は edit.tsx の set_mcid、解除は remove_mcid と同じ処理
+      if (mcid) {
+        if (mcid.length < 3 || mcid.length > 16) {
+          return { error: t("meEdit.mcidLength") };
+        }
 
-      if (existingUser && existingUser.id !== user.id) {
-        return { error: t("meEdit.mcidTaken") };
-      }
-
-      // Mojang APIで検証
-      try {
-        const uuid = await fetchUuidFromMcid(mcid);
-        const newSlug = generateSlug(mcid, session.user.id);
-
-        await db.transaction(async (tx) => {
-          await tx
-            .update(users)
-            .set({
-              mcid,
-              uuid,
-              slug: newSlug,
-              bedrockMcid,
-              updatedAt: new Date(),
-            })
-            .where(eq(users.id, user.id));
-
-          await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-          await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
+        // 既に同じMCIDが登録されていないかチェック
+        const existingUser = await db.query.users.findFirst({
+          where: eq(users.mcid, mcid),
         });
-        // edit.tsx の set_mcid が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
-        // ここでは行わない。ウィザード中は常に非公開（cron 対象外）でキャッシュが存在せず、
-        // 公開へ切り替えた時点で save_visibility が最新の MCID で追いつかせるため
+
+        if (existingUser && existingUser.id !== user.id) {
+          return { error: t("meEdit.mcidTaken") };
+        }
+      }
+
+      // 設定時は Mojang API で検証して uuid を導出する（フォームの値は信用しない）。解除時は両方 null
+      let next: { mcid: string | null; uuid: string | null };
+      try {
+        next = mcid ? { mcid, uuid: await fetchUuidFromMcid(mcid) } : { mcid: null, uuid: null };
       } catch (error) {
-        if (error instanceof MojangError) {
-          if (error.code === "MCID_NOT_FOUND") {
-            return { error: t("meEdit.mcidNotFound") };
-          }
+        if (error instanceof MojangError && error.code === "MCID_NOT_FOUND") {
+          return { error: t("meEdit.mcidNotFound") };
         }
         return { error: t("meEdit.mcidVerifyFailed") };
       }
-    } else if (!mcid && user.mcid) {
-      // 空欄で現在 MCID があれば解除: edit.tsx の remove_mcid と同じ処理
-      const newSlug = generateSlug(null, session.user.id);
+
+      // 解除時の slug は @{discordId} に戻る
+      const newSlug = generateSlug(next.mcid, session.user.id);
 
       await db.transaction(async (tx) => {
         await tx
           .update(users)
           .set({
-            mcid: null,
-            uuid: null,
+            mcid: next.mcid,
+            uuid: next.uuid,
             slug: newSlug,
             bedrockMcid,
             updatedAt: new Date(),
@@ -441,7 +438,11 @@ export async function action({ request }: Route.ActionArgs) {
         await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
         await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       });
+      // edit.tsx の set_mcid が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
+      // ここでは行わない。ウィザード中は常に非公開（cron 対象外）でキャッシュが存在せず、
+      // 公開へ切り替えた時点で save_visibility が最新の MCID で追いつかせるため
     } else if (bedrockMcid !== user.bedrockMcid) {
+      // Java版MCIDは変わらず、Bedrock版MCIDだけ変わった
       await db
         .update(users)
         .set({ bedrockMcid, updatedAt: new Date() })
@@ -453,7 +454,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // ステップ4: 連携（social_links へのプラットフォーム単位の upsert）
   if (actionType === "save_links") {
-    const values: Record<LinkPlatform, string> = { youtube: "", twitch: "", twitter: "", speedruncom: "" };
+    const values = emptyLinks();
     for (const platform of LINK_PLATFORMS) {
       const identifier = (formData.get(platform.value) as string)?.trim() || "";
       if (!identifier) continue;
@@ -511,11 +512,8 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meEdit.linkSaveFailed") };
     }
 
-    if (speedruncomChanged) {
-      runAfterResponse(refreshSrcRankingsForUser(user.id));
-    }
-    // Twitch VOD / YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外。
-    // 公開へ切り替えたときに save_visibility で追いつかせる）
+    // SRC ランキング・Twitch VOD・YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外。
+    // 公開範囲を選ぶ save_visibility で追いつかせる。ここでも SRC を取得すると標準経路で2回走る）
 
     return { success: true, action: "links" };
   }
@@ -523,7 +521,6 @@ export async function action({ request }: Route.ActionArgs) {
   // ステップ5: 公開設定（ウィザード完了）
   if (actionType === "save_visibility") {
     const profileVisibility = formData.get("profileVisibility") as ProfileVisibility;
-    const returnTo = sanitizeReturnTo(formData.get("returnTo"));
 
     if (!VISIBILITIES.includes(profileVisibility)) {
       return { error: t("meEdit.invalidOption") };
@@ -569,18 +566,15 @@ export async function action({ request }: Route.ActionArgs) {
           await refreshSrcRankingsForUser(user.id);
         })()
       );
+    } else if (profileVisibility === "unlisted") {
+      // 限定公開もプロフィールは見られるが、SRC/MCSR Ranked ランキングの cron は public のみが対象で追いつかない。
+      // 連携ステップ（save_links）では取得しないため、ここで SRC だけ即時に取得する
+      // （/me/edit の create_link なら限定公開でも即時取得される挙動に揃える）
+      runAfterResponse(refreshSrcRankingsForUser(user.id));
     }
 
-    // リダイレクトせず完了画面を出す（遷移先はクライアントの CTA が使う）
-    return {
-      success: true,
-      action: "complete",
-      slug: user.slug,
-      redirectTo: returnTo || `/player/${user.slug}`,
-      mcid: user.mcid,
-      displayName: user.displayName,
-      displayNameAlphabet: user.displayNameAlphabet,
-    };
+    // リダイレクトせず完了画面を出す（遷移先と表示名はクライアントが loader の値から組む）
+    return { success: true, action: "complete" };
   }
 
   return { error: t("onboarding.errorInvalidAction") };
@@ -589,7 +583,6 @@ export async function action({ request }: Route.ActionArgs) {
 type LoaderData = ReturnType<typeof useLoaderData<typeof loader>>;
 type DiscordUser = LoaderData["discordUser"];
 type OnboardingUser = NonNullable<LoaderData["user"]>;
-type ActionData = NonNullable<ReturnType<typeof useFetcher<typeof action>>["data"]>;
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -599,7 +592,7 @@ type Completion = { redirectTo: string; name: string };
  * ステップごとの保存用 fetcher。action が `{ success }` を返し、続く loader の再検証まで
  * 終わった（state が idle に戻った）時点で onSuccess を呼ぶ。失敗時は error を返す。
  */
-function useStepSubmit(onSuccess: (data: ActionData) => void) {
+function useStepSubmit(onSuccess: () => void) {
   const fetcher = useFetcher<typeof action>();
   const onSuccessRef = useRef(onSuccess);
   useEffect(() => {
@@ -609,7 +602,7 @@ function useStepSubmit(onSuccess: (data: ActionData) => void) {
   const { state, data } = fetcher;
   useEffect(() => {
     if (state === "idle" && data && "success" in data && data.success) {
-      onSuccessRef.current(data);
+      onSuccessRef.current();
     }
   }, [state, data]);
 
@@ -623,43 +616,31 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<WizardStep>(() => (user ? 1 : 0));
   const [completion, setCompletion] = useState<Completion | null>(null);
 
-  // ステップが変わったらページ先頭へ（長いステップの下端から次へ進んだときに途中から表示されないように）
-  const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+  // 画面を切り替えたらページ先頭へ（長いステップの下端から次へ進んだときに途中から表示されないように）
+  const goTo = (next: WizardStep) => {
+    setStep(next);
     window.scrollTo({ top: 0 });
-  }, [step, completion]);
+  };
+  const complete = (result: Completion) => {
+    setCompletion(result);
+    window.scrollTo({ top: 0 });
+  };
 
   let content;
   if (completion) {
     content = <CompleteScreen completion={completion} />;
   } else if (step === 0 || !user) {
-    content = <WelcomeStep discordUser={discordUser} onStarted={() => setStep(1)} />;
+    content = <WelcomeStep discordUser={discordUser} onStarted={() => goTo(1)} />;
   } else if (step === 1) {
-    content = <ProfileStep key="profile" user={user} discordName={discordUser.name} onNext={() => setStep(2)} />;
+    content = <ProfileStep user={user} discordName={discordUser.name} onNext={() => goTo(2)} />;
   } else if (step === 2) {
-    content = (
-      <MinecraftStep key="minecraft" user={user} onBack={() => setStep(1)} onNext={() => setStep(3)} />
-    );
+    content = <MinecraftStep user={user} onBack={() => goTo(1)} onNext={() => goTo(3)} />;
   } else if (step === 3) {
-    content = <SkinStep key="skin" user={user} onBack={() => setStep(2)} onNext={() => setStep(4)} />;
+    content = <SkinStep user={user} onBack={() => goTo(2)} onNext={() => goTo(4)} />;
   } else if (step === 4) {
-    content = (
-      <LinksStep key="links" links={links} onBack={() => setStep(3)} onNext={() => setStep(5)} />
-    );
+    content = <LinksStep links={links} onBack={() => goTo(3)} onNext={() => goTo(5)} />;
   } else {
-    content = (
-      <VisibilityStep
-        key="visibility"
-        user={user}
-        returnTo={returnTo}
-        onBack={() => setStep(4)}
-        onComplete={setCompletion}
-      />
-    );
+    content = <VisibilityStep user={user} returnTo={returnTo} onBack={() => goTo(4)} onComplete={complete} />;
   }
 
   return (
@@ -677,17 +658,16 @@ function WelcomeStep({ discordUser, onStarted }: { discordUser: DiscordUser; onS
   return (
     <>
       <CardHeader className="justify-items-center gap-3 px-5 text-center">
-        {discordUser.image ? (
-          <img
-            src={discordUser.image}
+        <Avatar className="size-20">
+          <AvatarImage
+            src={discordUser.image ?? undefined}
             alt={discordUser.name ?? ""}
-            className="h-20 w-20 rounded-full border border-border/70"
+            className="rounded-full border border-border/70"
           />
-        ) : (
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-secondary/50">
+          <AvatarFallback className="bg-secondary/50">
             <UserRound className="h-10 w-10 text-muted-foreground" />
-          </div>
-        )}
+          </AvatarFallback>
+        </Avatar>
         <CardTitle className="text-2xl font-bold leading-tight">
           {t("onboarding.welcomeTitle", { name: discordUser.name ?? "" })}
         </CardTitle>
@@ -971,19 +951,6 @@ function SkinStep({
   );
 }
 
-function LinkPlatformIcon({ platform }: { platform: LinkPlatform }) {
-  switch (platform) {
-    case "youtube":
-      return <Youtube className="h-4 w-4" />;
-    case "twitch":
-      return <Twitch className="h-4 w-4" />;
-    case "twitter":
-      return <Twitter className="h-4 w-4" />;
-    default:
-      return <ExternalLink className="h-4 w-4" />;
-  }
-}
-
 // ステップ4: 連携
 function LinksStep({
   links,
@@ -1012,7 +979,7 @@ function LinksStep({
           {LINK_PLATFORMS.map((platform) => (
             <div key={platform.value} className="space-y-2">
               <Label htmlFor={`link-${platform.value}`}>
-                <LinkPlatformIcon platform={platform.value} />
+                <platform.icon className="h-4 w-4" />
                 {platform.label}
               </Label>
               <div className="flex items-center">
@@ -1057,32 +1024,16 @@ function VisibilityStep({
 }) {
   const t = useT();
   const locale = useLocale();
-  const { fetcher, isSubmitting, error } = useStepSubmit((data) => {
-    // action の戻り値は各分岐の和が1つのオブジェクト型に正規化される（complete 固有の項目は optional）ため、
-    // 完了分岐の項目が揃っていることを実行時に確かめてから使う
-    if (!("redirectTo" in data) || !data.redirectTo || !data.slug) return;
+  // 完了画面の遷移先と表示名は loader の値から組む（各ステップの保存後に loader を再検証済みのため、
+  // slug・表示名は保存後の値になっている）
+  const { fetcher, isSubmitting, error } = useStepSubmit(() => {
     onComplete({
-      redirectTo: data.redirectTo,
-      name: getLocalizedDisplayName(
-        {
-          displayName: data.displayName ?? null,
-          displayNameAlphabet: data.displayNameAlphabet ?? null,
-          mcid: data.mcid ?? null,
-          slug: data.slug,
-        },
-        locale,
-      ),
+      redirectTo: returnTo || `/player/${user.slug}`,
+      name: getLocalizedDisplayName(user, locale),
     });
   });
   // 既定選択なし（本人が必ず選ぶ）。選ぶまで完了ボタンは押せない
   const [visibility, setVisibility] = useState<ProfileVisibility | "">("");
-  const [toggles, setToggles] = useState<Record<DisplayToggleName, boolean>>(() => ({
-    showRankedStats: user.showRankedStats ?? true,
-    showPacemanStats: user.showPacemanStats ?? true,
-    showPacemanOnHome: user.showPacemanOnHome ?? true,
-    showTwitchOnHome: user.showTwitchOnHome ?? true,
-    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
-  }));
 
   return (
     <>
@@ -1096,10 +1047,6 @@ function VisibilityStep({
         <fetcher.Form method="post" className="space-y-5">
           <input type="hidden" name="_action" value="save_visibility" />
           <input type="hidden" name="profileVisibility" value={visibility} />
-          {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
-          {DISPLAY_TOGGLES.map((toggle) => (
-            <input key={toggle.name} type="hidden" name={toggle.name} value={String(toggles[toggle.name])} />
-          ))}
 
           <div className="space-y-3">
             <Label id="visibility-label">{t("onboarding.visibilityChoiceLabel")}</Label>
@@ -1136,11 +1083,8 @@ function VisibilityStep({
                 <Label htmlFor={toggle.name} className="cursor-pointer text-sm font-normal leading-snug">
                   {t(toggle.labelKey)}
                 </Label>
-                <Switch
-                  id={toggle.name}
-                  checked={toggles[toggle.name]}
-                  onCheckedChange={(checked) => setToggles((prev) => ({ ...prev, [toggle.name]: checked }))}
-                />
+                {/* uncontrolled。オンのときだけ name=value("true") が送信される（edit.tsx の Switch と同じ） */}
+                <Switch id={toggle.name} name={toggle.name} value="true" defaultChecked={user[toggle.name] ?? true} />
               </div>
             ))}
           </div>

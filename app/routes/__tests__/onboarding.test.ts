@@ -30,7 +30,11 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+vi.mock("@/lib/session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session")>();
+  // isRegistered は純粋関数なので実物を使う（loader の「登録済み」判定をそのまま検証する）
+  return { ...actual, ...sessionMocks };
+});
 
 const mojangMocks = vi.hoisted(() => ({
   fetchUuidFromMcid: vi.fn(),
@@ -463,7 +467,7 @@ describe("action - save_visibility", () => {
     expect(updated?.profileVisibility).toBe("private");
   });
 
-  it("正常時はonboardingCompletedとshow*フラグが保存され、returnToがあればそこへredirectToが返る", async () => {
+  it("正常時はonboardingCompletedとshow*フラグが保存され、action=complete が返る（遷移先はクライアント側で組む）", async () => {
     await seedUser(db, {
       discordId: "discord-runner",
       slug: "steve",
@@ -472,17 +476,9 @@ describe("action - save_visibility", () => {
     });
     signInAs("discord-runner");
 
-    const fd = makeVisibilityFormData({ profileVisibility: "unlisted" });
-    fd.set("returnTo", "/me/edit");
+    const res = await callAction(makeVisibilityFormData({ profileVisibility: "unlisted" }));
 
-    const res = await callAction(fd);
-
-    expect(res).toMatchObject({
-      success: true,
-      action: "complete",
-      slug: "steve",
-      redirectTo: "/me/edit",
-    });
+    expect(res).toEqual({ success: true, action: "complete" });
 
     const updated = await findUserByDiscordId("discord-runner");
     expect(updated?.onboardingCompleted).toBe(true);
@@ -492,37 +488,6 @@ describe("action - save_visibility", () => {
     expect(updated?.showPacemanOnHome).toBe(true);
     expect(updated?.showTwitchOnHome).toBe(true);
     expect(updated?.showYoutubeOnHome).toBe(true);
-  });
-
-  it("returnToが無ければredirectToは/player/:slugになる", async () => {
-    await seedUser(db, {
-      discordId: "discord-runner",
-      slug: "steve",
-      profileVisibility: "private",
-      onboardingCompleted: false,
-    });
-    signInAs("discord-runner");
-
-    const res = await callAction(makeVisibilityFormData());
-
-    expect(res).toMatchObject({ success: true, action: "complete", redirectTo: "/player/steve" });
-  });
-
-  it("外部URLのreturnToは/player/:slugにフォールバックする", async () => {
-    await seedUser(db, {
-      discordId: "discord-runner",
-      slug: "steve",
-      profileVisibility: "private",
-      onboardingCompleted: false,
-    });
-    signInAs("discord-runner");
-
-    const fd = makeVisibilityFormData();
-    fd.set("returnTo", "https://evil.com/phish");
-
-    const res = await callAction(fd);
-
-    expect(res).toMatchObject({ success: true, action: "complete", redirectTo: "/player/steve" });
   });
 });
 
@@ -553,7 +518,7 @@ describe("loader", () => {
     signInAs("discord-runner", "Runner", "https://example.com/avatar.png");
 
     const result = (await callLoader()) as {
-      discordUser: { id: string; name: string | null; image: string | null };
+      discordUser: { name: string | null; image: string | null };
       user: { id: string; slug: string; displayName: string | null } | null;
       links: Record<string, string>;
       returnTo: string | null;
@@ -561,7 +526,6 @@ describe("loader", () => {
 
     expect(result).not.toBeInstanceOf(Response);
     expect(result.discordUser).toEqual({
-      id: "discord-runner",
       name: "Runner",
       image: "https://example.com/avatar.png",
     });

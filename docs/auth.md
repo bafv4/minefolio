@@ -113,7 +113,7 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 
 ## セッション取得ヘルパー
 
-`app/lib/session.ts` に定義された4つのヘルパー関数:
+`app/lib/session.ts` に定義されたヘルパー関数:
 
 ### `getSession(request, auth)`
 
@@ -129,11 +129,13 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 
 ### `getCurrentUser(request, auth, db)`
 
-- 認証必須 + オンボーディング必須
+- 認証必須 + オンボーディング（初期設定ウィザード）完了必須
 - セッション取得後、`users` テーブルから `discordId` で検索
-- ユーザーレコードがなければ `/onboarding` へリダイレクト
-- `onboardingCompleted`（ウィザード完了フラグ）は見ない。ウィザード途中で離脱したユーザーも行があれば通す（「オンボーディングフロー」参照）
+- 未登録（`isRegistered(user)` が偽＝レコードが無い、またはウィザード未完了）なら `/onboarding` へリダイレクト
+  （途中離脱したユーザーはウィザードのステップ1から再開する。各ステップはスキップできるため実質ロックにはならない）
 - 戻り値: `{ session, user }`
+- 注: 現状、アプリのルートは `getCurrentUser` を直接使っておらず（`getSession` ＋独自の `users` 検索が主）、
+  `/me/*` のレイアウト（`app/routes/me/_layout.tsx`）も同じ `isRegistered(user)` で判定して `/onboarding` へ送る
 
 ### `getCurrentUserOrOnboarding(request, auth, db)`
 
@@ -144,6 +146,11 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 ### `isAuthenticated(request, auth)`
 
 - セッションの有無を `boolean` で返す
+
+### `isRegistered(user)`
+
+- 「登録済み」の述語（`!!user && user.onboardingCompleted`）。DB アクセスはせず、取得済みの `users` 行（または `null` / `undefined`）を受け取る
+- `/login`・`/onboarding` の loader と `getCurrentUser` がこれで判定する（判定の単一情報源）
 
 ---
 
@@ -160,11 +167,12 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 - **登録済み** = `users` 行があり、かつ `users.onboardingCompleted === true`
 - `onboardingCompleted` は DB 既定値が `true`（列追加前から存在する全ユーザーは完了済み扱い。バックフィル不要）。
   ウィザード開始時（`_action=start`）の insert だけが明示的に `false` を入れ、最終ステップの保存で `true` になる
-- `/login` の loader: セッション済みで `!user || !user.onboardingCompleted` なら `/onboarding` へ（returnTo 引き継ぎ）
+- 判定は `app/lib/session.ts` の `isRegistered(user)` に集約している
+- `/login` の loader: セッション済みで未登録なら `/onboarding` へ（returnTo 引き継ぎ）
 - `/onboarding` の loader: 登録済みなら `returnTo || /player/{slug}` へリダイレクト。
   行が無ければようこそ画面から、行があり未完了ならステップ1から再開する（保存済みの値を各入力の初期値に使う）
-- `getCurrentUser` などセッションヘルパーは `onboardingCompleted` を見ない（行の有無だけで判定する）。
-  ウィザードを途中で離脱してもアプリ全体はロックせず、未設定の項目は後から `/me/edit` で設定できる
+- `getCurrentUser` も `isRegistered` で判定し、未完了なら `/onboarding` へリダイレクトする（`getCurrentUserOrOnboarding` は行の有無も見ない）。
+  ウィザードの各ステップはスキップでき、公開範囲を選べば完了するため、実質的なロックにはならない
 
 ### 前提条件
 
@@ -212,20 +220,25 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 
 - 各 ID は `/me/edit` の `create_link` と同じ形式検証（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
 - `social_links` へプラットフォーム単位で upsert（あれば identifier 更新、無ければ作成、空欄なら該当プラットフォームの行を削除）。カスタムリンクは扱わない
-- Speedrun.com は `users.speedruncomUsername` にも同期し、値が変わったら `speedruncomId` を `null` にリセットして SRC ランキングを即時更新
-- Twitch VOD / YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外）
+- Speedrun.com は `users.speedruncomUsername` にも同期し、値が変わったら `speedruncomId` を `null` にリセットする
+- SRC ランキング・Twitch VOD・YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外。
+  最終ステップで公開範囲が決まった時点で追いつかせる。ここでも取得すると標準経路で2回走るため）
 
 #### ステップ5: 公開設定（完了）
 
 - 公開範囲を enum 検証し、表示設定トグルと合わせて更新。同じ update で **`onboardingCompleted: true`** にする
 - 非公開→公開に切り替わる場合は `/me/edit` と同じく Twitch / YouTube / SRC のキャッシュを `runAfterResponse` で追いつかせる
-- リダイレクトせず `{ success: true, action: "complete", slug, redirectTo, ... }` を返し、クライアントが完了画面を表示する
+- 限定公開（`unlisted`）を選んだ場合は SRC ランキングだけ `runAfterResponse` で即時取得する（ランキングの cron は
+  `public` のみが対象で追いつかないため。`/me/edit` の `create_link` なら限定公開でも即時取得される挙動に揃える）
+- リダイレクトせず `{ success: true, action: "complete" }` だけを返し、クライアントが完了画面を表示する
   （この action の後だけ loader の再検証を抑止する。再検証すると「登録済み → リダイレクト」で完了画面が飛ぶため）
+- 公開設定のトグルは uncontrolled の `Switch`（オンのときだけ `name=true` が送信される）
 
 ### 完了画面
 
 - 「設定が完了しました」＋「ようこそ、{保存済みの表示名}さん！」（英語ロケールでは `displayNameAlphabet ?? displayName`）
 - CTA:「プロフィールを見る」（`returnTo` があればそこ、無ければ `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
+- 遷移先と表示名はクライアントが loader の値（`returnTo` と `user`。各ステップの保存後に再検証済み）から組む
 
 > 旧サイト (mchotkeys) からのデータ引き継ぎボタンは登録フローから削除済み。
 

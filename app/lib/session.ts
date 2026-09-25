@@ -30,7 +30,23 @@ export async function getOptionalSession(request: Request, auth: Auth) {
   return session;
 }
 
-// 現在のユーザー取得（認証必須、オンボーディング必須）
+type UserRow = typeof users.$inferSelect;
+
+/**
+ * 「登録済み」の述語。users 行があり、かつ初期設定ウィザード（/onboarding）を完了していること。
+ * /login・/onboarding の loader と getCurrentUser で共有する（判定をここ1箇所に集約する）。
+ * 型述語は `onboardingCompleted: true` まで絞る（単に UserRow とすると、false 側で
+ * 「未完了の行」まで undefined に絞り込まれてしまうため）。
+ */
+export function isRegistered(
+  user: UserRow | null | undefined,
+): user is UserRow & { onboardingCompleted: true } {
+  return !!user && user.onboardingCompleted;
+}
+
+// 現在のユーザー取得（認証必須、オンボーディング完了必須）
+// 未登録（行が無い、またはウィザード未完了）なら /onboarding へ。ウィザードの各ステップは
+// スキップできるため、途中離脱したユーザーも公開範囲を選ぶだけで抜けられる（実質ロックにはならない）
 export async function getCurrentUser(request: Request, auth: Auth, db: Database) {
   const session = await getSession(request, auth);
 
@@ -38,7 +54,7 @@ export async function getCurrentUser(request: Request, auth: Auth, db: Database)
     where: eq(users.discordId, session.user.id),
   });
 
-  if (!user) {
+  if (!isRegistered(user)) {
     throw redirect("/onboarding");
   }
 
