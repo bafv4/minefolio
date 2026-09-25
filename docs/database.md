@@ -251,6 +251,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `updated_at` | ts | |
 | `pinned_speedrun_records` | json? | ピン留めする run ID の配列 |
 | `rta_started_year_month` | text? | `"YYYY-MM"` |
+| `onboarding_completed` | bool | 既定 **true**。初期設定ウィザード（`/onboarding`）を完了したか。既定 true は列追加前の既存ユーザーを完了済みとして扱うため（バックフィル不要）で、ウィザード開始時の insert だけが `false` を入れる。反映は `scripts/add-onboarding-completed-column.ts` |
 
 索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
 

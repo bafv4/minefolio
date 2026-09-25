@@ -642,7 +642,8 @@ CREATE TABLE `users` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	`pinned_speedrun_records` text,
-	`rta_started_year_month` text
+	`rta_started_year_month` text,
+	`onboarding_completed` integer DEFAULT true NOT NULL
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);
