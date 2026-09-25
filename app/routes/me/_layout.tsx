@@ -2,7 +2,7 @@ import { Outlet, NavLink, redirect, useLoaderData, useNavigation } from "react-r
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, isRegistered } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -34,7 +34,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     where: eq(users.discordId, session.user.id),
   });
 
-  if (!user) {
+  // 未登録（行が無い、またはウィザード未完了）なら /onboarding へ（判定は isRegistered に集約）
+  if (!isRegistered(user)) {
     return redirect("/onboarding");
   }
 

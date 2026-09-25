@@ -3,7 +3,7 @@ import { Link, redirect } from "react-router";
 import type { Route } from "./+types/login";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, isRegistered } from "@/lib/session";
 import { getEnv, isDevAuthEnabled } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -56,12 +56,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       where: eq(users.discordId, session.user.id),
     });
 
-    if (user) {
-      // User exists, go to returnTo（あれば）／プロフィール（/player/:slug は slug で解決するため
-      // slug を使う。MCID 未設定ユーザーは mcid=null で /player/null になり 404 になるのを防ぐ）
+    if (isRegistered(user)) {
+      // 登録済み（users 行があり初期設定ウィザードも完了済み）: returnTo（あれば）／プロフィールへ
+      // （/player/:slug は slug で解決するため slug を使う。MCID 未設定ユーザーは mcid=null で
+      // /player/null になり 404 になるのを防ぐ）
       return redirect(returnTo || `/player/${user.slug}`);
     } else {
-      // User needs to complete onboarding（returnTo はオンボーディング完了後に引き継ぐ）
+      // users 行が無い、またはウィザード途中で離脱した: /onboarding（未完了なら途中から再開）。
+      // returnTo はウィザード完了後に引き継ぐ
       return redirect(returnTo ? `/onboarding?returnTo=${encodeURIComponent(returnTo)}` : "/onboarding");
     }
   }

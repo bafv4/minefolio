@@ -43,6 +43,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `customSkinUrl` | text | カスタムスキンURL (Vercel Blob) |
 | `customSkinModel` | enum | `default` / `slim` |
 | `customSkinUpdatedAt` | timestamp | カスタムスキン更新日時 |
+| `onboardingCompleted` | boolean (NOT NULL, 既定 true) | 初期設定ウィザード（`/onboarding`）を完了したか。既存ユーザーは既定値で完了済み、ウィザード開始時に `false` で作成され最終ステップ（公開設定）の保存で `true` になる。未完了のユーザーは `profileVisibility: "private"` のまま（詳細は [`docs/auth.md`](./auth.md#オンボーディングフロー)） |
 
 ### インデックス
 
@@ -758,5 +759,6 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
 | `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出・表示文言の組み立て（ロケール対応） |
 | `scripts/add-rta-started-column.ts` | `rta_started_year_month` 列のDB反映スクリプト |
+| `scripts/add-onboarding-completed-column.ts` | `onboarding_completed` 列のDB反映スクリプト |
 | `app/components/hint-tip.tsx` | 端数月の補足など、短い説明を出す共有トリガー（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |
 | `app/components/sensitivity-warning.tsx` | デバイスタブの感度警告表示（[`docs/keybindings.md`](./keybindings.md#関連ファイル)にも記載） |

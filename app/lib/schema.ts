@@ -84,6 +84,11 @@ export const users = sqliteTable("users", {
 
   // RTAを始めた年月（"YYYY-MM"形式の文字列、未回答はnull）。別プロジェクトmcsr-buttonのstarted_year_monthと同形式で、経過年数は表示時に算出する
   rtaStartedYearMonth: text("rta_started_year_month"),
+
+  // 初期設定ウィザード（/onboarding）を完了したか。DB 既定を true にしているのは、
+  // 列追加前から存在する全ユーザーを「完了済み」として扱うため（バックフィル不要）。
+  // ウィザード開始時（_action=start）の insert だけが明示的に false を入れる。
+  onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).default(true).notNull(),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
