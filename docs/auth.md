@@ -17,8 +17,8 @@ MinefolioはDiscord OAuthによるソーシャルログインを採用してい�
 
 1. ユーザーが `/login`（任意で `/login?returnTo=<戻り先パス>` )にアクセス
 2. 既にセッションがある場合:
-   - `users`テーブルにレコードがあれば `returnTo`（あれば）／なければ `/player/{slug}` へリダイレクト
-   - レコードがなければ `/onboarding`（`returnTo` があれば `?returnTo=` を付けて引き継ぐ）へリダイレクト
+   - 登録済み（`users` 行があり `onboardingCompleted === true`）なら `returnTo`（あれば）／なければ `/player/{slug}` へリダイレクト
+   - レコードが無い、またはウィザード未完了（`onboardingCompleted === false`）なら `/onboarding`（`returnTo` があれば `?returnTo=` を付けて引き継ぐ）へリダイレクト
 3. 未認証の場合、ログイン画面を表示
 4. 「Discordでログイン」ボタン押下で `authClient.signIn.social()` を呼び出し
    - `provider: "discord"`
@@ -72,10 +72,10 @@ identify, email
   Discord ボタンの `callbackURL` と `/dev/login` リンクのクエリに引き継ぐ
 - `/dev/login` の loader（セッション済み時の `/login` へのリダイレクト）・action（ログイン成功後の
   `/login` へのリダイレクト。フォームの hidden input 経由で受け渡す）
-- `/onboarding` の loader（既に `users` 行があれば `returnTo` へ即リダイレクト）・action
-  （`complete`/`skip` で新規ユーザー作成後、`returnTo` があればそこへ。フォームの hidden input
-  経由で受け渡す。新規ユーザーであっても、元々アクセスしようとしていたページへ自然に戻せるため
-  意図的に対応している）
+- `/onboarding` の loader（登録済み＝`onboardingCompleted === true` なら `returnTo` へ即リダイレクト）・
+  action（最終ステップ `save_visibility` が完了画面の「プロフィールを見る」の遷移先として
+  `returnTo`（無ければ `/player/{slug}`）を返す。フォームの hidden input 経由で受け渡す。
+  新規ユーザーであっても、元々アクセスしようとしていたページへ自然に戻せるため意図的に対応している）
 
 ### スコープ外
 
@@ -132,6 +132,7 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 - 認証必須 + オンボーディング必須
 - セッション取得後、`users` テーブルから `discordId` で検索
 - ユーザーレコードがなければ `/onboarding` へリダイレクト
+- `onboardingCompleted`（ウィザード完了フラグ）は見ない。ウィザード途中で離脱したユーザーも行があれば通す（「オンボーディングフロー」参照）
 - 戻り値: `{ session, user }`
 
 ### `getCurrentUserOrOnboarding(request, auth, db)`
@@ -150,38 +151,83 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 
 ### パス: `/onboarding`
 
+SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウト内の中央寄せ 1 枚カードで、
+ようこそ画面 → ステップ1〜5 → 完了画面の順に進む。実装は `app/routes/onboarding.tsx`
+（ステップ枠の共通部品は `app/components/onboarding/onboarding-step.tsx`）。
+
+### 「登録済み」の判定
+
+- **登録済み** = `users` 行があり、かつ `users.onboardingCompleted === true`
+- `onboardingCompleted` は DB 既定値が `true`（列追加前から存在する全ユーザーは完了済み扱い。バックフィル不要）。
+  ウィザード開始時（`_action=start`）の insert だけが明示的に `false` を入れ、最終ステップの保存で `true` になる
+- `/login` の loader: セッション済みで `!user || !user.onboardingCompleted` なら `/onboarding` へ（returnTo 引き継ぎ）
+- `/onboarding` の loader: 登録済みなら `returnTo || /player/{slug}` へリダイレクト。
+  行が無ければようこそ画面から、行があり未完了ならステップ1から再開する（保存済みの値を各入力の初期値に使う）
+- `getCurrentUser` などセッションヘルパーは `onboardingCompleted` を見ない（行の有無だけで判定する）。
+  ウィザードを途中で離脱してもアプリ全体はロックせず、未設定の項目は後から `/me/edit` で設定できる
+
 ### 前提条件
 
 - ログイン済み (`getSession` で検証)
-- `users` テーブルにレコードが存在しないこと (存在すれば `/player/{slug}` へリダイレクト)
 
-### ステップ1: MCID入力
+### ステップ構成
 
-1. ユーザーがMinecraft Java EditionのMCIDを入力
-2. バリデーション:
-   - 必須 (スキップ可能 -- 後述)
-   - 3~16文字
-   - 他ユーザーと重複不可
-3. Mojang APIでUUIDを取得 (`fetchUuidFromMcid`)
+各ステップは「タイトル＋説明」→ フォーム → フッター（左「戻る」、右「スキップ」「次へ」）。
+ステップ遷移はクライアント側の state、保存は各ステップの `useFetcher` POST（`_action` で分岐）。
+保存に成功（＋ loader の再検証完了）したら次のステップへ進み、失敗ならフォーム内にエラーを表示する。
+**「スキップ」は保存せずに次へ進むだけ**（サーバー呼び出しなし）。
 
-### ステップ2: 確認・登録
+| ステップ | `_action` | 内容 |
+|---|---|---|
+| 0 ようこそ | `start` | Discord アバター＋「ようこそ、{Discord表示名}さん」。「はじめる」で `users` 行を作成（下記） |
+| 1 プロフィール | `save_profile` | 表示名・アルファベット表記・ひとこと・自己紹介・所在地・代名詞。検証は `/me/edit` の基本情報フォームと同じ |
+| 2 Minecraft | `save_minecraft` | Java版 MCID（任意）・Bedrock版 MCID（任意） |
+| 3 スキン | （なし） | 現在のスキンのプレビューと `SkinUploader` によるカスタムスキンのアップロード／削除（既存 API `/api/me/skin`）。完了後は loader を再検証してプレビューを更新 |
+| 4 連携 | `save_links` | YouTube / Twitch / X / Speedrun.com の ID |
+| 5 公開設定 | `save_visibility` | **スキップ不可**。公開範囲（public / unlisted / private、既定選択なし・必須）とその他の表示設定トグル |
 
-1. MCIDとMinecraftアバターを表示して確認
-2. 登録処理:
-   - `createId()` でユーザーID生成 (CUID2)
-   - `generateSlug(mcid, discordId)` でスラッグ生成
-   - `users` テーブルにINSERT
-   - デフォルト値作成 (`createDefaultsForNewUser`)
-3. `/player/{slug}` へリダイレクト
+#### ステップ0: `start`（`users` 行の作成）
+
+- `displayName` = Discord 表示名、`displayNameAlphabet` = Discord 表示名が印字可能 ASCII（`/^[ -~]+$/`）かつ 50 文字以内ならそれ、そうでなければ `null`
+- `slug = generateSlug(null, discordId)`（`@{discordId}` 形式）、`mcid` / `uuid` は `null`
+- **`profileVisibility: "private"`**（ウィザード完了までは検索・一覧に出さない。公開範囲は最終ステップで必ず本人が選ぶ）
+- **`onboardingCompleted: false`**
+- 挿入成功後に `claimSlug()` と `createDefaultsForNewUser()`。UNIQUE 違反は `errorAlreadyRegistered`
+- 既に行がある（未完了からの再開）なら何もせず成功を返す
+
+#### ステップ1: 表示名の Discord フォールバック
+
+- 表示名が未入力なら Discord 表示名を保存する
+- アルファベット表記が未入力なら、Discord 表示名が印字可能 ASCII かつ 50 文字以内のときだけそれを保存し、そうでなければ `null`（start と同じ規則）
+
+#### ステップ2: MCID
+
+- Java版 MCID: 入力があり現在値と異なれば `/me/edit` の `set_mcid` と同じ処理（3〜16 文字・他ユーザー重複チェック・
+  Mojang API で UUID 取得・`generateSlug(mcid, discordId)`・トランザクション内で `recordSlugChange` と
+  `retargetFavoritesOnSlugChange`）。空欄で現在 MCID があれば `remove_mcid` 相当で解除（slug は `@{discordId}` に戻る）
+- Bedrock版 MCID: `set_bedrock_mcid` と同じ検証（3〜24 文字・制御文字禁止）。空欄なら `null`
+- ウィザード中は常に非公開のため、`set_mcid` が行う YouTube 動画キャッシュの追従は行わない（公開への切替時に追いつかせる）
+
+#### ステップ4: 連携
+
+- 各 ID は `/me/edit` の `create_link` と同じ形式検証（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
+- `social_links` へプラットフォーム単位で upsert（あれば identifier 更新、無ければ作成、空欄なら該当プラットフォームの行を削除）。カスタムリンクは扱わない
+- Speedrun.com は `users.speedruncomUsername` にも同期し、値が変わったら `speedruncomId` を `null` にリセットして SRC ランキングを即時更新
+- Twitch VOD / YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外）
+
+#### ステップ5: 公開設定（完了）
+
+- 公開範囲を enum 検証し、表示設定トグルと合わせて更新。同じ update で **`onboardingCompleted: true`** にする
+- 非公開→公開に切り替わる場合は `/me/edit` と同じく Twitch / YouTube / SRC のキャッシュを `runAfterResponse` で追いつかせる
+- リダイレクトせず `{ success: true, action: "complete", slug, redirectTo, ... }` を返し、クライアントが完了画面を表示する
+  （この action の後だけ loader の再検証を抑止する。再検証すると「登録済み → リダイレクト」で完了画面が飛ぶため）
+
+### 完了画面
+
+- 「設定が完了しました」＋「ようこそ、{保存済みの表示名}さん！」（英語ロケールでは `displayNameAlphabet ?? displayName`）
+- CTA:「プロフィールを見る」（`returnTo` があればそこ、無ければ `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
 
 > 旧サイト (mchotkeys) からのデータ引き継ぎボタンは登録フローから削除済み。
-
-### MCIDスキップ
-
-- MCIDなしでも登録可能 (`_action: "skip"`)
-- スラッグは `@{discordId}` 形式になる
-- `mcid`, `uuid` は `null`
-- デフォルト値のみ作成
 
 ---
 
@@ -269,7 +315,8 @@ const { session, user } = await getCurrentUser(request, auth, db);
 | `app/lib/session.ts` | セッション取得ヘルパー群 |
 | `app/lib/return-to.ts` | ログイン後の遷移先（returnTo）の検証・エンコード（`sanitizeReturnTo` / `encodeReturnToForCallback`） |
 | `app/routes/login.tsx` | ログインページ (Discord OAuthトリガー) |
-| `app/routes/onboarding.tsx` | オンボーディング (MCID登録、ユーザー作成) |
+| `app/routes/onboarding.tsx` | オンボーディング（ウィザード式初期設定。ユーザー作成・プロフィール/MCID/連携/公開設定の保存） |
+| `app/components/onboarding/onboarding-step.tsx` | ウィザードのステップ枠（ステップ表示＋Progress・エラー・フッター） |
 | `app/routes/dev-login.tsx` | ローカル開発専用の簡易ログイン（`DEV_AUTH=1` 時のみ） |
 | `app/routes/_layout.tsx` | ルートレイアウト (Discordアバター同期) |
 | `app/routes/api/auth/splat.tsx` | better-auth APIハンドラ (`/api/auth/*`) |
