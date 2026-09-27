@@ -8,20 +8,24 @@ import {
 } from "../translate.server";
 import { GLOSSARY, GLOSSARY_VERSION, formatGlossary } from "../translation-glossary";
 
-/** messages.create が受け取るもののうち、テストで検証する分だけ */
-type CreateParams = {
+/** messages.parse が受け取るもののうち、テストで検証する分だけ */
+type ParseParams = {
   model: string;
   system: string;
   messages: Array<{ role: string; content: string }>;
+  output_config?: { effort?: string };
 };
 
-/** options.client に差し込むモック（応答文字列を固定で返す） */
-function mockClient(reply: string | (() => never)) {
-  const create = vi.fn(async (_params: CreateParams) => {
+/**
+ * options.client に差し込むモック。
+ * 構造化出力（parsed_output）を固定で返す。null は「形が合わず SDK が解釈できなかった応答」を表す。
+ */
+function mockClient(reply: string[] | null | (() => never)) {
+  const create = vi.fn(async (_params: ParseParams) => {
     if (typeof reply === "function") reply();
-    return { content: [{ type: "text", text: reply as string }] };
+    return { parsed_output: reply === null ? null : { translations: reply as string[] } };
   });
-  return { client: { create } as never, create };
+  return { client: { parse: create } as never, create };
 }
 
 let originalKey: string | undefined;
@@ -72,21 +76,21 @@ describe("translateTexts - 無効・自明なケース", () => {
   });
 
   it("翻訳元と翻訳先が同じなら null", async () => {
-    const { client } = mockClient('["x"]');
+    const { client } = mockClient(["x"]);
     expect(
       await translateTexts(["こんにちは"], { from: "ja", to: "ja", client }),
     ).toBeNull();
   });
 
   it("空配列は API を呼ばずに空を返す", async () => {
-    const { client, create } = mockClient('["x"]');
+    const { client, create } = mockClient(["x"]);
     const result = await translateTexts([], { from: "ja", to: "en", client });
     expect(result?.texts).toEqual([]);
     expect(create).not.toHaveBeenCalled();
   });
 
   it("空白のみの要素しか無ければ API を呼ばずそのまま返す", async () => {
-    const { client, create } = mockClient('["x"]');
+    const { client, create } = mockClient(["x"]);
     const result = await translateTexts(["", "   ", "\n"], {
       from: "ja",
       to: "en",
@@ -97,7 +101,7 @@ describe("translateTexts - 無効・自明なケース", () => {
   });
 
   it("入力が上限文字数を超えたら null（呼び出し側で分割する）", async () => {
-    const { client, create } = mockClient('["x"]');
+    const { client, create } = mockClient(["x"]);
     const huge = "あ".repeat(MAX_INPUT_CHARS + 1);
     expect(await translateTexts([huge], { from: "ja", to: "en", client })).toBeNull();
     expect(create).not.toHaveBeenCalled();
@@ -106,7 +110,7 @@ describe("translateTexts - 無効・自明なケース", () => {
 
 describe("translateTexts - 正常系", () => {
   it("要素数と順序を保って訳文を返す", async () => {
-    const { client } = mockClient('["Hello","World"]');
+    const { client } = mockClient(["Hello", "World"]);
     const result = await translateTexts(["こんにちは", "世界"], {
       from: "ja",
       to: "en",
@@ -118,7 +122,7 @@ describe("translateTexts - 正常系", () => {
   });
 
   it("空要素は API へ送らず、訳文は元の位置へ戻る", async () => {
-    const { client, create } = mockClient('["Hello","World"]');
+    const { client, create } = mockClient(["Hello", "World"]);
     const result = await translateTexts(["こんにちは", "", "世界"], {
       from: "ja",
       to: "en",
@@ -130,14 +134,8 @@ describe("translateTexts - 正常系", () => {
     expect(sent).toEqual(["こんにちは", "世界"]);
   });
 
-  it("コードフェンスや前置きが付いていても配列を取り出す", async () => {
-    const { client } = mockClient('了解しました。\n```json\n["Hello"]\n```');
-    const result = await translateTexts(["こんにちは"], { from: "ja", to: "en", client });
-    expect(result?.texts).toEqual(["Hello"]);
-  });
-
   it("短文は Haiku、長文は上位モデルへ回す", async () => {
-    const short = mockClient('["a"]');
+    const short = mockClient(["a"]);
     const shortResult = await translateTexts(["短い"], {
       from: "ja",
       to: "en",
@@ -145,7 +143,7 @@ describe("translateTexts - 正常系", () => {
     });
     expect(shortResult?.model).toContain("haiku");
 
-    const long = mockClient('["a"]');
+    const long = mockClient(["a"]);
     const longResult = await translateTexts(["あ".repeat(5000)], {
       from: "ja",
       to: "en",
@@ -154,8 +152,18 @@ describe("translateTexts - 正常系", () => {
     expect(longResult?.model).toContain("sonnet");
   });
 
+  it("effort は上位モデルのときだけ送る（Haiku は受け付けない）", async () => {
+    const short = mockClient(["a"]);
+    await translateTexts(["短い"], { from: "ja", to: "en", client: short.client });
+    expect(short.create.mock.calls[0]![0].output_config?.effort).toBeUndefined();
+
+    const long = mockClient(["a"]);
+    await translateTexts(["あ".repeat(5000)], { from: "ja", to: "en", client: long.client });
+    expect(long.create.mock.calls[0]![0].output_config?.effort).toBe("low");
+  });
+
   it("プロンプトに用語集と文脈が載る", async () => {
-    const { client, create } = mockClient('["a"]');
+    const { client, create } = mockClient(["a"]);
     await translateTexts(["詰め"], {
       from: "ja",
       to: "en",
@@ -170,33 +178,21 @@ describe("translateTexts - 正常系", () => {
 
 describe("translateTexts - 壊れた応答は使わない", () => {
   it("要素数が足りなければ null（欠けたまま書き戻さない）", async () => {
-    const { client } = mockClient('["Hello"]');
+    const { client } = mockClient(["Hello"]);
     expect(
       await translateTexts(["こんにちは", "世界"], { from: "ja", to: "en", client }),
     ).toBeNull();
   });
 
   it("要素数が多すぎても null", async () => {
-    const { client } = mockClient('["Hello","World","!"]');
+    const { client } = mockClient(["Hello", "World", "!"]);
     expect(
       await translateTexts(["こんにちは", "世界"], { from: "ja", to: "en", client }),
     ).toBeNull();
   });
 
-  it("配列でなければ null", async () => {
-    const { client } = mockClient('{"text":"Hello"}');
-    expect(await translateTexts(["こんにちは"], { from: "ja", to: "en", client })).toBeNull();
-  });
-
-  it("文字列以外が混ざっていれば null", async () => {
-    const { client } = mockClient('["Hello", 42]');
-    expect(
-      await translateTexts(["こんにちは", "世界"], { from: "ja", to: "en", client }),
-    ).toBeNull();
-  });
-
-  it("JSON として壊れていれば null", async () => {
-    const { client } = mockClient('["Hello",');
+  it("SDK が形を解釈できなかった応答（parsed_output なし）は null", async () => {
+    const { client } = mockClient(null);
     expect(await translateTexts(["こんにちは"], { from: "ja", to: "en", client })).toBeNull();
   });
 
