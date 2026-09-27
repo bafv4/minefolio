@@ -13,10 +13,9 @@ pnpm dev              # 開発サーバー起動 (http://localhost:5173)
 pnpm build            # プロダクションビルド
 pnpm typecheck        # React Router typegen + tsc --noEmit
 pnpm test             # Vitest実行
-pnpm db:generate      # スキーマ変更からDrizzleマイグレーション生成
-pnpm db:migrate       # マイグレーション実行
-pnpm db:push          # スキーマをローカルDB（.env = file:local.db）に直接反映
-pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直接反映
+pnpm db:push          # スキーマをローカルDB（.env = file:local.db）に反映（現行 drizzle-kit では失敗することがある。`db-apply` スキル参照）
+pnpm db:push:remote   # 同上、リモートTurso（.env.remote）
+pnpm gen:test-schema  # テスト用 DDL（app/lib/__tests__/helpers/test-schema.sql）を再生成
 ```
 
 ### git依存パッケージの更新（`@bafv4/mcitems` 等）
@@ -113,7 +112,9 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 - スキーマ: `app/lib/schema.ts`（Drizzle ORM、SQLite/Turso方言）
 - 全体像（テーブル一覧・ER図・整合性ポリシー）: `docs/database.md`
-- マイグレーション: `drizzle/` ディレクトリ、`pnpm db:generate` + `pnpm db:migrate` で管理
+- スキーマ反映: `db-apply` スキルが単一情報源。`db:push` が中断する／TRUNCATE を提案する場合は
+  `scripts/` の一回限りスクリプト（dry-run 既定・`--apply`・`--remote`）で DDL を適用する。
+  `pnpm db:migrate` は本環境で反映経路として機能しない
 - ID生成: `@paralleldrive/cuid2` によるCUID2
 - 設定: `drizzle.config.ts` = ローカル用（`.env` を読み込み。リモートURLならエラーで中断）、
   `drizzle.remote.config.ts` = リモート用（`.env.remote` を読み込み。`pnpm db:push:remote` で使用）

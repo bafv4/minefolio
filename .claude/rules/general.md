@@ -63,7 +63,7 @@ const actionType = formData.get("_action") as string;
 - ローダー / meta ではロケールを明示する: `t(key, params, locale)`。locale は `resolveLocale(request)` / `localeFromMatches(matches)`（`@/lib/locale`）で得る
 - UIテキストは原則として翻訳キー経由、ハードコードしない。キーが無ければ `pages-ja.ts` に追加してから使う
 - 対応ロケールと検出（Cookie → Accept-Language → 既定）は `app/lib/locale.ts` が単一情報源。詳細は `docs/i18n.md`
-- 旧 `@/lib/i18n`（カテゴリ方式）は**削除済み**。ロケール関連は `@/lib/locale` に集約されている
+- ロケール関連（対応ロケール・検出・`resolveLocale` 等）は `@/lib/locale` に集約されている
 
 ## DB クエリ
 - リレーション読み込みは `with` を使用（別クエリにしない）
