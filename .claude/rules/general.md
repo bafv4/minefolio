@@ -55,13 +55,15 @@ const actionType = formData.get("_action") as string;
 - トースト: `toast.success(t("key"))` / `toast.error(t("key"))`（sonner）
 
 ## 翻訳（i18n）
-- import は `import { t } from "@/lib/messages"`（現行の主系統。約76ファイルで使用）
+- 翻訳関数はロケールを束ねた `Translator` を取得して使う。コンポーネントは `useT()`（`@/hooks/use-locale`）、
+  ローダー / action / meta / サーバー処理は `createTranslator(locale)`（`@/lib/messages`）。いずれも `const t = …` で受ける
 - `t("dotPath.key")` でアクセス（例: `t("meEdit.mcidRequired")`）。キー実体は `app/lib/messages/pages-ja.ts`（ネストしたオブジェクト）
+- `@/lib/messages` の `t` を直接 import しない。locale を省略すると常に日本語を返し、型エラーにもならない。
+  ヘルパー関数が文言を必要とする場合は、呼び出し側の `Translator` を引数（`t: Translator`）で受け取る
 - パラメータ補間: `t("key", { count: 5 })` → 文言中の `{count}` を置換
-- **文言の追加は `app/lib/messages/pages-ja.ts`（日本語・全キーの基準）に入れる**。英語 `pages-en.ts` は任意（部分集合でよく、未翻訳キーは日本語へフォールバックする）
-- **コンポーネントでは `t()` を直接呼ばず `useT()`（`@/hooks/use-locale`）を使う**。`t()` はモジュールレベルの純粋関数でリクエスト文脈を持たないため、直接呼ぶと常に日本語になる
-- ローダー / meta ではロケールを明示する: `t(key, params, locale)`。locale は `resolveLocale(request)` / `localeFromMatches(matches)`（`@/lib/locale`）で得る
-- UIテキストは原則として翻訳キー経由、ハードコードしない。キーが無ければ `pages-ja.ts` に追加してから使う
+- **文言の追加は `app/lib/messages/pages-ja.ts`（日本語・全キーの基準）と `pages-en.ts`（英語）の両方に入れる**。`app/lib/__tests__/locale.test.ts` の翻訳カバレッジが、英訳の漏れと英語側だけに残ったキーの両方で落ちる。型（`PartialMessages`）と `t()` の日本語フォールバックが部分集合を許すのは取りこぼし時の安全網で、英訳を省いてよいという意味ではない
+- ローダー / action では `createTranslator(resolveLocale(request))`、meta では `createTranslator(localeFromMatches(matches))` でロケールを明示する（`resolveLocale` / `localeFromMatches` は `@/lib/locale`）
+- UIテキストは原則として翻訳キー経由、ハードコードしない。キーが無ければ `pages-ja.ts` と `pages-en.ts` に追加してから使う
 - 対応ロケールと検出（Cookie → Accept-Language → 既定）は `app/lib/locale.ts` が単一情報源。詳細は `docs/i18n.md`
 - ロケール関連（対応ロケール・検出・`resolveLocale` 等）は `@/lib/locale` に集約されている
 

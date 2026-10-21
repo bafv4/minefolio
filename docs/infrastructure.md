@@ -46,41 +46,11 @@ pnpm db:migrate    # マイグレーション実行
 
 ## 国際化 (i18n)
 
-2つのi18nシステムを併用している。
+日本語（既定）と英語に対応する。詳細は [`docs/i18n.md`](./i18n.md) を参照。
 
-### システム1: カテゴリベース（app/lib/i18n.ts）
-
-```typescript
-t(category: string, key: string, params?: Record<string, string>, locale?: Locale)
-```
-
-- `translations` オブジェクトにカテゴリ → キー → 翻訳文の階層構造で定義
-- 対応言語: `ja`（日本語）、`en`（英語）
-- デフォルトロケール: `ja`
-- `supportedLocales` で言語名と自国語名を管理
-
-### システム2: ドットパスキー（app/lib/messages/）
-
-```typescript
-t(key: MessageKey, params?: Record<string, string | number>, locale?: AppLocale)
-```
-
-- `app/lib/messages/pages-ja.ts` にフラットなドットパスキーで翻訳を定義
-- 型安全: `MessageKey` 型で補完が効く
-- `{param}` 形式のパラメータ補間をサポート
-- `getNestedValue()` でドットパスを再帰的に解決
-
-### ロケール検出
-
-優先順位:
-1. Cookie（`locale` キー）
-2. `Accept-Language` ヘッダー
-3. デフォルト: `ja`
-
-### ロケール切替
-
-- `/api/set-locale`: POSTリクエストでCookieにロケールを設定
-- `LocaleSwitcher` コンポーネント: ヘッダーに言語切替UIを表示
+- メッセージ: `app/lib/messages/`（`pages-ja.ts` が全キーの基準、`pages-en.ts` が英訳）。`t()` / `createTranslator()` でドットパスキー（`t("meEdit.mcidRequired")`）を引く
+- ロケール検出: `app/lib/locale.ts`。Cookie（`minefolio_locale`）→ `Accept-Language` ヘッダー → 既定 `ja` の順
+- ロケール切替: `/api/set-locale`（POST）が Cookie にロケールを設定し、`LocaleSwitcher` コンポーネントがヘッダーに切替UIを表示する
 
 ---
 
@@ -367,9 +337,10 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `drizzle/` - マイグレーションファイル
 
 ### 国際化
-- `app/lib/i18n.ts` - カテゴリベースi18n（システム1）
-- `app/lib/messages/index.ts` - ドットパスキーi18n（システム2）エントリポイント
-- `app/lib/messages/pages-ja.ts` - 日本語メッセージ定義
+- `app/lib/locale.ts` - 対応ロケール・ロケール検出（Cookie / Accept-Language）
+- `app/lib/messages/index.ts` - メッセージ取得（`t()` / `createTranslator()`）エントリポイント
+- `app/lib/messages/pages-ja.ts` - 日本語メッセージ定義（全キーの基準）
+- `app/lib/messages/pages-en.ts` - 英語メッセージ定義
 
 ### レイアウト
 - `app/routes/_layout.tsx` - メインレイアウト（ヘッダー/フッター）

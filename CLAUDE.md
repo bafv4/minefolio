@@ -127,9 +127,11 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 ### i18n（国際化）
 
-日本語（既定）と英語に対応。**英語は主要導線から段階的**に広げており、未翻訳キーは日本語へフォールバックする。
+日本語（既定）と英語に対応。メッセージカタログは全キー英訳済み。
 
-- 文言実体は `app/lib/messages/`。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
+- 文言実体は `app/lib/messages/`。`pages-ja.ts` が全キーの基準。**新しいキーは `pages-en.ts` にも同時に追加する**
+  （`app/lib/__tests__/locale.test.ts` の翻訳カバレッジが ja/en のキー不一致で落ちる。型と `t()` の
+  日本語フォールバックが部分集合を許すのは取りこぼし時の安全網で、英訳を省いてよいという意味ではない）
 - **コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる**
 - 書き方の規約は `.claude/rules/general.md`「翻訳（i18n）」、ロケール検出などの詳細は `docs/i18n.md`
 
