@@ -60,7 +60,7 @@
   - **テーブル行・列ハンドル**（Notion 風、デスクトップのみ）— `toolbar/table-handles.tsx`。ホバー中の行の左端 / 列の上端にピル型ハンドルを表示。クリックで行・列全体を CellSelection で選択（`.selectedCell` ハイライト）し、メニューから行・列の追加・削除、スタイル一括適用（背景色 / 文字色 / 文字揃え）、テーブル削除ができる
 - モバイル/タッチ完全対応: `(hover:none)` で分岐し、バブルの代わりに下部固定ツールバー（`toolbar/mobile-toolbar.tsx`）。ブロックハンドルはタッチ時 `selectionUpdate` ベースで追従。
 - アクセシビリティ: `role`/`aria-label`、保存状態の `aria-live`、本文の `role=textbox`。
-- 自動保存（`hooks/use-auto-save.ts`、debounce 2000ms、最終保存時刻表示）と未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
+- 未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
 
 #### ディレクトリ構成（`app/components/guide-editor/`）
 
@@ -73,7 +73,7 @@
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
 | `panels/` | metadata-fields / color-picker / font-size-picker / settings-dialog / embed-dialog / youtube-dialog / link-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
-| `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
+| `hooks/` | use-guide-editor / use-guide-save / use-editor-rerender / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
 | `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
 | `lib/image-crop.ts` | トリミング矩形の計算（純粋関数 / DOM 非依存） |
