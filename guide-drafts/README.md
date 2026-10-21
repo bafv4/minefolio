@@ -29,8 +29,8 @@
 | # | ファイル名 | 対象ページ | 内容 |
 |---|---|---|---|
 | 1 | `usage-01-login.png` | `/login` | 「Discordでログイン」ボタンが見える状態 |
-| 2 | `usage-02-onboarding-mcid.png` | `/onboarding` | MCID入力欄と「検証して続行」「MCIDなしで登録」の両方が見える状態 |
-| 3 | `usage-03-onboarding-confirm.png` | `/onboarding`（MCID検証成功後） | アバタープレビューと「セットアップを完了」ボタン |
+| 2 | `usage-02-onboarding-minecraft.png` | `/onboarding`（ステップ2） | Java版/Bedrock版MCID入力欄と「戻る」「スキップ」「次へ」が見える状態 |
+| 3 | `usage-03-onboarding-visibility.png` | `/onboarding`（ステップ5） | 公開範囲の三択・表示設定のスイッチ・「設定を完了」ボタン |
 | 4 | `usage-04-edit-overview.png` | `/me/edit` | プロフィール編集ページ全体（表示名・自己紹介・スキン・ソーシャルリンクが見える範囲） |
 | 5 | `usage-05-edit-videos.png` | `/me/edit` | 「動画」カード。動画を2件以上登録し、うち1件をピン留めした状態 |
 | 6 | `usage-06-keybindings.png` | `/me/keybindings` | 仮想キーボードとリマップ編集領域。Trigger/Chat種別を設定したリマップ行が見える状態 |
