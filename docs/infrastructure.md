@@ -28,14 +28,17 @@ createClient({
 - マイグレーション出力: `./drizzle/`
 - ダイアレクト: `turso`
 
-### マイグレーション
+### スキーマ反映
 
 ```bash
-pnpm db:generate   # スキーマからマイグレーションSQL生成
-pnpm db:migrate    # マイグレーション実行
+pnpm db:push          # ローカル DB（.env = file:local.db）に反映
+pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 ```
 
-マイグレーションファイルは `drizzle/` ディレクトリに出力される。
+現行の drizzle-kit では `db:push` が中断する、または TRUNCATE を提案することがあり、その場合は
+`scripts/` の一回限りスクリプト（dry-run 既定・`--apply`・`--remote`）で DDL を適用する。
+`pnpm db:migrate` は本環境で反映経路として機能しない。手順の単一情報源は `db-apply` スキル
+（`.claude/skills/db-apply/SKILL.md`）。
 
 ### ID生成
 
