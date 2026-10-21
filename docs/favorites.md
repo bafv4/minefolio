@@ -161,13 +161,13 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 | `/favorites` | お気に入り一覧。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
 | `/browse` | ログイン時のみ、お気に入りを上位に並べ替え（loader で DB から取得） |
 | `/player/:slug` | `<FavoriteButton slug={player.slug} />` でトグル |
-| `/api/home-feed` | ライブ・ペース・動画でお気に入りを上位にソート（ログイン時のみ） |
+| ホーム（`/`） | ライブ・ペース・動画でお気に入りを先頭に並べ替え。クライアント側の `useFavorites()` で適用し、ゲスト（Cookie 同意済み）も対象。`/api/home-feed` 自体はユーザー非依存（お気に入り・セッションを参照せず、CDN キャッシュ） |
 
 ---
 
 ## SSR の扱い
 
-- ログイン中のローダー（`/favorites` / `/browse` / `/api/home-feed`）は DB から取得して SSR に反映
+- ログイン中のローダー（`/favorites` / `/browse`）は DB から取得して SSR に反映
 - 未ログインは SSR では何もしない（クライアントの `FavoritesProvider` がマウント後に処理）
 - `/_layout` ローダーで `initialFavorites` を取得し、`FavoritesProvider` に渡すことで初回描画のチラつきを軽減
 
