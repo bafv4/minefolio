@@ -43,6 +43,9 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `customSkinUrl` | text | カスタムスキンURL (Vercel Blob) |
 | `customSkinModel` | enum | `default` / `slim` |
 | `customSkinUpdatedAt` | timestamp | カスタムスキン更新日時 |
+| `customCapeUrl` | text (nullable) | カスタムマントURL (Vercel Blob、`capes/<userId>/`) |
+| `customCapeUpdatedAt` | timestamp (nullable) | カスタムマント更新日時 |
+| `capeDisplay` | enum (NOT NULL, 既定 `cape`) | `cape` / `elytra` / `hidden`。マントの出所（カスタム/Mojang）に関係なく適用される背中の表示 |
 | `onboardingCompleted` | boolean (NOT NULL, 既定 true) | 初期設定ウィザード（`/onboarding`）を完了したか。既存ユーザーは既定値で完了済み、ウィザード開始時に `false` で作成され最終ステップ（公開設定）の保存で `true` になる。未完了のユーザーは `profileVisibility: "private"` のまま（詳細は [`docs/auth.md`](./auth.md#オンボーディングフロー)） |
 
 ### インデックス
@@ -347,6 +350,61 @@ Steve を返す（この API の挙動は変えていない）。「MCID未登�
 
 ---
 
+## マント（cape）
+
+スキン3D表示（`MinecraftFullBody`）に背中のマント／エリトラを載せる。
+
+### 表示の優先順位
+
+**カスタムマント（`customCapeUrl`） → Mojang のマント（`uuid` がある場合） → なし**。
+カスタムスキンを設定していても `uuid` があれば Mojang のマントを出す（スキンとマントは独立に解決する）。
+この解決は `app/lib/cape.ts` の `resolveCapeProps({ uuid, customCapeUrl, capeDisplay })`（`.server` ではない共有ヘルパー）に集約しており、
+返り値 `{ capeUrl?, backEquipment? }` をそのまま `MinecraftFullBody` に spread する。`hidden` や出所が無い場合は `{}`。
+
+### `capeDisplay`
+
+| 値 | 表示 |
+|---|---|
+| `cape` | マント（既定） |
+| `elytra` | そのマントのテクスチャでエリトラ |
+| `hidden` | 非表示 |
+
+出所（カスタム/Mojang）に関係なく適用する。マントが無いユーザーが `elytra` を選んでも何も出ない。
+`/me/edit` の「マントの表示」3択トグル（「スキンモデル」トグルと同じ見た目）で選び、基本のプロフィール保存フォーム
+（`formValues` / 変更検知 / リセット）に乗る。サーバー側は `users.capeDisplay.enumValues` から導出した許可リストで検証し、
+値が未送信のときは列を更新対象から外す（`null` や既定値で上書きしない）。不正値はエラー。
+`/me/edit` のポーズプレビューには、保存前のフォーム値の `capeDisplay` を使って即時反映する。
+
+### API: `GET /api/cape?uuid=`
+
+Mojang のマント画像を返す中継API（`app/routes/api/cape.ts`）。プライバシーポリシーの
+「閲覧者の端末から Mojang へ直接通信しない」に合わせ、サーバーが sessionserver からプロフィールを取得して textures の
+`CAPE.url` を取り出し、PNG を取得して配信する（ブラウザに `textures.minecraft.net` を直接読ませない）。
+
+- `uuid`: ハイフン有無の32桁hex。形式不正は `400`
+- SSRF 対策: `CAPE.url` はパースしてホストが `textures.minecraft.net` であることを確認する（`toSafeMojangTextureUrl`、`app/lib/mojang.ts`）。
+  sessionserver は `http://` を返すため http/https のどちらも受け付け、取得時は常に `https` へ正規化する。ポート指定・認証情報つき・
+  別ホストは取得しない。リダイレクトは辿らない（`redirect: "error"`）
+- マントが無い（プロフィール 204/404・textures 無し・CAPE 無し）: `404` + 長期公開キャッシュ（`/api/skin` の `SKIN_CACHE_CONTROL` 相当）
+- Mojang 側の失敗（非 ok / 例外 / 不正なレスポンス / 想定外ホスト / 1MB 超）: `502` + 短TTL（`max-age=300, s-maxage=300`）
+- `MinecraftFullBody` は `loadCape` の失敗（404 等）を握りつぶしてマント無しで続行する
+
+### カスタムマントのアップロード
+
+- Blob パス: `capes/<userId>/cape.png`（`addRandomSuffix: true` のため実体は一意パス）。png のみ・1MB まで
+- 受け付ける画像サイズ: 64×32 / 22×17（旧形式）/ 128×64 / 256×128 / 512×256（HD）
+- `POST /api/me/cape/upload-token`: Client Upload 用トークン発行。認証必須、`capes/<userId>/` 以外・`..` を含むパスは拒否
+- `POST /api/me/cape`: `{ url }` を保存（認証必須。URLは `isVercelBlobUrl` でホスト検証。旧Blobは差し替え時に削除）。`customCapeUrl` / `customCapeUpdatedAt` を更新
+- `DELETE /api/me/cape`: Blob を削除し、`customCapeUrl` / `customCapeUpdatedAt` を `null` に（`capeDisplay` は触らない）
+- UI は `app/components/cape-uploader.tsx`（`skin-uploader.tsx` と同形。現在のマントは `pixelated` でプレビュー）。`/me/edit` の「カスタムスキン」の次にセクションを置く
+
+### 静止画キャッシュ
+
+`MinecraftFullBody` の静止画キャッシュキー・リクエストキー・主 effect の依存に `capeUrl` と `backEquipment` を含める
+（マントだけ変わったときのキャッシュ衝突と、古い静止画の残留を防ぐ）。静止画の角度は変えず、マントも同じ角度で載せる。
+
+---
+
 ## スキン表示コンポーネント
 
 ### `MinecraftAvatar`
@@ -394,6 +452,8 @@ Steve を返す（この API の挙動は変えていない）。「MCID未登�
 | `rotate` | `boolean` | `false` | 自動回転 |
 | `asImage` | `boolean` | `false` | 静止画像として出力（`interactive` が `true` のときは強制無効） |
 | `slim` | `boolean` | `false` | スリムスキンモデル |
+| `capeUrl` | `string` | - | マント画像URL。省略時はマント無し。読み込み失敗（404等）もマント無しで続行 |
+| `backEquipment` | `"cape" \| "elytra"` | `"cape"` | 背中の装備。`elytra` は同じマントテクスチャでエリトラ表示（`capeUrl` がある場合のみ有効） |
 | `interactive` | `boolean` | `false` | OrbitControls による回転・拡大縮小・移動を有効化 |
 | `showInteractiveHint` | `boolean` | `false` | インタラクティブモード時に右上にヒント切替ボタン（？）を表示 |
 
@@ -682,7 +742,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
    - トランザクション化により、途中で失敗した場合は全体がロールバックされる（「他ユーザーが押した favorites 行だけ消えた」のような復元不能な部分状態を防ぐ）
 2. action 側はこの呼び出しの後に `/` へリダイレクトするだけ
 
-Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` の2 prefix 配下 = 著者の全ガイドの本文画像・カバー・ドラフト分とカスタムスキン）は、トランザクション成功後に `deleteUserAccount()` が内部で `runAfterResponse()` 経由で best-effort 削除をスケジュールする（`cleanupUserBlobs()`）。失敗してもアカウント削除自体は完了しており、消し残しは `scripts/audit-orphan-blobs.ts` / `delete-orphan-blobs.ts` が後から拾える（[guides.md](./guides.md#参照されなくなった-blob-の回収)参照）。ローカル開発など `BLOB_READ_WRITE_TOKEN` 未設定時は no-op。
+Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` と `capes/<userId>/` の3 prefix 配下 = 著者の全ガイドの本文画像・カバー・ドラフト分とカスタムスキン・カスタムマント。`customSkinUrl` / `customCapeUrl` は規約前パスの保険として個別にも `del()` する）は、トランザクション成功後に `deleteUserAccount()` が内部で `runAfterResponse()` 経由で best-effort 削除をスケジュールする（`cleanupUserBlobs()`）。失敗してもアカウント削除自体は完了しており、消し残しは `scripts/audit-orphan-blobs.ts` / `delete-orphan-blobs.ts` が後から拾える（[guides.md](./guides.md#参照されなくなった-blob-の回収)参照）。ローカル開発など `BLOB_READ_WRITE_TOKEN` 未設定時は no-op。
 
 **残るもの**: `paceman_paces` の当該ユーザー分は `user_id` が `set null` になるだけで行自体は残る（MCID 起点の設計。同じ MCID で再登録されれば再リンクされる。[database.md](./database.md#ondelete-の使い分け)参照）。他ユーザーのガイドへコピーされた画像参照は、コピー元の Blob が削除されるため壊れる（cross-user 参照は保護対象外。ガイド個別削除時のカバー画像即時削除と同じ意味論として許容）。
 
@@ -757,6 +817,11 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/hooks/use-media-query.ts` | レスポンシブサイズ判定用フック |
 | `app/routes/api/skin.ts` | スキンテクスチャプロキシAPI |
 | `app/routes/api/me/skin.ts` | カスタムスキン管理API (POST/DELETE) |
+| `app/routes/api/cape.ts` | Mojang マント画像の中継API (`GET /api/cape?uuid=`) |
+| `app/routes/api/me/cape.ts` | カスタムマント管理API (POST/DELETE) |
+| `app/routes/api/me/cape/upload-token.ts` | カスタムマントのアップロードトークン発行 |
+| `app/lib/cape.ts` | マント表示の解決ヘルパー（`resolveCapeProps`・`capeDisplay` の型） |
+| `app/components/cape-uploader.tsx` | カスタムマントのアップロードUI |
 | `app/lib/rta-career.ts` | RTA歴（開始年月）のパース・検証・経過期間算出・表示文言の組み立て（ロケール対応） |
 | `scripts/add-rta-started-column.ts` | `rta_started_year_month` 列のDB反映スクリプト |
 | `scripts/add-onboarding-completed-column.ts` | `onboarding_completed` 列のDB反映スクリプト |

@@ -16,6 +16,9 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/skin` | GET | 不要 | スキン画像取得 |
 | `/api/me/skin` | POST/DELETE | 必須 | カスタムスキン保存・削除 |
 | `/api/me/skin/upload-token` | POST | 必須 | スキンアップロードトークン発行 |
+| `/api/cape` | GET | 不要 | Mojang マント画像取得（中継） |
+| `/api/me/cape` | POST/DELETE | 必須 | カスタムマント保存・削除 |
+| `/api/me/cape/upload-token` | POST | 必須 | マントアップロードトークン発行 |
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
@@ -57,6 +60,23 @@ Minecraftスキン画像を返す。
 **キャッシュ:** `Cache-Control: public, max-age=3600`（1時間）
 
 **関連ファイル:** `app/routes/api/skin.ts`
+
+---
+
+### `GET /api/cape`
+
+Mojang のマント画像を返す（サーバーが sessionserver から取得して中継。ブラウザは Mojang へ直接通信しない）。
+
+**パラメータ:**
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `uuid` | string | ○ | Minecraft UUID（ハイフン有無の32桁hex。不正は 400） |
+
+**レスポンス:** `image/png`（バイナリ）。マントが無い場合は `404`、Mojang 側の失敗は `502`
+
+**キャッシュ:** 200 / 404 は `Cache-Control: public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400`、502 は `max-age=300, s-maxage=300`
+
+**関連ファイル:** `app/routes/api/cape.ts`、仕様は [profiles.md](./profiles.md#マントcape)
 
 ---
 
