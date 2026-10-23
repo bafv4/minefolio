@@ -1,0 +1,19 @@
+# graphify（ナレッジグラフ）の対象から外すもの。書式は .gitignore と同じ。
+# 方針: コード（AST・post-commit フックで自動更新）＋ docs/ 直下の仕様書（semantic 抽出・リリース時などにまとめて更新）だけをグラフにする。
+
+# 毎セッション読み込まれる指示ファイル（グラフに入れても情報が増えない）
+/CLAUDE.md
+/.claude/
+
+# 公開コンテンツ（api.md は docs/api.md と重複、changelog・規約類はコード構造と関係が薄い）
+/app/content/
+
+# 仕様書以外のドキュメント
+/README.md
+/README.en.md
+/docs/research/
+/docs/update/
+/guide-drafts/
+
+# 静的ファイル（画像・フォントのライセンス）
+/public/
