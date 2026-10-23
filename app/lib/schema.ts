@@ -74,6 +74,12 @@ export const users = sqliteTable("users", {
   customSkinModel: text("custom_skin_model", { enum: ["default", "slim"] }),
   customSkinUpdatedAt: integer("custom_skin_updated_at", { mode: "timestamp" }),
 
+  // カスタムマント（Vercel Blob）／マント表示設定
+  customCapeUrl: text("custom_cape_url"),
+  customCapeUpdatedAt: integer("custom_cape_updated_at", { mode: "timestamp" }),
+  // 3D表示時の背中装備。cape=マント / elytra=マントのテクスチャでエリトラ / hidden=非表示（マントの出所に関係なく適用）
+  capeDisplay: text("cape_display", { enum: ["cape", "elytra", "hidden"] }).default("cape").notNull(),
+
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 
