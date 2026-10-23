@@ -222,8 +222,8 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 **パラメータ:**
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `sections` | string | △ | カンマ区切り（デフォルト: `actions`） |
-| `userSlugs` | string | △ | カンマ区切りのスラッグ一覧（各要素はトリム、完全一致）。指定すると対象を絞り込む。未指定なら全公開ユーザー |
+| `sections` | string | △ | カンマ区切り（デフォルト: `actions`）。各要素はトリム、空要素は除去、重複は許容。許可リスト外の値や、除去後に空になる指定は `400` |
+| `userSlugs` | string | △ | カンマ区切りのスラッグ一覧（各要素はトリム、完全一致＝大文字小文字を区別）。指定すると対象を絞り込む。未指定なら全公開ユーザー。除去後に空になる指定、または一覧ローダーから返らない slug を1つでも含む指定は `400` |
 
 **セクション:**
 
@@ -239,7 +239,10 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
 - 公開プロフィールのみ対象。キー配置一覧ページと同じ共有ローダー（`loadKeybindingsListPlayers`）を使うため、視聴者ロール除外・キー配置／リマップ／カスタムアクションがすべて空のユーザー除外・メインプリセットのスナップショット優先も一覧と同一
-- 未知のセクション名は無視され、有効なセクションが1つもなければ BOM のみの空CSVを `200` で返す（エラーにしない）
+- **不正な指定は `400`**（`{ "error": "..." }` の JSON。固定の英語文言）。DB アクセス前に `sections` → `userSlugs`（空判定）の順で検証し、その後 `userSlugs` の存在照合を行う
+  - `sections` が空（`sections=` / `sections=,` 等）、または許可リスト（`actions` / `remaps` / `custom-actions` / `mouse`。実装の `CSV_SECTIONS` 定数）外の値を含む。パラメータ自体が無い場合は `actions`
+  - `userSlugs` が空（`userSlugs=` / `userSlugs=,` 等）、または `loadKeybindingsListPlayers` から返らない slug を含む。返らない理由（存在しない・非公開・視聴者ロール・設定が空）はレスポンスで区別しない（非公開ユーザーの存在を漏らさないため）。見つからなかった slug は `notFound` 配列で返す（呼び出し側が入力した値）
+  - 例: `{ "error": "Unknown sections: foo. Allowed: actions, remaps, custom-actions, mouse" }` / `{ "error": "Some userSlugs were not found or are not exportable", "notFound": ["ghost"] }`
 - CSV の見出し・キー名ラベルは閲覧者のロケール（`resolveLocale`）に合わせる。先頭が `=` `+` `-` `@` タブ CR の値には CSV インジェクション対策で `'` を前置する
 
 **レスポンス:** `text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="keybindings.csv"`（`Cache-Control` ヘッダは付けない。`userSlugs` 未指定時のみ一覧データを60秒メモリキャッシュ）

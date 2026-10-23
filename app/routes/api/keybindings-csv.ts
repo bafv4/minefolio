@@ -20,6 +20,19 @@ const KEYBOARD_ACTIONS = [
   "hotbar6", "hotbar7", "hotbar8", "hotbar9",
 ] as const;
 
+// 出力できるセクションの許可リスト。各セクションの分岐と sections パラメータの検証の両方がこれを参照する
+const CSV_SECTIONS = ["actions", "remaps", "custom-actions", "mouse"] as const;
+type CsvSection = (typeof CSV_SECTIONS)[number];
+
+function isCsvSection(v: string): v is CsvSection {
+  return (CSV_SECTIONS as readonly string[]).includes(v);
+}
+
+// カンマ区切りのパラメータを分割し、各要素をトリムして空要素を除く
+function splitCsvParam(v: string): string[] {
+  return v.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function escapeCsv(v: string): string {
   let s = v;
   // CSV式（フォーミュラ）インジェクション対策: =,+,-,@,タブ,CR で始まる値は
@@ -38,12 +51,37 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = resolveLocale(request);
   const t = createTranslator(locale);
   const url = new URL(request.url);
-  const sections = url.searchParams.get("sections")?.split(",") ?? ["actions"];
+
+  // パラメータ検証（DB アクセスより前にできるものを先に行う）。
+  // 指定が不正なら 200 の空 CSV ではなく 400 を返す。
+  // sections: 未指定なら actions。指定時は分割・トリム・空要素除去し、空または許可リスト外を含めば 400
+  const sectionsParam = url.searchParams.get("sections");
+  const requestedSections =
+    sectionsParam === null ? ["actions"] : splitCsvParam(sectionsParam);
+  if (requestedSections.length === 0) {
+    return Response.json(
+      { error: `sections must contain at least one of: ${CSV_SECTIONS.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  const unknownSections = requestedSections.filter((s) => !isCsvSection(s));
+  if (unknownSections.length > 0) {
+    return Response.json(
+      {
+        error: `Unknown sections: ${unknownSections.join(", ")}. Allowed: ${CSV_SECTIONS.join(", ")}`,
+      },
+      { status: 400 },
+    );
+  }
+  const sections = new Set<CsvSection>(requestedSections as CsvSection[]);
+
   // 個別指定: userSlugs=slug1,slug2 のように指定すると対象を絞り込む。未指定なら全公開ユーザー。
+  // 指定時は分割・トリム・空要素除去し、空なら 400（存在照合はローダー結果との突き合わせで後段）
   const userSlugsParam = url.searchParams.get("userSlugs");
-  const userSlugs = userSlugsParam
-    ? userSlugsParam.split(",").map((s) => s.trim()).filter(Boolean)
-    : null;
+  const userSlugs = userSlugsParam === null ? null : splitCsvParam(userSlugsParam);
+  if (userSlugs !== null && userSlugs.length === 0) {
+    return Response.json({ error: "userSlugs must contain at least one slug" }, { status: 400 });
+  }
 
   const db = createDb();
 
@@ -53,11 +91,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
     slugs: userSlugs ?? undefined,
   });
 
+  // 指定 slug がローダーから返らなければ 400。存在しない・非公開・視聴者ロール・設定が空は
+  // 区別しない（非公開ユーザーの存在を漏らさないため）。照合はローダー（DB の slug 一致）と同じく
+  // 大文字小文字を区別する
+  if (userSlugs !== null) {
+    const found = new Set(players.map((p) => p.slug));
+    const notFound = [...new Set(userSlugs.filter((s) => !found.has(s)))];
+    if (notFound.length > 0) {
+      return Response.json(
+        { error: "Some userSlugs were not found or are not exportable", notFound },
+        { status: 400 },
+      );
+    }
+  }
+
   const playerName = (p: typeof players[0]) => getLocalizedDisplayName(p, locale);
 
   const csvBlocks: string[] = [];
 
-  if (sections.includes("actions")) {
+  if (sections.has("actions")) {
     const header = ["Player", ...KEYBOARD_ACTIONS.map((a) => getActionLabel(t, a))];
     csvBlocks.push(header.map(escapeCsv).join(","));
     for (const player of players) {
@@ -77,7 +129,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  if (sections.includes("remaps")) {
+  if (sections.has("remaps")) {
     if (csvBlocks.length > 0) csvBlocks.push(""); // separator
     csvBlocks.push(["Player", "Source Key", "Target Key", "Type"].map(escapeCsv).join(","));
     for (const player of players) {
@@ -96,7 +148,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  if (sections.includes("custom-actions")) {
+  if (sections.has("custom-actions")) {
     if (csvBlocks.length > 0) csvBlocks.push("");
     csvBlocks.push(["Player", "Trigger Key", "Action Name"].map(escapeCsv).join(","));
     for (const player of players) {
@@ -108,7 +160,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  if (sections.includes("mouse")) {
+  if (sections.has("mouse")) {
     if (csvBlocks.length > 0) csvBlocks.push("");
     csvBlocks.push(["Player", "DPI", "Sensitivity (%)", "cm/360", "Win Sens Multiplier", "Cursor Speed", "Raw Input", "Mouse Accel"].map(escapeCsv).join(","));
     for (const player of players) {

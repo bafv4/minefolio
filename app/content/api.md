@@ -252,9 +252,18 @@ CDN キャッシュ付き（種別ごとに 30秒〜30分、stale-while-revalida
 | `sections`  | string | ×    | カンマ区切り。`actions` / `remaps` / `custom-actions` / `mouse`。未指定なら `actions`              |
 | `userSlugs` | string | ×    | カンマ区切りのスラッグ一覧。指定すると対象を絞り込む。未指定なら設定登録済みの全公開ユーザーが対象 |
 
-**レスポンス:** `text/csv`（ブラウザがダウンロード、UTF-8 BOM 付き）
+**レスポンス:** `text/csv`（ブラウザがダウンロード、UTF-8 BOM 付き）。パラメータが不正な場合は `400`（`application/json`、`{ "error": "..." }`）
 
-選択したセクションごとに CSV を生成し、空行を挟んで結合する。未知のセクション名は無視される。`remaps` セクションの末尾には Type 列（リマップ種別: `all` / `trigger` / `chat`、未設定は空欄）が含まれる。
+選択したセクションごとに CSV を生成し、空行を挟んで結合する。`remaps` セクションの末尾には Type 列（リマップ種別: `all` / `trigger` / `chat`、未設定は空欄）が含まれる。
+
+**エラー（`400`）:**
+
+- `sections` が空（`sections=` など）、または上記以外のセクション名を含む
+- `userSlugs` が空（`userSlugs=` など）、または次のいずれかに当たる slug を含む: 存在しない／非公開／視聴者ロール／設定が空。どれに当たるかは区別しない。見つからなかった slug は `notFound` 配列で返す
+
+```json
+{ "error": "Some userSlugs were not found or are not exportable", "notFound": ["ghost"] }
+```
 
 ---
 
