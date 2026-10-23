@@ -87,7 +87,9 @@ Mojang のマント画像を返す（サーバーが sessionserver から取得�
 **パラメータ:**
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `q` | string | ○ | 検索クエリ（1〜100文字） |
+| `q` | string | ○ | 検索クエリ（前後の空白を除去し、先頭100文字に切り詰め） |
+
+`limit` などの件数指定パラメータはない。
 
 **レスポンス:**
 ```json
@@ -107,8 +109,11 @@ Mojang のマント画像を返す（サーバーが sessionserver から取得�
 }
 ```
 
-- 最大10件、更新日時の降順
-- クエリが1文字未満の場合は空配列
+- 検索対象は `title` のみ（部分一致の `LIKE`。`%` `_` はエスケープしてリテラル扱い。`summary` は検索対象外でレスポンスに含めるだけ）
+- 対象は公開済みガイド（`isPublished`）かつ著者のプロフィールが `public` のもののみ
+- 最大10件固定、更新日時（`updatedAt`）の降順
+- `q` が未指定・空（トリム後0文字）の場合は `200` で `{ "guides": [] }`（4xx は返さない）
+- `Cache-Control` ヘッダは付けない
 
 **関連ファイル:** `app/routes/api/guides/search.ts`
 
@@ -218,6 +223,7 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `sections` | string | △ | カンマ区切り（デフォルト: `actions`） |
+| `userSlugs` | string | △ | カンマ区切りのスラッグ一覧（各要素はトリム、完全一致）。指定すると対象を絞り込む。未指定なら全公開ユーザー |
 
 **セクション:**
 
@@ -232,11 +238,13 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 - `mouse` の `cm/360` `Cursor Speed` は計算できない場合は空欄。`Win Sens Multiplier` も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` は有効範囲（0〜200%）外の値も生データのまま出力（詳細: [`docs/keybindings.md`](./keybindings.md)）
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
-- 公開プロフィールのみ対象
+- 公開プロフィールのみ対象。キー配置一覧ページと同じ共有ローダー（`loadKeybindingsListPlayers`）を使うため、視聴者ロール除外・キー配置／リマップ／カスタムアクションがすべて空のユーザー除外・メインプリセットのスナップショット優先も一覧と同一
+- 未知のセクション名は無視され、有効なセクションが1つもなければ BOM のみの空CSVを `200` で返す（エラーにしない）
+- CSV の見出し・キー名ラベルは閲覧者のロケール（`resolveLocale`）に合わせる。先頭が `=` `+` `-` `@` タブ CR の値には CSV インジェクション対策で `'` を前置する
 
-**レスポンス:** `text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="keybindings.csv"`
+**レスポンス:** `text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="keybindings.csv"`（`Cache-Control` ヘッダは付けない。`userSlugs` 未指定時のみ一覧データを60秒メモリキャッシュ）
 
-**関連ファイル:** `app/routes/api/keybindings-csv.ts`
+**関連ファイル:** `app/routes/api/keybindings-csv.ts`, `app/lib/keybindings-list.server.ts`
 
 ---
 
