@@ -30,9 +30,10 @@ function getCacheKey(
   angle: number,
   elevation: number,
   zoom: number,
-  slim: boolean
+  slim: boolean,
+  capeKey: string
 ): string {
-  return `${uuid}-${pose}-${width}-${height}-${angle}-${elevation}-${zoom}-${slim ? "slim" : "default"}`;
+  return `${uuid}-${pose}-${width}-${height}-${angle}-${elevation}-${zoom}-${slim ? "slim" : "default"}-${capeKey}`;
 }
 
 // 最近使ったキーを末尾に再挿入することで純 LRU として動作
@@ -69,9 +70,10 @@ function getRequestKey(
   walk: boolean,
   run: boolean,
   rotate: boolean,
-  slim: boolean
+  slim: boolean,
+  capeKey: string
 ): string {
-  return [identifier, pose, angle, elevation, zoom, background ?? "", walk, run, rotate, slim].join("|");
+  return [identifier, pose, angle, elevation, zoom, background ?? "", walk, run, rotate, slim, capeKey].join("|");
 }
 
 export type PoseName =
@@ -103,6 +105,10 @@ interface MinecraftFullBodyProps {
   asImage?: boolean;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
+  /** マント画像のURL。省略時はマント無し。読み込みに失敗（404 等）した場合もマント無しで表示する */
+  capeUrl?: string;
+  /** 背中の装備。"cape"=マント / "elytra"=同じテクスチャでエリトラ（capeUrl がある場合のみ有効） */
+  backEquipment?: "cape" | "elytra";
   /** ユーザーによる回転・拡大縮小・移動操作を有効化（asImageは強制無効化される） */
   interactive?: boolean;
   /** インタラクティブモード時にヒントボタン（？）を表示するかどうか。クリックでヒント表示をトグル。 */
@@ -184,6 +190,8 @@ const MinecraftFullBodyComponent = ({
   rotate = false,
   asImage = false,
   slim = false,
+  capeUrl,
+  backEquipment = "cape",
   interactive = false,
   showInteractiveHint = false,
 }: MinecraftFullBodyProps) => {
@@ -192,6 +200,8 @@ const MinecraftFullBodyComponent = ({
   // skinIdentifier が Steve と別URLになるため、静止画キャッシュキーも衝突しない。
   const missingSkinSource = !uuid && !skinUrl;
   const effectiveSlim = missingSkinSource ? false : slim;
+  // マントの有無・種別を静止画キャッシュ/リクエストキーに含める（マントだけ変わった場合の衝突・古い画像の残留を防ぐ）
+  const capeKey = capeUrl ? `${capeUrl}@${backEquipment}` : "";
   const skinIdentifier = skinUrl || uuid || (missingSkinSource ? NO_MCID_SKIN_URL : STEVE_UUID);
   const avatarLabel = missingSkinSource
     ? t("fullbodyViewer.noMcidAvatarLabel")
@@ -207,7 +217,7 @@ const MinecraftFullBodyComponent = ({
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
 
-  const requestKey = getRequestKey(skinIdentifier, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveSlim);
+  const requestKey = getRequestKey(skinIdentifier, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveSlim, capeKey);
   // imageEntry が現在の props に対応していない場合（uuid/skinUrl 変更直後など）は無効化し、
   // 前ユーザーの静止画をそのまま表示し続けないようにする
   const imageSrc = effectiveAsImage && imageEntry?.requestKey === requestKey ? imageEntry.src : null;
@@ -217,7 +227,7 @@ const MinecraftFullBodyComponent = ({
     if (!canvas) return;
 
     if (effectiveAsImage) {
-      const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim);
+      const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim, capeKey);
       const cachedImage = getCachedImage(cacheKey);
       if (cachedImage) {
         setImageEntry({ requestKey, src: cachedImage });
@@ -264,6 +274,11 @@ const MinecraftFullBodyComponent = ({
         const skinModel = effectiveSlim ? "slim" : "default";
         const skinUrlToLoad = skinUrl || (uuid ? `/api/skin?uuid=${uuid}` : NO_MCID_SKIN_URL);
 
+        // マントはスキンと並行して取得する。失敗（Mojang 側にマントが無く 404 等）はマント無しで続行する
+        const capeLoad = capeUrl
+          ? viewer.loadCape(capeUrl, { backEquipment }).catch(() => {})
+          : null;
+
         try {
           await viewer.loadSkin(skinUrlToLoad, { model: skinModel });
         } catch {
@@ -274,6 +289,12 @@ const MinecraftFullBodyComponent = ({
         // loadSkin 待ち中に uuid/skinUrl が変わっていたら、ここで打ち切って共有 canvas への
         // 古いスキンの描画を防ぐ（同一 canvas を新しい viewer と共有しているため）
         if (disposeIfStale()) return;
+
+        // マントの読み込み完了も待つ。待ち中に props が変わっていたら同様に打ち切る
+        if (capeLoad) {
+          await capeLoad;
+          if (disposeIfStale()) return;
+        }
 
         // Set camera angle
         const angleRad = (angle * Math.PI) / 180;
@@ -348,7 +369,7 @@ const MinecraftFullBodyComponent = ({
 
           const dataUrl = canvas.toDataURL("image/png");
 
-          const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim);
+          const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim, capeKey);
           setCachedImage(cacheKey, dataUrl);
 
           setImageEntry({ requestKey, src: dataUrl });
@@ -374,9 +395,9 @@ const MinecraftFullBodyComponent = ({
       }
     };
     // skinIdentifier / requestKey は uuid/skinUrl 等（すべて依存配列に列挙済み）から派生する値なので除外。
-    // interactive は effectiveAsImage に内包されるので除外。effectiveSlim は uuid/skinUrl/slim 由来なので除外。
+    // interactive は effectiveAsImage に内包されるので除外。effectiveSlim は uuid/skinUrl/slim 由来、capeKey は capeUrl/backEquipment 由来なので除外。
     // width/height は別 effect で setSize() を呼んで再初期化を回避するため依存に含めない。
-  }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim]);
+  }, [uuid, skinUrl, pose, angle, elevation, zoom, background, walk, run, rotate, effectiveAsImage, slim, capeUrl, backEquipment]);
 
   // サイズ変更時は dispose せず setSize で軽量に更新
   useEffect(() => {

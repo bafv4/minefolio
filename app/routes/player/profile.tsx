@@ -35,6 +35,7 @@ import {
 import { platformLabel } from "@/lib/platform-label";
 import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { resolveCapeProps } from "@/lib/cape";
 import { format, formatDistanceToNow } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -1281,6 +1282,12 @@ export default function PlayerProfilePage() {
                     angle: -35,
                     elevation: 5,
                     zoom: 0.9,
+                    // カスタムマント → Mojang のマント → なし。capeDisplay が hidden なら {}
+                    ...resolveCapeProps({
+                      uuid: player.uuid,
+                      customCapeUrl: player.customCapeUrl,
+                      capeDisplay: player.capeDisplay,
+                    }),
                   };
                   const modalSize = { width: 360, height: 480 };
                   return (

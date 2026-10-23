@@ -196,6 +196,79 @@ export async function getSkinTextureUrl(uuid: string): Promise<string | null> {
   }
 }
 
+/** Mojang のテクスチャ配信ホスト。サーバーから取得してよいのはここだけ（SSRF 対策） */
+export const MOJANG_TEXTURES_HOST = "textures.minecraft.net";
+
+/**
+ * sessionserver が返したテクスチャ URL を検証し、取得に使う https URL へ正規化する。
+ *
+ * 実際の sessionserver は `http://textures.minecraft.net/...` を返すため、プロトコルは http / https の
+ * 両方を受け付け、取得時は常に https へ揃える。ホストが textures.minecraft.net 以外・ポート指定・
+ * 認証情報つき・パースできない URL は null（呼び出し側は fetch しない）。
+ */
+export function toSafeMojangTextureUrl(raw: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  if (parsed.hostname !== MOJANG_TEXTURES_HOST) return null;
+  if (parsed.port || parsed.username || parsed.password) return null;
+  return `https://${MOJANG_TEXTURES_HOST}${parsed.pathname}`;
+}
+
+/**
+ * UUID からマントのテクスチャ URL（検証・https 正規化済み）を取得する。
+ *
+ * - マントが無い（プロフィールが 204/404、textures 無し、CAPE 無し）→ null
+ * - Mojang 側の失敗（非 ok・不正なレスポンス・通信例外）→ throw（呼び出し側で 502 にする）
+ */
+export async function fetchCapeTextureUrl(uuid: string): Promise<string | null> {
+  const uuidWithoutHyphens = uuid.replace(/-/g, "");
+
+  const response = await fetch(
+    `${SESSION_SERVER_BASE}/session/minecraft/profile/${uuidWithoutHyphens}`,
+    { signal: AbortSignal.timeout(10000) }
+  );
+
+  // 204 / 404 は「そのUUIDのプロフィールが無い」＝マントも無い
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) {
+    throw new MojangError("API_ERROR", `Session server error: ${response.status}`);
+  }
+
+  const json = await response.json();
+  const data = safeParse(json, mojangSessionProfileSchema);
+  if (!data) {
+    throw new MojangError("API_ERROR", "Invalid response from Mojang session server");
+  }
+
+  const texturesProperty = data.properties.find((p) => p.name === "textures");
+  if (!texturesProperty) return null;
+
+  let texturesData: z.infer<typeof mojangTexturesSchema> | null;
+  try {
+    texturesData = safeParse(JSON.parse(atob(texturesProperty.value)), mojangTexturesSchema);
+  } catch {
+    throw new MojangError("API_ERROR", "Invalid textures property from Mojang session server");
+  }
+  if (!texturesData) {
+    throw new MojangError("API_ERROR", "Invalid textures property from Mojang session server");
+  }
+
+  const capeUrl = texturesData.textures.CAPE?.url;
+  if (!capeUrl) return null;
+
+  // ホストが Mojang のテクスチャ配信以外なら取得しない（マント無し扱いにはせず失敗として扱う）
+  const safeUrl = toSafeMojangTextureUrl(capeUrl);
+  if (!safeUrl) {
+    throw new MojangError("API_ERROR", "Unexpected cape texture host");
+  }
+  return safeUrl;
+}
+
 // UUIDをハイフン付きフォーマットに変換
 export function formatUuid(uuid: string): string {
   const clean = uuid.replace(/-/g, "");

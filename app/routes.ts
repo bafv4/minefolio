@@ -88,6 +88,7 @@ export default [
   route("api/skin", "routes/api/skin.ts"),
   route("api/me/skin", "routes/api/me/skin.ts"),
   route("api/me/skin/upload-token", "routes/api/me/skin/upload-token.ts"),
+  route("api/cape", "routes/api/cape.ts"),
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/favorites", "routes/api/favorites.ts"),

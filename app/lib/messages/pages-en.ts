@@ -1061,6 +1061,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     skinModelSlim: "Slim (Alex)",
     skinModelHint:
       "Choose the arm width of your skin. The slim model has thin (3-pixel) arms.",
+    capeDisplayLabel: "Cape display",
+    capeDisplayCape: "Cape",
+    capeDisplayElytra: "Elytra",
+    capeDisplayHidden: "Hidden",
+    capeDisplayHint:
+      "Choose what is shown on the back when a cape is available. Elytra uses the same image as the cape.",
     basicInfo: "Basic info",
     displayName: "Display name",
     fallbackToMcidOrSlug: "If left blank, {value} will be used",
