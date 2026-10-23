@@ -2043,6 +2043,30 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     customSkinActive:
       "A custom skin is active. It takes priority over the Mojang API skin.",
   },
+  capeUploader: {
+    pngOnly: "Only PNG images can be uploaded",
+    maxSize: "The file must be 1MB or smaller",
+    invalidSize:
+      "Cape images must be 64x32, 22x17, 128x64, 256x128, or 512x256 pixels",
+    loadError: "Failed to load the image",
+    saveFailed: "Failed to save the cape",
+    uploadSuccess: "Cape uploaded",
+    uploadFailed: "Upload failed",
+    deleteFailed: "Failed to delete the cape",
+    deleteSuccess: "Cape deleted",
+    uploading: "Uploading…",
+    changeCape: "Change cape",
+    uploadCape: "Upload a cape",
+    deleteCape: "Delete cape",
+    uploadHint:
+      "PNG, 64x32 or 22x17 (legacy), or 128x64 / 256x128 / 512x256 pixels, 1MB or smaller",
+    currentCape: "Current custom cape",
+    customCapeTitle: "Custom cape",
+    customCapeDesc:
+      "Upload a cape image to show on your profile. When set, it takes priority over your Mojang cape.",
+    customCapeActive:
+      "A custom cape is active. It takes priority over the Mojang cape.",
+  },
   meGuides: {
     title: "Guides - Minefolio",
     pageTitle: "Guides",

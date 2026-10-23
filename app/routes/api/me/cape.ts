@@ -1,0 +1,164 @@
+import type { ActionFunctionArgs } from "react-router";
+import { del } from "@vercel/blob";
+import { createDb } from "@/lib/db";
+import { createAuth } from "@/lib/auth";
+import { getEnv } from "@/lib/env.server";
+import { isVercelBlobUrl } from "@/lib/blob-url";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+
+// POST /api/me/cape - カスタムマントURLを保存
+// DELETE /api/me/cape - カスタムマントを削除
+// （/api/me/skin と同じ構成。capeDisplay は me/edit の保存フォーム側で扱うためここでは触らない）
+export async function action({ request }: ActionFunctionArgs) {
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+
+  // 認証チェック
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  });
+
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // ユーザー取得
+  const user = await db.query.users.findFirst({
+    where: eq(users.discordId, session.user.id),
+  });
+
+  if (!user) {
+    return new Response(JSON.stringify({ error: "User not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const method = request.method.toUpperCase();
+
+  // DELETE: カスタムマントを削除
+  if (method === "DELETE") {
+    try {
+      // 既存のBlobを削除
+      if (user.customCapeUrl) {
+        try {
+          await del(user.customCapeUrl);
+        } catch (e) {
+          // Blob削除に失敗しても続行（既に存在しない可能性）
+          console.warn("Failed to delete blob:", e);
+        }
+      }
+
+      // DBからカスタムマント情報をクリア
+      await db
+        .update(users)
+        .set({
+          customCapeUrl: null,
+          customCapeUpdatedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Delete cape error:", error);
+      return new Response(
+        JSON.stringify({ error: "Failed to delete cape" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+  }
+
+  // POST: カスタムマントURLを保存
+  if (method === "POST") {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (body === null || typeof body !== "object") {
+      return new Response(JSON.stringify({ error: "Invalid request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const { url } = body as { url?: unknown };
+
+    if (!url || typeof url !== "string") {
+      return new Response(JSON.stringify({ error: "URL is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    try {
+      // URLがVercel Blobのものか確認。
+      // 部分文字列一致（includes）はフラグメント等ですり抜けられるため、
+      // new URL() でパースしてホスト名を許可リスト判定する（SSRF 対策）。
+      if (!isVercelBlobUrl(url)) {
+        return new Response(JSON.stringify({ error: "Invalid blob URL" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // 古いBlobを削除（新しいものと異なる場合）
+      if (user.customCapeUrl && user.customCapeUrl !== url) {
+        try {
+          await del(user.customCapeUrl);
+        } catch (e) {
+          console.warn("Failed to delete old blob:", e);
+        }
+      }
+
+      // DBを更新
+      await db
+        .update(users)
+        .set({
+          customCapeUrl: url,
+          customCapeUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          customCapeUrl: url,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    } catch (error) {
+      console.error("Save cape error:", error);
+      return new Response(
+        JSON.stringify({ error: "Failed to save cape" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+  }
+
+  return new Response(JSON.stringify({ error: "Method not allowed" }), {
+    status: 405,
+    headers: { "Content-Type": "application/json" },
+  });
+}

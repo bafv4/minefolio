@@ -74,8 +74,8 @@ async function deleteBlobsInBatches(urlsOrPathnames: string[]): Promise<void> {
 }
 
 /**
- * アカウント削除時: そのユーザー名前空間の Blob（ガイド一式 + スキン）を一括削除する。
- * `guides/<userId>/` と `skins/<userId>/` の 2 prefix を全列挙して削除するため、
+ * アカウント削除時: そのユーザー名前空間の Blob（ガイド一式 + スキン + マント）を一括削除する。
+ * `guides/<userId>/` と `skins/<userId>/` と `capes/<userId>/` の 3 prefix を全列挙して削除するため、
  * 著者の全ガイド（本文画像・カバー・ドラフト分含む）を丸ごと消せる。
  *
  * `BLOB_READ_WRITE_TOKEN` 未設定（ローカル開発）なら何もしない no-op。絶対に throw しない。
@@ -83,18 +83,21 @@ async function deleteBlobsInBatches(urlsOrPathnames: string[]): Promise<void> {
 export async function cleanupUserBlobs({
   userId,
   customSkinUrl,
+  customCapeUrl,
 }: {
   userId: string;
   customSkinUrl: string | null;
+  customCapeUrl?: string | null;
 }): Promise<void> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
 
   try {
-    const [guidePathnames, skinPathnames] = await Promise.all([
+    const [guidePathnames, skinPathnames, capePathnames] = await Promise.all([
       listAllPathnamesByPrefix(`guides/${userId}/`),
       listAllPathnamesByPrefix(`skins/${userId}/`),
+      listAllPathnamesByPrefix(`capes/${userId}/`),
     ]);
-    await deleteBlobsInBatches([...guidePathnames, ...skinPathnames]);
+    await deleteBlobsInBatches([...guidePathnames, ...skinPathnames, ...capePathnames]);
 
     // 規約前パス（prefix に乗らなかった場合）の保険。del() は冪等なので、
     // prefix 削除で既に消えていても二重削除にはならない
@@ -103,6 +106,13 @@ export async function cleanupUserBlobs({
         await del(customSkinUrl as string);
       } catch (error) {
         console.error(`[content-cleanup] Failed to delete custom skin blob for user ${userId}:`, error);
+      }
+    }
+    if (isVercelBlobUrl(customCapeUrl)) {
+      try {
+        await del(customCapeUrl as string);
+      } catch (error) {
+        console.error(`[content-cleanup] Failed to delete custom cape blob for user ${userId}:`, error);
       }
     }
   } catch (error) {
@@ -203,7 +213,7 @@ export async function cleanupGuideBlobs({
  * 経由でスケジュールする（呼び出し側で別途 runAfterResponse を呼ぶ必要はない）。
  *
  * `user` は `db.query.users.findFirst({ where: eq(users.discordId, session.user.id) })` 等で
- * 取得した本人の行（id/slug/customSkinUrl を使う）。`sessionUserId` は better-auth 側の
+ * 取得した本人の行（id/slug/customSkinUrl/customCapeUrl を使う）。`sessionUserId` は better-auth 側の
  * ユーザーID（session.user.id。users とは FK で結ばれておらず、通常 user.discordId と同値）。
  */
 export async function deleteUserAccount(
@@ -212,7 +222,7 @@ export async function deleteUserAccount(
     user,
     sessionUserId,
   }: {
-    user: { id: string; slug: string; customSkinUrl: string | null };
+    user: { id: string; slug: string; customSkinUrl: string | null; customCapeUrl?: string | null };
     sessionUserId: string;
   },
 ): Promise<void> {
@@ -236,8 +246,14 @@ export async function deleteUserAccount(
     await tx.delete(authUsers).where(eq(authUsers.id, sessionUserId));
   });
 
-  // Vercel Blob 実体（ガイド一式・カスタムスキン）はレスポンス後に best-effort で削除する
-  runAfterResponse(cleanupUserBlobs({ userId: user.id, customSkinUrl: user.customSkinUrl }));
+  // Vercel Blob 実体（ガイド一式・カスタムスキン・カスタムマント）はレスポンス後に best-effort で削除する
+  runAfterResponse(
+    cleanupUserBlobs({
+      userId: user.id,
+      customSkinUrl: user.customSkinUrl,
+      customCapeUrl: user.customCapeUrl,
+    }),
+  );
 }
 
 /**

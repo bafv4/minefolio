@@ -98,6 +98,7 @@ import {
   X,
 } from "lucide-react";
 import { SkinUploader } from "@/components/skin-uploader";
+import { CapeUploader } from "@/components/cape-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
 
@@ -1850,6 +1851,34 @@ export default function EditProfilePage() {
               <SkinUploader
                 userId={user.id}
                 currentSkinUrl={user.customSkinUrl}
+                onUploadComplete={() => {
+                  window.location.reload();
+                }}
+                onDelete={() => {
+                  window.location.reload();
+                }}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Custom Cape Upload */}
+            <div className="space-y-3">
+              <Label>{t("capeUploader.customCapeTitle")}</Label>
+              <p className="text-sm text-muted-foreground">
+                {t("capeUploader.customCapeDesc")}
+              </p>
+              {user.customCapeUrl && (
+                <Alert className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {t("capeUploader.customCapeActive")}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <CapeUploader
+                userId={user.id}
+                currentCapeUrl={user.customCapeUrl}
                 onUploadComplete={() => {
                   window.location.reload();
                 }}

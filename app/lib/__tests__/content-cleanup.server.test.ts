@@ -187,6 +187,64 @@ describe("cleanupUserBlobs", () => {
     expect(blobMocks.del).toHaveBeenCalledWith(skinUrl);
   });
 
+  it("capes/<userId>/ も列挙して他 prefix と一緒に削除する", async () => {
+    blobMocks.list.mockImplementation(async ({ prefix }: { prefix: string }): Promise<ListPage> => {
+      if (prefix === "capes/u1/") {
+        return {
+          blobs: [
+            { pathname: "capes/u1/cape-abc.png", url: "url-cape1" },
+            { pathname: "capes/u1/cape-def.png", url: "url-cape2" },
+          ],
+          cursor: undefined,
+          hasMore: false,
+        };
+      }
+      if (prefix === "skins/u1/") {
+        return { blobs: [{ pathname: "skins/u1/skin-1.png", url: "url2" }], cursor: undefined, hasMore: false };
+      }
+      return emptyPage();
+    });
+
+    await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: null });
+
+    const prefixes = blobMocks.list.mock.calls.map((call) => (call[0] as { prefix: string }).prefix);
+    expect(prefixes).toEqual(expect.arrayContaining(["guides/u1/", "skins/u1/", "capes/u1/"]));
+    expect(blobMocks.del).toHaveBeenCalledTimes(1);
+    expect(blobMocks.del).toHaveBeenCalledWith(
+      expect.arrayContaining(["capes/u1/cape-abc.png", "capes/u1/cape-def.png", "skins/u1/skin-1.png"])
+    );
+  });
+
+  it("customCapeUrl が正規 Blob URL なら保険として del() する", async () => {
+    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/legacy/cape.png";
+
+    await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: capeUrl });
+
+    expect(blobMocks.del).toHaveBeenCalledWith(capeUrl);
+  });
+
+  it("customCapeUrl が正規 Blob URL でなければ保険 del() しない（不正な URL を del に渡さない）", async () => {
+    await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: "https://evil.example/cape.png" });
+
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("customCapeUrl が null / 未指定なら保険 del() しない", async () => {
+    await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: null });
+    await cleanupUserBlobs({ userId: "u1", customSkinUrl: null });
+
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("customCapeUrl の保険 del() が失敗しても throw しない", async () => {
+    blobMocks.del.mockRejectedValue(new Error("blob not found"));
+    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/legacy/cape.png";
+
+    await expect(
+      cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: capeUrl })
+    ).resolves.toBeUndefined();
+  });
+
   it("list/del が reject しても throw しない", async () => {
     blobMocks.list.mockRejectedValue(new Error("network error"));
 
