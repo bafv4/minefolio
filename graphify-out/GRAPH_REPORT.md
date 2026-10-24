@@ -1,892 +1,962 @@
-# Graph Report - minefolio  (2026-10-23)
+# Graph Report - minefolio  (2026-10-24)
 
 ## Corpus Check
-- Large corpus: 606 files · ~520,309 words. Semantic extraction will be expensive (many Claude tokens). Consider running on a subfolder.
+- 37 files · ~520,885 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4433 nodes · 16059 edges · 174 communities (160 shown, 14 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 113 edges (avg confidence: 0.83)
-- Token cost: 109,746 input · 0 output
+- 4486 nodes · 15991 edges · 189 communities (173 shown, 16 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 128 edges (avg confidence: 0.83)
+- Token cost: 176,015 input · 0 output
 
 ## Community Hubs (Navigation)
-- サーチクラフト編集UI
-- ルート共通ヘルパー
-- DBスキーマ定義
-- キー入力順ダイアログ
-- UI部品とエディタのダイアログ
 - 統計ビューと初期設定UI
-- package.json 依存関係
-- Twitch とペース取得
-- 認証掃除と旧データ移行
-- アイテムホットバー
-- アイテム設定のテスト
-- コンテンツ一覧とタブ
-- エディタのノードビュー
-- API認証とセッション
-- Microsoft認証の実測スクリプト
-- アプリのルートとプロバイダ
-- プレイスタイル定義
-- ページビューSQLとテストDB
-- キー取得ボタン
-- ルート設定とパッケージ情報
+- UI部品とエディタのダイアログ
 - セレクト部品と無限スクロール
-- meta と翻訳関数
-- ガイド画像ノード
-- TipTap 拡張定義
-- キー情報トリガー
-- 開発依存パッケージ
-- アバター・動画カード
-- ガイドエディタ定数・表操作
-- メッセージ取得とフィードバック
-- ガイドといいねのテスト
-- ガイド・いいね関連テーブル
-- プリセット操作
-- 仮想キーボードとキー定義
-- サーチクラフトテンプレート適用
-- アバター合成キャッシュ
-- DB接続設定と移行スクリプト
-- 新規ユーザー既定値とプリセット同期
-- YouTube 取得とキャッシュ
-- ガイド配色とサニタイズ
-- テンプレートの直列化
-- プリセット仕様
-- テスト基盤とペース分割
-- 走者一覧とお気に入りDB
-- 一回限りDDLスクリプト
-- キャッシュ層と Mojang 連携
-- Blob 孤児の監査
-- ページビュー集計
-- キー配置のテスト
-- 公開APIリファレンス
-- アカウント削除のテスト
-- OGP と全身スキン表示
-- プロフィール表示とキー配置カード
-- DB運用と集計cron仕様
-- トグル部品
-- ガイド表の正規化といいね集計
-- ガイドエディタのブロック操作
-- 外部統計取得
-- スラッシュコマンド
-- 外部ランキング更新
-- アイテム・サーチクラフト仕様
-- いいね・リアクション仕様
-- プロフィール仕様
-- 埋め込みとループ
-- PaceMan ライブ表示
-- アバター合成とシークレットグリッド
-- サーチクラフトのループ表示
-- slug フォールバックのテスト
-- Blob 削除とURL検証
-- 動画からGIF変換
-- Markdown文書ページとOGP
-- キー配置の定義とラベル
-- サーチクラフトの直列化
-- ガイドエディタ仕様
-- ホーム・ライブ仕様
-- 画像クロップ
-- ヘッダー・目次・UI部品
-- DB接続URL判定とリモート運用
-- プレイヤー一覧クエリ
-- 画像アップロード
-- GIF クロップ
-- cron 認証と掃除ジョブ
-- RTA歴
-- 一覧・比較・お気に入り仕様
-- プライバシー準拠と外部連携
-- 動画フィード
-- キー配置統計
-- shadcn 設定
-- アイテム・キー表示仕様
-- お気に入り仕様
-- TypeScript 設定
-- お気に入りの DB 処理
-- プリセット設定のデコード
+- 走者一覧とお気に入りDB (2)
+- プレイヤー一覧クエリ (2)
 - omggif 型定義
 - インポートのテスト
+- 新規ユーザー既定値とプリセット同期 (2)
 - サーチクラフトのテスト
-- i18n 仕様
-- プライバシーポリシーと変更履歴
-- 認証仕様
-- 初期設定のテスト
-- ローカル開発環境
-- カラム幅スナップ
-- スキン・マント仕様
-- ユーザーコンテンツ自動翻訳仕様
-- キー入力キャプチャ
-- 自動翻訳仕様
-- ヘッダーの切替メニュー
-- 一覧・比較仕様
+- Microsoft認証の実測スクリプト (3)
+- ルート共通ヘルパー
+- キー配置のテスト
 - gifenc 型定義
-- Blob 回収仕様
-- キー配置仕様
-- ガイド画像アップロードのテスト
-- ガイド編集のテスト
-- OGP のテスト
-- 認証仕様（better-auth）
-- セッションヘルパー仕様
-- GIFエンコード
+- プレイスタイル定義
+- DB運用と集計cron仕様 (2)
 - 設定ファイルのパーサ
+- ルート共通ヘルパー (4)
+- プレースホルダースキン生成
+- ビルド設定
+- Microsoft認証の実測スクリプト (4)
+- SNSチャンネル統計
+- MCSR Ranked ティア
+- キャッシュ層と Mojang 連携 (2)
+- ループ列追加スクリプト
+- YouTube URL と動画欄
+- タイピングテストとペース表示
+- プリセット操作
+- ユニーク索引名の修正スクリプト
+- インデックス欠落の補修スクリプト
+- ルート共通ヘルパー (5)
+- DB接続設定と移行スクリプト
+- フィードバックメール
+- ペースフィード
+- ガイド画像ノード (4)
+- テンプレートの直列化
+- GitHub フィードバック Issue 作成
+- 環境変数の型
+- サーチクラフトテンプレート適用
+- Blob 削除とURL検証
+- DBスキーマ定義
+- サーチクラフト編集UI (2)
+- slug フォールバックのテスト
+- Blob 削除とURL検証 (2)
+- YouTube 取得とキャッシュ
+- 仮想キーボードとキー定義
+- スラッシュコマンド
+- キー配置の定義とラベル
+- ガイド画像ノード (2)
+- APIキャッシュとペースタイムライン型
+- ガイド保存と画像アップロード
+- キー情報トリガー
+- 新規ユーザー既定値とプリセット同期
+- アバター合成キャッシュ
+- Blob 孤児の監査
+- ガイド配色とサニタイズ
+- ページビューSQLとテストDB
+- slug フォールバックのテスト (2)
+- サーチクラフト編集UI (3)
+- ガイドエディタ定数・表操作
+- アプリのルートとプロバイダ
+- キー情報トリガー (2)
+- プリセット操作 (2)
+- ページビューSQLとテストDB (2)
+- ルート共通ヘルパー (2)
+- アバター・動画カード
+- サーチクラフト編集UI (4)
+- slug フォールバックのテスト (3)
+- ガイドエディタのブロック操作
+- ガイド画像ノード
+- プロフィール表示とキー配置カード
+- ページビュー集計
+- アカウント削除のテスト
+- OGP と全身スキン表示
+- 一覧テーブルのフィルタ型
+- GIFの切り抜きとエンコード
+- UI部品とエディタのダイアログ (3)
+- セレクト部品と無限スクロール (2)
+- ルート共通ヘルパー (3)
+- サーチクラフト編集UI
+- 式インデックス修正スクリプト
+- 外部統計取得
+- ヘッダーの切替メニュー
+- ガイド画像ノード (3)
+- 統計ビューと初期設定UI (2)
+- ガイドといいねのテスト
+- カラム幅スナップ
+- キー配置一覧の行データ型
+- キャッシュ層と Mojang 連携
+- プリセット設定のデコード
+- アバター・動画カード (2)
+- Microsoft認証の実測スクリプト
+- PaceMan ライブ表示
+- meta と翻訳関数
+- プロフィール表示とキー配置カード (2)
+- アイテムアイコンの巡回表示
+- プレイヤー一覧クエリ
+- アプリのルートとプロバイダ (2)
+- スラッシュコマンド (2)
+- キー配置統計
+- UI部品とエディタのダイアログ (2)
+- PaceMan ライブ表示 (2)
+- RTA歴
+- 走者一覧とお気に入りDB
+- お気に入りコンテキスト
+- スラッシュコマンド (3)
+- Microsoft認証の実測スクリプト (2)
+- 初期設定のテスト
+- キー配置列定義のテスト
+- 認証仕様
+- 一覧・比較仕様
+- ガイド画像アップロードのテスト
+- OGP のテスト
+- セレクト部品と無限スクロール (3)
 - README と環境変数
 - スキンアップロードトークンのテスト
 - プロフィール編集の更新テスト
 - プロフィール編集のテスト
-- キー配置テーブル仕様
-- プレースホルダースキン生成
-- プロフィールリアクション
-- MCSR Ranked ティア
+- ルート設定とパッケージ情報
+- DB接続設定と移行スクリプト (2)
 - お気に入りAPI仕様
 - スキンAPIのテスト
 - 記録のテスト
 - デバイス設定のテスト
 - API ルートのテスト
-- ループ列追加スクリプト
-- 式インデックス修正スクリプト
-- ビルド設定
-- YouTube URL と動画欄
-- タイピングテストとペース表示
+- 操作設定一覧ページ
+- ページビュー同期cronのテスト
 - リアクション等のテスト
 - テンプレート操作のテスト
-- 開発者ページ仕様
-- MCSR Ranked 連携仕様
-- インデックス欠落の補修スクリプト
-- いいね表追加
-- 操作設定一覧ページ
-- ガイド一覧と人気順仕様
-- 翻訳対象外とフィードバック仕様
+- お気に入りAPIのテスト
+- SNS統計APIのテスト
 - プレイスタイル表追加
 - slug履歴表追加
-- お気に入りのDB処理仕様
-- フィードバックメール
-- ペースフィード
-- returnTo の安全化
+- キー取得ボタンのテスト
+- DB接続設定と移行スクリプト (3)
+- Twitch連携のテスト
 - YouTube URL 解析
-- キー配置CSVと公開範囲API仕様
-- プリセットの二重フラグ
-- MCID未登録の顔画像
-- ランキングテーブル追加スクリプト
-- 孤立インデックス削除スクリプト
-- 表示名アルファベット列追加スクリプト
-- メインプリセット列追加スクリプト
-- 初期設定完了列追加
-- GitHub フィードバック Issue 作成
-- pnpm ワークスペース設定
-- 環境変数の型
-- ランキング・統計仕様
+- slug フォールバックのテスト (4)
+- DB接続設定と移行スクリプト (4)
+- 表示幅による文字列切り詰め
+- ガイドカテゴリのシード
+- サーチクラフトの直列化
+- DB運用と集計cron仕様
+- ヘッダー・目次・UI部品
+- DB接続URL判定とリモート運用
+- TypeScript 設定
+- package.jsonのスクリプト
+- ローカル開発環境
+- 翻訳テーブル追加スクリプト
+- 表示名英字列の追加スクリプト
 - Vercel 設定
+- package.json 依存関係
+- プリセット整合性スクリプト
+- shadcn 設定
+- 開発依存パッケージ
+- プライバシーポリシーと変更履歴
+- スキン・マント仕様
+- ユーザーコンテンツ自動翻訳仕様
+- ガイド・いいね関連テーブル
+- 開発者ページ仕様
+- スキン・マント仕様 (2)
+- MCSR Ranked 連携仕様
+- 公開APIリファレンス (2)
+- プリセットの二重フラグ
+- プライバシー準拠と外部連携 (2)
+- pnpm ワークスペース設定
 - 認証判定ヘルパー
 - ガイド検索API
 - プリセットのリマップ型
 - 統計ページ
 - サーチクラフト一覧表示
 - What's New 仕様
+- プライバシー準拠と外部連携
+- アイテム・サーチクラフト仕様
+- 公開APIリファレンス
+- ガイドエディタ仕様
+- キー配置仕様
+- いいね・リアクション仕様
+- プロフィール仕様
+- Discordログインとセッション
+- ホーム・ライブ仕様
+- ガイド・いいね関連テーブル (2)
+- プリセット適用とLoop復元
+- アイテム・キー表示仕様
+- アイテム・キー表示仕様 (2)
+- お気に入り仕様
 
 ## God Nodes (most connected - your core abstractions)
-1. `useT()` - 384 edges
-2. `cn()` - 281 edges
-3. `t()` - 247 edges
-4. `createDb()` - 197 edges
-5. `Button()` - 173 edges
-6. `getEnv()` - 153 edges
+1. `useT()` - 356 edges
+2. `cn()` - 267 edges
+3. `t()` - 219 edges
+4. `createDb()` - 195 edges
+5. `Button()` - 166 edges
+6. `getEnv()` - 151 edges
 7. `react` - 143 edges
-8. `createTranslator()` - 141 edges
-9. `lucide-react` - 130 edges
-10. `vitest` - 130 edges
+8. `createTranslator()` - 138 edges
+9. `vitest` - 130 edges
+10. `lucide-react` - 130 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `app/content/api.md (public API doc source)` --semantically_similar_to--> `APIルート仕様書（内部用・全API）`  [INFERRED] [semantically similar]
   docs/developers.md → docs/api.md
 - `renderLock()` --indirect_call--> `PresetSwitchLock()`  [INFERRED]
   app/components/__tests__/preset-switch-lock.test.tsx → app/components/preset-switch-lock.tsx
-- `listAllBlobs()` --calls--> `listAllBlobs()`  [EXTRACTED]
-  scripts/lib/blob-refs.ts → app/lib/blob-storage.server.ts
-- `collectReferences()` --calls--> `collectBlobPathnames()`  [EXTRACTED]
-  scripts/lib/blob-refs.ts → app/lib/blob-url.ts
 - `renderButton()` --indirect_call--> `KeyCaptureButton()`  [INFERRED]
   app/components/__tests__/key-capture-button.test.tsx → app/components/key-capture-button.tsx
+- `listAllBlobs()` --calls--> `listAllBlobs()`  [EXTRACTED]
+  scripts/lib/blob-refs.ts → app/lib/blob-storage.server.ts
+- `getFavoritesFromDb` --shares_data_with--> `favorites table`  [INFERRED]
+  docs/browse-compare.md → docs/database.md
 
 ## Import Cycles
-- 2-file cycle: `app/lib/messages/index.ts -> app/lib/messages/pages-en.ts -> app/lib/messages/index.ts`
+- None detected.
 
 ## Hyperedges (group relationships)
-- **Login → onboarding → registered-user gating flow** — docs_auth_discord_oauth_flow, docs_auth_returnto, docs_auth_getsession, docs_auth_isregistered, docs_auth_onboarding_wizard, docs_auth_onboardingcompleted, docs_auth_getcurrentuser [EXTRACTED 1.00]
-- **Popular sort via page view snapshot** — docs_database_page_view_stats, docs_browse_compare_profilepageviewssql, docs_browse_compare_browse_page [EXTRACTED 1.00]
-- **Search craft / config snapshot JSON format shared across presets and templates** — docs_database_config_presets, docs_database_search_craft_templates, docs_database_search_crafts, docs_database_search_craft_loops [EXTRACTED 1.00]
 - **better-auth managed tables** — docs_database_auth_users, docs_database_auth_sessions, docs_database_auth_accounts, docs_database_auth_verifications [EXTRACTED 1.00]
+- **Search craft / config snapshot JSON format shared across presets and templates** — docs_database_config_presets, docs_database_search_craft_templates, docs_database_search_crafts, docs_database_search_craft_loops [EXTRACTED 1.00]
 - **Cron-maintained cache & aggregation layer (no FKs)** — docs_database_api_cache, docs_database_youtube_video_cache, docs_database_youtube_live_cache, docs_database_twitch_vod_cache, docs_database_content_translations, docs_database_page_view_stats, docs_database_app_meta [EXTRACTED 1.00]
-- **お気に入りのクライアント/サーバー同期フロー** — docs_favorites_favoritesprovider, docs_favorites_favorites_client, docs_favorites_api_favorites, docs_favorites_favorites_server, docs_favorites_favorites_table [EXTRACTED 1.00]
 - **Blob 回収フロー（ガイド削除・アカウント削除・孤児回収スクリプト）** — docs_guides_deleteguide, docs_guides_cleanupguideblobs, docs_profiles_deleteuseraccount, docs_guides_cleanupuserblobs, docs_guides_orphan_blob_scripts, docs_guides_blob_refs, docs_guides_blob_storage_server [EXTRACTED 1.00]
-- **ロケール決定・切替・翻訳解決のフロー** — docs_i18n_minefolio_locale_cookie, docs_i18n_locale_resolution, docs_i18n_locale_switcher, docs_i18n_use_t_hook, docs_i18n_create_translator [EXTRACTED 1.00]
-- **プライバシー準拠による外部送信の抑制設計** — docs_infrastructure_self_hosted_fonts, docs_infrastructure_legacy_google_fonts_og, docs_infrastructure_github_issue_optin, docs_infrastructure_external_transmission_disclosure [INFERRED 0.85]
-- **Search craft remap reverse-lookup and key-sequence visualization flow** — docs_keybindings_remap_type_context, docs_items_searchcraft_getactualkeyinfos, docs_items_searchcraft_getactualcontrolkeyinfo, docs_items_searchcraft_search_craft_key_sequence, docs_items_searchcraft_key_sequence_dialog, docs_items_searchcraft_virtualkeyboard_annotations [INFERRED 0.85]
-- **Live tables <-> active preset snapshot synchronization** — docs_presets_syncactivepresetsnapshot, docs_presets_apply_preset, docs_presets_shouldusepresetsnapshot, docs_search_craft_templates_applycraftstoexistingpreset, docs_presets_active_equals_live_invariant [INFERRED 0.85]
-- **Fetch-based idempotent like/reaction pattern (getOptionalSession 401, onConflictDoNothing, optimistic rollback)** — docs_likes_api_likes, docs_likes_setlike, docs_likes_likesprovider, docs_profile_reactions_api, docs_profile_reactions_setprofilereaction, docs_profile_reactions_use_profile_reactions [EXTRACTED 1.00]
-- **旧slug・改名MCIDのフォールバック解決フロー** — docs_profiles_resolveplayerslugfallback, docs_profiles_slug_history, docs_profiles_recordslugchange, docs_profiles_mojang_api, docs_guides_author_slug_resolution [EXTRACTED 1.00]
-- **スキン・マントの解決と描画** — docs_profiles_api_skin, docs_profiles_api_cape, docs_profiles_resolvecapeprops, docs_profiles_minecraftfullbody, docs_profiles_minecraftavatar, docs_profiles_no_mcid_placeholder, docs_profiles_skin_face_server [INFERRED 0.85]
+- **Chat-context remap resolution for search craft input** — docs_keybindings_filterremapsforcontext, docs_items_searchcraft_getactualkeyinfos, docs_items_searchcraft_getactualcontrolkeyinfo, docs_items_searchcraft_simulateremapoutput, docs_items_searchcraft_resolveshiftcomponent [EXTRACTED 1.00]
 - **CRON_SECRET で保護された定期バッチ群** — docs_api_api_cron_youtube_update, docs_api_api_cron_twitch_update, docs_api_api_cron_update_paceman_cache, docs_api_api_cron_update_rankings, docs_api_api_cron_update_page_views, docs_api_api_cron_cleanup_auth, docs_api_cron_secret_auth [EXTRACTED 1.00]
 - **動画フィードのパイプライン（cron蓄積→getPublicVideoFeed→FeedVideo）** — docs_api_api_cron_youtube_update, docs_api_api_cron_twitch_update, docs_api_getpublicvideofeed, docs_api_feedvideo, docs_api_api_home_feed, docs_api_api_videos [EXTRACTED 1.00]
+- **お気に入りのクライアント/サーバー同期フロー** — docs_favorites_favoritesprovider, docs_favorites_favorites_client, docs_favorites_api_favorites, docs_favorites_favorites_server, docs_favorites_favorites_table [EXTRACTED 1.00]
+- **Fetch-based idempotent like/reaction pattern (getOptionalSession 401, onConflictDoNothing, optimistic rollback)** — docs_likes_api_likes, docs_likes_setlike, docs_likes_likesprovider, docs_profile_reactions_api, docs_profile_reactions_setprofilereaction, docs_profile_reactions_use_profile_reactions [EXTRACTED 1.00]
+- **ロケール決定・切替・翻訳解決のフロー** — docs_i18n_minefolio_locale_cookie, docs_i18n_locale_resolution, docs_i18n_locale_switcher, docs_i18n_use_t_hook, docs_i18n_create_translator [EXTRACTED 1.00]
+- **Login → onboarding → registered-user gating flow** — docs_auth_discord_oauth_flow, docs_auth_returnto, docs_auth_getsession, docs_auth_isregistered, docs_auth_onboarding_wizard, docs_auth_onboardingcompleted, docs_auth_getcurrentuser [EXTRACTED 1.00]
+- **Mouse metric computation and validity (cm/360, cursor speed, sensitivity)** — docs_keybindings_cm360, docs_keybindings_cursor_speed, docs_keybindings_getwindowsmultiplierornull, docs_keybindings_isvalidsensitivity, docs_keybindings_tosensitivitypercent, docs_keybindings_missing_reasons [EXTRACTED 1.00]
+- **Popular sort via page view snapshot** — docs_database_page_view_stats, docs_browse_compare_profilepageviewssql, docs_browse_compare_browse_page [EXTRACTED 1.00]
+- **Loop transition derivation and rendering pipeline** — docs_items_searchcraft_derivetransition, docs_items_searchcraft_resolveloopsteps, docs_items_searchcraft_typedcharsegments, docs_items_searchcraft_loopkeysequence, docs_items_searchcraft_buildloopkeysequence [EXTRACTED 1.00]
+- **旧slug・改名MCIDのフォールバック解決フロー** — docs_profiles_resolveplayerslugfallback, docs_profiles_slug_history, docs_profiles_recordslugchange, docs_profiles_mojang_api, docs_guides_author_slug_resolution [EXTRACTED 1.00]
 - **Vercel Blob クライアントアップロードトークン発行API** — docs_api_api_me_skin_upload_token, docs_api_api_me_cape_upload_token, docs_api_api_me_guides_upload_image [INFERRED 0.85]
+- **Live tables <-> active preset snapshot synchronization** — docs_presets_syncactivepresetsnapshot, docs_presets_apply_preset, docs_presets_shouldusepresetsnapshot, docs_search_craft_templates_applycraftstoexistingpreset, docs_presets_active_equals_live_invariant [INFERRED 0.85]
+- **プライバシー準拠による外部送信の抑制設計** — docs_infrastructure_self_hosted_fonts, docs_infrastructure_legacy_google_fonts_og, docs_infrastructure_github_issue_optin, docs_infrastructure_external_transmission_disclosure [INFERRED 0.85]
+- **スキン・マントの解決と描画** — docs_profiles_api_skin, docs_profiles_api_cape, docs_profiles_resolvecapeprops, docs_profiles_minecraftfullbody, docs_profiles_minecraftavatar, docs_profiles_no_mcid_placeholder, docs_profiles_skin_face_server [INFERRED 0.85]
 
-## Communities (174 total, 14 thin omitted)
+## Communities (189 total, 16 thin omitted)
 
-### Community 0 - "サーチクラフト編集UI"
-Cohesion: 0.06
-Nodes (85): MyContentTabs(), ItemIcon(), ItemIconProps, ItemIconSpinner(), SPLIT_MARK_ITEM, BLOCK_TIMINGS, blockIndex(), craftZoneId() (+77 more)
-
-### Community 1 - "ルート共通ヘルパー"
-Cohesion: 0.07
-Nodes (84): createAuth(), createDb(), getEnv(), isDevAuthEnabled(), resolveLocale(), assertPresetIsActive(), sanitizeReturnTo(), parseRunIdList() (+76 more)
-
-### Community 2 - "DBスキーマ定義"
-Cohesion: 0.02
-Nodes (86): AuthCleanupResult, PROFILE_TAB_VALUES, ProfileTabValue, SELECTABLE_PROFILE_TABS, SelectableProfileTabValue, KEY_REMAP_TYPES, authSessions, authVerifications (+78 more)
-
-### Community 3 - "キー入力順ダイアログ"
-Cohesion: 0.05
-Nodes (77): TEXTURE_BASE_URL, CONTROL_KEY_META, ControlKeyBadge(), ControlKeyBadgeView(), ControlKeyKind, CraftMarker(), getFingerForKeyCode(), KeyBadge() (+69 more)
-
-### Community 4 - "UI部品とエディタのダイアログ"
+### Community 0 - "統計ビューと初期設定UI"
 Cohesion: 0.09
-Nodes (66): setImageMediaContext(), buildCoverImagePath(), buildInlineImagePath(), MAX_UPLOAD_BYTES, useUnsavedWarning(), GuideEditor(), insertEmbed(), insertGuideLink() (+58 more)
+Nodes (86): StatsViewProps, KeybindingsStatsData, EloRateGraph(), F3RemapStatCard(), isMouseKey(), KeybindingStatCard(), StatRow(), StatsView() (+78 more)
 
-### Community 5 - "統計ビューと初期設定UI"
-Cohesion: 0.10
-Nodes (68): EloRateGraph(), ToggleListNodeView(), F3RemapStatCard(), isMouseKey(), KeybindingStatCard(), StatsView(), LoadingProgressRing(), MCSRRankedCard() (+60 more)
-
-### Community 6 - "package.json 依存関係"
-Cohesion: 0.02
-Nodes (84): dependencies, @anthropic-ai/sdk, @bafv4/mcitems, better-auth, class-variance-authority, clsx, cmdk, date-fns (+76 more)
-
-### Community 7 - "Twitch とペース取得"
-Cohesion: 0.05
-Nodes (64): getTwitchCacheKey(), setCached(), videoRetentionCutoff(), fetchUuidFromMcid(), MojangError, parseDateParam(), missCacheKey(), resolveViaMojang() (+56 more)
-
-### Community 8 - "認証掃除と旧データ移行"
-Cohesion: 0.05
-Nodes (63): PaceTimelineResponse, CacheTTL, CacheType, cleanupMemoryCache(), getCached(), getDbCached(), getPaceManCacheKey(), invalidateCache() (+55 more)
-
-### Community 9 - "アイテムホットバー"
-Cohesion: 0.05
-Nodes (56): CyclingCapableIcon(), CyclingSlotIcon(), getServerTickSnapshot(), getTickSnapshot(), HotbarSlotTile(), ItemHotbar(), Slot, SLOT_NUMBERS (+48 more)
-
-### Community 10 - "アイテム設定のテスト"
-Cohesion: 0.07
-Nodes (65): AccelerationCell(), ActionKeyCell(), Cm360Cell(), CursorSpeedCell(), CustomActionCell(), CustomActionItem, customKeyNamesCache, DpiCell() (+57 more)
-
-### Community 11 - "コンテンツ一覧とタブ"
+### Community 1 - "UI部品とエディタのダイアログ"
 Cohesion: 0.08
-Nodes (48): ContentTab, ContentTabs(), GuidesContentTabs(), EmptyState(), EmptyStateProps, EmbedNodeView(), EmbedNodeViewProps, KeybindEmbedNodeView() (+40 more)
+Nodes (68): EmbedDialogProps, GuideLinkSearchProps, LinkDialogProps, MetadataFieldsProps, GuideSettingsValues, SettingsDialogProps, YoutubeDialogProps, PresetMismatchError (+60 more)
 
-### Community 12 - "エディタのノードビュー"
-Cohesion: 0.07
-Nodes (51): FloatingSaveBar(), FloatingSaveBarProps, displayLabel(), UserFilterChips(), UserFilterPlayer, UserSelectList(), PresetSwitchLock(), badgeVariants (+43 more)
-
-### Community 13 - "API認証とセッション"
-Cohesion: 0.09
-Nodes (32): Auth, Session, Database, MAX_GUIDE_SLUG_LENGTH, normalizeSlug(), softNormalizeSlug(), guides, users (+24 more)
-
-### Community 14 - "Microsoft認証の実測スクリプト"
-Cohesion: 0.05
-Nodes (39): changelogMarkdown, entries, normalizeHeading(), readSeenVersion(), scheduleIdle(), WhatsNew(), WhatsNewMarkdown, writeSeenVersion() (+31 more)
-
-### Community 15 - "アプリのルートとプロバイダ"
-Cohesion: 0.06
-Nodes (48): CookieConsentBanner(), CookieConsentBannerProps, useCookieConsent(), FavoriteButton(), FavoriteButtonProps, BackgroundPattern(), Providers(), ProvidersProps (+40 more)
-
-### Community 16 - "プレイスタイル定義"
-Cohesion: 0.06
-Nodes (54): ALL_VERSION_KEYS, BASTION_OPTIONS, BASTION_VERSION_KEY_SET, BASTION_VERSION_KEYS, BastionType, BEDROCK_VERSIONS, BedrockVersionCode, CAN_CANNOT_OPTIONS (+46 more)
-
-### Community 17 - "ページビューSQLとテストDB"
-Cohesion: 0.05
-Nodes (38): BROWSE_ITEMS_PER_PAGE, BrowseQueryArgs, getGuideLikeCounts(), getTemplateLikeCounts(), templateLikeCountSql(), profilePageViewsSql(), RankingsArgs, CategoryRecordRow (+30 more)
-
-### Community 18 - "キー取得ボタン"
-Cohesion: 0.05
-Nodes (48): RemapViewToggle(), isUniqueConstraintError(), FingerType, fetchKeybindingsListPlayers(), KeybindingsListPlayer, loadKeybindingsListPlayers(), fetchLegacyData(), guessCustomKeyCategory() (+40 more)
-
-### Community 19 - "ルート設定とパッケージ情報"
-Cohesion: 0.04
-Nodes (48): license, name, private, type, version, clsx, cmdk, @fontsource/jetbrains-mono (+40 more)
-
-### Community 20 - "セレクト部品と無限スクロール"
-Cohesion: 0.16
-Nodes (43): ContentSortSelect(), PresetSelector(), PresetSelectorPreset, PresetSelectorProps, DialogRemapRow(), getRemapOutputTypeFromTargetKey(), ModifierToggleGroup(), RemapOutputType (+35 more)
-
-### Community 21 - "meta と翻訳関数"
-Cohesion: 0.11
-Nodes (49): localeFromMatches(), createTranslator(), t(), buildOgMeta(), meta(), meta(), meta(), meta() (+41 more)
-
-### Community 22 - "ガイド画像ノード"
-Cohesion: 0.11
-Nodes (37): BackToTopButton(), Props, CodeBlockNodeView(), ColumnsNodeView(), GuideLinkNodeView(), getYouTubeEmbedUrl(), YoutubeNodeView(), TableAlignRow() (+29 more)
-
-### Community 23 - "TipTap 拡張定義"
-Cohesion: 0.06
-Nodes (41): CALLOUT_ICONS, CalloutExtension, Commands, @tiptap/core, CustomCodeBlock, ColumnExtension, ColumnsExtension, GuideLinkExtension (+33 more)
-
-### Community 24 - "キー情報トリガー"
-Cohesion: 0.07
-Nodes (48): CATEGORY_COLOR_STYLE, CATEGORY_ICON_MAP, CUSTOM_ACTION_CATEGORY_LABEL_KEYS, FINGER_DOT_CLASS, KeyComboChips(), KeyInfoBinding, KeyInfoBody(), KeyInfoCustomAction (+40 more)
-
-### Community 25 - "開発依存パッケージ"
-Cohesion: 0.04
-Nodes (47): FormControl(), FormDescription(), FormFieldContext, FormFieldContextValue, FormItem(), FormItemContext, FormItemContextValue, FormLabel() (+39 more)
-
-### Community 26 - "アバター・動画カード"
-Cohesion: 0.10
-Nodes (40): FeedVideoCard(), formatDuration(), getEmbedUrl(), getFeedVideoUrl(), Props, ScrollUpStickyHeader(), Table(), TableBody() (+32 more)
-
-### Community 27 - "ガイドエディタ定数・表操作"
-Cohesion: 0.11
-Nodes (39): AUTO_SAVE_DEBOUNCE_MS, BG_COLORS, CELL_COLORS, ImageAlign, TEXT_COLORS, applyTableOp(), copyTableToClipboard(), setCellBackground() (+31 more)
-
-### Community 28 - "メッセージ取得とフィードバック"
-Cohesion: 0.07
-Nodes (34): createFeedbackSchema(), FeedbackFormData, buildLanguageLabel(), GAME_LANGUAGE_DEFS, GameLanguageDef, nativeName(), DEFAULT_LOCALE, isLocale() (+26 more)
-
-### Community 29 - "ガイドといいねのテスト"
-Cohesion: 0.07
-Nodes (36): blobMocks, ENV_KEYS, ListPage, originalEnv, TranslationRow, createTestDbAt(), daysAgo(), seedGuide() (+28 more)
-
-### Community 30 - "ガイド・いいね関連テーブル"
-Cohesion: 0.10
-Nodes (35): Player compare page (/compare), rtaCareerView / rtaCareerLabel, Database Schema Overview (tables & ER diagram), api_cache table (generic API cache), app_meta table (app-wide key-value), category_records table (PB & targets), config_history table, config_presets table (config snapshots) (+27 more)
-
-### Community 31 - "プリセット操作"
-Cohesion: 0.08
-Nodes (39): createPreset(), createPresetFromImport(), CreatePresetOptions, DatabaseOrTransaction, generateInitialPresetName(), PresetCustomActionData, PresetCustomKeyData, PresetKeybindingData (+31 more)
-
-### Community 32 - "仮想キーボードとキー定義"
-Cohesion: 0.13
-Nodes (41): formatKeyCombination(), getKeyLabel(), normalizeKeyCode(), normalizeKeyCombination(), parseKeyCombination(), ActualKeyOptions, buildShiftHeldReverseMap(), charToKeyCode() (+33 more)
-
-### Community 33 - "サーチクラフトテンプレート適用"
-Cohesion: 0.09
-Nodes (35): PresetRemapData, PresetSearchCraftData, PresetSearchCraftLoopData, ConfigPreset, ApplyCraftsInput, ApplyToPresetResult, CreatePresetResult, dedupeRemaps() (+27 more)
-
-### Community 34 - "アバター合成キャッシュ"
-Cohesion: 0.10
-Nodes (37): CapeUploader(), CapeUploaderProps, VALID_CAPE_SIZES, OnboardingStepError(), OnboardingStepFooter(), OnboardingStepHeader(), SkinUploader(), SkinUploaderProps (+29 more)
-
-### Community 35 - "DB接続設定と移行スクリプト"
-Cohesion: 0.06
-Nodes (29): isLocalDbUrl(), pnpm db:push:remote (drizzle.remote.config.ts), pnpm dev:remote (Vite --mode remote), { url }, { url, authToken }, drizzle-kit, apply, client (+21 more)
-
-### Community 36 - "新規ユーザー既定値とプリセット同期"
-Cohesion: 0.07
-Nodes (34): createDefaultsForNewUser(), DEFAULT_KEYBINDINGS, seedKeybinding(), seedPlayerConfig(), seedImportSource(), callLoader(), callLoaderCsv(), ENV_KEYS (+26 more)
-
-### Community 37 - "YouTube 取得とキャッシュ"
-Cohesion: 0.09
-Nodes (35): setDbCached(), YoutubeLiveCache, refreshYoutubeForChannel(), getChannelStats(), CACHE_CONFIG, CachedYouTubeLive, checkVideosExist(), cleanupOldLiveCache() (+27 more)
-
-### Community 38 - "ガイド配色とサニタイズ"
-Cohesion: 0.08
-Nodes (29): buildExtensions(), extensions, FIXTURES, useGuideEditor(), UseGuideEditorOptions, setup(), allowedBgColors, allowedTextColors (+21 more)
-
-### Community 39 - "テンプレートの直列化"
-Cohesion: 0.10
-Nodes (30): CheckboxRow(), ExportTheme, KeyboardExportDialog(), RadioRow(), SwitchRow(), THEME_CLASS, LoopCraftInfo, effectiveRemapsFrom() (+22 more)
-
-### Community 40 - "プリセット仕様"
-Cohesion: 0.06
-Nodes (35): apply-preset intent, assertPresetIsActive() / PresetMismatchError, Preset sync known limitations, Loop craftId restoration (3 paths), preset-read.ts (decodePresetConfig), PresetSelector component, preset-utils.ts serializers, PresetSearchCraftData (variations) (+27 more)
-
-### Community 41 - "テスト基盤とペース分割"
-Cohesion: 0.06
-Nodes (19): claimSlug(), seedPace(), TestDb, NOW, RunSplits, callAction(), ENV_KEYS, makeRequest() (+11 more)
-
-### Community 42 - "走者一覧とお気に入りDB"
-Cohesion: 0.11
-Nodes (25): apiJsonResponse(), getApiUser(), getGuideLikeCount(), getTemplateLikeCount(), getViewerLikedIds(), likeGuide(), LikeResult, LikeTargetType (+17 more)
-
-### Community 43 - "一回限りDDLスクリプト"
-Cohesion: 0.06
-Nodes (21): dotenv, @libsql/client, apply, client, { url, authToken }, client, apply, client (+13 more)
-
-### Community 44 - "キャッシュ層と Mojang 連携"
-Cohesion: 0.09
-Nodes (21): getMojangCacheKey(), fetchCapeTextureUrl(), fetchMcidFromUuid(), formatUuid(), getSkinTextureUrl(), MOJANG_TEXTURES_HOST, MojangProfile, mojangProfileSchema (+13 more)
-
-### Community 45 - "Blob 孤児の監査"
-Cohesion: 0.10
-Nodes (30): asJson, client, token, { url, authToken }, allowBrokenRefs, apply, categoryFilter, client (+22 more)
-
-### Community 46 - "ページビュー集計"
-Cohesion: 0.11
-Nodes (27): AnalyticsPathTarget, GUIDE_PATH_PREFIX, PAGE_VIEW_WINDOW_DAYS, parseAnalyticsPath(), PROFILE_PATH_PREFIX, buildRows(), chunk(), errorMessage() (+19 more)
-
-### Community 47 - "キー配置のテスト"
-Cohesion: 0.08
-Nodes (20): seedConfigPreset(), ActionResult, callAction(), ENV_KEYS, formDataOf(), makeRequest(), originalEnv, saveForm() (+12 more)
-
-### Community 48 - "公開APIリファレンス"
-Cohesion: 0.10
-Nodes (28): APIルート仕様書（内部用・全API）, /api/auth/* (better-auth), api_cache テーブル（social_stats キャッシュ）, GET /api/cape, GET /api/cron/cleanup-auth, GET /api/cron/twitch-update, GET /api/cron/update-paceman-cache, GET /api/cron/update-page-views (+20 more)
-
-### Community 49 - "アカウント削除のテスト"
-Cohesion: 0.07
-Nodes (21): contentTranslations, favorites, SlugHistory, blobMocks, callAction(), ENV_KEYS, makeRequest(), originalEnv (+13 more)
-
-### Community 50 - "OGP と全身スキン表示"
-Cohesion: 0.11
-Nodes (26): faceFromSkinApi(), fetchNoMcidFaceDataUrl(), fetchSkinFaceDataUrl(), HEAD_BASE, HEAD_OVERLAY, renderSkinFacePng(), sampleIndex(), stripXmlComments() (+18 more)
-
-### Community 51 - "プロフィール表示とキー配置カード"
-Cohesion: 0.10
-Nodes (25): MissingMouseValue(), isHttpUrl(), safeExternalHref(), TwitchChannelStats, YouTubeChannelStats, SocialStatsResponse, CursorSpeedValue(), DisplayVideo (+17 more)
-
-### Community 52 - "DB運用と集計cron仕様"
-Cohesion: 0.07
-Nodes (20): SHARED_MEMORY_URL, callLoader(), ENV_KEYS, originalEnv, sessionMocks, callLoader(), ENV_KEYS, originalEnv (+12 more)
-
-### Community 53 - "トグル部品"
-Cohesion: 0.15
-Nodes (22): EDITOR_Z, FONT_SIZES, useEditorRerender(), InlineColorPicker(), applyGuideFontSize(), currentFontSize(), FontSizePicker(), isFontSizeEditable() (+14 more)
-
-### Community 54 - "ガイド表の正規化といいね集計"
+### Community 10 - "セレクト部品と無限スクロール"
 Cohesion: 0.12
-Nodes (23): sanitizeGuideHtml(), firstLazySegment(), normalizeGuideTables(), normalizeTable(), guideLikeCountSql(), guideListOrderBy(), getMainPaces(), getNetherEnterCount() (+15 more)
+Nodes (54): PresetSelectorPreset, PresetSelectorProps, RemapOutputType, RemapRowEntry, SearchCraftDraft, KeyboardLayoutOption, WorkbenchRemap, MyPresetOption (+46 more)
 
-### Community 55 - "ガイドエディタのブロック操作"
-Cohesion: 0.15
-Nodes (24): SaveMode, BlockType, CalloutType, collapseCellSelection(), insertCallout(), insertColumns(), insertHorizontalRule(), insertTable() (+16 more)
-
-### Community 56 - "外部統計取得"
-Cohesion: 0.11
-Nodes (18): EloRateGraphProps, checkPaceManPlayer(), ExternalStatsData, fetchAllExternalStats(), fetchMCSRRankedStats(), fetchSpeedrunComStats(), MCSRRankedMatch, MCSRRankedSeasonData (+10 more)
-
-### Community 57 - "スラッシュコマンド"
-Cohesion: 0.14
-Nodes (21): NOOP_CONTEXT, SlashCommand, SlashCommandStorage, ColorOption, filterSlashItems(), GROUP, resolveItem(), SLASH_ITEM_DEFS (+13 more)
-
-### Community 58 - "外部ランキング更新"
-Cohesion: 0.12
-Nodes (21): cleanupDuplicateVerifiedRankings(), fetchRankedUserData(), fetchSpeedruncomUserPbs(), fetchSpeedruncomUserPendingRuns(), formatTimeMs(), formatTimeSeconds(), LocalRankingRow, RankedUserResponse (+13 more)
-
-### Community 59 - "アイテム・サーチクラフト仕様"
-Cohesion: 0.10
-Nodes (18): ControlKeyBadge / ControlKeyBadgeView, deriveTransition() (backspace/arrowLeft/selectAll/home), item_layouts table, Item layout segments (Common, Overworld, Bastion, ... custom_*), Item Layout & Search Craft Spec, LoopEditorRow, LoopKeySequence / SearchCraftLoopRow / SearchCraftLoopGroupSection, remapLoopSteps() / remapVariationRefs() (+10 more)
-
-### Community 60 - "いいね・リアクション仕様"
-Cohesion: 0.09
-Nodes (19): POST /api/likes, content-sort.ts / ContentSortSelect, getViewerLikedIds(), guideListOrderBy(), LikeButton component, likes.server.ts server layer, LikesProvider / useLike (use-likes.tsx), page-view-stats.server.ts (guidePageViewsSql) (+11 more)
-
-### Community 61 - "プロフィール仕様"
-Cohesion: 0.11
-Nodes (24): プレイヤープロフィール 仕様書, Bedrock版 MCID（bedrockMcid）, /me/edit プロフィール編集, /me/playstyle 編集ページ, /og-image OGP画像生成（@vercel/og）, pinnedSpeedrunRecords（Speedrun.com記録のピン留め）, ピン留め（Folio強調表示）, app/lib/playstyle.ts（選択肢定義・表示条件ヘルパーの単一情報源） (+16 more)
-
-### Community 62 - "埋め込みとループ"
-Cohesion: 0.14
-Nodes (23): ContentSegment, EmbedLoopRow, EmbedRef, EmbedUserData, extractEmbedRefs(), getUniqueEmbedSlugs(), InvalidKbd(), KeybindEmbedView() (+15 more)
-
-### Community 63 - "PaceMan ライブ表示"
-Cohesion: 0.15
-Nodes (17): LivePaceList(), LivePaceListProps, getLatestSplit(), getRecentRunFinalSplit(), getSplitLabel(), getSplitLabelEnglish(), getSplitOrder(), getSplitTimeline() (+9 more)
-
-### Community 64 - "アバター合成とシークレットグリッド"
-Cohesion: 0.13
-Nodes (22): MinecraftAvatarComponent(), ProfileFeedCardPlayer, composite(), dataUrlCache, dataUrlInflight, dataUrlKey(), getRenderableAvatar(), HEAD_BASE (+14 more)
-
-### Community 65 - "サーチクラフトのループ表示"
-Cohesion: 0.13
-Nodes (23): MinecraftFullBody, groupLoopsByTiming(), makeLoopGroupExtra(), SearchCraftGroupedList(), useItemLang(), dateFormatPattern(), categoryLabel(), editionOfVersion() (+15 more)
-
-### Community 66 - "slug フォールバックのテスト"
-Cohesion: 0.09
-Nodes (17): innerContent(), renderLock(), wrapper(), recordSlugChange(), mojangMocks, callLoader(), ENV_KEYS, mojangMocks (+9 more)
-
-### Community 67 - "Blob 削除とURL検証"
-Cohesion: 0.18
-Nodes (20): delBlobsInBatches(), listAllBlobs(), blobUrlToPathname(), collectBlobPathnames(), isIpLiteralHostname(), isTrustedBlobHostname(), isVercelBlobUrl(), parseVercelBlobUrl() (+12 more)
-
-### Community 68 - "動画からGIF変換"
-Cohesion: 0.15
-Nodes (19): paletteSampleStep(), clamp(), clampTrimRange(), convertVideoToGif(), ConvertVideoToGifOptions, GIF_FPS_PRESETS, GIF_MAX_DURATION_SEC, GIF_MAX_FRAMES (+11 more)
-
-### Community 69 - "Markdown文書ページとOGP"
-Cohesion: 0.13
-Nodes (10): MarkdownDocPage(), MarkdownDocPageProps, ApiDocsPage(), loader(), ChangelogPage(), loader(), loader(), PrivacyPage() (+2 more)
-
-### Community 70 - "キー配置の定義とラベル"
-Cohesion: 0.09
-Nodes (22): ACTION_LABEL_KEYS, CONTROLLER_ACTIONS, ControllerSettings, DEFAULT_CONTROLLER_SETTINGS, FINGER_LABEL_KEYS, hasModifiers(), isControllerKeyCode(), isSingleKey() (+14 more)
-
-### Community 71 - "サーチクラフトの直列化"
-Cohesion: 0.25
-Nodes (19): serializeRemaps(), serializeSearchCraftLoops(), serializeSearchCrafts(), searchCraftLoops, searchCrafts, searchCraftTemplates, draftId(), normalizeTiming() (+11 more)
-
-### Community 72 - "ガイドエディタ仕様"
-Cohesion: 0.11
-Nodes (19): ガイド機能 仕様書, 著者slugの解決（/guides/:authorSlug 系）, buildExtensions()（editor-config.ts）, 列幅スナップ（column-snap.ts）, copyTableToClipboard, GIF のトリミング（lib/gif-crop.ts / omggif）, lib/gif-encode.ts（グローバルパレット + gifenc）, /guides/:authorSlug/:guideSlug ガイド閲覧 (+11 more)
-
-### Community 73 - "ホーム・ライブ仕様"
-Cohesion: 0.12
-Nodes (18): /api/home-feed (lazy feed API), apiCache table, getUserData() UserDataCache (home-user-data.server.ts), showPacemanOnHome / showYoutubeOnHome / showTwitchOnHome flags, Home & Live Feature Spec, Home page (/), Live paces section (15s auto refresh, LivePaceList), /live route removed (redirect to /) (+10 more)
-
-### Community 74 - "画像クロップ"
+### Community 101 - "走者一覧とお気に入りDB (2)"
 Cohesion: 0.24
-Nodes (18): clamp(), clampCropRect(), CropHandle, CropRect, fitCropRectToAspect(), FULL_CROP, isCropped(), MIN_CROP_SIZE (+10 more)
+Nodes (13): ProfileReactionBarProps, ProfileReactionPill, ReactionOverride, UseProfileReactionsOptions, UseProfileReactionsResult, ProfileReactionCount, ProfileReactionEmoji, overrideKeyOf() (+5 more)
 
-### Community 75 - "ヘッダー・目次・UI部品"
-Cohesion: 0.19
-Nodes (19): GuideTocMobile(), GuideTocSidebar(), jumpToHeading(), TocList(), useActiveHeading(), useFollowActiveHeading(), useTocMaxHeight(), Sheet() (+11 more)
-
-### Community 76 - "DB接続URL判定とリモート運用"
-Cohesion: 0.10
-Nodes (15): Likes Feature Spec, guide_likes table, search_craft_template_likes table, FEATURE_PROFILE_REACTIONS flag removal, profile_reactions table, apply, client, STATEMENTS (+7 more)
-
-### Community 77 - "プレイヤー一覧クエリ"
-Cohesion: 0.16
-Nodes (18): BROWSE_LIST_COLUMNS, BROWSE_SORTS, BrowseFilterEdition, BrowseFilterInputMethod, BrowseFilterPlatform, BrowseFilterRole, BrowseSortOption, buildWhere() (+10 more)
-
-### Community 78 - "画像アップロード"
-Cohesion: 0.19
-Nodes (14): COVER_IMAGE_PREPARE, INLINE_IMAGE_PREPARE, messageFor(), UploadImageOptions, useImageUpload(), UseImageUploadResult, canvasToBlob(), cropImageFromUrl() (+6 more)
-
-### Community 79 - "GIF クロップ"
-Cohesion: 0.17
-Nodes (13): clearRgbaRegion(), cropAnimatedGif(), cropAnimatedGifFromUrl(), CropAnimatedGifOptions, cropFrames(), cropRgbaBuffer(), GifDecodeError, PixelRegion (+5 more)
-
-### Community 80 - "cron 認証と掃除ジョブ"
-Cohesion: 0.16
-Nodes (15): cleanupExpiredAuthRows(), requireCronAuth(), isPageViewSyncConfigured(), loader(), authCleanupMocks, callLoader(), ENV_KEYS, makeRequest() (+7 more)
-
-### Community 81 - "RTA歴"
-Cohesion: 0.22
-Nodes (18): elapsedFrom(), EN_START_FORMATTER, formatRtaStartedLabel(), hasRtaCareerRemainder(), isInRange(), isValidRtaStartedYearMonth(), parseRtaStartedYearMonth(), RTA_STARTED_MIN_YEAR (+10 more)
-
-### Community 82 - "一覧・比較・お気に入り仕様"
-Cohesion: 0.12
-Nodes (15): Browse / Compare / Favorites Spec, Player list page (/browse), excludeViewersCondition, FavoriteButton, Favorites page (/favorites), getFavoritesFromDb, nullsLast (sort-order), parseBrowseSort / BROWSE_SORTS allowlist (+7 more)
-
-### Community 83 - "プライバシー準拠と外部連携"
-Cohesion: 0.12
-Nodes (14): app_meta テーブル（release_notify:last_version）, Cron 認証（CRON_SECRET / requireCronAuth）, CUID2 主キー生成（createId）, ダッシュボードレイアウト（me/_layout.tsx、認証必須）, DB 技術スタック（Drizzle ORM / libSQL / Turso / file:local.db）, 動的OGP画像（/og-image、@vercel/og ImageResponse）, 環境変数一覧（必須・任意、getEnv / Env 型）, 旧 OGP フォント取得（Google Fonts css2 text= 方式、撤去済み） (+6 more)
-
-### Community 84 - "動画フィード"
-Cohesion: 0.18
-Nodes (14): GuideItem, FeedVideo, feedVideoKey(), filterOwnVideos(), OwnVideoPrefs, VIDEO_FEED_RETENTION_DAYS, CachedPace, FeedAction (+6 more)
-
-### Community 85 - "キー配置統計"
-Cohesion: 0.12
-Nodes (17): StatsViewProps, CM180_RANGES, Cm180Stats, DPI_RANGES, DpiStats, F3RemapStats, KeybindingsStatsData, KeybindingStats (+9 more)
-
-### Community 86 - "shadcn 設定"
-Cohesion: 0.11
-Nodes (18): aliases, components, hooks, lib, ui, utils, iconLibrary, registries (+10 more)
-
-### Community 87 - "アイテム・キー表示仕様"
-Cohesion: 0.12
-Nodes (14): CraftMarker, getActualKeyInfos() reverse remap lookup, ItemHotbar component, ItemIcon wrapper (@bafv4/mcitems), KeyBadge, Profile page item/search-craft display, ShiftKeyGroup, findRemapConflict() (duplicate / allConflict) (+6 more)
-
-### Community 88 - "お気に入り仕様"
-Cohesion: 0.14
-Nodes (14): お気に入り機能 仕様書, /api/favorites (GET/POST/PUT), POST /api/users/by-slugs, Cookie 同意との連携（useCookieConsent）, FavoriteButton コンポーネント, app/lib/favorites-client.ts（localStorage/sessionStorage 操作）, /favorites ページ, app/lib/favorites.ts（DB CRUD ヘルパー） (+6 more)
-
-### Community 89 - "TypeScript 設定"
-Cohesion: 0.12
-Nodes (16): compilerOptions, esModuleInterop, jsx, lib, module, moduleResolution, noEmit, paths (+8 more)
-
-### Community 90 - "お気に入りの DB 処理"
+### Community 102 - "プレイヤー一覧クエリ (2)"
 Cohesion: 0.29
-Nodes (12): addFavoriteToDb(), buildLegacyFavoritesCookieDeletion(), DatabaseOrTransaction, getFavoritesFromDb(), isFavorite(), LEGACY_FAVORITES_COOKIE_NAME, removeFavoriteFromDb(), retargetFavoritesOnSlugChange() (+4 more)
+Nodes (12): DatabaseOrTransaction, addFavoriteToDb(), buildLegacyFavoritesCookieDeletion(), getFavoritesFromDb(), isFavorite(), removeFavoriteFromDb(), retargetFavoritesOnSlugChange(), syncLocalFavoritesToDb() (+4 more)
 
-### Community 91 - "プリセット設定のデコード"
-Cohesion: 0.33
-Nodes (14): coerceStringArray(), compareStrings(), decodePresetConfig(), decodePresetCustomActions(), decodePresetCustomKeys(), decodePresetItemLayouts(), decodePresetKeybindings(), decodePresetPlayerConfig() (+6 more)
-
-### Community 92 - "omggif 型定義"
+### Community 103 - "omggif 型定義"
 Cohesion: 0.12
 Nodes (6): GifFrameInfo, GifReader, GifWriter, GifWriterFrameOptions, GifWriterOptions, omggif
 
-### Community 93 - "インポートのテスト"
+### Community 104 - "インポートのテスト"
 Cohesion: 0.16
-Nodes (13): ActionResult, callAction(), CAPSLOCK_REMAP, ENV_KEYS, formDataOf(), makeRequest(), minecraftForm(), originalEnv (+5 more)
+Nodes (13): ActionResult, RemapPayload, callAction(), formDataOf(), makeRequest(), minecraftForm(), remapForm(), setupUser() (+5 more)
 
-### Community 94 - "サーチクラフトのテスト"
+### Community 105 - "新規ユーザー既定値とプリセット同期 (2)"
+Cohesion: 0.16
+Nodes (14): ActionResult, callAction(), insertPreset(), makeRequest(), readLiveConfig(), setupThreePresets(), setupUser(), signInAs() (+6 more)
+
+### Community 106 - "サーチクラフトのテスト"
 Cohesion: 0.17
-Nodes (12): ActionResult, callAction(), ENV_KEYS, EXISTING_CRAFTS_PAYLOAD, makeRequest(), originalEnv, seedCraft(), seedLoop() (+4 more)
+Nodes (12): ActionResult, callAction(), makeRequest(), seedCraft(), seedLoop(), setupCraftsWithLoop(), setupUserWithActivePreset(), signInAs() (+4 more)
 
-### Community 95 - "i18n 仕様"
-Cohesion: 0.21
-Nodes (8): createTranslator(resolveLocale / localeFromMatches)（ローダー・meta 用）, 表示名のアルファベット表記（displayNameAlphabet / pickDisplayName）, Cookie minefolio_locale, 多言語対応（i18n）仕様書, 対応ロケール（ja / en、SUPPORTED_LOCALES）, 翻訳カバレッジテスト（app/lib/__tests__/locale.test.ts）, useT() フック（コンポーネント用）, 国際化 (i18n) 概要
+### Community 109 - "Microsoft認証の実測スクリプト (3)"
+Cohesion: 0.25
+Nodes (8): AppMeta, VercelWebhookBody, getAppMeta(), setAppMeta(), parseChangelog(), buildReleaseDescription(), verifyVercelSignature(), action()
 
-### Community 96 - "プライバシーポリシーと変更履歴"
-Cohesion: 0.12
-Nodes (15): Local Development Environment, /dev/login simple login (triple gate), local.db SQLite fallback, vite optimizeDeps.include list, Tech Stack, api_cache table + CDN cache headers, Custom i18n (app/lib/messages), Discord OAuth via better-auth (+7 more)
+### Community 11 - "ルート共通ヘルパー"
+Cohesion: 0.11
+Nodes (65): RecordLimitError, createAuth(), createDb(), getEnv(), guideLikeCountSql(), resolveLocale(), getRecentPacesForPlayer(), parseRunIdList() (+57 more)
 
-### Community 97 - "認証仕様"
+### Community 110 - "キー配置のテスト"
+Cohesion: 0.16
+Nodes (10): ActionResult, callAction(), formDataOf(), makeRequest(), saveForm(), setupUserWithActivePreset(), signInAs(), ENV_KEYS (+2 more)
+
+### Community 116 - "gifenc 型定義"
 Cohesion: 0.15
-Nodes (4): isTableHandleMenuOpen(), openHandleMenus, cells(), hoverCell()
+Nodes (6): GifFrameOptions, GifPalette, GifPixelFormat, GifStream, QuantizeOptions, gifenc
 
-### Community 98 - "初期設定のテスト"
-Cohesion: 0.14
-Nodes (9): socialLinks, callAction(), callLoader(), ENV_KEYS, makeRequest(), mojangMocks, originalEnv, sessionMocks (+1 more)
+### Community 12 - "プレイスタイル定義"
+Cohesion: 0.06
+Nodes (60): BastionType, BedrockVersionCode, CanCannot, CategoryKey, CategoryOption, ClickMethod, Edition, FrequencyLevel (+52 more)
 
-### Community 99 - "ローカル開発環境"
-Cohesion: 0.12
-Nodes (13): apply, client, COLUMNS, existingNames, missing, pending, { url, authToken }, verifyNames (+5 more)
+### Community 120 - "DB運用と集計cron仕様 (2)"
+Cohesion: 0.17
+Nodes (6): StubEntry, BLOB_BYTES, ENV_KEYS, originalEnv, STEVE_BYTES, TEXTURE_BYTES
 
-### Community 100 - "カラム幅スナップ"
-Cohesion: 0.21
-Nodes (10): columnSnapPlugin(), findSnapTarget(), SNAP_TOLERANCE_PX, snapKey, cellPos(), COL0, COL1, colwidthOf() (+2 more)
+### Community 122 - "設定ファイルのパーサ"
+Cohesion: 0.31
+Nodes (9): ParsedMinecraftSettings, ParsedRemap, ahkKeyToJsKey(), parseAutoHotkeyScript(), parseMinecraftSettings(), parseOptionsText(), parseStandardSettings(), AHK_KEY_MAP (+1 more)
 
-### Community 101 - "スキン・マント仕様"
-Cohesion: 0.21
-Nodes (14): app/lib/blob-url.ts（blobUrlToPathname / collectBlobPathnames）, GET /api/cape?uuid=（Mojangマント中継）, GET /api/skin（スキンテクスチャプロキシ）, app/lib/avatar-cache.ts（isMissingSkinSource / NO_MCID_FACE_URL）, マント（cape）表示, カスタムマントのアップロード（/api/me/cape・upload-token・cape-uploader）, isVercelBlobUrl() / parseVercelBlobUrl()（blob-url.ts）, MinecraftAvatar（顔アイコン 2D） (+6 more)
-
-### Community 102 - "ユーザーコンテンツ自動翻訳仕様"
-Cohesion: 0.14
-Nodes (12): 表示名のアルファベット表記（getLocalizedDisplayName）, スラッグ生成（app/lib/slug.ts / generateSlug）, TipTap editor, xss sanitizer (guide-sanitize.server.ts), User Content Auto-Translation Spec, Claude API translation engine (structured output), content_translations table, deleteTranslationsForGuide / deleteTranslationsForUser (+4 more)
-
-### Community 103 - "キー入力キャプチャ"
-Cohesion: 0.26
-Nodes (11): isKeyCaptureEscapeTarget(), KeyCaptureButton(), keyCaptureEscapeGuard(), MODIFIER_KEY_CODES, modifiersFromEvent(), MOUSE_SIDE_BUTTON_CODES, button(), focus() (+3 more)
-
-### Community 104 - "自動翻訳仕様"
-Cohesion: 0.21
-Nodes (10): HeaderProps, navigation, THEME_OPTIONS, Avatar(), AvatarFallback(), AvatarImage(), authClient, LOCALE_NAMES (+2 more)
-
-### Community 105 - "ヘッダーの切替メニュー"
-Cohesion: 0.47
-Nodes (10): Header(), ThemeToggle(), LocaleSwitcher(), ShareButton(), ShareButtonProps, DropdownMenu(), DropdownMenuContent(), DropdownMenuItem() (+2 more)
-
-### Community 106 - "一覧・比較仕様"
-Cohesion: 0.15
-Nodes (8): DropdownMenuCheckboxItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuSeparator(), DropdownMenuShortcut(), DropdownMenuSubContent(), DropdownMenuSubTrigger(), @radix-ui/react-dropdown-menu
-
-### Community 107 - "gifenc 型定義"
-Cohesion: 0.15
-Nodes (6): gifenc, GifFrameOptions, GifPalette, GifPixelFormat, GifStream, QuantizeOptions
-
-### Community 108 - "Blob 回収仕様"
-Cohesion: 0.19
-Nodes (13): scripts/lib/blob-refs.ts（Blob参照判定の集約）, app/lib/blob-storage.server.ts（列挙・バッチ削除）, cleanupGuideBlobs(), cleanupUserBlobs(), deleteGuide()（content-cleanup.server.ts）, 孤児Blob回収スクリプト（audit-orphan-blobs / delete-orphan-blobs）, prepareImageForUpload(), runAfterResponse() (+5 more)
-
-### Community 109 - "キー配置仕様"
-Cohesion: 0.18
-Nodes (11): CSVエクスポート（/api/keybindings-csv、UTF-8 BOM）, レガシーインポート（/me/import、MCSRer Hotkeys）, Cursor Speed (calculateCursorSpeed), isValidSensitivity() (0..1 / 0-200%), Keybindings CSV export (/developers/export, /api/keybindings-csv), /keybindings/stats (loadKeybindingsStats), Legacy import mouse value validation (no clamping), Mouse settings (player_configs) (+3 more)
-
-### Community 110 - "ガイド画像アップロードのテスト"
-Cohesion: 0.23
-Nodes (11): authMocks, blobClientMocks, callAction(), ENV_KEYS, generateTokenFor(), GUIDE_IMAGE_CONTENT_TYPES, lastHandleUploadOptions(), makeRequest() (+3 more)
-
-### Community 111 - "ガイド編集のテスト"
-Cohesion: 0.21
-Nodes (9): ActionResult, callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks, setupAuthorWithDraftedGuide(), setupAuthorWithGuide() (+1 more)
-
-### Community 112 - "OGP のテスト"
-Cohesion: 0.18
-Nodes (8): callLoader(), collectText(), ENV_KEYS, ogMocks, originalEnv, PRIVATE_PII, renderedText(), seedPrivateUser()
-
-### Community 113 - "認証仕様（better-auth）"
-Cohesion: 0.23
-Nodes (10): Authentication & Authorization Spec, better-auth, /dev/login local simple login, Discord OAuth login flow, isDevAuthEnabled (DEV_AUTH=1 && non-production double gate), Session config (7d expiresIn, 1d updateAge, minefolio cookie prefix), auth_accounts table (better-auth OAuth), auth_sessions table (better-auth) (+2 more)
-
-### Community 114 - "セッションヘルパー仕様"
-Cohesion: 0.23
-Nodes (12): Discord avatar sync in _layout loader, encodeReturnToForCallback, getCurrentUser, getCurrentUserOrOnboarding, getOptionalSession, getSession, isRegistered, Onboarding wizard (/onboarding) (+4 more)
-
-### Community 115 - "GIFエンコード"
+### Community 124 - "ルート共通ヘルパー (4)"
 Cohesion: 0.27
-Nodes (8): concatSamples(), encodeGif(), EncodeGifOptions, GifTooLargeError, hasTransparency(), PALETTE_SAMPLE_FRAMES, throwIfAborted(), gifenc
+Nodes (7): KeybindingsListPlayer, fetchKeybindingsListPlayers(), loadKeybindingsListPlayers(), loader(), KeybindingsVisualPage(), loader(), keyRemaps
 
-### Community 116 - "設定ファイルのパーサ"
+### Community 129 - "プレースホルダースキン生成"
+Cohesion: 0.20
+Nodes (8): Rgba, buildBody(), fillRect(), write(), BASE_LAYER_RECTS, BLACK, BODY_PATH, OUT_DIR
+
+### Community 131 - "ビルド設定"
+Cohesion: 0.24
+Nodes (9): LikeButtonProps, LikeOverride, LikesContextValue, LikeSeed, LikeTargetType, keyOf(), LikesProvider(), useLike() (+1 more)
+
+### Community 132 - "Microsoft認証の実測スクリプト (4)"
+Cohesion: 0.24
+Nodes (4): ChangelogEntry, unreadEntries(), changelogMarkdown, entries
+
+### Community 133 - "SNSチャンネル統計"
 Cohesion: 0.31
-Nodes (9): AHK_KEY_MAP, ahkKeyToJsKey(), MC_ACTION_MAP, parseAutoHotkeyScript(), ParsedMinecraftSettings, ParsedRemap, parseMinecraftSettings(), parseOptionsText() (+1 more)
+Nodes (9): TwitchChannelStats, YouTubeChannelStats, SocialStatsResponse, getDbCached(), setDbCached(), getChannelStats(), fetchTwitchStats(), fetchYouTubeStats() (+1 more)
 
-### Community 117 - "README と環境変数"
-Cohesion: 0.25
-Nodes (10): authMocks, blobClientMocks, callAction(), ENV_KEYS, generateTokenFor(), lastHandleUploadOptions(), makeRequest(), originalEnv (+2 more)
+### Community 134 - "MCSR Ranked ティア"
+Cohesion: 0.24
+Nodes (8): RankTier, RankTierKey, TierThreshold, formatLabel(), getRankTier(), DIVISION_LABELS, TIER_KEY_LABELS, TIER_THRESHOLDS
 
-### Community 118 - "スキンアップロードトークンのテスト"
-Cohesion: 0.25
-Nodes (10): authMocks, blobClientMocks, callAction(), ENV_KEYS, generateTokenFor(), lastHandleUploadOptions(), makeRequest(), originalEnv (+2 more)
-
-### Community 119 - "プロフィール編集の更新テスト"
-Cohesion: 0.20
-Nodes (7): callAction(), ENV_KEYS, makeRequest(), mojangMocks, originalEnv, sessionMocks, targetedRefreshMocks
-
-### Community 120 - "プロフィール編集のテスト"
+### Community 137 - "キャッシュ層と Mojang 連携 (2)"
 Cohesion: 0.22
-Nodes (7): callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks, setupUser(), signInAs()
+Nodes (5): StubEntry, callLoader(), profileJson(), profileWithCape(), CAPE_BYTES
 
-### Community 121 - "キー配置テーブル仕様"
+### Community 141 - "ループ列追加スクリプト"
 Cohesion: 0.20
-Nodes (10): Controller settings JSON, custom_actions table, custom_keys table, Keybinding actions (movement/combat/inventory/ui, controller), Keybindings & Input Settings Spec, keybindings table, Keyboard layouts (JIS/US/TKL) label differences, KeyCode normalization (KeyboardEvent.code PascalCase, normalizeKeyCombination) (+2 more)
+Nodes (7): ColumnAddition, apply, client, COLUMN_ADDITIONS, pendingColumns, TABLE_STATEMENTS, { url, authToken }
 
-### Community 122 - "プレースホルダースキン生成"
-Cohesion: 0.20
-Nodes (8): BASE_LAYER_RECTS, BLACK, BODY_PATH, buildBody(), fillRect(), OUT_DIR, Rgba, write()
-
-### Community 123 - "プロフィールリアクション"
-Cohesion: 0.31
-Nodes (9): ProfileReactionBarProps, overrideKeyOf(), ProfileReactionPill, ReactionOverride, useProfileReactions(), UseProfileReactionsOptions, UseProfileReactionsResult, ProfileReactionCount (+1 more)
-
-### Community 124 - "MCSR Ranked ティア"
-Cohesion: 0.24
-Nodes (8): DIVISION_LABELS, formatLabel(), getRankTier(), RankTier, RankTierKey, TIER_KEY_LABELS, TIER_THRESHOLDS, TierThreshold
-
-### Community 125 - "お気に入りAPI仕様"
-Cohesion: 0.24
-Nodes (8): authMocks, blobMocks, callAction(), ENV_KEYS, makeRequest(), originalEnv, setupUser(), signInAs()
-
-### Community 126 - "スキンAPIのテスト"
-Cohesion: 0.24
-Nodes (8): authMocks, blobMocks, callAction(), ENV_KEYS, makeRequest(), originalEnv, setupUser(), signInAs()
-
-### Community 127 - "記録のテスト"
-Cohesion: 0.22
-Nodes (6): isHttpVideoUrl(), callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks
-
-### Community 128 - "デバイス設定のテスト"
-Cohesion: 0.24
-Nodes (7): callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks, setupUserWithActivePreset(), signInAs()
-
-### Community 129 - "API ルートのテスト"
-Cohesion: 0.22
-Nodes (7): callAction(), createFeedbackIssueMock, ENV_KEYS, makeRequest(), originalEnv, sendFeedbackEmailMock, sessionMocks
-
-### Community 130 - "ループ列追加スクリプト"
-Cohesion: 0.20
-Nodes (7): apply, client, COLUMN_ADDITIONS, ColumnAddition, pendingColumns, TABLE_STATEMENTS, { url, authToken }
-
-### Community 131 - "式インデックス修正スクリプト"
-Cohesion: 0.20
-Nodes (8): apply, client, ExpressionIndexTarget, pending, Plan, plans, TARGETS, { url, authToken }
-
-### Community 132 - "ビルド設定"
-Cohesion: 0.28
-Nodes (8): LikeButtonProps, keyOf(), LikeOverride, LikesContext, LikesContextValue, LikeSeed, LikesProvider(), LikeTargetType
-
-### Community 133 - "YouTube URL と動画欄"
+### Community 143 - "YouTube URL と動画欄"
 Cohesion: 0.33
-Nodes (5): buildTableOfContents(), decodeEntities(), findHeadingClose(), headingText(), TocItem
+Nodes (5): TocItem, buildTableOfContents(), decodeEntities(), findHeadingClose(), headingText()
 
-### Community 134 - "タイピングテストとペース表示"
+### Community 144 - "タイピングテストとペース表示"
 Cohesion: 0.33
-Nodes (7): SimulatedKeyOutput, applyTypingTestAction(), classifyTypingTestKey(), INITIAL_TYPING_TEST_BUFFER_STATE, TypingTestBufferAction, TypingTestBufferState, TypingTestSelection
+Nodes (7): SimulatedKeyOutput, TypingTestBufferAction, TypingTestBufferState, TypingTestSelection, applyTypingTestAction(), classifyTypingTestKey(), INITIAL_TYPING_TEST_BUFFER_STATE
 
-### Community 135 - "リアクション等のテスト"
-Cohesion: 0.25
-Nodes (6): callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks, setupProfile()
+### Community 15 - "プリセット操作"
+Cohesion: 0.07
+Nodes (46): LegacyCustomKey, LegacyItemLayout, LegacyPlayerData, LegacySearchCraft, CreatePresetOptions, DatabaseOrTransaction, PresetCustomActionData, PresetCustomKeyData (+38 more)
 
-### Community 136 - "テンプレート操作のテスト"
-Cohesion: 0.25
-Nodes (5): callAction(), ENV_KEYS, makeRequest(), originalEnv, sessionMocks
-
-### Community 137 - "開発者ページ仕様"
-Cohesion: 0.28
-Nodes (8): Developers Page (/developers) Spec, app/content/api.md (public API doc source), app/content/changelog.md (public changelog source), /developers/api page, /developers/changelog page, /developers/export page (CSV data export), /developers hub page, MarkdownDocPage
-
-### Community 138 - "MCSR Ranked 連携仕様"
+### Community 152 - "ユニーク索引名の修正スクリプト"
 Cohesion: 0.22
-Nodes (9): countryRank (jp top 150), Cron jobs (CRON_SECRET protected), fetchMCSRRankedStats(), getMinefolioEloRank() (rankings-query.server.ts), getRankTier() (mcsr-ranked-tiers.ts), MCSR Ranked integration, pacemanPaces table, player_rankings table (+1 more)
+Nodes (6): UniqueIndexTarget, apply, client, pending, TARGETS, { url, authToken }
 
-### Community 139 - "インデックス欠落の補修スクリプト"
+### Community 155 - "インデックス欠落の補修スクリプト"
 Cohesion: 0.25
-Nodes (6): apply, client, IndexTarget, pending, TARGETS, { url, authToken }
+Nodes (6): IndexTarget, apply, client, pending, TARGETS, { url, authToken }
 
-### Community 140 - "いいね表追加"
-Cohesion: 0.33
-Nodes (5): GuideSaveResult, GuideSaveValues, toFormData(), useGuideSave(), UseGuideSaveResult
-
-### Community 141 - "操作設定一覧ページ"
-Cohesion: 0.38
-Nodes (5): Footer(), NavigationProgress(), SPLASH_TIPS, TIP_KEYS, Layout()
-
-### Community 142 - "ガイド一覧と人気順仕様"
+### Community 156 - "ルート共通ヘルパー (5)"
 Cohesion: 0.29
-Nodes (5): guideListOrderBy()（likes.server.ts）, /guides ガイド一覧, page_view_stats（人気順のPV集計）, parseGuideTags(), PageViews7dMeta component
+Nodes (7): SaveAllAbortError, action(), isValidFingerAssignmentsJson(), parseJsonArray(), persistCustomActions(), persistKeybindingUpdates(), upsertFingerAssignments()
 
-### Community 143 - "翻訳対象外とフィードバック仕様"
-Cohesion: 0.33
-Nodes (5): 翻訳しないもの（利用者コンテンツ・Markdown 文書本文・SPLASH_TIPS・言語の自称表記）, Feedback-ID 相関ID（メールと Issue の突き合わせ）, フィードバックフォーム（/feedback、zod バリデーション）, MarkdownDocPage 共通シェル / buildOgMeta, Resend によるフィードバックメール送信（主経路）
+### Community 16 - "DB接続設定と移行スクリプト"
+Cohesion: 0.05
+Nodes (33): DbTarget, LoadDbEnvOptions, isLocalDbUrl(), loadDbEnv(), { url }, { url, authToken }, apply, client (+25 more)
 
-### Community 144 - "プレイスタイル表追加"
-Cohesion: 0.29
-Nodes (4): apply, client, STATEMENTS, { url, authToken }
-
-### Community 145 - "slug履歴表追加"
-Cohesion: 0.29
-Nodes (4): apply, client, STATEMENTS, { url, authToken }
-
-### Community 146 - "お気に入りのDB処理仕様"
-Cohesion: 0.47
-Nodes (4): CAPE_DISPLAY_OPTIONS, CapeDisplay, CapeProps, resolveCapeProps()
-
-### Community 147 - "フィードバックメール"
+### Community 160 - "フィードバックメール"
 Cohesion: 0.40
-Nodes (5): categoryLabels, escapeHtml(), FeedbackEmailParams, sendFeedbackEmail(), resend
+Nodes (5): FeedbackEmailParams, escapeHtml(), sendFeedbackEmail(), categoryLabels, resend
 
-### Community 148 - "ペースフィード"
+### Community 161 - "ペースフィード"
 Cohesion: 0.53
-Nodes (4): filterOwnPaces(), getHiddenPaceMcid(), OwnPacePrefs, paces
+Nodes (4): OwnPacePrefs, filterOwnPaces(), getHiddenPaceMcid(), paces
 
-### Community 149 - "returnTo の安全化"
+### Community 166 - "ガイド画像ノード (4)"
+Cohesion: 0.50
+Nodes (4): ImageStorage, GuideMediaContext, CustomImage, @tiptap/extension-image
+
+### Community 17 - "テンプレートの直列化"
+Cohesion: 0.10
+Nodes (42): ExportTheme, MinecraftAvatarProps, RemapContext, User, KeybindEmbedView(), MouseStat(), parseFingers(), CheckboxRow() (+34 more)
+
+### Community 172 - "GitHub フィードバック Issue 作成"
+Cohesion: 0.50
+Nodes (3): CreateFeedbackIssueParams, CreateFeedbackIssueResult, createFeedbackIssue()
+
+### Community 18 - "サーチクラフトテンプレート適用"
+Cohesion: 0.10
+Nodes (39): PresetRemapData, PresetSearchCraftData, ApplyCraftsInput, ApplyToPresetResult, CreatePresetResult, ResolvedLoopForInsert, EditorSubmission, TemplateCraft (+31 more)
+
+### Community 19 - "Blob 削除とURL検証"
+Cohesion: 0.09
+Nodes (36): CapeDisplay, CapeProps, DatabaseOrTransaction, ProfileTabValue, SelectableProfileTabValue, delBlobsInBatches(), listAllBlobs(), cleanupGuideBlobs() (+28 more)
+
+### Community 2 - "DBスキーマ定義"
+Cohesion: 0.02
+Nodes (81): AuthCleanupResult, CategoryRecord, ConfigHistoryEntry, ContentTranslation, CustomField, ExternalStat, ExternalTool, Favorite (+73 more)
+
+### Community 20 - "サーチクラフト編集UI (2)"
+Cohesion: 0.08
+Nodes (33): EmptyStateProps, FeedVideo, OwnVideoPrefs, CachedPace, DisplayNameFields, FeedAction, FeedState, RecentPacesResponse (+25 more)
+
+### Community 21 - "slug フォールバックのテスト"
+Cohesion: 0.08
+Nodes (30): Database, MojangError, DatabaseOrTransaction, extractEmbedRefs(), getUniqueEmbedSlugs(), dateFormatPattern(), createDefaultsForNewUser(), sanitizeGuideHtml() (+22 more)
+
+### Community 22 - "Blob 削除とURL検証 (2)"
+Cohesion: 0.12
+Nodes (19): Session, MojangProfile, TexturesProperty, isVercelBlobUrl(), normalizeSlug(), getViewerLikedIds(), createPresetFromImport(), fetchMojangSkin() (+11 more)
+
+### Community 23 - "YouTube 取得とキャッシュ"
+Cohesion: 0.08
+Nodes (37): YoutubeLiveCache, YoutubeVideoCache, CachedYouTubeLive, PendingVideoUpsert, YouTubePlaylistItem, YouTubeSearchResult, YouTubeUploadsPlaylistInfo, YouTubeVideoSnippet (+29 more)
+
+### Community 25 - "仮想キーボードとキー定義"
+Cohesion: 0.09
+Nodes (40): ActualKeyInfo, ActualKeyOptions, RemapConflict, CsvSection, getKeyCombinationLabel(), getKeyLabel(), isUnbound(), buildShiftHeldReverseMap() (+32 more)
+
+### Community 26 - "スラッシュコマンド"
+Cohesion: 0.13
+Nodes (28): ContentTab, GuideItem, GuideItemWithAuthorSlug, GameLanguageDef, ContentTabs(), GuidesContentTabs(), GuideCardGrid(), GuideListView() (+20 more)
+
+### Community 27 - "キー配置の定義とラベル"
+Cohesion: 0.06
+Nodes (39): KeyInfoBinding, KeyInfoData, ControllerSettings, FingerType, KeyCombination, Modifier, FingerToggleGroup(), sortFingers() (+31 more)
+
+### Community 28 - "ガイド画像ノード (2)"
+Cohesion: 0.11
+Nodes (38): ControlKeyKind, SearchCraftLoopRowData, SearchCraftRowData, ActualControlKeyInfo, RemapDetail, UiRemapInfo, SearchCraftEmbedView(), ControlKeyBadge() (+30 more)
+
+### Community 29 - "APIキャッシュとペースタイムライン型"
+Cohesion: 0.09
+Nodes (35): PaceTimelineResponse, CacheType, UserDataCache, PaceTimelineEntry, ApiCache, TwitchLinkCache, TwitchLinkData, cleanupMemoryCache() (+27 more)
+
+### Community 31 - "ガイド保存と画像アップロード"
+Cohesion: 0.10
+Nodes (31): GuideSaveResult, GuideSaveValues, UseGuideSaveResult, UploadImageOptions, UseImageUploadResult, ImageLoadError, ImageTooLargeError, PrepareImageOptions (+23 more)
+
+### Community 32 - "キー情報トリガー"
+Cohesion: 0.09
+Nodes (39): KeyInfoCustomAction, CustomButton, CustomKeyboardButton, FingerColorName, KeybindingInfo, KeybindingInfoList, KeyboardRow, KeyDefinition (+31 more)
+
+### Community 33 - "新規ユーザー既定値とプリセット同期"
+Cohesion: 0.07
+Nodes (28): ActionResult, SeedRemapValues, LoaderData, seedConfigPreset(), seedKeybinding(), seedPlayerConfig(), seedImportSource(), callLoader() (+20 more)
+
+### Community 34 - "アバター合成キャッシュ"
+Cohesion: 0.09
+Nodes (33): CapeUploaderProps, ImportDialogProps, ImportStep, SkinUploaderProps, Completion, DiscordUser, LinkPlatform, LoaderData (+25 more)
+
+### Community 35 - "Blob 孤児の監査"
+Cohesion: 0.09
+Nodes (35): BlobCategory, OrphanBlob, OrphanReport, ReferenceScan, blobUrlToPathname(), collectBlobPathnames(), isIpLiteralHostname(), isTrustedBlobHostname() (+27 more)
+
+### Community 36 - "ガイド配色とサニタイズ"
+Cohesion: 0.08
+Nodes (29): UseGuideEditorOptions, GuideFontSize, buildExtensions(), useGuideEditor(), setup(), buildAllowedSet(), isPaletteBgColor(), isPaletteTextColor() (+21 more)
+
+### Community 37 - "ページビューSQLとテストDB"
+Cohesion: 0.06
+Nodes (27): BrowseQueryArgs, RankingsArgs, CategoryRecordRow, ConfigPresetRow, GuideRow, KeybindingRow, PaceRow, PageViewStatRow (+19 more)
+
+### Community 38 - "slug フォールバックのテスト (2)"
+Cohesion: 0.07
+Nodes (25): PaceFeedSplit, RunSplits, invalidateCache(), paceFeedCacheKey(), createTestDbAt(), daysAgo(), seedPace(), clearFeedCache() (+17 more)
+
+### Community 39 - "サーチクラフト編集UI (3)"
+Cohesion: 0.09
+Nodes (36): TimingBlockProps, LoopEditorEntry, SearchCraftLoopDraft, LoopCraftInfo, LoopTransitionType, SearchCraftTiming, blockIndex(), craftZoneId() (+28 more)
+
+### Community 4 - "ガイドエディタ定数・表操作"
+Cohesion: 0.08
+Nodes (59): ImageAlign, TableCellStyleAttr, SwatchKind, HandleState, EditorBubbleMenuProps, MobileToolbarProps, TableCellBubbleMenuProps, HoverTarget (+51 more)
+
+### Community 40 - "アプリのルートとプロバイダ"
+Cohesion: 0.10
+Nodes (26): ProvidersProps, Locale, MetaMatch, BackgroundPattern(), Providers(), Toaster(), LocaleProvider(), isLocale() (+18 more)
+
+### Community 41 - "キー情報トリガー (2)"
+Cohesion: 0.10
+Nodes (31): KeyboardExportDialogProps, SequenceDisplayMode, FingerAssignment, RemapInfo, KeySequence, KeySequenceCraftInfo, KeySequenceStep, ResolvedLoopStep (+23 more)
+
+### Community 42 - "プリセット操作 (2)"
+Cohesion: 0.12
+Nodes (32): ContentSegment, EmbedLoopRow, EmbedRef, EmbedUserData, PresetLoopStepData, PresetSearchCraftLoopData, DerivedTransition, LoopKeyOp (+24 more)
+
+### Community 43 - "ページビューSQLとテストDB (2)"
+Cohesion: 0.10
+Nodes (29): ContentSort, LikeResult, LikeTargetType, Db, getGuideLikeCount(), getGuideLikeCounts(), getTemplateLikeCount(), getTemplateLikeCounts() (+21 more)
+
+### Community 44 - "ルート共通ヘルパー (2)"
+Cohesion: 0.10
+Nodes (22): UserRow, isDevAuthEnabled(), containsControlChar(), encodeReturnToForCallback(), sanitizeReturnTo(), getCurrentUser(), getCurrentUserOrOnboarding(), isAuthenticated() (+14 more)
+
+### Community 45 - "アバター・動画カード"
+Cohesion: 0.14
+Nodes (29): Props, LoadedRankings, PlayerRow, RankedType, RankingEntry, RankingsTab, ScrollUpStickyHeader(), Table() (+21 more)
+
+### Community 46 - "サーチクラフト編集UI (4)"
+Cohesion: 0.26
+Nodes (25): TemplateEditorData, TemplateRemapDraft, DbTransaction, MyContentTabs(), SearchCraftRowContentInner(), LoopEditorRow(), TemplateEditorForm(), AlertDialog() (+17 more)
+
+### Community 47 - "slug フォールバックのテスト (3)"
+Cohesion: 0.08
+Nodes (19): ListPage, TranslationRow, TestDb, isUniqueConstraintError(), getProfileReactionCounts(), claimSlug(), createTestDb(), callLoader() (+11 more)
+
+### Community 48 - "ガイドエディタのブロック操作"
+Cohesion: 0.12
+Nodes (27): SaveMode, BlockType, CalloutType, TableLineAxis, TableOp, TableStyleScope, DesktopToolbarProps, TabKey (+19 more)
+
+### Community 5 - "ガイド画像ノード"
+Cohesion: 0.06
+Nodes (51): Commands, Commands, EmbedNodeViewProps, MinecraftFullBodyProps, PoseName, BackToTopButton(), CalloutNodeView(), CodeBlockNodeView() (+43 more)
+
+### Community 50 - "プロフィール表示とキー配置カード"
+Cohesion: 0.13
+Nodes (27): TwitchVodCache, TwitchStream, TwitchTokenResponse, TwitchVideoApiItem, TwitchVideosPageResponse, TwitchVod, TwitchVodFetchResult, videoRetentionCutoff() (+19 more)
+
+### Community 51 - "ページビュー集計"
+Cohesion: 0.11
+Nodes (26): AnalyticsPathTarget, PageViewSyncResult, PageViewSyncSideResult, SyncWindow, NewPageViewStat, FetchTopPathsArgs, TopPathRow, parseAnalyticsPath() (+18 more)
+
+### Community 52 - "アカウント削除のテスト"
+Cohesion: 0.07
+Nodes (21): SlugHistory, callAction(), makeRequest(), callAction(), makeRequest(), callAction(), makeRequest(), contentTranslations (+13 more)
+
+### Community 53 - "OGP と全身スキン表示"
+Cohesion: 0.11
+Nodes (26): OgFont, OgFontWeight, OgpData, faceFromSkinApi(), fetchNoMcidFaceDataUrl(), fetchSkinFaceDataUrl(), renderSkinFacePng(), sampleIndex() (+18 more)
+
+### Community 54 - "一覧テーブルのフィルタ型"
+Cohesion: 0.16
+Nodes (23): KeybindingsRow, PresetKey, KeybindingsTableProps, Item, FilterablePlayer, Tab, CardView(), KeybindingsEmptyState() (+15 more)
+
+### Community 55 - "GIFの切り抜きとエンコード"
+Cohesion: 0.13
+Nodes (20): CropAnimatedGifOptions, GifDecodeError, PixelRegion, EncodeGifOptions, GifSourceFrame, GifTooLargeError, FixtureFrame, clearRgbaRegion() (+12 more)
+
+### Community 56 - "UI部品とエディタのダイアログ (3)"
+Cohesion: 0.15
+Nodes (23): ConvertVideoToGifOptions, GifFramePlan, GifTrimRange, VideoDecodeError, VideoToGifDialogProps, clamp(), clampTrimRange(), convertVideoToGif() (+15 more)
+
+### Community 57 - "セレクト部品と無限スクロール (2)"
+Cohesion: 0.08
+Nodes (22): CustomActionEntry, CustomActionMutationInput, CustomKeyEntry, CustomKeyMutationInput, Db, DbClient, DbRemapData, DbTransaction (+14 more)
+
+### Community 58 - "ルート共通ヘルパー (3)"
+Cohesion: 0.12
+Nodes (22): Auth, Db, PaceFeedItem, PaceSearchFilters, VisiblePaceFeed, Auth, Db, VideoSearchFilters (+14 more)
+
+### Community 6 - "サーチクラフト編集UI"
+Cohesion: 0.06
+Nodes (58): ItemIconProps, UserFilterPlayer, PaceFeedRun, ComboboxOption, ComboboxProps, FormFieldContextValue, FormItemContextValue, getLocalizedItemName() (+50 more)
+
+### Community 60 - "式インデックス修正スクリプト"
+Cohesion: 0.07
+Nodes (20): ExpressionIndexTarget, Plan, client, apply, client, hasColumn, { url, authToken }, client (+12 more)
+
+### Community 61 - "外部統計取得"
+Cohesion: 0.11
+Nodes (18): EloRateGraphProps, ExternalStatsData, MCSRRankedMatch, MCSRRankedSeasonData, MCSRRankedStats, MCSRRankedUser, PaceManStats, RankedApiResponse (+10 more)
+
+### Community 62 - "ヘッダーの切替メニュー"
+Cohesion: 0.21
+Nodes (20): HeaderProps, ShareButtonProps, Header(), ThemeToggle(), LocaleSwitcher(), ShareButton(), Avatar(), AvatarFallback() (+12 more)
+
+### Community 66 - "ガイド画像ノード (3)"
+Cohesion: 0.19
+Nodes (21): CropHandle, CropRect, ImageCropDialogProps, getImageMediaContext(), clamp(), clampCropRect(), fitCropRectToAspect(), isCropped() (+13 more)
+
+### Community 67 - "統計ビューと初期設定UI (2)"
+Cohesion: 0.13
+Nodes (20): GroupedPaceEntry, PaceEntry, PaceFeedEntry, PaceFeedQuery, cachePacemanPaces(), extractPaceEntries(), getMainPaces(), getNetherEnterCount() (+12 more)
+
+### Community 68 - "ガイドといいねのテスト"
+Cohesion: 0.11
+Nodes (20): ActionResult, seedGuide(), seedUser(), setupGuide(), seedTwitchUser(), callAction(), makeRequest(), setupGuide() (+12 more)
+
+### Community 69 - "カラム幅スナップ"
+Cohesion: 0.11
+Nodes (20): StyleAttrs, columnSnapPlugin(), findSnapTarget(), selectCellTextOnly(), cellPos(), colwidthOf(), setColwidths(), simulateResizeCommit() (+12 more)
+
+### Community 7 - "キー配置一覧の行データ型"
+Cohesion: 0.09
+Nodes (59): CustomActionItem, HotbarKeybinding, MouseConfig, PlayerSummary, RemapItem, MouseSettingsField, MouseSettingsValidationError, HintTip() (+51 more)
+
+### Community 70 - "キャッシュ層と Mojang 連携"
+Cohesion: 0.13
+Nodes (17): MojangProfile, MojangSessionProfile, getMojangCacheKey(), fetchCapeTextureUrl(), fetchMcidFromUuid(), formatUuid(), getSkinTextureUrl(), safeParse() (+9 more)
+
+### Community 72 - "プリセット設定のデコード"
+Cohesion: 0.19
+Nodes (22): PresetSnapshot, coerceStringArray(), compareStrings(), decodePresetConfig(), decodePresetCustomActions(), decodePresetCustomKeys(), decodePresetItemLayouts(), decodePresetKeybindings() (+14 more)
+
+### Community 73 - "アバター・動画カード (2)"
+Cohesion: 0.13
+Nodes (20): LocalRankingRow, RankedUserResponse, RankingsCategory, RankingsUserInput, SpeedruncomPbResponse, SpeedruncomRunsResponse, SpeedruncomUserSearchResponse, UpdateUserRankingsResult (+12 more)
+
+### Community 75 - "Microsoft認証の実測スクリプト"
+Cohesion: 0.12
+Nodes (18): StepResult, base64url(), dump(), explainXsts(), getJson(), mask(), openInBrowser(), postJson() (+10 more)
+
+### Community 79 - "PaceMan ライブ表示"
+Cohesion: 0.18
+Nodes (16): LivePaceListProps, PaceManEvent, PaceManLiveRun, PaceManRecentRun, PaceManRecentRunRaw, LiveRunsResponse, LivePaceList(), getLatestSplit() (+8 more)
+
+### Community 8 - "meta と翻訳関数"
+Cohesion: 0.06
+Nodes (48): MarkdownDocPageProps, ProfileFeedCardPlayer, FavoritePlayer, MarkdownDocPage(), localeFromMatches(), createTranslator(), buildOgMeta(), meta() (+40 more)
+
+### Community 80 - "プロフィール表示とキー配置カード (2)"
+Cohesion: 0.09
+Nodes (19): MouseReasonConfig, DisplayVideo, ProfileSocialLink, RecordCardRecord, SocialStatsData, StatsPlayer, playstyleOptionLabel(), DeviceRow() (+11 more)
+
+### Community 83 - "アイテムアイコンの巡回表示"
+Cohesion: 0.17
+Nodes (18): Slot, MediaQueryEntry, CyclingCapableIcon(), CyclingSlotIcon(), getServerTickSnapshot(), getTickSnapshot(), HotbarSlotTile(), SlotIconImage() (+10 more)
+
+### Community 84 - "プレイヤー一覧クエリ"
+Cohesion: 0.17
+Nodes (18): BrowseFilterEdition, BrowseFilterInputMethod, BrowseFilterPlatform, BrowseFilterRole, BrowseSortOption, buildWhere(), escapeLike(), getViewerFavoriteSlugs() (+10 more)
+
+### Community 85 - "アプリのルートとプロバイダ (2)"
+Cohesion: 0.16
+Nodes (17): ParseParams, TranslateOptions, TranslateResult, GlossaryEntry, buildSystemPrompt(), isTranslationEnabled(), sourceHash(), translateTexts() (+9 more)
+
+### Community 88 - "スラッシュコマンド (2)"
+Cohesion: 0.17
+Nodes (16): SlashCommandStorage, SlashRender, SlashMenuProps, GuideEditorProps, GuidePublishedSnapshot, SlashCommandContext, SlashItem, SlashItemDef (+8 more)
+
+### Community 89 - "キー配置統計"
+Cohesion: 0.12
+Nodes (18): ColorOption, Cm180Stats, DpiStats, F3RemapStats, KeybindingStats, PlayerInfo, RangeStatWithPlayers, RawInputStats (+10 more)
+
+### Community 9 - "UI部品とエディタのダイアログ (2)"
+Cohesion: 0.08
+Nodes (39): Props, CookieConsentBannerProps, FavoriteButtonProps, FloatingSaveBarProps, ViewMode, FetchResponse, UseInfiniteScrollOptions, KeyRemapType (+31 more)
+
+### Community 91 - "PaceMan ライブ表示 (2)"
+Cohesion: 0.18
+Nodes (18): RenderAvatarOptions, MinecraftAvatarComponent(), composite(), dataUrlKey(), getRenderableAvatar(), isMissingSkinSource(), loadImage(), loadSkin() (+10 more)
+
+### Community 92 - "RTA歴"
+Cohesion: 0.23
+Nodes (17): rtaCareerElapsed, rtaCareerView, RtaStartedYearMonth, elapsedFrom(), formatRtaStartedLabel(), hasRtaCareerRemainder(), isInRange(), isValidRtaStartedYearMonth() (+9 more)
+
+### Community 95 - "走者一覧とお気に入りDB"
+Cohesion: 0.20
+Nodes (11): Auth, ProfileReactionResult, apiJsonResponse(), getApiUser(), isProfileReactionEmoji(), getReactionCount(), getViewerProfileReactions(), setProfileReaction() (+3 more)
+
+### Community 98 - "お気に入りコンテキスト"
+Cohesion: 0.30
+Nodes (15): FavoritesContextValue, FavoritesProviderProps, FavoritesProvider(), addLocalFavorite(), clearLocalFavorites(), getLocalFavorites(), getSessionFavorites(), readArray() (+7 more)
+
+### Community 99 - "スラッシュコマンド (3)"
+Cohesion: 0.17
+Nodes (12): FeedbackFormData, AppLocale, MessageSchema, NestedMessageKey, PartialMessages, Translator, MainPlatform, getNestedValue() (+4 more)
+
+### Community 108 - "Microsoft認証の実測スクリプト (2)"
+Cohesion: 0.20
+Nodes (10): normalizeHeading(), readSeenVersion(), scheduleIdle(), WhatsNew(), writeSeenVersion(), WhatsNewMarkdown, BioMarkdown, react-markdown (+2 more)
+
+### Community 114 - "初期設定のテスト"
+Cohesion: 0.15
+Nodes (8): callAction(), callLoader(), makeRequest(), ENV_KEYS, mojangMocks, originalEnv, sessionMocks, targetedRefreshMocks
+
+### Community 115 - "キー配置列定義のテスト"
+Cohesion: 0.15
+Nodes (9): emptyRow, filledRow, mouseColumns, negativeSensRow, noWinRow, overSensRow, sortableColumns, t (+1 more)
+
+### Community 118 - "一覧・比較仕様"
+Cohesion: 0.17
+Nodes (7): DropdownMenuCheckboxItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuShortcut(), DropdownMenuSubContent(), DropdownMenuSubTrigger(), @radix-ui/react-dropdown-menu
+
+### Community 119 - "ガイド画像アップロードのテスト"
+Cohesion: 0.23
+Nodes (11): callAction(), generateTokenFor(), lastHandleUploadOptions(), makeRequest(), setupUser(), signInAs(), authMocks, blobClientMocks (+3 more)
+
+### Community 121 - "OGP のテスト"
+Cohesion: 0.18
+Nodes (8): callLoader(), collectText(), renderedText(), seedPrivateUser(), ENV_KEYS, ogMocks, originalEnv, PRIVATE_PII
+
+### Community 123 - "セレクト部品と無限スクロール (3)"
+Cohesion: 0.20
+Nodes (11): isControllerKeyCode(), categoryLabelsOf(), countRemapSourceKeys(), CustomActionRow(), dbRemapsToUiRemaps(), dbRemapToUiRemap(), DialogCustomActionRow(), KeybindingsPage() (+3 more)
+
+### Community 125 - "README と環境変数"
+Cohesion: 0.25
+Nodes (10): callAction(), generateTokenFor(), lastHandleUploadOptions(), makeRequest(), setupUser(), signInAs(), authMocks, blobClientMocks (+2 more)
+
+### Community 126 - "スキンアップロードトークンのテスト"
+Cohesion: 0.25
+Nodes (10): callAction(), generateTokenFor(), lastHandleUploadOptions(), makeRequest(), setupUser(), signInAs(), authMocks, blobClientMocks (+2 more)
+
+### Community 127 - "プロフィール編集の更新テスト"
+Cohesion: 0.20
+Nodes (7): callAction(), makeRequest(), ENV_KEYS, mojangMocks, originalEnv, sessionMocks, targetedRefreshMocks
+
+### Community 128 - "プロフィール編集のテスト"
+Cohesion: 0.22
+Nodes (7): callAction(), makeRequest(), setupUser(), signInAs(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 13 - "ルート設定とパッケージ情報"
+Cohesion: 0.03
+Nodes (53): innerContent(), renderLock(), wrapper(), Toggle(), toggleVariants, license, name, private (+45 more)
+
+### Community 130 - "DB接続設定と移行スクリプト (2)"
+Cohesion: 0.16
+Nodes (8): apply, client, STATEMENTS, { url, authToken }, apply, client, hasColumn, { url, authToken }
+
+### Community 135 - "お気に入りAPI仕様"
+Cohesion: 0.24
+Nodes (8): callAction(), makeRequest(), setupUser(), signInAs(), authMocks, blobMocks, ENV_KEYS, originalEnv
+
+### Community 136 - "スキンAPIのテスト"
+Cohesion: 0.24
+Nodes (8): callAction(), makeRequest(), setupUser(), signInAs(), authMocks, blobMocks, ENV_KEYS, originalEnv
+
+### Community 138 - "記録のテスト"
+Cohesion: 0.22
+Nodes (6): isHttpVideoUrl(), callAction(), makeRequest(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 139 - "デバイス設定のテスト"
+Cohesion: 0.24
+Nodes (7): callAction(), makeRequest(), setupUserWithActivePreset(), signInAs(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 140 - "API ルートのテスト"
+Cohesion: 0.22
+Nodes (7): callAction(), makeRequest(), createFeedbackIssueMock, ENV_KEYS, originalEnv, sendFeedbackEmailMock, sessionMocks
+
+### Community 142 - "操作設定一覧ページ"
+Cohesion: 0.28
+Nodes (7): Footer(), NavigationProgress(), inSameTabGroup(), Layout(), SPLASH_TIPS, TIP_KEYS, TAB_NAV_GROUPS
+
+### Community 145 - "ページビュー同期cronのテスト"
+Cohesion: 0.33
+Nodes (7): isPageViewSyncConfigured(), callLoader(), makeRequest(), loader(), ENV_KEYS, originalEnv, pageViewMocks
+
+### Community 146 - "リアクション等のテスト"
+Cohesion: 0.25
+Nodes (6): callAction(), makeRequest(), setupProfile(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 147 - "テンプレート操作のテスト"
+Cohesion: 0.25
+Nodes (5): callAction(), makeRequest(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 153 - "お気に入りAPIのテスト"
+Cohesion: 0.29
+Nodes (5): callAction(), makeRequest(), ENV_KEYS, originalEnv, sessionMocks
+
+### Community 154 - "SNS統計APIのテスト"
+Cohesion: 0.29
+Nodes (6): callLoader(), makeRequest(), ENV_KEYS, originalEnv, twitchMocks, youtubeMocks
+
+### Community 157 - "プレイスタイル表追加"
+Cohesion: 0.29
+Nodes (4): apply, client, STATEMENTS, { url, authToken }
+
+### Community 158 - "slug履歴表追加"
+Cohesion: 0.29
+Nodes (4): apply, client, STATEMENTS, { url, authToken }
+
+### Community 159 - "キー取得ボタンのテスト"
+Cohesion: 0.53
+Nodes (5): button(), focus(), key(), mouseDown(), renderButton()
+
+### Community 165 - "DB接続設定と移行スクリプト (3)"
+Cohesion: 0.33
+Nodes (3): apply, client, { url, authToken }
+
+### Community 168 - "YouTube URL 解析"
+Cohesion: 0.90
+Nodes (3): getYouTubeEmbedUrl(), getYouTubeThumbnailUrl(), getYouTubeVideoId()
+
+### Community 169 - "slug フォールバックのテスト (4)"
 Cohesion: 0.40
-Nodes (4): BLOCKED_PREFIXES, CALLBACK_UNSAFE_CHARS, containsControlChar(), encodeReturnToForCallback()
+Nodes (3): ENV_KEYS, originalEnv, vodCacheMocks
 
-### Community 150 - "YouTube URL 解析"
-Cohesion: 0.67
-Nodes (4): getYouTubeEmbedUrl(), getYouTubeThumbnailUrl(), getYouTubeVideoId(), VideoEmbed()
+### Community 170 - "DB接続設定と移行スクリプト (4)"
+Cohesion: 0.40
+Nodes (3): apply, client, { url, authToken }
 
-### Community 151 - "キー配置CSVと公開範囲API仕様"
+### Community 173 - "表示幅による文字列切り詰め"
+Cohesion: 1.00
+Nodes (3): getVisualWidth(), isWideChar(), truncateByVisualWidth()
+
+### Community 71 - "サーチクラフトの直列化"
+Cohesion: 0.23
+Nodes (21): serializeRemaps(), serializeSearchCraftLoops(), serializeSearchCrafts(), filterRemapsForChat(), draftId(), normalizeTiming(), parseTemplateCrafts(), parseTemplateLoops() (+13 more)
+
+### Community 74 - "DB運用と集計cron仕様"
+Cohesion: 0.09
+Nodes (19): callLoader(), callLoader(), action(), callAction(), makeRequest(), callProfileLoader(), callStatsLoader(), SHARED_MEMORY_URL (+11 more)
+
+### Community 78 - "ヘッダー・目次・UI部品"
+Cohesion: 0.19
+Nodes (19): GuideTocMobile(), GuideTocSidebar(), jumpToHeading(), TocList(), useActiveHeading(), useFollowActiveHeading(), useTocMaxHeight(), Sheet() (+11 more)
+
+### Community 86 - "DB接続URL判定とリモート運用"
+Cohesion: 0.10
+Nodes (14): apply, client, STATEMENTS, TABLES, { url, authToken }, apply, client, STATEMENTS (+6 more)
+
+### Community 100 - "TypeScript 設定"
+Cohesion: 0.12
+Nodes (16): compilerOptions, esModuleInterop, jsx, lib, module, moduleResolution, noEmit, paths (+8 more)
+
+### Community 107 - "package.jsonのスクリプト"
+Cohesion: 0.12
+Nodes (16): scripts, build, db:generate, db:migrate, db:push, db:push:remote, db:studio, db:studio:remote (+8 more)
+
+### Community 151 - "ローカル開発環境"
+Cohesion: 0.22
+Nodes (8): apply, client, COLUMNS, existingNames, missing, pending, { url, authToken }, verifyNames
+
+### Community 164 - "翻訳テーブル追加スクリプト"
+Cohesion: 0.33
+Nodes (5): apply, client, found, STATEMENTS, { url, authToken }
+
+### Community 171 - "表示名英字列の追加スクリプト"
+Cohesion: 0.40
+Nodes (4): apply, client, hasColumn, { url, authToken }
+
+### Community 3 - "package.json 依存関係"
+Cohesion: 0.02
+Nodes (84): dependencies, @anthropic-ai/sdk, @bafv4/mcitems, better-auth, class-variance-authority, clsx, cmdk, date-fns (+76 more)
+
+### Community 87 - "プリセット整合性スクリプト"
+Cohesion: 0.11
+Nodes (18): apply, client, { url, authToken }, assertPresetIsActive() / PresetMismatchError, preset-read.ts (decodePresetConfig), preset-utils.ts serializers, serializeSearchCraftLoops(), shouldUsePresetSnapshot() (+10 more)
+
+### Community 93 - "shadcn 設定"
+Cohesion: 0.11
+Nodes (18): aliases, components, hooks, lib, ui, utils, iconLibrary, registries (+10 more)
+
+### Community 94 - "開発依存パッケージ"
+Cohesion: 0.11
+Nodes (19): devDependencies, dotenv, drizzle-kit, jsdom, @react-router/dev, tailwindcss, @tailwindcss/vite, @tiptap/html (+11 more)
+
+### Community 111 - "プライバシーポリシーと変更履歴"
+Cohesion: 0.13
+Nodes (14): /dev/login simple login (triple gate), local.db SQLite fallback, vite optimizeDeps.include list, api_cache table + CDN cache headers, Custom i18n (app/lib/messages), Discord OAuth via better-auth, Drizzle ORM / drizzle-kit, External APIs (Mojang, PaceMan, MCSR Ranked, Speedrun.com, YouTube, Twitch) (+6 more)
+
+### Community 112 - "スキン・マント仕様"
+Cohesion: 0.19
+Nodes (15): app/lib/avatar-cache.ts（isMissingSkinSource / NO_MCID_FACE_URL）, isVercelBlobUrl() / parseVercelBlobUrl()（blob-url.ts）, MinecraftAvatar（顔アイコン 2D）, MinecraftFullBody（3D全身・skinview3d）, resolveCapeProps()（app/lib/cape.ts）, app/lib/skin-face.server.ts（fetchSkinFaceDataUrl / fetchNoMcidFaceDataUrl）, toSafeMojangTextureUrl()（mojang.ts）, GET /api/cape?uuid=（Mojangマント中継） (+7 more)
+
+### Community 113 - "ユーザーコンテンツ自動翻訳仕様"
+Cohesion: 0.13
+Nodes (13): スラッグ生成（app/lib/slug.ts / generateSlug）, deleteTranslationsForGuide / deleteTranslationsForUser, translation-glossary.ts (GLOSSARY_VERSION), translateTexts() (translate.server.ts), 表示名のアルファベット表記（getLocalizedDisplayName）, /og-image OGP画像生成（@vercel/og）, TipTap editor, xss sanitizer (guide-sanitize.server.ts) (+5 more)
+
+### Community 14 - "ガイド・いいね関連テーブル"
+Cohesion: 0.08
+Nodes (38): api_cache table (generic API cache), app_meta table (app-wide key-value), category_records table (PB & targets), config_history table, config_presets table (config snapshots), content_translations table (machine translation), custom_actions table, custom_fields table (unused) (+30 more)
+
+### Community 148 - "開発者ページ仕様"
+Cohesion: 0.28
+Nodes (8): /developers/api page, /developers/changelog page, /developers/export page (CSV data export), /developers hub page, MarkdownDocPage, Developers Page (/developers) Spec, app/content/api.md (public API doc source), app/content/changelog.md (public changelog source)
+
+### Community 149 - "スキン・マント仕様 (2)"
+Cohesion: 0.33
+Nodes (9): scripts/lib/blob-refs.ts（Blob参照判定の集約）, app/lib/blob-storage.server.ts（列挙・バッチ削除）, app/lib/blob-url.ts（blobUrlToPathname / collectBlobPathnames）, cleanupGuideBlobs(), cleanupUserBlobs(), deleteGuide()（content-cleanup.server.ts）, runAfterResponse(), deleteUserAccount()（アカウント削除） (+1 more)
+
+### Community 150 - "MCSR Ranked 連携仕様"
+Cohesion: 0.22
+Nodes (9): fetchMCSRRankedStats(), getMinefolioEloRank() (rankings-query.server.ts), getRankTier() (mcsr-ranked-tiers.ts), countryRank (jp top 150), Cron jobs (CRON_SECRET protected), MCSR Ranked integration, pacemanPaces table, player_rankings table (+1 more)
+
+### Community 162 - "公開APIリファレンス (2)"
 Cohesion: 0.33
 Nodes (5): GET /api/keybindings-csv, POST /api/likes, CSV_SECTIONS（actions/remaps/custom-actions/mouse）, loadKeybindingsListPlayers（共有ローダー）, publiclyReferencableCondition（public + unlisted）
 
-### Community 152 - "プリセットの二重フラグ"
+### Community 163 - "プリセットの二重フラグ"
 Cohesion: 0.33
-Nodes (4): Config Presets Spec, configHistory table, configPresets table, set-main / setMainPreset
+Nodes (4): set-main / setMainPreset, configHistory table, configPresets table, Config Presets Spec
 
-### Community 153 - "MCID未登録の顔画像"
-Cohesion: 0.33
-Nodes (4): apply, client, STATEMENTS, { url, authToken }
-
-### Community 154 - "ランキングテーブル追加スクリプト"
-Cohesion: 0.33
-Nodes (4): apply, client, STATEMENTS, { url, authToken }
-
-### Community 155 - "孤立インデックス削除スクリプト"
-Cohesion: 0.33
-Nodes (3): apply, client, { url, authToken }
-
-### Community 156 - "表示名アルファベット列追加スクリプト"
-Cohesion: 0.40
-Nodes (4): apply, client, hasColumn, { url, authToken }
-
-### Community 157 - "メインプリセット列追加スクリプト"
-Cohesion: 0.40
-Nodes (4): apply, client, hasColumn, { url, authToken }
-
-### Community 158 - "初期設定完了列追加"
-Cohesion: 0.40
-Nodes (3): apply, client, { url, authToken }
-
-### Community 159 - "GitHub フィードバック Issue 作成"
+### Community 174 - "プライバシー準拠と外部連携 (2)"
 Cohesion: 0.50
-Nodes (3): createFeedbackIssue(), CreateFeedbackIssueParams, CreateFeedbackIssueResult
+Nodes (3): guideListOrderBy()（likes.server.ts）, page_view_stats（人気順のPV集計）, PageViews7dMeta component
+
+### Community 24 - "プライバシー準拠と外部連携"
+Cohesion: 0.06
+Nodes (29): createTranslator(resolveLocale / localeFromMatches)（ローダー・meta 用）, 表示名のアルファベット表記（displayNameAlphabet / pickDisplayName）, Cookie minefolio_locale, 対応ロケール（ja / en、SUPPORTED_LOCALES）, 翻訳カバレッジテスト（app/lib/__tests__/locale.test.ts）, 翻訳しないもの（利用者コンテンツ・Markdown 文書本文・SPLASH_TIPS・言語の自称表記）, useT() フック（コンポーネント用）, app_meta テーブル（release_notify:last_version） (+21 more)
+
+### Community 30 - "アイテム・サーチクラフト仕様"
+Cohesion: 0.07
+Nodes (41): buildCraftKeySequence(), buildKeyAnnotations(), buildLoopKeySequence(), deriveTransition() (backspace/arrowLeft/selectAll/home), EntrySelect (craft×variation composite options), FloatingSaveBar (bulk save), Hotbar Slot structure (slot 1-9, items[], offhand), isValidLoopStepsShape() (structural validation) (+33 more)
+
+### Community 49 - "公開APIリファレンス"
+Cohesion: 0.10
+Nodes (28): /api/auth/* (better-auth), api_cache テーブル（social_stats キャッシュ）, GET /api/cape, GET /api/cron/cleanup-auth, GET /api/cron/twitch-update, GET /api/cron/update-paceman-cache, GET /api/cron/update-page-views, GET /api/cron/update-rankings (+20 more)
+
+### Community 59 - "ガイドエディタ仕様"
+Cohesion: 0.09
+Nodes (23): buildExtensions()（editor-config.ts）, copyTableToClipboard, lib/gif-encode.ts（グローバルパレット + gifenc）, normalizeSlug() / softNormalizeSlug()（guide-slug.ts）, 色・文字サイズ判定（guide-colors / guide-font-sizes）, parseGuideTags(), prepareImageForUpload(), 著者slugの解決（/guides/:authorSlug 系） (+15 more)
+
+### Community 63 - "キー配置仕様"
+Cohesion: 0.12
+Nodes (27): VirtualKeyboard keyAnnotations / heldKeys props, cm/360 turn distance formula (calculateCm360), CSV export (/developers/export, GET /api/keybindings-csv), Cursor Speed (calculateCursorSpeed), FilterDialog (user + numeric range filters, orderedRange), forSort() (undefined for unset → sortUndefined last), getWindowsMultiplierOrNull() / Windows pointer speed multiplier table, HintTip (Tooltip on pointer, Popover on touch) (+19 more)
+
+### Community 64 - "いいね・リアクション仕様"
+Cohesion: 0.09
+Nodes (20): POST /api/likes, content-sort.ts / ContentSortSelect, getViewerLikedIds(), guideListOrderBy(), LikeButton component, likes.server.ts server layer, LikesProvider / useLike (use-likes.tsx), page-view-stats.server.ts (guidePageViewsSql) (+12 more)
+
+### Community 65 - "プロフィール仕様"
+Cohesion: 0.10
+Nodes (25): app/lib/playstyle.ts（選択肢定義・表示条件ヘルパーの単一情報源）, recordSlugChange() / claimSlug() / resolveSlugFromHistory(), resolvePlayerSlugFallback()（slug_history → Mojang の2段フォールバック）, RTA歴（app/lib/rta-career.ts）, validatePlaystyle(), app/lib/youtube-url.ts（getYouTubeVideoId / getYouTubeEmbedUrl）, getSpeedrunComVideoEmbedUrl(), Bedrock版 MCID（bedrockMcid） (+17 more)
+
+### Community 76 - "Discordログインとセッション"
+Cohesion: 0.12
+Nodes (22): better-auth, /dev/login local simple login, Discord avatar sync in _layout loader, Discord OAuth login flow, encodeReturnToForCallback, getCurrentUser, getCurrentUserOrOnboarding, getOptionalSession (+14 more)
+
+### Community 77 - "ホーム・ライブ仕様"
+Cohesion: 0.12
+Nodes (18): /api/home-feed (lazy feed API), apiCache table, getUserData() UserDataCache (home-user-data.server.ts), showPacemanOnHome / showYoutubeOnHome / showTwitchOnHome flags, Home page (/), Live paces section (15s auto refresh, LivePaceList), /live route removed (redirect to /), Pace timeline modal (PaceFeedCard, getRunTimeline) (+10 more)
+
+### Community 81 - "ガイド・いいね関連テーブル (2)"
+Cohesion: 0.10
+Nodes (22): Player list page (/browse), Player compare page (/compare), excludeViewersCondition, FavoriteButton, Favorites page (/favorites), getFavoritesFromDb, nullsLast (sort-order), parseBrowseSort / BROWSE_SORTS allowlist (+14 more)
+
+### Community 82 - "プリセット適用とLoop復元"
+Cohesion: 0.09
+Nodes (20): apply-preset intent, PresetSelector component, remapLoopSteps() (search-craft-loops.ts), restoreSearchCraftLoopsFromSnapshot(), getActualKeyInfos(), RemapRow / KeyCaptureButton, simulateRemapOutput() (remap-utils.ts), SearchCraftTimingBoard (+12 more)
+
+### Community 90 - "アイテム・キー表示仕様"
+Cohesion: 0.14
+Nodes (20): ActualKeyBadges, @bafv4/mcitems package (Minecraft 1.16 items), ControlKeyBadge / ControlKeyBadgeView / CONTROL_KEY_META, CraftMarker (craft execution marker chip), getFingersForKeyCode(), getLocalizedItemName(), ItemIcon wrapper (item-icon.tsx), KeyBadge (+12 more)
+
+### Community 96 - "アイテム・キー表示仕様 (2)"
+Cohesion: 0.16
+Nodes (16): key_remaps table, getActualControlKeyInfo() (control key reverse lookup), getActualKeyInfos() (chat-context reverse remap lookup), RemapDetail / tooltipLabel (structured tooltip info), resolveShiftComponent() (4-stage ShiftLeft→ShiftRight resolution), SHIFT_CHAR_MAP reverse lookup, ⇧Home composition (Shift component + Home component), simulateRemapOutput() (forward remap simulation) (+8 more)
+
+### Community 97 - "お気に入り仕様"
+Cohesion: 0.14
+Nodes (14): /api/favorites (GET/POST/PUT), POST /api/users/by-slugs, Cookie 同意との連携（useCookieConsent）, FavoriteButton コンポーネント, app/lib/favorites-client.ts（localStorage/sessionStorage 操作）, /favorites ページ, app/lib/favorites.ts（DB CRUD ヘルパー）, favorites テーブル (userId, favoriteSlug) (+6 more)
 
 ## Knowledge Gaps
-- **118 isolated node(s):** `@fontsource/jetbrains-mono`, `@fontsource/zen-kaku-gothic-new`, `@hookform/resolvers`, `@react-router/node`, `@react-router/serve` (+113 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1506 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **118 isolated node(s):** `@fontsource/jetbrains-mono`, `@fontsource/zen-kaku-gothic-new`, `@hookform/resolvers`, `jsdom`, `@react-router/node` (+113 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1512 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vitest` connect `slug フォールバックのテスト` to `ルート共通ヘルパー`, `キー入力順ダイアログ`, `Twitch とペース取得`, `認証掃除と旧データ移行`, `アイテムホットバー`, `アイテム設定のテスト`, `コンテンツ一覧とタブ`, `API認証とセッション`, `Microsoft認証の実測スクリプト`, `アプリのルートとプロバイダ`, `ページビューSQLとテストDB`, `キー取得ボタン`, `ルート設定とパッケージ情報`, `アバター・動画カード`, `メッセージ取得とフィードバック`, `ガイドといいねのテスト`, `プリセット操作`, `仮想キーボードとキー定義`, `サーチクラフトテンプレート適用`, `DB接続設定と移行スクリプト`, `新規ユーザー既定値とプリセット同期`, `YouTube 取得とキャッシュ`, `ガイド配色とサニタイズ`, `テスト基盤とペース分割`, `走者一覧とお気に入りDB`, `キャッシュ層と Mojang 連携`, `ページビュー集計`, `キー配置のテスト`, `アカウント削除のテスト`, `OGP と全身スキン表示`, `プロフィール表示とキー配置カード`, `DB運用と集計cron仕様`, `トグル部品`, `ガイド表の正規化といいね集計`, `ガイドエディタのブロック操作`, `外部統計取得`, `外部ランキング更新`, `PaceMan ライブ表示`, `サーチクラフトのループ表示`, `Blob 削除とURL検証`, `動画からGIF変換`, `画像クロップ`, `画像アップロード`, `GIF クロップ`, `cron 認証と掃除ジョブ`, `RTA歴`, `動画フィード`, `お気に入りの DB 処理`, `プリセット設定のデコード`, `インポートのテスト`, `サーチクラフトのテスト`, `認証仕様`, `初期設定のテスト`, `カラム幅スナップ`, `キー入力キャプチャ`, `ガイド画像アップロードのテスト`, `ガイド編集のテスト`, `OGP のテスト`, `設定ファイルのパーサ`, `README と環境変数`, `スキンアップロードトークンのテスト`, `プロフィール編集の更新テスト`, `プロフィール編集のテスト`, `MCSR Ranked ティア`, `お気に入りAPI仕様`, `スキンAPIのテスト`, `記録のテスト`, `デバイス設定のテスト`, `API ルートのテスト`, `YouTube URL と動画欄`, `タイピングテストとペース表示`, `リアクション等のテスト`, `テンプレート操作のテスト`, `お気に入りのDB処理仕様`, `ペースフィード`, `returnTo の安全化`, `YouTube URL 解析`?**
-  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+- **Why does `Database Schema Overview (tables & ER diagram)` connect `ガイド・いいね関連テーブル` to `アイテム・キー表示仕様 (2)`, `いいね・リアクション仕様`, `DBスキーマ定義`, `プリセットの二重フラグ`, `プロフィール仕様`, `お気に入り仕様`, `Discordログインとセッション`, `ホーム・ライブ仕様`, `公開APIリファレンス`, `ガイド・いいね関連テーブル (2)`, `ユーザーコンテンツ自動翻訳仕様`, `プリセット整合性スクリプト`, `ガイドエディタ仕様`?**
+  _High betweenness centrality (0.140) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `t()` (e.g. with `fix-missing-indexes.ts` and `fix-paceman-expression-index.ts`) actually correct?**
   _`t()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `@fontsource/jetbrains-mono`, `@fontsource/zen-kaku-gothic-new`, `@hookform/resolvers` to the rest of the system?**
   _118 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `サーチクラフト編集UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.0610121671662846 - nodes in this community are weakly interconnected._
-- **Why does `useT()` connect `統計ビューと初期設定UI` to `サーチクラフト編集UI`, `ルート共通ヘルパー`, `キー入力順ダイアログ`, `UI部品とエディタのダイアログ`, `アイテムホットバー`, `アイテム設定のテスト`, `コンテンツ一覧とタブ`, `エディタのノードビュー`, `操作設定一覧ページ`, `Microsoft認証の実測スクリプト`, `アプリのルートとプロバイダ`, `API認証とセッション`, `プレイスタイル定義`, `キー取得ボタン`, `セレクト部品と無限スクロール`, `meta と翻訳関数`, `ガイド画像ノード`, `TipTap 拡張定義`, `キー情報トリガー`, `アバター・動画カード`, `ガイドエディタ定数・表操作`, `アバター合成キャッシュ`, `ガイド配色とサニタイズ`, `テンプレートの直列化`, `プロフィール表示とキー配置カード`, `トグル部品`, `ガイド表の正規化といいね集計`, `ガイドエディタのブロック操作`, `埋め込みとループ`, `PaceMan ライブ表示`, `アバター合成とシークレットグリッド`, `サーチクラフトのループ表示`, `Markdown文書ページとOGP`, `サーチクラフトの直列化`, `画像クロップ`, `ヘッダー・目次・UI部品`, `画像アップロード`, `RTA歴`, `動画フィード`, `キー入力キャプチャ`, `自動翻訳仕様`, `ヘッダーの切替メニュー`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
+- **Should `統計ビューと初期設定UI` be split into smaller, more focused modules?**
+  _Cohesion score 0.08552631578947369 - nodes in this community are weakly interconnected._
+- **Why does `vitest` connect `サーチクラフトテンプレート適用` to `統計ビューと初期設定UI`, `ガイドエディタ定数・表操作`, `キー配置一覧の行データ型`, `プレイスタイル定義`, `ルート設定とパッケージ情報`, `プリセット操作`, `DB接続設定と移行スクリプト`, `Blob 削除とURL検証`, `サーチクラフト編集UI (2)`, `slug フォールバックのテスト`, `Blob 削除とURL検証 (2)`, `YouTube 取得とキャッシュ`, `仮想キーボードとキー定義`, `スラッシュコマンド`, `APIキャッシュとペースタイムライン型`, `ガイド保存と画像アップロード`, `キー情報トリガー`, `新規ユーザー既定値とプリセット同期`, `Blob 孤児の監査`, `ガイド配色とサニタイズ`, `ページビューSQLとテストDB`, `slug フォールバックのテスト (2)`, `アプリのルートとプロバイダ`, `キー情報トリガー (2)`, `プリセット操作 (2)`, `ページビューSQLとテストDB (2)`, `ルート共通ヘルパー (2)`, `slug フォールバックのテスト (3)`, `ガイドエディタのブロック操作`, `プロフィール表示とキー配置カード`, `ページビュー集計`, `アカウント削除のテスト`, `OGP と全身スキン表示`, `GIFの切り抜きとエンコード`, `UI部品とエディタのダイアログ (3)`, `外部統計取得`, `ガイド画像ノード (3)`, `統計ビューと初期設定UI (2)`, `ガイドといいねのテスト`, `カラム幅スナップ`, `キャッシュ層と Mojang 連携`, `プリセット設定のデコード`, `アバター・動画カード (2)`, `DB運用と集計cron仕様`, `PaceMan ライブ表示`, `アプリのルートとプロバイダ (2)`, `RTA歴`, `プレイヤー一覧クエリ (2)`, `インポートのテスト`, `新規ユーザー既定値とプリセット同期 (2)`, `サーチクラフトのテスト`, `Microsoft認証の実測スクリプト (3)`, `キー配置のテスト`, `初期設定のテスト`, `キー配置列定義のテスト`, `認証仕様`, `ガイド画像アップロードのテスト`, `DB運用と集計cron仕様 (2)`, `OGP のテスト`, `設定ファイルのパーサ`, `ルート共通ヘルパー (4)`, `README と環境変数`, `スキンアップロードトークンのテスト`, `プロフィール編集の更新テスト`, `プロフィール編集のテスト`, `Microsoft認証の実測スクリプト (4)`, `MCSR Ranked ティア`, `お気に入りAPI仕様`, `スキンAPIのテスト`, `キャッシュ層と Mojang 連携 (2)`, `記録のテスト`, `デバイス設定のテスト`, `API ルートのテスト`, `YouTube URL と動画欄`, `タイピングテストとペース表示`, `ページビュー同期cronのテスト`, `リアクション等のテスト`, `テンプレート操作のテスト`, `お気に入りAPIのテスト`, `SNS統計APIのテスト`, `キー取得ボタンのテスト`, `ペースフィード`, `Twitch連携のテスト`, `YouTube URL 解析`, `slug フォールバックのテスト (4)`?**
+  _High betweenness centrality (0.085) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `createDb()` (e.g. with `update-paceman-cache.test.ts` and `expectNoWorkPerformed()`) actually correct?**
   _`createDb()` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **Should `ルート共通ヘルパー` be split into smaller, more focused modules?**
-  _Cohesion score 0.07057387057387057 - nodes in this community are weakly interconnected._
+- **Should `UI部品とエディタのダイアログ` be split into smaller, more focused modules?**
+  _Cohesion score 0.0783076203833567 - nodes in this community are weakly interconnected._
