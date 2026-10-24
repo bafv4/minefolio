@@ -53,7 +53,7 @@
     "@react-router/node": "8.5.0",
     "@react-router/serve": "8.5.0",
     "@tailwindcss/typography": "^0.5.20",
-    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-table": "^9.3.1",
     "@tanstack/react-virtual": "^3.14.22",
     "@tiptap/core": "^3.32.0",
     "@tiptap/extension-bubble-menu": "^3.32.0",

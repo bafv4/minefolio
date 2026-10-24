@@ -403,6 +403,7 @@ type ControllerSettings = {
 
 - 列定義は `COLUMN_PRESETS`（`keybindings-columns.tsx`）でプリセット名＝タブ名として管理する
 - **各カラムはドラッグでリサイズ可能**（TanStack Table の `columnResizeMode: "onChange"`）。`KeybindingsTable` は `getSize()` から `grid-template-columns` を算出する
+- テーブルは **TanStack Table v9**（`useTable`）。使う機能だけを `keybindingsTableFeatures`（`keybindings-columns.tsx`）に明示登録している（`rowSortingFeature` ＋ `sortedRowModel` / `columnSizingFeature` / `columnResizingFeature`、ソート関数は数値列用の `basic` のみ）。列定義の型は `KeybindingsColumnDef`（= `ColumnDef<KeybindingsFeatures, KeybindingsRow>`）。列の可視性機能は使わないため `getAllLeafColumns()` / `row.getAllCells()` で描画する。リサイズ中の列幅は `table.state.columnSizing`（v8 の `getState()` は廃止）
 - ヘッダーは折り返さない（`whitespace-nowrap` + `truncate`）。セルは `overflow-hidden` で列幅にクリップ
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 

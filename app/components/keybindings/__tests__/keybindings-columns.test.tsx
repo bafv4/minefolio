@@ -4,16 +4,15 @@
 // 通常比較に回り、昇順で先頭に来てしまう）。アクセサが null を返していた回帰があるため、
 // 「未設定は undefined を返す」ことを列定義のレベルで固定する。
 import { describe, it, expect } from "vitest";
-import {
-  createTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  type ColumnDef,
-  type SortingState,
-  type TableOptionsResolved,
-} from "@tanstack/react-table";
+import { renderToStaticMarkup } from "react-dom/server";
+import { useTable, type SortingState } from "@tanstack/react-table";
 import { createTranslator } from "@/lib/messages";
-import { columnPresets, type KeybindingsRow } from "../keybindings-columns";
+import {
+  columnPresets,
+  keybindingsTableFeatures,
+  type KeybindingsColumnDef,
+  type KeybindingsRow,
+} from "../keybindings-columns";
 
 const t = createTranslator("ja");
 
@@ -90,11 +89,11 @@ const noWinRow: KeybindingsRow = {
   } as KeybindingsRow["playerConfig"],
 };
 
-const mouseColumns = columnPresets(t).mouse as ColumnDef<KeybindingsRow>[];
+const mouseColumns = columnPresets(t).mouse as KeybindingsColumnDef[];
 
 const sortableColumns = mouseColumns.filter((col) => col.enableSorting);
 
-function accessorOf(col: ColumnDef<KeybindingsRow>) {
+function accessorOf(col: KeybindingsColumnDef) {
   const fn = (col as { accessorFn?: (row: KeybindingsRow, index: number) => unknown })
     .accessorFn;
   if (!fn) throw new Error(`accessorFn missing: ${col.id}`);
@@ -128,20 +127,26 @@ describe("mouse 列のソート設定", () => {
 });
 
 /**
- * 実際に TanStack の並び替えを通して行の順序を得る（React 描画は不要）。
+ * 実際に TanStack の並び替えを通して行の順序を得る。
+ * v9 のコアは React のリアクティビティ層（useTable が注入）を必要とするため、
+ * 本番と同じ useTable をサーバー描画（DOM 不要）の中で 1 度だけ動かして行モデルを取り出す。
  * sorting は固定なので state 更新は受け取らない。
  */
 function sortedSlugs(rows: KeybindingsRow[], sorting: SortingState): string[] {
-  const table = createTable<KeybindingsRow>({
-    data: rows,
-    columns: mouseColumns,
-    state: { sorting },
-    onStateChange: () => {},
-    renderFallbackValue: null,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  } as TableOptionsResolved<KeybindingsRow>);
-  return table.getRowModel().rows.map((r) => r.original.slug);
+  let slugs: string[] = [];
+  function Probe() {
+    const table = useTable({
+      features: keybindingsTableFeatures,
+      data: rows,
+      columns: mouseColumns,
+      state: { sorting },
+      onSortingChange: () => {},
+    });
+    slugs = table.getRowModel().rows.map((r) => r.original.slug);
+    return null;
+  }
+  renderToStaticMarkup(<Probe />);
+  return slugs;
 }
 
 describe("mouse 列の並び替え - 未設定は昇順・降順のどちらでも末尾", () => {
@@ -174,7 +179,7 @@ describe("mouse 列の並び替え - 未設定は昇順・降順のどちらで�
   });
 });
 
-function columnById(id: string): ColumnDef<KeybindingsRow> {
+function columnById(id: string): KeybindingsColumnDef {
   const col = mouseColumns.find((c) => c.id === id);
   if (!col) throw new Error(`column not found: ${id}`);
   return col;

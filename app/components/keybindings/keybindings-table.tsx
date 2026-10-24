@@ -3,11 +3,8 @@
 import { useMemo, useRef } from "react";
 import {
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
   type CellContext,
-  type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -15,6 +12,9 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   columnPresets,
+  keybindingsTableFeatures,
+  type KeybindingsColumnDef,
+  type KeybindingsFeatures,
   type KeybindingsRow,
   type PresetKey,
 } from "./keybindings-columns";
@@ -43,8 +43,8 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
   const isMobile = useMediaQuery("(max-width: 767px)", false);
   // モバイルでは走者列を狭め、セルを縦並び（頭＋名前）の compact 表示に差し替える。
   // 列幅は TanStack の size（px）で決まり CSS では切り替えられないため JS 側で分岐する。
-  const columns = useMemo<ColumnDef<KeybindingsRow>[]>(() => {
-    const base = columnPresets(t)[preset] as ColumnDef<KeybindingsRow>[];
+  const columns = useMemo<KeybindingsColumnDef[]>(() => {
+    const base = columnPresets(t)[preset] as KeybindingsColumnDef[];
     if (!isMobile) return base;
     return base.map((col) =>
       col.id === "runner"
@@ -52,10 +52,10 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
             ...col,
             size: RUNNER_COL_SIZE_MOBILE,
             minSize: RUNNER_COL_MIN_SIZE_MOBILE,
-            cell: ({ row }: CellContext<KeybindingsRow, unknown>) => (
+            cell: ({ row }: CellContext<KeybindingsFeatures, KeybindingsRow, unknown>) => (
               <RunnerCell player={row.original} variant="compact" />
             ),
-          } as ColumnDef<KeybindingsRow>)
+          } as KeybindingsColumnDef)
         : col,
     );
   }, [preset, isMobile]);
@@ -67,7 +67,8 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
     return [{ id: sort.key, desc: sort.direction === "desc" }];
   }, [sort]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features: keybindingsTableFeatures,
     data: rows,
     columns,
     state: { sorting },
@@ -83,12 +84,10 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
     enableColumnResizing: true,
     columnResizeMode: "onChange",
     defaultColumn: { minSize: 48 },
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   });
 
   // 列リサイズの現在値（columnSizing が変わるたびに gridTemplateColumns を再計算）
-  const columnSizing = table.getState().columnSizing;
+  const columnSizing = table.state.columnSizing;
 
   const rowModel = table.getRowModel();
 
@@ -118,7 +117,7 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
   const gridTemplateColumns = useMemo(
     () =>
       table
-        .getVisibleLeafColumns()
+        .getAllLeafColumns()
         .map((col) => `${col.getSize()}px`)
         .join(" "),
     // table はレンダーごとに生成されるため依存に含めない。
@@ -231,7 +230,7 @@ export function KeybindingsTable({ rows, preset }: KeybindingsTableProps) {
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
-              {row.getVisibleCells().map((cell, idx) => {
+              {row.getAllCells().map((cell, idx) => {
                 const align =
                   (cell.column.columnDef.meta as { align?: string } | undefined)
                     ?.align ?? "left";
