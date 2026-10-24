@@ -124,7 +124,14 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
     （satori 内部の WeakMap フォントキャッシュが fonts 配列の同一性をキーにしているため）
   - 取得失敗（非2xx・TTF検証失敗等）は `console.error` に記録する
   - 空配列（全ウェイト失敗）の場合は呼び出し側で `@vercel/og` のバンドル既定フォントにフォールバックする
+    （1.0 系の既定は Geist。ラテン文字のみで日本語は描画できないため、フォールバックは最終手段）
   - 外部（Google Fonts）への通信は行わない。JetBrains Mono は OGP 描画では未使用のため同梱していない
+- **`@vercel/og` は `1.0.1` に厳密固定（`^` を付けない）**: 1.0.2 以降は内部の satori が同梱する harfbuzzjs が
+  ESM 内で `__require("fs")` を呼び、Node ESM で import した時点で `Dynamic require of "fs" is not supported` と
+  なってサーバー全体（react-router-serve）が起動しない。更新時は `pnpm build` 後の本番ビルドを起動し、
+  `/` と `/og-image` を実際に叩いて確認する（`og-image.test.ts` は `@vercel/og` をモックしているため検出できない）
+- ラスタライズ: 1.0.1 は Node 実行時に `sharp`（optionalDependencies）を import できればそれで SVG→PNG 変換し、
+  できなければ `@resvg/resvg-wasm` にフォールバックする
 - 旧実装（Google Fonts css2 API に描画テキスト全体を `text=` クエリで渡してサブセット TTF を取得する方式）は、
   表示名・MCID・bio 等の PII を外部送信していたため撤去済み
 

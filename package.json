@@ -75,7 +75,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.2",
     "@vercel/functions": "^3.10.3",
-    "@vercel/og": "^0.8.6",
+    "@vercel/og": "1.0.1",
     "@vercel/react-router": "^1.3.7",
     "better-auth": "^1.7.12",
     "class-variance-authority": "^0.7.1",
