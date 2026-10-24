@@ -1,5 +1,5 @@
 import type { MessageKey } from "@/lib/messages";
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
@@ -292,7 +292,7 @@ const NUMPAD_LAYOUT: KeyboardRow[] = [
 ];
 
 // 指の種類から基本色名へのマッピング
-type FingerColorName = "pinky" | "ring" | "middle" | "index" | "thumb";
+type FingerColorName = "pinky" | "ring" | "middle" | "index" | "thumb" | "palm";
 
 const FINGER_TO_COLOR: Record<FingerType, FingerColorName> = {
   "left-pinky": "pinky",
@@ -300,6 +300,8 @@ const FINGER_TO_COLOR: Record<FingerType, FingerColorName> = {
   "left-middle": "middle",
   "left-index": "index",
   "left-thumb": "thumb",
+  "left-palm": "palm",
+  "right-palm": "palm",
   "right-thumb": "thumb",
   "right-index": "index",
   "right-middle": "middle",
@@ -314,12 +316,70 @@ export const FINGER_KEY_COLORS: Record<FingerType, string> = {
   "left-middle": "bg-finger-middle/30 border-finger-middle/60 text-foreground",
   "left-index": "bg-finger-index/30 border-finger-index/60 text-foreground",
   "left-thumb": "bg-finger-thumb/30 border-finger-thumb/60 text-foreground",
+  "left-palm": "bg-finger-palm/30 border-finger-palm/60 text-foreground",
+  "right-palm": "bg-finger-palm/30 border-finger-palm/60 text-foreground",
   "right-thumb": "bg-finger-thumb/30 border-finger-thumb/60 text-foreground",
   "right-index": "bg-finger-index/30 border-finger-index/60 text-foreground",
   "right-middle": "bg-finger-middle/30 border-finger-middle/60 text-foreground",
   "right-ring": "bg-finger-ring/30 border-finger-ring/60 text-foreground",
   "right-pinky": "bg-finger-pinky/30 border-finger-pinky/60 text-foreground",
 };
+
+// 複数の指（色が2種類以上）を等幅バンドで分割表示するときの枠線・文字色（背景は inline style で描画）
+const FINGER_SPLIT_KEY_COLORS: Record<FingerColorName, string> = {
+  "pinky": "border-finger-pinky/60 text-foreground",
+  "ring": "border-finger-ring/60 text-foreground",
+  "middle": "border-finger-middle/60 text-foreground",
+  "index": "border-finger-index/60 text-foreground",
+  "thumb": "border-finger-thumb/60 text-foreground",
+  "palm": "border-finger-palm/60 text-foreground",
+};
+
+// 指の基本色名 → CSS 変数（inline style 用。oklch 定義なので hsl() で包まない）
+const FINGER_CSS_VARS: Record<FingerColorName, string> = {
+  "pinky": "var(--finger-pinky)",
+  "ring": "var(--finger-ring)",
+  "middle": "var(--finger-middle)",
+  "index": "var(--finger-index)",
+  "thumb": "var(--finger-thumb)",
+  "palm": "var(--finger-palm)",
+};
+
+/**
+ * キーに割り当てられた指（複数可）から、キー面の className / style を求める。
+ *
+ * - 指が無い: 空の className
+ * - 指が1本、または複数でも色が全部同じ（例: left-index と right-index）:
+ *   従来どおり `FINGER_KEY_COLORS[先頭の指]`（見た目は単一指と同一）
+ * - 色が2種類以上: 先頭の指の枠線色 + 色ごとの等幅バンド（ハードストップのグラデーション）を
+ *   inline style の background-image で描画する。不透明度は 既存の bg-finger の /30 と同じ 30%
+ *   （Tailwind 4 と同じ oklab での color-mix）。
+ *   `backgroundOrigin: border-box` により枠線の下までバンドが届く（既定の padding-box だと
+ *   半透明の枠線の下に反対側のバンドが繰り返されて見えるため）。
+ */
+export function getFingerKeyStyle(
+  fingers: readonly FingerType[] | undefined,
+): { className: string; style?: CSSProperties } {
+  if (!fingers || fingers.length === 0) return { className: "" };
+  const colors: FingerColorName[] = [];
+  for (const f of fingers) {
+    const c = FINGER_TO_COLOR[f];
+    if (!colors.includes(c)) colors.push(c);
+  }
+  if (colors.length <= 1) return { className: FINGER_KEY_COLORS[fingers[0]] };
+  const n = colors.length;
+  const stops = colors.map((c, i) => {
+    const tint = `color-mix(in oklab, ${FINGER_CSS_VARS[c]} 30%, transparent)`;
+    return `${tint} ${(i * 100) / n}% ${((i + 1) * 100) / n}%`;
+  });
+  return {
+    className: FINGER_SPLIT_KEY_COLORS[colors[0]],
+    style: {
+      backgroundImage: `linear-gradient(90deg, ${stops.join(", ")})`,
+      backgroundOrigin: "border-box",
+    },
+  };
+}
 
 // チップ用の色（操作名表示用）- CSS変数を使用。
 // 文字色は --finger-chip-fg（ライト=白 / ダーク・ウルトラダーク=黒）を参照。
@@ -331,6 +391,8 @@ export const FINGER_CHIP_COLORS: Record<FingerType, string> = {
   "left-middle": "bg-finger-middle text-finger-chip-foreground",
   "left-index": "bg-finger-index text-finger-chip-foreground",
   "left-thumb": "bg-finger-thumb text-finger-chip-foreground",
+  "left-palm": "bg-finger-palm text-finger-chip-foreground",
+  "right-palm": "bg-finger-palm text-finger-chip-foreground",
   "right-thumb": "bg-finger-thumb text-finger-chip-foreground",
   "right-index": "bg-finger-index text-finger-chip-foreground",
   "right-middle": "bg-finger-middle text-finger-chip-foreground",
@@ -345,6 +407,7 @@ const FINGER_BG_COLORS: Record<FingerColorName, string> = {
   "middle": "bg-finger-middle",
   "index": "bg-finger-index",
   "thumb": "bg-finger-thumb",
+  "palm": "bg-finger-palm",
 };
 
 type KeybindingInfo = {
@@ -416,6 +479,7 @@ function JisEnterKey({
   ariaLabel,
   chips,
   keyClass,
+  keyStyle,
   isHighlighted,
   clickable,
   onClick,
@@ -426,6 +490,8 @@ function JisEnterKey({
   ariaLabel: string;
   chips: React.ReactNode;
   keyClass: string;
+  /** 複数指の色分割背景（getFingerKeyStyle の style）。上段・下段で同じ帯が揃うよう配置を調整する */
+  keyStyle?: CSSProperties;
   isHighlighted: boolean;
   clickable: boolean;
   onClick: () => void;
@@ -471,7 +537,7 @@ function JisEnterKey({
       <div
         aria-hidden
         className={cn(rectBase, "rounded-md rounded-b-none border-b-0 left-0")}
-        style={{ top: 0, width: topPx, height: rowPx }}
+        style={{ ...keyStyle, top: 0, width: topPx, height: rowPx }}
       />
       {/* 下段（狭い側・右寄せ）。上辺は角丸・枠線なしにして上段とちょうど接する */}
       <div
@@ -479,7 +545,16 @@ function JisEnterKey({
           rectBase,
           "rounded-md rounded-t-none border-t-0 right-0 flex flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium",
         )}
-        style={{ top: rowPx, width: bottomPx, height: totalHeightPx - rowPx }}
+        style={{
+          ...keyStyle,
+          // 下段は上段と同じ帯幅になるよう、上段幅のグラデーションを右端基準で切り出す
+          ...(keyStyle?.backgroundImage
+            ? { backgroundSize: `${topPx}px 100%`, backgroundPosition: "right top", backgroundRepeat: "no-repeat" }
+            : undefined),
+          top: rowPx,
+          width: bottomPx,
+          height: totalHeightPx - rowPx,
+        }}
       >
         <span className="font-semibold leading-none">{label}</span>
         {chips}
@@ -540,12 +615,12 @@ function VirtualKeyboardComponent({
   };
 
   // キーコードから指割り当てを取得（正規化して検索）
-  const getFingerForKey = (keyCode: string): FingerType | undefined => {
+  const getFingersForKey = (keyCode: string): FingerType[] => {
     const normalized = normalizeKeyCode(keyCode);
-    const fingers = effectiveFingerAssignments[normalized] ||
-                   effectiveFingerAssignments[keyCode] ||
-                   effectiveFingerAssignments[keyCode.toLowerCase()];
-    return fingers?.[0];
+    return effectiveFingerAssignments[normalized] ||
+           effectiveFingerAssignments[keyCode] ||
+           effectiveFingerAssignments[keyCode.toLowerCase()] ||
+           [];
   };
 
   // キーコードからリマップ情報を取得
@@ -586,7 +661,9 @@ function VirtualKeyboardComponent({
     const width = (key.width || 1) * baseSize + ((key.width || 1) - 1) * gap;
     const height = (key.height || 1) * baseSize + ((key.height || 1) - 1) * gap;
     const bindings = getBindingsForKey(key.code);
-    const finger = getFingerForKey(key.code);
+    const fingers = getFingersForKey(key.code);
+    // 先頭の指（チップ色・枠線色・有無判定に使う）。複数指の背景は fingerStyle のバンド分割で描画
+    const finger: FingerType | undefined = fingers[0];
     // 複数リマップ対応: このキーに関連する全リマップを取得
     const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
     const isHighlighted = highlightedKeys.includes(key.code);
@@ -601,9 +678,10 @@ function VirtualKeyboardComponent({
     (key.labelKey ? t(key.labelKey) : key.label) || getKeyLabel(t, key.code);
 
     // 指割り当てが有効な場合は指の色を使用、そうでなければデフォルト
-    const fingerKeyClass = showFingerAssignments && finger
-      ? FINGER_KEY_COLORS[finger]
-      : "";
+    const fingerKeyStyle = showFingerAssignments
+      ? getFingerKeyStyle(fingers)
+      : { className: "" as string, style: undefined };
+    const fingerKeyClass = fingerKeyStyle.className;
     const chipClass = showFingerAssignments && finger
       ? FINGER_CHIP_COLORS[finger]
       : "bg-foreground/80 text-background";
@@ -674,6 +752,8 @@ function VirtualKeyboardComponent({
           key.className
         )}
         style={{
+          // 保持中（isHeld）は warning 背景を優先するため、指のバンド背景は載せない
+          ...(isHeld ? undefined : fingerKeyStyle.style),
           width: `${width}px`,
           height: `${height}px`,
         }}
@@ -762,7 +842,7 @@ function VirtualKeyboardComponent({
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: keyRemaps,
       customActions: getCustomActionsForKeyCode(customActions, key.code),
-      finger: showFingerAssignments ? finger : undefined,
+      fingers: showFingerAssignments ? fingers : undefined,
       layout,
     };
 
@@ -793,6 +873,7 @@ function VirtualKeyboardComponent({
             : "bg-secondary/50 border-border/50 text-muted-foreground",
           isDimmed && "opacity-40 grayscale",
         )}
+        keyStyle={fingerKeyStyle.style}
         isHighlighted={isHighlighted}
         clickable={!!onKeyClick}
         onClick={() => onKeyClick?.(key.code)}
@@ -884,13 +965,15 @@ function VirtualKeyboardComponent({
       <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
         {customKeys.map((ck, index) => {
           const bindings = getBindingsForKey(ck.code);
-          const finger = getFingerForKey(ck.code);
+          const fingers = getFingersForKey(ck.code);
+          const finger: FingerType | undefined = fingers[0];
           const remap = showRemaps ? getRemapForKey(ck.code) : undefined;
           const isHighlighted = highlightedKeys.includes(ck.code);
 
-          const fingerKeyClass = showFingerAssignments && finger
-            ? FINGER_KEY_COLORS[finger]
-            : "";
+          const fingerKeyStyle = showFingerAssignments
+            ? getFingerKeyStyle(fingers)
+            : { className: "" as string, style: undefined };
+          const fingerKeyClass = fingerKeyStyle.className;
           const chipClass = showFingerAssignments && finger
             ? FINGER_CHIP_COLORS[finger]
             : "bg-foreground/80 text-background";
@@ -939,6 +1022,7 @@ function VirtualKeyboardComponent({
                 onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
               )}
               style={{
+                ...fingerKeyStyle.style,
                 minWidth: `${baseSize}px`,
                 maxWidth: `${baseSize * 2.5}px`,
                 height: `${baseSize}px`,
@@ -1025,7 +1109,7 @@ function VirtualKeyboardComponent({
             bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
             remaps: remap ? [remap] : [],
             customActions: getCustomActionsForKeyCode(customActions, ck.code),
-            finger: showFingerAssignments ? finger : undefined,
+            fingers: showFingerAssignments ? fingers : undefined,
             layout,
           };
           return (
@@ -1146,9 +1230,8 @@ export function VirtualMouse({
   };
 
   // 指割り当てを取得（ユーザー設定のみ、デフォルトは使用しない）
-  const getFingerForButton = (code: string): FingerType | undefined => {
-    const fingers = fingerAssignments[code] || fingerAssignments[code.toLowerCase()];
-    return fingers?.[0];
+  const getFingersForButton = (code: string): FingerType[] => {
+    return fingerAssignments[code] || fingerAssignments[code.toLowerCase()] || [];
   };
 
   // リマップ情報を取得
@@ -1173,9 +1256,11 @@ export function VirtualMouse({
 
   const renderButton = (button: typeof buttons[0], index: number, isCustom = false) => {
     const bindings = getBindingsForButton(button.code);
-    const finger = showFingerAssignments ? getFingerForButton(button.code) : undefined;
+    const fingers = showFingerAssignments ? getFingersForButton(button.code) : [];
+    const finger: FingerType | undefined = fingers[0];
     const remap = showRemaps ? getRemapForButton(button.code) : undefined;
-    const fingerKeyClass = finger ? FINGER_KEY_COLORS[finger] : "bg-secondary/50 border-border/50 text-muted-foreground";
+    const fingerKeyStyle = getFingerKeyStyle(fingers);
+    const fingerKeyClass = finger ? fingerKeyStyle.className : "bg-secondary/50 border-border/50 text-muted-foreground";
     const chipClass = finger ? FINGER_CHIP_COLORS[finger] : "bg-foreground/80 text-background";
 
     const width = (button.width || 1) * baseSize + ((button.width || 1) - 1) * gap;
@@ -1217,7 +1302,7 @@ export function VirtualMouse({
           fingerKeyClass,
           onButtonClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
         )}
-        style={{ width: `${width}px`, height: `${height}px` }}
+        style={{ ...fingerKeyStyle.style, width: `${width}px`, height: `${height}px` }}
       >
         {remap ? (
           isRemapStacked ? (
@@ -1289,7 +1374,7 @@ export function VirtualMouse({
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: remap ? [remap] : [],
       customActions: getCustomActionsForKeyCode(customActions, button.code),
-      finger: showFingerAssignments ? finger : undefined,
+      fingers: showFingerAssignments ? fingers : undefined,
     };
     return (
       <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom}>
@@ -1392,12 +1477,12 @@ export function VirtualNumpad({
   };
 
   // キーコードから指割り当てを取得（正規化して検索）
-  const getFingerForKey = (keyCode: string): FingerType | undefined => {
+  const getFingersForKey = (keyCode: string): FingerType[] => {
     const normalized = normalizeKeyCode(keyCode);
-    const fingers = effectiveFingerAssignments[normalized] ||
-                   effectiveFingerAssignments[keyCode] ||
-                   effectiveFingerAssignments[keyCode.toLowerCase()];
-    return fingers?.[0];
+    return effectiveFingerAssignments[normalized] ||
+           effectiveFingerAssignments[keyCode] ||
+           effectiveFingerAssignments[keyCode.toLowerCase()] ||
+           [];
   };
 
   // キーコードからリマップ情報を取得
@@ -1429,15 +1514,17 @@ export function VirtualNumpad({
     const width = (key.width || 1) * baseSize + ((key.width || 1) - 1) * gap;
     const height = (key.height || 1) * baseSize + ((key.height || 1) - 1) * gap;
     const bindings = getBindingsForKey(key.code);
-    const finger = getFingerForKey(key.code);
+    const fingers = getFingersForKey(key.code);
+    const finger: FingerType | undefined = fingers[0];
     const remap = showRemaps ? getRemapForKey(key.code) : undefined;
     const isHighlighted = highlightedKeys.includes(key.code);
     const displayLabel =
     (key.labelKey ? t(key.labelKey) : key.label) || getKeyLabel(t, key.code);
 
-    const fingerKeyClass = showFingerAssignments && finger
-      ? FINGER_KEY_COLORS[finger]
-      : "";
+    const fingerKeyStyle = showFingerAssignments
+      ? getFingerKeyStyle(fingers)
+      : { className: "" as string, style: undefined };
+    const fingerKeyClass = fingerKeyStyle.className;
     const chipClass = showFingerAssignments && finger
       ? FINGER_CHIP_COLORS[finger]
       : "bg-foreground/80 text-background";
@@ -1474,6 +1561,7 @@ export function VirtualNumpad({
           key.className
         )}
         style={{
+          ...fingerKeyStyle.style,
           width: `${width}px`,
           height: `${height}px`,
         }}
@@ -1536,7 +1624,7 @@ export function VirtualNumpad({
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: remap ? [remap] : [],
       customActions: getCustomActionsForKeyCode(customActions, key.code),
-      finger: showFingerAssignments ? finger : undefined,
+      fingers: showFingerAssignments ? fingers : undefined,
     };
     return (
       <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
@@ -1603,6 +1691,7 @@ export function FingerLegend({ className }: { className?: string }) {
     { key: "middle", labelKey: "fingerLabels.middle" },
     { key: "index", labelKey: "fingerLabels.index" },
     { key: "thumb", labelKey: "fingerLabels.thumb" },
+    { key: "palm", labelKey: "fingerLabels.palm" },
   ];
 
   return (

@@ -174,12 +174,15 @@ export const PAGES_JA = {
     rightMiddle: "右中指",
     rightRing: "右薬指",
     rightPinky: "右小指",
+    leftPalm: "左手のひら",
+    rightPalm: "右手のひら",
     /** 凡例用の左右を含まない短縮形（components/virtual-keyboard.tsx の FingerLegend） */
     pinky: "小指",
     ring: "薬指",
     middle: "中指",
     index: "人差指",
     thumb: "親指",
+    palm: "手のひら",
   },
   /** 読み込み中の表示（navigation-progress / 無限スクロール / プロフィールの外部統計） */
   loading: {
@@ -1897,7 +1900,8 @@ export const PAGES_JA = {
     keyRemapSetting: "リマップ:",
     actionAssignment: "操作割り当て:",
     fingerAssignment: "指割り当て:",
-    selectFinger: "指を選択",
+    fingerMultiHint: "押す指を選択（複数可）",
+    fingerClear: "指の割り当てを解除",
     settingsSuffix: "の設定",
     notUsed: "不使用",
     unassignAction: "割り当てを解除",

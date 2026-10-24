@@ -164,14 +164,14 @@ Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中
 
 ### 共有バッジコンポーネント: `app/components/search-craft-badges.tsx`
 
-サーチクラフトのキーバッジ系コンポーネントの葉モジュール。表示（`search-craft-template-view.tsx`）・Loop表示（`search-craft-loop-view.tsx`）・キー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）の3ファイルが共通で使う。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`FINGER_KEY_COLORS`）・`lib/keybindings`・`lib/remap-utils` のみで、上記3ファイルのいずれにも依存しない（＝どこから import しても循環importにならない）。以前はダイアログ側が循環import回避のため見た目だけを揃えたローカル実装（`TypeKeyBadge`/`ControlBadge`/`CraftMarkerPill` 等）を持っていたが、葉モジュール化によりこの二重実装を解消した。`.claude/rules/ui.md`「キーバッジ」節と同じ規格。見た目を変える場合はこのファイルだけを直せばよい。
+サーチクラフトのキーバッジ系コンポーネントの葉モジュール。表示（`search-craft-template-view.tsx`）・Loop表示（`search-craft-loop-view.tsx`）・キー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）の3ファイルが共通で使う。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、上記3ファイルのいずれにも依存しない（＝どこから import しても循環importにならない）。以前はダイアログ側が循環import回避のため見た目だけを揃えたローカル実装（`TypeKeyBadge`/`ControlBadge`/`CraftMarkerPill` 等）を持っていたが、葉モジュール化によりこの二重実装を解消した。`.claude/rules/ui.md`「キーバッジ」節と同じ規格。見た目を変える場合はこのファイルだけを直せばよい。
 
 | エクスポート | 説明 |
 |---|---|
 | `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` は re-export で既存 import 元を保つ |
 | `KeyBadge` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ付き）。`search-craft-template-view.tsx` は re-export |
 | `ShiftKeyGroup` | 「Shiftを押しながら」入力するキー列全体を囲むラッパー。`search-craft-template-view.tsx` は re-export |
-| `getFingerForKeyCode(keyCode, fingerAssignments)` | キーコード（修飾キー込み表記を含む）から指割り当てを検索する共通ヘルパー（ベースキー＝最後のセグメントで引く）。以前は `search-craft-template-view.tsx`（`ActualKeyBadges`）とダイアログ（`SequenceStepBadge`）でほぼ同じロジックが重複していた |
+| `getFingersForKeyCode(keyCode, fingerAssignments)` | キーコード（修飾キー込み表記を含む）から指割り当てを検索する共通ヘルパー（ベースキー＝最後のセグメントで引く）。以前は `search-craft-template-view.tsx`（`ActualKeyBadges`）とダイアログ（`SequenceStepBadge`）でほぼ同じロジックが重複していた |
 | `ControlKeyKind` / `CONTROL_KEY_META` | 制御キー（backspace/arrowLeft/selectAll/home）の種別と、種別ごとの keyCode・短縮ラベル・逆引き対象キーのメタ |
 | `ControlKeyBadgeView({ kind, info, count })` | 制御キーのバッジ描画部。解決済み `ActualControlKeyInfo` を直接受け取って描画するだけ（二重解決しない）。キー入力順ダイアログは既に解決済みの info を持つためこちらを直接使う |
 | `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持） |

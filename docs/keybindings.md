@@ -332,7 +332,13 @@ JIS配列とUS配列で同一キーコードの表示ラベルが異なる。
 
 `fingerAssignments` はJSON形式で、各キーコードに対応する指の種類を配列で格納する。
 
-指の種類: `left-pinky`, `left-ring`, `left-middle`, `left-index`, `left-thumb`, `right-thumb`, `right-index`, `right-middle`, `right-ring`, `right-pinky`
+指の種類: `left-pinky`, `left-ring`, `left-middle`, `left-index`, `left-thumb`, `left-palm`, `right-palm`, `right-thumb`, `right-index`, `right-middle`, `right-ring`, `right-pinky`（`left-palm` / `right-palm` は手のひら。色トークン `--finger-palm`）
+
+**1キーに複数の指を割り当てられる**（例: 親指と手のひらで押す、人差指と中指で押す）。`/me/keybindings` のキー編集ダイアログでは `FingerToggleGroup`（`finger-toggle-group.tsx`。左手6・右手6のトグル＋解除ボタン）で選ぶ。配列の順序は編集UIの正準順（上記の並び）に揃えて保存する。表示時の扱い:
+
+- 指の**色**（小指/薬指/中指/人差指/親指/手のひら。左右は同色）が1種類だけなら、従来と同じ単色表示（例: `left-index` + `right-index`）
+- 色が2種類以上なら、キー背景を色ごとの等幅バンドに分割して表示する（`getFingerKeyStyle` in `virtual-keyboard.tsx`。`VirtualKeyboard` / `VirtualMouse` / テンキー / サーチクラフトの `KeyBadge` で共通。JIS Enter の L 字は上段・下段で帯が揃う）。枠線とアクション名チップの色は先頭の指のもの
+- キー情報（ツールチップ/モーダル）には割り当てられた全ての指を色ドット＋ラベルで並べる
 
 デフォルトはWASD配置に基づく一般的な指割り当てが定義されている（`DEFAULT_FINGER_ASSIGNMENTS`）。
 

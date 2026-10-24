@@ -20,7 +20,7 @@ import {
   SearchStringText,
   KeyBadge,
   ShiftKeyGroup,
-  getFingerForKeyCode,
+  getFingersForKeyCode,
 } from "@/components/search-craft-badges";
 import { cn } from "@/lib/utils";
 import { ShiftMark } from "@/components/shift-mark";
@@ -147,7 +147,7 @@ export function ActualKeyBadges({
       key={idx}
       keyCode={info.keyCode}
       label={info.displayLabel}
-      finger={getFingerForKeyCode(info.keyCode, fingerAssignments)}
+      fingers={getFingersForKeyCode(info.keyCode, fingerAssignments)}
       isRemapped={info.isRemapped}
       needsShift={info.needsShift}
       remapDetail={info.remapDetail}

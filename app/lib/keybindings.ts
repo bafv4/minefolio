@@ -533,6 +533,8 @@ export type FingerType =
   | "left-middle"
   | "left-index"
   | "left-thumb"
+  | "left-palm"
+  | "right-palm"
   | "right-thumb"
   | "right-index"
   | "right-middle"
@@ -546,6 +548,8 @@ const FINGER_LABEL_KEYS: Record<FingerType, MessageKey> = {
   "left-middle": "fingerLabels.leftMiddle",
   "left-index": "fingerLabels.leftIndex",
   "left-thumb": "fingerLabels.leftThumb",
+  "left-palm": "fingerLabels.leftPalm",
+  "right-palm": "fingerLabels.rightPalm",
   "right-thumb": "fingerLabels.rightThumb",
   "right-index": "fingerLabels.rightIndex",
   "right-middle": "fingerLabels.rightMiddle",

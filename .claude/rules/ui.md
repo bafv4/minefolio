@@ -52,7 +52,7 @@
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
 
 ### キーバッジ（サーチクラフト系）
-実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`FINGER_KEY_COLORS`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
+実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
 
 - 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
 - トーン:

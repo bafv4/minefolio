@@ -70,6 +70,8 @@ const FINGER_DOT_CLASS: Record<FingerType, string> = {
   "left-middle": "bg-finger-middle",
   "left-index": "bg-finger-index",
   "left-thumb": "bg-finger-thumb",
+  "left-palm": "bg-finger-palm",
+  "right-palm": "bg-finger-palm",
   "right-thumb": "bg-finger-thumb",
   "right-index": "bg-finger-index",
   "right-middle": "bg-finger-middle",
@@ -103,7 +105,8 @@ export type KeyInfoData = {
   /** このキーをトリガーとするカスタムアクション（複数対応） */
   customActions?: KeyInfoCustomAction[];
   /** 指割り当て */
-  finger?: FingerType;
+  /** 割り当てられた指（複数可）。全部を色ドット＋ラベルで並べる */
+  fingers?: FingerType[];
   /** キーボードレイアウト（JIS/US 判定用） */
   layout?: string | null;
 };
@@ -192,7 +195,7 @@ function RemapRow({
 /** Tooltip と Dialog で共有する Body 部分（タイトル含めない） */
 function KeyInfoBody({ info }: { info: KeyInfoData }) {
   const t = useT();
-  const { bindings = [], remaps = [], customActions = [], finger, layout = null } = info;
+  const { bindings = [], remaps = [], customActions = [], fingers = [], layout = null } = info;
   return (
     <div className="space-y-2 text-foreground">
       {remaps.length > 0 && (
@@ -266,18 +269,21 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
           </div>
         </div>
       )}
-      {finger && (
-        <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40">
-          <span
-            className={cn(
-              "inline-block w-2 h-2 rounded-full",
-              FINGER_DOT_CLASS[finger],
-            )}
-            aria-hidden
-          />
-          <span className="text-muted-foreground">
-            {t("keybindings.fingerPrefix")}: {getFingerLabel(t, finger)}
-          </span>
+      {fingers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs pt-1 border-t border-border/40">
+          <span className="text-muted-foreground">{t("keybindings.fingerPrefix")}:</span>
+          {fingers.map((finger) => (
+            <span key={finger} className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <span
+                className={cn(
+                  "inline-block w-2 h-2 rounded-full",
+                  FINGER_DOT_CLASS[finger],
+                )}
+                aria-hidden
+              />
+              {getFingerLabel(t, finger)}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -287,7 +293,7 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
 /**
  * キー要素をラップし、デスクトップでは Tooltip、モバイル（< md）では Dialog でキー情報を表示する。
  *
- * - 情報がない (`bindings` も `remaps` も `customActions` も `finger` も空) かつ `alwaysShow=false` の場合は素通し。
+ * - 情報がない (`bindings` も `remaps` も `customActions` も `fingers` も空) かつ `alwaysShow=false` の場合は素通し。
  * - `alwaysShow=true` のときは情報が無くてもタイトルだけの Tooltip/Dialog を出す（カスタムキー用）。
  */
 export function KeyInfoTrigger({
@@ -303,7 +309,7 @@ export function KeyInfoTrigger({
     (info.bindings?.length ?? 0) > 0 ||
     (info.remaps?.length ?? 0) > 0 ||
     (info.customActions?.length ?? 0) > 0 ||
-    !!info.finger;
+    (info.fingers?.length ?? 0) > 0;
 
   // SSR ではデスクトップとして扱い、ハイドレーション後にモバイルなら Dialog に切替
   const isMobile = useMediaQuery("(max-width: 767px)", false);
