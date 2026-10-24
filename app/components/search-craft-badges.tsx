@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
-import { FINGER_KEY_COLORS } from "@/components/virtual-keyboard";
+import { getFingerKeyStyle } from "@/components/virtual-keyboard";
 import { KeyLabelText, ShiftMark } from "@/components/shift-mark";
 import { getKeyLabel, getKeyCombinationLabel, type FingerType } from "@/lib/keybindings";
 import {
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  * `search-craft-template-view.tsx`（表示・実入力キー）・`search-craft-loop-view.tsx`
  * （Loop の制御キー・クラフト実行マーカー）・`search-craft-key-sequence-dialog.tsx`
  * （キー入力順ダイアログ）が共通で使う。依存は ui/tooltip・shift-mark・item-icon・
- * virtual-keyboard（FINGER_KEY_COLORS）・lib/keybindings・lib/remap-utils のみで、
+ * virtual-keyboard（getFingerKeyStyle）・lib/keybindings・lib/remap-utils のみで、
  * 上記3ファイルのいずれにも依存しない（＝どこから import しても循環importにならない）。
  * `.claude/rules/ui.md`「キーバッジ」節と同じ規格。見た目を変える場合はこのファイルだけを直せばよい。
  */
@@ -64,21 +64,25 @@ export function SearchStringText({ value }: { value: string }) {
 export function KeyBadge({
   keyCode,
   label,
-  finger,
+  fingers,
   isRemapped,
   needsShift,
   remapDetail,
 }: {
   keyCode: string;
   label: string;
-  finger?: FingerType;
+  /** 割り当てられた指（複数可）。色が2種類以上ならバッジ背景を色ごとのバンドに分割する */
+  fingers?: FingerType[];
   isRemapped?: boolean;
   needsShift?: boolean;
   /** リマップされている場合のツールチップ詳細（「リマップ: 物理 → 出力」表示用） */
   remapDetail?: RemapDetail;
 }) {
   const t = useT();
-  const fingerClass = finger ? FINGER_KEY_COLORS[finger] : "";
+  const hasFinger = !!fingers && fingers.length > 0;
+  const fingerKeyStyle = getFingerKeyStyle(fingers);
+  // Shift 同時押しの警告トーンが勝つ場合は、指のバンド背景を載せない
+  const showFingerBands = !(needsShift && !isRemapped);
 
   // ツールチップのテキスト。物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と
   // 同じ「リマップ: 物理 → 出力」形式（フル名称。⇧ 等の短縮記号は使わない）
@@ -99,12 +103,13 @@ export function KeyBadge({
         <span
           className={cn(
             "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-            finger
-              ? fingerClass
+            hasFinger
+              ? fingerKeyStyle.className
               : "bg-secondary/50 border-border/50 text-muted-foreground",
             isRemapped && "ring-2 ring-primary ring-offset-1 ring-offset-background",
             needsShift && !isRemapped && "border-warning/50 bg-warning/10"
           )}
+          style={showFingerBands ? fingerKeyStyle.style : undefined}
         >
           <KeyLabelText label={label} />
         </span>
@@ -142,18 +147,18 @@ export function ShiftKeyGroup({ children }: { children?: ReactNode }) {
 }
 
 /**
- * キーコード（"Shift+KeyA" のような修飾キー込み表記を含む）から、指割り当てを検索する
+ * キーコード（"Shift+KeyA" のような修飾キー込み表記を含む）から、指割り当て（複数可）を検索する
  * （ベースキー＝最後のセグメントで引く。大文字小文字ゆらぎも吸収）。
- * `fingerAssignments` 未指定なら常に undefined。
+ * `fingerAssignments` 未指定、または割り当てが無ければ undefined。
  */
-export function getFingerForKeyCode(
+export function getFingersForKeyCode(
   keyCode: string,
   fingerAssignments?: Record<string, FingerType[]>,
-): FingerType | undefined {
+): FingerType[] | undefined {
   if (!fingerAssignments) return undefined;
   const baseKeyCode = keyCode.includes("+") ? (keyCode.split("+").pop() ?? keyCode) : keyCode;
   const fingers = fingerAssignments[baseKeyCode] || fingerAssignments[baseKeyCode.toLowerCase()];
-  return fingers?.[0];
+  return fingers && fingers.length > 0 ? fingers : undefined;
 }
 
 // ============================================

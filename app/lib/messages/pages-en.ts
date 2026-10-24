@@ -168,11 +168,14 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     rightMiddle: "R middle",
     rightRing: "R ring",
     rightPinky: "R pinky",
+    leftPalm: "L palm",
+    rightPalm: "R palm",
     pinky: "Pinky",
     ring: "Ring",
     middle: "Middle",
     index: "Index",
     thumb: "Thumb",
+    palm: "Palm",
   },
   loading: {
     page: "Loading…",
@@ -1061,6 +1064,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     skinModelSlim: "Slim (Alex)",
     skinModelHint:
       "Choose the arm width of your skin. The slim model has thin (3-pixel) arms.",
+    capeDisplayLabel: "Cape display",
+    capeDisplayCape: "Cape",
+    capeDisplayElytra: "Elytra",
+    capeDisplayHidden: "Hidden",
+    capeDisplayHint:
+      "Choose what is shown on the back when a cape is available. Elytra uses the same image as the cape.",
     basicInfo: "Basic info",
     displayName: "Display name",
     fallbackToMcidOrSlug: "If left blank, {value} will be used",
@@ -1942,7 +1951,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     keyRemapSetting: "Remap:",
     actionAssignment: "Action binding:",
     fingerAssignment: "Finger assignment:",
-    selectFinger: "Select a finger",
+    fingerMultiHint: "Select the fingers used (multiple allowed)",
+    fingerClear: "Clear finger assignment",
     settingsSuffix: " settings",
     notUsed: "Unused",
     unassignAction: "Clear binding",
@@ -2036,6 +2046,30 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Upload a skin image to show on your profile. When set, it takes priority over the skin from the Mojang API.",
     customSkinActive:
       "A custom skin is active. It takes priority over the Mojang API skin.",
+  },
+  capeUploader: {
+    pngOnly: "Only PNG images can be uploaded",
+    maxSize: "The file must be 1MB or smaller",
+    invalidSize:
+      "Cape images must be 64x32, 22x17, 128x64, 256x128, or 512x256 pixels",
+    loadError: "Failed to load the image",
+    saveFailed: "Failed to save the cape",
+    uploadSuccess: "Cape uploaded",
+    uploadFailed: "Upload failed",
+    deleteFailed: "Failed to delete the cape",
+    deleteSuccess: "Cape deleted",
+    uploading: "Uploading…",
+    changeCape: "Change cape",
+    uploadCape: "Upload a cape",
+    deleteCape: "Delete cape",
+    uploadHint:
+      "PNG, 64x32 or 22x17 (legacy), or 128x64 / 256x128 / 512x256 pixels, 1MB or smaller",
+    currentCape: "Current custom cape",
+    customCapeTitle: "Custom cape",
+    customCapeDesc:
+      "Upload a cape image to show on your profile. When set, it takes priority over your Mojang cape.",
+    customCapeActive:
+      "A custom cape is active. It takes priority over the Mojang cape.",
   },
   meGuides: {
     title: "Guides - Minefolio",

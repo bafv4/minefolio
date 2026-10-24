@@ -13,17 +13,19 @@ import { blobUrlToPathname, collectBlobPathnames } from "../../app/lib/blob-url"
 import { listAllBlobs as listAllBlobsShared } from "../../app/lib/blob-storage.server";
 
 /** Blob のパス分類（プレフィックスは各アップロード経路の実装と対） */
-export type BlobCategory = "guideInline" | "guideCover" | "skin" | "unknown";
+export type BlobCategory = "guideInline" | "guideCover" | "skin" | "cape" | "unknown";
 
 export const CATEGORY_LABEL: Record<BlobCategory, string> = {
   guideInline: "ガイド本文の画像",
   guideCover: "ガイドのカバー画像",
   skin: "カスタムスキン",
+  cape: "カスタムマント",
   unknown: "その他（分類不明）",
 };
 
 export function categorize(pathname: string): BlobCategory {
   if (pathname.startsWith("skins/")) return "skin";
+  if (pathname.startsWith("capes/")) return "cape";
   if (pathname.startsWith("guides/")) {
     // guides/<userId>/<guideId>/images/<uuid>.<ext> / guides/<userId>/<guideId>/cover-<suffix>.<ext>
     return pathname.includes("/images/") ? "guideInline" : "guideCover";
@@ -45,6 +47,7 @@ export interface ReferenceScan {
   referenced: Set<string>;
   guideCount: number;
   skinCount: number;
+  capeCount: number;
   /** 本文中の <img> タグ総数（抽出漏れの目安。外部画像も含む） */
   imgTagCount: number;
 }
@@ -85,10 +88,21 @@ export async function collectReferences(client: Client): Promise<ReferenceScan> 
     }
   }
 
+  // カスタムマント（capes/<userId>/…）。スキンと同じく users の1列が唯一の参照元
+  const capes = await client.execute(
+    "SELECT custom_cape_url FROM users WHERE custom_cape_url IS NOT NULL",
+  );
+  for (const row of capes.rows) {
+    for (const pathname of collectBlobPathnames([row.custom_cape_url as string | null])) {
+      referenced.add(pathname);
+    }
+  }
+
   return {
     referenced,
     guideCount: guides.rows.length,
     skinCount: users.rows.length,
+    capeCount: capes.rows.length,
     imgTagCount,
   };
 }
@@ -176,7 +190,7 @@ export function formatBytes(bytes: number): string {
 
 /** 分類別の件数・サイズを表形式で出す */
 export function printByCategory(orphans: OrphanBlob[]): void {
-  const order: BlobCategory[] = ["guideInline", "guideCover", "skin", "unknown"];
+  const order: BlobCategory[] = ["guideInline", "guideCover", "skin", "cape", "unknown"];
   for (const category of order) {
     const rows = orphans.filter((o) => o.category === category);
     if (rows.length === 0) continue;

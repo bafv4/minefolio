@@ -167,6 +167,73 @@ describe("action - profileVisibility の検証", () => {
   });
 });
 
+describe("action - capeDisplay の検証", () => {
+  async function findCapeDisplay(userId: string): Promise<string | undefined> {
+    const row = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    return row?.capeDisplay;
+  }
+
+  it.each(["cape", "elytra", "hidden"])("有効値（%s）は保存される", async (value) => {
+    // 保存値と異なる初期値から始めて、確実に書き換わったことを見る
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      capeDisplay: value === "cape" ? "hidden" : "cape",
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ capeDisplay: value }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await findCapeDisplay(user.id)).toBe(value);
+  });
+
+  it("allowlist 外の値（evil）は invalidOption エラーになり、DB は無変更", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      capeDisplay: "elytra",
+    });
+    signInAs("discord-runner");
+    const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+    const res = await callAction(baseFormData({ capeDisplay: "evil" }));
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+  });
+
+  it("空文字も不正値として扱い、列を上書きしない", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      capeDisplay: "elytra",
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ capeDisplay: "" }));
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(await findCapeDisplay(user.id)).toBe("elytra");
+  });
+
+  it("未送信のときは capeDisplay 列を上書きせず、他の項目は保存される", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      capeDisplay: "elytra",
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ displayName: "Renamed" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row?.capeDisplay).toBe("elytra");
+    expect(row?.displayName).toBe("Renamed");
+  });
+});
+
 describe("action - socialLinks の platform 検証", () => {
   it("allowlist 外の platform（evil）は invalidOption エラーになる", async () => {
     await setupUser();

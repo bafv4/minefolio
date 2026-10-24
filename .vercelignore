@@ -26,3 +26,6 @@ __tests__/
 # IDE
 .vscode/
 .idea/
+
+# graphify（開発用ナレッジグラフ。アプリの実行・ビルドには不要）
+graphify-out/

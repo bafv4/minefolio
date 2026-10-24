@@ -16,6 +16,9 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/skin` | GET | 不要 | スキン画像取得 |
 | `/api/me/skin` | POST/DELETE | 必須 | カスタムスキン保存・削除 |
 | `/api/me/skin/upload-token` | POST | 必須 | スキンアップロードトークン発行 |
+| `/api/cape` | GET | 不要 | Mojang マント画像取得（中継） |
+| `/api/me/cape` | POST/DELETE | 必須 | カスタムマント保存・削除 |
+| `/api/me/cape/upload-token` | POST | 必須 | マントアップロードトークン発行 |
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
@@ -60,6 +63,23 @@ Minecraftスキン画像を返す。
 
 ---
 
+### `GET /api/cape`
+
+Mojang のマント画像を返す（サーバーが sessionserver から取得して中継。ブラウザは Mojang へ直接通信しない）。
+
+**パラメータ:**
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `uuid` | string | ○ | Minecraft UUID（ハイフン有無の32桁hex。不正は 400） |
+
+**レスポンス:** `image/png`（バイナリ）。マントが無い場合は `404`、Mojang 側の失敗は `502`
+
+**キャッシュ:** 200 / 404 は `Cache-Control: public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400`、502 は `max-age=300, s-maxage=300`
+
+**関連ファイル:** `app/routes/api/cape.ts`、仕様は [profiles.md](./profiles.md#マントcape)
+
+---
+
 ### `GET /api/guides/search`
 
 公開ガイドをタイトルで検索する。
@@ -67,7 +87,9 @@ Minecraftスキン画像を返す。
 **パラメータ:**
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `q` | string | ○ | 検索クエリ（1〜100文字） |
+| `q` | string | ○ | 検索クエリ（前後の空白を除去し、先頭100文字に切り詰め） |
+
+`limit` などの件数指定パラメータはない。
 
 **レスポンス:**
 ```json
@@ -87,8 +109,11 @@ Minecraftスキン画像を返す。
 }
 ```
 
-- 最大10件、更新日時の降順
-- クエリが1文字未満の場合は空配列
+- 検索対象は `title` のみ（部分一致の `LIKE`。`%` `_` はエスケープしてリテラル扱い。`summary` は検索対象外でレスポンスに含めるだけ）
+- 対象は公開済みガイド（`isPublished`）かつ著者のプロフィールが `public` のもののみ
+- 最大10件固定、更新日時（`updatedAt`）の降順
+- `q` が未指定・空（トリム後0文字）の場合は `200` で `{ "guides": [] }`（4xx は返さない）
+- `Cache-Control` ヘッダは付けない
 
 **関連ファイル:** `app/routes/api/guides/search.ts`
 
@@ -197,7 +222,8 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 **パラメータ:**
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `sections` | string | △ | カンマ区切り（デフォルト: `actions`） |
+| `sections` | string | △ | カンマ区切り（デフォルト: `actions`）。各要素はトリム、空要素は除去、重複は許容。許可リスト外の値や、除去後に空になる指定は `400` |
+| `userSlugs` | string | △ | カンマ区切りのスラッグ一覧（各要素はトリム、完全一致＝大文字小文字を区別）。指定すると対象を絞り込む。未指定なら全公開ユーザー。除去後に空になる指定、または一覧ローダーから返らない slug を1つでも含む指定は `400` |
 
 **セクション:**
 
@@ -212,11 +238,16 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 - `mouse` の `cm/360` `Cursor Speed` は計算できない場合は空欄。`Win Sens Multiplier` も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` は有効範囲（0〜200%）外の値も生データのまま出力（詳細: [`docs/keybindings.md`](./keybindings.md)）
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
-- 公開プロフィールのみ対象
+- 公開プロフィールのみ対象。キー配置一覧ページと同じ共有ローダー（`loadKeybindingsListPlayers`）を使うため、視聴者ロール除外・キー配置／リマップ／カスタムアクションがすべて空のユーザー除外・メインプリセットのスナップショット優先も一覧と同一
+- **不正な指定は `400`**（`{ "error": "..." }` の JSON。固定の英語文言）。DB アクセス前に `sections` → `userSlugs`（空判定）の順で検証し、その後 `userSlugs` の存在照合を行う
+  - `sections` が空（`sections=` / `sections=,` 等）、または許可リスト（`actions` / `remaps` / `custom-actions` / `mouse`。実装の `CSV_SECTIONS` 定数）外の値を含む。パラメータ自体が無い場合は `actions`
+  - `userSlugs` が空（`userSlugs=` / `userSlugs=,` 等）、または `loadKeybindingsListPlayers` から返らない slug を含む。返らない理由（存在しない・非公開・視聴者ロール・設定が空）はレスポンスで区別しない（非公開ユーザーの存在を漏らさないため）。見つからなかった slug は `notFound` 配列で返す（呼び出し側が入力した値）
+  - 例: `{ "error": "Unknown sections: foo. Allowed: actions, remaps, custom-actions, mouse" }` / `{ "error": "Some userSlugs were not found or are not exportable", "notFound": ["ghost"] }`
+- CSV の見出し・キー名ラベルは閲覧者のロケール（`resolveLocale`）に合わせる。先頭が `=` `+` `-` `@` タブ CR の値には CSV インジェクション対策で `'` を前置する
 
-**レスポンス:** `text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="keybindings.csv"`
+**レスポンス:** `text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="keybindings.csv"`（`Cache-Control` ヘッダは付けない。`userSlugs` 未指定時のみ一覧データを60秒メモリキャッシュ）
 
-**関連ファイル:** `app/routes/api/keybindings-csv.ts`
+**関連ファイル:** `app/routes/api/keybindings-csv.ts`, `app/lib/keybindings-list.server.ts`
 
 ---
 

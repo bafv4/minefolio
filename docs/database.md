@@ -247,6 +247,9 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `custom_skin_url` | text? | Vercel Blob の URL |
 | `custom_skin_model` | enum? | `default` / `slim` |
 | `custom_skin_updated_at` | ts? | |
+| `custom_cape_url` | text? | カスタムマントの Vercel Blob URL |
+| `custom_cape_updated_at` | ts? | |
+| `cape_display` | enum | 既定 `cape`。3D 表示時の背中装備（`cape`=マント / `elytra`=マントのテクスチャでエリトラ / `hidden`=非表示）。マントの出所（カスタム or Mojang）に関係なく適用。反映は `scripts/add-cape-columns.ts` |
 | `created_at` | ts | |
 | `updated_at` | ts | |
 | `pinned_speedrun_records` | json? | ピン留めする run ID の配列 |

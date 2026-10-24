@@ -332,7 +332,13 @@ JIS配列とUS配列で同一キーコードの表示ラベルが異なる。
 
 `fingerAssignments` はJSON形式で、各キーコードに対応する指の種類を配列で格納する。
 
-指の種類: `left-pinky`, `left-ring`, `left-middle`, `left-index`, `left-thumb`, `right-thumb`, `right-index`, `right-middle`, `right-ring`, `right-pinky`
+指の種類: `left-pinky`, `left-ring`, `left-middle`, `left-index`, `left-thumb`, `left-palm`, `right-palm`, `right-thumb`, `right-index`, `right-middle`, `right-ring`, `right-pinky`（`left-palm` / `right-palm` は手のひら。色トークン `--finger-palm`）
+
+**1キーに複数の指を割り当てられる**（例: 親指と手のひらで押す、人差指と中指で押す）。`/me/keybindings` のキー編集ダイアログでは `FingerToggleGroup`（`finger-toggle-group.tsx`。左手6・右手6のトグル＋解除ボタン）で選ぶ。配列の順序は編集UIの正準順（上記の並び）に揃えて保存する。表示時の扱い:
+
+- 指の**色**（小指/薬指/中指/人差指/親指/手のひら。左右は同色）が1種類だけなら、従来と同じ単色表示（例: `left-index` + `right-index`）
+- 色が2種類以上なら、キー背景を色ごとの等幅バンドに分割して表示する（`getFingerKeyStyle` in `virtual-keyboard.tsx`。`VirtualKeyboard` / `VirtualMouse` / テンキー / サーチクラフトの `KeyBadge` で共通。JIS Enter の L 字は上段・下段で帯が揃う）。枠線とアクション名チップの色は先頭の指のもの
+- キー情報（ツールチップ/モーダル）には割り当てられた全ての指を色ドット＋ラベルで並べる
 
 デフォルトはWASD配置に基づく一般的な指割り当てが定義されている（`DEFAULT_FINGER_ASSIGNMENTS`）。
 
@@ -397,6 +403,7 @@ type ControllerSettings = {
 
 - 列定義は `COLUMN_PRESETS`（`keybindings-columns.tsx`）でプリセット名＝タブ名として管理する
 - **各カラムはドラッグでリサイズ可能**（TanStack Table の `columnResizeMode: "onChange"`）。`KeybindingsTable` は `getSize()` から `grid-template-columns` を算出する
+- テーブルは **TanStack Table v9**（`useTable`）。使う機能だけを `keybindingsTableFeatures`（`keybindings-columns.tsx`）に明示登録している（`rowSortingFeature` ＋ `sortedRowModel` / `columnSizingFeature` / `columnResizingFeature`、ソート関数は数値列用の `basic` のみ）。列定義の型は `KeybindingsColumnDef`（= `ColumnDef<KeybindingsFeatures, KeybindingsRow>`）。列の可視性機能は使わないため `getAllLeafColumns()` / `row.getAllCells()` で描画する。リサイズ中の列幅は `table.state.columnSizing`（v8 の `getState()` は廃止）
 - ヘッダーは折り返さない（`whitespace-nowrap` + `truncate`）。セルは `overflow-hidden` で列幅にクリップ
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 

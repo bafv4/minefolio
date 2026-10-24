@@ -60,7 +60,7 @@
   - **テーブル行・列ハンドル**（Notion 風、デスクトップのみ）— `toolbar/table-handles.tsx`。ホバー中の行の左端 / 列の上端にピル型ハンドルを表示。クリックで行・列全体を CellSelection で選択（`.selectedCell` ハイライト）し、メニューから行・列の追加・削除、スタイル一括適用（背景色 / 文字色 / 文字揃え）、テーブル削除ができる
 - モバイル/タッチ完全対応: `(hover:none)` で分岐し、バブルの代わりに下部固定ツールバー（`toolbar/mobile-toolbar.tsx`）。ブロックハンドルはタッチ時 `selectionUpdate` ベースで追従。
 - アクセシビリティ: `role`/`aria-label`、保存状態の `aria-live`、本文の `role=textbox`。
-- 自動保存（`hooks/use-auto-save.ts`、debounce 2000ms、最終保存時刻表示）と未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
+- 未保存離脱警告（`hooks/use-unsaved-warning.ts`、useBlocker + beforeunload）。
 
 #### ディレクトリ構成（`app/components/guide-editor/`）
 
@@ -73,7 +73,7 @@
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
 | `panels/` | metadata-fields / color-picker / font-size-picker / settings-dialog / embed-dialog / youtube-dialog / link-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
-| `hooks/` | use-guide-editor / use-auto-save / use-image-upload / use-unsaved-warning |
+| `hooks/` | use-guide-editor / use-guide-save / use-editor-rerender / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
 | `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
 | `lib/image-crop.ts` | トリミング矩形の計算（純粋関数 / DOM 非依存） |
@@ -141,7 +141,7 @@
 
 **ガイド削除時**（`app/routes/my-guides/index.tsx` の `_action="delete"` → `app/lib/content-cleanup.server.ts` の `deleteGuide()`）は、翻訳キャッシュ削除 + `guides` 行削除を `db.transaction()` で原子化したうえで、トランザクション成功後に `cleanupGuideBlobs()` を `runAfterResponse()` 経由で呼ぶ。`cleanupGuideBlobs()` は `guides/<userId>/<guideId>/` 配下の Blob（本文画像・カバー・ドラフトカバー）と、削除された行の本文/カバー/ドラフト列が参照していた `guides/<userId>/` 配下の Blob をあわせて削除する。ただし著者の残ガイド（他ガイド・ドラフト）がまだ参照しているパスは保護し、削除対象から外す（同一著者内のコピー参照を壊さないため）。この保護判定用クエリは、著者の残ガイドのうち本文/カバー/ドラフト列のいずれかが Blob ホスト文字列（`%blob.vercel-storage.com%`）を含む行だけを対象にする LIKE 事前絞り込みを行う（Blob 参照ゼロのガイドの本文転送を削減する最適化。**候補 pathname ごとの LIKE 絞りは percent-encoding 不一致で誤削除を招くため行わない**）。**他ユーザーのガイドへコピーされた画像参照までは保護しない**（cross-user 参照は現状のカバー画像即時削除と同じ意味論として許容する）。`BLOB_READ_WRITE_TOKEN` 未設定なら no-op。
 
-**アカウント削除時**（`app/routes/me/edit.tsx` の `_action="delete_account"` → `deleteUserAccount()`）は、本体削除のトランザクション成功後に `cleanupUserBlobs()` を `runAfterResponse()` 経由で呼ぶ。`cleanupUserBlobs()` は `guides/<userId>/` と `skins/<userId>/` の2 prefix を丸ごと削除する（著者の全ガイド・カスタムスキンをまとめて消す）。
+**アカウント削除時**（`app/routes/me/edit.tsx` の `_action="delete_account"` → `deleteUserAccount()`）は、本体削除のトランザクション成功後に `cleanupUserBlobs()` を `runAfterResponse()` 経由で呼ぶ。`cleanupUserBlobs()` は `guides/<userId>/` と `skins/<userId>/` と `capes/<userId>/` の3 prefix を丸ごと削除する（著者の全ガイド・カスタムスキン・カスタムマントをまとめて消す）。
 
 上記2経路でカバーしきれない残骸（トリミングで残る元画像・差し替えで参照が外れた画像・cross-user 参照の孤児など）は、cron を置かず **`scripts/` のスクリプトを必要なときに手で実行**して回収する。トリミングは元画像を残す（同じ Blob が他のガイドやドラフト/公開版から参照されている可能性があり、参照追跡なしに消すと表示が壊れるため）。
 

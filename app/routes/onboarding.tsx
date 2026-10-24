@@ -30,6 +30,7 @@ import {
   refreshSrcRankingsForUser,
 } from "@/lib/targeted-refresh.server";
 import { cn } from "@/lib/utils";
+import { resolveCapeProps } from "@/lib/cape";
 import { useLocale, useT } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,11 +56,9 @@ import {
   ExternalLink,
   Info,
   Loader2,
-  Twitch,
-  Twitter,
   UserRound,
-  Youtube,
 } from "lucide-react";
+import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 
 // enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
 const VISIBILITIES = users.profileVisibility.enumValues;
@@ -242,6 +241,8 @@ export async function loader({ request }: Route.LoaderArgs) {
           pronouns: existingUser.pronouns,
           customSkinUrl: existingUser.customSkinUrl,
           slimSkin: existingUser.slimSkin,
+          customCapeUrl: existingUser.customCapeUrl,
+          capeDisplay: existingUser.capeDisplay,
           showRankedStats: existingUser.showRankedStats,
           showPacemanStats: existingUser.showPacemanStats,
           showPacemanOnHome: existingUser.showPacemanOnHome,
@@ -914,6 +915,11 @@ function SkinStep({
               elevation={5}
               zoom={0.9}
               slim={user.slimSkin ?? false}
+              {...resolveCapeProps({
+                uuid: user.uuid,
+                customCapeUrl: user.customCapeUrl,
+                capeDisplay: user.capeDisplay,
+              })}
               asImage
             />
           </div>

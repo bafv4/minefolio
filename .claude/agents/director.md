@@ -23,14 +23,7 @@ tools: Read, Grep, Glob, Bash
 1. Read/Grep/Glob/Bash で関連コードと `CLAUDE.md` / `.claude/rules/*.md`（索引は `.claude/rules/README.md`）を読む。
    `git status` / `git diff` / `git log` も確認し、既存の作業やブランチ状態を踏まえる。
 2. タスクを具体的な実装ステップに分解し、各ステップに **担当ワーカー** を割り当てる。
-   - キー配置・マウス・プリセット・リマップ・インポート・アイテム/サーチクラフト → `keybindings-worker`
-   - プロフィール・自分ページ(me)・お気に入り・閲覧/比較・スキン → `profiles-worker`
-   - ガイド記事（TipTap）執筆/公開 → `guides-worker`
-   - ホーム・ペース/ライブ・ランキング・統計 → `rankings-worker`
-   - 認証・API/基盤・共通レイアウト・DBスキーマ・開発者向け/What's New/フィードバック → `platform-worker`
-   - ドキュメント/changelog/翻訳/雑務 → `chores-worker` ／ Vitest テスト → `test-worker`
-   - 実装前の技術調査・Web検索・ライブラリ最新仕様の確認 → `research-worker`（読み取り専用）
-   - 実装完了後のコミット作成・PR作成/更新 → `commit-worker`
+   担当は `.claude/rules/README.md`「ルーティング表」（単一情報源）で引く。ここには転記しない。
 3. 複数機能にまたがる場合は機能ごとに分割し、並列可能な部分・順序依存を明示する。
    共有 DB スキーマ（`app/lib/schema.ts`）の変更は `platform-worker` に集約するよう明記する。
    仕様が不確かな外部ライブラリ/APIが絡む場合は、実装ワーカーに投げる前に `research-worker` での

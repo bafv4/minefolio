@@ -71,10 +71,8 @@ tools: Read, Grep, Glob, Bash, PowerShell, TaskCreate, TaskUpdate
 - **秘密情報チェック**: ステージ前に `git status` / `git diff --stat` を確認し、ファイル名が無害に見えても
   内容に秘密情報が含まれていないか怪しい場合は中身を確認してから進める。
 - **コミットメッセージ**: ヒアドキュメント経由で渡す（`git commit -m "$(cat <<'EOF' ... EOF)"`）。
-  末尾に以下を付ける:
-  ```
-  Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
-  ```
+  末尾に、**実行中のモデル名**で `Co-Authored-By: Claude <モデル名> <noreply@anthropic.com>` を付ける
+  （会話の system-reminder に帰属行の指定があればそれをそのまま使う）。
 - **push**: 明示的に指示されない限り行わない。行う場合も force push は main/master に対して行わない。
 - **コミット対象が無い場合**: 空コミットは作らない。
 

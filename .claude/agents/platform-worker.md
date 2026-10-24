@@ -32,8 +32,9 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 ## DBスキーマの調整役
 
 `app/lib/schema.ts` は全機能で共有される。スキーマ変更は各機能ワーカーではなくここに集約し、
-呼び出し元（メイン）経由で影響範囲を確認してから行う（CLAUDE.md の DB 反映運用＝`db:push` / `db:push:remote`、
-falsy デフォルト NOT NULL 列は `scripts/` の dry-run 既定 + `--apply` スクリプトで手動 DDL）。
+呼び出し元（メイン）経由で影響範囲を確認してから行う。反映経路は `db-apply` スキルに従う
+（`db:push` が中断・TRUNCATE 提案するときは `scripts/` の一回限りスクリプトで DDL を適用し、
+`pnpm gen:test-schema` でテスト用 DDL を更新する）。
 
 ## 遵守事項
 

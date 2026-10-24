@@ -17,12 +17,12 @@ import {
   Columns3,
   ImageIcon,
   Film,
-  Youtube as YoutubeIcon,
   Link as LinkIcon,
   FileText,
   Keyboard,
   Package,
 } from "lucide-react";
+import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import type { SlashItem, SlashItemDef } from "../types";
 import type { MessageKey, Translator } from "@/lib/messages";
 import {

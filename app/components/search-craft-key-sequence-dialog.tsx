@@ -16,7 +16,7 @@ import {
   KeyBadge,
   ControlKeyBadgeView,
   CraftMarker,
-  getFingerForKeyCode,
+  getFingersForKeyCode,
 } from "@/components/search-craft-badges";
 import type { KeyboardLayout } from "@/lib/keybindings";
 import type { RemapInfo, UiRemapInfo } from "@/lib/remap-utils";
@@ -76,7 +76,7 @@ function SequenceStepBadge({
         <KeyBadge
           keyCode={step.info.keyCode}
           label={step.info.displayLabel}
-          finger={getFingerForKeyCode(step.info.keyCode, fingerAssignments)}
+          fingers={getFingersForKeyCode(step.info.keyCode, fingerAssignments)}
           isRemapped={step.info.isRemapped}
           needsShift={step.info.needsShift}
           remapDetail={step.info.remapDetail}

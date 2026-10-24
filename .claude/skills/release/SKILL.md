@@ -112,7 +112,17 @@ description: Minefolio のバージョンリリース作業。origin/main と de
 
 8. **仕様変更が `docs/` に未反映なら追随させる**（`docs/` の該当ファイル、必要なら `.claude/rules/`）。
 
-9. **コミットする。**
+9. **ナレッジグラフ（`graphify-out/`）のドキュメント分を更新する。**
+   コードのノードは post-commit フックが AST で自動更新するが、`docs/` の仕様書は semantic 抽出（LLM）なので
+   自動では更新されない。リリース範囲で `docs/` に変更があれば `/graphify --update` を実行する
+   （対象は `.graphifyignore` で コード ＋ `docs/` 直下の仕様書に絞ってある）。
+   変更が無ければこの手順は飛ばす。グラフの更新はリリースコミットと分けてコミットする。
+
+   ```
+   chore(graphify): ナレッジグラフを更新（vX.Y.Z までの docs を反映）
+   ```
+
+10. **コミットする。**
 
    ```
    chore(release): vX.Y.Z（チェンジログ作成・バージョン更新）

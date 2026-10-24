@@ -44,7 +44,7 @@ const client = createClient({ url, authToken });
 await runScript(client, async () => {
   const scan = await collectReferences(client);
   console.log(
-    `\nDB: ガイド ${scan.guideCount} 件 / スキン ${scan.skinCount} 件 → 参照パス ${scan.referenced.size} 個`,
+    `\nDB: ガイド ${scan.guideCount} 件 / スキン ${scan.skinCount} 件 / マント ${scan.capeCount} 件 → 参照パス ${scan.referenced.size} 個`,
   );
 
   const blobs = await listAllBlobs(token, (count) =>

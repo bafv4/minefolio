@@ -7,7 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Share2, Twitter, Link2, Check } from "lucide-react";
+import { Share2, Link2, Check } from "lucide-react";
+import { Twitter } from "@/components/brand-icons";
 import { toast } from "sonner";
 
 interface ShareButtonProps {

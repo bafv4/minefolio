@@ -1,6 +1,6 @@
 // ガイドエディタの共有型定義。
 import type { Editor } from "@tiptap/core";
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import type { CropRect } from "./lib/image-crop";
 import type { MessageKey } from "@/lib/messages";
 
@@ -71,7 +71,7 @@ export interface SlashItem {
   /** 検索用キーワード（日英、部分一致） */
   keywords: string[];
   /** アイコン */
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   /** グループ見出し（基本ブロック / 埋め込み 等） */
   group: string;
   /**

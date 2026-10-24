@@ -17,6 +17,7 @@ import { importFromLegacy } from "@/lib/legacy-import";
 import { createId } from "@paralleldrive/cuid2";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { generateSlug } from "@/lib/slug";
+import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
 import { recordSlugChange } from "@/lib/slug-history.server";
 import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
 import {
@@ -82,9 +83,6 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
-  Youtube,
-  Twitch,
-  Twitter,
   Share2,
   Video,
   Settings,
@@ -96,13 +94,16 @@ import {
   ArrowDown,
   X,
 } from "lucide-react";
+import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { SkinUploader } from "@/components/skin-uploader";
+import { CapeUploader } from "@/components/cape-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
 
 // enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
 const VISIBILITIES = users.profileVisibility.enumValues;
 const POSES = users.profilePose.enumValues;
+const CAPE_DISPLAYS: readonly string[] = users.capeDisplay.enumValues;
 const PLATFORMS = users.mainPlatform.enumValues;
 const ROLES = users.role.enumValues;
 const SOCIAL_PLATFORMS = socialLinks.platform.enumValues;
@@ -759,6 +760,12 @@ export async function action({ request }: Route.ActionArgs) {
   const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
   const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
   const slimSkin = formData.get("slimSkin") === "true";
+  // マント表示。未送信（null）・不正値は列を更新対象から外す（null や既定値で上書きしない）
+  const capeDisplayRaw = formData.get("capeDisplay");
+  const capeDisplay =
+    typeof capeDisplayRaw === "string" && CAPE_DISPLAYS.includes(capeDisplayRaw)
+      ? (capeDisplayRaw as CapeDisplay)
+      : null;
   // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
   // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
   const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
@@ -812,6 +819,10 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t("meEdit.invalidOption") };
   }
 
+  if (capeDisplayRaw !== null && capeDisplay === null) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
   if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) {
     return { error: t("meEdit.invalidOption") };
   }
@@ -844,6 +855,7 @@ export async function action({ request }: Route.ActionArgs) {
       profileVisibility,
       profilePose,
       slimSkin,
+      ...(capeDisplay ? { capeDisplay } : {}),
       defaultProfileTab,
       mainPlatform,
       role,
@@ -1214,6 +1226,7 @@ export default function EditProfilePage() {
     profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
+    capeDisplay: (user.capeDisplay as CapeDisplay) ?? "cape",
     defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
@@ -1329,6 +1342,7 @@ export default function EditProfilePage() {
     formData.set("profileVisibility", formValues.profileVisibility);
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
+    formData.set("capeDisplay", formValues.capeDisplay);
     formData.set("defaultProfileTab", formValues.defaultProfileTab);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
@@ -1352,6 +1366,13 @@ export default function EditProfilePage() {
   useEffect(() => {
     setFormValues((prev) => ({ ...prev, profilePose: selectedPose }));
   }, [selectedPose]);
+
+  // ポーズプレビュー用のマント。capeDisplay は保存前のフォーム値を使う（選択が即プレビューに反映される）
+  const capeProps = resolveCapeProps({
+    uuid: user.uuid,
+    customCapeUrl: user.customCapeUrl,
+    capeDisplay: formValues.capeDisplay,
+  });
 
   const isSubmitting = fetcher.state === "submitting";
   const isLinkSubmitting = linkFetcher.state === "submitting";
@@ -1837,6 +1858,34 @@ export default function EditProfilePage() {
               />
             </div>
 
+            <Separator />
+
+            {/* Custom Cape Upload */}
+            <div className="space-y-3">
+              <Label>{t("capeUploader.customCapeTitle")}</Label>
+              <p className="text-sm text-muted-foreground">
+                {t("capeUploader.customCapeDesc")}
+              </p>
+              {user.customCapeUrl && (
+                <Alert className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {t("capeUploader.customCapeActive")}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <CapeUploader
+                userId={user.id}
+                currentCapeUrl={user.customCapeUrl}
+                onUploadComplete={() => {
+                  window.location.reload();
+                }}
+                onDelete={() => {
+                  window.location.reload();
+                }}
+              />
+            </div>
+
             {/* Pose Selection - show when user has uuid OR custom skin */}
             {(user.uuid || user.customSkinUrl) && (
               <>
@@ -1866,6 +1915,7 @@ export default function EditProfilePage() {
                             elevation={5}
                             zoom={0.9}
                             slim={formValues.slimSkin}
+                            {...capeProps}
                             asImage
                           />
                         </div>
@@ -1908,6 +1958,31 @@ export default function EditProfilePage() {
                   {t("meEdit.skinModelSlim")}
                 </button>
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Cape Display Toggle - 常に表示（Mojang のマントにも適用されるため） */}
+            <div className="space-y-2">
+              <Label>{t("meEdit.capeDisplayLabel")}</Label>
+              <div className="flex rounded-lg border p-1 w-fit">
+                {CAPE_DISPLAY_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setFormValues((prev) => ({ ...prev, capeDisplay: option }))}
+                    className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.capeDisplay === option
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                      }`}
+                  >
+                    {option === "cape" && t("meEdit.capeDisplayCape")}
+                    {option === "elytra" && t("meEdit.capeDisplayElytra")}
+                    {option === "hidden" && t("meEdit.capeDisplayHidden")}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("meEdit.capeDisplayHint")}</p>
             </div>
           </CardContent>
         </Card>

@@ -52,7 +52,7 @@
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
 
 ### キーバッジ（サーチクラフト系）
-実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`FINGER_KEY_COLORS`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい（以前はダイアログ側が循環import回避のためローカルに見た目だけを揃えた実装を持っていたが、葉モジュール化によりこの二重実装は解消済み）。
+実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
 
 - 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
 - トーン:
@@ -101,6 +101,7 @@
 
 ## アイコン
 - `lucide-react` を統一使用
+- ブランドアイコン（YouTube / Twitch / X〔旧 Twitter〕/ GitHub）は lucide-react 1.x で削除されたため、`app/components/brand-icons.tsx`（`@icons-pack/react-simple-icons` のラッパー。`currentColor`・`aria-hidden`・空 `<title>` 既定、`className` の `h-* w-*` でサイズ指定）から import する。`Twitter` は X のロゴを描画する。新しいブランドアイコンが必要なときもこのファイルに追加する
 - サイズは用途に合わせる（フッター: `h-3 w-3`、ボタン内: `h-4 w-4`、空状態: `h-12 w-12`）
 - `Button` コンポーネント内の svg は基底の `[&_svg:not([class*='size-'])]:size-4` により 16px に強制される。16px 以外にしたい場合は `h-5 w-5` ではなく **`size-5` / `size-6` クラス**を使う（`h-*` 指定は上記セレクタに拾われず死にクラスになる）
 

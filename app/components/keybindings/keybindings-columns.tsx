@@ -1,6 +1,14 @@
 // /keybindings の TanStack Table 列プリセット定義。
 // 4 つのサブタブ（actions / remaps / custom-actions / mouse）ごとに ColumnDef 配列を export。
-import type { ColumnDef } from "@tanstack/react-table";
+import {
+  columnResizingFeature,
+  columnSizingFeature,
+  createSortedRowModel,
+  rowSortingFeature,
+  sortFn_basic,
+  tableFeatures,
+  type ColumnDef,
+} from "@tanstack/react-table";
 import { getActionLabel } from "@/lib/keybindings";
 import {
   calculateCm360,
@@ -29,6 +37,25 @@ import {
   type RemapItem,
 } from "./keybindings-cells";
 
+/**
+ * TanStack Table v9 の feature 構成。使う機能（ソート・列サイズ・列リサイズ）だけを明示登録する。
+ * ソート可能な列は数値のみで、`sortFn: "auto"` は `basic` に解決されるため `basic` だけ登録する。
+ * 参照が安定するようモジュールスコープで 1 度だけ作る。
+ */
+export const keybindingsTableFeatures = tableFeatures({
+  rowSortingFeature,
+  columnSizingFeature,
+  // columnResizingFeature は columnSizingFeature を前提とするため後に置く
+  columnResizingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: { basic: sortFn_basic },
+});
+
+export type KeybindingsFeatures = typeof keybindingsTableFeatures;
+
+/** 本テーブルの列定義型（v9 は `ColumnDef<TFeatures, TData>`） */
+export type KeybindingsColumnDef = ColumnDef<KeybindingsFeatures, KeybindingsRow>;
+
 /** TanStack Table が受け取る行データ型（4 ビュー共通） */
 export type KeybindingsRow = {
   id: string;
@@ -54,7 +81,7 @@ export type KeybindingsRow = {
  * 共通: 走者列（左端 sticky）
  * ========================================================== */
 
-const runnerColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
+const runnerColumn = (t: Translator): KeybindingsColumnDef => ({
   id: "runner",
   header: () => t("keybindings.columnRunner"),
   cell: ({ row }) => <RunnerCell player={row.original} />,
@@ -69,7 +96,7 @@ const runnerColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
  * ========================================================== */
 
 /** アクション 1 件分のキー表示列を生成 */
-function actionColumn(t: Translator, action: string): ColumnDef<KeybindingsRow> {
+function actionColumn(t: Translator, action: string): KeybindingsColumnDef {
   return {
     id: `action.${action}`,
     header: () => (
@@ -96,7 +123,7 @@ function actionColumn(t: Translator, action: string): ColumnDef<KeybindingsRow> 
   };
 }
 
-const hotbarColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
+const hotbarColumn = (t: Translator): KeybindingsColumnDef => ({
   id: "action.hotbar",
   header: () => (
     <Tooltip>
@@ -121,20 +148,20 @@ const hotbarColumn = (t: Translator): ColumnDef<KeybindingsRow> => ({
 });
 
 // 移動: 前進・後退・左右・ジャンプ・スニーク・ダッシュ
-const movementColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const movementColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   ...["forward", "back", "left", "right", "jump", "sneak", "sprint"].map((a) => actionColumn(t, a)),
 ];
 
 // インベントリ: ホットバー（集約）・オフハンド・インベントリ・ブロック選択・ドロップ
-const inventoryColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const inventoryColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   hotbarColumn(t),
   ...["swapHands", "inventory", "pickBlock", "drop"].map((a) => actionColumn(t, a)),
 ];
 
 // 戦闘・UI: 攻撃・使用・視点切替・チャット・コマンド・全画面
-const combatUiColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const combatUiColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   ...["attack", "use", "togglePerspective", "chat", "command", "fullscreen"].map(
     (a: string) => actionColumn(t, a),
@@ -145,7 +172,7 @@ const combatUiColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
  * remaps プリセット
  * ========================================================== */
 
-const remapsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const remapsColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   {
     id: "remaps",
@@ -167,7 +194,7 @@ const remapsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
  * custom-actions プリセット
  * ========================================================== */
 
-const customActionsColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const customActionsColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   {
     id: "custom-actions",
@@ -211,7 +238,7 @@ const windowsMultiplier = (config: MouseConfig): number | null => {
   return config.windowsSpeed;
 };
 
-const mouseColumns = (t: Translator): ColumnDef<KeybindingsRow>[] => [
+const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   {
     id: "mouse.dpi",

@@ -13,10 +13,9 @@ pnpm dev              # 開発サーバー起動 (http://localhost:5173)
 pnpm build            # プロダクションビルド
 pnpm typecheck        # React Router typegen + tsc --noEmit
 pnpm test             # Vitest実行
-pnpm db:generate      # スキーマ変更からDrizzleマイグレーション生成
-pnpm db:migrate       # マイグレーション実行
-pnpm db:push          # スキーマをローカルDB（.env = file:local.db）に直接反映
-pnpm db:push:remote   # スキーマをリモートTurso（.env.remote）に直接反映
+pnpm db:push          # スキーマをローカルDB（.env = file:local.db）に反映（現行 drizzle-kit では失敗することがある。`db-apply` スキル参照）
+pnpm db:push:remote   # 同上、リモートTurso（.env.remote）
+pnpm gen:test-schema  # テスト用 DDL（app/lib/__tests__/helpers/test-schema.sql）を再生成
 ```
 
 ### git依存パッケージの更新（`@bafv4/mcitems` 等）
@@ -113,7 +112,9 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 - スキーマ: `app/lib/schema.ts`（Drizzle ORM、SQLite/Turso方言）
 - 全体像（テーブル一覧・ER図・整合性ポリシー）: `docs/database.md`
-- マイグレーション: `drizzle/` ディレクトリ、`pnpm db:generate` + `pnpm db:migrate` で管理
+- スキーマ反映: `db-apply` スキルが単一情報源。`db:push` が中断する／TRUNCATE を提案する場合は
+  `scripts/` の一回限りスクリプト（dry-run 既定・`--apply`・`--remote`）で DDL を適用する。
+  `pnpm db:migrate` は本環境で反映経路として機能しない
 - ID生成: `@paralleldrive/cuid2` によるCUID2
 - 設定: `drizzle.config.ts` = ローカル用（`.env` を読み込み。リモートURLならエラーで中断）、
   `drizzle.remote.config.ts` = リモート用（`.env.remote` を読み込み。`pnpm db:push:remote` で使用）
@@ -126,9 +127,11 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 
 ### i18n（国際化）
 
-日本語（既定）と英語に対応。**英語は主要導線から段階的**に広げており、未翻訳キーは日本語へフォールバックする。
+日本語（既定）と英語に対応。メッセージカタログは全キー英訳済み。
 
-- 文言実体は `app/lib/messages/`。`pages-ja.ts` が全キーの基準、`pages-en.ts` は部分集合
+- 文言実体は `app/lib/messages/`。`pages-ja.ts` が全キーの基準。**新しいキーは `pages-en.ts` にも同時に追加する**
+  （`app/lib/__tests__/locale.test.ts` の翻訳カバレッジが ja/en のキー不一致で落ちる。型と `t()` の
+  日本語フォールバックが部分集合を許すのは取りこぼし時の安全網で、英訳を省いてよいという意味ではない）
 - **コンポーネントは `useT()`（`@/hooks/use-locale`）。`t()` を直接呼ぶと常に日本語になる**
 - 書き方の規約は `.claude/rules/general.md`「翻訳（i18n）」、ロケール検出などの詳細は `docs/i18n.md`
 
@@ -167,3 +170,14 @@ React Router 8 の `context` は `RouterContextProvider`（`context.get()` ベ�
 - **Speedrun.com / MCSR Ranked**: プレイヤー統計取得（`app/lib/external-stats.ts`）
 - **Vercel Blob**: スキンファイル・ガイド画像の保存
 - **`/og-image`**: `@vercel/og` による動的OGP画像生成
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.

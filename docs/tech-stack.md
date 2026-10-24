@@ -82,6 +82,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 | **shadcn/ui** | コンポーネント集（New York スタイル、Slate base） |
 | **@radix-ui/react-\*** / **radix-ui** | shadcn の土台。アクセシビリティ重視のヘッドレスコンポーネント |
 | **lucide-react** | アイコンセット |
+| **@icons-pack/react-simple-icons** | ブランドアイコン（YouTube / Twitch / X / GitHub）。lucide-react 1.x でブランドアイコンが削除されたための代替（MIT、アイコンデータは simple-icons CC0）。ビルドに同梱してインライン描画し外部送信なし。`app/components/brand-icons.tsx` の薄いラッパー経由で使う |
 | **next-themes** | ダーク/ライトテーマ切替 |
 | **class-variance-authority** | コンポーネントのバリアント定義 |
 | **clsx** / **tailwind-merge** | `cn()` ユーティリティの基盤 |

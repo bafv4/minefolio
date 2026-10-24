@@ -9,7 +9,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, inArray } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, getFingerLabel, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
 import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
+import { FingerToggleGroup, sortFingers } from "@/components/finger-toggle-group";
 import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
@@ -808,32 +809,6 @@ const KEYBINDING_DISPLAY_GROUPS = [
   },
 ] as const;
 
-const FINGER_OPTIONS: FingerType[] = [
-  "left-pinky",
-  "left-ring",
-  "left-middle",
-  "left-index",
-  "left-thumb",
-  "right-thumb",
-  "right-index",
-  "right-middle",
-  "right-ring",
-  "right-pinky",
-];
-
-const FINGER_COLOR_CLASSES: Record<FingerType, string> = {
-  "left-pinky": "bg-finger-pinky",
-  "left-ring": "bg-finger-ring",
-  "left-middle": "bg-finger-middle",
-  "left-index": "bg-finger-index",
-  "left-thumb": "bg-finger-thumb",
-  "right-thumb": "bg-finger-thumb",
-  "right-index": "bg-finger-index",
-  "right-middle": "bg-finger-middle",
-  "right-ring": "bg-finger-ring",
-  "right-pinky": "bg-finger-pinky",
-};
-
 // =====================================
 // リマップ関連の型定義
 // =====================================
@@ -1511,9 +1486,6 @@ export default function KeybindingsPage() {
       });
   }, [editingKeyCode, localRemaps]);
 
-  const selectedFinger = editingKeyCode
-    ? localFingerAssignments[editingKeyCode]?.[0]
-    : undefined;
   const selectedKeyCustomActions = useMemo(() => {
     if (!editingKeyCode) return [];
     return localCustomActions
@@ -1806,19 +1778,6 @@ export default function KeybindingsPage() {
     });
   }, []);
 
-  // 指割り当てを更新
-  const updateFingerAssignment = useCallback((keyCode: string, finger: FingerType | null) => {
-    setLocalFingerAssignments((prev) => {
-      const updated = { ...prev };
-      if (finger === null) {
-        delete updated[keyCode];
-      } else {
-        updated[keyCode] = [finger];
-      }
-      return updated;
-    });
-  }, []);
-
   // カスタムアクションを追加
   const addCustomAction = useCallback(() => {
     setLocalCustomActions((prev) => [
@@ -1899,14 +1858,15 @@ export default function KeybindingsPage() {
     });
   }, [localRemaps]);
 
-  const modalUpdateFingerAssignment = useCallback((keyCode: string, finger: FingerType | null) => {
+  // 指割り当て（複数可）を更新。空配列ならキーごと削除。配列は正準順（FINGER_OPTIONS）に揃える
+  const modalUpdateFingerAssignment = useCallback((keyCode: string, fingers: FingerType[]) => {
     setModalDraftFingerAssignments((prev) => {
       const base = prev ?? localFingerAssignments;
       const updated = { ...base };
-      if (finger === null) {
+      if (fingers.length === 0) {
         delete updated[keyCode];
       } else {
-        updated[keyCode] = [finger];
+        updated[keyCode] = sortFingers(fingers);
       }
       return updated;
     });
@@ -2811,32 +2771,15 @@ export default function KeybindingsPage() {
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
             <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
               <Label>{t("meKeybindings.fingerAssignment")}</Label>
-              <Select
-                value={(editingKeyCode ? modalFingerAssignments[editingKeyCode]?.[0] : undefined) || "none"}
-                onValueChange={(value) => {
+              <FingerToggleGroup
+                value={editingKeyCode ? modalFingerAssignments[editingKeyCode] ?? [] : []}
+                disabled={!canEditPresetData}
+                onChange={(next) => {
                   if (editingKeyCode) {
-                    modalUpdateFingerAssignment(
-                      editingKeyCode,
-                      value === "none" ? null : (value as FingerType)
-                    );
+                    modalUpdateFingerAssignment(editingKeyCode, next);
                   }
                 }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("meKeybindings.selectFinger")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t("meKeybindings.unassigned")}</SelectItem>
-                  {FINGER_OPTIONS.map((finger) => (
-                    <SelectItem key={finger} value={finger}>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-3 h-3 rounded-full ${FINGER_COLOR_CLASSES[finger]}`} />
-                        {getFingerLabel(t, finger)}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             )}
 
