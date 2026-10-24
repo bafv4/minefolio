@@ -101,6 +101,7 @@
 
 ## アイコン
 - `lucide-react` を統一使用
+- ブランドアイコン（YouTube / Twitch / X〔旧 Twitter〕/ GitHub）は lucide-react 1.x で削除されたため、`app/components/brand-icons.tsx`（`@icons-pack/react-simple-icons` のラッパー。`currentColor`・`aria-hidden`・空 `<title>` 既定、`className` の `h-* w-*` でサイズ指定）から import する。`Twitter` は X のロゴを描画する。新しいブランドアイコンが必要なときもこのファイルに追加する
 - サイズは用途に合わせる（フッター: `h-3 w-3`、ボタン内: `h-4 w-4`、空状態: `h-12 w-12`）
 - `Button` コンポーネント内の svg は基底の `[&_svg:not([class*='size-'])]:size-4` により 16px に強制される。16px 以外にしたい場合は `h-5 w-5` ではなく **`size-5` / `size-6` クラス**を使う（`h-*` 指定は上記セレクタに拾われず死にクラスになる）
 

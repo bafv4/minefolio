@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { useT } from "@/hooks/use-locale";
-import { Github, MessageSquare, Heart, Code, Shield, ScrollText } from "lucide-react";
+import { MessageSquare, Heart, Code, Shield, ScrollText } from "lucide-react";
+import { Github } from "@/components/brand-icons";
 import packageJson from "../../../package.json";
 
 export function Footer() {

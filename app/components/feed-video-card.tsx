@@ -3,7 +3,8 @@ import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
-import { Youtube, Twitch, Play, ExternalLink } from "lucide-react";
+import { Play, ExternalLink } from "lucide-react";
+import { Youtube, Twitch } from "@/components/brand-icons";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 

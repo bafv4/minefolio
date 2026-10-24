@@ -42,7 +42,6 @@ import {
   Keyboard,
   Package,
   FileText,
-  Youtube as YoutubeIcon,
   ArrowUpToLine,
   ArrowDownToLine,
   ArrowLeftToLine,
@@ -53,6 +52,7 @@ import {
   PanelLeft,
   AlignHorizontalDistributeCenter,
 } from "lucide-react";
+import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";

@@ -199,9 +199,6 @@ import {
   Mouse,
   Settings,
   ExternalLink,
-  Youtube,
-  Twitch,
-  Twitter,
   Pencil,
   Calendar,
   History,
@@ -228,6 +225,7 @@ import {
   Sparkles,
   Speech,
 } from "lucide-react";
+import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";

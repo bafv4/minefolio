@@ -56,11 +56,9 @@ import {
   ExternalLink,
   Info,
   Loader2,
-  Twitch,
-  Twitter,
   UserRound,
-  Youtube,
 } from "lucide-react";
+import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 
 // enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
 const VISIBILITIES = users.profileVisibility.enumValues;

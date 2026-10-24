@@ -83,9 +83,6 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
-  Youtube,
-  Twitch,
-  Twitter,
   Share2,
   Video,
   Settings,
@@ -97,6 +94,7 @@ import {
   ArrowDown,
   X,
 } from "lucide-react";
+import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { SkinUploader } from "@/components/skin-uploader";
 import { CapeUploader } from "@/components/cape-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
