@@ -35,6 +35,7 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/cron/update-rankings` | GET | CRON_SECRET | ランキングデータ更新 |
 | `/api/cron/update-page-views` | GET | CRON_SECRET | Vercel Web Analytics からページビュー集計を更新 |
 | `/api/cron/cleanup-auth` | GET | CRON_SECRET | 期限切れ認証セッション・検証トークンの削除 |
+| `/api/cron/translations` | GET | CRON_SECRET | 利用者コンテンツ自動翻訳（ガイド・bio）の取りこぼし掃除 |
 
 ---
 
@@ -624,3 +625,34 @@ Vercel Web Analytics から直近ウィンドウ（`PAGE_VIEW_WINDOW_DAYS`）の
 ```
 
 **関連ファイル:** `app/routes/api/cron/cleanup-auth.ts`, `app/lib/auth-cleanup.server.ts`
+
+---
+
+### `GET /api/cron/translations`
+
+利用者コンテンツ（公開ガイド・プロフィール bio）の自動翻訳で取りこぼした対象を拾い直す時間毎バッチ（`10 * * * *`）。保存時のバックグラウンド翻訳が失敗・未実行だった場合の安全網。翻訳本体・対象選定は `app/lib/content-translation.server.ts` の `processPendingTranslations()`。
+
+**処理内容（優先順、各段階を上限件数で打ち切り）:**
+1. 再試行すべき行: `pending`（10分以上経過）／`failed`（6時間以上経過）／`ready` だが用語集バージョン不一致
+2. 原文が更新された可能性のある `ready` 行（原文の `updatedAt` が翻訳行より新しい）
+3. 翻訳行がまだ無い翻訳対象（公開ガイド・空でない bio）
+
+いずれも公開済みかつオプトアウトでないものに限る。1回の実行は `DEFAULT_CRON_LIMIT`（10）件の対象まで。関数は `maxDuration = 60` 秒で、48秒（80%）を超えたら新しい対象に着手しない。
+
+`ANTHROPIC_API_KEY` 未設定（機能無効）の場合は DB・API とも触らず、全カウント 0 の 200 を返す。
+
+**レスポンス例:**
+```json
+{
+  "success": true,
+  "processed": 3,
+  "translated": 2,
+  "upToDate": 1,
+  "failed": 0,
+  "skipped": 0,
+  "removed": 0,
+  "timestamp": "2026-04-05T12:10:00.000Z"
+}
+```
+
+**関連ファイル:** `app/routes/api/cron/translations.ts`, `app/lib/content-translation.server.ts`
