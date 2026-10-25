@@ -22,6 +22,7 @@ import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug, getLocalizedDisplayName } from "@/lib/slug";
 import { sanitizeReturnTo } from "@/lib/return-to";
 import { claimSlug, recordSlugChange } from "@/lib/slug-history.server";
+import { scheduleUserBioTranslation } from "@/lib/content-translation.server";
 import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
 import {
   runAfterResponse,
@@ -367,6 +368,9 @@ export async function action({ request }: Route.ActionArgs) {
         updatedAt: new Date(),
       })
       .where(eq(users.id, user.id));
+
+    // bio / shortBio の自動翻訳をレスポンス後に走らせる（機能無効なら何もしない。失敗しても保存には影響しない）
+    scheduleUserBioTranslation(db, user.id);
 
     return { success: true, action: "profile" };
   }

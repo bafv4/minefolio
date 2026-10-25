@@ -215,6 +215,9 @@ importers:
       omggif:
         specifier: ^1.0.10
         version: 1.0.10
+      parse5:
+        specifier: ^8.0.1
+        version: 8.0.1
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0

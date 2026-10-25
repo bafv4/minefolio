@@ -269,6 +269,7 @@ CREATE TABLE `guides` (
 	`draft_tags` text,
 	`draft_updated_at` integer,
 	`is_pinned` integer DEFAULT false NOT NULL,
+	`allow_auto_translation` integer DEFAULT true NOT NULL,
 	FOREIGN KEY (`author_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
@@ -646,7 +647,8 @@ CREATE TABLE `users` (
 	`updated_at` integer NOT NULL,
 	`pinned_speedrun_records` text,
 	`rta_started_year_month` text,
-	`onboarding_completed` integer DEFAULT true NOT NULL
+	`onboarding_completed` integer DEFAULT true NOT NULL,
+	`allow_auto_translation` integer DEFAULT true NOT NULL
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);
