@@ -1,9 +1,10 @@
 import { Link } from "react-router";
-import { useLocale } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Eye, FileText, Pin } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Eye, FileText, Languages, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
 import { PageViews7dMeta } from "@/components/page-views-meta";
 import { formatDistanceToNow } from "date-fns";
@@ -31,7 +32,27 @@ export type GuideItem = {
   isPinned?: boolean;
   /** 閲覧者自身のガイドか（自分のガイドにはいいねできない） */
   isOwn?: boolean;
+  /** title / summary が自動翻訳の訳文に差し替え済みか（applyGuideTranslation）。マーカーを出す */
+  autoTranslated?: boolean;
 };
+
+/** 自動翻訳マーカー（アイコン＋ツールチップ）。オーバーレイリンクより手前（z-10）で hover を受ける */
+function AutoTranslatedMark() {
+  const t = useT();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="relative z-10 inline-flex shrink-0 items-center text-muted-foreground"
+          aria-label={t("guides.autoTranslatedMark")}
+        >
+          <Languages className="h-3 w-3" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{t("guides.autoTranslatedMark")}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
@@ -129,6 +150,7 @@ export function GuideCardGrid({
                   {guide.authorName && (
                     <span className="min-w-0 truncate">{guide.authorName}</span>
                   )}
+                  {guide.autoTranslated && <AutoTranslatedMark />}
                   {/* "replace" モードでは pageViews7d がある間だけ累計View数を隠し、7日間PVに差し替える
                       （ホームの「よく読まれているガイド」専用。/guides の人気順は "additional" のまま両方出す） */}
                   {!(pageViewsMode === "replace" && guide.pageViews7d !== undefined) && (
@@ -222,6 +244,7 @@ export function GuideListView({
               )}
               <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                 {guide.authorName && <span className="truncate">{guide.authorName}</span>}
+                {guide.autoTranslated && <AutoTranslatedMark />}
                 <span className="flex items-center gap-1">
                   <Eye className="h-3 w-3" />
                   {guide.viewCount}

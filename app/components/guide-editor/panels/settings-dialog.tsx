@@ -25,6 +25,7 @@ export interface GuideSettingsValues {
   coverImageUrl: string | null;
   isPublished: boolean;
   slug: string;
+  allowAutoTranslation: boolean;
 }
 
 interface SettingsDialogProps {
@@ -60,6 +61,7 @@ export function SettingsDialog({
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialValues.coverImageUrl);
   const [isPublished, setIsPublished] = useState(initialValues.isPublished);
   const [slug, setSlug] = useState(initialValues.slug);
+  const [allowAutoTranslation, setAllowAutoTranslation] = useState(initialValues.allowAutoTranslation);
 
   // 開くたびに親の現在値で再初期化（前回のキャンセル分を引きずらない）
   useEffect(() => {
@@ -70,6 +72,7 @@ export function SettingsDialog({
       setCoverImageUrl(initialValues.coverImageUrl);
       setIsPublished(initialValues.isPublished);
       setSlug(initialValues.slug);
+      setAllowAutoTranslation(initialValues.allowAutoTranslation);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -83,7 +86,7 @@ export function SettingsDialog({
   const resolvedSlug = normalizeSlug(slug) || initialValues.slug;
 
   const apply = () => {
-    onApply({ title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug });
+    onApply({ title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation });
     onOpenChange(false);
   };
 
@@ -146,6 +149,20 @@ export function SettingsDialog({
             checked={isPublished}
             onCheckedChange={setIsPublished}
             aria-label={t("guideEditor.published")}
+          />
+        </div>
+
+        {/* 自動翻訳の許可（既定オン。オフで既存の翻訳も削除 — docs/translation.md） */}
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="guide-allow-auto-translation">{t("guideEditor.ui.allowAutoTranslation")}</Label>
+            <p className="text-xs text-muted-foreground">{t("guideEditor.ui.allowAutoTranslationHint")}</p>
+          </div>
+          <Switch
+            id="guide-allow-auto-translation"
+            checked={allowAutoTranslation}
+            onCheckedChange={setAllowAutoTranslation}
+            aria-label={t("guideEditor.ui.allowAutoTranslation")}
           />
         </div>
 

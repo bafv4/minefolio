@@ -6,6 +6,10 @@ export const PAGES_JA = {
     copy: "コピー",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
+    autoTranslatedNotice: "この記事は自動翻訳です",
+    viewingOriginalNotice: "原文（{language}）を表示中",
+    showOriginal: "原文（{language}）を表示",
+    showTranslation: "翻訳を表示",
   },
   /** テーマ切替（components/layout/theme-toggle.tsx） */
   theme: {
@@ -2180,6 +2184,9 @@ export const PAGES_JA = {
       settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」で編集中の内容へ反映されます（保存は別途行ってください）。",
       publishOn: "公開する（保存時に公開状態が反映されます）",
       publishOff: "下書き（保存時に非公開のままになります）",
+      allowAutoTranslation: "自動翻訳を許可する",
+      allowAutoTranslationHint:
+        "オンにすると、公開したガイドを閲覧者の言語に合わせて自動翻訳して表示します（原文への切り替えもできます）。翻訳には外部サービス（Anthropic）を使います。オフにすると既存の翻訳も削除されます。この設定は保存・仮保存のどちらでも反映されます。",
       cancel: "キャンセル",
       apply: "反映",
       blockActions: "ブロック操作",
@@ -2296,6 +2303,7 @@ export const PAGES_JA = {
     leave: "保存せず離れる",
   },
   guides: {
+    autoTranslatedMark: "タイトルと概要は自動翻訳です",
     guidesCount: "{count} 件のガイド",
     guideList: "ガイド一覧",
     userGuidesTitle: "{name}のガイド",

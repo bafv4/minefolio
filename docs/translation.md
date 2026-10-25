@@ -8,8 +8,9 @@ UI 文言の多言語化（`docs/i18n.md`）とは別系統。あちらは開発
 こちらは**利用者が書いた可変のコンテンツ**を機械翻訳して保存・配信する。`docs/i18n.md` の
 「利用者が書いた内容は翻訳しない」という原則に対する、明示的な例外となる。
 
-> **状態: Phase 1 実装済み・Phase 2 実装中。** 基盤（スキーマ・中核ライブラリ・初期設定画面の呼び出し）と
-> Phase 1 の画面側（プロフィール表示・`/me/edit`）は実装済み。ガイド表示/編集と Cron ルートは後続で実装する。Phase 3 は未着手。
+> **状態: Phase 1・2 実装済み。** 基盤（スキーマ・中核ライブラリ・初期設定画面の呼び出し）、
+> Phase 1 の画面側（プロフィール表示・`/me/edit`）、Phase 2 の画面側（ガイド閲覧・一覧・編集の設定と公開フック）と
+> Cron ルート（`/api/cron/translations`）は実装済み。Phase 3 は未着手。
 > 方針は「エンジンは Claude API」「公開ガイドと bio は既定オン＋著者オプトアウト」で決定済み。
 
 ---
@@ -192,7 +193,7 @@ sourceHash === 現在の原文のハッシュ
 |---|---|---|
 | 0 | 用語集・`content_translations` テーブル・翻訳関数（配列 in/out）・機能フラグ。UI なし | **実装済み** |
 | 1 | **bio / shortBio**。短く HTML も無いので試金石に最適 | **実装済み**（`/player/:slug` の表示・切替、`/me/edit` の許可スイッチ。[`docs/profiles.md`](./profiles.md)。一覧カードの `shortBio` は未対応） |
-| 2 | ガイド（テキストノード抽出・公開フック・Cron・バナー・著者オプトアウト） | 基盤実装済み（Cron ルート・表示・設定UI は後続） |
+| 2 | ガイド（テキストノード抽出・公開フック・Cron・バナー・著者オプトアウト） | **実装済み**（`/guides/:authorSlug/:guideSlug` のバナー・`?original=1` 切替、一覧のマーカー、編集の許可スイッチと公開フック。[`docs/guides.md`](./guides.md)。Cron は `/api/cron/translations`） |
 | 3 | 訳文の手動上書き、テンプレート | 未着手 |
 
 ### Phase 0 で入ったもの
@@ -278,12 +279,14 @@ processPendingTranslations(db, { limit?, timeBudgetMs? }): Promise<ProcessTransl
   1 チャンクでも失敗したら全体を `failed` にする
 - `scheduleTranslation` は action の**保存・公開が成功した後**に呼ぶ。`@vercel/functions` の `waitUntil()` で
   レスポンス後に実行する。機能無効なら何もしない。await 不要・throw しない
-- 呼び出し済み: `/onboarding` の `save_profile`（bio の保存後）、`/me/edit`（保存成功後。許可オフなら `removeUserBioTranslations` を await）。ガイドの公開／更新・オプトアウト切替は後続
+- 呼び出し済み: `/onboarding` の `save_profile`（bio の保存後）、`/me/edit`（保存成功後。許可オフなら `removeUserBioTranslations` を await）、`/my-guides/:guideSlug/edit` の action（保存〔publish〕の成功後、およびオフ→オンに戻した保存の後に `scheduleGuideTranslation`。許可オフなら `removeGuideTranslations` を await。仮保存＝オートセーブ相当では呼ばない）
 
 ### Cron（`processPendingTranslations`）
 
-1 回あたり `limit` 件（既定 10、対象 1 件 = ガイド 1 本 or bio 1 人）までを**同期的**に処理する。ルートは `CRON_SECRET` で保護し、
-`vercel.json` の crons に追加する（既存の cron ルートと同じ構成）。対象は公開済みかつオプトアウトでないもののみで、優先順:
+1 回あたり `limit` 件（既定 10、対象 1 件 = ガイド 1 本 or bio 1 人）までを**同期的**に処理する。ルートは
+`/api/cron/translations`（`app/routes/api/cron/translations.ts`）で、`CRON_SECRET` で保護し（`requireCronAuth()`）、
+`vercel.json` の crons に **毎時 10 分**（`10 * * * *`）で登録済み。`maxDuration` は 60 秒、`timeBudgetMs` は 48 秒
+（`maxDuration` の 80%。これを超えたら新しい対象に着手しない）。対象は公開済みかつオプトアウトでないもののみで、優先順:
 
 1. 再試行すべき行: `pending`（10 分以上経過）／`failed`（6 時間以上経過。失敗し続ける対象で API を叩き潰さない）／`ready` だが用語集バージョン不一致
 2. 原文が更新された可能性のある `ready` 行（原文の `updatedAt` > 翻訳行の `updatedAt`。ハッシュ照合は翻訳関数側）

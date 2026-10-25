@@ -19,6 +19,8 @@ import { EmptyState } from "@/components/empty-state";
 import { BookOpen, Search } from "lucide-react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { getGuideTranslations } from "@/lib/content-translation.server";
+import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { pickDisplayName } from "@/lib/slug";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
@@ -154,9 +156,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .slice(0, 20)
     .map(([name]) => name);
 
+  // 自動翻訳（docs/translation.md）。表示対象の訳文をまとめて 1 回で引き、title / summary を差し替える。
+  // 検索・タグ絞り込みは原文で行う。機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
+  const translations = await getGuideTranslations(
+    db,
+    filtered.map((g) => g.guide.id),
+    locale,
+  );
+  const translatedGuides = filtered.map((row) => ({
+    ...row,
+    guide: applyGuideTranslation(row.guide, translations),
+  }));
+
   const appUrl = env.APP_URL || "https://minefolio.app";
   return {
-    guides: filtered,
+    guides: translatedGuides,
     allTags,
     tag,
     q,

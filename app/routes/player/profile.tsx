@@ -75,7 +75,8 @@ import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
-import { getUserBioTranslation } from "@/lib/content-translation.server";
+import { getGuideTranslations, getUserBioTranslation } from "@/lib/content-translation.server";
+import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { AutoTranslateNotice } from "@/components/profile/auto-translate-notice";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
@@ -537,6 +538,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         isPinned: true,
       },
       extras: { likeCount: guideLikeCountSql().as("like_count") },
+    }).then(async (rows) => {
+      // ガイドの自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
+      const translations = await getGuideTranslations(db, rows.map((g) => g.id), viewerLocale);
+      return rows.map((g) => applyGuideTranslation(g, translations));
     }),
     resolvePacemanStats(),
     resolveMinefolioEloRank(),

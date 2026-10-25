@@ -31,6 +31,21 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
+// 自動翻訳の依頼・削除（実体は ANTHROPIC_API_KEY が無いと何もしない）。呼び分けだけを検証するため差し替える
+const translationMocks = vi.hoisted(() => ({
+  scheduleGuideTranslation: vi.fn(),
+  removeGuideTranslations: vi.fn(),
+}));
+
+vi.mock("@/lib/content-translation.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/content-translation.server")>();
+  return {
+    ...actual,
+    scheduleGuideTranslation: translationMocks.scheduleGuideTranslation,
+    removeGuideTranslations: translationMocks.removeGuideTranslations,
+  };
+});
+
 import { action } from "../edit";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
@@ -74,6 +89,7 @@ function signInAs(discordId: string) {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  translationMocks.removeGuideTranslations.mockResolvedValue(undefined);
   for (const key of ENV_KEYS) originalEnv[key] = process.env[key];
   process.env.TURSO_DATABASE_URL = SHARED_MEMORY_URL;
   process.env.BETTER_AUTH_SECRET = "test-secret";
@@ -450,5 +466,73 @@ describe("action - スラッグと所有権", () => {
 
     expect(res).toEqual({ error: ERROR_NOT_FOUND });
     expect(await findGuide(guide.id)).toEqual(before);
+  });
+});
+
+// 自動翻訳の許可（guides.allowAutoTranslation。ライブ列）と翻訳フック（docs/translation.md）。
+describe("action - 自動翻訳の許可と翻訳フック", () => {
+  it("保存（publish）で公開版の翻訳を依頼する", async () => {
+    const { guide } = await setupAuthorWithGuide();
+
+    await callAction("my-guide", baseFormData({ _action: "publish" }));
+
+    expect(translationMocks.scheduleGuideTranslation).toHaveBeenCalledTimes(1);
+    expect(translationMocks.scheduleGuideTranslation.mock.calls[0][1]).toBe(guide.id);
+    expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
+  });
+
+  it("仮保存（draft）では翻訳を依頼しない（ドラフトは翻訳対象外）", async () => {
+    await setupAuthorWithGuide();
+
+    await callAction("my-guide", baseFormData({ _action: "draft" }));
+
+    expect(translationMocks.scheduleGuideTranslation).not.toHaveBeenCalled();
+    expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
+  });
+
+  it("false を送ると列を更新して既存の訳文を削除し、翻訳は依頼しない（仮保存でも同じ）", async () => {
+    const { guide } = await setupAuthorWithGuide();
+
+    await callAction("my-guide", baseFormData({ _action: "draft", allowAutoTranslation: "false" }));
+
+    expect((await findGuide(guide.id)).allowAutoTranslation).toBe(false);
+    expect(translationMocks.removeGuideTranslations).toHaveBeenCalledTimes(1);
+    expect(translationMocks.removeGuideTranslations.mock.calls[0][1]).toBe(guide.id);
+    expect(translationMocks.scheduleGuideTranslation).not.toHaveBeenCalled();
+  });
+
+  it("オフのガイドを保存（publish）しても、未送信なら許可は変わらず訳文の削除だけが走る", async () => {
+    const { guide } = await setupAuthorWithGuide({ allowAutoTranslation: false });
+
+    await callAction("my-guide", baseFormData({ _action: "publish" }));
+
+    expect((await findGuide(guide.id)).allowAutoTranslation).toBe(false);
+    expect(translationMocks.removeGuideTranslations).toHaveBeenCalledTimes(1);
+    expect(translationMocks.scheduleGuideTranslation).not.toHaveBeenCalled();
+  });
+
+  it("オフ→オンに戻すと、仮保存でも翻訳を依頼する", async () => {
+    const { guide } = await setupAuthorWithGuide({ allowAutoTranslation: false });
+
+    await callAction("my-guide", baseFormData({ _action: "draft", allowAutoTranslation: "true" }));
+
+    expect((await findGuide(guide.id)).allowAutoTranslation).toBe(true);
+    expect(translationMocks.scheduleGuideTranslation).toHaveBeenCalledTimes(1);
+    expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
+  });
+
+  it("true / false 以外の値は拒否し、ガイド行を変更せず翻訳にも触れない", async () => {
+    const { guide } = await setupAuthorWithGuide();
+    const before = await findGuide(guide.id);
+
+    const res = await callAction(
+      "my-guide",
+      baseFormData({ _action: "publish", allowAutoTranslation: "yes" }),
+    );
+
+    expect(res.error).toBe(ERROR_INVALID_ACTION);
+    expect(await findGuide(guide.id)).toEqual(before);
+    expect(translationMocks.scheduleGuideTranslation).not.toHaveBeenCalled();
+    expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
   });
 });
