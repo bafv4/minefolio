@@ -30,6 +30,7 @@ import {
   refreshSrcRankingsForUser,
 } from "@/lib/targeted-refresh.server";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
+import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -780,6 +781,10 @@ export async function action({ request }: Route.ActionArgs) {
   const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
   const showRankedStats = formData.get("showRankedStats") === "true";
   const showPacemanStats = formData.get("showPacemanStats") === "true";
+  // 自己紹介の自動翻訳の許可。未送信（null）・不正値は列を更新対象から外す（既定値で上書きしない）
+  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
+  const allowAutoTranslation =
+    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
 
   // Validate
   if (displayName && displayName.length > 50) {
@@ -820,6 +825,10 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (capeDisplayRaw !== null && capeDisplay === null) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
     return { error: t("meEdit.invalidOption") };
   }
 
@@ -869,9 +878,18 @@ export async function action({ request }: Route.ActionArgs) {
       showYoutubeOnHome,
       showRankedStats,
       showPacemanStats,
+      ...(allowAutoTranslation !== null ? { allowAutoTranslation } : {}),
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
+
+  // 自己紹介の自動翻訳（docs/translation.md）。オフにしたら既存の訳文を確実に消す（機能無効でも消す）。
+  // オンのときは毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない）
+  if ((allowAutoTranslation ?? user.allowAutoTranslation) === false) {
+    await removeUserBioTranslations(db, user.id);
+  } else {
+    scheduleUserBioTranslation(db, user.id);
+  }
 
   // speedruncomUsername を social_links（speedruncom行）へ逆方向同期する。
   // ソーシャルリンク欄側の create_link/update_link/delete_link は既に users.speedruncomUsername を
@@ -1239,6 +1257,7 @@ export default function EditProfilePage() {
     showYoutubeOnHome: user.showYoutubeOnHome ?? true,
     showRankedStats: user.showRankedStats ?? true,
     showPacemanStats: user.showPacemanStats ?? true,
+    allowAutoTranslation: user.allowAutoTranslation ?? true,
   });
 
   const [formValues, setFormValues] = useState(buildFormValues);
@@ -1359,6 +1378,7 @@ export default function EditProfilePage() {
     formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
     formData.set("showRankedStats", String(formValues.showRankedStats));
     formData.set("showPacemanStats", String(formValues.showPacemanStats));
+    formData.set("allowAutoTranslation", String(formValues.allowAutoTranslation));
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues, isRtaStartedIncomplete, t]);
 
@@ -2069,6 +2089,24 @@ export default function EditProfilePage() {
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.shortBioHint")}
               </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 p-3">
+              <div className="space-y-1">
+                <Label htmlFor="allowAutoTranslation" className="text-sm font-normal cursor-pointer">
+                  {t("meEdit.allowAutoTranslation")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("meEdit.allowAutoTranslationHint")}
+                </p>
+              </div>
+              <Switch
+                id="allowAutoTranslation"
+                checked={formValues.allowAutoTranslation}
+                onCheckedChange={(checked) =>
+                  setFormValues((prev) => ({ ...prev, allowAutoTranslation: checked }))
+                }
+              />
             </div>
 
             <div className="space-y-2">

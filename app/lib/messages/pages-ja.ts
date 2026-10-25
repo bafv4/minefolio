@@ -685,6 +685,11 @@ export const PAGES_JA = {
     skinDialogTitle: "{name} のスキン",
     noMcidNote: "このユーザーはMCIDを登録していません",
     bedrockMcidLine: "Bedrock版: {id}",
+    /** 自己紹介の自動翻訳表示（訳文を既定で出しているときの注記と、原文/訳文の切替） */
+    autoTranslated: "自動翻訳",
+    showOriginal: "原文を表示",
+    showTranslation: "翻訳を表示",
+    viewingOriginal: "原文を表示中",
     noGuidesTitle: "ガイドがありません",
     noGuidesDescription: "このプレイヤーはまだガイドを公開していません。",
     /** プラットフォーム名（me/edit の選択肢と共有） */
@@ -1075,6 +1080,9 @@ export const PAGES_JA = {
     mobile: "スマホ",
     other: "その他",
     shortBioHint: "走者カードに表示される短い肩書き",
+    allowAutoTranslation: "自己紹介の自動翻訳を許可する",
+    allowAutoTranslationHint:
+      "オンにすると、閲覧者の言語に合わせて自己紹介とひとことを自動翻訳して表示します（原文への切り替えもできます）。翻訳には外部サービス（Anthropic）を使います。オフにすると既存の翻訳も削除されます。",
     roleRunner: "走者",
     roleViewer: "視聴者",
     role: "ロール",

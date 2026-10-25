@@ -75,6 +75,8 @@ import { YouTubeEmbed } from "@/components/youtube-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
+import { getUserBioTranslation } from "@/lib/content-translation.server";
+import { AutoTranslateNotice } from "@/components/profile/auto-translate-notice";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -321,7 +323,8 @@ export function shouldRevalidate({
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const t = createTranslator(resolveLocale(request));
+  const viewerLocale = resolveLocale(request);
+  const t = createTranslator(viewerLocale);
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -514,7 +517,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計・
   // Minefolio内順位は互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
   // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
-  const [presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank] = await Promise.all([
+  const [presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
     resolvePresetOverride(),
     resolveProfileReactions(),
     // プレイヤーの公開ガイドを取得
@@ -537,6 +540,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }),
     resolvePacemanStats(),
     resolveMinefolioEloRank(),
+    // bio / shortBio の自動翻訳（docs/translation.md）。訳文が使えない（機能無効・opt-out・失効・
+    // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する
+    getUserBioTranslation(db, player, viewerLocale),
   ]);
 
   let displayKeybindings = player.keybindings;
@@ -609,6 +615,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     pinnedSpeedrunRecords,
     pacemanStats,
     minefolioEloRank,
+    bioTranslation,
     presets: presets.map((p) => ({
       id: p.id,
       name: p.name,
@@ -626,11 +633,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, minefolioEloRank, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, minefolioEloRank, bioTranslation, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  // 自己紹介（bio / shortBio）の自動翻訳。訳文があれば既定で訳文を出し、原文へ切り替えられる。
+  // 切替はクライアント状態のみ（ローダーは訳文と原文の両方を返す）
+  const [showBioOriginal, setShowBioOriginal] = useState(false);
+  const showTranslatedBio = bioTranslation !== null && !showBioOriginal;
+  const displayShortBio =
+    (showTranslatedBio ? bioTranslation.shortBio : null) ?? player.shortBio;
+  const displayBio = (showTranslatedBio ? bioTranslation.bio : null) ?? player.bio;
+  // 注記は「実際に訳文が存在する欄」の近くにだけ出す（空の欄に出さない）
+  const hasTranslatedShortBio = Boolean(bioTranslation?.shortBio && player.shortBio);
+  const hasTranslatedBio = Boolean(bioTranslation?.bio && player.bio);
+  const toggleBioOriginal = () => setShowBioOriginal((prev) => !prev);
   // Radix TabsContent は非アクティブ時に子要素を unmount するため、タブ切替で消える
   // ProfileReactionBar 側ではなく、unmount されない親（このページ）で state を保持する
   // （docs/profile-reactions.md 参照）
@@ -1163,8 +1181,8 @@ export default function PlayerProfilePage() {
                     {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
                   </p>
                 )}
-                {player.shortBio && (
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{player.shortBio}</p>
+                {displayShortBio && (
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">{displayShortBio}</p>
                 )}
               </div>
             </TabsTrigger>
@@ -1369,8 +1387,15 @@ export default function PlayerProfilePage() {
                         {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
                       </p>
                     )}
-                    {player.shortBio && (
-                      <p className="text-sm text-muted-foreground mt-2">{player.shortBio}</p>
+                    {displayShortBio && (
+                      <p className="text-sm text-muted-foreground mt-2">{displayShortBio}</p>
+                    )}
+                    {hasTranslatedShortBio && (
+                      <AutoTranslateNotice
+                        showOriginal={showBioOriginal}
+                        onToggle={toggleBioOriginal}
+                        className="mt-1 justify-center sm:justify-start"
+                      />
                     )}
                   </div>
 
@@ -1453,7 +1478,7 @@ export default function PlayerProfilePage() {
                     <FavoriteButton slug={player.slug} />
                     <ShareButton
                       title={`${playerName} - Minefolio`}
-                      description={player.shortBio ?? undefined}
+                      description={displayShortBio ?? undefined}
                       includeTab={true}
                     />
                     <Button asChild variant="outline" size="sm">
@@ -1481,20 +1506,23 @@ export default function PlayerProfilePage() {
           )}
 
           {/* Bio */}
-          {player.bio && (
+          {displayBio && (
             <Card className="gap-3 py-5">
               <CardHeader className="px-5">
                 <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
+                {hasTranslatedBio && (
+                  <AutoTranslateNotice showOriginal={showBioOriginal} onToggle={toggleBioOriginal} />
+                )}
               </CardHeader>
               <CardContent className="px-5">
                 <Suspense
                   fallback={
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                      {player.bio}
+                      {displayBio}
                     </p>
                   }
                 >
-                  <BioMarkdown bio={player.bio} />
+                  <BioMarkdown bio={displayBio} />
                 </Suspense>
               </CardContent>
             </Card>
