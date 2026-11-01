@@ -12,7 +12,7 @@ import {
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { users } from "@/lib/schema";
+import { contentTranslations, users } from "@/lib/schema";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -23,6 +23,17 @@ const sessionMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/session", () => sessionMocks);
+
+const translationMocks = vi.hoisted(() => ({
+  scheduleUserBioTranslation: vi.fn(),
+}));
+
+// 翻訳のスケジュールだけ差し替える（本物は waitUntil 経由で Anthropic API へ到達しうる）。
+// 訳文行の削除（removeUserBioTranslations）は本物を使って DB を検証する
+vi.mock("@/lib/content-translation.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/content-translation.server")>();
+  return { ...actual, scheduleUserBioTranslation: translationMocks.scheduleUserBioTranslation };
+});
 
 import { action, loader } from "../edit";
 
@@ -303,5 +314,48 @@ describe("loader - translationEnabled", () => {
     signInAs("discord-runner");
 
     expect((await callLoader()).translationEnabled).toBe(true);
+  });
+});
+
+describe("自己紹介の自動翻訳と公開範囲（非公開プロフィールは翻訳しない）", () => {
+  async function seedTranslationRow(userId: string) {
+    await db.insert(contentTranslations).values({
+      targetType: "userBio",
+      targetId: userId,
+      locale: "en",
+      sourceHash: "dummy",
+      glossaryVersion: 1,
+      status: "ready",
+    });
+  }
+
+  it("非公開→公開に変えると翻訳がスケジュールされる", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "private" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "public" }));
+
+    expect(translationMocks.scheduleUserBioTranslation).toHaveBeenCalledTimes(1);
+    expect(translationMocks.scheduleUserBioTranslation.mock.calls[0][1]).toBe(user.id);
+  });
+
+  it("非公開→限定公開でも翻訳がスケジュールされる", async () => {
+    await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "private" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "unlisted" }));
+
+    expect(translationMocks.scheduleUserBioTranslation).toHaveBeenCalledTimes(1);
+  });
+
+  it("公開→非公開に変えると既存の訳文行を即時削除し、翻訳はスケジュールしない", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "public" });
+    await seedTranslationRow(user.id);
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "private" }));
+
+    expect(await db.select().from(contentTranslations)).toHaveLength(0);
+    expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
   });
 });

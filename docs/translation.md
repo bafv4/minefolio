@@ -143,6 +143,10 @@ sourceHash === 現在の原文のハッシュ
 - **ガイドと bio の両方**に「自動翻訳を許可する」オプトアウトがある（**既定オン**）。
   列は `guides.allow_auto_translation`（ガイドごと）と `users.allow_auto_translation`（bio / shortBio）
 - オフにすると既存の翻訳行も削除し（`removeGuideTranslations` / `removeUserBioTranslations`）、以後翻訳しない
+- **非公開プロフィール（`profileVisibility = "private"`）の bio は翻訳しない**（表示されないものを外部 API に送らない。
+  限定公開〔`unlisted`〕は対象）。非公開にした時点で既存の訳文行も削除し、非公開→公開／限定公開に変えたときに翻訳を走らせる
+  （`/me/edit` は保存のたびに schedule するため自然に走る。`/onboarding` は `save_visibility` で schedule する。
+  `/onboarding` は非公開で作成されるため、公開範囲を選ぶまで bio は翻訳されない）
 - ガイドはガイド設定、bio は `/me/edit` に置く。`/onboarding` には置かない（既定オンのまま）
 - 訳文の手動上書きは Phase 3
 
@@ -248,10 +252,10 @@ sourceHash === 現在の原文のハッシュ
 
 ### 読み取り（失効判定込み。使えないときは `null`＝呼び出し側が原文を使う）
 
-条件: 機能有効 && オプトアウトでない && `sourceHash` 一致 && `glossaryVersion` 一致 && `status = ready` && 原文ロケール≠閲覧ロケール。
+条件: 機能有効 && オプトアウトでない && 非公開プロフィールでない（bio）&& `sourceHash` 一致 && `glossaryVersion` 一致 && `status = ready` && 原文ロケール≠閲覧ロケール。
 
 ```ts
-getUserBioTranslation(db, { id, bio, shortBio, allowAutoTranslation }, viewerLocale): Promise<TranslatedBio | null>
+getUserBioTranslation(db, { id, bio, shortBio, allowAutoTranslation, profileVisibility }, viewerLocale): Promise<TranslatedBio | null>
 getUserBioTranslations(db, userIds, viewerLocale): Promise<Map<userId, TranslatedBio>>   // 一覧用。原文は関数内で引く
 getGuideTranslation(db, { id, title, summary, content, isPublished, allowAutoTranslation }, viewerLocale): Promise<TranslatedGuide | null>
 getGuideTranslations(db, guideIds, viewerLocale): Promise<Map<guideId, TranslatedGuideSummary>>  // 一覧用（title/summary のみ）
@@ -273,21 +277,29 @@ processPendingTranslations(db, { limit?, timeBudgetMs? }): Promise<ProcessTransl
 
 - `TranslateOutcome` = `"translated" | "upToDate" | "failed" | "skipped" | "removed"`。例外は投げない
 - 現在の原文・オプトアウト・機能有効を確認し、最新の訳文があれば API を呼ばない。`pending` 行を upsert →
-  翻訳 → `ready`（失敗は `failed` + `error`）。翻訳中に原文が編集されたら結果を捨てる。
-  原文が空（bio / shortBio とも空）またはオプトアウトなら行を削除する。**ガイドは公開済みのみ**（ドラフトは `skipped`）
+  翻訳 → `ready`（失敗は `failed` + `error`）。
+  原文が空（bio / shortBio とも空）・オプトアウト・非公開プロフィール（bio）なら API を呼ばず行を削除する（`removed`）。
+  **ガイドは公開済みのみ**（ドラフトは `skipped`）
+- **書き込み直前に再確認する**: API 応答待ちの間に状態が変わりうるため、結果を保存する直前に DB を読み直し、
+  原文ハッシュが同じ・自動翻訳の許可がまだ true・（bio なら）非公開でない／（ガイドなら）公開中、のすべてを満たさなければ
+  結果を捨てる（`failed` を返し、行は書かない）。これを欠くと、翻訳中にオフにして削除したはずの訳文行が復活する
 - ガイド本文は `[title, summary, ...テキストノード]` を 8,000 字ごとのチャンクに分けて順に翻訳し、
   1 チャンクでも失敗したら全体を `failed` にする
 - `scheduleTranslation` は action の**保存・公開が成功した後**に呼ぶ。`@vercel/functions` の `waitUntil()` で
   レスポンス後に実行する。機能無効なら何もしない。await 不要・throw しない
-- 呼び出し済み: `/onboarding` の `save_profile`（bio の保存後）、`/me/edit`（保存成功後。許可オフなら `removeUserBioTranslations` を await）、`/my-guides/:guideSlug/edit` の action（保存〔publish〕の成功後、およびオフ→オンに戻した保存の後に `scheduleGuideTranslation`。許可オフなら `removeGuideTranslations` を await。仮保存＝オートセーブ相当では呼ばない）
+- 呼び出し済み: `/onboarding` の `save_profile`（bio の保存後。非公開のため基盤側で `removed`）と `save_visibility`（非公開→公開／限定公開で schedule、公開→非公開で `removeUserBioTranslations` を await）、`/me/edit`（保存成功後。許可オフまたは非公開なら `removeUserBioTranslations` を await）、`/my-guides/:guideSlug/edit` の action（保存〔publish〕の成功後、およびオフ→オンに戻した保存の後に `scheduleGuideTranslation`。許可オフなら `removeGuideTranslations` を await。仮保存＝オートセーブ相当では呼ばない）
 
 ### Cron（`processPendingTranslations`）
 
 1 回あたり `limit` 件（既定 10、対象 1 件 = ガイド 1 本 or bio 1 人）までを**同期的**に処理する。ルートは
 `/api/cron/translations`（`app/routes/api/cron/translations.ts`）で、`CRON_SECRET` で保護し（`requireCronAuth()`）、
 `vercel.json` の crons に **毎時 10 分**（`10 * * * *`）で登録済み。`maxDuration` は 60 秒、`timeBudgetMs` は 48 秒
-（`maxDuration` の 80%。これを超えたら新しい対象に着手しない）。対象は公開済みかつオプトアウトでないもののみで、優先順:
+（`maxDuration` の 80%。これを超えたら新しい対象に着手しない）。翻訳の対象は公開済みかつオプトアウトでないもののみで、優先順:
 
+0. **掃除**（API は呼ばない・削除のみ）: 翻訳が許されなくなった対象——自動翻訳オフ（ガイド・bio）／未公開ガイド／非公開プロフィールの bio——に
+   残っている訳文行を削除する。書き込み直前の再確認とオフ操作の間に残る極小の競合や、非公開化・ドラフトへの戻しで取りこぼした行を拾う。
+   対象 1 件（ガイド 1 本 or bio 1 人）を `processed` / `removed` に数え、`limit` と `timeBudgetMs` は翻訳と共有する。
+   **機能無効（`ANTHROPIC_API_KEY` 未設定）では Cron 全体が何もしない**ので掃除もしない（オフ・非公開化の操作側は機能無効でも削除する）
 1. 再試行すべき行: `pending`（10 分以上経過）／`failed`（6 時間以上経過。失敗し続ける対象で API を叩き潰さない）／`ready` だが用語集バージョン不一致
 2. 原文が更新された可能性のある `ready` 行（原文の `updatedAt` > 翻訳行の `updatedAt`。ハッシュ照合は翻訳関数側）
 3. 翻訳行がまだ無い翻訳対象（公開ガイド・空でない bio。非公開プロフィールの bio は除く）

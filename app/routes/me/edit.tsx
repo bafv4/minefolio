@@ -894,9 +894,10 @@ export async function action({ request }: Route.ActionArgs) {
     })
     .where(eq(users.id, user.id));
 
-  // 自己紹介の自動翻訳（docs/translation.md）。オフにしたら既存の訳文を確実に消す（機能無効でも消す）。
-  // オンのときは毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない）
-  if ((allowAutoTranslation ?? user.allowAutoTranslation) === false) {
+  // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
+  // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない。
+  // 非公開→公開／限定公開への切り替えもここで翻訳が走る）
+  if ((allowAutoTranslation ?? user.allowAutoTranslation) === false || profileVisibility === "private") {
     await removeUserBioTranslations(db, user.id);
   } else {
     scheduleUserBioTranslation(db, user.id);

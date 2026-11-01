@@ -168,10 +168,11 @@ function toTranslatedBio(
  */
 export async function getUserBioTranslation(
   db: Database,
-  user: UserBioSource & { id: string; allowAutoTranslation: boolean },
+  user: UserBioSource & { id: string; allowAutoTranslation: boolean; profileVisibility: string | null },
   viewerLocale: Locale,
 ): Promise<TranslatedBio | null> {
-  if (!isTranslationEnabled() || !user.allowAutoTranslation) return null;
+  // 非公開プロフィールの bio は翻訳しない（残存行があっても返さない）
+  if (!isTranslationEnabled() || !user.allowAutoTranslation || user.profileVisibility === "private") return null;
   const [row] = await selectReadyRows(db, "userBio", [user.id], viewerLocale, true);
   return row ? toTranslatedBio(row, user, viewerLocale) : null;
 }
@@ -179,7 +180,7 @@ export async function getUserBioTranslation(
 /**
  * 複数ユーザーの bio / shortBio の訳文をまとめて引く（一覧用・N+1 にしない）。
  * 訳文のある行だけ現在の原文を読み直して照合する（原文を持っていない一覧でも使える）。
- * オプトアウト中のユーザーは返さない。
+ * オプトアウト中・非公開プロフィールのユーザーは返さない。
  * @returns userId → 訳文（訳文を使えないユーザーはキーに含まれない）
  */
 export async function getUserBioTranslations(
@@ -203,6 +204,7 @@ export async function getUserBioTranslations(
           rows.map((r) => r.targetId),
         ),
         eq(users.allowAutoTranslation, true),
+        ne(users.profileVisibility, "private"),
       ),
     );
   const sourceById = new Map(sources.map((s) => [s.id, s]));
@@ -372,8 +374,12 @@ interface TranslateTargetArgs {
   context: string;
   /** 翻訳済み配列 → 保存する列。失敗したら例外 */
   build: (translated: string[]) => TranslatedValues;
-  /** 翻訳中に原文が書き換わっていないか（書き換わっていれば結果を捨てる） */
-  isSourceUnchanged: () => Promise<boolean>;
+  /**
+   * 書き込み直前の再確認。DB を読み直し、原文が書き換わっていない・自動翻訳の許可が true のまま・
+   * bio なら非公開でない／ガイドなら公開中、のすべてを満たすときだけ true。false なら結果を捨てる
+   * （API 応答待ちの間にオフ・非公開化されて削除済みの訳文行を復活させないため）
+   */
+  canWriteResult: () => Promise<boolean>;
   translate: typeof translateTexts;
 }
 
@@ -467,9 +473,10 @@ async function translateIntoLocale(
     failure = `translation failed: ${error instanceof Error ? error.message : String(error)}`;
   }
 
-  // 翻訳中に原文が編集されていたら結果は捨てる（新しい原文の翻訳は別の呼び出し／Cron が担う。
-  // 古いハッシュのまま ready にしても読み取り側が弾くので害は無いが、行を無駄に上書きしない）
-  if (!(await args.isSourceUnchanged())) return "failed";
+  // 翻訳中に原文が編集された／許可がオフにされた／非公開化された場合は結果を捨てる（新しい原文の翻訳は
+  // 別の呼び出し／Cron が担う。オフ・非公開化の時点で訳文行は削除済みなので、ここで書くと復活してしまう）。
+  // チェックと書き込みの間の極小の競合は Cron の掃除（processPendingTranslations）が拾う
+  if (!(await args.canWriteResult())) return "failed";
 
   if (failure !== null || values === null) {
     console.error(`[content-translation] ${args.targetType}:${args.targetId} -> ${args.to}: ${failure}`);
@@ -518,7 +525,8 @@ async function deleteRowsOutsideLocales(
 
 /**
  * ユーザーの bio / shortBio を翻訳して保存する。
- * - 機能無効なら何もしない（"skipped"）。オプトアウト済み／bio も shortBio も空なら翻訳行を削除する（"removed"）
+ * - 機能無効なら何もしない（"skipped"）。オプトアウト済み／**非公開プロフィール（profileVisibility = "private"）**／
+ *   bio も shortBio も空なら API を呼ばず翻訳行を削除する（"removed"）。限定公開（unlisted）は対象
  * - 既に最新の訳文があれば API を呼ばない（"upToDate"）
  * - 失敗しても例外は投げない（"failed"。行は failed で、表示は原文のまま）
  */
@@ -533,12 +541,20 @@ export async function translateUserBio(
   const load = () =>
     db.query.users.findFirst({
       where: eq(users.id, userId),
-      columns: { id: true, bio: true, shortBio: true, allowAutoTranslation: true, updatedAt: true },
+      columns: {
+        id: true,
+        bio: true,
+        shortBio: true,
+        allowAutoTranslation: true,
+        profileVisibility: true,
+        updatedAt: true,
+      },
     });
   const user = await load();
   if (!user) return "skipped";
 
-  if (!user.allowAutoTranslation || isBioBlank(user)) {
+  // 非公開プロフィールの bio は表示されないので翻訳に送らない（Cron も除外しており、経路で扱いを揃える）
+  if (!user.allowAutoTranslation || user.profileVisibility === "private" || isBioBlank(user)) {
     await removeUserBioTranslations(db, userId);
     return "removed";
   }
@@ -566,9 +582,14 @@ export async function translateUserBio(
           summary: user.shortBio ? shortBio : null,
           content: user.bio ? bio : null,
         }),
-        isSourceUnchanged: async () => {
+        canWriteResult: async () => {
           const latest = await load();
-          return !!latest && sourceHash(userBioSourceTexts(latest)) === hash;
+          return (
+            !!latest &&
+            latest.allowAutoTranslation &&
+            latest.profileVisibility !== "private" &&
+            sourceHash(userBioSourceTexts(latest)) === hash
+          );
         },
         translate,
       }),
@@ -641,9 +662,14 @@ export async function translateGuide(
           summary: guide.summary ? translated[1] : null,
           content: sanitizeGuideHtml(extracted.apply(translated.slice(2))),
         }),
-        isSourceUnchanged: async () => {
+        canWriteResult: async () => {
           const latest = await load();
-          return !!latest && sourceHash(guideSourceTexts(latest)) === hash;
+          return (
+            !!latest &&
+            latest.allowAutoTranslation &&
+            latest.isPublished &&
+            sourceHash(guideSourceTexts(latest)) === hash
+          );
         },
         translate,
       }),
@@ -723,6 +749,9 @@ export interface ProcessTranslationsResult {
  * 取りこぼしの翻訳を掃除する（Cron 用）。同期処理で、`limit` 件の対象まで順に翻訳する。
  *
  * 対象（優先順）:
+ *   0. 掃除: 翻訳が許されなくなった対象（自動翻訳オフ・非公開プロフィールの bio・未公開ガイド）に残っている
+ *      訳文行を削除する（API は呼ばない）。翻訳中のオフ操作との極小の競合や、非公開化・非公開への戻しで
+ *      取りこぼした行を拾う。1 対象 = 1 件として `processed` / `removed` に数え、上限（limit）を共有する
  *   1. 再試行すべき行: pending（10 分以上経過）／failed（6 時間以上経過）／ready だが用語集バージョン不一致
  *   2. 原文が更新された可能性のある ready 行（原文の updatedAt > 翻訳行の updatedAt。ハッシュ照合は翻訳関数側）
  *   3. 翻訳行がまだ無い翻訳対象（公開ガイド・空でない bio。非公開プロフィールの bio は除く）
@@ -748,9 +777,11 @@ export async function processPendingTranslations(
   const pendingCutoff = new Date(now.getTime() - PENDING_RETRY_MS);
   const failedCutoff = new Date(now.getTime() - FAILED_RETRY_MS);
 
+  const startedAt = Date.now();
   const guideIds = new Set<string>();
   const userIds = new Set<string>();
-  const remaining = () => limit - guideIds.size - userIds.size;
+  let swept = 0;
+  const remaining = () => limit - guideIds.size - userIds.size - swept;
 
   const retryable = or(
     and(eq(contentTranslations.status, "pending"), lt(contentTranslations.updatedAt, pendingCutoff)),
@@ -759,6 +790,60 @@ export async function processPendingTranslations(
   );
   const guideTarget = and(eq(guides.isPublished, true), eq(guides.allowAutoTranslation, true));
   const userTarget = and(eq(users.allowAutoTranslation, true), ne(users.profileVisibility, "private"));
+
+  // 0. 翻訳が許されなくなった対象に残っている訳文行を掃除する（削除のみ・API 不使用）
+  if (remaining() > 0 && !(options.timeBudgetMs !== undefined && Date.now() - startedAt >= options.timeBudgetMs)) {
+    const staleGuides = await db
+      .selectDistinct({ id: guides.id })
+      .from(contentTranslations)
+      .innerJoin(guides, eq(guides.id, contentTranslations.targetId))
+      .where(
+        and(
+          eq(contentTranslations.targetType, "guide"),
+          or(eq(guides.allowAutoTranslation, false), eq(guides.isPublished, false)),
+        ),
+      )
+      .limit(remaining());
+    if (staleGuides.length > 0) {
+      await db.delete(contentTranslations).where(
+        and(
+          eq(contentTranslations.targetType, "guide"),
+          inArray(
+            contentTranslations.targetId,
+            staleGuides.map((r) => r.id),
+          ),
+        ),
+      );
+      swept += staleGuides.length;
+    }
+  }
+  if (remaining() > 0 && !(options.timeBudgetMs !== undefined && Date.now() - startedAt >= options.timeBudgetMs)) {
+    const staleUsers = await db
+      .selectDistinct({ id: users.id })
+      .from(contentTranslations)
+      .innerJoin(users, eq(users.id, contentTranslations.targetId))
+      .where(
+        and(
+          eq(contentTranslations.targetType, "userBio"),
+          or(eq(users.allowAutoTranslation, false), eq(users.profileVisibility, "private")),
+        ),
+      )
+      .limit(remaining());
+    if (staleUsers.length > 0) {
+      await db.delete(contentTranslations).where(
+        and(
+          eq(contentTranslations.targetType, "userBio"),
+          inArray(
+            contentTranslations.targetId,
+            staleUsers.map((r) => r.id),
+          ),
+        ),
+      );
+      swept += staleUsers.length;
+    }
+  }
+  result.processed += swept;
+  result.removed += swept;
 
   // 1. 再試行すべき行
   if (remaining() > 0) {
@@ -858,7 +943,6 @@ export async function processPendingTranslations(
     rows.forEach((r) => userIds.add(r.id));
   }
 
-  const startedAt = Date.now();
   const queue: Array<() => Promise<TranslateOutcome>> = [
     ...[...guideIds].map((id) => () => translateGuide(db, id, { translate: options.translate })),
     ...[...userIds].map((id) => () => translateUserBio(db, id, { translate: options.translate })),

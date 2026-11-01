@@ -60,6 +60,19 @@ function fakeTranslate() {
   }));
 }
 
+/** 偽の翻訳関数。API 応答待ちに見立てて、結果を返す直前に `during` を実行する（翻訳中の操作を再現する） */
+function fakeTranslateDuring(during: () => Promise<void>) {
+  return vi.fn<TranslateFn>(async (texts, options) => {
+    await during();
+    return {
+      texts: texts.map((t) => (t.trim() === "" ? t : `[${options.to}]${t}`)),
+      model: "fake-model",
+      engine: TRANSLATION_ENGINE,
+      glossaryVersion: GLOSSARY_VERSION,
+    };
+  });
+}
+
 /** 失敗（null）を返す偽の翻訳関数 */
 function failingTranslate() {
   return vi.fn<TranslateFn>(async () => null);
@@ -411,6 +424,63 @@ describe("translateUserBio / getUserBioTranslation", () => {
     expect(row.content).toBeNull();
   });
 
+  it("非公開プロフィールは翻訳 API を呼ばず、既存の訳文行を削除する（removed）", async () => {
+    const user = await seedBioUser();
+    await translateUserBio(asDb(), user.id, { translate: fakeTranslate() });
+    expect(await allRows()).toHaveLength(1);
+
+    await db.update(users).set({ profileVisibility: "private" }).where(eq(users.id, user.id));
+    const translate = fakeTranslate();
+    expect(await translateUserBio(asDb(), user.id, { translate })).toBe("removed");
+    expect(translate).not.toHaveBeenCalled();
+    expect(await allRows()).toHaveLength(0);
+  });
+
+  it("最初から非公開のプロフィールは行を作らない（removed）", async () => {
+    const user = await seedBioUser({ profileVisibility: "private" });
+    const translate = fakeTranslate();
+    expect(await translateUserBio(asDb(), user.id, { translate })).toBe("removed");
+    expect(translate).not.toHaveBeenCalled();
+    expect(await allRows()).toHaveLength(0);
+  });
+
+  it("限定公開（unlisted）は従来どおり翻訳する", async () => {
+    const user = await seedBioUser({ profileVisibility: "unlisted" });
+    expect(await translateUserBio(asDb(), user.id, { translate: fakeTranslate() })).toBe("translated");
+    expect((await rowFor("userBio", user.id)).status).toBe("ready");
+  });
+
+  it("非公開プロフィールの訳文は行が残っていても読み取りで null", async () => {
+    const user = await seedBioUser();
+    await translateUserBio(asDb(), user.id, { translate: fakeTranslate() });
+    await db.update(users).set({ profileVisibility: "private" }).where(eq(users.id, user.id));
+    expect(await getUserBioTranslation(asDb(), { ...user, profileVisibility: "private" }, "en")).toBeNull();
+    expect((await getUserBioTranslations(asDb(), [user.id], "en")).size).toBe(0);
+  });
+
+  it("翻訳中に許可をオフにして訳文行を削除されたら、結果を書き込まない（行が復活しない）", async () => {
+    const user = await seedBioUser();
+    const translate = fakeTranslateDuring(async () => {
+      await db.update(users).set({ allowAutoTranslation: false }).where(eq(users.id, user.id));
+      await removeUserBioTranslations(asDb(), user.id);
+    });
+
+    expect(await translateUserBio(asDb(), user.id, { translate })).toBe("failed");
+    expect(translate).toHaveBeenCalled();
+    expect(await allRows()).toHaveLength(0);
+  });
+
+  it("翻訳中にプロフィールを非公開にされたら、結果を書き込まない", async () => {
+    const user = await seedBioUser();
+    const translate = fakeTranslateDuring(async () => {
+      await db.update(users).set({ profileVisibility: "private" }).where(eq(users.id, user.id));
+      await removeUserBioTranslations(asDb(), user.id);
+    });
+
+    expect(await translateUserBio(asDb(), user.id, { translate })).toBe("failed");
+    expect(await allRows()).toHaveLength(0);
+  });
+
   it("翻訳関数が要素数の違う配列を返したら failed（部分的な訳文を保存しない）", async () => {
     const user = await seedBioUser();
     const translate = vi.fn<TranslateFn>(async () => ({
@@ -590,6 +660,31 @@ describe("translateGuide / getGuideTranslation", () => {
     expect(await translateGuide(asDb(), guide.id, { translate: fakeTranslate() })).toBe("removed");
     expect(await allRows()).toHaveLength(0);
     expect(await getGuideTranslation(asDb(), { ...guide, allowAutoTranslation: false }, "en")).toBeNull();
+  });
+
+  it("翻訳中に許可をオフにして訳文行を削除されたら、結果を書き込まない（行が復活しない）", async () => {
+    const author = await seedUser(db);
+    const guide = await seedJaGuide(author.id);
+    const translate = fakeTranslateDuring(async () => {
+      await db.update(guides).set({ allowAutoTranslation: false }).where(eq(guides.id, guide.id));
+      await removeGuideTranslations(asDb(), guide.id);
+    });
+
+    expect(await translateGuide(asDb(), guide.id, { translate })).toBe("failed");
+    expect(translate).toHaveBeenCalled();
+    expect(await allRows()).toHaveLength(0);
+  });
+
+  it("翻訳中にガイドを非公開（ドラフト）に戻されたら、結果を書き込まない", async () => {
+    const author = await seedUser(db);
+    const guide = await seedJaGuide(author.id);
+    const translate = fakeTranslateDuring(async () => {
+      await db.update(guides).set({ isPublished: false }).where(eq(guides.id, guide.id));
+    });
+
+    expect(await translateGuide(asDb(), guide.id, { translate })).toBe("failed");
+    expect((await rowFor("guide", guide.id))?.status).not.toBe("ready");
+    expect((await rowFor("guide", guide.id))?.content ?? null).toBeNull();
   });
 
   it("存在しないガイドは skipped", async () => {
@@ -827,6 +922,15 @@ describe("機能無効時", () => {
     expect(result).toEqual({ processed: 0, translated: 0, upToDate: 0, failed: 0, skipped: 0, removed: 0 });
     expect(await allRows()).toHaveLength(0);
     expect(await db.select().from(guides)).toEqual(before);
+  });
+
+  it("processPendingTranslations は機能無効では掃除もしない（opt-out 対象の残存行にも触れない）", async () => {
+    const user = await seedBioUser({ allowAutoTranslation: false });
+    await insertRow({ targetType: "userBio", targetId: user.id });
+
+    const result = await processPendingTranslations(asDb());
+    expect(result).toEqual({ processed: 0, translated: 0, upToDate: 0, failed: 0, skipped: 0, removed: 0 });
+    expect(await allRows()).toHaveLength(1);
   });
 
   it("removeUserBioTranslations / removeGuideTranslations は機能無効でも行を削除する", async () => {
@@ -1106,7 +1210,7 @@ describe("processPendingTranslations", () => {
     expect((await rowFor("guide", guide.id)).content).toBe("<p>[en]編集後の本文です</p>");
   });
 
-  it("オプトアウト・非公開化されたものは行が残っていても再試行しない", async () => {
+  it("オプトアウト・非公開化されたものは行が残っていても翻訳を再試行しない（掃除で削除される）", async () => {
     const author = await seedUser(db, { bio: null, shortBio: null, updatedAt: OLD });
     const optedOut = await seedJaGuide(author.id, { title: "オプトアウト", updatedAt: OLD });
     const unpublished = await seedJaGuide(author.id, { title: "非公開", updatedAt: OLD });
@@ -1120,8 +1224,71 @@ describe("processPendingTranslations", () => {
     const translate = fakeTranslate();
 
     const result = await processPendingTranslations(asDb(), { translate, now: at(FAILED_RETRY_MS * 2) });
-    expect(result.processed).toBe(0);
     expect(translate).not.toHaveBeenCalled();
+    expect(result).toEqual({ processed: 3, translated: 0, upToDate: 0, failed: 0, skipped: 0, removed: 3 });
+    expect(await allRows()).toHaveLength(0);
+  });
+
+  describe("掃除: 翻訳が許されなくなった対象に残っている訳文行を削除する", () => {
+    it("許可オフ・非公開 bio・未公開ガイドの訳文行を削除し、removed に数える（API は呼ばない）", async () => {
+      const author = await seedUser(db, { bio: null, shortBio: null, updatedAt: OLD });
+      const optedOutGuide = await seedJaGuide(author.id, { title: "オプトアウト", updatedAt: OLD });
+      const draftGuide = await seedJaGuide(author.id, { title: "ドラフト", updatedAt: OLD });
+      const privateUser = await seedBioUser({ profileVisibility: "private", updatedAt: OLD });
+      const optedOutUser = await seedBioUser({ allowAutoTranslation: false, updatedAt: OLD });
+      const keepGuide = await makeReadyGuide();
+      const keepUser = await makeReadyBio();
+      for (const g of [optedOutGuide, draftGuide]) await insertRow({ targetType: "guide", targetId: g.id });
+      await insertRow({ targetType: "guide", targetId: optedOutGuide.id, locale: "ja" });
+      for (const u of [privateUser, optedOutUser]) await insertRow({ targetType: "userBio", targetId: u.id });
+      await db.update(guides).set({ allowAutoTranslation: false }).where(eq(guides.id, optedOutGuide.id));
+      await db.update(guides).set({ isPublished: false }).where(eq(guides.id, draftGuide.id));
+      const translate = fakeTranslate();
+
+      const result = await processPendingTranslations(asDb(), { translate, now: T0 });
+      expect(result).toEqual({ processed: 4, translated: 0, upToDate: 0, failed: 0, skipped: 0, removed: 4 });
+      expect(translate).not.toHaveBeenCalled();
+      // 翻訳が許されている対象の行は残る
+      expect((await allRows()).map((r) => `${r.targetType}:${r.targetId}`).sort()).toEqual(
+        [`guide:${keepGuide.id}`, `userBio:${keepUser.id}`].sort(),
+      );
+    });
+
+    it("unlisted の bio の行は掃除しない", async () => {
+      const user = await seedBioUser({ profileVisibility: "unlisted", updatedAt: OLD });
+      await translateUserBio(asDb(), user.id, { translate: fakeTranslate() });
+      await setRow("userBio", user.id, { updatedAt: T0 });
+
+      const result = await processPendingTranslations(asDb(), { translate: fakeTranslate(), now: T0 });
+      expect(result.processed).toBe(0);
+      expect(await allRows()).toHaveLength(1);
+    });
+
+    it("limit を翻訳と共有し、1 回で捌けない分は次の実行で削除する", async () => {
+      const author = await seedUser(db, { bio: null, shortBio: null, updatedAt: OLD });
+      for (let i = 0; i < 3; i++) {
+        const g = await seedJaGuide(author.id, { title: `ドラフト${i}`, isPublished: false, updatedAt: OLD });
+        await insertRow({ targetType: "guide", targetId: g.id });
+      }
+
+      const first = await processPendingTranslations(asDb(), { translate: fakeTranslate(), now: T0, limit: 2 });
+      expect(first).toMatchObject({ processed: 2, removed: 2 });
+      expect(await allRows()).toHaveLength(1);
+
+      const second = await processPendingTranslations(asDb(), { translate: fakeTranslate(), now: T0, limit: 2 });
+      expect(second).toMatchObject({ processed: 1, removed: 1 });
+      expect(await allRows()).toHaveLength(0);
+    });
+
+    it("timeBudgetMs を使い切っていたら掃除もしない／limit 0 でも何もしない", async () => {
+      const user = await seedBioUser({ allowAutoTranslation: false, updatedAt: OLD });
+      await insertRow({ targetType: "userBio", targetId: user.id });
+      const translate = fakeTranslate();
+
+      expect((await processPendingTranslations(asDb(), { translate, now: T0, timeBudgetMs: 0 })).processed).toBe(0);
+      expect((await processPendingTranslations(asDb(), { translate, now: T0, limit: 0 })).processed).toBe(0);
+      expect(await allRows()).toHaveLength(1);
+    });
   });
 
   it("再試行すべき行が、行の無い新規対象より優先される", async () => {
