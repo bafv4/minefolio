@@ -719,6 +719,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 `bio` / `shortBio` の入力欄の直下に「自己紹介の自動翻訳を許可する」`Switch`（`users.allowAutoTranslation`、既定オン）と説明（外部サービス Anthropic に送る旨を含む）を置く。保存フォーム（`FloatingSaveBar` の一括保存）に `allowAutoTranslation`（`"true"` / `"false"`）を載せる。
 
+- 機能無効時（`isTranslationEnabled()` が偽＝`ANTHROPIC_API_KEY` 未設定）はスイッチと説明を**表示しない**。loader が真偽値 `translationEnabled` だけをクライアントへ渡し、無効時はフォームに `allowAutoTranslation` を載せない（未送信なので保存済みの値が残り、キー設定後にそのまま使われる）
 - 検証: `"true"` / `"false"` 以外の値は `meEdit.invalidOption` で拒否。**未送信（null）の場合は列を更新対象から外し**、既定値で上書きしない
 - 保存成功後の分岐: 有効な許可状態（送信値、未送信なら既存値）が **オフ** なら `removeUserBioTranslations()` を await（機能無効でも確実に訳文行を消す）。**オン**なら毎回 `scheduleUserBioTranslation()`（`waitUntil` でレスポンス後に翻訳。基盤が原文ハッシュで `upToDate` を判定するので、bio / shortBio が変わっていない保存では API を呼ばない）
 

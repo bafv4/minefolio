@@ -314,6 +314,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 ### 自動翻訳の許可と翻訳フック（編集 action）
 
 - 設定モーダルの「自動翻訳を許可する」スイッチ（既定オン、`guides.allowAutoTranslation`）。説明文で、翻訳に外部サービス（Anthropic）を使うこと・オフにすると既存の翻訳も削除されることを伝える
+- 自動翻訳の機能が無効（`ANTHROPIC_API_KEY` 未設定）のときはこのスイッチを表示しない。loader が `translationEnabled`（`isTranslationEnabled()` の真偽値）をエディタへ渡し、無効時は仮保存・保存とも `allowAutoTranslation` を送らない（サーバーは保存済みの値のまま残す）
 - フォームは `allowAutoTranslation`（`"true"` / `"false"`）を仮保存・保存のどちらでも送る。サーバーは `"true"` / `"false"` 以外を拒否し（`errorInvalidAction`）、未送信なら列を上書きしない。ライブ列なので仮保存でも反映する（スラッグと同じ）
 - 保存成功後の分岐（有効値 = 送信値 ?? 現在値）:
   - **false** → `removeGuideTranslations()` を await（機能無効でも消す）。翻訳は依頼しない

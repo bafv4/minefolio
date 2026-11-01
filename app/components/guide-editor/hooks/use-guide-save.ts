@@ -13,8 +13,8 @@ export interface GuideSaveValues {
   isPublished: boolean;
   coverImageUrl: string | null;
   slug: string;
-  /** 自動翻訳の許可（ライブ列。仮保存・保存のどちらでも送る） */
-  allowAutoTranslation: boolean;
+  /** 自動翻訳の許可（ライブ列。仮保存・保存のどちらでも送る）。undefined なら送らず、サーバーは列を変えない */
+  allowAutoTranslation?: boolean;
 }
 
 export type SaveMode = "draft" | "publish" | "discard";
@@ -38,7 +38,9 @@ function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
   fd.append("isPublished", String(v.isPublished));
   fd.append("coverImageUrl", v.coverImageUrl ?? "");
   fd.append("slug", v.slug);
-  fd.append("allowAutoTranslation", String(v.allowAutoTranslation));
+  if (v.allowAutoTranslation !== undefined) {
+    fd.append("allowAutoTranslation", String(v.allowAutoTranslation));
+  }
   return fd;
 }
 

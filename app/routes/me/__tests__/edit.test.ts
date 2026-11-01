@@ -24,7 +24,7 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
-import { action } from "../edit";
+import { action, loader } from "../edit";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -246,5 +246,62 @@ describe("action - socialLinks の platform 検証", () => {
     const res = await callAction(fd);
 
     expect(res).toEqual({ error: "不正な選択肢です" });
+  });
+});
+
+describe("allowAutoTranslation（自己紹介の自動翻訳の許可）", () => {
+  it("未送信（機能無効でスイッチが出ない）のときは列を上書きせず、保存済みの値が残る", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      allowAutoTranslation: false,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ displayName: "Renamed" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row?.allowAutoTranslation).toBe(false);
+    expect(row?.displayName).toBe("Renamed");
+  });
+
+  it("送信された値は保存される", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ allowAutoTranslation: "false" }));
+
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row?.allowAutoTranslation).toBe(false);
+  });
+});
+
+describe("loader - translationEnabled", () => {
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalKey;
+  });
+
+  async function callLoader(): Promise<{ translationEnabled: boolean }> {
+    const request = new Request("https://minefolio.app/me/edit");
+    return loader({ request, params: {}, context: {} } as never) as never;
+  }
+
+  it("ANTHROPIC_API_KEY 未設定なら false を返す", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    expect((await callLoader()).translationEnabled).toBe(false);
+  });
+
+  it("ANTHROPIC_API_KEY 設定済みなら true を返す", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    expect((await callLoader()).translationEnabled).toBe(true);
   });
 });

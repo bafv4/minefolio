@@ -46,7 +46,7 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
   };
 });
 
-import { action } from "../edit";
+import { action, loader } from "../edit";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -521,6 +521,17 @@ describe("action - 自動翻訳の許可と翻訳フック", () => {
     expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
   });
 
+  it("未送信（機能無効時のエディタの保存）なら、オンの許可も変わらない（仮保存・保存とも）", async () => {
+    const { guide } = await setupAuthorWithGuide({ allowAutoTranslation: true });
+
+    await callAction("my-guide", baseFormData({ _action: "draft" }));
+    expect((await findGuide(guide.id)).allowAutoTranslation).toBe(true);
+
+    await callAction("my-guide", baseFormData({ _action: "publish" }));
+    expect((await findGuide(guide.id)).allowAutoTranslation).toBe(true);
+    expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
+  });
+
   it("true / false 以外の値は拒否し、ガイド行を変更せず翻訳にも触れない", async () => {
     const { guide } = await setupAuthorWithGuide();
     const before = await findGuide(guide.id);
@@ -534,5 +545,37 @@ describe("action - 自動翻訳の許可と翻訳フック", () => {
     expect(await findGuide(guide.id)).toEqual(before);
     expect(translationMocks.scheduleGuideTranslation).not.toHaveBeenCalled();
     expect(translationMocks.removeGuideTranslations).not.toHaveBeenCalled();
+  });
+});
+
+// 自動翻訳の機能が無効（ANTHROPIC_API_KEY 未設定）のときは、設定モーダルのスイッチを出さない。
+// loader が真偽値 translationEnabled だけをエディタへ渡す（.server 関数をコンポーネントに持ち込まない）
+describe("loader - translationEnabled", () => {
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalKey;
+  });
+
+  async function callLoader() {
+    return (await loader({
+      request: new Request("https://minefolio.app/my-guides/my-guide/edit"),
+      params: { guideSlug: "my-guide" },
+      context: {},
+    } as never)) as unknown as { translationEnabled: boolean };
+  }
+
+  it("ANTHROPIC_API_KEY 未設定なら false", async () => {
+    await setupAuthorWithGuide();
+    delete process.env.ANTHROPIC_API_KEY;
+
+    expect((await callLoader()).translationEnabled).toBe(false);
+  });
+
+  it("ANTHROPIC_API_KEY が設定されていれば true", async () => {
+    await setupAuthorWithGuide();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+
+    expect((await callLoader()).translationEnabled).toBe(true);
   });
 });

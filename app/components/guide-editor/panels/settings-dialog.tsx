@@ -35,6 +35,8 @@ interface SettingsDialogProps {
   initialValues: GuideSettingsValues;
   /** URLプレビュー用の著者スラッグ（/guides/{authorSlug}/{slug}） */
   authorSlug: string;
+  /** 自動翻訳の機能が有効か。無効なら許可スイッチを描画しない */
+  translationEnabled: boolean;
   /** カバー画像を Blob へアップロードし URL を返す（即時アップロード） */
   uploadCover: (file: File) => Promise<string | null>;
   isUploadingCover: boolean;
@@ -48,6 +50,7 @@ export function SettingsDialog({
   onOpenChange,
   initialValues,
   authorSlug,
+  translationEnabled,
   uploadCover,
   isUploadingCover,
   uploadError,
@@ -152,19 +155,21 @@ export function SettingsDialog({
           />
         </div>
 
-        {/* 自動翻訳の許可（既定オン。オフで既存の翻訳も削除 — docs/translation.md） */}
-        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-0.5">
-            <Label htmlFor="guide-allow-auto-translation">{t("guideEditor.ui.allowAutoTranslation")}</Label>
-            <p className="text-xs text-muted-foreground">{t("guideEditor.ui.allowAutoTranslationHint")}</p>
+        {/* 自動翻訳の許可（既定オン。オフで既存の翻訳も削除 — docs/translation.md）。機能無効時は出さない */}
+        {translationEnabled && (
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="guide-allow-auto-translation">{t("guideEditor.ui.allowAutoTranslation")}</Label>
+              <p className="text-xs text-muted-foreground">{t("guideEditor.ui.allowAutoTranslationHint")}</p>
+            </div>
+            <Switch
+              id="guide-allow-auto-translation"
+              checked={allowAutoTranslation}
+              onCheckedChange={setAllowAutoTranslation}
+              aria-label={t("guideEditor.ui.allowAutoTranslation")}
+            />
           </div>
-          <Switch
-            id="guide-allow-auto-translation"
-            checked={allowAutoTranslation}
-            onCheckedChange={setAllowAutoTranslation}
-            aria-label={t("guideEditor.ui.allowAutoTranslation")}
-          />
-        </div>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

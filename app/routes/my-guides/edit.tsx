@@ -13,6 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
 import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content-translation.server";
+import { isTranslationEnabled } from "@/lib/translate.server";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 
@@ -79,7 +80,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     isPublished: guide.isPublished,
   };
 
-  return { guide: { ...guide, ...resolved }, user, hasDraft, published };
+  // 自動翻訳の機能が無効（ANTHROPIC_API_KEY 未設定）なら設定モーダルのスイッチを出さない。
+  // .server の関数はコンポーネントから使えないため、真偽値だけをエディタへ渡す
+  const translationEnabled = isTranslationEnabled();
+
+  return { guide: { ...guide, ...resolved }, user, hasDraft, published, translationEnabled };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -284,7 +289,7 @@ function safeParseTags(raw: string | null | undefined): string[] {
 }
 
 export default function GuideEditPage() {
-  const { guide, user, hasDraft, published } = useLoaderData<typeof loader>();
+  const { guide, user, hasDraft, published, translationEnabled } = useLoaderData<typeof loader>();
 
   return (
     <GuideEditor
@@ -296,6 +301,7 @@ export default function GuideEditPage() {
       initialTags={safeParseTags(guide.tags)}
       initialIsPublished={guide.isPublished}
       initialAllowAutoTranslation={guide.allowAutoTranslation}
+      translationEnabled={translationEnabled}
       initialCoverImageUrl={guide.coverImageUrl}
       initialHasDraft={hasDraft}
       publishedSnapshot={{
