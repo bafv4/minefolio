@@ -116,11 +116,7 @@ description: Minefolio のバージョンリリース作業。origin/main と de
    コードのノードは post-commit フックが AST で自動更新するが、`docs/` の仕様書は semantic 抽出（LLM）なので
    自動では更新されない。リリース範囲で `docs/` に変更があれば `/graphify --update` を実行する
    （対象は `.graphifyignore` で コード ＋ `docs/` 直下の仕様書に絞ってある）。
-   変更が無ければこの手順は飛ばす。グラフの更新はリリースコミットと分けてコミットする。
-
-   ```
-   chore(graphify): ナレッジグラフを更新（vX.Y.Z までの docs を反映）
-   ```
+   変更が無ければこの手順は飛ばす。`graphify-out/` は Git 管理外（ローカルのみ）なので、グラフの更新はコミットしない。
 
 10. **コミットする。**
 

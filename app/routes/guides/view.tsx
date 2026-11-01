@@ -1,5 +1,7 @@
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { getGuideTranslation } from "@/lib/content-translation.server";
+import { GuideAutoTranslateBanner } from "@/components/guide-auto-translate-banner";
 import {
   useLoaderData,
   Link,
@@ -61,8 +63,9 @@ export function meta({
   if (!loaderData?.guide) {
     return [{ title: t("guideView.notFoundTitle") }];
   }
-  const title = `${loaderData.guide.title} - Minefolio`;
-  const description = loaderData.guide.summary || t("guideView.metaDescription", { name: pickDisplayName(loaderData.author, locale) || loaderData.author.mcid || "" });
+  // meta / OGP は常に原文（クローラーには日本語。docs/translation.md「SEO」）。本文表示が訳文でも変えない
+  const title = `${loaderData.guide.metaTitle} - Minefolio`;
+  const description = loaderData.guide.metaSummary || t("guideView.metaDescription", { name: pickDisplayName(loaderData.author, locale) || loaderData.author.mcid || "" });
   const ogImage = loaderData.guide.coverImageUrl || `${loaderData.appUrl}/og-image`;
   return [
     { title },
@@ -313,6 +316,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const viewTags = previewingDraft ? guide.draftTags ?? guide.tags : guide.tags;
   const viewContent = previewingDraft ? guide.draftContent ?? guide.content : guide.content;
 
+  // 自動翻訳（docs/translation.md）。公開版の閲覧のみ対象（ドラフトプレビューは翻訳しない）。
+  // 訳文が使えない（機能無効・opt-out・失効・未公開・原文と閲覧ロケールが同じ）ときは null で原文。
+  // ?original=1 は原文への切替（SSR で切り替えるので共有・再読み込みでも状態が保てる）。
+  // 切替リンクを出すため、original 指定でも訳文の有無は引く
+  const translation = draftPreview
+    ? null
+    : await getGuideTranslation(db, guide, resolveLocale(request));
+  const showOriginal = url.searchParams.get("original") === "1";
+  const translated = translation !== null && !showOriginal ? translation : null;
+  const displayTitle = translated?.title ?? viewTitle;
+  const displaySummary = translated?.summary ?? viewSummary;
+  const displayContent = translated?.content ?? viewContent;
+
   // ドラフトプレビューでは閲覧数を増やさない
   if (!draftPreview) {
     db.update(guides)
@@ -323,7 +339,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
-  const sanitizedContent = sanitizeGuideHtml(viewContent);
+  const sanitizedContent = sanitizeGuideHtml(displayContent);
 
   // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
   const normalizedContent = normalizeGuideTables(sanitizedContent);
@@ -353,8 +369,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     guide: {
       id: guide.id,
       slug: guide.slug,
-      title: viewTitle,
-      summary: viewSummary,
+      title: displayTitle,
+      summary: displaySummary,
+      // meta / OGP 用の原文（本文が訳文でも常に原文）
+      metaTitle: viewTitle,
+      metaSummary: viewSummary,
       coverImageUrl: viewCover,
       tags: viewTags,
       viewCount: guide.viewCount,
@@ -376,6 +395,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     isOwner,
     previewingDraft,
     toc,
+    // 訳文が存在するとき（原文表示中も含む）だけ非 null。バナーの文言と切替リンクに使う
+    autoTranslation: translation
+      ? { sourceLocale: translation.sourceLocale, showingOriginal: showOriginal }
+      : null,
   };
 }
 
@@ -383,7 +406,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { guide, author, embedUsers, isOwner, previewingDraft, toc } = useLoaderData<typeof loader>();
+  const { guide, author, embedUsers, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
   const tags = parseGuideTags(guide.tags);
   const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -491,6 +514,14 @@ export default function GuideViewPage() {
             </Badge>
           ))}
         </div>
+      )}
+
+      {/* 自動翻訳の注記と原文切替（自動翻訳を著者の言葉として黙って出さない。docs/translation.md） */}
+      {autoTranslation && (
+        <GuideAutoTranslateBanner
+          sourceLocale={autoTranslation.sourceLocale}
+          showingOriginal={autoTranslation.showingOriginal}
+        />
       )}
 
       {/* Meta */}

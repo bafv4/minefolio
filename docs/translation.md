@@ -8,8 +8,10 @@ UI 文言の多言語化（`docs/i18n.md`）とは別系統。あちらは開発
 こちらは**利用者が書いた可変のコンテンツ**を機械翻訳して保存・配信する。`docs/i18n.md` の
 「利用者が書いた内容は翻訳しない」という原則に対する、明示的な例外となる。
 
-> **状態: Phase 0 実装済み（土台のみ・UI 無し）。Phase 1 以降は未実装。**
-> 方針は「エンジンは Claude API」「公開ガイドは既定オン＋著者オプトアウト」で決定済み。
+> **状態: Phase 1・2 実装済み。** 基盤（スキーマ・中核ライブラリ・初期設定画面の呼び出し）、
+> Phase 1 の画面側（プロフィール表示・`/me/edit`）、Phase 2 の画面側（ガイド閲覧・一覧・編集の設定と公開フック）と
+> Cron ルート（`/api/cron/translations`）は実装済み。Phase 3 は未着手。
+> 方針は「エンジンは Claude API」「公開ガイドと bio は既定オン＋著者オプトアウト」で決定済み。
 
 ---
 
@@ -138,8 +140,14 @@ sourceHash === 現在の原文のハッシュ
 
 ### 著者の制御
 
-- ガイド設定に「自動翻訳を許可する」チェックボックス（**既定オン**）
-- オフにすると既存の翻訳行も削除する
+- **ガイドと bio の両方**に「自動翻訳を許可する」オプトアウトがある（**既定オン**）。
+  列は `guides.allow_auto_translation`（ガイドごと）と `users.allow_auto_translation`（bio / shortBio）
+- オフにすると既存の翻訳行も削除し（`removeGuideTranslations` / `removeUserBioTranslations`）、以後翻訳しない
+- **非公開プロフィール（`profileVisibility = "private"`）の bio は翻訳しない**（表示されないものを外部 API に送らない。
+  限定公開〔`unlisted`〕は対象）。非公開にした時点で既存の訳文行も削除し、非公開→公開／限定公開に変えたときに翻訳を走らせる
+  （`/me/edit` は保存のたびに schedule するため自然に走る。`/onboarding` は `save_visibility` で schedule する。
+  `/onboarding` は非公開で作成されるため、公開範囲を選ぶまで bio は翻訳されない）
+- ガイドはガイド設定、bio は `/me/edit` に置く。`/onboarding` には置かない（既定オンのまま）
 - 訳文の手動上書きは Phase 3
 
 ---
@@ -188,8 +196,8 @@ sourceHash === 現在の原文のハッシュ
 | Phase | 内容 | 状態 |
 |---|---|---|
 | 0 | 用語集・`content_translations` テーブル・翻訳関数（配列 in/out）・機能フラグ。UI なし | **実装済み** |
-| 1 | **bio / shortBio**。短く HTML も無いので試金石に最適 | 未着手 |
-| 2 | ガイド（テキストノード抽出・公開フック・Cron・バナー・著者オプトアウト） | 未着手 |
+| 1 | **bio / shortBio**。短く HTML も無いので試金石に最適 | **実装済み**（`/player/:slug` の表示・切替、`/me/edit` の許可スイッチ。[`docs/profiles.md`](./profiles.md)。一覧カードの `shortBio` は未対応） |
+| 2 | ガイド（テキストノード抽出・公開フック・Cron・バナー・著者オプトアウト） | **実装済み**（`/guides/:authorSlug/:guideSlug` のバナー・`?original=1` 切替、一覧のマーカー、編集の許可スイッチと公開フック。[`docs/guides.md`](./guides.md)。Cron は `/api/cron/translations`） |
 | 3 | 訳文の手動上書き、テンプレート | 未着手 |
 
 ### Phase 0 で入ったもの
@@ -211,6 +219,93 @@ sourceHash === 現在の原文のハッシュ
   呼び出し側は必ず原文へフォールバックする
 - `MAX_INPUT_CHARS`（20,000字）を超える入力は `null`。分割は呼び出し側の責務（Phase 2）
 - モデルは `LONG_INPUT_CHARS`（4,000字）を境に Haiku ↔ 上位モデルを切り替える
+
+---
+
+## 原文ロケールと翻訳先
+
+- **原文の言語は文字種で判定する**（`detectSourceLocale()`）: ひらがな・カタカナ・漢字（CJK 統合漢字）を含めば `ja`、含まなければ `en`
+- **対象ごとに原文ロケールは 1 つ**。bio は `bio` + `shortBio` を連結、ガイドは `title` + `summary` + 本文テキスト（タグ・属性は除く）を連結して判定する
+  （ハッシュとの整合のため、フィールドごとには判定しない）
+- 翻訳先は対応ロケール（`app/lib/locale.ts`）のうち**原文ロケール以外のすべて**（`translationTargetLocales()`。現状は 1 つ）。
+  同じロケールへは翻訳しない。原文ロケールが変わって翻訳先でなくなったロケールの行は、次の翻訳実行時に削除する
+
+## 列の割り当てとハッシュ
+
+| targetType | `title` | `summary` | `content` |
+|---|---|---|---|
+| `userBio` | 未使用 | 訳した `users.shortBio`（プレーン） | 訳した `users.bio`（Markdown） |
+| `guide` | 訳した `guides.title` | 訳した `guides.summary` | 訳した本文 HTML（`sanitizeGuideHtml()` 済み） |
+
+`sourceHash` は**原文フィールドそのもの**から作る: bio は `[bio, shortBio]`、ガイドは `[title, summary, content の生 HTML]`
+（空は `""`）。HTML 抽出後の配列からは作らない — 一覧ページが本文をパースせずに失効判定できるようにするため。
+
+## 実装（基盤）
+
+| ファイル | 役割 |
+|---|---|
+| `app/lib/content-translation.server.ts` | 下記の読み取り・実行・スケジュール・Cron の関数 |
+| `app/lib/guide-translate-html.server.ts` | 本文 HTML の純関数。`extractGuideHtmlTexts(html)` → `{ texts, apply(translated) }`、`chunkTexts()`。parse5 でパースし、`code`/`pre`/`kbd`/`samp`/`script`/`style`/`textarea`/`template` の中身と埋め込み div（`data-keybind-embed` / `data-searchcraft-embed` / `data-guide-link`）を除外、属性値は `img[alt]` のみ翻訳、空白のみのテキストノードは送らず、前後の空白は元のまま保つ。`apply` は未サニタイズの HTML を返す（呼び出し側が `sanitizeGuideHtml()` を通す） |
+| `scripts/add-allow-auto-translation-columns.ts` | `users` / `guides` に `allow_auto_translation` 列を追加する一回限りスクリプト |
+
+依存: `parse5`（純粋な HTML パース用。ESM のみだが本アプリのサーバーは ESM）。
+
+### 読み取り（失効判定込み。使えないときは `null`＝呼び出し側が原文を使う）
+
+条件: 機能有効 && オプトアウトでない && 非公開プロフィールでない（bio）&& `sourceHash` 一致 && `glossaryVersion` 一致 && `status = ready` && 原文ロケール≠閲覧ロケール。
+
+```ts
+getUserBioTranslation(db, { id, bio, shortBio, allowAutoTranslation, profileVisibility }, viewerLocale): Promise<TranslatedBio | null>
+getUserBioTranslations(db, userIds, viewerLocale): Promise<Map<userId, TranslatedBio>>   // 一覧用。原文は関数内で引く
+getGuideTranslation(db, { id, title, summary, content, isPublished, allowAutoTranslation }, viewerLocale): Promise<TranslatedGuide | null>
+getGuideTranslations(db, guideIds, viewerLocale): Promise<Map<guideId, TranslatedGuideSummary>>  // 一覧用（title/summary のみ）
+```
+
+- 単体版には**ローダーが読んだ現在の原文**を渡す（ガイドは公開版。ドラフトのプレビューでは呼ばない）
+- 一覧版は id だけ受け取り、訳文のある行についてだけ現在の原文を読み直して照合する（N+1 にならない・本文を読まない一覧でも使える）
+- 結果の `sourceLocale` が「原文（日本語）を表示」バナーの表記に使える
+
+### 実行・スケジュール
+
+```ts
+translateUserBio(db, userId, options?): Promise<TranslateOutcome>
+translateGuide(db, guideId, options?): Promise<TranslateOutcome>
+scheduleTranslation(db, { type: "userBio" | "guide", id }): void   // + scheduleUserBioTranslation / scheduleGuideTranslation
+removeUserBioTranslations(db, userId) / removeGuideTranslations(db, guideId)   // オプトアウトに切り替えたとき
+processPendingTranslations(db, { limit?, timeBudgetMs? }): Promise<ProcessTranslationsResult>   // Cron 用
+```
+
+- `TranslateOutcome` = `"translated" | "upToDate" | "failed" | "skipped" | "removed"`。例外は投げない
+- 現在の原文・オプトアウト・機能有効を確認し、最新の訳文があれば API を呼ばない。`pending` 行を upsert →
+  翻訳 → `ready`（失敗は `failed` + `error`）。
+  原文が空（bio / shortBio とも空）・オプトアウト・非公開プロフィール（bio）なら API を呼ばず行を削除する（`removed`）。
+  **ガイドは公開済みのみ**（ドラフトは `skipped`）
+- **書き込み直前に再確認する**: API 応答待ちの間に状態が変わりうるため、結果を保存する直前に DB を読み直し、
+  原文ハッシュが同じ・自動翻訳の許可がまだ true・（bio なら）非公開でない／（ガイドなら）公開中、のすべてを満たさなければ
+  結果を捨てる（`failed` を返し、行は書かない）。これを欠くと、翻訳中にオフにして削除したはずの訳文行が復活する
+- ガイド本文は `[title, summary, ...テキストノード]` を 8,000 字ごとのチャンクに分けて順に翻訳し、
+  1 チャンクでも失敗したら全体を `failed` にする
+- `scheduleTranslation` は action の**保存・公開が成功した後**に呼ぶ。`@vercel/functions` の `waitUntil()` で
+  レスポンス後に実行する。機能無効なら何もしない。await 不要・throw しない
+- 呼び出し済み: `/onboarding` の `save_profile`（bio の保存後。非公開のため基盤側で `removed`）と `save_visibility`（非公開→公開／限定公開で schedule、公開→非公開で `removeUserBioTranslations` を await）、`/me/edit`（保存成功後。許可オフまたは非公開なら `removeUserBioTranslations` を await）、`/my-guides/:guideSlug/edit` の action（保存〔publish〕の成功後、およびオフ→オンに戻した保存の後に `scheduleGuideTranslation`。許可オフなら `removeGuideTranslations` を await。仮保存＝オートセーブ相当では呼ばない）
+
+### Cron（`processPendingTranslations`）
+
+1 回あたり `limit` 件（既定 10、対象 1 件 = ガイド 1 本 or bio 1 人）までを**同期的**に処理する。ルートは
+`/api/cron/translations`（`app/routes/api/cron/translations.ts`）で、`CRON_SECRET` で保護し（`requireCronAuth()`）、
+`vercel.json` の crons に **毎時 10 分**（`10 * * * *`）で登録済み。`maxDuration` は 60 秒、`timeBudgetMs` は 48 秒
+（`maxDuration` の 80%。これを超えたら新しい対象に着手しない）。翻訳の対象は公開済みかつオプトアウトでないもののみで、優先順:
+
+0. **掃除**（API は呼ばない・削除のみ）: 翻訳が許されなくなった対象——自動翻訳オフ（ガイド・bio）／未公開ガイド／非公開プロフィールの bio——に
+   残っている訳文行を削除する。書き込み直前の再確認とオフ操作の間に残る極小の競合や、非公開化・ドラフトへの戻しで取りこぼした行を拾う。
+   対象 1 件（ガイド 1 本 or bio 1 人）を `processed` / `removed` に数え、`limit` と `timeBudgetMs` は翻訳と共有する。
+   **機能無効（`ANTHROPIC_API_KEY` 未設定）では Cron 全体が何もしない**ので掃除もしない（オフ・非公開化の操作側は機能無効でも削除する）
+1. 再試行すべき行: `pending`（10 分以上経過）／`failed`（6 時間以上経過。失敗し続ける対象で API を叩き潰さない）／`ready` だが用語集バージョン不一致
+2. 原文が更新された可能性のある `ready` 行（原文の `updatedAt` > 翻訳行の `updatedAt`。ハッシュ照合は翻訳関数側）
+3. 翻訳行がまだ無い翻訳対象（公開ガイド・空でない bio。非公開プロフィールの bio は除く）
+
+全件走査はせず各段階を `limit` 件で打ち切る。`timeBudgetMs` を超えたら新しい対象に着手しない。返り値は
+`{ processed, translated, upToDate, failed, skipped, removed }`。
 
 ---
 

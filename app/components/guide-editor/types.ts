@@ -13,6 +13,10 @@ export interface GuideEditorProps {
   initialSummary: string;
   initialTags: string[];
   initialIsPublished: boolean;
+  /** 自動翻訳を許可するか（ライブ列。ロールバックの対象外） */
+  initialAllowAutoTranslation: boolean;
+  /** 自動翻訳の機能が有効か（無効なら設定モーダルのスイッチを出さず、保存でも allowAutoTranslation を送らない） */
+  translationEnabled: boolean;
   initialCoverImageUrl: string | null;
   /** 読み込み時に未コミットのドラフトが存在したか */
   initialHasDraft: boolean;

@@ -31,6 +31,8 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`＝「最近の更新」）」→ 水平線 → 「PV順（`home.sectionPopular`＝「注目（直近7日）」。プロフィール・ガイド共通）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
 
+ガイド2セクション（更新順・PV順）には自動翻訳（[`docs/translation.md`](./translation.md)）を反映する。ローダーで両セクションのガイド id をまとめて `getGuideTranslations(db, ids, resolveLocale(request))` に1回だけ渡し（N+1 にしない）、各行へ `applyGuideTranslation` を適用して `title` / `summary` を差し替え `autoTranslated` を付ける（カードの自動翻訳マーカーは `GuideCardGrid` が表示）。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・`Cache-Control`）が無く、`getUserData` の60秒キャッシュもロケール非依存のユーザー情報のみのため、閲覧ロケールごとの結果はリクエスト毎に決まる（共有キャッシュへ訳文が混入しない）。機能無効（`ANTHROPIC_API_KEY` 未設定）・opt-out・原文と同じロケールでは Map が空になり、表示は原文のまま。
+
 PV順の select は `page_view_stats.pageviews` を `pageViews7d` として追加で持ち、カード表示の根拠数値に使う（`common.pageViews7d`＝「直近{days}日の閲覧数」、`TrendingUp` アイコン。実体は `app/components/page-views-meta.tsx` の `PageViews7dMeta`、ガイドカードと共有）:
 
 - **よく見られているプロフィール**（`ProfileFeedCard`）: フッターメタ行の左側（役割・エディション等のバッジ群と同じ並び）に `pageViews7d` を追加表示する（既存表示への追加のみ）

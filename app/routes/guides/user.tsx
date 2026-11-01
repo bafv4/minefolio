@@ -1,5 +1,7 @@
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { getGuideTranslations } from "@/lib/content-translation.server";
+import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import {
@@ -126,8 +128,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     extras: { likeCount: guideLikeCountSql().as("like_count") },
   });
 
+  // 自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
+  const translations = await getGuideTranslations(
+    db,
+    authorGuides.map((g) => g.id),
+    resolveLocale(request),
+  );
+  const translatedGuides = authorGuides.map((g) => applyGuideTranslation(g, translations));
+
   const appUrl = env.APP_URL || "https://minefolio.app";
-  return { author, guides: authorGuides, appUrl };
+  return { author, guides: translatedGuides, appUrl };
 }
 
 

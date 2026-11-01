@@ -22,6 +22,7 @@ import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug, getLocalizedDisplayName } from "@/lib/slug";
 import { sanitizeReturnTo } from "@/lib/return-to";
 import { claimSlug, recordSlugChange } from "@/lib/slug-history.server";
+import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
 import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
 import {
   runAfterResponse,
@@ -368,6 +369,9 @@ export async function action({ request }: Route.ActionArgs) {
       })
       .where(eq(users.id, user.id));
 
+    // bio / shortBio の自動翻訳をレスポンス後に走らせる（機能無効なら何もしない。失敗しても保存には影響しない）
+    scheduleUserBioTranslation(db, user.id);
+
     return { success: true, action: "profile" };
   }
 
@@ -546,6 +550,15 @@ export async function action({ request }: Route.ActionArgs) {
         updatedAt: new Date(),
       })
       .where(eq(users.id, user.id));
+
+    // bio の自動翻訳（docs/translation.md）。非公開プロフィールの bio は翻訳しないので、プロフィール保存時
+    // （step 1）には訳されていない。非公開→公開／限定公開になったここで翻訳を走らせる。
+    // 逆に非公開へ変えたときは既存の訳文を消す（機能無効でも消す）
+    if (profileVisibility === "private") {
+      if (user.profileVisibility !== "private") await removeUserBioTranslations(db, user.id);
+    } else if (user.profileVisibility === "private") {
+      scheduleUserBioTranslation(db, user.id);
+    }
 
     // 非公開→公開への切り替え時は、非公開中はcron対象外で取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる
     // （edit.tsx の基本情報フォームと同じ処理。連携有無の検索もレスポンスを遅らせないようbackground側で行う）

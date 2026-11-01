@@ -17,6 +17,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     draftPreviewNotice:
       "You're viewing a draft preview. It may differ from the published version.",
     embedUserNotFound: 'User "{slug}" not found',
+    autoTranslatedNotice: "This article was automatically translated",
+    viewingOriginalNotice: "Showing the original ({language})",
+    showOriginal: "Show original ({language})",
+    showTranslation: "Show translation",
   },
   theme: {
     toggle: "Toggle theme",
@@ -494,6 +498,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     signInWithDiscord: "Log in with Discord",
   },
   guides: {
+    autoTranslatedMark: "Title and summary are auto-translated",
     guidesCount: "{count} guides",
     guideList: "All guides",
     userGuidesTitle: "Guides by {name}",
@@ -710,6 +715,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     skinDialogTitle: "{name}'s skin",
     noMcidNote: "This user hasn't registered an MCID",
     bedrockMcidLine: "Bedrock: {id}",
+    autoTranslated: "Auto-translated",
+    showOriginal: "Show original",
+    showTranslation: "Show translation",
+    viewingOriginal: "Showing original",
     noGuidesTitle: "No guides",
     noGuidesDescription: "This player hasn't published any guides yet.",
     platformPcWindows: "PC (Windows)",
@@ -1101,6 +1110,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     mobile: "Mobile",
     other: "Other",
     shortBioHint: "A short label shown on your runner card",
+    allowAutoTranslation: "Allow auto-translation of my bio",
+    allowAutoTranslationHint:
+      "When on, your About and Tagline are automatically translated to match each viewer's language (viewers can switch back to the original). Translation uses an external service (Anthropic). Turning this off also deletes existing translations.",
     roleRunner: "Runner",
     roleViewer: "Viewer",
     role: "Role",
@@ -2235,6 +2247,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
         "Edit the title, summary, cover image, tags, and visibility. “Apply” updates the editor — saving is a separate step.",
       publishOn: "Published (visibility is applied when you save)",
       publishOff: "Draft (stays unpublished when you save)",
+      allowAutoTranslation: "Allow auto-translation",
+      allowAutoTranslationHint:
+        "When on, your published guide is automatically translated to match each viewer's language (viewers can switch back to the original). Translation uses an external service (Anthropic). Turning this off also deletes existing translations. This setting is applied by both Save and Save draft.",
       cancel: "Cancel",
       apply: "Apply",
       blockActions: "Block actions",

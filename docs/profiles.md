@@ -23,6 +23,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `discordAvatar` | text | Discordアバター (セッションから自動同期) |
 | `bio` | text | プロフィール説明文 |
 | `shortBio` | text | 短い説明文 (OGP等で使用) |
+| `allowAutoTranslation` | boolean (既定 true) | 自己紹介（`bio` / `shortBio`）の自動翻訳を許可するか。`/me/edit` のスイッチで切り替える（[`docs/translation.md`](./translation.md)） |
 | `hasImported` | boolean | レガシーデータインポート済みフラグ |
 | `profileVisibility` | enum | `public` / `unlisted` / `private` |
 | `profilePose` | enum | `standing` / `walking` / `waving` |
@@ -656,6 +657,16 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ヘッダーカードの基本情報カラム下部に、編集（本人のみ）/お気に入り/シェア/比較のアクションボタン行がある。**その直下**にプロフィール絵文字リアクションバー（常時表示、標準機能）を配置する。詳細は [`docs/profile-reactions.md`](./profile-reactions.md) を参照。
 
+### 自己紹介（bio / shortBio）の自動翻訳表示
+
+閲覧ロケールと原文のロケールが異なり、有効な訳文があるときだけ、`bio`（Bio カード）と `shortBio`（ヘッダーカード・サイドバー）を**訳文を既定で**表示する。仕様の全体は [`docs/translation.md`](./translation.md)。
+
+- loader が `getUserBioTranslation(db, player, resolveLocale(request))`（`app/lib/content-translation.server.ts`）を呼び、`bioTranslation`（`{ bio, shortBio, sourceLocale }` | `null`）を返す。`player` の原文も従来どおり返すため、訳文と原文の両方がクライアントに渡る（500字以内で負担は小さい）。`null` は機能無効・オプトアウト・失効・原文と閲覧ロケールが同じ、のいずれかで、その場合は原文のみ
+- SSR 時点で訳文が出る（切替前に原文が一瞬見えることはない）。切替はクライアント状態（`showBioOriginal`）のみで、`bio` と `shortBio` が同時に切り替わる
+- 訳文が存在する欄の近くに `AutoTranslateNotice`（`app/components/profile/auto-translate-notice.tsx`）を出す: ヘッダーカードの `shortBio` の下と Bio カードの見出し直下。「自動翻訳 · 原文を表示」→ 原文表示中は「原文を表示中 · 翻訳を表示」（`playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。自動翻訳を著者の言葉として黙って出さないための必須要素
+- 訳文の `bio` も原文と同じ `BioMarkdown`（`react-markdown` + `rehype-sanitize`）で描画する
+- `<meta>` の description / OGP・シェアの文面は原文（`shortBio`）のまま。一覧カード（`/browse`・ホーム・`/compare` 等）の `shortBio` は**未対応**（原文表示）
+
 ### デバイスタブのマウス設定表示
 
 `devices` タブのマウス設定は、値が出せない/不正なケースでも行を消さず「-」+ 理由（または警告）を表示する。計算ロジック・警告UIは `/keybindings` 一覧と共有しており、詳細は [`docs/keybindings.md`](./keybindings.md#マウス設定)（振り向き・カーソル速度・バリデーション節）を参照:
@@ -703,6 +714,14 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
 
 「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
+
+### 自己紹介の自動翻訳の許可
+
+`bio` / `shortBio` の入力欄の直下に「自己紹介の自動翻訳を許可する」`Switch`（`users.allowAutoTranslation`、既定オン）と説明（外部サービス Anthropic に送る旨を含む）を置く。保存フォーム（`FloatingSaveBar` の一括保存）に `allowAutoTranslation`（`"true"` / `"false"`）を載せる。
+
+- 機能無効時（`isTranslationEnabled()` が偽＝`ANTHROPIC_API_KEY` 未設定）はスイッチと説明を**表示しない**。loader が真偽値 `translationEnabled` だけをクライアントへ渡し、無効時はフォームに `allowAutoTranslation` を載せない（未送信なので保存済みの値が残り、キー設定後にそのまま使われる）
+- 検証: `"true"` / `"false"` 以外の値は `meEdit.invalidOption` で拒否。**未送信（null）の場合は列を更新対象から外し**、既定値で上書きしない
+- 保存成功後の分岐: 有効な許可状態（送信値、未送信なら既存値）が **オフ** なら `removeUserBioTranslations()` を await（機能無効でも確実に訳文行を消す）。**オン**なら毎回 `scheduleUserBioTranslation()`（`waitUntil` でレスポンス後に翻訳。基盤が原文ハッシュで `upToDate` を判定するので、bio / shortBio が変わっていない保存では API を呼ばない）
 
 ### Bedrock版 MCID（Xbox ゲーマータグ）
 

@@ -26,6 +26,7 @@
 | viewCount | integer | 閲覧数 |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時（保存=公開版更新時のみ） |
+| allowAutoTranslation | boolean | 自動翻訳を許可するか（既定 true）。ライブ列（ドラフト対象外・ロールバック対象外）。編集画面の設定モーダルのスイッチで切り替える（下記「自動翻訳」） |
 | isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭・拡大表示）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
 
 #### 保存モデル（仮保存 / 保存）
@@ -250,7 +251,25 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - カバー画像、タイトル、著者情報、本文を表示
 - 閲覧時に viewCount をインクリメント
 - メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
-- **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
+- **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、meta 用の原文 metaTitle / metaSummary、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
+
+#### 自動翻訳の表示（`/guides/:authorSlug/:guideSlug`）
+
+仕様の全体は [`docs/translation.md`](./translation.md)。ここでは画面側の挙動のみ。
+
+- ローダーは公開版の原文を `getGuideTranslation()` に渡し、訳文（title / summary / 本文）が使えれば**既定で訳文を表示**する。使えない（機能無効・著者がオプトアウト・失効・未公開・原文と閲覧ロケールが同じ）ときは `null` で、従来どおり原文。**ドラフトプレビュー（`?draft=1`）では翻訳を引かない**
+- 訳文の本文も原文と同じ経路（サニタイズ → 表の整形 → 目次 → 埋め込みの抽出・描画 → `guide-content`）で描画するため、キー配置・サーチクラフト・ガイドリンクの埋め込みは訳文でも同じに動く（埋め込み div は翻訳対象外で原文のまま）
+- 記事上部（タグ行とメタ帯の間）に `GuideAutoTranslateBanner`（`app/components/guide-auto-translate-banner.tsx`）を出す。「この記事は自動翻訳です · 原文（日本語）を表示」。色は `border-info/40 bg-info/10`。誤訳が意味の反転になりうる技術記事のため、バナーと原文への切替は必須要素
+- **原文への切替は `?original=1`**（SSR で出し分け。共有・再読み込みでも状態が保てる）。原文表示中は「原文（日本語）を表示中 · 翻訳を表示」に変わり、クエリから `original` を外すだけで訳文に戻る。他のクエリ（`draft` 等）は維持する。原文ロケール名は `sourceLocale` から `LOCALE_NAMES` で引く
+- 訳文があるとき（原文表示中も含む）だけローダーが `autoTranslation: { sourceLocale, showingOriginal }` を返す。無いときは `null`＝バナーを出さない
+- **meta / OGP は常に原文**（クローラーには常に日本語。ローダーが `guide.metaTitle` / `guide.metaSummary` を別に返す）
+
+#### 一覧での自動翻訳
+
+`getGuideTranslations(db, ids, viewerLocale)` を 1 回呼び、`applyGuideTranslation()`（`app/lib/guide-translation-list.ts`）でタイトル・要約を訳文に差し替える（N+1 にならない）。差し替えた行は `autoTranslated: true` になり、`GuideCardGrid` / `GuideListView` が著者名の隣に `Languages` アイコン＋ツールチップ（`guides.autoTranslatedMark`）の小さなマーカーを出す。
+
+- 対象: `/guides`（検索・タグ絞り込みは原文で行う）・`/guides/:authorSlug`・`/player/:slug` のガイドタブ
+- ホーム（`/`）のガイドセクションも `GuideItem.autoTranslated` を受け取れる。ローダー側で同じ差し替えが必要（rankings-worker 担当）
 
 ### 著者slugの解決（`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug` 共通）
 
@@ -291,6 +310,16 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
   - スラッグ変更に成功すると、action は新しい `slug` を返し、クライアントは `/my-guides/{新slug}/edit` へ `navigate(replace)` する（同一ルートのためエディタは再マウントされず、編集中の本文・状態は保持される）。
   - 旧スラッグからのリダイレクトは行わない（旧URLは404になる）。
   - action の戻り値は素の object（`{ success, mode, slug }` / `{ error }`）。`hooks/use-guide-save.ts` が `fetcher.data` として受け取り、宿主（`index.tsx`）がトースト表示とURL差し替えを行う。
+
+### 自動翻訳の許可と翻訳フック（編集 action）
+
+- 設定モーダルの「自動翻訳を許可する」スイッチ（既定オン、`guides.allowAutoTranslation`）。説明文で、翻訳に外部サービス（Anthropic）を使うこと・オフにすると既存の翻訳も削除されることを伝える
+- 自動翻訳の機能が無効（`ANTHROPIC_API_KEY` 未設定）のときはこのスイッチを表示しない。loader が `translationEnabled`（`isTranslationEnabled()` の真偽値）をエディタへ渡し、無効時は仮保存・保存とも `allowAutoTranslation` を送らない（サーバーは保存済みの値のまま残す）
+- フォームは `allowAutoTranslation`（`"true"` / `"false"`）を仮保存・保存のどちらでも送る。サーバーは `"true"` / `"false"` 以外を拒否し（`errorInvalidAction`）、未送信なら列を上書きしない。ライブ列なので仮保存でも反映する（スラッグと同じ）
+- 保存成功後の分岐（有効値 = 送信値 ?? 現在値）:
+  - **false** → `removeGuideTranslations()` を await（機能無効でも消す）。翻訳は依頼しない
+  - **true** かつ（保存〔publish〕、またはオフ→オンに戻した保存）→ `scheduleGuideTranslation()`（`waitUntil`。レスポンス後に走り、失敗しても保存結果に影響しない）。公開版を書き換えない**仮保存では、許可を戻したとき以外は翻訳しない**（ドラフトは翻訳対象外）
+- `/my-guides/new` は非公開で作成するため翻訳しない。公開版の更新は `/my-guides/:guideSlug/edit` の publish のみ
 
 ### 公開ガイド表示時の編集導線
 
@@ -335,6 +364,8 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 
 - `app/components/guide-editor/index.tsx` — TipTapガイドエディタ
 - `app/components/guide-list-views.tsx` — ガイド一覧のグリッド/リスト表示
+- `app/components/guide-auto-translate-banner.tsx` — 自動翻訳バナーと原文切替リンク（`?original=1`）
+- `app/lib/guide-translation-list.ts` — 一覧行へ訳文を適用する純関数（`applyGuideTranslation`）
 
 ### API
 

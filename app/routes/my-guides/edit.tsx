@@ -12,6 +12,8 @@ import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
+import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content-translation.server";
+import { isTranslationEnabled } from "@/lib/translate.server";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 
@@ -78,7 +80,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     isPublished: guide.isPublished,
   };
 
-  return { guide: { ...guide, ...resolved }, user, hasDraft, published };
+  // 自動翻訳の機能が無効（ANTHROPIC_API_KEY 未設定）なら設定モーダルのスイッチを出さない。
+  // .server の関数はコンポーネントから使えないため、真偽値だけをエディタへ渡す
+  const translationEnabled = isTranslationEnabled();
+
+  return { guide: { ...guide, ...resolved }, user, hasDraft, published, translationEnabled };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -133,6 +139,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return { error: t("meGuides.errorInvalidAction") };
   }
   const saveMode = action;
+
+  // 自動翻訳の許可（ライブ列。仮保存・保存のどちらでも反映する）。未送信なら上書きしない。
+  // "true" / "false" 以外は拒否する（不正値を黙って false 扱いにして翻訳を消さない）
+  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
+  const allowAutoTranslation =
+    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
+  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
+    return { error: t("meGuides.errorInvalidAction") };
+  }
 
   const title = (formData.get("title") as string)?.trim() || guide.title;
   const content = (formData.get("content") as string) ?? guide.content;
@@ -215,6 +230,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .update(guides)
       .set({
         slug: nextSlug,
+        ...(allowAutoTranslation !== null ? { allowAutoTranslation } : {}),
         draftTitle: title,
         draftSummary: summary,
         draftContent: content,
@@ -229,6 +245,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .update(guides)
       .set({
         slug: nextSlug,
+        ...(allowAutoTranslation !== null ? { allowAutoTranslation } : {}),
         title,
         content,
         summary,
@@ -246,6 +263,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .where(eq(guides.id, guide.id));
   }
 
+  // 自動翻訳（docs/translation.md）。オフなら既存の訳文を確実に消す（機能無効でも消す）。
+  // オンのときは、公開版を更新する保存、またはオフ→オンに戻した保存で翻訳を依頼する
+  // （仮保存はドラフト列だけを書き換えるので、許可を戻したとき以外は翻訳しない）。
+  // 翻訳はレスポンス後に走り、失敗しても保存結果には影響しない
+  const effectiveAllow = allowAutoTranslation ?? guide.allowAutoTranslation;
+  if (!effectiveAllow) {
+    await removeGuideTranslations(db, guide.id);
+  } else if (saveMode === "publish" || !guide.allowAutoTranslation) {
+    scheduleGuideTranslation(db, guide.id);
+  }
+
   return { success: true, mode: saveMode, slug: nextSlug };
 }
 
@@ -261,7 +289,7 @@ function safeParseTags(raw: string | null | undefined): string[] {
 }
 
 export default function GuideEditPage() {
-  const { guide, user, hasDraft, published } = useLoaderData<typeof loader>();
+  const { guide, user, hasDraft, published, translationEnabled } = useLoaderData<typeof loader>();
 
   return (
     <GuideEditor
@@ -272,6 +300,8 @@ export default function GuideEditPage() {
       initialSummary={guide.summary ?? ""}
       initialTags={safeParseTags(guide.tags)}
       initialIsPublished={guide.isPublished}
+      initialAllowAutoTranslation={guide.allowAutoTranslation}
+      translationEnabled={translationEnabled}
       initialCoverImageUrl={guide.coverImageUrl}
       initialHasDraft={hasDraft}
       publishedSnapshot={{

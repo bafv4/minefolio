@@ -20,7 +20,7 @@ import {
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { users, socialLinks } from "@/lib/schema";
+import { contentTranslations, users, socialLinks } from "@/lib/schema";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -58,6 +58,17 @@ const targetedRefreshMocks = vi.hoisted(() => ({
   refreshSrcRankingsForUser: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/targeted-refresh.server", () => targetedRefreshMocks);
+
+const translationMocks = vi.hoisted(() => ({
+  scheduleUserBioTranslation: vi.fn(),
+}));
+
+// 翻訳のスケジュールだけ差し替える（本物は waitUntil 経由で Anthropic API へ到達しうる）。
+// 訳文行の削除（removeUserBioTranslations）は本物を使って DB を検証する
+vi.mock("@/lib/content-translation.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/content-translation.server")>();
+  return { ...actual, scheduleUserBioTranslation: translationMocks.scheduleUserBioTranslation };
+});
 
 import { MojangError } from "@/lib/mojang";
 import { action, loader } from "../onboarding";
@@ -488,6 +499,62 @@ describe("action - save_visibility", () => {
     expect(updated?.showPacemanOnHome).toBe(true);
     expect(updated?.showTwitchOnHome).toBe(true);
     expect(updated?.showYoutubeOnHome).toBe(true);
+  });
+
+  it("非公開→公開／限定公開を選ぶと bio の自動翻訳がスケジュールされる（非公開中は翻訳されていないため）", async () => {
+    for (const visibility of ["public", "unlisted"]) {
+      translationMocks.scheduleUserBioTranslation.mockClear();
+      await db.delete(users);
+      const user = await seedUser(db, {
+        discordId: "discord-runner",
+        slug: "steve",
+        profileVisibility: "private",
+        onboardingCompleted: false,
+      });
+      signInAs("discord-runner");
+
+      await callAction(makeVisibilityFormData({ profileVisibility: visibility }));
+
+      expect(translationMocks.scheduleUserBioTranslation).toHaveBeenCalledTimes(1);
+      expect(translationMocks.scheduleUserBioTranslation.mock.calls[0][1]).toBe(user.id);
+    }
+  });
+
+  it("非公開のまま完了しても翻訳はスケジュールしない", async () => {
+    await seedUser(db, {
+      discordId: "discord-runner",
+      slug: "steve",
+      profileVisibility: "private",
+      onboardingCompleted: false,
+    });
+    signInAs("discord-runner");
+
+    await callAction(makeVisibilityFormData({ profileVisibility: "private" }));
+
+    expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
+  });
+
+  it("公開→非公開に変えると既存の訳文行を削除する", async () => {
+    const user = await seedUser(db, {
+      discordId: "discord-runner",
+      slug: "steve",
+      profileVisibility: "public",
+      onboardingCompleted: false,
+    });
+    await db.insert(contentTranslations).values({
+      targetType: "userBio",
+      targetId: user.id,
+      locale: "en",
+      sourceHash: "dummy",
+      glossaryVersion: 1,
+      status: "ready",
+    });
+    signInAs("discord-runner");
+
+    await callAction(makeVisibilityFormData({ profileVisibility: "private" }));
+
+    expect(await db.select().from(contentTranslations)).toHaveLength(0);
+    expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
   });
 });
 

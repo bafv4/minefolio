@@ -95,6 +95,10 @@ export const users = sqliteTable("users", {
   // 列追加前から存在する全ユーザーを「完了済み」として扱うため（バックフィル不要）。
   // ウィザード開始時（_action=start）の insert だけが明示的に false を入れる。
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).default(true).notNull(),
+
+  // bio / shortBio の自動翻訳を許可するか（docs/translation.md）。既定オン、オフにすると既存の翻訳行も削除する。
+  // DB 既定を true にしているのは、列追加前から存在する全ユーザーを「許可」として扱うため（バックフィル不要）。
+  allowAutoTranslation: integer("allow_auto_translation", { mode: "boolean" }).default(true).notNull(),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
@@ -492,6 +496,8 @@ export const guides = sqliteTable("guides", {
   draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
   // プロフィールのガイドタブでのピン留め（ピン留めカードは先頭・拡大表示）
   isPinned: integer("is_pinned", { mode: "boolean" }).default(false).notNull(),
+  // このガイドの自動翻訳を許可するか（docs/translation.md）。既定オン、オフにすると既存の翻訳行も削除する。
+  allowAutoTranslation: integer("allow_auto_translation", { mode: "boolean" }).default(true).notNull(),
 }, (t) => [
   uniqueIndex("guides_author_slug_uniq").on(t.authorId, t.slug),
   index("guides_feed_idx").on(t.isPublished, t.updatedAt),
@@ -1289,7 +1295,12 @@ export type NewProfileReaction = typeof profileReactions.$inferInsert;
 //
 // 対象ごとにテーブルを分けず targetType で束ねる（ガイド・bio・将来のテンプレートを
 // 同じ読み書き経路で扱うため）。外部キーは張らない（targetType ごとに参照先が異なるため）。
-// 対象の削除時は Phase 1/2 の書き込み経路で明示的に消す。
+// 対象の削除時は明示的に消す（app/lib/content-cleanup.server.ts）。
+//
+// 列の割り当て（app/lib/content-translation.server.ts）:
+//   - targetType = "userBio": content = 訳した users.bio（Markdown）、summary = 訳した users.shortBio、title は使わない
+//   - targetType = "guide":   title / summary / content = 訳した guides.title / summary / content（HTML）
+// sourceHash は原文フィールドそのもの（bio+shortBio、または guide の title+summary+content の生 HTML）から作る。
 export const contentTranslations = sqliteTable("content_translations", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
 

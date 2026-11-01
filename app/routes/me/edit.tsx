@@ -8,6 +8,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { isTranslationEnabled } from "@/lib/translate.server";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, and, asc, inArray } from "drizzle-orm";
@@ -30,6 +31,7 @@ import {
   refreshSrcRankingsForUser,
 } from "@/lib/targeted-refresh.server";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
+import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
 import {
   isValidRtaStartedYearMonth,
   parseRtaStartedYearMonth,
@@ -223,7 +225,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
 
-  return { user, links: user.socialLinks, videos: user.profileVideos, legacyApiUrl, hasExistingData };
+  // 自動翻訳が無効（ANTHROPIC_API_KEY 未設定）のときは許可スイッチを出さない（真偽値だけをクライアントへ渡す）
+  const translationEnabled = isTranslationEnabled();
+
+  return {
+    user,
+    links: user.socialLinks,
+    videos: user.profileVideos,
+    legacyApiUrl,
+    hasExistingData,
+    translationEnabled,
+  };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
@@ -780,6 +792,10 @@ export async function action({ request }: Route.ActionArgs) {
   const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
   const showRankedStats = formData.get("showRankedStats") === "true";
   const showPacemanStats = formData.get("showPacemanStats") === "true";
+  // 自己紹介の自動翻訳の許可。未送信（null）・不正値は列を更新対象から外す（既定値で上書きしない）
+  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
+  const allowAutoTranslation =
+    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
 
   // Validate
   if (displayName && displayName.length > 50) {
@@ -820,6 +836,10 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (capeDisplayRaw !== null && capeDisplay === null) {
+    return { error: t("meEdit.invalidOption") };
+  }
+
+  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
     return { error: t("meEdit.invalidOption") };
   }
 
@@ -869,9 +889,19 @@ export async function action({ request }: Route.ActionArgs) {
       showYoutubeOnHome,
       showRankedStats,
       showPacemanStats,
+      ...(allowAutoTranslation !== null ? { allowAutoTranslation } : {}),
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
+
+  // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
+  // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない。
+  // 非公開→公開／限定公開への切り替えもここで翻訳が走る）
+  if ((allowAutoTranslation ?? user.allowAutoTranslation) === false || profileVisibility === "private") {
+    await removeUserBioTranslations(db, user.id);
+  } else {
+    scheduleUserBioTranslation(db, user.id);
+  }
 
   // speedruncomUsername を social_links（speedruncom行）へ逆方向同期する。
   // ソーシャルリンク欄側の create_link/update_link/delete_link は既に users.speedruncomUsername を
@@ -1169,7 +1199,8 @@ function VideoDialog({
 export default function EditProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { user, links, videos, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
+  const { user, links, videos, legacyApiUrl, hasExistingData, translationEnabled } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const linkFetcher = useFetcher<typeof action>();
   const videoFetcher = useFetcher<typeof action>();
@@ -1239,6 +1270,7 @@ export default function EditProfilePage() {
     showYoutubeOnHome: user.showYoutubeOnHome ?? true,
     showRankedStats: user.showRankedStats ?? true,
     showPacemanStats: user.showPacemanStats ?? true,
+    allowAutoTranslation: user.allowAutoTranslation ?? true,
   });
 
   const [formValues, setFormValues] = useState(buildFormValues);
@@ -1359,8 +1391,12 @@ export default function EditProfilePage() {
     formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
     formData.set("showRankedStats", String(formValues.showRankedStats));
     formData.set("showPacemanStats", String(formValues.showPacemanStats));
+    // 機能無効時はスイッチを出さないので送らない（action は未送信なら列を上書きしない）
+    if (translationEnabled) {
+      formData.set("allowAutoTranslation", String(formValues.allowAutoTranslation));
+    }
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, isRtaStartedIncomplete, t]);
+  }, [fetcher, formValues, isRtaStartedIncomplete, t, translationEnabled]);
 
   // ポーズ変更を同期
   useEffect(() => {
@@ -2070,6 +2106,26 @@ export default function EditProfilePage() {
                 {t("meEdit.shortBioHint")}
               </p>
             </div>
+
+            {translationEnabled && (
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 p-3">
+                <div className="space-y-1">
+                  <Label htmlFor="allowAutoTranslation" className="text-sm font-normal cursor-pointer">
+                    {t("meEdit.allowAutoTranslation")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("meEdit.allowAutoTranslationHint")}
+                  </p>
+                </div>
+                <Switch
+                  id="allowAutoTranslation"
+                  checked={formValues.allowAutoTranslation}
+                  onCheckedChange={(checked) =>
+                    setFormValues((prev) => ({ ...prev, allowAutoTranslation: checked }))
+                  }
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="rtaStartedYear">{t("meEdit.rtaStarted")}</Label>

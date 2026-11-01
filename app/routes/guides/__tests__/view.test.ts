@@ -32,6 +32,16 @@ vi.mock("@/lib/mojang", async (importOriginal) => {
   };
 });
 
+// 自動翻訳の読み取り（実体は ANTHROPIC_API_KEY が無いと常に null）。表示の出し分けだけを検証するため差し替える
+const translationMocks = vi.hoisted(() => ({
+  getGuideTranslation: vi.fn(),
+}));
+
+vi.mock("@/lib/content-translation.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/content-translation.server")>();
+  return { ...actual, getGuideTranslation: translationMocks.getGuideTranslation };
+});
+
 import { loader } from "../view";
 
 // ガイド詳細のSSRペイロード。
@@ -61,6 +71,8 @@ async function callLoader(authorSlug: string, guideSlug: string, search = "") {
 beforeEach(async () => {
   vi.clearAllMocks();
   mojangMocks.fetchUuidFromMcid.mockReset();
+  translationMocks.getGuideTranslation.mockReset();
+  translationMocks.getGuideTranslation.mockResolvedValue(null);
   for (const key of ENV_KEYS) originalEnv[key] = process.env[key];
   process.env.TURSO_DATABASE_URL = SHARED_URL;
   process.env.BETTER_AUTH_SECRET = "test-secret";
@@ -236,5 +248,68 @@ describe("著者slugの解決（大文字小文字無視の一致 + 404フォー
     expect(thrown).toBeInstanceOf(Response);
     expect((thrown as Response).status).toBe(404);
     expect(mojangMocks.fetchUuidFromMcid).not.toHaveBeenCalled();
+  });
+});
+
+// 自動翻訳（docs/translation.md）。訳文があれば既定で訳文を表示し、?original=1 で原文へ切り替える。
+// meta / OGP 用の値は常に原文。ドラフトプレビューでは翻訳を引かない。
+describe("自動翻訳の表示切替", () => {
+  const TRANSLATION = {
+    title: "Translated title",
+    summary: "Translated summary",
+    content: "<p>TRANSLATED_BODY</p>",
+    sourceLocale: "ja" as const,
+  };
+
+  it("訳文が無ければ従来どおり原文で、autoTranslation は null", async () => {
+    await seedGuideWithDraft();
+
+    const data = await callLoader("author", "my-guide");
+    const guide = data.guide as Record<string, unknown>;
+
+    expect(data.autoTranslation).toBeNull();
+    expect(guide.title).toBe("公開タイトル");
+    expect(guide.sanitizedContent).toContain(RAW_CONTENT_MARKER);
+  });
+
+  it("訳文があれば title / summary / 本文を訳文にし、meta 用の値は原文のまま", async () => {
+    await seedGuideWithDraft();
+    translationMocks.getGuideTranslation.mockResolvedValue(TRANSLATION);
+
+    const data = await callLoader("author", "my-guide");
+    const guide = data.guide as Record<string, unknown>;
+
+    expect(guide.title).toBe("Translated title");
+    expect(guide.summary).toBe("Translated summary");
+    expect(guide.sanitizedContent).toContain("TRANSLATED_BODY");
+    expect(guide.sanitizedContent).not.toContain(RAW_CONTENT_MARKER);
+    expect(guide.metaTitle).toBe("公開タイトル");
+    expect(data.autoTranslation).toEqual({ sourceLocale: "ja", showingOriginal: false });
+  });
+
+  it("?original=1 は原文を表示し、訳文があることは autoTranslation で伝える（戻すリンク用）", async () => {
+    await seedGuideWithDraft();
+    translationMocks.getGuideTranslation.mockResolvedValue(TRANSLATION);
+
+    const data = await callLoader("author", "my-guide", "?original=1");
+    const guide = data.guide as Record<string, unknown>;
+
+    expect(guide.title).toBe("公開タイトル");
+    expect(guide.sanitizedContent).toContain(RAW_CONTENT_MARKER);
+    expect(data.autoTranslation).toEqual({ sourceLocale: "ja", showingOriginal: true });
+  });
+
+  it("ドラフトプレビュー（?draft=1）では翻訳を引かず、ドラフトをそのまま表示する", async () => {
+    await seedGuideWithDraft();
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "discord-author" } });
+    translationMocks.getGuideTranslation.mockResolvedValue(TRANSLATION);
+
+    const data = await callLoader("author", "my-guide", "?draft=1");
+    const guide = data.guide as Record<string, unknown>;
+
+    expect(translationMocks.getGuideTranslation).not.toHaveBeenCalled();
+    expect(data.autoTranslation).toBeNull();
+    expect(guide.title).toBe("下書きタイトル");
+    expect(guide.sanitizedContent).toContain(DRAFT_SECRET);
   });
 });

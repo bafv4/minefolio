@@ -28,7 +28,9 @@ import { useFavorites } from "@/hooks/use-favorites";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { getGuideTranslations } from "@/lib/content-translation.server";
+import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { pickDisplayName } from "@/lib/slug";
 import {
   ArrowRight,
@@ -209,6 +211,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const totalPublicProfiles = profileCounts?.total ?? 0;
   const activePublicProfiles = profileCounts?.active ?? 0;
 
+  // 自動翻訳（docs/translation.md）。更新順・PV順の両セクションのガイド id をまとめて 1 回で引き、
+  // title / summary を差し替える。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・Cache-Control）が無く、
+  // getUserData のキャッシュもロケール非依存のユーザー情報のみなので、閲覧ロケールごとの結果はここで毎回決まる。
+  // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
+  const guideTranslations = await getGuideTranslations(
+    db,
+    [...recentlyUpdatedGuides, ...popularGuides].map((g) => g.id),
+    resolveLocale(request),
+  );
+
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
@@ -221,8 +233,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToSkinUrl,
     recentlyUpdatedUsers,
     popularUsers,
-    recentlyUpdatedGuides,
-    popularGuides,
+    recentlyUpdatedGuides: recentlyUpdatedGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
+    popularGuides: popularGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
     totalPublicProfiles,
     activePublicProfiles,
   };

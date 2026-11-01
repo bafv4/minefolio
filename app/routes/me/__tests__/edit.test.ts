@@ -12,7 +12,7 @@ import {
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { users } from "@/lib/schema";
+import { contentTranslations, users } from "@/lib/schema";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -24,7 +24,18 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
-import { action } from "../edit";
+const translationMocks = vi.hoisted(() => ({
+  scheduleUserBioTranslation: vi.fn(),
+}));
+
+// 翻訳のスケジュールだけ差し替える（本物は waitUntil 経由で Anthropic API へ到達しうる）。
+// 訳文行の削除（removeUserBioTranslations）は本物を使って DB を検証する
+vi.mock("@/lib/content-translation.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/content-translation.server")>();
+  return { ...actual, scheduleUserBioTranslation: translationMocks.scheduleUserBioTranslation };
+});
+
+import { action, loader } from "../edit";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -246,5 +257,105 @@ describe("action - socialLinks の platform 検証", () => {
     const res = await callAction(fd);
 
     expect(res).toEqual({ error: "不正な選択肢です" });
+  });
+});
+
+describe("allowAutoTranslation（自己紹介の自動翻訳の許可）", () => {
+  it("未送信（機能無効でスイッチが出ない）のときは列を上書きせず、保存済みの値が残る", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      allowAutoTranslation: false,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ displayName: "Renamed" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row?.allowAutoTranslation).toBe(false);
+    expect(row?.displayName).toBe("Renamed");
+  });
+
+  it("送信された値は保存される", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ allowAutoTranslation: "false" }));
+
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row?.allowAutoTranslation).toBe(false);
+  });
+});
+
+describe("loader - translationEnabled", () => {
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalKey;
+  });
+
+  async function callLoader(): Promise<{ translationEnabled: boolean }> {
+    const request = new Request("https://minefolio.app/me/edit");
+    return loader({ request, params: {}, context: {} } as never) as never;
+  }
+
+  it("ANTHROPIC_API_KEY 未設定なら false を返す", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    expect((await callLoader()).translationEnabled).toBe(false);
+  });
+
+  it("ANTHROPIC_API_KEY 設定済みなら true を返す", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    expect((await callLoader()).translationEnabled).toBe(true);
+  });
+});
+
+describe("自己紹介の自動翻訳と公開範囲（非公開プロフィールは翻訳しない）", () => {
+  async function seedTranslationRow(userId: string) {
+    await db.insert(contentTranslations).values({
+      targetType: "userBio",
+      targetId: userId,
+      locale: "en",
+      sourceHash: "dummy",
+      glossaryVersion: 1,
+      status: "ready",
+    });
+  }
+
+  it("非公開→公開に変えると翻訳がスケジュールされる", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "private" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "public" }));
+
+    expect(translationMocks.scheduleUserBioTranslation).toHaveBeenCalledTimes(1);
+    expect(translationMocks.scheduleUserBioTranslation.mock.calls[0][1]).toBe(user.id);
+  });
+
+  it("非公開→限定公開でも翻訳がスケジュールされる", async () => {
+    await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "private" });
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "unlisted" }));
+
+    expect(translationMocks.scheduleUserBioTranslation).toHaveBeenCalledTimes(1);
+  });
+
+  it("公開→非公開に変えると既存の訳文行を即時削除し、翻訳はスケジュールしない", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", profileVisibility: "public" });
+    await seedTranslationRow(user.id);
+    signInAs("discord-runner");
+
+    await callAction(baseFormData({ profileVisibility: "private" }));
+
+    expect(await db.select().from(contentTranslations)).toHaveLength(0);
+    expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
   });
 });

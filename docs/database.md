@@ -255,6 +255,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `pinned_speedrun_records` | json? | ピン留めする run ID の配列 |
 | `rta_started_year_month` | text? | `"YYYY-MM"` |
 | `onboarding_completed` | bool | 既定 **true**。初期設定ウィザード（`/onboarding`）を完了したか。既定 true は列追加前の既存ユーザーを完了済みとして扱うため（バックフィル不要）で、ウィザード開始時の insert だけが `false` を入れる。反映は `scripts/add-onboarding-completed-column.ts` |
+| `allow_auto_translation` | bool | 既定 **true**。bio / shortBio の自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `userBio` の翻訳行を削除する。既定 true は既存ユーザーを「許可」として扱うため。反映は `scripts/add-allow-auto-translation-columns.ts` |
 
 索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
 
@@ -755,6 +756,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `draft_tags` | json? | |
 | `draft_updated_at` | ts? | |
 | `is_pinned` | bool | 既定 false |
+| `allow_auto_translation` | bool | 既定 **true**。このガイドの自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `guide` の翻訳行を削除する。反映は `scripts/add-allow-auto-translation-columns.ts` |
 
 索引: **UNIQUE** `(author_id, slug)` / `(is_published, updated_at)` / `(author_id)`
 
@@ -969,7 +971,11 @@ MCID を持たないユーザーの VOD も扱うため **`mcid` 列を持たな
 #### `content_translations`
 
 ガイド本文・プロフィール文の機械翻訳（[translation.md](./translation.md)）。対象ごとにテーブルを分けず
-`target_type` で束ねるため FK は張らない。対象削除時は書き込み経路で明示的に消す。
+`target_type` で束ねるため FK は張らない。対象削除時は明示的に消す。
+
+列の割り当て: `userBio` は `content` = 訳した `users.bio`（Markdown）、`summary` = 訳した `users.short_bio`（`title` は使わない）。
+`guide` は `title` / `summary` / `content` = 訳したガイドの同名列（`content` は HTML）。`source_hash` は原文フィールドそのもの
+（bio + shortBio、またはガイドの title + summary + content の生 HTML）から作る。
 
 | カラム | 型 | 制約・参照 |
 |---|---|---|

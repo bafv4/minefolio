@@ -59,6 +59,8 @@ export function GuideEditor({
   initialSummary,
   initialTags,
   initialIsPublished,
+  initialAllowAutoTranslation,
+  translationEnabled,
   initialCoverImageUrl,
   initialHasDraft,
   publishedSnapshot,
@@ -72,6 +74,10 @@ export function GuideEditor({
   const [summary, setSummary] = useState(initialSummary);
   const [tags, setTags] = useState<string[]>(initialTags);
   const [isPublished, setIsPublished] = useState(initialIsPublished);
+  // 自動翻訳の許可はライブ列（スラッグと同様、ドラフト対象外・ロールバックの対象外）
+  const [allowAutoTranslation, setAllowAutoTranslation] = useState(initialAllowAutoTranslation);
+  // 機能無効時は保存で allowAutoTranslation を送らない（サーバーは保存済みの値のまま残す）
+  const allowAutoTranslationToSend = translationEnabled ? allowAutoTranslation : undefined;
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
   // 編集中のURLスラッグ（初期値は現在のコミット済みスラッグ）。
   const [slug, setSlug] = useState(guideSlug);
@@ -126,11 +132,12 @@ export function GuideEditor({
         isPublished,
         coverImageUrl,
         slug,
+        allowAutoTranslation: allowAutoTranslationToSend,
       });
       setDirty(false);
       setDraftActive(mode === "draft");
     },
-    [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug],
+    [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug, allowAutoTranslationToSend],
   );
 
   // 保存結果の監視: エラーはトースト、スラッグ変更時は新しい編集URLへ差し替える。
@@ -172,10 +179,11 @@ export function GuideEditor({
       isPublished: publishedSnapshot.isPublished,
       coverImageUrl: publishedSnapshot.coverImageUrl,
       slug: guideSlug,
+      allowAutoTranslation: allowAutoTranslationToSend,
     });
     setDirty(false);
     setDraftActive(false);
-  }, [editor, publishedSnapshot, submit, guideSlug]);
+  }, [editor, publishedSnapshot, submit, guideSlug, allowAutoTranslationToSend]);
 
   // 未保存離脱警告
   const blocker = useUnsavedWarning(dirty);
@@ -396,8 +404,9 @@ export function GuideEditor({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug }}
+        initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
         authorSlug={authorSlug}
+        translationEnabled={translationEnabled}
         uploadCover={(file) =>
           coverUpload.uploadTo(
             buildCoverImagePath(userId, guideId),
@@ -415,6 +424,7 @@ export function GuideEditor({
           setCoverImageUrl(v.coverImageUrl);
           setIsPublished(v.isPublished);
           setSlug(v.slug);
+          setAllowAutoTranslation(v.allowAutoTranslation);
           markDirty();
         }}
       />
