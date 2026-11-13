@@ -1,7 +1,7 @@
 import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, redirect, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
@@ -11,28 +11,24 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
-import { users, socialLinks, profileVideos } from "@/lib/schema";
-import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, and, asc } from "drizzle-orm";
+import {
+  users,
+  socialLinks,
+  profileVideos,
+  keybindings,
+  playerConfigs,
+  itemLayouts,
+  searchCrafts,
+  keyRemaps,
+} from "@/lib/schema";
+import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
+import { eq, asc } from "drizzle-orm";
+import { safeExternalHref } from "@/lib/safe-url";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { importFromLegacy } from "@/lib/legacy-import";
-import { createId } from "@paralleldrive/cuid2";
-import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
-import { generateSlug } from "@/lib/slug";
 import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
-import { recordSlugChange } from "@/lib/slug-history.server";
-import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
-import {
-  runAfterResponse,
-  refreshYoutubeForChannel,
-  updateYoutubeCacheMcid,
-} from "@/lib/targeted-refresh.server";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
-import {
-  saveProfileBatch,
-  scheduleSocialLinkKicks,
-  scheduleSocialLinkDeleteKicks,
-} from "@/lib/profile-edit.server";
+import { saveProfileBatch } from "@/lib/profile-edit.server";
 import {
   MAX_PROFILE_VIDEOS,
   validateBedrockMcidFormat,
@@ -114,7 +110,6 @@ import {
   Settings,
   AlertTriangle,
   Download,
-  ImageIcon,
   Pin,
   ArrowUp,
   ArrowDown,
@@ -157,11 +152,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       profileVideos: {
         orderBy: [asc(profileVideos.displayOrder)],
       },
-      keybindings: true,
-      playerConfig: true,
-      itemLayouts: true,
-      searchCrafts: true,
-      keyRemaps: true,
     },
   });
 
@@ -169,13 +159,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  // キー配置等のデータが存在するかチェック
-  const hasExistingData =
-    user.keybindings.length > 0 ||
-    user.playerConfig !== null ||
-    user.itemLayouts.length > 0 ||
-    user.searchCrafts.length > 0 ||
-    user.keyRemaps.length > 0;
+  // キー配置等のデータが存在するかチェック（レガシーインポート案内の出し分けにだけ使う。
+  // 中身は不要なので各テーブル1行の存在確認だけにし、関連データ全件をクライアントへ返さない）
+  const existenceChecks = await Promise.all([
+    db.query.keybindings.findFirst({ where: eq(keybindings.userId, user.id), columns: { id: true } }),
+    db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id), columns: { id: true } }),
+    db.query.itemLayouts.findFirst({ where: eq(itemLayouts.userId, user.id), columns: { id: true } }),
+    db.query.searchCrafts.findFirst({ where: eq(searchCrafts.userId, user.id), columns: { id: true } }),
+    db.query.keyRemaps.findFirst({ where: eq(keyRemaps.userId, user.id), columns: { id: true } }),
+  ]);
+  const hasExistingData = existenceChecks.some((row) => row !== undefined);
 
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
@@ -195,7 +188,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
       {/* Header Skeleton */}
@@ -287,367 +279,6 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
-  // MCID設定/変更
-  if (actionType === "set_mcid") {
-    const mcid = (formData.get("mcid") as string)?.trim();
-
-    if (!mcid) {
-      return { error: t("meEdit.mcidRequired"), action: "mcid" };
-    }
-
-    if (mcid.length < 3 || mcid.length > 16) {
-      return { error: t("meEdit.mcidLength"), action: "mcid" };
-    }
-
-    // 既に同じMCIDが登録されていないかチェック
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.mcid, mcid),
-    });
-
-    if (existingUser && existingUser.id !== user.id) {
-      return { error: t("meEdit.mcidTaken"), action: "mcid" };
-    }
-
-    // Mojang APIで検証
-    try {
-      const uuid = await fetchUuidFromMcid(mcid);
-      const newSlug = generateSlug(mcid, session.user.id);
-
-      await db.transaction(async (tx) => {
-        await tx
-          .update(users)
-          .set({
-            mcid,
-            uuid,
-            slug: newSlug,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, user.id));
-
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
-      });
-
-      // MCID変更に伴う外部キャッシュの紐付け追従（YouTube動画キャッシュのMCID列を新値へ）。
-      // YouTube連携があれば新MCIDで即時取得もキックする（連携有無の検索もレスポンスを遅らせないようbackground側で行う）
-      const oldMcid = user.mcid;
-      runAfterResponse(
-        (async () => {
-          if (oldMcid) {
-            await updateYoutubeCacheMcid(oldMcid, mcid);
-          }
-          const youtubeLink = await db.query.socialLinks.findFirst({
-            where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "youtube")),
-          });
-          if (youtubeLink) {
-            await refreshYoutubeForChannel(youtubeLink.identifier, mcid);
-          }
-        })()
-      );
-
-      return { success: true, action: "mcid", newSlug };
-    } catch (error) {
-      if (error instanceof MojangError) {
-        if (error.code === "MCID_NOT_FOUND") {
-          return { error: t("meEdit.mcidNotFound"), action: "mcid" };
-        }
-      }
-      return { error: t("meEdit.mcidVerifyFailed"), action: "mcid" };
-    }
-  }
-
-  // MCID削除
-  if (actionType === "remove_mcid") {
-    const newSlug = generateSlug(null, session.user.id);
-
-    await db.transaction(async (tx) => {
-      await tx
-        .update(users)
-        .set({
-          mcid: null,
-          uuid: null,
-          slug: newSlug,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-
-      await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-      await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
-    });
-
-    return { success: true, action: "mcid_removed", newSlug };
-  }
-
-  // Bedrock版MCID（Xboxゲーマータグ）の設定/変更
-  // 自己申告の表示用テキスト。所有確認APIが存在しないためMojang検証は行わず、
-  // uuid・スキン・slug などJava MCIDに紐づく処理には一切関与させない（slugは変わらない）
-  if (actionType === "set_bedrock_mcid") {
-    const bedrockMcid = (formData.get("bedrockMcid") as string)?.trim();
-
-    if (!bedrockMcid) {
-      return { error: t("meEdit.bedrockMcidRequired"), action: "bedrock_mcid" };
-    }
-
-    // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
-    if (bedrockMcid.length < 3 || bedrockMcid.length > 24) {
-      return { error: t("meEdit.bedrockMcidLength"), action: "bedrock_mcid" };
-    }
-
-    // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
-    if (/[\u0000-\u001f\u007f]/.test(bedrockMcid)) {
-      return { error: t("meEdit.bedrockMcidInvalid"), action: "bedrock_mcid" };
-    }
-
-    await db
-      .update(users)
-      .set({ bedrockMcid, updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-
-    return { success: true, action: "bedrock_mcid" };
-  }
-
-  // Bedrock版MCID削除
-  if (actionType === "remove_bedrock_mcid") {
-    await db
-      .update(users)
-      .set({ bedrockMcid: null, updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-
-    return { success: true, action: "bedrock_mcid_removed" };
-  }
-
-  // ソーシャルリンクの操作
-  if (actionType === "create_link" || actionType === "update_link") {
-    const id = formData.get("id") as string | null;
-    const platform = formData.get("platform") as "speedruncom" | "youtube" | "twitch" | "twitter" | "custom";
-    const identifier = (formData.get("identifier") as string)?.trim();
-    const customLabel = (formData.get("customLabel") as string)?.trim() || null;
-    const customUrl = (formData.get("customUrl") as string)?.trim() || null;
-
-    const linkErrorKey = validateLinkInput({ platform, identifier, customLabel, customUrl });
-    if (linkErrorKey) {
-      return { error: t(linkErrorKey) };
-    }
-
-    try {
-      if (actionType === "create_link") {
-        // カスタム以外は同じプラットフォームの重複チェック
-        if (platform !== "custom") {
-          const existingPlatform = await db.query.socialLinks.findFirst({
-            where: (links, { and, eq: eqOp }) => and(
-              eqOp(links.userId, user.id),
-              eqOp(links.platform, platform)
-            ),
-          });
-
-          if (existingPlatform) {
-            return { error: t("meEdit.platformLinkExistsForEdit", { platform }) };
-          }
-        }
-
-        await db.insert(socialLinks).values({
-          id: createId(),
-          userId: user.id,
-          platform,
-          identifier,
-          customLabel: platform === "custom" ? customLabel : null,
-          customUrl: platform === "custom" ? customUrl : null,
-        });
-
-        // Speedrun.comの場合、speedruncomUsernameも自動設定
-        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
-        if (platform === "speedruncom") {
-          await db
-            .update(users)
-            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        }
-
-        scheduleSocialLinkKicks({
-          userId: user.id,
-          mcid: user.mcid,
-          oldPlatform: null,
-          oldIdentifier: null,
-          newPlatform: platform,
-          newIdentifier: identifier,
-        });
-      } else if (id) {
-        // カスタム以外は更新時に別のプラットフォームに変更する場合、重複チェック
-        if (platform !== "custom") {
-          const existingPlatform = await db.query.socialLinks.findFirst({
-            where: (links, { and, eq: eqOp, ne }) => and(
-              eqOp(links.userId, user.id),
-              eqOp(links.platform, platform),
-              ne(links.id, id)
-            ),
-          });
-
-          if (existingPlatform) {
-            return { error: t("meEdit.platformLinkExistsSimple", { platform }) };
-          }
-        }
-
-        // 更新前のリンク情報を取得（所有確認込み・IDOR 防止）
-        const oldLink = await db.query.socialLinks.findFirst({
-          where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
-        });
-
-        if (!oldLink) {
-          return { error: t("meEdit.linkSaveFailed") };
-        }
-
-        await db
-          .update(socialLinks)
-          .set({
-            platform,
-            identifier,
-            customLabel: platform === "custom" ? customLabel : null,
-            customUrl: platform === "custom" ? customUrl : null,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
-
-        // Speedrun.comの場合、speedruncomUsernameも自動更新
-        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
-        if (platform === "speedruncom") {
-          await db
-            .update(users)
-            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        } else if (oldLink?.platform === "speedruncom") {
-          // Speedrun.comから別のプラットフォームに変更した場合、クリア
-          await db
-            .update(users)
-            .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        }
-
-        scheduleSocialLinkKicks({
-          userId: user.id,
-          mcid: user.mcid,
-          oldPlatform: oldLink.platform,
-          oldIdentifier: oldLink.identifier,
-          newPlatform: platform,
-          newIdentifier: identifier,
-        });
-      }
-
-      return { success: true, action: "link" };
-    } catch (e) {
-      console.error("Social link error:", e);
-      if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
-        return { error: t("meEdit.platformLinkExists") };
-      }
-      return { error: t("meEdit.linkSaveFailed") };
-    }
-  }
-
-  if (actionType === "delete_link") {
-    const id = formData.get("id") as string;
-    if (id) {
-      // 削除前にリンク情報を取得（所有確認込み・IDOR 防止）
-      const linkToDelete = await db.query.socialLinks.findFirst({
-        where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
-      });
-
-      if (!linkToDelete) {
-        return { success: true, action: "link" };
-      }
-
-      await db
-        .delete(socialLinks)
-        .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
-
-      // Speedrun.comリンクを削除した場合、speedruncomUsername・speedruncomIdもクリア
-      if (linkToDelete.platform === "speedruncom") {
-        await db
-          .update(users)
-          .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
-          .where(eq(users.id, user.id));
-      }
-
-      // 削除したプラットフォームの外部キャッシュも削除する
-      scheduleSocialLinkDeleteKicks(user.id, linkToDelete);
-    }
-    return { success: true, action: "link" };
-  }
-
-  // 動画欄の操作
-  if (actionType === "create_video" || actionType === "update_video") {
-    const id = formData.get("id") as string | null;
-    const url = (formData.get("url") as string)?.trim();
-    const title = (formData.get("title") as string)?.trim() || null;
-    const isPinned = formData.get("isPinned") === "true";
-
-    const videoErrorKey = validateVideoInput({ url, title, isPinned });
-    if (videoErrorKey) {
-      return { error: t(videoErrorKey) };
-    }
-
-    if (actionType === "create_video") {
-      const existing = await db.query.profileVideos.findMany({
-        where: eq(profileVideos.userId, user.id),
-      });
-      if (existing.length >= 10) {
-        return { error: t("meEdit.videoMaxCount") };
-      }
-      const maxOrder = existing.reduce((max, v) => Math.max(max, v.displayOrder), 0);
-      await db.insert(profileVideos).values({
-        id: createId(),
-        userId: user.id,
-        url,
-        title,
-        isPinned,
-        displayOrder: maxOrder + 1,
-      });
-    } else if (id) {
-      await db
-        .update(profileVideos)
-        .set({ url, title, isPinned, updatedAt: new Date() })
-        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
-    }
-    return { success: true, action: "video" };
-  }
-
-  if (actionType === "delete_video") {
-    const id = formData.get("id") as string;
-    if (id) {
-      await db
-        .delete(profileVideos)
-        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
-    }
-    return { success: true, action: "video" };
-  }
-
-  if (actionType === "move_video") {
-    const id = formData.get("id") as string;
-    const direction = formData.get("direction") as string;
-    const videos = await db.query.profileVideos.findMany({
-      where: eq(profileVideos.userId, user.id),
-      orderBy: [asc(profileVideos.displayOrder)],
-    });
-    const index = videos.findIndex((v) => v.id === id);
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (index !== -1 && targetIndex >= 0 && targetIndex < videos.length) {
-      const reordered = [...videos];
-      const [moved] = reordered.splice(index, 1);
-      reordered.splice(targetIndex, 0, moved);
-      // displayOrder の重複があっても正しく並ぶよう、インデックスで振り直す
-      await Promise.all(
-        reordered
-          .map((video, i) => ({ video, i }))
-          .filter(({ video, i }) => video.displayOrder !== i)
-          .map(({ video, i }) =>
-            db
-              .update(profileVideos)
-              .set({ displayOrder: i, updatedAt: new Date() })
-              .where(and(eq(profileVideos.id, video.id), eq(profileVideos.userId, user.id)))
-          )
-      );
-    }
-    return { success: true, action: "video" };
-  }
-
   // アカウント削除
   if (actionType === "delete_account") {
     const confirmText = (formData.get("confirmText") as string)?.trim();
@@ -721,7 +352,9 @@ function getPlatformIcon(platform: string) {
   }
 }
 
-function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string {
+// href に置く URL。カスタムリンクは http/https 以外（保存済みの javascript: 等）なら undefined を返し、
+// href 属性自体を出さない（プロフィール側と同じく safeExternalHref を通す）
+function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string | undefined {
   switch (platform) {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
@@ -733,7 +366,7 @@ function getPlatformUrl(platform: string, identifier: string, customUrlValue?: s
     case "twitter":
       return `https://x.com/${identifier}`;
     case "custom":
-      return customUrlValue || "#";
+      return safeExternalHref(customUrlValue);
     default:
       return "#";
   }

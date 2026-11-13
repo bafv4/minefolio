@@ -245,21 +245,6 @@ describe("action - capeDisplay の検証", () => {
   });
 });
 
-describe("action - socialLinks の platform 検証", () => {
-  it("allowlist 外の platform（evil）は invalidOption エラーになる", async () => {
-    await setupUser();
-
-    const fd = new FormData();
-    fd.set("_action", "create_link");
-    fd.set("platform", "evil");
-    fd.set("identifier", "runner");
-
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ error: "不正な選択肢です" });
-  });
-});
-
 describe("allowAutoTranslation（自己紹介の自動翻訳の許可）", () => {
   it("未送信（機能無効でスイッチが出ない）のときは列を上書きせず、保存済みの値が残る", async () => {
     const user = await seedUser(db, {
