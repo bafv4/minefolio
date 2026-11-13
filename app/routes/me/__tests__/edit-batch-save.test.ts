@@ -276,6 +276,20 @@ describe("save_all - 検証エラー時は DB を1行も変えない", () => {
     expect((await userRow(user.id))?.displayName).toBe("Before");
   });
 
+  it("allowlist 外の platform（evil）は拒否され、何も保存されない", async () => {
+    const user = await seedUser(db, { discordId: "d-evil" });
+    signInAs("d-evil");
+
+    const res = await callAction(
+      saveAllForm({
+        links: { create: [{ key: "e", platform: "evil" as never, identifier: "runner", customLabel: null, customUrl: null }] },
+      }),
+    );
+
+    expect(res).not.toMatchObject({ success: true });
+    expect(await linksOf(user.id)).toHaveLength(0);
+  });
+
   it("カスタムリンクの javascript: URL は拒否される", async () => {
     const user = await seedUser(db, { discordId: "d-xss" });
     signInAs("d-xss");
@@ -467,6 +481,35 @@ describe("save_all - speedruncomUsername の優先規則（リンクの変更を
       "speedruncom:FromForm",
       "twitter:tw",
     ]);
+  });
+});
+
+describe("save_all - MCID 変更時の favorites 追従", () => {
+  it("MCID変更で旧slugを指すfavorites行が新slugへ追従更新され、旧slugは履歴に記録される", async () => {
+    const user = await seedUser(db, { slug: "old-mcid-slug", discordId: "d-fav-set", mcid: "OldMcid" });
+    const fan = await seedUser(db, { slug: "fan" });
+    await db.insert(schema.favorites).values({ userId: fan.id, favoriteSlug: "old-mcid-slug" });
+    signInAs("d-fav-set");
+    mojangMocks.fetchUuidFromMcid.mockResolvedValue("11111111-1111-1111-1111-111111111111");
+
+    const res = await callAction(saveAllForm({ mcid: { op: "set", value: "NewMcid" } }));
+
+    expect(res).toEqual({ success: true, action: "profile", newSlug: "NewMcid" });
+    expect((await db.query.favorites.findFirst({ where: eq(schema.favorites.userId, fan.id) }))?.favoriteSlug).toBe("NewMcid");
+    expect((await db.query.slugHistory.findFirst({ where: eq(schema.slugHistory.slug, "old-mcid-slug") }))?.userId).toBe(user.id);
+  });
+
+  it("MCID削除で旧slugを指すfavorites行が新slug（@discordId形式）へ追従更新される", async () => {
+    const user = await seedUser(db, { slug: "somemcid", discordId: "d-fav-rm", mcid: "SomeMcid", uuid: "22222222-2222-2222-2222-222222222222" });
+    const fan = await seedUser(db, { slug: "fan2" });
+    await db.insert(schema.favorites).values({ userId: fan.id, favoriteSlug: "somemcid" });
+    signInAs("d-fav-rm");
+
+    const res = await callAction(saveAllForm({ mcid: { op: "remove" } }));
+
+    expect(res).toEqual({ success: true, action: "profile", newSlug: "@d-fav-rm" });
+    expect((await userRow(user.id))?.slug).toBe("@d-fav-rm");
+    expect((await db.query.favorites.findFirst({ where: eq(schema.favorites.userId, fan.id) }))?.favoriteSlug).toBe("@d-fav-rm");
   });
 });
 
