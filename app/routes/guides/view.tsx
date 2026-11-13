@@ -33,6 +33,7 @@ import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
+import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
@@ -345,7 +346,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   ).replace(/<\/table>/g, '</table></div>');
 
   // 見出し(h1〜h3)に id を付与し、目次データを生成する
-  const { html: contentWithIds, toc } = buildTableOfContents(wrappedContent);
+  // 目次は元のレベルで抽出し、その後に本文見出しを1段下げる（ページタイトルが h1 のため。guide-heading-demote.ts）
+  const { html: tocHtml, toc } = buildTableOfContents(wrappedContent);
+  const contentWithIds = demoteGuideHeadings(tocHtml);
 
   // Extract embed references and fetch user data
   const embedRefs = extractEmbedRefs(contentWithIds);
@@ -623,14 +626,14 @@ function GuideContent({
     return (
       <div
         ref={contentRef}
-        className="guide-content prose prose-neutral dark:prose-invert max-w-none"
+        className="guide-content guide-content-demoted prose prose-neutral dark:prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }
 
   return (
-    <div ref={contentRef} className="guide-content prose prose-neutral dark:prose-invert max-w-none">
+    <div ref={contentRef} className="guide-content guide-content-demoted prose prose-neutral dark:prose-invert max-w-none">
       {segments.map((seg, i) => {
         if (seg.type === "html") {
           return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
