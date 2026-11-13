@@ -8,12 +8,13 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Trophy, Timer, Swords, Video, ExternalLink, Clock, Loader2 } from "lucide-react";
+import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
+import { getCached, setCached } from "@/lib/cache";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
   loadRankingCategories,
@@ -35,7 +36,6 @@ function rankMedalClass(rank: number): string {
 
 /** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ */
 function StickyHeaderShell({ children }: { children: ReactNode }) {
-  const t = useT();
   return (
     <table className="w-full caption-bottom text-sm">
       <TableHeader>{children}</TableHeader>
@@ -63,18 +63,53 @@ export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   ];
 };
 
+const RANKINGS_CACHE_TTL = 5 * 60 * 1000;
+const CATEGORIES_CACHE_KEY = "rankings:categories";
+type Categories = Awaited<ReturnType<typeof loadRankingCategories>>;
+type LoadedRankings = Awaited<ReturnType<typeof loadRankings>>;
+
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const url = new URL(request.url);
   const args = parseRankingsParams(url.searchParams);
-  const speedruncomCategories = await loadRankingCategories(db);
+  // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
+  const loadCategories = async () => {
+    const cached = await getCached<Categories>(CATEGORIES_CACHE_KEY);
+    if (cached) return cached;
+    const fresh = await loadRankingCategories(db);
+    await setCached(CATEGORIES_CACHE_KEY, fresh, RANKINGS_CACHE_TTL);
+    return fresh;
+  };
 
-  const { rankings, selectedCategory } = await loadRankings(
-    db,
-    args,
-    speedruncomCategories,
-  );
+  let speedruncomCategories: Categories;
+  let rankings: LoadedRankings["rankings"];
+  let selectedCategory: LoadedRankings["selectedCategory"];
+
+  if (args.tab === "speedruncom") {
+    // 選択カテゴリの id が要るのでカテゴリ一覧が先（キャッシュ済みなら往復なし）
+    speedruncomCategories = await loadCategories();
+    const target = args.categorySlug
+      ? speedruncomCategories.find((c) => c.slug === args.categorySlug)
+      : speedruncomCategories[0];
+    const key = `rankings:speedruncom:${target?.id ?? "none"}`;
+    const cached = await getCached<LoadedRankings>(key);
+    const loaded =
+      cached ?? (await loadRankings(db, args, speedruncomCategories));
+    if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
+    ({ rankings, selectedCategory } = loaded);
+  } else {
+    // ranked タブはカテゴリ不要（nav 用の一覧だけ必要）なので並列に取得する
+    const key = `rankings:ranked:${args.rankedType === "pb" ? "pb" : "elo"}`;
+    const cached = await getCached<LoadedRankings>(key);
+    const [cats, loaded] = await Promise.all([
+      loadCategories(),
+      cached ?? loadRankings(db, args, []),
+    ]);
+    if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
+    speedruncomCategories = cats;
+    ({ rankings, selectedCategory } = loaded);
+  }
 
   return {
     tab: args.tab,
