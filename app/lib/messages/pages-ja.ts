@@ -2206,6 +2206,8 @@ export const PAGES_JA = {
       alignRight: "右揃え",
       clearAlign: "揃えを解除",
       clearImageAlign: "配置を解除",
+      imageAlt: "代替テキスト",
+      imageAltPlaceholder: "画像の内容を説明（装飾なら空のまま）",
       textAndBgColor: "文字色・背景色",
       textColor: "文字色",
       bgColor: "背景色",

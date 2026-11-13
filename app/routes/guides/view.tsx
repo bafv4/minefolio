@@ -34,6 +34,7 @@ import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
 import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
+import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
@@ -348,7 +349,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 見出し(h1〜h3)に id を付与し、目次データを生成する
   // 目次は元のレベルで抽出し、その後に本文見出しを1段下げる（ページタイトルが h1 のため。guide-heading-demote.ts）
   const { html: tocHtml, toc } = buildTableOfContents(wrappedContent);
-  const contentWithIds = demoteGuideHeadings(tocHtml);
+  const contentWithIds = blankGenericImageAlt(demoteGuideHeadings(tocHtml));
 
   // Extract embed references and fetch user data
   const embedRefs = extractEmbedRefs(contentWithIds);

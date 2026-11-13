@@ -228,7 +228,7 @@ export function GuideEditor({
         editor
           .chain()
           .focus()
-          .setImage({ src: url, alt: file.name.replace(/\.[^.]+$/, "") })
+          .setImage({ src: url, alt: "" })
           .run();
       }
     },

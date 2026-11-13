@@ -5,7 +5,9 @@ import type { MessageKey } from "@/lib/messages";
 import { useState, useCallback, useRef } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
-import { Trash2, AlignLeft, AlignCenter, AlignRight, X, Crop } from "lucide-react";
+import { Trash2, AlignLeft, AlignCenter, AlignRight, X, Crop, Captions } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -51,6 +53,7 @@ export function ImageNodeView({
   const src = String(node.attrs.src);
   const width = node.attrs.width ? Number(node.attrs.width) : undefined;
   const align = node.attrs.align ? String(node.attrs.align) : "";
+  const alt = node.attrs.alt ? String(node.attrs.alt) : "";
 
   const handleCropApply = useCallback(
     async (rect: CropRect) => {
@@ -164,6 +167,39 @@ export function ImageNodeView({
             </Tooltip>
           )}
           <span className="mx-0.5 h-4 w-px bg-white/30" aria-hidden />
+          {/* 代替テキスト。入力値は即時に node 属性へ反映する（空なら装飾扱い） */}
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("guideEditor.ui.imageAlt")}
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded text-white transition-colors hover:bg-white/20",
+                      alt && "bg-white/30",
+                    )}
+                  >
+                    <Captions className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t("guideEditor.ui.imageAlt")}</TooltipContent>
+            </Tooltip>
+            <PopoverContent align="end" className="w-72 space-y-1.5 p-3">
+              <label htmlFor="guide-image-alt" className="text-xs font-medium">
+                {t("guideEditor.ui.imageAlt")}
+              </label>
+              <Input
+                id="guide-image-alt"
+                value={alt}
+                maxLength={200}
+                placeholder={t("guideEditor.ui.imageAltPlaceholder")}
+                onChange={(e) => updateAttributes({ alt: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </PopoverContent>
+          </Popover>
           <Tooltip>
             <TooltipTrigger asChild>
               <button

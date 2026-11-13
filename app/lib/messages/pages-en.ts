@@ -2267,6 +2267,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       alignRight: "Align right",
       clearAlign: "Clear alignment",
       clearImageAlign: "Clear alignment",
+      imageAlt: "Alt text",
+      imageAltPlaceholder: "Describe the image (leave empty if decorative)",
       textAndBgColor: "Text & background color",
       textColor: "Text color",
       bgColor: "Background color",

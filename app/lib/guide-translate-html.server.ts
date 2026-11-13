@@ -6,6 +6,7 @@
 // このモジュールは DB・翻訳 API・サニタイザのいずれにも依存しない純関数（テストしやすくするため）。
 // 書き戻した HTML は呼び出し側が sanitizeGuideHtml() を通す。
 import { parseFragment, serialize, type DefaultTreeAdapterMap } from "parse5";
+import { isGenericImageAlt } from "./guide-image-alt";
 
 type ChildNode = DefaultTreeAdapterMap["childNode"];
 type ParentNode = DefaultTreeAdapterMap["parentNode"];
@@ -73,7 +74,8 @@ export function extractGuideHtmlTexts(html: string): ExtractedHtmlTexts {
     const attr = element.attrs.find((a) => a.name === "alt");
     if (!attr) return;
     const { lead, core, trail } = splitWhitespace(attr.value);
-    if (core === "") return;
+    // 空・旧エディタの汎用値 "image" は送らない（表示時に空 alt にするため。guide-image-alt.ts）
+    if (core === "" || isGenericImageAlt(core)) return;
     texts.push(core);
     slots.push({
       write(translated) {
