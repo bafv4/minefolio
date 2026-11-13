@@ -664,22 +664,22 @@ body {
      tip→success, info→info, warning→warning, danger→destructive */
   .callout-tip {
     background: color-mix(in oklch, var(--success) 12%, transparent);
-    border-left: 3px solid var(--success);
+    border: 1px solid color-mix(in oklch, var(--success) 40%, transparent);
   }
 
   .callout-info {
     background: color-mix(in oklch, var(--info) 12%, transparent);
-    border-left: 3px solid var(--info);
+    border: 1px solid color-mix(in oklch, var(--info) 40%, transparent);
   }
 
   .callout-warning {
     background: color-mix(in oklch, var(--warning) 12%, transparent);
-    border-left: 3px solid var(--warning);
+    border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent);
   }
 
   .callout-danger {
     background: color-mix(in oklch, var(--destructive) 12%, transparent);
-    border-left: 3px solid var(--destructive);
+    border: 1px solid color-mix(in oklch, var(--destructive) 40%, transparent);
   }
 
   /* Toggle list — editor only (view styles are outside layer) */
@@ -1183,7 +1183,6 @@ body {
   align-items: start;
   font-style: normal;
   color: inherit;
-  border-left-width: 3px;
 }
 
 .guide-content.prose .callout p {
