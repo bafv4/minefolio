@@ -36,7 +36,8 @@ import {
   INLINE_IMAGE_PREPARE,
   MAX_UPLOAD_BYTES,
 } from "./hooks/use-image-upload";
-import { useUnsavedWarning } from "./hooks/use-unsaved-warning";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { insertEmbed, insertGuideLink } from "./lib/block-commands";
 import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
@@ -462,22 +463,7 @@ export function GuideEditor({
       />
 
       {/* 未保存離脱の確認 */}
-      <AlertDialog open={blocker.state === "blocked"}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("guideEditor.unsavedLeaveTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("guideEditor.unsavedLeaveDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => blocker.reset?.()}>
-              {t("guideEditor.stay")}
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => blocker.proceed?.()}>
-              {t("guideEditor.leave")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }
