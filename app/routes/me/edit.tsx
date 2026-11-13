@@ -14,6 +14,7 @@ import { isTranslationEnabled } from "@/lib/translate.server";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, asc } from "drizzle-orm";
+import { safeExternalHref } from "@/lib/safe-url";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
@@ -344,7 +345,9 @@ function getPlatformIcon(platform: string) {
   }
 }
 
-function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string {
+// href に置く URL。カスタムリンクは http/https 以外（保存済みの javascript: 等）なら undefined を返し、
+// href 属性自体を出さない（プロフィール側と同じく safeExternalHref を通す）
+function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string | undefined {
   switch (platform) {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
@@ -356,7 +359,7 @@ function getPlatformUrl(platform: string, identifier: string, customUrlValue?: s
     case "twitter":
       return `https://x.com/${identifier}`;
     case "custom":
-      return customUrlValue || "#";
+      return safeExternalHref(customUrlValue);
     default:
       return "#";
   }
