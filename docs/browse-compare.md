@@ -39,6 +39,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 `?sort=` は許可リスト（`BROWSE_SORTS` = 上記4値、`app/lib/browse-query.server.ts`）で検証し、未知の値は既定の `updatedAt` へ丸める（`parseBrowseSort()`）。ガイド・テンプレート一覧の `parseContentSort()` と同じ「不正な `sort` はエラーにせず既定へフォールバックする」方針を踏襲している。
 
+`popular` 選択時は、並び替えの下に基準「直近7日でよく見られた順」（`contentSort.popularDesc`、日数は `PAGE_VIEW_WINDOW_DAYS`）を補足テキストで表示する。閲覧数の数値そのものはカード等に出さない。
 
 ### 表示形式（カード / リスト）
 

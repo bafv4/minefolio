@@ -36,6 +36,7 @@ import {
   parseBrowseSearchParams,
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
+import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
@@ -545,6 +546,13 @@ export default function BrowsePage() {
             <ViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
+
+        {/* 人気順の基準（閲覧数そのものは出さない） */}
+        {sortBy === "popular" && (
+          <p className="text-xs text-muted-foreground">
+            {t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS })}
+          </p>
+        )}
 
         {/* アクティブフィルタの表示 */}
         {activeFilterCount > 0 && (
