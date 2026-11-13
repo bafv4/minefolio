@@ -17,7 +17,6 @@ import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profil
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
-  fetchMCSRRankedStats,
   checkPaceManPlayer,
   fetchSpeedrunComStats,
 } from "@/lib/external-stats";
@@ -254,6 +253,8 @@ import {
   type MouseReasonConfig,
 } from "@/lib/mouse-settings-reasons";
 import { HintTip } from "@/components/hint-tip";
+import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
+import { ProfileHighlights } from "@/components/profile-highlights";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import {
@@ -1515,6 +1516,16 @@ export default function PlayerProfilePage() {
             </CardContent>
           </Card>
 
+          {/* ハイライト行（メインカテゴリ・PB・Elo・感度。該当タブへ切替） */}
+          <ProfileHighlights
+            mcid={player.mcid}
+            showRankedStats={player.showRankedStats !== false}
+            mainCategory={player.playstyle?.mainCategory}
+            records={player.categoryRecords}
+            config={player.playerConfig}
+            onSelectTab={handleTabChange}
+          />
+
           {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
             <SocialLinksCard links={player.socialLinks} slug={player.slug} />
@@ -2772,7 +2783,7 @@ function StatsTabContent({
         // mcid が未設定でも従来から無条件に呼び出している（各関数側が未登録相当を返す）。
         // StatsPlayer.mcid は users テーブルに合わせ string | null だが、呼び出しはその挙動を
         // 変えないための型上の非nullアサーション
-        fetchMCSRRankedStats(player.mcid!)
+        fetchMCSRRankedStatsCached(player.mcid!)
           .then((ranked) => {
             if (cancelled) return;
             setExternalStats((prev) => ({ ...prev, ranked }));

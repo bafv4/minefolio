@@ -176,6 +176,12 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 ## プロフィール表示タブ
 
+### 既定タブのハイライト行
+
+既定タブ（`profile`）のヘッダ直下に `ProfileHighlights`（`app/components/profile-highlights.tsx`）を出す。メインカテゴリ（`playstyles.mainCategory`）・そのカテゴリの PB（一致する記録が無ければ先頭の PB 付き記録。ラベルは記録名）・MCSR Ranked Elo（クライアント取得。取得中はスケルトン、未登録・失敗・`showRankedStats === false` なら項目ごと非表示）・ゲーム内感度（+ 計算可能なら cm/360）を、データがある項目だけタイルで並べる（全部無ければ行ごと非表示）。各タイルは `playstyle` / `stats` / `devices` タブへ切り替えるボタン。
+
+### タブ構成
+
 `/player/:slug` のタブ構成（サイドバー/モバイルドロワーの並び順）:
 
 | タブ | 説明 |
