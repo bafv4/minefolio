@@ -460,3 +460,90 @@ describe("action - 空文字 keyCode の扱い（normalizeEmptyToUnbound）", ()
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
   });
 });
+
+describe("action - まとめ書き込み（CASE UPDATE / db.batch / upsert）", () => {
+  it("save-keybindings は複数行を1回で更新し、他ユーザー行・未送信行は変えず、スナップショットを同期する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const other = await seedUser(db, { slug: "other", discordId: "discord-other" });
+    const fwd = await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+    const back = await seedKeybinding(db, user.id, { action: "back", keyCode: "KeyS", category: "movement" });
+    const left = await seedKeybinding(db, user.id, { action: "left", keyCode: "KeyA", category: "movement" });
+    const foreign = await seedKeybinding(db, other.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-keybindings",
+        presetId: preset.id,
+        keybindings: JSON.stringify([
+          { id: fwd.id, keyCode: "KeyI" },
+          { id: back.id, keyCode: "" },
+          // 同一 id は後勝ち
+          { id: fwd.id, keyCode: "KeyU" },
+          // 他ユーザーの行は更新されない
+          { id: foreign.id, keyCode: "KeyZ" },
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ success: true, message: "キー配置を保存しました" });
+    expect((await findKeybinding(fwd.id))?.keyCode).toBe("KeyU");
+    expect((await findKeybinding(back.id))?.keyCode).toBe("_UNBOUND");
+    expect((await findKeybinding(left.id))?.keyCode).toBe("KeyA");
+    expect((await findKeybinding(foreign.id))?.keyCode).toBe("KeyW");
+
+    const snapshot = await db.query.configPresets.findFirst({
+      where: eq(schema.configPresets.id, preset.id),
+    });
+    const rows = JSON.parse(snapshot!.keybindingsData!) as { action: string; keyCode: string }[];
+    expect(Object.fromEntries(rows.map((r) => [r.action, r.keyCode]))).toEqual({
+      forward: "KeyU",
+      back: "_UNBOUND",
+      left: "KeyA",
+    });
+  });
+
+  it("save-fingers は player_configs が無ければ作成し、あれば更新する（スナップショットも同期）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    await callAction(
+      formDataOf({ intent: "save-fingers", presetId: preset.id, fingerAssignments: JSON.stringify({ KeyW: ["left-index"] }) }),
+    );
+    await callAction(
+      formDataOf({ intent: "save-fingers", presetId: preset.id, fingerAssignments: JSON.stringify({ KeyW: ["left-middle"] }) }),
+    );
+
+    const configs = await db.query.playerConfigs.findMany({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(configs).toHaveLength(1);
+    expect(JSON.parse(configs[0].fingerAssignments!)).toEqual({ KeyW: ["left-middle"] });
+    const snapshot = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(JSON.parse(snapshot!.fingerAssignmentsData!)).toEqual({ KeyW: ["left-middle"] });
+    expect(snapshot!.playerConfigData).not.toBeNull();
+  });
+
+  it("save-custom-actions は削除・更新・追加を1バッチで適用し、スナップショットを同期する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const now = new Date();
+    await db.insert(schema.customActions).values([
+      { id: "ca-keep", userId: user.id, actionName: "old", category: "other", triggerKey: "KeyQ", displayOrder: 0, createdAt: now, updatedAt: now },
+      { id: "ca-del", userId: user.id, actionName: "gone", category: "other", triggerKey: "KeyE", displayOrder: 1, createdAt: now, updatedAt: now },
+    ]);
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-custom-actions",
+        presetId: preset.id,
+        customActions: JSON.stringify([
+          { id: "ca-del", _delete: true },
+          { id: "ca-keep", actionName: "renamed", triggerKey: "KeyQ", category: "other" },
+          { actionName: "fresh", triggerKey: "KeyR", category: "other" },
+        ]),
+      }),
+    );
+
+    expect(res.success).toBe(true);
+    const rows = await db.query.customActions.findMany({ where: eq(schema.customActions.userId, user.id) });
+    expect(rows.map((r) => r.actionName).sort()).toEqual(["fresh", "renamed"]);
+    const snapshot = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(JSON.parse(snapshot!.customActionsData!)).toHaveLength(2);
+  });
+});

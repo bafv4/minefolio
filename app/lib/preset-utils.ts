@@ -354,18 +354,23 @@ export type PresetSyncKind =
 /**
  * アクティブプリセットのスナップショットを、指定種別のライブテーブル内容で更新する。
  * アクティブプリセットがない場合は no-op。
+ * options.activePresetId を渡すと、アクティブプリセットの再取得を省略する（呼び出し側で解決済みの場合）。
  */
 export async function syncActivePresetSnapshot(
   db: Database,
   userId: string,
   kinds: PresetSyncKind[],
+  options?: { activePresetId?: string },
 ): Promise<void> {
   if (kinds.length === 0) return;
 
-  const active = await db.query.configPresets.findFirst({
-    where: (p, { and, eq }) => and(eq(p.userId, userId), eq(p.isActive, true)),
-    columns: { id: true },
-  });
+  // 呼び出し側がアクティブプリセットを解決済みならそれを使い、再取得（DB 1 往復）を省く
+  const active = options?.activePresetId
+    ? { id: options.activePresetId }
+    : await db.query.configPresets.findFirst({
+        where: (p, { and, eq }) => and(eq(p.userId, userId), eq(p.isActive, true)),
+        columns: { id: true },
+      });
   if (!active) return;
 
   const now = new Date();

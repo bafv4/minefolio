@@ -5,7 +5,7 @@ import { resolveLocale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
-import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
+import { getRemapSourceLabel } from "@/lib/remap-utils";
 import {
   calculateCm360,
   calculateCursorSpeed,
