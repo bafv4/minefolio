@@ -36,6 +36,7 @@ export const PAGES_JA = {
     body2: "Cookieにはお気に入りに登録した走者のIDのみが保存されます。",
     accept: "同意する",
     decline: "拒否する",
+    declineAndClose: "拒否して閉じる",
   },
   /** ガイドの目次 */
   guideToc: {

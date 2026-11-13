@@ -44,6 +44,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     body2: "Only the IDs of the runners you favorite are stored.",
     accept: "Accept",
     decline: "Decline",
+    declineAndClose: "Decline and close",
   },
   guideToc: {
     title: "Contents",

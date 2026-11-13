@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Cookie, X } from "lucide-react";
 
 const COOKIE_CONSENT_KEY = "minefolio_cookie_consent";
@@ -115,14 +116,20 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
                 </Button>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={handleDecline}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0"
+                  aria-label={t("cookieConsent.declineAndClose")}
+                  onClick={handleDecline}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("cookieConsent.declineAndClose")}</TooltipContent>
+            </Tooltip>
           </div>
         </CardContent>
       </Card>
