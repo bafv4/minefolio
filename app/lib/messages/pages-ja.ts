@@ -423,17 +423,6 @@ export const PAGES_JA = {
     welcomeFavorites: "お気に入り",
   },
   paces: {
-    /** スプリット名（PaceMan のイベントID に対応） */
-    splitNether: "ネザーイン",
-    splitBastion: "バスティオン",
-    splitFortress: "フォートレス",
-    splitBlind: "ブラインド",
-    splitSecondPortal: "2ndポータル",
-    splitStronghold: "要塞",
-    splitEnd: "ジ・エンド",
-    splitFinish: "クリア",
-    splitFirstStructure: "1st構造物",
-    splitSecondStructure: "2nd構造物",
     title: "最近のペース",
     metaTitle: "最近のペース - Minefolio",
     description: "登録走者の過去2か月のペース一覧です。",

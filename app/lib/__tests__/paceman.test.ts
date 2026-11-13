@@ -1,38 +1,14 @@
 // PaceMan APIの依存ゼロの純関数群（fetch を伴う fetchLiveRuns / fetchRecentRuns 等は対象外）。
 // スプリット表示・進行順ソートを担い、境界を誤ると誤ったスプリットが表示される。
 import { describe, it, expect } from "vitest";
-import { createTranslator } from "../messages";
 import {
-  getRecentRunFinalSplit,
   getLatestSplit,
   getSplitOrder,
-  getSplitLabel,
   getSplitLabelEnglish,
   getSplitTimeline,
-  type PaceManRecentRun,
   type PaceManLiveRun,
   type PaceManEvent,
 } from "../paceman";
-
-const t = createTranslator("ja");
-
-function recentRun(overrides: Partial<PaceManRecentRun> = {}): PaceManRecentRun {
-  return {
-    id: 1,
-    nickname: "runner",
-    nether: null,
-    bastion: null,
-    fortress: null,
-    first_portal: null,
-    first_structure: null,
-    second_structure: null,
-    stronghold: null,
-    end: null,
-    finish: null,
-    time: 1700000000,
-    ...overrides,
-  };
-}
 
 function event(eventId: string, overrides: Partial<PaceManEvent> = {}): PaceManEvent {
   return { eventId, rta: 0, igt: 0, ...overrides };
@@ -52,68 +28,6 @@ function liveRun(eventList: PaceManEvent[]): PaceManLiveRun {
     numLeaves: 0,
   };
 }
-
-// ============================================
-// getRecentRunFinalSplit
-// ============================================
-
-describe("getRecentRunFinalSplit", () => {
-  it("finish が到達していれば最優先で finish を返す", () => {
-    const run = recentRun({
-      nether: 60000,
-      bastion: 120000,
-      fortress: 180000,
-      first_portal: 240000,
-      stronghold: 300000,
-      end: 360000,
-      finish: 420000,
-    });
-
-    const result = getRecentRunFinalSplit(t, run);
-
-    expect(result).toEqual({ splitId: "rsg.credits", label: "クリア", igt: 420000 });
-  });
-
-  it("finish未到達なら end → stronghold → ... の進行順で最も進んだスプリットを返す", () => {
-    const run = recentRun({
-      nether: 60000,
-      bastion: 120000,
-      fortress: 180000,
-      stronghold: 300000,
-      // first_portal, second_structure, end, finish は未到達
-    });
-
-    const result = getRecentRunFinalSplit(t, run);
-
-    expect(result).toEqual({ splitId: "rsg.enter_stronghold", label: "要塞", igt: 300000 });
-  });
-
-  it("second_structure のみ到達している場合はそれを返す（fortress/bastion未到達扱い）", () => {
-    const run = recentRun({ second_structure: 150000 });
-    const result = getRecentRunFinalSplit(t, run);
-    expect(result).toEqual({
-      splitId: "rsg.second_structure",
-      label: "2nd構造物",
-      igt: 150000,
-    });
-  });
-
-  it("nether のみ到達（最も進行が浅い）場合はそれを返す", () => {
-    const run = recentRun({ nether: 45000 });
-    const result = getRecentRunFinalSplit(t, run);
-    expect(result).toEqual({ splitId: "rsg.enter_nether", label: "ネザーイン", igt: 45000 });
-  });
-
-  it("全スプリットが null（未到達）なら null を返す", () => {
-    const run = recentRun();
-    expect(getRecentRunFinalSplit(t, run)).toBeNull();
-  });
-
-  it("値が 0 のスプリットは未到達扱いになる（> 0 判定）", () => {
-    const run = recentRun({ nether: 0 });
-    expect(getRecentRunFinalSplit(t, run)).toBeNull();
-  });
-});
 
 // ============================================
 // getLatestSplit / getSplitOrder
@@ -162,25 +76,8 @@ describe("getLatestSplit", () => {
 });
 
 // ============================================
-// getSplitLabel / getSplitLabelEnglish / getSplitTimeline
+// getSplitLabelEnglish / getSplitTimeline
 // ============================================
-
-describe("getSplitLabel（日本語）", () => {
-  it("既知の eventId は翻訳ラベルを返す", () => {
-    expect(getSplitLabel(t, "rsg.enter_nether")).toBe("ネザーイン");
-    expect(getSplitLabel(t, "rsg.enter_bastion")).toBe("バスティオン");
-    expect(getSplitLabel(t, "rsg.enter_fortress")).toBe("フォートレス");
-    expect(getSplitLabel(t, "rsg.first_portal")).toBe("ブラインド");
-    expect(getSplitLabel(t, "rsg.second_portal")).toBe("2ndポータル");
-    expect(getSplitLabel(t, "rsg.enter_stronghold")).toBe("要塞");
-    expect(getSplitLabel(t, "rsg.enter_end")).toBe("ジ・エンド");
-    expect(getSplitLabel(t, "rsg.credits")).toBe("クリア");
-  });
-
-  it("未知の eventId は 'rsg.' を除去し '_' をスペースへ変換したものを返す", () => {
-    expect(getSplitLabel(t, "rsg.some_unknown_event")).toBe("some unknown event");
-  });
-});
 
 describe("getSplitLabelEnglish", () => {
   it("既知の eventId は英語ラベルを返す（first_portal は口語表記 'Blind'）", () => {

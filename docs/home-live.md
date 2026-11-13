@@ -200,6 +200,8 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 | `maxTime` | タイム上限 | `m:ss` 形式。表示される区間のIGTに対して適用 |
 | `sort` | 並び順 | `time`＝表示タイム（IGT）の昇順（同タイムは新しい順）。未指定・不正値は新しい順。`split` と併用すると区間別最速になる。キャッシュ済みベースのコピーに対して `getPublicPaceFeed` 内でソートする |
 
+区間名（セレクトの選択肢・カード・バッジ）は日本語ロケールでも **PaceMan の英語正規名**（Bastion / Fortress / Enter Stronghold 等）のまま表示する（ユーザー判断。`app/lib/paceman.ts` の `getSplitTimeline` / `PaceManSplitMark` が語彙の基準）。
+
 ### 遅延ロード・無限スクロール
 
 - loader（SSR）は先頭60件と総件数のみ返す
