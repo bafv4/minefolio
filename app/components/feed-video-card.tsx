@@ -99,13 +99,10 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
                 <Play className="ml-0.5 h-6 w-6 fill-white text-white" />
               </span>
             </span>
-            {/* プラットフォームバッジ */}
-            <span
-              className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-white ${
-                isYouTube ? "bg-youtube/90" : "bg-twitch/90"
-              }`}
-            >
-              {isYouTube ? <Youtube className="h-3 w-3" /> : <Twitch className="h-3 w-3" />}
+            {/* プラットフォームバッジ（右下の配信時間と同じ暗色ピル。ブランド色は面ではなくアイコンに置く:
+                ダークテーマの --youtube / --twitch は明るく、白文字の面にすると約3:1まで下がるため） */}
+            <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white">
+              {isYouTube ? <Youtube className="h-3 w-3 text-youtube" /> : <Twitch className="h-3 w-3 text-twitch" />}
               {platformName}
             </span>
             {/* 配信時間（Twitch VOD） */}
