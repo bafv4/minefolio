@@ -26,8 +26,6 @@ export const GUIDE_FONT_SIZES = [
   { nameKey: "guideEditor.fontSizes.xl", value: "1.5em" },
 ] as const satisfies ReadonlyArray<{ nameKey: MessageKey; value: string }>;
 
-export type GuideFontSize = (typeof GUIDE_FONT_SIZES)[number]["value"];
-
 /** 比較用に値を正規化する（小文字化・空白除去） */
 function normalizeFontSize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "");

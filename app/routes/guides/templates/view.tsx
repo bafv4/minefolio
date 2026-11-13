@@ -112,9 +112,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  const session = await getOptionalSession(request, auth);
+  // セッション（→ 閲覧者のプリセット一覧）・テンプレート本体・いいね数は互いに独立なので並行する。
+  // 閲覧者のプリセットは、テンプレートが 404 の場合は使わないが、その場合でも読み捨てるだけ（挙動は同じ）
+  const sessionPromise = getOptionalSession(request, auth);
+  const myPresetsPromise = sessionPromise.then((session) =>
+    session
+      ? db.query.users.findFirst({
+          where: eq(users.discordId, session.user.id),
+          columns: { id: true },
+          with: {
+            configPresets: { columns: { id: true, name: true, isActive: true } },
+          },
+        })
+      : null
+  );
+  const likeCountPromise = getTemplateLikeCount(db, params.templateId);
+  // テンプレートが 404 などで早期に throw しても、残りの Promise の失敗が未処理の rejection にならないようにする
+  // （待つ側では元の Promise を await するので、失敗はそこで通常どおり伝わる）
+  myPresetsPromise.catch(() => {});
+  likeCountPromise.catch(() => {});
 
-  const template = await db.query.searchCraftTemplates.findFirst({
+  const templatePromise = db.query.searchCraftTemplates.findFirst({
     where: eq(searchCraftTemplates.id, params.templateId),
     with: {
       user: {
@@ -131,6 +149,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
+  const [session, template] = await Promise.all([sessionPromise, templatePromise]);
+
   if (!template) {
     throw new Response(t("templates.notFound"), { status: 404 });
   }
@@ -146,19 +166,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // ログイン中は反映先選択用に自分のプリセット一覧を返す
-  let myPresets: { id: string; name: string; isActive: boolean }[] = [];
-  if (session) {
-    const me = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      with: {
-        configPresets: { columns: { id: true, name: true, isActive: true } },
-      },
-    });
-    myPresets = me?.configPresets ?? [];
-  }
+  const [me, likeCount] = await Promise.all([myPresetsPromise, likeCountPromise]);
+  const myPresets: { id: string; name: string; isActive: boolean }[] = me?.configPresets ?? [];
 
   const appUrl = env.APP_URL || "https://minefolio.app";
-  const likeCount = await getTemplateLikeCount(db, template.id);
 
   const crafts = parseTemplateCrafts(template.craftsData);
 

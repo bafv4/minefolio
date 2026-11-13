@@ -7,16 +7,6 @@ import { EditorContent } from "@tiptap/react";
 import { toast } from "sonner";
 import { ArrowLeft, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/hooks/use-locale";
 import type { GuideEditorProps, SlashCommandContext, GuideMediaContext } from "./types";

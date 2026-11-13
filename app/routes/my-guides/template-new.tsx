@@ -7,19 +7,12 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
-import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
-import { filterRemapsForChat } from "@/lib/remap-utils";
+import { users, searchCraftTemplates } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+import { SEARCH_CRAFT_USER_WITH, loadEditorSettingsFromUser } from "@/lib/search-craft-templates.server";
 import {
-  parseTemplateCrafts,
-  parseTemplateRemaps,
-  parseTemplateLoops,
   parseEditorSubmission,
-  toEditorCrafts,
-  toEditorRemaps,
   toSubmittableLoops,
-  draftId,
   MAX_TEMPLATES_PER_USER,
 } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
@@ -43,41 +36,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
-    with: {
-      searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-      searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-      keyRemaps: true,
-      playerConfig: { columns: { gameLanguage: true, keyboardLayout: true } },
-    },
+    with: SEARCH_CRAFT_USER_WITH,
   });
 
   if (!user) {
     throw new Response(t("meTemplates.userNotFound"), { status: 404 });
   }
 
-  const currentCrafts = toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts)));
-  // ライブの Loop（craftId 参照）を、いったんプリセットと同一の craftSeq 形式に変換してから
-  // craftIndex 形式へデコードし、現在の crafts の draft id へ解決する
-  const currentLoops = parseTemplateLoops(
-    serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts),
-    currentCrafts.length,
-  ).map((loop) => ({
-    id: draftId("loop"),
-    steps: loop.steps.map((s) => ({
-      craftId: currentCrafts[s.craftIndex].id,
-      transition: s.transition,
-    })),
-    comment: loop.comment,
-    timing: loop.timing,
-  }));
-
   return {
-    currentSettings: {
-      crafts: currentCrafts,
-      // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
-      remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
-      loops: currentLoops,
-    },
+    currentSettings: loadEditorSettingsFromUser(user),
     defaultGameLanguage: user.playerConfig?.gameLanguage ?? "",
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
   };

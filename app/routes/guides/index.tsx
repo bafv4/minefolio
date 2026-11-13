@@ -193,7 +193,7 @@ export default function GuidesIndexPage() {
     hasPageViewData,
     viewerId,
   } = useLoaderData<typeof loader>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
   const { isTabSwitching } = useTabNavigation();

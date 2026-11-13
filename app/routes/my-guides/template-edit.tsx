@@ -7,19 +7,18 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
-import { eq, and, asc } from "drizzle-orm";
-import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
-import { filterRemapsForChat } from "@/lib/remap-utils";
+import { users, searchCraftTemplates } from "@/lib/schema";
+import { eq, and } from "drizzle-orm";
+import { SEARCH_CRAFT_USER_WITH, loadEditorSettingsFromUser } from "@/lib/search-craft-templates.server";
 import {
   parseTemplateCrafts,
   parseTemplateRemaps,
   parseTemplateLoops,
   parseEditorSubmission,
   toEditorCrafts,
+  toEditorLoops,
   toEditorRemaps,
   toSubmittableLoops,
-  draftId,
 } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
 import { toast } from "sonner";
@@ -42,12 +41,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
-    with: {
-      searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-      searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-      keyRemaps: true,
-      playerConfig: { columns: { keyboardLayout: true } },
-    },
+    with: SEARCH_CRAFT_USER_WITH,
   });
 
   if (!user) {
@@ -67,29 +61,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const templateCrafts = toEditorCrafts(parseTemplateCrafts(template.craftsData));
   // loopsData（craftIndex 参照）を、上で振った crafts の draft id へ解決する
-  const templateLoops = parseTemplateLoops(template.loopsData, templateCrafts.length).map((loop) => ({
-    id: draftId("loop"),
-    steps: loop.steps.map((s) => ({
-      craftId: templateCrafts[s.craftIndex].id,
-      transition: s.transition,
-    })),
-    comment: loop.comment,
-    timing: loop.timing,
-  }));
-
-  const currentCrafts = toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts)));
-  const currentLoops = parseTemplateLoops(
-    serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts),
-    currentCrafts.length,
-  ).map((loop) => ({
-    id: draftId("loop"),
-    steps: loop.steps.map((s) => ({
-      craftId: currentCrafts[s.craftIndex].id,
-      transition: s.transition,
-    })),
-    comment: loop.comment,
-    timing: loop.timing,
-  }));
+  const templateLoops = toEditorLoops(
+    parseTemplateLoops(template.loopsData, templateCrafts.length),
+    templateCrafts,
+  );
 
   return {
     template: {
@@ -101,12 +76,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       remaps: toEditorRemaps(parseTemplateRemaps(template.remapsData)),
       loops: templateLoops,
     },
-    currentSettings: {
-      crafts: currentCrafts,
-      // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
-      remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
-      loops: currentLoops,
-    },
+    currentSettings: loadEditorSettingsFromUser(user),
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
   };
 }
