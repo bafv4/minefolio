@@ -138,7 +138,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 **slug_history の記録・整理**（詳細は `app/lib/slug-history.server.ts` と `docs/database.md` の
 `slug_history` 節）:
-- `/me/edit` の `set_mcid` / `remove_mcid` アクション、および一括保存（`save_all`）の MCID 変更は、`users` 更新と `recordSlugChange()` を
+- 一括保存（`save_all`、`saveProfileBatch`）の MCID 設定・変更・削除は、`users` 更新と `recordSlugChange()` を
   同一トランザクションでまとめて実行する（Mojang検証はトランザクションの外）
 - `recordSlugChange` は旧slugを小文字化して upsert（1つの旧slugは常に最新の元所有者1人だけを
   指す）し、新slugが過去に別ユーザーの旧slugとして記録されていればその履歴行を削除する
@@ -524,11 +524,11 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 
 ### `speedruncom` リンクと `users.speedruncomUsername` の双方向同期
 
-`app/routes/me/edit.tsx` の action（`/me/edit`）で双方向に同期する。
+`/me/edit` の一括保存（`save_all`、`app/lib/profile-edit.server.ts` の `saveProfileBatch`）で双方向に同期する（リンクが `speedruncom` に触れるかの判定は `app/lib/profile-edit-validation.ts` の `linksTouchSpeedrun`）。
 
-- **ソーシャルリンク欄からの操作** → `speedruncomUsername` に反映: `create_link` / `update_link` で
+- **ソーシャルリンク欄からの操作** → `speedruncomUsername` に反映: リンクの作成・更新で
   platform が `speedruncom` なら identifier を `speedruncomUsername` にセット、別プラットフォームへ
-  変更した場合はクリア、`delete_link` で `speedruncom` リンクを削除した場合もクリア
+  変更した場合はクリア、`speedruncom` リンクを削除した場合もクリア
 - **基本情報フォーム（Speedrun.com連携欄）からの操作** → `speedruncom` ソーシャルリンクに反映: 値を
   設定/変更すると `social_links` に `speedruncom` 行を作成・更新（identifier が同じ場合は書き込みしない）、
   空にすると該当行を削除する
@@ -583,11 +583,11 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 - `getYouTubeVideoId()` / `getYouTubeEmbedUrl()` / `getYouTubeThumbnailUrl()` を共通利用
 - `watch?v=` / `youtu.be` / `live/` / `shorts/` / `embed/` 形式に対応
 - **埋め込みURLへ変換できないURLは iframe に渡さず外部リンク表示にする**（YouTube視聴ページの `X-Frame-Options: SAMEORIGIN` によりブラウザが埋め込みをブロックするため。旧実装は変換不能時に生URLを埋め込みFirefoxで「このページを開けません」が出ていた）
-- 登録時（`/me/edit` の `create_video` / `update_video`）も `getYouTubeVideoId()` で解決できないURLを拒否する
+- 登録時（`/me/edit` の一括保存 `changes.videos` の `create` / `update`）も `getYouTubeVideoId()` で解決できないURLを拒否する
 
 ### 編集（`/me/edit` の「動画」カード）
 
-- ソーシャルリンクと同じ「Dialog で下書きを編集 → 保存バーで一括保存」パターン（[/me/edit の保存方式](#medit-の保存方式保存バーでの一括保存)）。追加・編集・削除・上下入替はいずれも下書きだけを変え、保存時に `changes.videos`（`create` / `update` / `delete` / `order`）として送る。`order` の並び順でサーバーが `displayOrder` をインデックスで振り直す（旧 `create_video` / `update_video` / `delete_video` / `move_video` の `_action` もサーバー側に残る）
+- ソーシャルリンクと同じ「Dialog で下書きを編集 → 保存バーで一括保存」パターン（[/me/edit の保存方式](#medit-の保存方式保存バーでの一括保存)）。追加・編集・削除・上下入替はいずれも下書きだけを変え、保存時に `changes.videos`（`create` / `update` / `delete` / `order`）として送る。`order` の並び順でサーバーが `displayOrder` をインデックスで振り直す（旧 `create_video` 等の個別 `_action` は削除済み）
 - 最大10件。タイトルは100文字まで。ピン留めはダイアログ内のSwitch
 - 動画0件かつレガシー `featuredVideoUrl` があるとき、追加ダイアログにそのURLをプリフィルして移行を促す
 
@@ -736,7 +736,8 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **未保存検知・離脱ガード**: `useUnsavedWarning(hasChanges)` は1つのまま、`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
 - **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
 - **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
-- **後方互換**: 個別の `_action`（`set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / `create_video` / `update_video` / `delete_video` / `move_video`）はサーバーに残してあるが、現在の `/me/edit` UI は使わない（既存テストが直接呼ぶ。入力検証は `app/lib/profile-edit-validation.ts` を共有）
+- **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action に残るのは `save_all`（`saveProfileBatch`）・`import_legacy`・`delete_account` のみ
+- **共有モジュール**: MCID 検証と slug 変更は `app/lib/mcid-change.server.ts`（`verifyMcidForUser` / `applyMcidSlugChange`。onboarding も同じものを使い、uuid の重複チェックを含む）、入力上限と検証は `app/lib/profile-edit-validation.ts`（`PROFILE_FIELD_LIMITS` / `validateProfileTextFields` / `validateLinkInput` / `linksTouchSpeedrun`）
 
 ### 自己紹介の自動翻訳の許可
 
@@ -750,7 +751,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 「MCID・スキン」カードの Java版 MCID ブロックの下で登録・変更・削除する。
 
-- action: `set_bedrock_mcid`（`bedrockMcid`）/ `remove_bedrock_mcid`。`users.bedrockMcid` を更新するだけで、
+- 保存: 一括保存（`save_all`）のフォーム値 `bedrockMcid`（空欄で削除）。`users.bedrockMcid` を更新するだけで、
   `recordSlugChange` などの slug 関連処理・Mojang 検証・YouTubeキャッシュ追従は**一切呼ばない**
 - **Mojang 検証はしない**（Xbox ゲーマータグの所有確認 API が存在しないため）。あくまで自己申告の表示用テキスト
 - **重複チェックもしない**（未検証値のため UNIQUE 制約も張っていない）

@@ -168,13 +168,13 @@ Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中
 
 | エクスポート | 説明 |
 |---|---|
-| `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` は re-export で既存 import 元を保つ |
+| `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`renderVisibleSpaces` の re-export は無く、利用側（Loop表示・キー入力順ダイアログ）は本モジュールから直接 import する。`SearchStringText` のみ `search-craft-template-view.tsx` が re-export で既存 import 元を保つ |
 | `KeyBadge` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ付き）。`search-craft-template-view.tsx` は re-export |
 | `ShiftKeyGroup` | 「Shiftを押しながら」入力するキー列全体を囲むラッパー。`search-craft-template-view.tsx` は re-export |
 | `getFingersForKeyCode(keyCode, fingerAssignments)` | キーコード（修飾キー込み表記を含む）から指割り当てを検索する共通ヘルパー（ベースキー＝最後のセグメントで引く）。以前は `search-craft-template-view.tsx`（`ActualKeyBadges`）とダイアログ（`SequenceStepBadge`）でほぼ同じロジックが重複していた |
 | `ControlKeyKind` / `CONTROL_KEY_META` | 制御キー（backspace/arrowLeft/selectAll/home）の種別と、種別ごとの keyCode・短縮ラベル・逆引き対象キーのメタ |
 | `ControlKeyBadgeView({ kind, info, count })` | 制御キーのバッジ描画部。解決済み `ActualControlKeyInfo` を直接受け取って描画するだけ（二重解決しない）。キー入力順ダイアログは既に解決済みの info を持つためこちらを直接使う |
-| `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持） |
+| `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持。`search-craft-loop-view.tsx` は re-export も残す） |
 | `CraftMarker({ items, content, showItemBreakdown? })` | クラフト実行マーカーのチップ（ItemIcon 24px＋サーチ文字列部分）。`content` は呼び出し側が用意した描画済み ReactNode（`renderVisibleSpaces` の素の描画、または Loop 表示側の `SegmentedSearchString` 等、用途に応じて異なる）。`showItemBreakdown: true` のときだけ、複数アイテム（2件以上）の Tooltip に UI ロケール依存の表示名（`getLocalizedItemName`）で内訳を追加する。省略時（キー入力順ダイアログ）は内訳なしの単純表示のまま |
 
 ### Shiftを押しながらクラフト（withShift）

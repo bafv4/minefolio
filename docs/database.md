@@ -175,7 +175,7 @@ erDiagram
 | `auth_accounts.account_id` | `users.discord_id` | better-auth 側のテーブル。アプリは `eq(users.discordId, session.user.id)` で毎回引き直す |
 
 副作用として `favorites` は参照先ユーザーの削除・`slug` 変更で孤児化しうる。
-`slug` 変更（MCID の設定・変更・削除、`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid`）による
+`slug` 変更（MCID の設定・変更・削除、`/me/edit` の一括保存 `save_all`、onboarding のステップ2。いずれも `app/lib/mcid-change.server.ts` の `applyMcidSlugChange`）による
 追従更新はアプリケーション層で実装済み（`app/lib/favorites.ts` の `retargetFavoritesOnSlugChange`。
 `users` 更新と同じトランザクション内で旧 slug → 新 slug へ更新し、新 slug を指す孤児行は先に削除する。
 詳細は [favorites.md](./favorites.md#slug-変更時の追従更新)）。ユーザー削除時（cascade 対象外の孤児）も
@@ -569,7 +569,7 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 
 #### `slug_history`
 
-MCID 登録（`set_mcid`）・削除（`remove_mcid`）で `users.slug` が変わるたびに旧 slug を記録し、
+MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `users.slug` が変わるたびに旧 slug を記録し、
 `/player/:slug` 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴
 （[`app/lib/slug-history.server.ts`](../app/lib/slug-history.server.ts)）。Mojang API 起点の
 フォールバック（`player-slug-fallback.server.ts`）より優先して解決する。詳細は

@@ -105,7 +105,7 @@
 favorites コメントおよび [database.md](./database.md#弱参照fk-を張らない参照) 参照）。MCID の設定・変更・削除で
 `users.slug` が再生成されると、他ユーザーが持つ `favorites` 行が古い slug を指したまま孤児化し、
 `/favorites`（`inArray(users.slug, slugs)` の完全一致で解決）から黙って消える。これを防ぐため、
-`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid` アクションは `users` 更新と同じトランザクション内で
+`app/lib/mcid-change.server.ts` の `applyMcidSlugChange`（`/me/edit` の `save_all` と onboarding が共用）は `users` 更新と同じトランザクション内で
 `retargetFavoritesOnSlugChange(tx, { oldSlug, newSlug })` を呼ぶ。
 
 処理順（`app/lib/favorites.ts`）:
@@ -179,7 +179,7 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 |---|---|
 | `app/lib/schema.ts` | `favorites` テーブル定義 |
 | `app/lib/favorites.ts` | サーバー側 DB CRUD + 旧 Cookie 削除ヘッダー + slug 変更時の追従更新（`retargetFavoritesOnSlugChange`） |
-| `app/routes/me/edit.tsx` | `set_mcid` / `remove_mcid` アクションから `retargetFavoritesOnSlugChange` を呼び出し |
+| `app/lib/mcid-change.server.ts` | `applyMcidSlugChange` から `retargetFavoritesOnSlugChange` を呼び出し（`/me/edit` の `save_all`・onboarding 共用） |
 | `app/lib/favorites-client.ts` | クライアント側 localStorage / sessionStorage 操作 |
 | `app/hooks/use-favorites.tsx` | `FavoritesProvider` + `useFavorites` |
 | `app/routes/api/favorites.ts` | GET / POST / PUT のお気に入り API |

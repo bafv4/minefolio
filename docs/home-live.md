@@ -34,7 +34,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`＝「最近の更新」）」→ 水平線 → 「PV順（`home.sectionPopular`＝「注目（直近7日）」。プロフィール・ガイド共通）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
 
-ガイド2セクション（更新順・PV順）には自動翻訳（[`docs/translation.md`](./translation.md)）を反映する。ローダーで両セクションのガイド id をまとめて `getGuideTranslations(db, ids, resolveLocale(request))` に1回だけ渡し（N+1 にしない）、各行へ `applyGuideTranslation` を適用して `title` / `summary` を差し替え `autoTranslated` を付ける（カードの自動翻訳マーカーは `GuideCardGrid` が表示）。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・`Cache-Control`）が無く、`getUserData` の60秒キャッシュもロケール非依存のユーザー情報のみのため、閲覧ロケールごとの結果はリクエスト毎に決まる（共有キャッシュへ訳文が混入しない）。機能無効（`ANTHROPIC_API_KEY` 未設定）・opt-out・原文と同じロケールでは Map が空になり、表示は原文のまま。
+ガイド2セクション（更新順・PV順）には自動翻訳（[`docs/translation.md`](./translation.md)）を反映する。ローダーで両セクションのガイド id をまとめて `getGuideTranslations(db, ids, resolveLocale(request))` に1回だけ渡し（N+1 にしない）、各行へ `applyGuideTranslation` を適用して `title` / `summary` を差し替え `autoTranslated` を付ける（カードの自動翻訳マーカーは `GuideCardGrid` が表示）。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・`Cache-Control`）が無く、`getUserData` の60秒キャッシュ（`/api/home-feed` と `paces-feed.server.ts` が使用）もロケール非依存のユーザー情報のみのため、閲覧ロケールごとの結果はリクエスト毎に決まる（共有キャッシュへ訳文が混入しない）。機能無効（`ANTHROPIC_API_KEY` 未設定）・opt-out・原文と同じロケールでは Map が空になり、表示は原文のまま。
 
 PV順の select は `page_view_stats.pageviews` を `pageViews7d` として追加で持ち、カード表示の根拠数値に使う（`common.pageViews7d`＝「直近{days}日の閲覧数」、`TrendingUp` アイコン。実体は `app/components/page-views-meta.tsx` の `PageViews7dMeta`、ガイドカードと共有）:
 
@@ -72,7 +72,8 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
 遅延読み込み対応のAPIエンドポイント。クエリパラメータ `type` で取得するデータ種別を指定する。
 
 - **レスポンスはユーザー非依存**: セッション・お気に入りを一切参照しない（お気に入りを先頭に出す並べ替えはクライアント側 `useFavorites()` で適用）。これによりレスポンスがユーザー間で完全に共有可能になり、CDNキャッシュが正しく機能する
-- **UserDataCache**: 登録ユーザーのMCID・UUID・表示名・カスタムスキンURLをインメモリキャッシュ（TTL: 1分）。`app/lib/home-user-data.server.ts` の `getUserData()` に共通化されており、ホームSSR loader（`home.tsx`）と `/api/home-feed` の両方が同一キャッシュを参照する（毎リクエストの全ユーザースキャンを回避）
+- **UserDataCache**: 登録ユーザーのMCID・UUID・表示名・カスタムスキンURLをインメモリキャッシュ（TTL: 1分）。`app/lib/home-user-data.server.ts` の `getUserData()` に共通化されており、`/api/home-feed` と `app/lib/paces-feed.server.ts`（`/paces`・`/api/paces`）が同一キャッシュを参照する（毎リクエストの全ユーザースキャンを回避）。ホームの SSR loader（`home.tsx`）はこのマップを返さない
+- **応答に載せるマップは表示アイテム分のみ**: キャッシュは全公開ユーザー分だが、`/api/home-feed` の応答（ライブラン・ペース）には `pickUserDataForMcids` で表示アイテムの mcid 分だけに絞ったマップ（`mcidToUuid` / `mcidToSlug` / `mcidToDisplayName` / `mcidToDisplayNameAlphabet` / `mcidToSkinUrl`）を載せる
 - **TwitchLinkCache**: Twitchソーシャルリンク一覧をキャッシュ（TTL: 5分）
 - **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N, stale-while-revalidate=M` を設定（上記の表を参照）
 
@@ -139,7 +140,7 @@ cron（YouTube 2時間毎・Twitch 30分毎）は全体の定期同期として�
 
 ### カスタムスキン対応
 
-- `mcidToSkinUrl` マップ: MCIDからカスタムスキンURLへのマッピング
+- `mcidToSkinUrl` マップ: MCIDからカスタムスキンURLへのマッピング（`/api/home-feed` の応答に表示アイテム分のみ含まれる）
 - カスタムスキンが設定されているユーザーは、Mojang APIの代わりにカスタムスキンURLを使用
 - `customSkinUrl` は Vercel Blob に保存
 
@@ -152,11 +153,19 @@ interface FeedState {
   recentVideos: FeedVideo[];
   twitchVods: FeedVideo[];
   recentPaces: CachedPace[];
+  liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
+  mcidToSlug: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
-  loading: { videos: boolean; twitchVods: boolean; paces: boolean; };
+  mcidToDisplayNameAlphabet: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
+  loading: { videos; twitchVods; paces; liveRuns: boolean };
+  errors: { videos; twitchVods; paces; liveRuns: boolean };
+  liveRunsCheckedAt: number | null;
 }
 ```
+
+mcid マップは SSR では持たず、`SET_PACES` / `SET_LIVE_RUNS` で受けた `/api/home-feed` 応答のマップを `mergeMcidMaps` で既存 state に**蓄積マージ**する（ライブとペースで別々の mcid が返るため、後勝ち置換ではなく和集合にする。応答にキーが無い場合はそのまま保持）。
 
 ### メタタグ
 
@@ -177,14 +186,15 @@ interface FeedState {
 
 共通ロジックは `app/lib/paces-feed.server.ts` に集約（loaderと `/api/paces` で共用）。レスポンスをCDNキャッシュ可能にするため、セッション非依存の一覧取得と、ログインユーザー固有の表示設定取得を2関数に分離している:
 
-- **`getPublicPaceFeed(db, filters)`**（セッション非依存）
-  - 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）の `mcidToUuid` / `mcidToDisplayName` / `mcidToSkinUrl` マップを構築
+- **`getPublicPaceFeed(filters)`**（セッション非依存。戻り値は `{ items, userData }`）
+  - 登録ユーザー（MCID・UUIDあり、視聴者ロール除外）の情報は `getUserData()` の共通キャッシュから取得。SSR 1ページ目・`/api/paces` はいずれも `withPaceProfiles` で応答ページ分の `items[].profile`（`uuid` / `displayName` / `displayNameAlphabet` / `skinUrl`）を付与し、全ユーザー分のマップは応答に載せない
   - `getPaceFeedEntries(registeredMcids, query)`（`app/lib/paceman-cache.ts`）で取得
     - Enter Nether を除外、保持期間（2か月）外をガード
     - 同一 `pacemanRunId` は最も進んだ Split（rta最大）のみ採用（区間指定時はその区間の行）
     - 日時降順ソート（同秒タイは `pacemanRunId` 降順でタイブレーク — offsetページングの安定性のため）。ホームフィードはこの共通関数に `{ limit: 12 }` を渡して利用する
-  - フィード全体は区間キー毎にインメモリキャッシュ（TTL 60秒）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
+  - フィード全体は区間キー毎にインメモリキャッシュ（キー `paces:feed:v3:*`、TTL 60秒。保持するのは `items` 配列のみ）し、無限スクロールのページ毎にテーブル全体を走査しない。プレイヤー・時期・タイムはキャッシュ済みリストへのJSフィルタで適用
   - 「自分のペースを隠す」設定（`showPacemanOnHome`）はここでは適用しない（レスポンスをユーザー間で共有可能にするため）
+  - プロフィールを非公開化しても、フィードキャッシュ・`getUserData` キャッシュ（各TTL 60秒）の都合で反映は最大約120秒遅れうる
 - **`getViewerPacePrefs(db, auth, request)`**（セッション依存）: `getOptionalSession()` でセッションを取得し、ログインユーザーの `mcid` / `showPacemanOnHome` を返す（未ログイン・未登録ユーザーはフィルタなし扱い）
 - 「自分のペースを隠す」フィルタは `getViewerPacePrefs` の結果を使い、`/paces` ページのクライアント側（`paces.tsx`）でMCID一致除外として適用する（ホームの `/api/home-feed` と同じパターン）
 
@@ -210,7 +220,7 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 ### /api/paces
 
-ページング+検索用APIエンドポイント。`{ items, page, total, hasMore }` を返す（`page` は1始まり、1ページ60件）。レスポンスは `getPublicPaceFeed()` のみを使いセッション非依存（「自分のペースを隠す」フィルタは適用しない）のため、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300` を付与しCDNキャッシュ可能にしている。
+ページング+検索用APIエンドポイント。`{ items, page, total, hasMore }` を返す（`page` は1始まり、1ページ60件）。レスポンスは `getPublicPaceFeed()` ＋ `withPaceProfiles`（`items[].profile` 付与）のみを使いセッション非依存（「自分のペースを隠す」フィルタは適用しない）のため、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300` を付与しCDNキャッシュ可能にしている。
 
 ---
 
@@ -325,7 +335,7 @@ YouTubeライブ配信は表示されない。将来的にRSS/Atomフィード�
 PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）がPaceMan APIから直近1週間分を取得し、**蓄積型**で保存する:
 
 - 取得したランと同じ `pacemanRunId` の既存行のみ削除して挿入（取得ウィンドウ外の過去ペースは保持）
-- 削除→挿入→プルーニングは1トランザクションで実行（途中失敗による蓄積データの消失を防ぐ）
+- 削除→挿入→プルーニングは `db.batch`（1トランザクション）で実行（途中失敗による蓄積データの消失を防ぐ）
 - 保持期間は**過去2か月**。それより古い行はCron実行時に削除される
 - 読み取り側（`getPaceFeedEntries`）にも保持期間ガードがあり、Cronが止まっても期間外データは配信されない
 

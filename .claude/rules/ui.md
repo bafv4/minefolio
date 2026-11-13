@@ -52,7 +52,7 @@
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
 
 ### キーバッジ（サーチクラフト系）
-実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。`search-craft-template-view.tsx` / `search-craft-loop-view.tsx` は re-export で既存 import 元を保つ。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
+実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。既存 import 元を保つ re-export が残っているのは `search-craft-template-view.tsx`（`SearchStringText` / `KeyBadge` / `ShiftKeyGroup`）と `search-craft-loop-view.tsx`（`ControlKeyBadge`）のみで、`renderVisibleSpaces` 等の他は本モジュールから直接 import する。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
 
 - 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
 - トーン:
@@ -115,6 +115,7 @@
 - ラッパー側でテクスチャ配信元（`TEXTURE_BASE_URL = "/mcitems"`）・`pixelated` クラス・読み込み中の円形プログレスを既定化している
   （`loadLang()` に渡すベースURLも同モジュールの `TEXTURE_BASE_URL` を import する）
 - 読み込み中のプレースホルダは `size` と同じ外枠を保つため、画像に切り替わってもレイアウトがずれない
+- **例外**: `app/components/paceman-split-mark.tsx`（PaceMan 区間アイコン、固定8種）は `ItemIcon` を使わず、静的 `<img>` で `/mcitems/1.16.1/items/minecraft_*.png` を直接参照する。`ItemIcon` が引き込むアイテム名辞書チャンク（約162KB）をホーム・`/paces` の初期表示から外すため。読み込み中スピナーと取得失敗時フォールバックは無い
 
 ## カード全体をクリック可能にする（オーバーレイリンク）
 

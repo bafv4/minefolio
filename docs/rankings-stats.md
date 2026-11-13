@@ -11,6 +11,7 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 ### ページ
 
 - `/rankings` — スピードランランキング表示
+- **インメモリキャッシュ**（`app/lib/cache.ts`、TTL **60秒**）: `rankings:categories`（カテゴリ一覧）、`rankings:speedruncom:<categoryId|none>`、`rankings:ranked:{pb|elo}`。ランキング自体は12時間毎の cron でしか変わらないが、プロフィール非公開化の反映遅延を `getUserData`（60秒）と同程度に抑えるため TTL は短くしている
 
 ### categoryRecordsテーブル
 
@@ -64,11 +65,11 @@ APIの `wins + loses` と `playedMatches` は一致しない場合がある（de
 
 #### 国内順位（countryRank）
 
-MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのインデックス（`index + 1`）から算出する（`fetchMCSRRankedStats` 内）。**このAPIは上位150件で結果を打ち切るため、`country === "jp"` かつ国内150位以内のプレイヤーのみ順位を表示し、圏外（151位以下・国コード未設定・jp以外）は非表示**とする割り切り仕様。
+MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのインデックス（`index + 1`）から算出する（`fetchMCSRRankedStats` 内）。**このAPIは上位150件で結果を打ち切るため、`country === "jp"` かつ国内150位以内のプレイヤーのみ順位を表示し、圏外（151位以下・国コード未設定・jp以外）は非表示**とする割り切り仕様。JP リーダーボードの取得結果は `app/lib/external-stats.ts` のモジュール内で5分キャッシュし、プレイヤーごとに再取得しない。
 
 #### Minefolio内順位
 
-`player_rankings`（`ranking_type = 'ranked_elo'`、cron `/api/cron/update-rankings` で更新）を基に、「公開プロフィール（`profile_visibility = 'public'`）かつRanked統計公開（`users.show_ranked_stats = true`）のユーザーの中で、自分より高いEloの人数 + 1」で算出する（同率は同順位）。実装は `getMinefolioEloRank()`（`app/lib/rankings-query.server.ts`）。
+`player_rankings`（`ranking_type = 'ranked_elo'`、cron `/api/cron/update-rankings` で更新）を基に、「公開プロフィール（`profile_visibility = 'public'`）かつRanked統計公開（`users.show_ranked_stats = true`）のユーザーの中で、自分より高いEloの人数 + 1」で算出する（同率は同順位）。実装は `getMinefolioEloRank()`（`app/lib/rankings-query.server.ts`）で、全件を取得せず SQL の件数集計（`count`）で順位を求める。
 
 カード上のEloレート自体はMCSR Ranked APIからのライブ取得値、Minefolio内順位はcronキャッシュ（`player_rankings`）基準のため、両者の更新タイミングにはズレが生じうる（許容仕様）。
 
@@ -83,6 +84,7 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 ### /stats — プラットフォーム全体統計
 
 - Minefolio全体の統合統計データを表示
+- 集計結果の生データのみをインメモリキャッシュする（キー `stats:raw`、TTL 5分）。ロケール非依存の生データだけを保持し、ラベルは毎回ロケールに応じて生成する
 - 感度分布は `/keybindings/stats` の感度区分（0〜200%基準の10区分・有効範囲外は集計から除外）と揃えている。詳細は [`docs/keybindings.md`](./keybindings.md) の「感度分布（`SENSITIVITY_RANGES`）」を参照
 
 ### /keybindings/stats — キー配置統計
@@ -126,6 +128,7 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 ### キャッシュ更新
 
 - Cronジョブ `/api/cron/update-paceman-cache` で定期的にデータを取得・更新
+- キャッシュ書き込み（既存ラン行の削除→挿入→プルーニング）は `db.batch`（1トランザクション）で実行する
 
 ---
 

@@ -8,6 +8,14 @@
 
 APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて手動登録されている。レイアウト外のため UIコンポーネントは持たず、`loader`（GET）または `action`（POST等）のみをexportする。
 
+### 共通ヘルパ（`app/lib/api-auth.server.ts`）
+
+- `requireApiUser(db, auth, request, columns?)`: 認証必須の JSON API 用。未ログインは 401、`users` 行が無ければ 404 の `Response` を `response` として返し（両者を区別する）、成功時は `user` を返す。`columns` で取得列を絞れる（`id` は常に含む。省略時は全列）。返す Response のヘッダは Content-Type のみ
+- `getApiUser(db, auth, request)`: 認証できれば `{ id }`、できなければ `null`（401/404 を区別しない簡易版）
+- `plainJsonResponse(body, init?)`: Content-Type のみを付ける素の JSON レスポンス（`Cache-Control` なし）
+- `apiJsonResponse(body, init?)`: `plainJsonResponse` に `Cache-Control: private, no-store` を付けたもの
+- テクスチャ（スキン/マント）の Blob アップロードトークン発行は `app/lib/blob-storage.server.ts` の `handleTextureUploadToken` に共通化
+
 ## 一覧
 
 | エンドポイント | メソッド | 認証 | 用途 |
@@ -392,6 +400,8 @@ Vercel Blobへのクライアントアップロード用トークンを発行す
 - サイズ: 最大1MB
 - パス: `skins/{userId}/` 配下のみ許可
 - `addRandomSuffix: true` で毎回一意なblobパスに保存（固定パスへの再アップロードが「既に存在する」で失敗するのを防ぐ。旧blobは `POST /api/me/skin` が削除）
+
+**実装:** 認証・ユーザー解決は各ルートで行い、トークン発行本体は `app/lib/blob-storage.server.ts` の `handleTextureUploadToken(request, { prefix, userId, logLabel })`（スキン `skins/` とマント `capes/` で共通）に委譲する。
 
 **関連ファイル:** `app/routes/api/me/skin/upload-token.ts`
 

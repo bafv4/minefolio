@@ -210,15 +210,13 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 
 #### ステップ2: MCID
 
-- Java版 MCID: 入力があり現在値と異なれば `/me/edit` の `set_mcid` と同じ処理（3〜16 文字・他ユーザー重複チェック・
-  Mojang API で UUID 取得・`generateSlug(mcid, discordId)`・トランザクション内で `recordSlugChange` と
-  `retargetFavoritesOnSlugChange`）。空欄で現在 MCID があれば `remove_mcid` 相当で解除（slug は `@{discordId}` に戻る）
-- Bedrock版 MCID: `set_bedrock_mcid` と同じ検証（3〜24 文字・制御文字禁止）。空欄なら `null`
-- ウィザード中は常に非公開のため、`set_mcid` が行う YouTube 動画キャッシュの追従は行わない（公開への切替時に追いつかせる）
+- Java版 MCID: 入力があり現在値と異なれば `/me/edit` の一括保存と共通の `app/lib/mcid-change.server.ts`（`verifyMcidForUser`: 3〜16 文字・他ユーザー重複チェック〈uuid 重複も含む〉・Mojang API で UUID 取得 ／ `applyMcidSlugChange`: `generateSlug(mcid, discordId)`・トランザクション内で `recordSlugChange` と `retargetFavoritesOnSlugChange`）を使う。空欄で現在 MCID があれば解除（slug は `@{discordId}` に戻る）
+- Bedrock版 MCID: `/me/edit` と同じ検証（`app/lib/profile-edit-validation.ts`。3〜24 文字・制御文字禁止）。空欄なら `null`
+- ウィザード中は常に非公開のため、`/me/edit` の MCID 変更が行う YouTube 動画キャッシュの追従は行わない（公開への切替時に追いつかせる）
 
 #### ステップ4: 連携
 
-- 各 ID は `/me/edit` の `create_link` と同じ形式検証（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
+- 各 ID は `/me/edit` のリンク作成と同じ形式検証（`validateLinkInput`）（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
 - `social_links` へプラットフォーム単位で upsert（あれば identifier 更新、無ければ作成、空欄なら該当プラットフォームの行を削除）。カスタムリンクは扱わない
 - Speedrun.com は `users.speedruncomUsername` にも同期し、値が変わったら `speedruncomId` を `null` にリセットする
 - SRC ランキング・Twitch VOD・YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外。
@@ -229,7 +227,7 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 - 公開範囲を enum 検証し、表示設定トグルと合わせて更新。同じ update で **`onboardingCompleted: true`** にする
 - 非公開→公開に切り替わる場合は `/me/edit` と同じく Twitch / YouTube / SRC のキャッシュを `runAfterResponse` で追いつかせる
 - 限定公開（`unlisted`）を選んだ場合は SRC ランキングだけ `runAfterResponse` で即時取得する（ランキングの cron は
-  `public` のみが対象で追いつかないため。`/me/edit` の `create_link` なら限定公開でも即時取得される挙動に揃える）
+  `public` のみが対象で追いつかないため。`/me/edit` の一括保存でリンクを追加した場合は限定公開でも即時取得される挙動に揃える）
 - リダイレクトせず `{ success: true, action: "complete" }` だけを返し、クライアントが完了画面を表示する
   （この action の後だけ loader の再検証を抑止する。再検証すると「登録済み → リダイレクト」で完了画面が飛ぶため）
 - 公開設定のトグルは uncontrolled の `Switch`（オンのときだけ `name=true` が送信される）
