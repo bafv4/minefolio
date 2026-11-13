@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet, NavLink, redirect, useLoaderData, useLocation, useNavigation } from "react-router";
+import { Outlet, NavLink, redirect, useLoaderData, useLocation, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -26,6 +26,21 @@ import { Button } from "@/components/ui/button";
 import { ShareButton } from "@/components/share-button";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
+
+// 同じ pathname で検索パラメータだけが変わる GET 遷移では、このレイアウトのデータ（ユーザー行・appUrl）は
+// 変わらないので再取得しない。action 後・パス変更・revalidator.revalidate()（URL 不変）は従来どおり。
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  actionResult,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
+  if (actionResult !== undefined) return defaultShouldRevalidate;
+  if (currentUrl.pathname === nextUrl.pathname && currentUrl.search !== nextUrl.search) return false;
+  return defaultShouldRevalidate;
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
