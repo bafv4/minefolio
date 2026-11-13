@@ -42,7 +42,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
-import { decodePresetConfig } from "@/lib/preset-read";
+import { decodePresetConfig, parseFingerAssignments } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import {
   groupLoopsByTiming,
@@ -767,14 +767,10 @@ export default function PlayerProfilePage() {
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as KeyboardLayout;
 
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
-  const userFingerAssignments = useMemo(() => {
-    if (!player.playerConfig?.fingerAssignments) return {};
-    try {
-      return JSON.parse(player.playerConfig.fingerAssignments);
-    } catch {
-      return {};
-    }
-  }, [player.playerConfig?.fingerAssignments]);
+  const userFingerAssignments = useMemo(
+    () => parseFingerAssignments(player.playerConfig?.fingerAssignments),
+    [player.playerConfig?.fingerAssignments],
+  );
 
   // サーチクラフト（items JSON列をパース）。SearchCraftGroupedList・Loop 表示のクラフト
   // 参照解決の両方で使うため一度だけ計算する
