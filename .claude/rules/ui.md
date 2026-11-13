@@ -85,6 +85,7 @@
 - ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）、`--youtube` / `--twitch` / `--gold` / `--bronze`
 - コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
 - 意味を持つ色（成功・警告・情報・エラー/破壊的）は必ずセマンティックトークン（`text-success` / `text-warning` / `text-info` / `text-destructive` と各 `bg-*/10` 等）を使う。`green-500` などのパレット直指定・生 hex は禁止
+- セマンティックトークンは `text-*` としても使うため、各テーマの値は背景（ライト=白系、ダーク=暗色）に対して文字コントラスト 4.5:1 以上を保つ（例: ライトの `--warning` は黄色ではなく amber-700 相当）。トークン値を変えるときは全テーマで測る
 - `dark:` バリアントは使わない。3テーマ（light / dark / ultra-dark）はトークン側で吸収する（タブ節の既存方針の一般化）
 - inline style で色を書く場合もトークンをそのまま参照する（例: `var(--muted)`）。`hsl(var(--token))` で包むのは oklch 定義のため無効色になるので禁止
 

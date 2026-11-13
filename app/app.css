@@ -141,7 +141,9 @@ body {
   /* Semantic colors */
   --success: oklch(0.56 0.16 139);
   --success-foreground: oklch(0.985 0.01 139);
-  --warning: oklch(0.828 0.189 84.429);
+  /* ライトでは文字色としても使う（text-warning）ため白背景で 4.5:1 以上を確保する（amber-700 相当、約5.0:1）。
+     旧値 oklch(0.828 0.189 84.429) は約1.7:1 で、警告文言が読めなかった */
+  --warning: oklch(0.555 0.163 48.998);
   --warning-foreground: oklch(0.129 0.042 264.695);
   --info: oklch(0.623 0.214 259.815);
   --info-foreground: oklch(1 0 0);
