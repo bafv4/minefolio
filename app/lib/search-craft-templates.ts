@@ -390,6 +390,30 @@ export function toSubmittableLoops(
   return result;
 }
 
+/**
+ * craftIndex 参照の Loop（loopsData のパース結果）を、エディタ用の Loop（craftId 参照・draft id 付き）へ変換する。
+ * crafts は直前に `toEditorCrafts` で id を振ったものを渡す（index が一致している前提）。
+ */
+export function toEditorLoops(
+  loops: TemplateLoop[],
+  crafts: { id: string }[],
+): {
+  id: string;
+  steps: { craftId: string; transition: LoopTransition | null }[];
+  comment: string | null;
+  timing: SearchCraftTiming | null;
+}[] {
+  return loops.map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: crafts[s.craftIndex].id,
+      transition: s.transition,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
+}
+
 /** パース済みデータにエディタ用のIDを振る（リマップ） */
 export function toEditorRemaps(
   remaps: UiRemapInfo[],

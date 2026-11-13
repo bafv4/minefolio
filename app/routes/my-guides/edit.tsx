@@ -12,6 +12,7 @@ import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content-translation.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
 import { createTranslator } from "@/lib/messages";
@@ -33,7 +34,6 @@ export function meta({
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -277,17 +277,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   return { success: true, mode: saveMode, slug: nextSlug };
 }
 
-/** tags は JSON 文字列だが、データ不整合があってもクラッシュしないよう防御的に解析する */
-function safeParseTags(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed.filter((t) => typeof t === "string") as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function GuideEditPage() {
   const { guide, user, hasDraft, published, translationEnabled } = useLoaderData<typeof loader>();
 
@@ -298,7 +287,7 @@ export default function GuideEditPage() {
       initialTitle={guide.title}
       initialContent={guide.content}
       initialSummary={guide.summary ?? ""}
-      initialTags={safeParseTags(guide.tags)}
+      initialTags={parseGuideTags(guide.tags)}
       initialIsPublished={guide.isPublished}
       initialAllowAutoTranslation={guide.allowAutoTranslation}
       translationEnabled={translationEnabled}
@@ -309,7 +298,7 @@ export default function GuideEditPage() {
         summary: published.summary,
         content: published.content,
         coverImageUrl: published.coverImageUrl,
-        tags: safeParseTags(published.tags),
+        tags: parseGuideTags(published.tags),
         isPublished: published.isPublished,
       }}
       authorSlug={user.slug}
