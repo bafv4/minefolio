@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import type { Translator } from "@/lib/messages";
+import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -33,19 +33,6 @@ function formatRunTime(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-// Unix秒からの相対時間を表示（モジュール関数のためフックを使えず、t を受け取る）
-function formatRelativeUnixTime(t: Translator, unixSeconds: number): string {
-  const now = Date.now();
-  const diffMs = now - unixSeconds * 1000;
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffMinutes < 1) return t("playerStats.justNow");
-  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
-  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
-  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
 }
 
 export function PaceFeedCard({
@@ -123,7 +110,7 @@ export function PaceFeedCard({
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
             {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}
-            <span suppressHydrationWarning>{formatRelativeUnixTime(t, run.time)}</span>
+            <span suppressHydrationWarning>{formatRelativeTimeInMinutes(t, new Date(run.time * 1000))}</span>
           </span>
         </div>
       </div>
