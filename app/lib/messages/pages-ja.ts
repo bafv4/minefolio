@@ -1308,6 +1308,8 @@ export const PAGES_JA = {
     presets: "プリセット",
     import: "インポート",
     guides: "ガイド",
+    home: "マイページ",
+    mobileMenuLabel: "マイページのメニューを開閉（現在: {page}）",
   },
   login: {
     title: "ログイン - Minefolio",

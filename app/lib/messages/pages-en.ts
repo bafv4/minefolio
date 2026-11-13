@@ -1341,6 +1341,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     presets: "Presets",
     import: "Import",
     guides: "Guides",
+    home: "My page",
+    mobileMenuLabel: "Toggle my page menu (current: {page})",
   },
   devLogin: {
     title: "Dev login",

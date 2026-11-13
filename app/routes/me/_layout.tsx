@@ -1,4 +1,5 @@
-import { Outlet, NavLink, redirect, useLoaderData, useNavigation } from "react-router";
+import { useEffect, useState } from "react";
+import { Outlet, NavLink, redirect, useLoaderData, useLocation, useNavigation } from "react-router";
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -18,7 +19,10 @@ import {
   Loader2,
   Save,
   Upload,
+  X,
+  ChevronsDown,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ShareButton } from "@/components/share-button";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
@@ -72,12 +76,21 @@ export default function MeLayout() {
   // ナビゲーション中（ローディング中）かどうか
   const isNavigating = navigation.state === "loading";
 
+  // lg 未満のナビ開閉状態と現在ページ名（ページ遷移したら閉じる）
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+  const currentItem = [...mainNavItems, ...secondaryNavItems].find((item) => item.to === location.pathname);
+  const currentLabel = currentItem ? t(currentItem.labelKey) : t("meLayout.home");
+
   return (
     <div className="flex flex-col lg:flex-row gap-8">
       {/* Sidebar Navigation */}
       <aside className="lg:w-64 shrink-0">
         <nav className="sticky top-24 space-y-1">
-          <div className="mb-4 pb-4 border-b flex items-start justify-between gap-2">
+          <div className="mb-3 pb-3 lg:mb-4 lg:pb-4 border-b flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium truncate">
                 {userName}
@@ -92,6 +105,21 @@ export default function MeLayout() {
             />
           </div>
 
+          {/* lg 未満（縦積み）: 現在のページ名を表示する開閉トグル。h1 を1画面目に収めるため既定は閉じる */}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-between lg:hidden"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="me-mobile-menu"
+            aria-label={t("meLayout.mobileMenuLabel", { page: currentLabel })}
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            <span className="min-w-0 truncate text-sm font-medium text-primary">{currentLabel}</span>
+            {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
+          </Button>
+
+          <div id="me-mobile-menu" className={cn("space-y-1", !mobileMenuOpen && "hidden", "lg:block")}>
           {/* 主要なナビゲーション項目 */}
           {mainNavItems.map((item) => (
             <NavLink
@@ -154,6 +182,7 @@ export default function MeLayout() {
               )}
             </NavLink>
           ))}
+          </div>
         </nav>
       </aside>
 
