@@ -28,10 +28,6 @@ export async function action({ request }: ActionFunctionArgs) {
     body,
     request,
     onBeforeGenerateToken: async (pathname) => {
-      // user は外側で検証済みだが、コールバック実行時の型ナロー目的で再確認
-      if (!user || !user.id) {
-        throw new Error("Unauthorized");
-      }
       // パストラバーサル対策: 接頭辞一致に加え、'..' セグメントを含むパスを拒否する
       if (
         !pathname.startsWith(`guides/${user.id}/`) ||

@@ -23,13 +23,8 @@ export async function getApiUser(
   auth: Auth,
   request: Request,
 ): Promise<{ id: string } | null> {
-  const session = await getOptionalSession(request, auth);
-  if (!session) return null;
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
-  return user ?? null;
+  const result = await requireApiUser(db, auth, request, []);
+  return result.user ? { id: result.user.id } : null;
 }
 
 type UserRow = typeof users.$inferSelect;
@@ -73,8 +68,7 @@ export async function requireApiUser<K extends keyof UserRow = keyof UserRow>(
 
 /** JSON API ルート用のレスポンス。閲覧者ごとに異なる応答なので、CDN・ブラウザともにキャッシュさせない。 */
 export function apiJsonResponse(body: unknown, init?: ResponseInit): Response {
-  const headers = new Headers(init?.headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  headers.set("Cache-Control", "private, no-store");
-  return new Response(JSON.stringify(body), { ...init, headers });
+  const response = plainJsonResponse(body, init);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }
