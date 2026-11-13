@@ -952,8 +952,6 @@ export const PAGES_JA = {
     idInvalidChars: "IDに使用できない文字が含まれています",
     idAllowedChars: "IDには英数字、ハイフン、アンダースコアのみ使用できます",
     platformLinkExists: "このプラットフォームのリンクは既に登録されています",
-    platformLinkExistsForEdit: "{platform}のリンクは既に登録されています。編集から更新してください。",
-    platformLinkExistsSimple: "{platform}のリンクは既に登録されています。",
     linkSaveFailed: "リンクの保存に失敗しました",
     profileSaveFailed: "プロフィールの保存に失敗しました",
     pendingSaveNote: "この変更は、画面下の保存バーで保存するまで反映されません。",

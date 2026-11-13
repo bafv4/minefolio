@@ -973,9 +973,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     idInvalidChars: "The ID contains characters that can't be used",
     idAllowedChars: "IDs can only contain letters, numbers, hyphens, and underscores",
     platformLinkExists: "A link for this platform is already registered",
-    platformLinkExistsForEdit:
-      "A {platform} link is already registered. Update it from Edit.",
-    platformLinkExistsSimple: "A {platform} link is already registered.",
     linkSaveFailed: "Failed to save the link",
     profileSaveFailed: "Failed to save your profile",
     pendingSaveNote: "This change will not take effect until you save it with the save bar at the bottom.",
