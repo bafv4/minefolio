@@ -19,7 +19,8 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
-import { action, isHttpVideoUrl } from "../records";
+import { action } from "../records";
+import { isHttpUrl as isHttpVideoUrl } from "@/lib/safe-url";
 
 // pbVideoUrl の Stored XSS 対策（http/https スキーム許可リスト）の回帰テスト。
 describe("isHttpVideoUrl", () => {

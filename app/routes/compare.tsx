@@ -13,13 +13,12 @@ import {
   type PresetSnapshot,
 } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
-import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { toSensitivityPercent } from "@/lib/mouse-settings";
 import { rtaCareerLabel, rtaCareerView } from "@/lib/rta-career";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -33,7 +32,7 @@ import {
 import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import type { Translator } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -152,8 +151,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
 
-  // 走者一覧（選択用）: 一覧なので公開プロフィールのみ
-  const allPlayers = await db.query.users.findMany({
+  // 走者一覧（選択用）: 一覧なので公開プロフィールのみ。
+  // drizzle のクエリは await されるまで実行されないので、各分岐の Promise.all に渡して他クエリと並列に走らせる
+  const allPlayersQuery = db.query.users.findMany({
     where: eq(users.profileVisibility, "public"),
     columns: {
       mcid: true,
@@ -169,22 +169,48 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // p1のみ指定の場合、類似走者を検索（slugで検索）
   if (p1 && !p2) {
-    const player1Raw = await db.query.users.findFirst({
-      // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
-      where: and(
-        eq(users.slug, p1),
-        publiclyReferencableCondition,
-      ),
-      with: {
-        keybindings: true,
-        playerConfig: true,
-        keyRemaps: true,
-        configPresets: {
-          where: eq(configPresets.isMain, true),
-          columns: MAIN_PRESET_COLUMNS,
+    // 比較元・類似度計算用の全ユーザー・選択用一覧は互いに独立なので並列に取得する
+    // （類似度計算側はメインプリセットのスナップショットを優先。無いユーザーのみライブ）
+    const [allPlayers, player1Raw, allUsersWithKeybindings] = await Promise.all([
+      allPlayersQuery,
+      db.query.users.findFirst({
+        // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
+        where: and(
+          eq(users.slug, p1),
+          publiclyReferencableCondition,
+        ),
+        with: {
+          keybindings: true,
+          playerConfig: true,
+          keyRemaps: true,
+          configPresets: {
+            where: eq(configPresets.isMain, true),
+            columns: MAIN_PRESET_COLUMNS,
+          },
         },
-      },
-    });
+      }),
+      db.query.users.findMany({
+        where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
+        columns: {
+          id: true,
+          mcid: true,
+          uuid: true,
+          slug: true,
+          displayName: true,
+          displayNameAlphabet: true,
+          customSkinUrl: true,
+        },
+        with: {
+          // 類似度計算に使うのは action / keyCode のみ（メイン持ちユーザーでは未使用のため最小限に）
+          keybindings: { columns: { action: true, keyCode: true } },
+          configPresets: {
+            where: eq(configPresets.isMain, true),
+            columns: { id: true, isActive: true, keybindingsData: true },
+          },
+        },
+        limit: 50,
+      }),
+    ]);
 
     if (!player1Raw) {
       return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
@@ -196,30 +222,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     for (const kb of player1Data.keybindings) {
       p1KeyMap[kb.action] = kb.keyCode;
     }
-
-    // 全ユーザーのキーバインドを取得して類似度を計算
-    // （メインプリセットのスナップショットを優先。無いユーザーのみライブ）
-    const allUsersWithKeybindings = await db.query.users.findMany({
-      where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
-      columns: {
-        id: true,
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        customSkinUrl: true,
-      },
-      with: {
-        // 類似度計算に使うのは action / keyCode のみ（メイン持ちユーザーでは未使用のため最小限に）
-        keybindings: { columns: { action: true, keyCode: true } },
-        configPresets: {
-          where: eq(configPresets.isMain, true),
-          columns: { id: true, isActive: true, keybindingsData: true },
-        },
-      },
-      limit: 50,
-    });
 
     const similarPlayers = allUsersWithKeybindings
       .map((user) => {
@@ -275,11 +277,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // 両方指定されていない場合は選択画面のみ
   if (!p1 || !p2) {
+    const allPlayers = await allPlayersQuery;
     return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
   }
 
   // 両走者のデータを取得（slugで検索・メインプリセットのスナップショット優先）
-  const [player1Raw, player2Raw] = await Promise.all([
+  const [allPlayers, player1Raw, player2Raw] = await Promise.all([
+    allPlayersQuery,
     db.query.users.findFirst({
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(

@@ -39,7 +39,6 @@ import {
   Trash2,
   ExternalLink,
   Loader2,
-  CheckCircle2,
   AlertCircle,
   Eye,
   EyeOff,
@@ -48,19 +47,7 @@ import {
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-
-// pbVideoUrl は http/https スキームのみ許可する（javascript: 等を弾き Stored XSS を防ぐ）。
-// F6 が所有する共有ヘルパー app/lib/safe-url.ts とは独立させるため、この機能内の
-// ローカルヘルパーとして持つ（同等の実装が profile.tsx の RecordCard 側にもある）。
-export function isHttpVideoUrl(value: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return false;
-  }
-  return parsed.protocol === "http:" || parsed.protocol === "https:";
-}
+import { isHttpUrl } from "@/lib/safe-url";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -122,7 +109,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -200,7 +186,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("meRecords.invalidTime") };
     }
 
-    if (pbVideoUrl && !isHttpVideoUrl(pbVideoUrl)) {
+    if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) {
       return { error: t("meRecords.invalidVideoUrl") };
     }
 

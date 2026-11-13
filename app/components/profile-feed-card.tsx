@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
 import { Clock3 } from "lucide-react";
@@ -181,3 +182,22 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
   );
 }
 
+// ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）
+export function ProfileFeedCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <Skeleton className="h-5 w-16 rounded-full" />
+        <Skeleton className="h-3 w-12" />
+      </div>
+    </div>
+  );
+}

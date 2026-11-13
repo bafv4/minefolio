@@ -1,11 +1,10 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { categoryRecords, users } from "./schema";
+import { categoryRecords, favorites, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
-import { getFavoritesFromDb } from "./favorites";
 import { profilePageViewsSql } from "./page-view-stats.server";
 import { pickHighlightPb } from "./profile-highlights";
 
@@ -142,45 +141,43 @@ function buildWhere(args: BrowseQueryArgs) {
 export async function loadBrowsePage(
   db: Database,
   args: BrowseQueryArgs,
-  favoriteSlugs: string[],
+  favoriteSlugs: string[] | Promise<string[]>,
 ) {
   const whereCondition = buildWhere(args);
 
-  // ソート: お気に入りを最優先（ログイン中のみ）→ 通常ソート
-  // ORDER BY に組み込むことで、append しても一貫した順序になる。
-  const favoritePriority =
-    favoriteSlugs.length > 0
-      ? sql`CASE WHEN ${inArray(users.slug, favoriteSlugs)} THEN 0 ELSE 1 END`
-      : null;
+  // count はお気に入りに依存しないので、お気に入り取得（Promise 可）と並行して発行する。
+  // （drizzle のクエリは await されるまで実行されないため Promise.all に直接渡す）
+  const buildList = async () => {
+    const resolvedFavoriteSlugs = await favoriteSlugs;
+    // ソート: お気に入りを最優先（ログイン中のみ）→ 通常ソート
+    // ORDER BY に組み込むことで、append しても一貫した順序になる。
+    const favoritePriority =
+      resolvedFavoriteSlugs.length > 0
+        ? sql`CASE WHEN ${inArray(users.slug, resolvedFavoriteSlugs)} THEN 0 ELSE 1 END`
+        : null;
 
-  // 未設定（NULL）の行は必ず末尾へ送る（sort-order.ts の共通ルール）。
-  // SQLite の既定では昇順で NULL が先頭に来てしまい、MCID 未登録・表示名未設定の
-  // 走者が並び替えのたびに 1 ページ目を占有する。
-  const orderByClause =
-    args.sort === "mcid"
-      ? [nullsLast(users.mcid), asc(users.mcid)]
-      : args.sort === "displayName"
-      ? [nullsLast(users.displayName), asc(users.displayName)]
-      : args.sort === "popular"
-      ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
-        [desc(profilePageViewsSql()), desc(users.updatedAt)]
-      : // updatedAt は NOT NULL なので NULL 対策は不要
-        [desc(users.updatedAt)];
+    // 未設定（NULL）の行は必ず末尾へ送る（sort-order.ts の共通ルール）。
+    // SQLite の既定では昇順で NULL が先頭に来てしまい、MCID 未登録・表示名未設定の
+    // 走者が並び替えのたびに 1 ページ目を占有する。
+    const orderByClause =
+      args.sort === "mcid"
+        ? [nullsLast(users.mcid), asc(users.mcid)]
+        : args.sort === "displayName"
+        ? [nullsLast(users.displayName), asc(users.displayName)]
+        : args.sort === "popular"
+        ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
+          [desc(profilePageViewsSql()), desc(users.updatedAt)]
+        : // updatedAt は NOT NULL なので NULL 対策は不要
+          [desc(users.updatedAt)];
 
-  // 末尾に一意キー（id）を付けて全順序にする。updatedAt / displayName / mcid が同値（NULL 同士含む）の
-  // 行があると offset ページングで順序が揺れ、隣接ページ間で同じ走者が重複して返る
-  // （一覧の React key 重複警告の原因）。
-  const orderBy = favoritePriority
-    ? [favoritePriority, ...orderByClause, asc(users.id)]
-    : [...orderByClause, asc(users.id)];
+    // 末尾に一意キー（id）を付けて全順序にする。updatedAt / displayName / mcid が同値（NULL 同士含む）の
+    // 行があると offset ページングで順序が揺れ、隣接ページ間で同じ走者が重複して返る
+    // （一覧の React key 重複警告の原因）。
+    const orderBy = favoritePriority
+      ? [favoritePriority, ...orderByClause, asc(users.id)]
+      : [...orderByClause, asc(users.id)];
 
-  // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
-  const [totalCountResult, playerList] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(whereCondition),
-    db.query.users.findMany({
+    return db.query.users.findMany({
       where: whereCondition,
       columns: BROWSE_LIST_COLUMNS,
       // 走者を見分ける表示用（メインカテゴリ + その PB）。with で一括取得し N+1 にしない
@@ -194,7 +191,15 @@ export async function loadBrowsePage(
       orderBy,
       limit: BROWSE_ITEMS_PER_PAGE,
       offset: (args.page - 1) * BROWSE_ITEMS_PER_PAGE,
-    }),
+    });
+  };
+
+  const [totalCountResult, playerList] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(whereCondition),
+    buildList(),
   ]);
 
   const totalCount = totalCountResult[0]?.count ?? 0;
@@ -215,16 +220,29 @@ export async function loadBrowsePage(
   };
 }
 
+/**
+ * discordId からユーザーの存在とお気に入り slug を 1 クエリ（users LEFT JOIN favorites）で取得する。
+ * ユーザーが存在しなければ null。登録順（createdAt 昇順）で返す。
+ */
+export async function getFavoriteSlugsByDiscordId(
+  db: Database,
+  discordId: string,
+): Promise<string[] | null> {
+  const rows = await db
+    .select({ favoriteSlug: favorites.favoriteSlug })
+    .from(users)
+    .leftJoin(favorites, eq(favorites.userId, users.id))
+    .where(eq(users.discordId, discordId))
+    .orderBy(asc(favorites.createdAt));
+  if (rows.length === 0) return null;
+  return rows.flatMap((r) => (r.favoriteSlug ? [r.favoriteSlug] : []));
+}
+
 /** ログイン中ユーザーのお気に入り slug を取得（未ログインは [] ） */
 export async function getViewerFavoriteSlugs(
   db: Database,
   discordId: string | null,
 ): Promise<string[]> {
   if (!discordId) return [];
-  const me = await db.query.users.findFirst({
-    where: eq(users.discordId, discordId),
-    columns: { id: true },
-  });
-  if (!me) return [];
-  return getFavoritesFromDb(db, me.id);
+  return (await getFavoriteSlugsByDiscordId(db, discordId)) ?? [];
 }
