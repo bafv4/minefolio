@@ -581,6 +581,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     emptyHint: "Paces will appear here once they are recorded",
     emptyFilteredHint: "Try changing the filters or reset them",
     resetFilters: "Reset filters",
+    filterToggle: "Filters",
+    filterActiveCount: "{count} active",
     filterPlayer: "Player",
     filterPlayerPlaceholder: "Search by MCID or name…",
     filterSplit: "Split",

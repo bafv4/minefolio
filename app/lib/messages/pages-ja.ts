@@ -447,6 +447,8 @@ export const PAGES_JA = {
     emptyHint: "ペースが記録されるとここに表示されます",
     emptyFilteredHint: "検索条件を変えるか、条件をリセットしてください",
     resetFilters: "条件をリセット",
+    filterToggle: "検索条件",
+    filterActiveCount: "{count}件適用中",
     filterPlayer: "プレイヤー",
     filterPlayerPlaceholder: "MCID・名前で検索...",
     filterSplit: "区間",

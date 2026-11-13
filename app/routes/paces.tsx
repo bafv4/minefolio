@@ -29,7 +29,8 @@ import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
-import { History, Activity, Loader2, Search, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { History, Activity, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime", "sort"] as const;
@@ -190,6 +191,10 @@ export default function PacesPage() {
   }, [searchParams]);
 
   const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
+  // 折りたたみバッジの件数は絞り込み条件のみ（並び順 sort は絞り込みではないので数えない）
+  const activeFilterCount = FILTER_PARAM_KEYS.filter((key) => key !== "sort" && searchParams.get(key)).length;
+  // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +238,23 @@ export default function PacesPage() {
         onSubmit={handleSearch}
         className="rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5"
       >
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          aria-controls="pace-filter-panel"
+          className="flex w-full items-center gap-2 rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+        >
+          <Search className="h-4 w-4" />
+          {t("paces.filterToggle")}
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+              {t("paces.filterActiveCount", { count: activeFilterCount })}
+            </span>
+          )}
+          <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", filtersOpen && "rotate-180")} />
+        </button>
+        <div id="pace-filter-panel" className={cn("mt-3 sm:mt-0 sm:block", filtersOpen ? "block" : "hidden")}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
           <div className="space-y-1.5">
             <Label htmlFor="pace-filter-player">{t("paces.filterPlayer")}</Label>
@@ -324,6 +346,7 @@ export default function PacesPage() {
               {t("common.clear")}
             </Button>
           )}
+        </div>
         </div>
       </form>
 
