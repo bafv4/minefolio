@@ -410,7 +410,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     timelineDescription: "Split times recorded during this run.",
     timelineError: "Could not load the timeline",
     timelineEmpty: "No split data",
-    viewOnPaceMan: "View on",
+    viewOnPaceMan: "View on {site}",
+    splitBreakdown: "Split time breakdown",
   },
   browse: {
     title: "Browse profiles",

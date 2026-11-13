@@ -72,7 +72,8 @@ export function PaceFeedCard({
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
-          アバター/名前リンク（z-10）が同じ位置にある部分はそちらが優先される */}
+          アバター/名前リンク（z-10）が同じ位置にある部分はそちらが優先される。
+          タブ停止はこのボタンと名前リンクの2つだけ（アバターは名前リンクと同じ遷移先のため除外） */}
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
@@ -80,7 +81,13 @@ export function PaceFeedCard({
         aria-label={`${displayName || run.nickname || run.mcid}: ${t("home.viewTimeline")}`}
       />
       <div className="flex items-center gap-3">
-        <Link to={`/player/${run.mcid}`} prefetch="intent" className="relative z-10 shrink-0">
+        <Link
+          to={`/player/${run.mcid}`}
+          prefetch="intent"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="relative z-10 shrink-0"
+        >
           {uuid ? (
             <div className="h-11 w-11 rounded-xl transition-opacity hover:opacity-80">
               <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} />
@@ -234,7 +241,7 @@ function PaceTimelineModal({
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
         >
-          PaceMan.gg {t("home.viewOnPaceMan")}
+          {t("home.viewOnPaceMan", { site: "PaceMan.gg" })}
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </DialogContent>

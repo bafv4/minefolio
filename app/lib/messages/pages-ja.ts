@@ -412,7 +412,8 @@ export const PAGES_JA = {
     timelineDescription: "このランで記録された区間タイムです。",
     timelineError: "タイムラインの取得に失敗しました",
     timelineEmpty: "区間データがありません",
-    viewOnPaceMan: "で見る",
+    viewOnPaceMan: "{site} で見る",
+    splitBreakdown: "区間タイムの内訳",
   },
   paces: {
     /** スプリット名（PaceMan のイベントID に対応） */

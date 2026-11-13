@@ -1,7 +1,7 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   type PaceManLiveRun,
-  getSplitLabelEnglish,
   getSplitTimeline,
   getSplitOrder,
   getLatestSplit,
@@ -12,11 +12,68 @@ import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Badge } from "@/components/ui/badge";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+
+/**
+ * 区間タイムの内訳。トリガーは実 button（キーボード/タッチで到達可能）。
+ * マウス: ホバーで表示 / キーボード: フォーカスで表示 / タッチ: タップでトグル。
+ * 区間名は同じ行のバッジ（PaceManSplitMark）・タイムラインモーダルと同じ英語の PaceMan 正規名を使う
+ */
+function SplitBreakdown({ run, igt }: { run: PaceManLiveRun; igt: number }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const hoverRef = useRef(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${formatTime(igt)}: ${t("home.splitBreakdown")}`}
+          className="cursor-pointer rounded font-mono font-semibold underline decoration-dotted underline-offset-4 decoration-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") {
+              hoverRef.current = true;
+              setOpen(true);
+            }
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") {
+              hoverRef.current = false;
+              setOpen(false);
+            }
+          }}
+          onFocus={(e) => {
+            if (e.currentTarget.matches(":focus-visible")) setOpen(true);
+          }}
+          onBlur={() => setOpen(false)}
+          onClick={(e) => {
+            // マウスはホバーで既に開いているため、クリックで閉じない（キーボードの click は detail=0）
+            if (hoverRef.current && e.detail > 0) e.preventDefault();
+          }}
+        >
+          {formatTime(igt)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="left"
+        className="w-auto p-0"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div className="px-3 py-2 space-y-1">
+          {[...run.eventList]
+            .sort((a, b) => getSplitOrder(a.eventId) - getSplitOrder(b.eventId))
+            .map((event) => (
+              <div key={event.eventId} className="flex items-center justify-between gap-4 text-xs">
+                <span className="opacity-80">{getSplitTimeline(event.eventId)}</span>
+                <span className="font-mono font-semibold">{formatTime(event.igt)}</span>
+              </div>
+            ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface LivePaceListProps {
   runs: PaceManLiveRun[];
@@ -100,25 +157,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                 <td className="py-2 px-3 text-right font-mono font-semibold">
                   {latestSplit ? (
                     run.eventList.length > 1 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-default underline decoration-dotted underline-offset-4 decoration-muted-foreground/50">
-                            {formatTime(latestSplit.igt)}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="p-0">
-                          <div className="px-3 py-2 space-y-1">
-                            {[...run.eventList]
-                              .sort((a, b) => getSplitOrder(a.eventId) - getSplitOrder(b.eventId))
-                              .map((event) => (
-                                <div key={event.eventId} className="flex items-center justify-between gap-4 text-xs">
-                                  <span className="opacity-80">{getSplitLabelEnglish(event.eventId)}</span>
-                                  <span className="font-mono font-semibold">{formatTime(event.igt)}</span>
-                                </div>
-                              ))}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
+                      <SplitBreakdown run={run} igt={latestSplit.igt} />
                     ) : (
                       formatTime(latestSplit.igt)
                     )
