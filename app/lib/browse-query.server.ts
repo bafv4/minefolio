@@ -1,7 +1,7 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { users } from "./schema";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
@@ -109,7 +109,14 @@ function buildWhere(args: BrowseQueryArgs) {
   }
 
   if (args.roles.length > 0) {
-    conditions.push(or(...args.roles.map((r) => eq(users.role, r)))!);
+    // role 未設定（NULL）は走者として扱う（excludeViewersCondition / 既定の一覧と同じ解釈）
+    conditions.push(
+      or(
+        ...args.roles.map((r) =>
+          r === "runner" ? or(isNull(users.role), eq(users.role, "runner"))! : eq(users.role, r),
+        ),
+      )!,
+    );
   } else {
     conditions.push(excludeViewersCondition!);
   }

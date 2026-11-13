@@ -43,7 +43,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 | パラメータ | 型 | 選択肢 |
 |-----------|-----|--------|
-| `role` | FilterRole | `runner` / `viewer` |
+| `role` | FilterRole | `runner` / `viewer`（`users.role` は NULL 許容で NULL＝未設定。**未設定は走者として扱う**: `runner` 絞り込みは NULL を含み、`role` 指定なしの既定一覧（視聴者除外）と件数が一致する） |
 | `edition` | FilterEdition | `java` / `bedrock` |
 | `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch` |
 | `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
@@ -156,6 +156,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 ### 表示
 
 - `ProfileFeedCard`（`/browse` と共通）でプレイヤーカード表示。role/edition/platform バッジ付き
+- `/browse` の見出し（件数行）は選択中の role フィルタに追従する（走者／視聴者／すべて）。件数の単位は「人」（en は people）に統一
 - お気に入りが空の場合、`EmptyState` で案内メッセージ + `/browse` への導線を表示
 - `FavoriteButton` コンポーネントで各プレイヤーカードにお気に入りトグルボタンを表示（v1.4.0 から `slug` プロップを受け取る）
 

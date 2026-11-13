@@ -271,7 +271,14 @@ export default function BrowsePage() {
           {t("browse.title")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {`${t("browse.totalCount")} (${totalCount}${t("common.peopleUnit")})`}
+          {t(
+            filters.roles.length === 0 || (filters.roles.length === 1 && filters.roles[0] === "runner")
+              ? "browse.totalCountRunner"
+              : filters.roles.length === 1
+                ? "browse.totalCountViewer"
+                : "browse.totalCountAll",
+            { count: totalCount },
+          )}
         </p>
       </div>
 
