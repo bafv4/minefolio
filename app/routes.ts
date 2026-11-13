@@ -93,6 +93,7 @@ export default [
   route("api/me/cape/upload-token", "routes/api/me/cape/upload-token.ts"),
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
+  route("api/guides/view-count", "routes/api/guides/view-count.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/likes", "routes/api/likes.ts"),
   route("api/profile-reactions", "routes/api/profile-reactions.ts"),

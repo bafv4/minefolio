@@ -329,14 +329,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const displaySummary = translated?.summary ?? viewSummary;
   const displayContent = translated?.content ?? viewContent;
 
-  // ドラフトプレビューでは閲覧数を増やさない
-  if (!draftPreview) {
-    db.update(guides)
-      .set({ viewCount: sql`${guides.viewCount} + 1` })
-      .where(eq(guides.id, guide.id))
-      .then(() => {})
-      .catch(() => {});
-  }
+  // 閲覧数はここでは数えない（?original=1 の切替で loader が再実行されて水増しされるため）。
+  // ページ表示時にクライアントから /api/guides/view-count へ1回だけ送る（GuideViewPage 参照）。
 
   // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
   const sanitizedContent = sanitizeGuideHtml(displayContent);
@@ -410,6 +404,22 @@ export default function GuideViewPage() {
   const tags = parseGuideTags(guide.tags);
   const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // 1回のページ訪問につき1回だけ閲覧数を加算する。コンポーネントは search param（?original=1 等）の
+  // 変更では再マウントされず guide.id も変わらないため、切替では再送されない。ドラフトプレビューは数えない。
+  // 送信済みの guide.id を ref で覚え、開発時の StrictMode による effect の二重実行でも1回に抑える。
+  const guideId = guide.id;
+  const countedGuideIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (previewingDraft || countedGuideIdRef.current === guideId) return;
+    countedGuideIdRef.current = guideId;
+    fetch("/api/guides/view-count", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guideId }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [guideId, previewingDraft]);
 
   // Inject copy buttons on code blocks
   useEffect(() => {

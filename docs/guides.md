@@ -249,7 +249,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - 個別ガイドの全文表示
 - カバー画像、タイトル、著者情報、本文を表示
-- 閲覧時に viewCount をインクリメント
+- 閲覧数（`viewCount`）は**ページ表示時にクライアントから `POST /api/guides/view-count` を1回送って**加算する（`GuideViewPage` の effect、`guide.id` 単位）。loader では数えない — 原文/訳文切替（`?original=1`）など同一ページ内の search param 変更でも loader が再実行され、切替のたびに水増しされるため。ドラフトプレビューは送らず、API は公開済みガイドのみ加算する。JS を実行しないクローラは数えない
 - メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
 - **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、meta 用の原文 metaTitle / metaSummary、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
 
