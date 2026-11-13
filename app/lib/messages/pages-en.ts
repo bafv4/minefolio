@@ -750,6 +750,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     showOriginal: "Show original",
     showTranslation: "Show translation",
     viewingOriginal: "Showing original",
+    externalLinkLabel: "View on {host}",
     noGuidesTitle: "No guides",
     noGuidesDescription: "This player hasn't published any guides yet.",
     platformPcWindows: "PC (Windows)",

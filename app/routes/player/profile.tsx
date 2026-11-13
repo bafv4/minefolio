@@ -77,6 +77,7 @@ import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { getGuideTranslations, getUserBioTranslation } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { AutoTranslateNotice } from "@/components/auto-translate-notice";
+import { LinkifiedText } from "@/components/profile/linkified-text";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
@@ -983,7 +984,7 @@ export default function PlayerProfilePage() {
   if (showPlaystyleClickMethods && playstyleClickMethods.includes("drag") && player.playstyle?.dragTapeType) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleDragTapeType"),
-      value: player.playstyle.dragTapeType,
+      value: <LinkifiedText text={player.playstyle.dragTapeType} />,
     });
   }
   if (showPlaystyleMousepad) {
@@ -995,7 +996,7 @@ export default function PlayerProfilePage() {
   if (showPlaystyleMousepad && player.playstyle?.usesMousepad === "uses" && player.playstyle?.mousepadType) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleMousepadType"),
-      value: player.playstyle.mousepadType,
+      value: <LinkifiedText text={player.playstyle.mousepadType} />,
     });
   }
 

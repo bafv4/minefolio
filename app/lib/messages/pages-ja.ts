@@ -726,6 +726,7 @@ export const PAGES_JA = {
     showOriginal: "原文を表示",
     showTranslation: "翻訳を表示",
     viewingOriginal: "原文を表示中",
+    externalLinkLabel: "{host} で見る",
     noGuidesTitle: "ガイドがありません",
     noGuidesDescription: "このプレイヤーはまだガイドを公開していません。",
     /** プラットフォーム名（me/edit の選択肢と共有） */
