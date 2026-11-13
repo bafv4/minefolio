@@ -108,8 +108,8 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | pacemanRunId | string | PaceManのランID |
 | mcid | string | MinecraftプレイヤーID |
 | timeline | string | スプリット名 |
-| rta | integer (ms) | Real Time Attack（ミリ秒） |
-| igt | integer (ms) | In Game Time（ミリ秒） |
+| rta | integer (ms) | 区間タイム（ミリ秒）。**列名に反して中身は IGT**（PaceMan stats API `getRecentRuns` の値は IGT。画面では「IGT」と明記して表示する） |
+| igt | integer (ms) | 未使用（常に null） |
 | date | timestamp | 実行日時 |
 | isNetherEnter | boolean | ネザー入りかどうか |
 | is2ndStructureOrLater | boolean | 2つ目以降のストラクチャーかどうか |

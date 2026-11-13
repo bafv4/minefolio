@@ -283,6 +283,7 @@ function PaceRow({ pace }: { pace: GroupedPaceEntry }) {
         ) : (
           <span className="font-mono font-medium">{formatTime(pace.latestSplit.rta)}</span>
         )}
+        <span className="-ml-1 text-[10px] text-muted-foreground">{t("home.igtTime")}</span>
         <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
     </a>

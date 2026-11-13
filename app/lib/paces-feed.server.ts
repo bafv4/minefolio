@@ -22,7 +22,7 @@ export interface PaceFeedItem {
   mcid: string;
   nickname: string;
   timeline: string;
-  rta: number;
+  rta: number; // 名前は rta だが実体は IGT（PaceMan getRecentRuns の区間値は IGT。paceman_paces.rta 列に保存されている）
   pacemanRunId: number;
   time: number; // Unix秒
 }

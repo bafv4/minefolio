@@ -181,7 +181,8 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
         userId,
         timeline: entry.timeline,
         rta: entry.rta,
-        igt: null, // PaceManRecentRunにはIGTがないためnull
+        // 注意: PaceMan stats API（getRecentRuns）の区間値は IGT。歴史的経緯で rta 列に格納しており、igt 列は常に null
+        igt: null,
         date: runDate,
         isNetherEnter: entry.isNetherEnter,
         is2ndStructureOrLater: entry.is2ndStructureOrLater,

@@ -111,7 +111,7 @@ export function PaceFeedCard({
             ml-auto shrink-0 で折り返し後も行内右端に揃える */}
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <div className="min-w-0">
-            <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("home.igtTime")}</p>
             <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
           </div>
           <Badge variant="secondary" className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs">
