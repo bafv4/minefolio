@@ -219,7 +219,7 @@ export function HotbarSummaryCell({
     <div className="flex flex-nowrap items-end gap-1">
       {slots.map(({ n, keyCode }) => (
         <span key={n} className="inline-flex flex-col items-center gap-0.5">
-          <span className="text-[9px] leading-none text-muted-foreground">{n}</span>
+          <span className="text-[10px] leading-none text-muted-foreground">{n}</span>
           {keyCode ? (
             <KeyBadge
               keyCode={keyCode}

@@ -793,12 +793,12 @@ function VirtualKeyboardComponent({
                       ))}
                     </span>
                   )}
-                  <span className="font-medium text-[9px] text-muted-foreground/50">
+                  <span className="font-medium text-[10px] text-muted-foreground/50">
                     {displayLabel}
                   </span>
-                  <span className="text-[8px] text-muted-foreground/40">→</span>
+                  <span className="text-[10px] text-muted-foreground/40">→</span>
                   <span className={cn(
-                    "font-bold text-[9px]",
+                    "font-bold text-[10px]",
                     isDisabled ? "text-destructive/80" : "text-foreground"
                   )}>
                     {targetLabel}
@@ -807,7 +807,7 @@ function VirtualKeyboardComponent({
               );
             })}
             {keyRemaps.length > 2 && (
-              <span className="text-[7px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
+              <span className="text-[10px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
             )}
           </div>
         ) : (
@@ -825,7 +825,7 @@ function VirtualKeyboardComponent({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
-                "rounded px-1 py-0 leading-none text-[8px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
@@ -859,7 +859,7 @@ function VirtualKeyboardComponent({
               {filteredBindings.map((binding, i) => (
                 <span
                   key={i}
-                  className={cn("rounded px-1 py-0 leading-none text-[8px]", chipClass)}
+                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]", chipClass)}
                 >
                   {getShortActionLabel(t, binding.action)}
                 </span>
@@ -990,7 +990,7 @@ function VirtualKeyboardComponent({
               ? "text-[11px]"
               : text.length <= 7
               ? "text-[10px]"
-              : "text-[9px]";
+              : "text-[10px]";
 
           // リマップ表示時、ラベル + → + ターゲット の合計が長く 1 行に収まりにくい場合は
           // 矢印以降を改行して下段に表示する（ラベル単体が truncate されるケース対策）。
@@ -1040,7 +1040,7 @@ function VirtualKeyboardComponent({
                       {ck.label}
                     </span>
                     <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                      <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                      <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
                       <span
                         className={cn(
                           "font-bold leading-tight truncate min-w-0",
@@ -1062,7 +1062,7 @@ function VirtualKeyboardComponent({
                     >
                       {ck.label}
                     </span>
-                    <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                    <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
                     <span
                       className={cn(
                         "font-bold leading-tight truncate min-w-0",
@@ -1091,7 +1091,7 @@ function VirtualKeyboardComponent({
                     <span
                       key={i}
                       className={cn(
-                        "rounded px-1 py-0 leading-none text-[8px]",
+                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
                         chipClass,
                       )}
                     >
@@ -1276,7 +1276,7 @@ export function VirtualMouse({
         ? "text-[11px]"
         : text.length <= 7
         ? "text-[10px]"
-        : "text-[9px]";
+        : "text-[10px]";
     // 単一リマップ（ラベル → ターゲット）で、操作名チップなど他の要素を併置しない場合は、
     // 収まらない長さのとき矢印の前で改行（縦積み）する。デフォルト/カスタム両方に適用。
     const hasChips = showActionLabels && bindings.length > 0;
@@ -1316,7 +1316,7 @@ export function VirtualMouse({
                 {button.label}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
                 <span
                   className={cn(
                     "font-bold leading-tight truncate min-w-0",
@@ -1330,10 +1330,10 @@ export function VirtualMouse({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
+              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground/50">
                 {button.label}
               </span>
-              <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
                 isRemapDisabled ? "text-destructive/80" : "text-foreground"
@@ -1356,7 +1356,7 @@ export function VirtualMouse({
               <span
                 key={i}
                 className={cn(
-                  "rounded px-1 py-0 leading-none text-[8px]",
+                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
                   chipClass
                 )}
               >
@@ -1569,11 +1569,11 @@ export function VirtualNumpad({
         {remap ? (
           isRemapStacked ? (
             <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
-              <span className="font-medium leading-tight truncate min-w-0 max-w-full text-center text-[9px] text-muted-foreground/50">
+              <span className="font-medium leading-tight truncate min-w-0 max-w-full text-center text-[10px] text-muted-foreground/50">
                 {displayLabel}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
                 <span className={cn(
                   "font-bold leading-tight truncate min-w-0 text-[11px]",
                   isRemapDisabled ? "text-destructive/80" : "text-foreground"
@@ -1584,10 +1584,10 @@ export function VirtualNumpad({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
+              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground/50">
                 {displayLabel}
               </span>
-              <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
                 isRemapDisabled ? "text-destructive/80" : "text-foreground"
@@ -1608,7 +1608,7 @@ export function VirtualNumpad({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span key={i} className={cn(
-                "rounded px-1 py-0 leading-none text-[8px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
