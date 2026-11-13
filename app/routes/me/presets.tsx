@@ -1,15 +1,15 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import type { Route } from "./+types/presets";
 import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
+import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions } from "@/lib/schema";
 import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { parseLoopSteps, remapLoopSteps } from "@/lib/search-craft-loops";
 import { resolveRowVariations, searchCraftColumnValues } from "@/lib/search-craft-variations";
@@ -51,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
+import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -246,12 +246,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       where: eq(configHistory.userId, user.id),
       orderBy: [desc(configHistory.createdAt)],
       limit: 20,
-      with: {
-        preset: {
-          columns: {
-            name: true,
-          },
-        },
+      // 履歴表示が使う列だけ（previous_data / new_data の JSON は送らない）
+      columns: {
+        id: true,
+        changeType: true,
+        changeDescription: true,
+        createdAt: true,
       },
     }),
   ]);
