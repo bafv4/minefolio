@@ -3,6 +3,8 @@ import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -1274,7 +1276,9 @@ export default function EditProfilePage() {
   });
 
   const [formValues, setFormValues] = useState(buildFormValues);
-  const initialFormValues = useRef(buildFormValues());
+  // 保存済みの値（dirty 判定の基準）。保存成功時に送信時点のスナップショットへ更新する
+  const [savedFormValues, setSavedFormValues] = useState(buildFormValues);
+  const submittedValuesRef = useRef<ReturnType<typeof buildFormValues> | null>(null);
 
   // selectedPoseをformValuesに同期
   useEffect(() => {
@@ -1285,7 +1289,10 @@ export default function EditProfilePage() {
   }, [selectedPose]);
 
   // 変更チェック
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(savedFormValues);
+
+  // 未保存のままアプリ内遷移・タブ閉じをしようとしたら確認する
+  const blocker = useUnsavedWarning(hasChanges);
 
   // 入力変更ハンドラ
   const handleInputChange = useCallback((field: keyof typeof formValues, value: string) => {
@@ -1352,9 +1359,9 @@ export default function EditProfilePage() {
 
   // フォームリセット
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
-    setSelectedPose((initialFormValues.current.profilePose as PoseName) ?? "waving");
-  }, []);
+    setFormValues(savedFormValues);
+    setSelectedPose((savedFormValues.profilePose as PoseName) ?? "waving");
+  }, [savedFormValues]);
 
   // 保存処理
   const handleSave = useCallback(() => {
@@ -1395,6 +1402,7 @@ export default function EditProfilePage() {
     if (translationEnabled) {
       formData.set("allowAutoTranslation", String(formValues.allowAutoTranslation));
     }
+    submittedValuesRef.current = { ...formValues };
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues, isRtaStartedIncomplete, t, translationEnabled]);
 
@@ -1432,12 +1440,15 @@ export default function EditProfilePage() {
   const prevMcidDataRef = useRef<typeof mcidFetcher.data>(undefined);
   const prevBedrockMcidDataRef = useRef<typeof bedrockMcidFetcher.data>(undefined);
 
-  // 保存成功後に初期値を更新
+  // 保存成功後に基準値を更新（レスポンスごとに1回だけ。送信時点の値を使うので保存中の入力は未保存のまま残る）
+  const handledSaveDataRef = useRef<typeof fetcher.data>(undefined);
   useEffect(() => {
-    if (data && "success" in data && data.action === "profile") {
-      initialFormValues.current = { ...formValues };
+    if (!data || data === handledSaveDataRef.current) return;
+    handledSaveDataRef.current = data;
+    if ("success" in data && data.action === "profile" && submittedValuesRef.current) {
+      setSavedFormValues(submittedValuesRef.current);
     }
-  }, [data, formValues]);
+  }, [data]);
 
   // プロフィール更新のトースト
   useEffect(() => {
@@ -2539,6 +2550,7 @@ export default function EditProfilePage() {
           onSave={handleSave}
           onReset={handleReset}
         />
+        <UnsavedChangesDialog blocker={blocker} />
       </div>
 
       {/* Social Links Section */}
