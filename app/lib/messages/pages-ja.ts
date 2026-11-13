@@ -442,6 +442,7 @@ export const PAGES_JA = {
     filterSplit: "区間",
     splitAll: "すべて",
     filterPeriod: "時期",
+    filterPeriodFrom: "開始日",
     filterPeriodTo: "終了日",
     filterMaxTime: "タイム上限",
     filterMaxTimePlaceholder: "例: 10:00",

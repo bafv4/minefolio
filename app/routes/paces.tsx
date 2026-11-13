@@ -254,22 +254,34 @@ export default function PacesPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pace-filter-from">{t("paces.filterPeriod")}</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="pace-filter-from"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <span className="shrink-0 text-muted-foreground">{t("common.rangeSeparator")}</span>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                aria-label={t("paces.filterPeriodTo")}
-              />
+          <div className="space-y-1.5 sm:col-span-2 xl:col-span-1">
+            <span className="flex text-sm font-medium leading-none">{t("paces.filterPeriod")}</span>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+              <div className="space-y-1">
+                <Label htmlFor="pace-filter-from" className="text-xs text-muted-foreground sm:sr-only">
+                  {t("paces.filterPeriodFrom")}
+                </Label>
+                <Input
+                  id="pace-filter-from"
+                  type="date"
+                  className="min-w-40"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </div>
+              <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
+              <div className="space-y-1">
+                <Label htmlFor="pace-filter-to" className="text-xs text-muted-foreground sm:sr-only">
+                  {t("paces.filterPeriodTo")}
+                </Label>
+                <Input
+                  id="pace-filter-to"
+                  type="date"
+                  className="min-w-40"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <div className="space-y-1.5">

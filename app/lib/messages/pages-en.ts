@@ -574,6 +574,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     filterSplit: "Split",
     splitAll: "All",
     filterPeriod: "Period",
+    filterPeriodFrom: "Start date",
     filterPeriodTo: "End date",
     filterMaxTime: "Max time",
     filterMaxTimePlaceholder: "e.g. 10:00",
