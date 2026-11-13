@@ -11,7 +11,6 @@ import {
   VirtualKeyboard,
   VirtualMouse,
   keybindingsToMap,
-  type FingerAssignment,
 } from "@/components/virtual-keyboard";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { filterRemapsForContext, toUiRemaps, type RemapContext } from "@/lib/remap-utils";
@@ -24,18 +23,9 @@ import { KeybindingsEmptyState } from "./keybindings-empty-state";
 import type { KeybindingsRow } from "./keybindings-columns";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
-
-function parseFingers(json: string | null | undefined): FingerAssignment {
-  if (!json) return {};
-  try {
-    return JSON.parse(json) as FingerAssignment;
-  } catch {
-    return {};
-  }
-}
+import { parseFingerAssignments } from "@/lib/preset-read";
 
 export function CardView({ players }: { players: KeybindingsRow[] }) {
-  const t = useT();
   // Trigger/Chat 表示切替は全カード共通（プロフィールページと同じセグメント）。
   // 種別付き（trigger/chat）リマップを持つプレイヤーが1人もいなければ両表示が同一のため出さない
   const [remapView, setRemapView] = useState<RemapContext>("trigger");
@@ -119,7 +109,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   const { fingerAssignments, remaps, keybindingsMap, customKeyboardKeys, customButtons } =
     useMemo(
       () => ({
-        fingerAssignments: parseFingers(player.playerConfig?.fingerAssignments),
+        fingerAssignments: parseFingerAssignments(player.playerConfig?.fingerAssignments),
         // 一覧カードのキーボードは選択中の表示文脈（Trigger/Chat）のリマップに絞る
         remaps: toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
         keybindingsMap: keybindingsToMap(player.keybindings),

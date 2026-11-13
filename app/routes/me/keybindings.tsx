@@ -8,8 +8,9 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
-import { eq, asc, and, inArray } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
+import { eq, asc, and, inArray, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, parseKeyCombination, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, Settings, Copy, Gamepad2, TriangleAlert } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, Gamepad2, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
@@ -60,7 +61,8 @@ import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetSyncKind } from "@/lib/preset-utils";
+import { syncActivePresetSnapshot, type PresetSyncKind } from "@/lib/preset-utils";
+import { parseFingerAssignments } from "@/lib/preset-read";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
@@ -164,7 +166,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -363,22 +364,45 @@ async function persistKeybindingUpdates(
   now: Date,
   options: { normalizeEmptyToUnbound: boolean }
 ) {
+  // 行ごとの UPDATE（Turso では 1 件 = 1 HTTP 往復）を避け、CASE 式の単一 UPDATE にまとめる。
+  // 同一 id が複数あれば後勝ち（従来の逐次 UPDATE と同じ最終状態）。
+  const keyCodeById = new Map<string, string>();
   for (const update of updates) {
+    if (typeof update.id !== "string") continue;
     if (options.normalizeEmptyToUnbound) {
-      const keyCode = update.keyCode || "_UNBOUND";
-      await db
-        .update(keybindings)
-        .set({ keyCode, updatedAt: now })
-        .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
+      keyCodeById.set(update.id, update.keyCode || "_UNBOUND");
       continue;
     }
-
     if (!update.keyCode) continue;
-    await db
-      .update(keybindings)
-      .set({ keyCode: update.keyCode, updatedAt: now })
-      .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
+    keyCodeById.set(update.id, update.keyCode);
   }
+  if (keyCodeById.size === 0) return;
+
+  const keyCodeCase = sql.join(
+    [
+      sql`CASE ${keybindings.id}`,
+      ...Array.from(keyCodeById, ([id, keyCode]) => sql`WHEN ${id} THEN ${keyCode}`),
+      sql`END`,
+    ],
+    sql` `
+  );
+  await db
+    .update(keybindings)
+    .set({ keyCode: keyCodeCase, updatedAt: now })
+    .where(and(eq(keybindings.userId, userId), inArray(keybindings.id, Array.from(keyCodeById.keys()))));
+}
+
+/**
+ * 書き込み文をまとめて実行する。トップレベルの DB では db.batch（1 HTTP リクエスト・原子的）、
+ * トランザクション内では（呼び出し側のトランザクションに任せて）順次実行する。
+ */
+async function runWrites(db: DbClient, statements: BatchItem<"sqlite">[]) {
+  if (statements.length === 0) return;
+  if ("batch" in db) {
+    await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    return;
+  }
+  for (const statement of statements) await statement;
 }
 
 async function upsertFingerAssignments(
@@ -387,25 +411,20 @@ async function upsertFingerAssignments(
   fingerAssignmentsJson: string,
   now: Date
 ) {
-  const existingConfig = await db.query.playerConfigs.findFirst({
-    where: eq(playerConfigs.userId, userId),
-  });
-
-  if (existingConfig) {
-    await db
-      .update(playerConfigs)
-      .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
-      .where(eq(playerConfigs.userId, userId));
-    return;
-  }
-
-  await db.insert(playerConfigs).values({
-    id: createId(),
-    userId,
-    fingerAssignments: fingerAssignmentsJson,
-    createdAt: now,
-    updatedAt: now,
-  });
+  // player_configs.user_id は UNIQUE。select → update/insert の 2 往復を 1 文の upsert にする
+  await db
+    .insert(playerConfigs)
+    .values({
+      id: createId(),
+      userId,
+      fingerAssignments: fingerAssignmentsJson,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: playerConfigs.userId,
+      set: { fingerAssignments: fingerAssignmentsJson, updatedAt: now },
+    });
 }
 
 async function persistCustomActions(
@@ -414,11 +433,14 @@ async function persistCustomActions(
   actionsData: CustomActionMutationInput[],
   now: Date
 ) {
+  const statements: BatchItem<"sqlite">[] = [];
   for (const action of actionsData) {
     if (action._delete && action.id) {
-      await db
-        .delete(customActions)
-        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
+      statements.push(
+        db
+          .delete(customActions)
+          .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)))
+      );
     }
   }
 
@@ -430,32 +452,37 @@ async function persistCustomActions(
     const triggerKeyNormalized = normalizeKeyCombination(action.triggerKey);
 
     if (action.id) {
-      await db
-        .update(customActions)
-        .set({
-          actionName: action.actionName,
-          description: action.description || null,
-          category: action.category,
-          triggerKey: triggerKeyNormalized,
-          displayOrder: order++,
-          updatedAt: now,
-        })
-        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
+      statements.push(
+        db
+          .update(customActions)
+          .set({
+            actionName: action.actionName,
+            description: action.description || null,
+            category: action.category,
+            triggerKey: triggerKeyNormalized,
+            displayOrder: order++,
+            updatedAt: now,
+          })
+          .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)))
+      );
       continue;
     }
 
-    await db.insert(customActions).values({
-      id: createId(),
-      userId,
-      actionName: action.actionName,
-      description: action.description || null,
-      category: action.category,
-      triggerKey: triggerKeyNormalized,
-      displayOrder: order++,
-      createdAt: now,
-      updatedAt: now,
-    });
+    statements.push(
+      db.insert(customActions).values({
+        id: createId(),
+        userId,
+        actionName: action.actionName,
+        description: action.description || null,
+        category: action.category,
+        triggerKey: triggerKeyNormalized,
+        displayOrder: order++,
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
   }
+  await runWrites(db, statements);
 }
 
 /** formData 由来の JSON 配列を安全にパースする（不正なら null）。 */
@@ -481,21 +508,6 @@ function isValidFingerAssignmentsJson(raw: string): boolean {
   }
 }
 
-/** fingerAssignments を安全にパースする（不正・未設定なら {}）。表示側で使用。 */
-function parseFingerAssignments(
-  raw: string | null | undefined,
-): Record<string, FingerType[]> {
-  if (!raw) return {};
-  try {
-    const v = JSON.parse(raw);
-    return v && typeof v === "object" && !Array.isArray(v)
-      ? (v as Record<string, FingerType[]>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -516,13 +528,15 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent") as string;
   const presetId = (formData.get("presetId") as string | null) || null;
 
-  try {
-    await assertPresetIsActive(db, user.id, presetId);
-  } catch (e) {
-    if (e instanceof PresetMismatchError) {
-      return { error: t("mePresets.staleSession") };
-    }
-    throw e;
+  // アクティブプリセットは 1 回だけ引き、競合検証（assertPresetIsActive 相当）・プリセット必須ゲート・
+  // スナップショット同期（syncActivePresetSnapshot の activePresetId）で共有する
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  // 送信 presetId が現在のアクティブと異なる（別タブでプリセット切替が起きた等）場合は弾く
+  if (presetId && activePresetRow?.id !== presetId) {
+    return { error: t("mePresets.staleSession") };
   }
 
   // このアクションの全 intent はライブ設定への書き込み＝アクティブプリセットの
@@ -530,10 +544,6 @@ export async function action({ request }: Route.ActionArgs) {
   // （既存データの読み込みは可能）。プリセットが無いまま書き込むと
   // syncActivePresetSnapshot が無言でスキップされ、後からプリセットを作るまで
   // どのプリセットにも属さないデータになってしまう。
-  const activePresetRow = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-    columns: { id: true },
-  });
   if (!activePresetRow) {
     return { error: t("meKeybindings.presetRequired") };
   }
@@ -547,7 +557,7 @@ export async function action({ request }: Route.ActionArgs) {
     await persistKeybindingUpdates(db, user.id, updates, new Date(), {
       normalizeEmptyToUnbound: true,
     });
-    await syncActivePresetSnapshot(db, user.id, ["keybindings"]);
+    await syncActivePresetSnapshot(db, user.id, ["keybindings"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveKeybindings") };
   }
@@ -562,7 +572,7 @@ export async function action({ request }: Route.ActionArgs) {
     const now = new Date();
     const remapError = await persistRemaps(t, db, user.id, remapsData, now);
     if (remapError) return { error: remapError.error };
-    await syncActivePresetSnapshot(db, user.id, ["remaps"]);
+    await syncActivePresetSnapshot(db, user.id, ["remaps"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveRemaps") };
   }
@@ -577,7 +587,7 @@ export async function action({ request }: Route.ActionArgs) {
     await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
     // upsertFingerAssignments はライブ playerConfig 行を新規作成しうるため playerConfig も同期する
     // （fingers のみだと fingerAssignmentsData だけ非 null の非対称スナップショットになる）
-    await syncActivePresetSnapshot(db, user.id, ["fingers", "playerConfig"]);
+    await syncActivePresetSnapshot(db, user.id, ["fingers", "playerConfig"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveFingers") };
   }
@@ -670,7 +680,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (fingerAssignmentsJson) syncKinds.push("fingers", "playerConfig");
     if (customActionsJson) syncKinds.push("customActions");
     if (syncKinds.length > 0) {
-      await syncActivePresetSnapshot(db, user.id, syncKinds);
+      await syncActivePresetSnapshot(db, user.id, syncKinds, { activePresetId: activePresetRow.id });
     }
 
     return { success: true, message: t("meKeybindings.saveSettings") };
@@ -701,7 +711,7 @@ export async function action({ request }: Route.ActionArgs) {
         "itemLayouts",
         "searchCrafts",
         "customActions",
-      ]);
+      ], { activePresetId: activePresetRow.id });
       return {
         success: true,
         message: t("meKeybindings.importSummary", {
@@ -727,34 +737,42 @@ export async function action({ request }: Route.ActionArgs) {
 
     const now = new Date();
 
+    const customKeyStatements: BatchItem<"sqlite">[] = [];
     for (const ck of customKeysData) {
       if (ck._delete && ck.id) {
-        await db
-          .delete(customKeys)
-          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
+        customKeyStatements.push(
+          db
+            .delete(customKeys)
+            .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)))
+        );
       } else if (ck.id) {
-        await db.update(customKeys)
-          .set({
+        customKeyStatements.push(
+          db.update(customKeys)
+            .set({
+              keyCode: ck.keyCode,
+              keyName: ck.keyName,
+              category: ck.category,
+              updatedAt: now,
+            })
+            .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)))
+        );
+      } else if (ck.keyCode && ck.keyName) {
+        customKeyStatements.push(
+          db.insert(customKeys).values({
+            id: createId(),
+            userId: user.id,
             keyCode: ck.keyCode,
             keyName: ck.keyName,
             category: ck.category,
+            createdAt: now,
             updatedAt: now,
           })
-          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
-      } else if (ck.keyCode && ck.keyName) {
-        await db.insert(customKeys).values({
-          id: createId(),
-          userId: user.id,
-          keyCode: ck.keyCode,
-          keyName: ck.keyName,
-          category: ck.category,
-          createdAt: now,
-          updatedAt: now,
-        });
+        );
       }
     }
+    await runWrites(db, customKeyStatements);
 
-    await syncActivePresetSnapshot(db, user.id, ["customKeys"]);
+    await syncActivePresetSnapshot(db, user.id, ["customKeys"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveCustomKeys") };
   }
@@ -768,7 +786,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     const now = new Date();
     await persistCustomActions(db, user.id, customActionsData, now);
-    await syncActivePresetSnapshot(db, user.id, ["customActions"]);
+    await syncActivePresetSnapshot(db, user.id, ["customActions"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveCustomActions") };
   }
@@ -1234,7 +1252,7 @@ function PresetRequiredNotice() {
 
 export default function KeybindingsPage() {
   const t = useT();
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, legacyApiUrl, activePreset, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const customKeyFetcher = useFetcher<typeof action>();
@@ -1520,41 +1538,6 @@ export default function KeybindingsPage() {
   const selectedKeyBindings = editingKeyCode
     ? keybindingsWithLocalChanges.filter((kb) => kb.keyCode === editingKeyCode)
     : [];
-  // 選択したキーに関連するすべてのリマップ（修飾キー組み合わせを含む）
-  const selectedKeyRemaps = useMemo(() => {
-    if (!editingKeyCode) return [];
-    // editingKeyCode をベースキーとして持つすべてのリマップを検索
-    // 例: editingKeyCode が "KeyA" の場合、"KeyA", "Shift+KeyA", "Ctrl+KeyA" などすべて
-    return localRemaps
-      .map((r, index) => ({ ...r, _index: index }))
-      .filter((r) => {
-        if (r._delete) return false;
-        const parsed = parseKeyCombination(r.sourceKey);
-        return parsed.keyCode === editingKeyCode;
-      });
-  }, [editingKeyCode, localRemaps]);
-
-  const selectedKeyCustomActions = useMemo(() => {
-    if (!editingKeyCode) return [];
-    return localCustomActions
-      .map((a, index) => ({ ...a, _index: index }))
-      .filter((a) => {
-        if (a._delete || !a.triggerKey) return false;
-        const parsed = parseKeyCombination(a.triggerKey);
-        return parsed.keyCode === editingKeyCode;
-      });
-  }, [editingKeyCode, localCustomActions]);
-
-  // 各操作がどのキーに割り当てられているかをマップ化
-  const actionToKeyMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const kb of keybindingsWithLocalChanges) {
-      if (kb.keyCode) {
-        map[kb.action] = kb.keyCode;
-      }
-    }
-    return map;
-  }, [keybindingsWithLocalChanges]);
 
   // 有効なカスタムキー（削除されていないもの）
   const activeCustomKeys = useMemo(
@@ -1601,11 +1584,6 @@ export default function KeybindingsPage() {
     }
     return getKeyLabel(t, keyCode);
   }, [customKeyNameMap]);
-
-  // 現在選択中のキーに割り当てられている操作のIDセット
-  const selectedActionIds = useMemo(() => {
-    return new Set(selectedKeyBindings.map((kb) => kb.id));
-  }, [selectedKeyBindings]);
 
   const modalKeybindingChanges = modalDraftKeybindingChanges ?? keybindingChanges;
   const modalRemaps = modalDraftRemaps ?? localRemaps;
@@ -1786,30 +1764,6 @@ export default function KeybindingsPage() {
     }));
   }, []);
 
-  // 操作のON/OFFを切り替え（ダイアログからの操作用）
-  const toggleActionForKey = useCallback((keybindingId: string, targetKeyCode: string, isCurrentlyAssigned: boolean, previousKeyCode?: string) => {
-    setKeybindingChanges((prev) => {
-      const original = validKeybindings.find((kb) => kb.id === keybindingId);
-      if (!original) return prev;
-
-      if (isCurrentlyAssigned) {
-        // 割り当てを解除（不使用にする）
-        return {
-          ...prev,
-          [keybindingId]: UNBOUND_KEY,
-        };
-      } else {
-        // このキーに割り当てる
-        // 他のキーに割り当て済みの場合、そのキーから削除する処理は
-        // keybindingChangesにtargetKeyCodeを設定することで自動的に上書きされる
-        return {
-          ...prev,
-          [keybindingId]: targetKeyCode,
-        };
-      }
-    });
-  }, [validKeybindings]);
-
   // リマップを追加
   const addRemap = useCallback((sourceKey: string) => {
     setLocalRemaps((prev) => [
@@ -1856,20 +1810,6 @@ export default function KeybindingsPage() {
         description: null,
         category: "other" as const,
         triggerKey: "",
-        displayOrder: prev.length,
-        _isNew: true,
-      },
-    ]);
-  }, []);
-
-  const addCustomActionForKey = useCallback((keyCode: string) => {
-    setLocalCustomActions((prev) => [
-      ...prev,
-      {
-        actionName: "",
-        description: null,
-        category: "other" as const,
-        triggerKey: keyCode,
         displayOrder: prev.length,
         _isNew: true,
       },
@@ -2062,24 +2002,6 @@ export default function KeybindingsPage() {
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset, keyboardLayout]);
 
-  // デバッグ: 現在のデータを表示
-  const handleDebugLog = useCallback(() => {
-    console.log("[Debug] keybindings count:", kbs.length);
-    console.log("[Debug] keyRemaps count:", initialRemaps.length);
-    console.log("[Debug] keyRemaps:", initialRemaps);
-    console.log("[Debug] playerConfig:", playerConfig);
-    console.log("[Debug] fingerAssignments:", playerConfig?.fingerAssignments);
-    if (playerConfig?.fingerAssignments) {
-      try {
-        const parsed = JSON.parse(playerConfig.fingerAssignments);
-        console.log("[Debug] fingerAssignments (parsed):", parsed);
-        console.log("[Debug] fingerAssignments keys:", Object.keys(parsed));
-      } catch (e) {
-        console.error("[Debug] fingerAssignments parse error:", e);
-      }
-    }
-  }, [kbs, initialRemaps, playerConfig]);
-
   // データを再読み込み
   const handleRevalidate = useCallback(() => {
     revalidator.revalidate();
@@ -2248,14 +2170,6 @@ export default function KeybindingsPage() {
         {/* 開発用デバッグボタン */}
         {import.meta.env.DEV && (
           <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDebugLog}
-            >
-              Debug
-            </Button>
             <Button
               type="button"
               variant="outline"

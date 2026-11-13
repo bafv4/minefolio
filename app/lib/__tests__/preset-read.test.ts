@@ -4,7 +4,24 @@ import {
   decodePresetSearchCrafts,
   decodePresetSearchCraftLoops,
   decodePresetConfig,
+  parseFingerAssignments,
 } from "../preset-read";
+
+describe("parseFingerAssignments", () => {
+  it("正常なオブジェクト JSON をそのまま返す", () => {
+    expect(parseFingerAssignments('{"KeyW":["left-index"]}')).toEqual({ KeyW: ["left-index"] });
+  });
+
+  it("未設定・破損 JSON・オブジェクト以外は空オブジェクトにする（描画を落とさない）", () => {
+    expect(parseFingerAssignments(null)).toEqual({});
+    expect(parseFingerAssignments(undefined)).toEqual({});
+    expect(parseFingerAssignments("")).toEqual({});
+    expect(parseFingerAssignments("{broken")).toEqual({});
+    expect(parseFingerAssignments("[1,2]")).toEqual({});
+    expect(parseFingerAssignments("null")).toEqual({});
+    expect(parseFingerAssignments("5")).toEqual({});
+  });
+});
 
 describe("decodePresetSearchCrafts", () => {
   const userId = "user-1";
