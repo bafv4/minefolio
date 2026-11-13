@@ -90,8 +90,9 @@ export function Header({ user }: HeaderProps) {
               </Link>
             </div>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex md:items-center md:space-x-1">
+            {/* Desktop Navigation（ロゴ＋ナビ＋右側の操作が1行に収まるのは約900px以上。md〈768px〉の
+                container では幅が足りず各項目が折り返すため、横並びは lg から。未満はハンバーガーメニュー） */}
+            <div className="hidden lg:flex lg:items-center lg:space-x-1">
               {navigation.map((item, index) => {
                 const Icon = item.icon;
                 return (
@@ -102,7 +103,7 @@ export function Header({ user }: HeaderProps) {
                     <Link
                       to={item.href}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
+                        "flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
                         location.pathname === item.href
                           ? "text-brand bg-brand/10"
                           : "text-muted-foreground"
@@ -117,7 +118,7 @@ export function Header({ user }: HeaderProps) {
             </div>
 
             {/* Right side - Desktop */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden lg:flex items-center space-x-4">
               <ThemeToggle />
               <LocaleSwitcher />
               <WhatsNew />
@@ -210,7 +211,7 @@ export function Header({ user }: HeaderProps) {
 
             {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <div className="flex items-center gap-1 md:hidden">
+              <div className="flex items-center gap-1 lg:hidden">
                 <WhatsNew />
                 <SheetTrigger asChild>
                   <Button
