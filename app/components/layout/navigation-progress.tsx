@@ -1,5 +1,5 @@
 import { useNavigation, useLocation } from "react-router";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Loader2, Lightbulb } from "lucide-react";
 import { inSameTabGroup } from "@/lib/tab-nav-groups";
 import { useT } from "@/hooks/use-locale";
