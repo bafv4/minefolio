@@ -56,6 +56,12 @@ export function useInfiniteScroll<T>({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   // 進行中の追加ロードが、どの検索条件で開始されたかを記録（陳腐化判定用）
   const loadedSigRef = useRef<string | null>(null);
+  // 取得済みの最終ページと追加ロード中フラグ。state（page / fetcher.state）は再描画まで古い値のため、
+  // 読み込み完了直後に IntersectionObserver が古い loadMore を呼ぶと同じページを二重に取得し、
+  // 同じ項目が重複して append される（React の key 重複警告）。判定は ref で同期的に行う
+  const pageRef = useRef(initialPage);
+  const inFlightRef = useRef(false);
+  const hasMoreRef = useRef(initialHasMore);
   // extraParams はオブジェクトの参照が呼び出しごとに変わりうるため、
   // useCallback の依存には安定な文字列キーを使う（stale closure を避ける）
   const extraParamsKey = useMemo(() => JSON.stringify(extraParams ?? {}), [extraParams]);
@@ -67,11 +73,23 @@ export function useInfiniteScroll<T>({
     setPage(initialPage);
     setHasMore(initialHasMore);
     setAddedCount(0);
+    pageRef.current = initialPage;
+    inFlightRef.current = false;
+    hasMoreRef.current = initialHasMore;
     // 進行中ロードの結果は破棄（条件が変わったため）
     loadedSigRef.current = null;
     // resetDeps は呼び出し側責任
     // 依存配列は呼び出し側から展開して渡す
   }, [initialItems, initialPage, initialHasMore, ...resetDeps]);
+
+  // 読み込みが終わったら（結果を採用しない場合・エラーで data が更新されない場合も）ロード中フラグを解除する
+  const prevFetcherStateRef = useRef(fetcher.state);
+  useEffect(() => {
+    if (prevFetcherStateRef.current !== "idle" && fetcher.state === "idle") {
+      inFlightRef.current = false;
+    }
+    prevFetcherStateRef.current = fetcher.state;
+  }, [fetcher.state]);
 
   // fetcher 完了時に items に append
   useEffect(() => {
@@ -83,20 +101,26 @@ export function useInfiniteScroll<T>({
     }
     const data = fetcher.data;
     const newItems = data.items;
+    loadedSigRef.current = null;
+    inFlightRef.current = false;
+    hasMoreRef.current = data.hasMore;
     if (newItems.length === 0 && !data.hasMore) {
       setHasMore(false);
       return;
     }
+    pageRef.current = data.page;
     setItems((prev) => [...prev, ...newItems]);
     setPage(data.page);
     setHasMore(data.hasMore);
     setAddedCount(newItems.length);
-    loadedSigRef.current = null;
   }, [fetcher.state, fetcher.data, searchParams]);
 
   const loadMore = useCallback(() => {
-    if (!hasMore || fetcher.state !== "idle") return;
-    const nextPage = page + 1;
+    // ロード中の判定は inFlightRef（loadMore 〜 fetcher が idle に戻るまで）。クロージャ内の
+    // fetcher.state は IntersectionObserver が古い loadMore を保持していると "loading" のまま残りうる
+    if (!hasMoreRef.current || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const nextPage = pageRef.current + 1;
     const params = new URLSearchParams(searchParams);
     params.set("page", String(nextPage));
     for (const [key, value] of Object.entries(extraParams ?? {})) {
@@ -106,6 +130,8 @@ export function useInfiniteScroll<T>({
     loadedSigRef.current = paramsSignature(searchParams);
     fetcher.load(`${endpoint}?${params.toString()}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // page は値としては使わないが、追加のたびに loadMore を作り直して IntersectionObserver を
+    // 登録し直す（センチネルが可視のままだと交差の変化が起きず、次のロードが発火しないため）
   }, [hasMore, fetcher, page, searchParams, endpoint, extraParamsKey]);
 
   // IntersectionObserver: センチネルが可視化したら loadMore
