@@ -45,14 +45,18 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
   const t = useT();
   const locale = useLocale();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   const isYouTube = video.platform === "youtube";
   const watchUrl = getFeedVideoUrl(video);
   const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
   const platformName = isYouTube ? "YouTube" : "Twitch";
-  const thumbnailUrl =
+  const rawThumbnailUrl =
     video.thumbnailUrl ||
     (isYouTube ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg` : null);
+  // 処理中の Twitch VOD は `_404/404_processing_*.png` のプレースホルダURLになる（現状 403 だが、
+  // 将来画像を返しても見栄えが悪いのでアイコン表示に落とす）。読み込み失敗時も同様
+  const thumbnailUrl = thumbFailed || rawThumbnailUrl?.includes("_404") ? null : rawThumbnailUrl;
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
@@ -83,7 +87,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             className="block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {thumbnailUrl ? (
-              <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" />
+              <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" onError={() => setThumbFailed(true)} />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <Twitch className="h-10 w-10 text-muted-foreground/50" />
