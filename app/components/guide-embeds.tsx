@@ -1,9 +1,7 @@
-import { lazy, Suspense } from "react";
 import { Link } from "react-router";
 import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
-import type { FingerType } from "@/lib/keybindings";
-import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps, type RemapInfo } from "@/lib/remap-utils";
-import { coerceStringArray, safeParseArray } from "@/lib/preset-read";
+import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps } from "@/lib/remap-utils";
+import { coerceStringArray, parseFingerAssignments, safeParseArray } from "@/lib/preset-read";
 import type { PresetSearchCraftLoopData, PresetLoopStepData } from "@/lib/preset-utils";
 import {
   resolveLoopSteps,
@@ -223,9 +221,7 @@ export function KeybindEmbedView({
       if (config.fingerAssignments) fingerAssignmentsJson = config.fingerAssignments;
     }
   }
-  const fingerAssignments = fingerAssignmentsJson
-    ? (JSON.parse(fingerAssignmentsJson) as Record<string, FingerType[]>)
-    : {};
+  const fingerAssignments = parseFingerAssignments(fingerAssignmentsJson);
 
   if (remaps.length === 0) {
     return (
