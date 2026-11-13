@@ -13,8 +13,8 @@ import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, keybindings, keyRemaps, playerConfigs, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
-import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { users, guides, keybindings, keyRemaps, searchCrafts, searchCraftLoops } from "@/lib/schema";
+import { eq, and, or, sql, asc, inArray } from "drizzle-orm";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { resolveRowVariations } from "@/lib/search-craft-variations";
@@ -85,16 +85,22 @@ export function meta({
 }
 
 // ガイド本文に埋め込まれた（キーバインド/サーチクラフト）ユーザーのデータを解決する。
-// slug 一致 → 未マッチ分は mcid 一致でも再試行し、両方の結果を統合する。
+// slug 一致と mcid 一致を1クエリで引き、slug 一致を優先する（mcid 一致は slug で
+// 解決できなかった参照のみ採用）。presetNames は本文が data-preset-name で参照している
+// 名前で、クライアントへはこれに該当するプリセットだけを送る（全プリセットの JSON 列を送らない）。
 async function resolveEmbedUsers(
   db: Database,
-  embedSlugs: string[]
+  embedSlugs: string[],
+  presetNames: ReadonlySet<string>
 ): Promise<Record<string, EmbedUserData>> {
   const embedUsers: Record<string, EmbedUserData> = {};
   if (embedSlugs.length > 0) {
     // 非公開（private）ユーザーの設定はガイド埋め込みでも露出させない
-    const embedUserRows = await db.query.users.findMany({
-      where: and(inArray(users.slug, embedSlugs), publiclyReferencableCondition),
+    const rows = await db.query.users.findMany({
+      where: and(
+        or(inArray(users.slug, embedSlugs), inArray(users.mcid, embedSlugs)),
+        publiclyReferencableCondition
+      ),
       columns: {
         id: true,
         slug: true,
@@ -124,42 +130,15 @@ async function resolveEmbedUsers(
       },
     });
 
-    // Also try matching by mcid for slugs that didn't match
-    const matchedSlugs = new Set(embedUserRows.map((u) => u.slug));
-    const unmatchedSlugs = embedSlugs.filter((s) => !matchedSlugs.has(s));
-    if (unmatchedSlugs.length > 0) {
-      const byMcid = await db.query.users.findMany({
-        where: and(inArray(users.mcid, unmatchedSlugs), publiclyReferencableCondition),
-        columns: {
-          id: true,
-          slug: true,
-          displayName: true,
-          displayNameAlphabet: true,
-          mcid: true,
-        },
-        with: {
-          keybindings: { orderBy: [asc(keybindings.category), asc(keybindings.action)] },
-          keyRemaps: { orderBy: [asc(keyRemaps.sourceKey)] },
-          playerConfig: { columns: { keyboardLayout: true, fingerAssignments: true } },
-          searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-          searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-          configPresets: {
-            columns: {
-              name: true,
-              isActive: true,
-              isMain: true,
-              keybindingsData: true,
-              remapsData: true,
-              playerConfigData: true,
-              fingerAssignmentsData: true,
-              searchCraftsData: true,
-              searchCraftLoopsData: true,
-            },
-          },
-        },
-      });
-      embedUserRows.push(...byMcid);
-    }
+    // slug 一致を先、slug で解決できなかった参照に対する mcid 一致を後にする
+    // （従来の「slug → 未マッチ分のみ mcid」の2段クエリと同じ結果）
+    const slugSet = new Set(embedSlugs);
+    const slugMatched = rows.filter((u) => slugSet.has(u.slug));
+    const matchedSlugs = new Set(slugMatched.map((u) => u.slug));
+    const embedUserRows = [
+      ...slugMatched,
+      ...rows.filter((u) => !slugSet.has(u.slug) && u.mcid && slugSet.has(u.mcid) && !matchedSlugs.has(u.mcid)),
+    ];
 
     for (const u of embedUserRows) {
       // 既定表示（presetName 指定なし）はメイン（公開用）プリセットのスナップショットを優先。
@@ -220,7 +199,8 @@ async function resolveEmbedUsers(
         mcid: u.mcid,
         // クライアント（guide-embeds）が使うフィールドのみ渡す
         // （fingerAssignmentsData 等のスナップショット列をペイロードに漏らさない）
-        presets: u.configPresets.map((p) => ({
+        // 埋め込みが data-preset-name で参照するプリセットだけ（未指定の既定表示は上の display を使う）
+        presets: u.configPresets.filter((p) => presetNames.has(p.name)).map((p) => ({
           name: p.name,
           isActive: p.isActive,
           keybindingsData: p.keybindingsData,
@@ -305,7 +285,31 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // ドラフトプレビュー時は未公開でも取得可。それ以外は公開済みのみ。
   if (!draftPreview) guideConditions.push(eq(guides.isPublished, true));
 
-  const guide = await db.query.guides.findFirst({ where: and(...guideConditions) });
+  // 公開閲覧では draft 系の列（下書き本文など）を読まない。所有者のドラフトプレビュー時だけ取得する。
+  // （`as true` は型を draft 列ありに揃えるための断り。draftPreview が false のとき draft* は
+  //  実行時に undefined だが、下の previewingDraft が draftPreview && で守っているので読まれない）
+  const guide = await db.query.guides.findFirst({
+    where: and(...guideConditions),
+    columns: {
+      id: true,
+      slug: true,
+      title: true,
+      summary: true,
+      content: true,
+      coverImageUrl: true,
+      tags: true,
+      viewCount: true,
+      updatedAt: true,
+      isPublished: true,
+      allowAutoTranslation: true,
+      draftUpdatedAt: draftPreview as true,
+      draftTitle: draftPreview as true,
+      draftSummary: draftPreview as true,
+      draftCoverImageUrl: draftPreview as true,
+      draftTags: draftPreview as true,
+      draftContent: draftPreview as true,
+    },
+  });
 
   if (!guide) {
     throw new Response("Not Found", { status: 404 });
@@ -323,9 +327,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 訳文が使えない（機能無効・opt-out・失効・未公開・原文と閲覧ロケールが同じ）ときは null で原文。
   // ?original=1 は原文への切替（SSR で切り替えるので共有・再読み込みでも状態が保てる）。
   // 切替リンクを出すため、original 指定でも訳文の有無は引く
-  const translation = draftPreview
-    ? null
-    : await getGuideTranslation(db, guide, resolveLocale(request));
+  // いいね数（guide.id にのみ依存）は翻訳取得と独立なので並行する
+  const [translation, likeCount] = await Promise.all([
+    draftPreview ? null : getGuideTranslation(db, guide, resolveLocale(request)),
+    getGuideLikeCount(db, guide.id),
+  ]);
   const showOriginal = url.searchParams.get("original") === "1";
   const translated = translation !== null && !showOriginal ? translation : null;
   const displayTitle = translated?.title ?? viewTitle;
@@ -356,11 +362,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const embedRefs = extractEmbedRefs(contentWithIds);
   const embedSlugs = getUniqueEmbedSlugs(embedRefs);
   const appUrl = env.APP_URL || "https://minefolio.app";
-  // likeCount（guide.id にのみ依存）と埋め込みユーザー取得は互いに独立なので並行する
-  const [likeCount, embedUsers] = await Promise.all([
-    getGuideLikeCount(db, guide.id),
-    resolveEmbedUsers(db, embedSlugs),
-  ]);
+  // 埋め込みが data-preset-name で参照しているプリセット名（クライアントへ送るプリセットの絞り込み用）。
+  // extractEmbedRefs の正規表現には取りこぼし得る形があるため、属性値を本文全体から集める（上位集合）
+  const presetNames = new Set<string>();
+  for (const m of contentWithIds.matchAll(/data-preset-name="([^"]*)"/g)) {
+    if (m[1]) presetNames.add(m[1]);
+  }
+  const embedUsers = await resolveEmbedUsers(db, embedSlugs, presetNames);
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
