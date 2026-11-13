@@ -11,7 +11,16 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
-import { users, socialLinks, profileVideos } from "@/lib/schema";
+import {
+  users,
+  socialLinks,
+  profileVideos,
+  keybindings,
+  playerConfigs,
+  itemLayouts,
+  searchCrafts,
+  keyRemaps,
+} from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
 import { eq, asc } from "drizzle-orm";
 import { safeExternalHref } from "@/lib/safe-url";
@@ -143,11 +152,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       profileVideos: {
         orderBy: [asc(profileVideos.displayOrder)],
       },
-      keybindings: true,
-      playerConfig: true,
-      itemLayouts: true,
-      searchCrafts: true,
-      keyRemaps: true,
     },
   });
 
@@ -155,13 +159,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  // キー配置等のデータが存在するかチェック
-  const hasExistingData =
-    user.keybindings.length > 0 ||
-    user.playerConfig !== null ||
-    user.itemLayouts.length > 0 ||
-    user.searchCrafts.length > 0 ||
-    user.keyRemaps.length > 0;
+  // キー配置等のデータが存在するかチェック（レガシーインポート案内の出し分けにだけ使う。
+  // 中身は不要なので各テーブル1行の存在確認だけにし、関連データ全件をクライアントへ返さない）
+  const existenceChecks = await Promise.all([
+    db.query.keybindings.findFirst({ where: eq(keybindings.userId, user.id), columns: { id: true } }),
+    db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id), columns: { id: true } }),
+    db.query.itemLayouts.findFirst({ where: eq(itemLayouts.userId, user.id), columns: { id: true } }),
+    db.query.searchCrafts.findFirst({ where: eq(searchCrafts.userId, user.id), columns: { id: true } }),
+    db.query.keyRemaps.findFirst({ where: eq(keyRemaps.userId, user.id), columns: { id: true } }),
+  ]);
+  const hasExistingData = existenceChecks.some((row) => row !== undefined);
 
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
