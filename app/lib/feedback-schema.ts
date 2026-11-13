@@ -21,4 +21,3 @@ export function createFeedbackSchema(t: Translator) {
   });
 }
 
-export type FeedbackFormData = z.infer<ReturnType<typeof createFeedbackSchema>>;
