@@ -25,7 +25,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | 最近更新されたガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
 | よく読まれているガイド | `page_view_stats` テーブル + `guides` + `users` JOIN | `targetType = "guide"`、`isPublished = true` かつ著者が `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
 | 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
-| ヒーローの見本ペース | `paceman_paces` + `users` JOIN（`lower(mcid)`） | `app/lib/home-pace-sample.server.ts` の `getHomeSamplePace`。公開プロフィール・視聴者除外・Enter Nether 除外・保持期間内。区間深度（`PACE_FEED_SPLITS` 順、Finish 最大）降順→日時降順で1件。0件なら見本カードを出さない |
+| ヒーローの見本ペース | `paceman_paces` + `users` JOIN（`user_id`） | `app/lib/home-pace-sample.server.ts` の `getHomeSamplePace`。公開プロフィール・視聴者除外・Enter Nether 除外・保持期間内。区間深度（`PACE_FEED_SPLITS` 順、Finish 最大）降順→日時降順で1件。0件なら見本カードを出さない |
 | 記録ペース総数 | 同上 | `countHomeRecordedPaces`。同条件の `count(distinct pacemanRunId)`（保持期間＝直近2か月） |
 
 ヒーロー右カラムは「見本ペース（`PaceFeedCard` 流用）＋統計行（公開プロフィール数・記録ペース数・ライブ中人数）」。ライブ中人数はクライアントの feed state（`liveRuns`）由来で、未取得はスケルトン・取得失敗は「-」。登録済みユーザー（`isRegistered`）にはヒーロー左カラムに「おかえりなさい」帯（マイプロフィール・プロフィール編集・お気に入りへの近道）を表示する。
@@ -338,6 +338,9 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - 削除→挿入→プルーニングは `db.batch`（1トランザクション）で実行（途中失敗による蓄積データの消失を防ぐ）
 - 保持期間は**過去2か月**。それより古い行はCron実行時に削除される
 - 読み取り側（`getPaceFeedEntries`）にも保持期間ガードがあり、Cronが止まっても期間外データは配信されない
+- **`user_id` の再リンク**: INSERT 時に `lower(mcid)` が一致する users（公開/視聴者判定なし）の id を `user_id` に入れる。後から MCID を登録・変更したユーザーの既存行は INSERT 時には紐づかないため、Cron が毎回 `relinkPacemanPaceUsers()`（`app/lib/paceman-cache.ts`）を実行し、保持期間内の行の `user_id` を「現在の `lower(users.mcid)` 一致のユーザー」に合わせ直す（未登録・MCID 変更/解除後の旧 MCID 行は `null`、別ユーザーが同 MCID を登録済みならそのユーザーへ付け替え。冪等）。取得結果が0件・登録ユーザー0人でも実行する
+- ホームの見本ペース/記録ペース総数（`home-pace-sample.server.ts`）は `users.id = paceman_paces.user_id` で結合する（`idx_paceman_paces_user_id` を使用。従来の `lower(mcid)` 結合はインデックスが効かなかった）。公開プロフィール・視聴者除外などの表示判定は結合側で行う。再リンク後は従来の `lower(mcid)` 結合と同じ結果になる（`app/lib/__tests__/home-pace-sample.server.test.ts`）
+- 許容している一時的なずれ: MCID の登録・変更から次の Cron（30分間隔）までの間は、該当ユーザーの過去行がホームの見本/件数に入らない（または旧 MCID 行が残る）。結果は10分キャッシュでもあり、最大で約40分遅れて反映される。他のフィード（`/paces` 等）は mcid 文字列で絞るため影響しない
 
 ### apiCache
 

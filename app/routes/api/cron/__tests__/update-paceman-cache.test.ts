@@ -16,7 +16,7 @@ const { createDb, fetchRecentRunsForUsers, cachePacemanPaces } = vi.hoisted(() =
 
 vi.mock("@/lib/db", () => ({ createDb }));
 vi.mock("@/lib/paceman", () => ({ fetchRecentRunsForUsers }));
-vi.mock("@/lib/paceman-cache", () => ({ cachePacemanPaces }));
+vi.mock("@/lib/paceman-cache", () => ({ cachePacemanPaces, relinkPacemanPaceUsers: vi.fn() }));
 
 import { loader } from "../update-paceman-cache";
 

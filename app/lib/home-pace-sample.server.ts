@@ -7,7 +7,7 @@ import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import type { PaceFeedRun } from "@/components/pace-feed-card";
 
-// 結果は10分キャッシュ（ホーム全リクエストで lower(mcid) JOIN を走らせないため。表示名の選択はクライアント側のためロケール非依存）
+// 結果は10分キャッシュ（ホーム全リクエストで JOIN を走らせないため。表示名の選択はクライアント側のためロケール非依存）
 const HOME_PACE_SAMPLE_TTL = 10 * 60 * 1000;
 const SAMPLE_CACHE_KEY = "home:pace-sample:v1";
 const COUNT_CACHE_KEY = "home:pace-count:v1";
@@ -60,7 +60,7 @@ async function queryHomeSamplePace(db: Database): Promise<HomeSamplePace | null>
       customSkinUrl: users.customSkinUrl,
     })
     .from(pacemanPaces)
-    .innerJoin(users, sql`lower(${users.mcid}) = lower(${pacemanPaces.mcid})`)
+    .innerJoin(users, eq(users.id, pacemanPaces.userId))
     .where(and(...baseConditions()))
     .orderBy(desc(timelineDepthSql), desc(pacemanPaces.date))
     .limit(1);
@@ -94,7 +94,7 @@ async function queryRecordedPaceCount(db: Database): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(distinct ${pacemanPaces.pacemanRunId})` })
     .from(pacemanPaces)
-    .innerJoin(users, sql`lower(${users.mcid}) = lower(${pacemanPaces.mcid})`)
+    .innerJoin(users, eq(users.id, pacemanPaces.userId))
     .where(and(...baseConditions()));
   return Number(row?.total ?? 0);
 }

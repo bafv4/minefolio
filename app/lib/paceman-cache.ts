@@ -215,6 +215,26 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
   await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 }
 
+/**
+ * 保持期間内の paceman_paces.user_id を「現在の users.mcid（大文字小文字無視）」に合わせ直す。
+ * - 後から MCID を登録したユーザーの既存行（user_id = null）を紐づける
+ * - MCID を変更・解除したユーザーの旧 MCID 行は user_id を null に戻す（別ユーザーが同じ MCID を
+ *   登録していればそのユーザーへ付け替わる）
+ * リンク条件は cachePacemanPaces の INSERT 時（lower(mcid) 一致のみ。公開/視聴者判定はしない）と同じ。
+ * 表示時の公開判定は参照側の結合（home-pace-sample.server.ts 等）に残す。
+ * これにより user_id 結合が、従来の lower(users.mcid) = lower(paceman_paces.mcid) 結合と同じ結果になる。
+ * cron（update-paceman-cache）から毎回呼ぶ。冪等。変更行数を返す。
+ */
+export async function relinkPacemanPaceUsers(): Promise<number> {
+  const db = createDb();
+  const currentUserId = sql`(select ${users.id} from ${users} where lower(${users.mcid}) = lower(${pacemanPaces.mcid}) limit 1)`;
+  const result = await db
+    .update(pacemanPaces)
+    .set({ userId: currentUserId })
+    .where(and(gte(pacemanPaces.date, getPaceRetentionStart()), sql`${pacemanPaces.userId} is not ${currentUserId}`));
+  return result.rowsAffected;
+}
+
 // フィード用ペースエントリ（ホームフィード・ペース一覧で共用）
 export interface PaceFeedEntry {
   mcid: string;
