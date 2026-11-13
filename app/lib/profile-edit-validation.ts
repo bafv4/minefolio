@@ -55,13 +55,77 @@ export type ProfileFieldErrors = {
   videos?: Record<string, string>;
 };
 
+/** プロフィール文字列欄の最大文字数・MCID 長（入力欄の maxLength とサーバー検証の単一情報源） */
+export const PROFILE_FIELD_LIMITS = {
+  displayName: 50,
+  displayNameAlphabet: 50,
+  bio: 500,
+  location: 100,
+  shortBio: 50,
+  pronouns: 20,
+  speedruncomUsername: 50,
+  linkIdentifier: 100,
+  mcidMin: 3,
+  mcidMax: 16,
+  bedrockMcidMin: 3,
+  bedrockMcidMax: 24,
+} as const;
+
+/** 印字可能な ASCII のみ（英数字・空白・基本記号）。アルファベット表記の表示名の規則 */
+export const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
+
+/** プロフィール文字列欄（trim・空→null 済み）の検証。問題が無ければ null。エラーキーは onboarding と /me/edit で共通 */
+export function validateProfileTextFields(fields: {
+  displayName: string | null;
+  displayNameAlphabet: string | null;
+  bio: string | null;
+  location: string | null;
+  shortBio: string | null;
+  pronouns: string | null;
+}): MessageKey | null {
+  const { displayName, displayNameAlphabet, bio, location, shortBio, pronouns } = fields;
+  const limits = PROFILE_FIELD_LIMITS;
+  if (displayName && displayName.length > limits.displayName) return "meEdit.displayNameMax";
+  if (displayNameAlphabet && displayNameAlphabet.length > limits.displayNameAlphabet) {
+    return "meEdit.displayNameAlphabetMax";
+  }
+  if (displayNameAlphabet && !PRINTABLE_ASCII_RE.test(displayNameAlphabet)) {
+    return "meEdit.displayNameAlphabetInvalid";
+  }
+  if (bio && bio.length > limits.bio) return "meEdit.bioMax";
+  if (location && location.length > limits.location) return "meEdit.locationMax";
+  if (shortBio && shortBio.length > limits.shortBio) return "meEdit.shortBioMax";
+  if (pronouns && pronouns.length > limits.pronouns) return "meEdit.pronounsMax";
+  return null;
+}
+
+/**
+ * 今回の保存で speedrun.com リンクに触れるか（作成 / 更新 / 削除。更新は旧・新どちらかが speedruncom）。
+ * クライアント（下書き）とサーバーが同じ判定を使う。食い違うと speedruncomUsername が逆向きに同期される。
+ * `platformOf` は既存リンク id → 保存済みの platform
+ */
+export function linksTouchSpeedrun(
+  links: {
+    create?: { platform: string }[];
+    update?: { id: string; platform: string }[];
+    delete?: string[];
+  },
+  platformOf: (id: string) => string | undefined,
+): boolean {
+  return (
+    (links.create ?? []).some((l) => l.platform === "speedruncom") ||
+    (links.update ?? []).some((l) => l.platform === "speedruncom" || platformOf(l.id) === "speedruncom") ||
+    (links.delete ?? []).some((id) => platformOf(id) === "speedruncom")
+  );
+}
+
 /** ソーシャルリンク1件の検証。問題が無ければ null */
 export function validateLinkInput(input: LinkPayload): MessageKey | null {
   const { platform, identifier, customLabel, customUrl } = input;
 
   if (!platform || !identifier) return "meEdit.platformAndIdRequired";
   if (!SOCIAL_PLATFORMS.includes(platform)) return "meEdit.invalidOption";
-  if (identifier.length > 100) return "meEdit.idMaxLength";
+  if (identifier.length > PROFILE_FIELD_LIMITS.linkIdentifier) return "meEdit.idMaxLength";
 
   if (platform === "custom") {
     // カスタムSNSはラベルとURLが必須
@@ -96,7 +160,7 @@ export function validateVideoInput(input: VideoPayload): MessageKey | null {
 /** Java 版 MCID の形式検証（Mojang 照合の前段） */
 export function validateMcidFormat(mcid: string): MessageKey | null {
   if (!mcid) return "meEdit.mcidRequired";
-  if (mcid.length < 3 || mcid.length > 16) return "meEdit.mcidLength";
+  if (mcid.length < PROFILE_FIELD_LIMITS.mcidMin || mcid.length > PROFILE_FIELD_LIMITS.mcidMax) return "meEdit.mcidLength";
   return null;
 }
 
@@ -104,7 +168,9 @@ export function validateMcidFormat(mcid: string): MessageKey | null {
 export function validateBedrockMcidFormat(value: string): MessageKey | null {
   if (!value) return "meEdit.bedrockMcidRequired";
   // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
-  if (value.length < 3 || value.length > 24) return "meEdit.bedrockMcidLength";
+  if (value.length < PROFILE_FIELD_LIMITS.bedrockMcidMin || value.length > PROFILE_FIELD_LIMITS.bedrockMcidMax) {
+    return "meEdit.bedrockMcidLength";
+  }
   // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
   if (/[\u0000-\u001f\u007f]/.test(value)) return "meEdit.bedrockMcidInvalid";
   return null;

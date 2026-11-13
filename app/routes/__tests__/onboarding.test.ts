@@ -262,6 +262,29 @@ describe("action - save_minecraft（なりすまし防止）", () => {
     expect(await findUserByDiscordId("discord-runner")).toEqual(before);
   });
 
+  it("大文字小文字だけ違うMCIDでMojangのuuidが他ユーザーと同じならmcidTakenエラーで行が変わらない", async () => {
+    const owner = await seedUser(db, {
+      slug: "steve",
+      discordId: "discord-owner",
+      mcid: "Steve",
+      uuid: "11111111-1111-1111-1111-111111111111",
+    });
+    const before = await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
+    signInAs("discord-runner");
+    mojangMocks.fetchUuidFromMcid.mockResolvedValue("11111111-1111-1111-1111-111111111111");
+
+    const fd = new FormData();
+    fd.set("_action", "save_minecraft");
+    fd.set("mcid", "steve");
+
+    const res = await callAction(fd);
+
+    expect(res).toEqual({ error: "このMCIDは既に登録されています" });
+    expect(mojangMocks.fetchUuidFromMcid).toHaveBeenCalledWith("steve");
+    expect(await findUserByDiscordId("discord-runner")).toEqual(before);
+    expect((await findUserByDiscordId("discord-owner"))?.uuid).toBe(owner.uuid);
+  });
+
   it("MCID_NOT_FOUNDはmcidNotFoundエラーを返す", async () => {
     await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
     signInAs("discord-runner");
