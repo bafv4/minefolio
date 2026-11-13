@@ -44,6 +44,7 @@ import {
   Shuffle,
   Timer,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
@@ -284,6 +285,8 @@ interface FeedState {
     paces: boolean;
     liveRuns: boolean;
   };
+  // ライブペースを最後に正常取得した時刻（ms。未取得は null）
+  liveRunsCheckedAt: number | null;
 }
 
 type FeedAction =
@@ -291,7 +294,8 @@ type FeedAction =
   | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
   | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string>; mcidToDisplayNameAlphabet?: Record<string, string> } }
   | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
-  | { type: "SET_ERROR"; payload: keyof FeedState["errors"] };
+  | { type: "SET_ERROR"; payload: keyof FeedState["errors"] }
+  | { type: "RETRY"; payload: keyof FeedState["errors"] };
 
 const initialFeedState: FeedState = {
   recentVideos: [],
@@ -314,6 +318,7 @@ const initialFeedState: FeedState = {
     paces: false,
     liveRuns: false,
   },
+  liveRunsCheckedAt: null,
 };
 
 function feedReducer(state: FeedState, action: FeedAction): FeedState {
@@ -322,12 +327,14 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
       return {
         ...state,
         recentVideos: action.payload,
+        errors: { ...state.errors, videos: false },
         loading: { ...state.loading, videos: false },
       };
     case "SET_TWITCH_VODS":
       return {
         ...state,
         twitchVods: action.payload,
+        errors: { ...state.errors, twitchVods: false },
         loading: { ...state.loading, twitchVods: false },
       };
     case "SET_PACES":
@@ -343,6 +350,7 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         mcidToDisplayNameAlphabet: action.payload.mcidToDisplayNameAlphabet
           ? { ...state.mcidToDisplayNameAlphabet, ...action.payload.mcidToDisplayNameAlphabet }
           : state.mcidToDisplayNameAlphabet,
+        errors: { ...state.errors, paces: false },
         loading: { ...state.loading, paces: false },
       };
     case "SET_LIVE_RUNS":
@@ -355,7 +363,9 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         mcidToSkinUrl: action.payload.mcidToSkinUrl
           ? { ...state.mcidToSkinUrl, ...action.payload.mcidToSkinUrl }
           : state.mcidToSkinUrl,
+        errors: { ...state.errors, liveRuns: false },
         loading: { ...state.loading, liveRuns: false },
+        liveRunsCheckedAt: Date.now(),
       };
     case "SET_ERROR":
       return {
@@ -363,9 +373,40 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         errors: { ...state.errors, [action.payload]: true },
         loading: { ...state.loading, [action.payload]: false },
       };
+    case "RETRY":
+      return {
+        ...state,
+        errors: { ...state.errors, [action.payload]: false },
+        loading: { ...state.loading, [action.payload]: true },
+      };
     default:
       return state;
   }
+}
+
+// 取得失敗（HTTPエラー含む）を例外にして .catch へ流す
+async function fetchFeedJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+// 取得失敗時の文言 + 再試行ボタン（ペース・動画セクション共通）
+function FeedErrorNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const t = useT();
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+    >
+      <AlertCircle className="h-4 w-4 shrink-0" />
+      <span className="min-w-0">{message}</span>
+      <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={onRetry}>
+        <RefreshCw className="mr-1 h-3.5 w-3.5" />
+        {t("home.feedRetry")}
+      </Button>
+    </div>
+  );
 }
 
 // ホームの動画フィードに表示する新着件数（全件は /videos 照会ページ）
@@ -442,8 +483,7 @@ export default function HomePage() {
 
   // ライブペースを取得する関数（初回・15秒間隔の自動更新・手動の更新ボタンで共用）
   const fetchLiveRuns = useCallback(() => {
-    return fetch("/api/home-feed?type=live-runs")
-      .then((res) => res.json() as Promise<LiveRunsResponse>)
+    return fetchFeedJson<LiveRunsResponse>("/api/home-feed?type=live-runs")
       .then((data) => {
         dispatch({
           type: "SET_LIVE_RUNS",
@@ -461,10 +501,33 @@ export default function HomePage() {
     fetchLiveRuns().finally(() => setIsRefreshingLiveRuns(false));
   }, [fetchLiveRuns]);
 
-  // ライブペースの自動更新（15秒間隔）
+  // ライブペースの自動更新（15秒間隔）。タブが非表示の間は止め、表示に戻ったら即更新して再開する
   useEffect(() => {
-    const interval = setInterval(fetchLiveRuns, 15000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const stop = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    const start = () => {
+      stop();
+      interval = setInterval(fetchLiveRuns, 15000);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchLiveRuns();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [fetchLiveRuns]);
 
   // 「ランダムで見る」をAlt(Option)キー押下中にクリックすると隠しページへ。
@@ -533,12 +596,9 @@ export default function HomePage() {
   const pacesMcidToDisplayName = feed.mcidToDisplayName;
   const pacesMcidToDisplayNameAlphabet = feed.mcidToDisplayNameAlphabet;
 
-  // 遅延読み込み（Promise.allで並列化）
-  useEffect(() => {
-    Promise.all([
-      // YouTube動画
-      fetch("/api/home-feed?type=youtube-videos")
-        .then((res) => res.json() as Promise<YouTubeVideosResponse>)
+  const fetchYouTubeVideos = useCallback(
+    () =>
+      fetchFeedJson<YouTubeVideosResponse>("/api/home-feed?type=youtube-videos")
         .then((data) => {
           dispatch({ type: "SET_VIDEOS", payload: data.recentVideos || [] });
         })
@@ -546,10 +606,11 @@ export default function HomePage() {
           console.error("Failed to fetch YouTube videos:", err);
           dispatch({ type: "SET_ERROR", payload: "videos" });
         }),
-
-      // Twitch VOD
-      fetch("/api/home-feed?type=twitch-vods")
-        .then((res) => res.json() as Promise<TwitchVodsResponse>)
+    []
+  );
+  const fetchTwitchVods = useCallback(
+    () =>
+      fetchFeedJson<TwitchVodsResponse>("/api/home-feed?type=twitch-vods")
         .then((data) => {
           dispatch({ type: "SET_TWITCH_VODS", payload: data.recentVods || [] });
         })
@@ -557,10 +618,11 @@ export default function HomePage() {
           console.error("Failed to fetch Twitch VODs:", err);
           dispatch({ type: "SET_ERROR", payload: "twitchVods" });
         }),
-
-      // 最近のペース
-      fetch("/api/home-feed?type=recent-paces")
-        .then((res) => res.json() as Promise<RecentPacesResponse>)
+    []
+  );
+  const fetchRecentPaces = useCallback(
+    () =>
+      fetchFeedJson<RecentPacesResponse>("/api/home-feed?type=recent-paces")
         .then((data) => {
           dispatch({
             type: "SET_PACES",
@@ -576,11 +638,33 @@ export default function HomePage() {
           console.error("Failed to fetch recent paces:", err);
           dispatch({ type: "SET_ERROR", payload: "paces" });
         }),
+    []
+  );
 
-      // ライブペース
-      fetchLiveRuns(),
-    ]);
+  const retryPaces = useCallback(() => {
+    dispatch({ type: "RETRY", payload: "paces" });
+    fetchRecentPaces();
+  }, [fetchRecentPaces]);
+  const retryLiveRuns = useCallback(() => {
+    dispatch({ type: "RETRY", payload: "liveRuns" });
+    fetchLiveRuns();
   }, [fetchLiveRuns]);
+  // 動画は YouTube / Twitch のうち失敗した側だけ再取得する
+  const retryVideos = useCallback(() => {
+    if (feed.errors.videos) {
+      dispatch({ type: "RETRY", payload: "videos" });
+      fetchYouTubeVideos();
+    }
+    if (feed.errors.twitchVods) {
+      dispatch({ type: "RETRY", payload: "twitchVods" });
+      fetchTwitchVods();
+    }
+  }, [feed.errors.videos, feed.errors.twitchVods, fetchYouTubeVideos, fetchTwitchVods]);
+
+  // 遅延読み込み（Promise.allで並列化）
+  useEffect(() => {
+    Promise.all([fetchYouTubeVideos(), fetchTwitchVods(), fetchRecentPaces(), fetchLiveRuns()]);
+  }, [fetchYouTubeVideos, fetchTwitchVods, fetchRecentPaces, fetchLiveRuns]);
 
   // ローダー由来のマップにフィード由来の情報をマージ（毎レンダーの再生成を避ける）
   const mergedMcidToUuid = useMemo(
@@ -773,7 +857,7 @@ export default function HomePage() {
           片方の遅延がもう片方の表示をブロックしないようにする */}
       {feed.loading.paces && feed.loading.liveRuns ? (
         <SectionSkeleton columns={4} />
-      ) : sortedLiveRuns.length > 0 || sortedRecentPaces.length > 0 || feed.loading.paces || feed.loading.liveRuns ? (
+      ) : (
         <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -804,6 +888,34 @@ export default function HomePage() {
                 {t("home.refreshLivePaces")}
               </Button>
             </div>
+            {/* 状態行のみ aria-live（表のライブリージョン化は読み上げが過多になる）。時刻は読み上げ対象外 */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <p aria-live="polite" className={cn(feed.errors.liveRuns && "text-destructive")}>
+                {feed.errors.liveRuns
+                  ? feed.liveRunsCheckedAt === null
+                    ? t("home.liveFetchFailed")
+                    : t("home.liveStaleNote")
+                  : !feed.loading.liveRuns && sortedLiveRuns.length === 0
+                    ? t("home.noLivePaces")
+                    : null}
+              </p>
+              {feed.liveRunsCheckedAt !== null && (
+                <span aria-hidden="true">
+                  {t("home.liveLastChecked", {
+                    time: new Date(feed.liveRunsCheckedAt).toLocaleTimeString(locale, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                  })}
+                </span>
+              )}
+              {feed.errors.liveRuns && (
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={retryLiveRuns}>
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                  {t("home.feedRetry")}
+                </Button>
+              )}
+            </div>
             {feed.loading.liveRuns ? (
               <div className="space-y-2">
                 <Skeleton className="h-10 rounded-xl" />
@@ -819,9 +931,7 @@ export default function HomePage() {
                 mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
                 mcidToSkinUrl={mergedMcidToSkinUrl}
               />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("home.noLivePaces")}</p>
-            )}
+            ) : null}
           </div>
 
           {/* 過去のペース（最新12件） */}
@@ -837,7 +947,7 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-          ) : sortedRecentPaces.length > 0 ? (
+          ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />
@@ -849,29 +959,39 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {sortedRecentPaces.map((run) => (
-                  <PaceFeedCard
-                    key={`${run.mcid}-${run.time}-${run.timeline}`}
-                    run={run}
-                    uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-                    displayName={
-                      (locale !== "ja"
-                        ? pacesMcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
-                        : undefined) ?? pacesMcidToDisplayName[run.mcid.toLowerCase()]
-                    }
-                    skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
-                  />
-                ))}
-              </div>
+              {feed.errors.paces ? (
+                <FeedErrorNotice message={t("home.pacesFetchFailed")} onRetry={retryPaces} />
+              ) : sortedRecentPaces.length === 0 ? (
+                <EmptyState
+                  icon={<History className="h-12 w-12" />}
+                  title={t("home.noRecentPaces")}
+                  description={t("home.noRecentPacesDescription")}
+                />
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {sortedRecentPaces.map((run) => (
+                    <PaceFeedCard
+                      key={`${run.mcid}-${run.time}-${run.timeline}`}
+                      run={run}
+                      uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
+                      displayName={
+                        (locale !== "ja"
+                          ? pacesMcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
+                          : undefined) ?? pacesMcidToDisplayName[run.mcid.toLowerCase()]
+                      }
+                      skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          ) : null}
+          )}
         </section>
-      ) : null}
+      )}
 
       {feed.loading.videos || feed.loading.twitchVods ? (
         <SectionSkeleton columns={3} />
-      ) : sortedRecentVideos.length > 0 ? (
+      ) : (
         <section className="space-y-5 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2">
@@ -888,13 +1008,23 @@ export default function HomePage() {
               </Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {sortedRecentVideos.map((video) => (
-              <FeedVideoCard key={feedVideoKey(video)} video={video} />
-            ))}
-          </div>
+          {(feed.errors.videos || feed.errors.twitchVods) && sortedRecentVideos.length === 0 ? (
+            <FeedErrorNotice message={t("home.videosFetchFailed")} onRetry={retryVideos} />
+          ) : sortedRecentVideos.length === 0 ? (
+            <EmptyState
+              icon={<Play className="h-12 w-12" />}
+              title={t("home.noVideos")}
+              description={t("home.noVideosDescription")}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {sortedRecentVideos.map((video) => (
+                <FeedVideoCard key={feedVideoKey(video)} video={video} />
+              ))}
+            </div>
+          )}
         </section>
-      ) : null}
+      )}
     </div>
   );
 }
