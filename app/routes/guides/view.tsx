@@ -508,7 +508,7 @@ export default function GuideViewPage() {
 
       {/* Title + summary */}
       <div className="mb-5">
-        <h1 className="text-4xl font-bold leading-tight tracking-tight mb-3">
+        <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight mb-3">
           {guide.title}
         </h1>
         {guide.summary && (
