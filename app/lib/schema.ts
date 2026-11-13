@@ -804,8 +804,9 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 // 副作用: 参照先 user の削除で favorites が孤児化する可能性がある。
 //   - GC: 必要に応じて `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` を別途実行
 //   - slug 変更時の旧 slug → 新 slug の追従更新はアプリケーション層で実装済み
-//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。me/edit.tsx の set_mcid / remove_mcid の
-//      トランザクション内で users 更新・slug_history 記録とともに呼ばれる）
+//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。app/lib/mcid-change.server.ts の
+//      applyMcidSlugChange が、/me/edit の一括保存（save_all）のトランザクション内で
+//      users 更新・slug_history 記録とともに呼ぶ）
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1449,7 +1450,7 @@ export type NewPlaystyle = typeof playstyles.$inferInsert;
 // ============================================
 // slug_history（旧slugからのリダイレクト解決）
 // ============================================
-// MCID登録（set_mcid）・MCID削除（remove_mcid）で users.slug が変わるたびに旧 slug を記録し、
+// MCID登録・変更・削除（/me/edit の save_all → app/lib/mcid-change.server.ts の applyMcidSlugChange）で users.slug が変わるたびに旧 slug を記録し、
 // /player/:slug 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴。
 // 読み書きは app/lib/slug-history.server.ts に集約する。
 // Mojang API 起点のフォールバック（player-slug-fallback.server.ts）より優先して解決する

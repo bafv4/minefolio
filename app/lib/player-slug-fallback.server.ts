@@ -1,6 +1,6 @@
 // /player/:slug 404時のフォールバックリダイレクト解決。2段構成:
 //
-// 1. slug_history（DB内で完結、確実）: set_mcid / remove_mcid で users.slug が変わるたびに
+// 1. slug_history（DB内で完結、確実）: MCID の変更・削除（mcid-change.server.ts の applyMcidSlugChange）で users.slug が変わるたびに
 //    旧slugを記録している（app/lib/slug-history.server.ts）。404になった slug をそのまま
 //    履歴から引き、現在の slug が見つかればそれを返す。改名後の旧MCID・`@discordId` 形式の
 //    旧slugのどちらも救済対象（形状ガードは不要）。

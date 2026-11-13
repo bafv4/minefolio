@@ -194,6 +194,8 @@ describe("getMinefolioEloRank", () => {
     await seedPlayerRanking(db, off.id, { rankingType: "ranked_elo", eloRate: 3000 });
     await seedPlayerRanking(db, noElo.id, { rankingType: "ranked_elo", eloRate: null });
     await seedPlayerRanking(db, other.id, { rankingType: "ranked_elo", eloRate: 1200 });
+    // speedruncom 行は（eloRate が高くても）Elo 順位の母集団に数えない
+    await seedPlayerRanking(db, me.id, { rankingType: "speedruncom", eloRate: 5000 });
 
     expect(await getMinefolioEloRank(db, me.id)).toEqual({ rank: 2, total: 2 });
     expect(await getMinefolioEloRank(db, noElo.id)).toBeNull();

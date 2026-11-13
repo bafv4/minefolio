@@ -1,6 +1,7 @@
 // users.slug の変更履歴（旧slug→現ユーザー）を管理するヘルパー。
 //
-// MCID登録（set_mcid）・MCID削除（remove_mcid）で users.slug が変わるたびに旧 slug を
+// MCID の登録・変更・削除（/me/edit の一括保存 save_all → mcid-change.server.ts の
+// applyMcidSlugChange）で users.slug が変わるたびに旧 slug を
 // 記録しておき、/player/:slug 等が 404 になったとき slug_history から現在の slug を
 // 引いて 302 リダイレクトする（app/lib/player-slug-fallback.server.ts から呼ばれる）。
 //
@@ -16,7 +17,7 @@ import { publiclyReferencableCondition } from "./users-filter";
 type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /**
- * MCID変更（set_mcid）・MCID削除（remove_mcid）で slug が変わる直前に呼ぶ。
+ * MCID の変更・削除（mcid-change.server.ts の applyMcidSlugChange）で slug が変わる直前に呼ぶ。
  * 旧 slug を履歴として記録し（既に同じ旧slugの履歴があれば元所有者を上書き）、
  * 新 slug が過去に別ユーザーの旧slugとして記録されていればその履歴を削除する
  * （新slugには現役の持ち主ができたため、古い対応付けは不要になる）。

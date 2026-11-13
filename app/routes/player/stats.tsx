@@ -66,8 +66,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         displayNameAlphabet: true,
         profileVisibility: true,
         discordId: true,
-      showRankedStats: true,
-    },
+        showRankedStats: true,
+      },
     }),
   ]);
 

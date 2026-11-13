@@ -1,4 +1,4 @@
-// ホームフィード（/ SSR loader・api/home-feed）共通のユーザーデータキャッシュ
+// ホームフィードのユーザーデータキャッシュ（利用者: app/routes/api/home-feed.ts と app/lib/paces-feed.server.ts。ホーム SSR ローダーでは使わない）
 // DBクエリ削減のため60秒キャッシュ（PaceMan連携用: registeredMcids等）
 
 import { createDb } from "@/lib/db";

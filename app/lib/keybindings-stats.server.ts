@@ -306,7 +306,6 @@ export async function loadKeybindingsStats(
   }
 
   // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
-
   const remappedToF3UserIds = new Set(f3InputRemaps.map((r) => r.userId));
 
   const f3DefaultUsers = usersWithKeybindingsData.filter(
@@ -350,9 +349,7 @@ export async function loadKeybindingsStats(
     totalCount: f3TotalCount,
   };
 
-  // マウス設定
-
-  // DPI 統計
+  // マウス設定: DPI 統計
   const dpiConfigs = mouseConfigs.filter((c) => c.mouseDpi != null);
   const dpiValues = dpiConfigs.map((c) => c.mouseDpi!);
 
