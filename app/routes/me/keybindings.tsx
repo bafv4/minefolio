@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
 import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { FingerToggleGroup, sortFingers } from "@/components/finger-toggle-group";
 import { createId } from "@paralleldrive/cuid2";
@@ -2394,7 +2395,7 @@ export default function KeybindingsPage() {
           <CardContent>
             <div className="flex flex-col items-start gap-4">
               {/* メインキーボード */}
-              <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+              <HorizontalScrollArea showHint>
                 <VirtualKeyboard
                   layout={keyboardLayout}
                   keybindings={keybindingsMap}
@@ -2407,9 +2408,9 @@ export default function KeybindingsPage() {
                   showRemaps
                   hideNumpad
                 />
-              </div>
-              {/* テンキーとマウスを横並び */}
-              <div className="flex items-start gap-6">
+              </HorizontalScrollArea>
+              {/* テンキーとマウスを横並び（狭い画面では折り返して縦積み） */}
+              <div className="flex max-w-full flex-wrap items-start gap-x-6 gap-y-4">
                 <VirtualNumpad
                   keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}

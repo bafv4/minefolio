@@ -316,6 +316,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     notFoundDetails: "We couldn't find the page you were looking for.",
   },
   common: {
+    scrollHorizontalHint: "Scroll horizontally to see more",
     rangeSeparator: "–",
     listSeparator: ", ",
     listSeparatorComma: ", ",

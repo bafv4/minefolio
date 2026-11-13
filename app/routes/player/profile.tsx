@@ -177,6 +177,7 @@ export function HydrateFallback() {
   );
 }
 import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
@@ -1616,7 +1617,7 @@ export default function PlayerProfilePage() {
                 <CardContent className="px-5">
                   <div className="flex flex-col items-start gap-4">
                     {/* メインキーボード */}
-                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+                    <HorizontalScrollArea showHint>
                       <VirtualKeyboard
                         layout={keyboardLayout}
                         keybindings={keybindingsMap}
@@ -1629,9 +1630,9 @@ export default function PlayerProfilePage() {
                         showRemaps
                         hideNumpad
                       />
-                    </div>
+                    </HorizontalScrollArea>
                     {/* テンキーとマウスを横並び */}
-                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+                    <HorizontalScrollArea>
                       <div className="flex items-start gap-6">
                         {!isTKL && (
                           <VirtualNumpad
@@ -1655,7 +1656,7 @@ export default function PlayerProfilePage() {
                           showRemaps
                         />
                       </div>
-                    </div>
+                    </HorizontalScrollArea>
                   </div>
                 </CardContent>
               </Card>

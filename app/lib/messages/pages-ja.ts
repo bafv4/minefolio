@@ -316,6 +316,8 @@ export const PAGES_JA = {
     notFoundDetails: "お探しのページが見つかりませんでした。",
   },
   common: {
+    /** 横スクロール可能領域のヒント（はみ出し時のみ表示） */
+    scrollHorizontalHint: "横にスクロールできます",
     /** 数値レンジの区切り（「10:00 〜 12:00」等） */
     rangeSeparator: "〜",
     /** 並列の区切り（「前進・後退」等） */
