@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useT } from "@/hooks/use-locale";
 import { MessageSquare, Heart, Code, Shield, ScrollText } from "lucide-react";
 import { Github } from "@/components/brand-icons";
-import packageJson from "../../../package.json";
+import { version } from "../../../package.json";
 
 export function Footer() {
   const t = useT();
@@ -14,7 +14,7 @@ export function Footer() {
             <div className="flex items-center space-x-2">
               <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
               <span className="text-xl font-bold">Minefolio</span>
-              <span className="text-xs text-muted-foreground ml-1">{packageJson.version}</span>
+              <span className="text-xs text-muted-foreground ml-1">{version}</span>
               <span className="text-xs text-muted-foreground ml-1">by bfmkn</span>
             </div>
           </div>
