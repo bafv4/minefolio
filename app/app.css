@@ -1092,6 +1092,32 @@ body {
    表の min-width を「固定列合計 + 未指定列 × 160px」に再計算することで行う。
    収まらない分は .table-scroll-wrapper の横スクロールに逃げる。 */
 
+/* sm 未満（モバイル）のみ。デスクトップ表示は変えない。
+   1) 3 列以下（行のセル数で判定。colgroup の有無に依らない）の表は本文幅に収め、セルを折り返す（min-width / 列幅は inline style なので !important で上書き）
+   2) 4 列以上は横スクロールのまま、スクロール可能な側に端フェードを出して続きがあることを示す
+      （background-attachment: local の覆いグラデ + scroll の影。スクロール位置に追従し JS 不要） */
+@media (max-width: 639px) {
+  .guide-content.prose table:not(:has(tr > :nth-child(4))) {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .guide-content.prose table:not(:has(tr > :nth-child(4))) col {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  .guide-content.prose td,
+  .guide-content.prose th {
+    word-break: break-word;
+  }
+  .guide-content.prose .table-scroll-wrapper {
+    background:
+      linear-gradient(to right, var(--background) 30%, transparent) left center / 2rem 100% no-repeat local,
+      linear-gradient(to left, var(--background) 30%, transparent) right center / 2rem 100% no-repeat local,
+      linear-gradient(to right, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+      linear-gradient(to left, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+  }
+}
+
 .guide-content.prose :where(th) {
   font-weight: 600;
   background: color-mix(in oklch, var(--muted) 60%, transparent);
