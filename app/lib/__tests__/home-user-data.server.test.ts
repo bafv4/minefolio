@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getUserData, USER_DATA_CACHE_KEY } from "../home-user-data.server";
+import { getUserData, pickUserDataForMcids, USER_DATA_CACHE_KEY } from "../home-user-data.server";
 import { invalidateCache } from "../cache";
 import { createTestDbAt, seedUser, type TestDb } from "./helpers/test-db";
 
@@ -84,5 +84,31 @@ describe("getUserData - キャッシュ", () => {
     const second = await getUserData();
     expect(second).toBe(first); // 同一オブジェクト参照（キャッシュから返る）
     expect(second.registeredMcids).toEqual(["pub"]);
+  });
+});
+
+describe("pickUserDataForMcids", () => {
+  const userData = {
+    registeredMcids: ["a", "b"],
+    mcidToUuid: { a: "uuid-a", b: "uuid-b" },
+    mcidToSlug: { a: "slug-a", b: "slug-b" },
+    mcidToDisplayName: { a: "A名", b: "B名" },
+    mcidToDisplayNameAlphabet: { b: "B-en" },
+    mcidToSkinUrl: { a: "https://skins/a.png" },
+  };
+
+  it("指定した mcid（大文字小文字不問）の分だけに絞る", () => {
+    expect(pickUserDataForMcids(userData, ["A"])).toEqual({
+      mcidToUuid: { a: "uuid-a" },
+      mcidToSlug: { a: "slug-a" },
+      mcidToDisplayName: { a: "A名" },
+      mcidToDisplayNameAlphabet: {},
+      mcidToSkinUrl: { a: "https://skins/a.png" },
+    });
+  });
+
+  it("公開ユーザーでない mcid・Object.prototype のプロパティ名は何も載せない", () => {
+    const picked = pickUserDataForMcids(userData, ["stranger", "constructor"]);
+    expect(Object.values(picked).every((m) => Object.keys(m).length === 0)).toBe(true);
   });
 });

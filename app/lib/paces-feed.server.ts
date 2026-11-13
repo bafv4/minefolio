@@ -1,12 +1,12 @@
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDb } from "./db";
 import { createAuth } from "./auth";
 import { users } from "./schema";
 import { getOptionalSession } from "./session";
 import { getPaceFeedEntries } from "./paceman-cache";
 import { PACE_FEED_SPLITS } from "./pace-splits";
-import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
+import { getUserData, type UserDataCache } from "./home-user-data.server";
 
 // フィード全体（区間キー毎）のキャッシュTTL
 // 無限スクロールのページ毎にテーブル全体を走査しないためのもの
@@ -14,7 +14,7 @@ const PACES_FEED_CACHE_TTL = 60 * 1000;
 
 /** フィード全体キャッシュのキー。形状を変えたら版数を上げる（テストからも参照する） */
 export function paceFeedCacheKey(timeline?: string): string {
-  return `paces:feed:v2:${timeline ?? "all"}`;
+  return `paces:feed:v3:${timeline ?? "all"}`;
 }
 
 // /paces ページと /api/paces で共用するフィード項目（クライアント表示用に整形済み）
@@ -85,68 +85,45 @@ export function parsePaceSearchParams(searchParams: URLSearchParams): PaceSearch
   return filters;
 }
 
+/** 一覧の各ペースに添える、表示に必要な走者情報（そのペースの mcid 分のみ。全ユーザー分のマップは送らない） */
+export interface PaceFeedProfile {
+  uuid?: string;
+  displayName?: string;
+  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
+  displayNameAlphabet?: string;
+  skinUrl?: string;
+}
+
+export type PaceFeedItemWithProfile = PaceFeedItem & { profile?: PaceFeedProfile };
+
 export interface VisiblePaceFeed {
   items: PaceFeedItem[];
-  mcidToUuid: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
-  mcidToDisplayNameAlphabet: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
+  /**
+   * 走者情報の取得元（getUserData の共通キャッシュ。全公開ユーザー分なのでそのままクライアントへ返さない）。
+   * 応答に載せるページ分だけ withPaceProfiles で絞って使う
+   */
+  userData: UserDataCache;
 }
 
 type Db = ReturnType<typeof createDb>;
 type Auth = ReturnType<typeof createAuth>;
 
 /**
- * フィード全体（区間指定のみ反映、他フィルタ未適用）とマップを構築してキャッシュする
+ * フィード全体（区間指定のみ反映、他フィルタ未適用）を構築してキャッシュする
  * 区間はSQLでの行選択（そのランのどのSplitを表示するか）に関わるためキャッシュキーに含める。
  * それ以外の条件（プレイヤー・時期・タイム）はキャッシュ済みリストへのJSフィルタで等価に適用できる。
+ * 対象ユーザー（公開プロフィール・viewer除外・MCID/UUIDあり）は getUserData と共通で、
+ * 公開条件を1箇所（home-user-data.server.ts）に保つ。
  */
-async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFeed> {
+async function getPaceFeedBase(userData: UserDataCache, timeline?: string): Promise<PaceFeedItem[]> {
   const cacheKey = paceFeedCacheKey(timeline);
-  const cached = await getCached<VisiblePaceFeed>(cacheKey);
+  const cached = await getCached<PaceFeedItem[]>(cacheKey);
   if (cached) return cached;
 
-  const usersWithMcid = await db
-    .select({
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(users)
-    .where(
-      and(
-        isNotNull(users.mcid),
-        isNotNull(users.uuid),
-        excludeViewersCondition,
-        // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴・表示名・スキンを
-        // 未認証で配信される公開フィードに露出させない。/paces はディスカバリ一覧なので、
-        // 一覧系と同じ「公開のみ」ルール（browse-query.server.ts と同一）に揃える。
-        eq(users.profileVisibility, "public"),
-      ),
-    );
-
-  const registeredMcidSet = new Set(usersWithMcid.map((u) => u.mcid!.toLowerCase()));
-  const mcidToUuid = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.uuid!])
-  );
-  const mcidToDisplayName = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
-  );
-  const mcidToDisplayNameAlphabet = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.displayNameAlphabet)
-      .map((u) => [u.mcid!.toLowerCase(), u.displayNameAlphabet!])
-  );
-  const mcidToSkinUrl = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.customSkinUrl !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
-  );
-
-  const paces = await getPaceFeedEntries(registeredMcidSet, { timeline });
+  // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴を未認証で配信される公開フィードに
+  // 露出させない（getUserData が公開のみ）。getPaceFeedEntries は対象 mcid 集合を引数に取るため、
+  // ユーザー取得（60秒キャッシュ。呼び出し側で取得済み）の後にペース取得を行う。
+  const paces = await getPaceFeedEntries(new Set(userData.registeredMcids), { timeline });
 
   const items = paces.map((p) => ({
     mcid: p.mcid,
@@ -157,9 +134,29 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
     time: Math.floor(p.date.getTime() / 1000),
   }));
 
-  const base: VisiblePaceFeed = { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
-  await setCached(cacheKey, base, PACES_FEED_CACHE_TTL);
-  return base;
+  await setCached(cacheKey, items, PACES_FEED_CACHE_TTL);
+  return items;
+}
+
+/**
+ * ペースに走者情報（uuid・表示名・スキン）を添える。ページに含まれる分だけ付くため、
+ * 全ユーザー分のマップを SSR/API 応答に載せずに済む。userData に無い mcid（非公開化など）は profile なし
+ */
+export function withPaceProfiles(
+  items: PaceFeedItem[],
+  userData: Pick<UserDataCache, "mcidToUuid" | "mcidToDisplayName" | "mcidToDisplayNameAlphabet" | "mcidToSkinUrl">,
+): PaceFeedItemWithProfile[] {
+  return items.map((item) => {
+    const key = item.mcid.toLowerCase();
+    if (!Object.hasOwn(userData.mcidToUuid, key)) return item;
+    const profile: PaceFeedProfile = { uuid: userData.mcidToUuid[key] };
+    if (Object.hasOwn(userData.mcidToDisplayName, key)) profile.displayName = userData.mcidToDisplayName[key];
+    if (Object.hasOwn(userData.mcidToDisplayNameAlphabet, key)) {
+      profile.displayNameAlphabet = userData.mcidToDisplayNameAlphabet[key];
+    }
+    if (Object.hasOwn(userData.mcidToSkinUrl, key)) profile.skinUrl = userData.mcidToSkinUrl[key];
+    return { ...item, profile };
+  });
 }
 
 /**
@@ -171,13 +168,13 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
  *   getViewerPacePrefs の結果を使ってクライアント側でフィルタする（ホームと同じ挙動）
  */
 export async function getPublicPaceFeed(
-  db: Db,
   filters: PaceSearchFilters = {},
 ): Promise<VisiblePaceFeed> {
-  const base = await getPaceFeedBase(db, filters.timeline);
-  const { mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } = base;
+  const userData = await getUserData();
+  const baseItems = await getPaceFeedBase(userData, filters.timeline);
+  const { mcidToDisplayName, mcidToDisplayNameAlphabet } = userData;
 
-  let items = base.items;
+  let items = baseItems;
 
   // 時期（ランは同一日時の行しか持たないため、ラン単位のJSフィルタでSQL条件と等価）
   if (filters.from) {
@@ -207,14 +204,14 @@ export async function getPublicPaceFeed(
   }
 
   // タイム順（RTA昇順）。同タイムは新しい順（ランIDで決定的にタイブレークし、offsetページングを安定させる）。
-  // base.items を破壊しないようコピーしてからソートする（キャッシュ共有のため）
+  // base の items を破壊しないようコピーしてからソートする（キャッシュ共有のため）
   if (filters.sort === "time") {
     items = [...items].sort(
       (a, b) => a.rta - b.rta || b.time - a.time || b.pacemanRunId - a.pacemanRunId,
     );
   }
 
-  return { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
+  return { items, userData };
 }
 
 /**

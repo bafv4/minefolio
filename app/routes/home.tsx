@@ -11,7 +11,6 @@ import { pickHighlightPb, type HighlightPbRecord } from "@/lib/profile-highlight
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
-import { getUserData } from "@/lib/home-user-data.server";
 import { countHomeRecordedPaces, getHomeSamplePace } from "@/lib/home-pace-sample.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
@@ -27,13 +26,12 @@ import { PaceFeedCard } from "@/components/pace-feed-card";
 import { FeedVideoCard } from "@/components/feed-video-card";
 import { feedVideoKey, filterOwnVideos, type FeedVideo } from "@/lib/feed-video";
 import { useFavorites } from "@/hooks/use-favorites";
-import { formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { pickDisplayName } from "@/lib/slug";
+import { pickMcidDisplayName } from "@/lib/mcid-display-name";
 import {
   ArrowRight,
   Play,
@@ -122,11 +120,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     authorMcid: users.mcid,
   };
 
-  // セッション確認（→登録ユーザー判定）、ユーザーデータキャッシュ取得、コンテンツ5クエリは
-  // 互いに独立なので並行して走らせる
+  // セッション確認（→登録ユーザー判定）とコンテンツ5クエリは互いに独立なので並行して走らせる。
+  // mcid→ユーザー情報のマップはローダーでは返さない（全公開ユーザー分を SSR に載せない）。
+  // ライブ・過去ペースの各 API 応答（/api/home-feed）が表示する mcid の分だけ運ぶ
   const [
     currentUser,
-    userData,
     [recentlyUpdatedUsers, popularUsers, recentlyUpdatedGuides, popularGuides, [profileCounts]],
     samplePace,
     recordedPaceTotal,
@@ -159,9 +157,6 @@ export async function loader({ request }: Route.LoaderArgs) {
           showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
         };
       })(),
-      // 登録ユーザーのMCIDとUUIDを取得（MCIDがあるユーザーのみ - PaceMan連携用。視聴者ロールは除外）
-      // api/home-feed と共通の60秒キャッシュ（app/lib/home-user-data.server.ts）を利用
-      getUserData(),
       Promise.all([
         // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外、最新4件）
         db
@@ -221,14 +216,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       getHomeSamplePace(db).catch(() => null),
       countHomeRecordedPaces(db).catch(() => null),
     ]);
-  const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
-    userData;
   const isRegistered = currentUser != null;
   const totalPublicProfiles = profileCounts?.total ?? 0;
 
   // 自動翻訳（docs/translation.md）。更新順・PV順の両セクションのガイド id をまとめて 1 回で引き、
-  // title / summary を差し替える。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・Cache-Control）が無く、
-  // getUserData のキャッシュもロケール非依存のユーザー情報のみなので、閲覧ロケールごとの結果はここで毎回決まる。
+  // title / summary を差し替える。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・Cache-Control）が無いため、
+  // 閲覧ロケールごとの結果はここで毎回決まる。
   // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
   const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers].map((u) => u.id))];
   const [guideTranslations, feedPlaystyles, feedRecords] = await Promise.all([
@@ -281,12 +274,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
     currentUser,
-    registeredMcids,
-    mcidToUuid,
-    mcidToSlug,
-    mcidToDisplayName,
-    mcidToDisplayNameAlphabet,
-    mcidToSkinUrl,
     recentlyUpdatedUsers: withHighlights(recentlyUpdatedUsers),
     popularUsers: withHighlights(popularUsers),
     recentlyUpdatedGuides: recentlyUpdatedGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
@@ -306,17 +293,21 @@ interface TwitchVodsResponse {
   recentVods: FeedVideo[];
 }
 
-interface RecentPacesResponse {
-  recentPaces: CachedPace[];
+// ライブ・過去ペースの応答に含まれる mcid（小文字）→ユーザー情報マップ。応答のアイテムに出てくる mcid の分のみ
+interface McidMapsResponse {
   mcidToUuid: Record<string, string>;
+  mcidToSlug: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToDisplayNameAlphabet: Record<string, string>;
+  mcidToSkinUrl: Record<string, string>;
 }
 
-interface LiveRunsResponse {
+interface RecentPacesResponse extends McidMapsResponse {
+  recentPaces: CachedPace[];
+}
+
+interface LiveRunsResponse extends McidMapsResponse {
   liveRuns: PaceManLiveRun[];
-  mcidToUuid: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
 }
 
 // Feed状態管理用のReducer
@@ -326,6 +317,7 @@ interface FeedState {
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
   mcidToUuid: Record<string, string>;
+  mcidToSlug: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
   mcidToDisplayNameAlphabet: Record<string, string>;
   mcidToSkinUrl: Record<string, string>;
@@ -348,8 +340,8 @@ interface FeedState {
 type FeedAction =
   | { type: "SET_VIDEOS"; payload: FeedVideo[] }
   | { type: "SET_TWITCH_VODS"; payload: FeedVideo[] }
-  | { type: "SET_PACES"; payload: { recentPaces: CachedPace[]; mcidToUuid?: Record<string, string>; mcidToDisplayName?: Record<string, string>; mcidToDisplayNameAlphabet?: Record<string, string> } }
-  | { type: "SET_LIVE_RUNS"; payload: { liveRuns: PaceManLiveRun[]; mcidToUuid?: Record<string, string>; mcidToSkinUrl?: Record<string, string> } }
+  | { type: "SET_PACES"; payload: Partial<McidMapsResponse> & { recentPaces: CachedPace[] } }
+  | { type: "SET_LIVE_RUNS"; payload: Partial<McidMapsResponse> & { liveRuns: PaceManLiveRun[] } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] }
   | { type: "RETRY"; payload: keyof FeedState["errors"] };
 
@@ -359,6 +351,7 @@ const initialFeedState: FeedState = {
   recentPaces: [],
   liveRuns: [],
   mcidToUuid: {},
+  mcidToSlug: {},
   mcidToDisplayName: {},
   mcidToDisplayNameAlphabet: {},
   mcidToSkinUrl: {},
@@ -376,6 +369,24 @@ const initialFeedState: FeedState = {
   },
   liveRunsCheckedAt: null,
 };
+
+const MCID_MAP_KEYS = [
+  "mcidToUuid",
+  "mcidToSlug",
+  "mcidToDisplayName",
+  "mcidToDisplayNameAlphabet",
+  "mcidToSkinUrl",
+] as const;
+
+// 応答の mcid マップを既存の state にマージする（ライブとペースで別 mcid が来るため蓄積する。
+// 応答に無い（古いキャッシュ等）キーは触らない）
+function mergeMcidMaps(state: FeedState, payload: Partial<McidMapsResponse>): Pick<FeedState, (typeof MCID_MAP_KEYS)[number]> {
+  const merged = {} as Pick<FeedState, (typeof MCID_MAP_KEYS)[number]>;
+  for (const key of MCID_MAP_KEYS) {
+    merged[key] = payload[key] ? { ...state[key], ...payload[key] } : state[key];
+  }
+  return merged;
+}
 
 function feedReducer(state: FeedState, action: FeedAction): FeedState {
   switch (action.type) {
@@ -397,15 +408,7 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
       return {
         ...state,
         recentPaces: action.payload.recentPaces,
-        mcidToUuid: action.payload.mcidToUuid
-          ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
-          : state.mcidToUuid,
-        mcidToDisplayName: action.payload.mcidToDisplayName
-          ? { ...state.mcidToDisplayName, ...action.payload.mcidToDisplayName }
-          : state.mcidToDisplayName,
-        mcidToDisplayNameAlphabet: action.payload.mcidToDisplayNameAlphabet
-          ? { ...state.mcidToDisplayNameAlphabet, ...action.payload.mcidToDisplayNameAlphabet }
-          : state.mcidToDisplayNameAlphabet,
+        ...mergeMcidMaps(state, action.payload),
         errors: { ...state.errors, paces: false },
         loading: { ...state.loading, paces: false },
       };
@@ -413,12 +416,7 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
       return {
         ...state,
         liveRuns: action.payload.liveRuns,
-        mcidToUuid: action.payload.mcidToUuid
-          ? { ...state.mcidToUuid, ...action.payload.mcidToUuid }
-          : state.mcidToUuid,
-        mcidToSkinUrl: action.payload.mcidToSkinUrl
-          ? { ...state.mcidToSkinUrl, ...action.payload.mcidToSkinUrl }
-          : state.mcidToSkinUrl,
+        ...mergeMcidMaps(state, action.payload),
         errors: { ...state.errors, liveRuns: false },
         loading: { ...state.loading, liveRuns: false },
         liveRunsCheckedAt: Date.now(),
@@ -497,12 +495,6 @@ export default function HomePage() {
   const {
     isRegistered,
     currentUser,
-    registeredMcids,
-    mcidToUuid,
-    mcidToSlug,
-    mcidToDisplayName,
-    mcidToDisplayNameAlphabet,
-    mcidToSkinUrl,
     recentlyUpdatedUsers,
     popularUsers,
     recentlyUpdatedGuides,
@@ -516,8 +508,6 @@ export default function HomePage() {
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
   const [isRefreshingLiveRuns, setIsRefreshingLiveRuns] = useState(false);
   const navigate = useNavigate();
-
-  const registeredMcidSet = useMemo(() => new Set(registeredMcids), [registeredMcids]);
 
   // お気に入りの並べ替えはクライアント側で適用する
   // （/api/home-feed のレスポンスはユーザー非依存でCDNキャッシュされるため）
@@ -544,7 +534,7 @@ export default function HomePage() {
       .then((data) => {
         dispatch({
           type: "SET_LIVE_RUNS",
-          payload: { liveRuns: data.liveRuns || [], mcidToUuid: data.mcidToUuid, mcidToSkinUrl: data.mcidToSkinUrl },
+          payload: { ...data, liveRuns: data.liveRuns || [] },
         });
       })
       .catch((err) => {
@@ -631,12 +621,12 @@ export default function HomePage() {
 
   // お気に入りを先頭に並べ替え（表示用）
   const sortedRecentPaces = useMemo(
-    () => sortFavoritesFirst(filteredRecentPaces, (run) => mcidToSlug[run.mcid.toLowerCase()]),
-    [filteredRecentPaces, sortFavoritesFirst, mcidToSlug]
+    () => sortFavoritesFirst(filteredRecentPaces, (run) => feed.mcidToSlug[run.mcid.toLowerCase()]),
+    [filteredRecentPaces, sortFavoritesFirst, feed.mcidToSlug]
   );
   const sortedLiveRuns = useMemo(
-    () => sortFavoritesFirst(filteredLiveRuns, (run) => mcidToSlug[run.nickname.toLowerCase()]),
-    [filteredLiveRuns, sortFavoritesFirst, mcidToSlug]
+    () => sortFavoritesFirst(filteredLiveRuns, (run) => feed.mcidToSlug[run.nickname.toLowerCase()]),
+    [filteredLiveRuns, sortFavoritesFirst, feed.mcidToSlug]
   );
   // ホームは新着数件のみ表示（全件は /videos 照会ページへ）。
   // 新着順で切り出してから、その中でお気に入りを先頭に並べ替える
@@ -648,10 +638,6 @@ export default function HomePage() {
       ),
     [filteredRecentVideos, sortFavoritesFirst]
   );
-
-  const pacesMcidToUuid = feed.mcidToUuid;
-  const pacesMcidToDisplayName = feed.mcidToDisplayName;
-  const pacesMcidToDisplayNameAlphabet = feed.mcidToDisplayNameAlphabet;
 
   const fetchYouTubeVideos = useCallback(
     () =>
@@ -683,12 +669,7 @@ export default function HomePage() {
         .then((data) => {
           dispatch({
             type: "SET_PACES",
-            payload: {
-              recentPaces: data.recentPaces || [],
-              mcidToUuid: data.mcidToUuid,
-              mcidToDisplayName: data.mcidToDisplayName,
-              mcidToDisplayNameAlphabet: data.mcidToDisplayNameAlphabet,
-            },
+            payload: { ...data, recentPaces: data.recentPaces || [] },
           });
         })
         .catch((err) => {
@@ -722,16 +703,6 @@ export default function HomePage() {
   useEffect(() => {
     Promise.all([fetchYouTubeVideos(), fetchTwitchVods(), fetchRecentPaces(), fetchLiveRuns()]);
   }, [fetchYouTubeVideos, fetchTwitchVods, fetchRecentPaces, fetchLiveRuns]);
-
-  // ローダー由来のマップにフィード由来の情報をマージ（毎レンダーの再生成を避ける）
-  const mergedMcidToUuid = useMemo(
-    () => ({ ...mcidToUuid, ...pacesMcidToUuid }),
-    [mcidToUuid, pacesMcidToUuid]
-  );
-  const mergedMcidToSkinUrl = useMemo(
-    () => ({ ...mcidToSkinUrl, ...feed.mcidToSkinUrl }),
-    [mcidToSkinUrl, feed.mcidToSkinUrl]
-  );
 
   // ガイド一覧行（更新順・PV順で共通の select 形。PV順のみ pageViews7d を追加で持つ）を
   // GuideCardGrid 用の型へ変換
@@ -1039,12 +1010,11 @@ export default function HomePage() {
             ) : sortedLiveRuns.length > 0 ? (
               <LivePaceList
                 runs={sortedLiveRuns}
-                registeredMcidSet={registeredMcidSet}
-                mcidToSlug={mcidToSlug}
-                mcidToUuid={mergedMcidToUuid}
-                mcidToDisplayName={mcidToDisplayName}
-                mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
-                mcidToSkinUrl={mergedMcidToSkinUrl}
+                mcidToSlug={feed.mcidToSlug}
+                mcidToUuid={feed.mcidToUuid}
+                mcidToDisplayName={feed.mcidToDisplayName}
+                mcidToDisplayNameAlphabet={feed.mcidToDisplayNameAlphabet}
+                mcidToSkinUrl={feed.mcidToSkinUrl}
               />
             ) : null}
           </div>
@@ -1088,13 +1058,9 @@ export default function HomePage() {
                     <PaceFeedCard
                       key={`${run.mcid}-${run.time}-${run.timeline}`}
                       run={run}
-                      uuid={mergedMcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-                      displayName={
-                        (locale !== "ja"
-                          ? pacesMcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
-                          : undefined) ?? pacesMcidToDisplayName[run.mcid.toLowerCase()]
-                      }
-                      skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
+                      uuid={feed.mcidToUuid[run.mcid.toLowerCase()]}
+                      displayName={pickMcidDisplayName(feed, run.mcid, locale)}
+                      skinUrl={feed.mcidToSkinUrl[run.mcid.toLowerCase()]}
                     />
                   ))}
                 </div>
