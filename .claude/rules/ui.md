@@ -96,6 +96,9 @@
 - いずれもセルフホスト（`@fontsource/*` を `app/app.css` で import。OGP 用 TTF は `public/fonts/`）。
   **Google Fonts 等の外部配信は使わない**（プライバシーポリシーの外部送信記載と連動するため、
   外部フォント配信を追加する場合はポリシー改定が必要）
+- `truncate` / `line-clamp-*`（overflow:hidden）の要素に `leading-none` を付けない。Zen Kaku Gothic New は
+  ディセンダーが深く、行間が約1.4em未満だと g / y / p / 括弧の下端が切れる（例: `text-base leading-none` で約2px）。
+  詰めたい場合も `leading-snug` 以上にする（`text-xs` 既定の 16px は実害なし）
 
 ## レスポンシブ
 - モバイルファーストでTailwindブレークポイントを使用（`sm:`, `md:`, `lg:`）

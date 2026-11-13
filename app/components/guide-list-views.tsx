@@ -124,8 +124,10 @@ export function GuideCardGrid({
                 </div>
               )}
               <div className="flex flex-1 flex-col p-4">
-                <h3 className="flex items-start gap-1.5 text-base font-semibold leading-none line-clamp-2 transition-colors group-hover:text-primary">
-                  {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
+                {/* leading-none（16px）だと Zen Kaku Gothic New のディセンダー（g/y/p）が line-clamp の
+                    overflow:hidden で約2px切れるため leading-snug（22px）。Pin は1行目の中央に揃える */}
+                <h3 className="flex items-start gap-1.5 text-base font-semibold leading-snug line-clamp-2 transition-colors group-hover:text-primary">
+                  {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-[3px]" />}
                   {guide.title}
                 </h3>
                 {guide.summary && (
