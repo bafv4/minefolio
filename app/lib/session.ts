@@ -17,6 +17,9 @@ function loadSession(request: Request, auth: Auth) {
   if (!pending) {
     pending = auth.api.getSession({ headers: request.headers });
     sessionByRequest.set(request, pending);
+    // reject したら失敗を共有し続けないようエントリを消す（呼び出し側は pending を await して
+    // 同じエラーを受け取るので、この catch は未処理 rejection を作らない）。
+    pending.catch(() => sessionByRequest.delete(request));
   }
   return pending;
 }
