@@ -368,7 +368,6 @@ async function persistKeybindingUpdates(
   // 同一 id が複数あれば後勝ち（従来の逐次 UPDATE と同じ最終状態）。
   const keyCodeById = new Map<string, string>();
   for (const update of updates) {
-    if (typeof update.id !== "string") continue;
     if (options.normalizeEmptyToUnbound) {
       keyCodeById.set(update.id, update.keyCode || "_UNBOUND");
       continue;
@@ -498,6 +497,22 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
   }
 }
 
+/**
+ * キーバインド更新の上限件数。CASE 式 UPDATE のバインド変数が件数に比例するため、
+ * SQLite の変数上限に当たる前に弾く（実際のキー数は数百件未満）。
+ */
+const MAX_KEYBINDING_UPDATES = 1000;
+
+/** キーバインド更新 payload を検証してパースする（不正・過大なら null）。 */
+function parseKeybindingUpdates(raw: string | null | undefined): KeybindingUpdateInput[] | null {
+  const updates = parseJsonArray<KeybindingUpdateInput>(raw);
+  if (!updates || updates.length > MAX_KEYBINDING_UPDATES) return null;
+  const valid = updates.every(
+    (u) => typeof u.id === "string" && typeof u.keyCode === "string",
+  );
+  return valid ? updates : null;
+}
+
 /** fingerAssignments の JSON 文字列がオブジェクトとして妥当か検証する。 */
 function isValidFingerAssignmentsJson(raw: string): boolean {
   try {
@@ -550,9 +565,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // キーバインド保存
   if (intent === "save-keybindings") {
-    const updates = parseJsonArray<KeybindingUpdateInput>(
-      formData.get("keybindings") as string,
-    );
+    const updates = parseKeybindingUpdates(formData.get("keybindings") as string);
     if (!updates) return { error: t("meKeybindings.invalidPayload") };
     await persistKeybindingUpdates(db, user.id, updates, new Date(), {
       normalizeEmptyToUnbound: true,
@@ -605,7 +618,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (remapsJson && !remapsData) return { error: t("meKeybindings.invalidPayload") };
 
     const keybindingUpdates = keybindingsJson
-      ? parseJsonArray<KeybindingUpdateInput>(keybindingsJson)
+      ? parseKeybindingUpdates(keybindingsJson)
       : null;
     if (keybindingsJson && !keybindingUpdates) return { error: t("meKeybindings.invalidPayload") };
 

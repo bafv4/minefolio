@@ -446,7 +446,18 @@ export async function syncActivePresetSnapshot(
   const updates: Partial<typeof configPresets.$inferInsert> = Object.assign({}, ...parts);
 
   updates.updatedAt = now;
-  await db.update(configPresets).set(updates).where(eq(configPresets.id, active.id));
+  // 呼び出し側が解決済みの activePresetId を渡す経路では、解決から同期までの間に別タブで切替が起きうる。
+  // isActive を条件に含め、切替後は旧プリセットのスナップショットを書き換えない（no-op）ようにする
+  await db
+    .update(configPresets)
+    .set(updates)
+    .where(
+      and(
+        eq(configPresets.id, active.id),
+        eq(configPresets.userId, userId),
+        eq(configPresets.isActive, true),
+      ),
+    );
 }
 
 /**

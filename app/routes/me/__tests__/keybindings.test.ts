@@ -30,6 +30,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../keybindings";
+import { syncActivePresetSnapshot } from "@/lib/preset-utils";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -457,6 +458,135 @@ describe("action - 空文字 keyCode の扱い（normalizeEmptyToUnbound）", ()
     );
 
     expect(res).toEqual({ success: true, message: "設定を保存しました" });
+    expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
+  });
+});
+
+describe("action - save-all の customActions（トランザクション内の逐次実行）", () => {
+  it("customActions を含む save-all で削除・更新・追加が適用される", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const now = new Date();
+    await db.insert(schema.customActions).values([
+      { id: "ca-keep", userId: user.id, actionName: "old", category: "other", triggerKey: "KeyQ", displayOrder: 0, createdAt: now, updatedAt: now },
+      { id: "ca-del", userId: user.id, actionName: "gone", category: "other", triggerKey: "KeyE", displayOrder: 1, createdAt: now, updatedAt: now },
+    ]);
+    const keybinding = await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-all",
+        presetId: preset.id,
+        keybindings: JSON.stringify([{ id: keybinding.id, keyCode: "KeyZ" }]),
+        customActions: JSON.stringify([
+          { id: "ca-del", _delete: true },
+          { id: "ca-keep", actionName: "renamed", triggerKey: "KeyQ", category: "other" },
+          { actionName: "fresh", triggerKey: "KeyR", category: "other" },
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ success: true, message: "設定を保存しました" });
+    const rows = await db.query.customActions.findMany({ where: eq(schema.customActions.userId, user.id) });
+    expect(rows.map((r) => r.actionName).sort()).toEqual(["fresh", "renamed"]);
+    expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyZ");
+    const snapshot = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(JSON.parse(snapshot!.customActionsData!)).toHaveLength(2);
+  });
+});
+
+describe("action - save-custom-keys（db.batch 経路）", () => {
+  it("削除・更新・追加を1バッチで適用し、スナップショットを同期する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const now = new Date();
+    await db.insert(schema.customKeys).values([
+      { id: "ck-keep", userId: user.id, keyCode: "Custom1", keyName: "Old", category: "keyboard", createdAt: now, updatedAt: now },
+      { id: "ck-del", userId: user.id, keyCode: "Custom2", keyName: "Gone", category: "keyboard", createdAt: now, updatedAt: now },
+    ]);
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-custom-keys",
+        presetId: preset.id,
+        customKeys: JSON.stringify([
+          { id: "ck-del", _delete: true },
+          { id: "ck-keep", keyCode: "Custom1", keyName: "Renamed", category: "mouse" },
+          { keyCode: "Custom3", keyName: "Fresh", category: "keyboard" },
+        ]),
+      }),
+    );
+
+    expect(res.success).toBe(true);
+    const rows = await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) });
+    expect(rows.map((r) => `${r.keyName}:${r.category}`).sort()).toEqual(["Fresh:keyboard", "Renamed:mouse"]);
+    const snapshot = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(JSON.parse(snapshot!.customKeysData!)).toHaveLength(2);
+  });
+});
+
+describe("syncActivePresetSnapshot - 切替後の no-op", () => {
+  it("activePresetId が切替後に非アクティブになっていれば、そのプリセットのスナップショットを書き換えない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+    // 解決後に別タブで別プリセットへ切替が起きた状態を再現する
+    const next = await seedConfigPreset(db, user.id, { name: "Next", isActive: false });
+    await db.update(schema.configPresets).set({ isActive: false }).where(eq(schema.configPresets.id, preset.id));
+    await db.update(schema.configPresets).set({ isActive: true }).where(eq(schema.configPresets.id, next.id));
+
+    await syncActivePresetSnapshot(db as never, user.id, ["keybindings"], { activePresetId: preset.id });
+
+    const old = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(old?.keybindingsData).toBeNull();
+    const current = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, next.id) });
+    expect(current?.keybindingsData).toBeNull();
+  });
+});
+
+describe("action - save-keybindings の入力検証", () => {
+  it("件数が上限（1000）を超えると invalidPayload を返し、何も更新しない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const keybinding = await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+    const updates = Array.from({ length: 1001 }, (_, i) => ({
+      id: i === 0 ? keybinding.id : `dummy-${i}`,
+      keyCode: "KeyZ",
+    }));
+
+    const res = await callAction(
+      formDataOf({ intent: "save-keybindings", presetId: preset.id, keybindings: JSON.stringify(updates) }),
+    );
+
+    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
+  });
+
+  it("上限ちょうどの件数は受け付ける", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const keybinding = await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+    const updates = Array.from({ length: 1000 }, (_, i) => ({
+      id: i === 0 ? keybinding.id : `dummy-${i}`,
+      keyCode: "KeyZ",
+    }));
+
+    const res = await callAction(
+      formDataOf({ intent: "save-keybindings", presetId: preset.id, keybindings: JSON.stringify(updates) }),
+    );
+
+    expect(res.success).toBe(true);
+    expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyZ");
+  });
+
+  it.each([
+    ["keyCode が文字列でない", { keyCode: 123 }],
+    ["keyCode が無い", {}],
+    ["id が文字列でない", { id: 1, keyCode: "KeyZ" }],
+  ])("%s 要素を含むと invalidPayload を返す（save-keybindings / save-all）", async (_label, bad) => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const keybinding = await seedKeybinding(db, user.id, { action: "forward", keyCode: "KeyW", category: "movement" });
+    const payload = JSON.stringify([{ id: keybinding.id, keyCode: "KeyZ" }, { id: "x", ...bad }]);
+
+    for (const intent of ["save-keybindings", "save-all"]) {
+      const res = await callAction(formDataOf({ intent, presetId: preset.id, keybindings: payload }));
+      expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    }
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
   });
 });
