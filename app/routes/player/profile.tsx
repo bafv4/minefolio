@@ -1,19 +1,18 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
-import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GuideCardGrid,
   GuideListView,
-  type GuideItem,
 } from "@/components/guide-list-views";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
@@ -42,7 +41,7 @@ import type { Translator } from "@/lib/messages";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName } from "@/lib/game-languages";
-import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
+import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
 import { decodePresetConfig } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import {
@@ -63,7 +62,7 @@ import {
   rtaCareerLabel,
   rtaCareerView,
 } from "@/lib/rta-career";
-import { safeExternalHref } from "@/lib/safe-url";
+import { isHttpUrl, safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import {
   getProfileReactionCounts,
@@ -84,7 +83,7 @@ const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
 const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
 
 // OGPメタタグ
-export function meta({ loaderData, params, matches }: Route.MetaArgs) {
+export function meta({ loaderData, matches }: Route.MetaArgs) {
   if (!loaderData?.player) {
     return [
       { title: "Player Not Found - Minefolio" },
@@ -131,11 +130,6 @@ export function meta({ loaderData, params, matches }: Route.MetaArgs) {
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
-  const t = useT();
-  const locale = useLocale();
-  const params = useParams();
-  const slug = params.slug || "loading";
-
   return (
     <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-200">
       {/* Left Sidebar Skeleton */}
@@ -176,12 +170,11 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type KeyboardLayout } from "@/lib/keybindings";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -219,7 +212,6 @@ import {
   X,
   Loader2,
   BookOpen,
-  Eye,
   Maximize2,
   Languages,
   Pin,
@@ -347,7 +339,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       where: normalizedSlug
         ? sql`lower(${users.slug}) = ${normalizedSlug}`
         : sql`0 = 1`,
-      columns: { id: true, discordId: true, profileVisibility: true },
+      columns: { id: true, discordId: true, profileVisibility: true, mcid: true, showRankedStats: true },
     }),
   ]);
 
@@ -369,8 +361,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
+  // 本人判定（上の非公開プロフィール判定と同じ discordId 比較）
+  const isOwner = session?.user?.id === gate.discordId;
+
+  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
+  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
+  // gate.id だけで引けるため、重い player クエリと並列に走らせる
+  const presetsPromise = db.query.configPresets.findMany({
+    where: eq(configPresets.userId, gate.id),
+    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
+    columns: {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      isMain: true,
+    },
+    extras: {
+      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
+      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
+    },
+  });
+
   // Fetch player with all related data（ゲートを通過した場合のみ、内部IDで重いクエリを実行）
-  const player = await db.query.users.findFirst({
+  const playerPromise = db.query.users.findFirst({
     where: eq(users.id, gate.id),
     with: {
       playerConfig: true,
@@ -409,54 +423,100 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
-  // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
-  if (!player) {
-    throw new Response(t("playerProfile.notFound"), { status: 404 });
-  }
-
-  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
-  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
-  const presets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, player.id),
-    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
+  // プレイヤーの公開ガイドを取得（gate.id だけで引けるため player クエリと並列）
+  const guidesPromise = db.query.guides.findMany({
+    where: (g, { and, eq }) => and(eq(g.authorId, gate.id), eq(g.isPublished, true)),
+    // ピン留めを先頭に表示
+    orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
     columns: {
       id: true,
-      name: true,
-      description: true,
-      isActive: true,
-      isMain: true,
+      slug: true,
+      title: true,
+      summary: true,
+      tags: true,
+      coverImageUrl: true,
+      viewCount: true,
+      updatedAt: true,
+      isPinned: true,
     },
-    extras: {
-      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
-      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
-    },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
+  }).then(async (rows) => {
+    // ガイドの自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
+    const translations = await getGuideTranslations(db, rows.map((g) => g.id), viewerLocale);
+    return rows.map((g) => applyGuideTranslation(g, translations));
   });
+
+  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
+  const reactionsPromise = (async (): Promise<{
+    counts: ProfileReactionCount[];
+    viewerReactions: string[];
+    viewerHasAccount: boolean;
+  }> => {
+    // 本人なら gate.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
+    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
+    const viewerUserId = isOwner
+      ? gate.id
+      : session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          }))?.id ?? null)
+        : null;
+    const [counts, viewerReactions] = await Promise.all([
+      getProfileReactionCounts(db, gate.id),
+      getViewerProfileReactions(db, gate.id, viewerUserId),
+    ]);
+    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
+  })();
+
+  // PaceManの統計情報を取得（MCIDがある場合のみ）
+  const pacemanPromise = (async () => {
+    if (!gate.mcid) return null;
+    try {
+      const [netherEnterCount, mainPaces] = await Promise.all([
+        getNetherEnterCount(gate.mcid),
+        getRecentPacesForPlayer(gate.mcid, 10),
+      ]);
+      return { netherEnterCount, mainPaces };
+    } catch (error) {
+      console.error("Failed to fetch PaceMan stats:", error);
+      return null;
+    }
+  })();
+
+  // Minefolio内 Elo 順位（rankings-query.server.ts の cron キャッシュ基準）。
+  // 公開プロフィール かつ Ranked統計を非表示にしていない場合のみ取得する
+  // （/rankings ranked_elo タブと同じ絞り込み条件 = getMinefolioEloRank 内で判定）
+  const eloRankPromise =
+    gate.profileVisibility !== "public" || gate.showRankedStats === false
+      ? Promise.resolve(null)
+      : getMinefolioEloRank(db, gate.id);
 
   // 表示プリセットの解決: `?preset=` が有効ならそのプリセット、
   // 無指定・不正・削除済みの場合はメイン（公開用）プリセットへフォールバック。
   // メインが無い場合（移行前データ等）は編集中プリセットへさらにフォールバック
-  const requestedPreset = presetId
-    ? presets.find((p) => p.id === presetId)
-    : undefined;
-  const selectedPreset =
-    requestedPreset ??
-    presets.find((p) => p.isMain) ??
-    presets.find((p) => p.isActive) ??
-    null;
-
-  // Check if current user is viewing their own profile
-  // （上の非公開プロフィール判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
-  const isOwner = session?.user?.id === player.discordId;
+  const resolveSelectedPreset = (presets: Awaited<typeof presetsPromise>) => {
+    const requestedPreset = presetId
+      ? presets.find((p) => p.id === presetId)
+      : undefined;
+    return (
+      requestedPreset ??
+      presets.find((p) => p.isMain) ??
+      presets.find((p) => p.isActive) ??
+      null
+    );
+  };
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
   // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
-  const resolvePresetOverride = async () => {
-    if (!selectedPreset || selectedPreset.isActive) return null;
+  const presetOverridePromise = presetsPromise.then(async (presets) => {
+    const selected = resolveSelectedPreset(presets);
+    if (!selected || selected.isActive) return null;
     const presetSnapshot = await db.query.configPresets.findFirst({
-      where: eq(configPresets.id, selectedPreset.id),
+      where: eq(configPresets.id, selected.id),
       columns: {
         keybindingsData: true,
         playerConfigData: true,
@@ -469,89 +529,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         customActionsData: true,
       },
     });
-    return decodePresetConfig(presetSnapshot ?? {}, player.id);
-  };
+    return decodePresetConfig(presetSnapshot ?? {}, gate.id);
+  });
 
-  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
-  const resolveProfileReactions = async (): Promise<{
-    counts: ProfileReactionCount[];
-    viewerReactions: string[];
-    viewerHasAccount: boolean;
-  }> => {
-    // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
-    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
-    const viewerUserId = isOwner
-      ? player.id
-      : session
-        ? ((await db.query.users.findFirst({
-            where: eq(users.discordId, session.user.id),
-            columns: { id: true },
-          }))?.id ?? null)
-        : null;
-    const [counts, viewerReactions] = await Promise.all([
-      getProfileReactionCounts(db, player.id),
-      getViewerProfileReactions(db, player.id, viewerUserId),
-    ]);
-    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
-  };
-
-  // PaceManの統計情報を取得（MCIDがある場合のみ）
-  const resolvePacemanStats = async () => {
-    if (!player.mcid) return null;
-    try {
-      const [netherEnterCount, mainPaces] = await Promise.all([
-        getNetherEnterCount(player.mcid),
-        getRecentPacesForPlayer(player.mcid, 10),
-      ]);
-      return { netherEnterCount, mainPaces };
-    } catch (error) {
-      console.error("Failed to fetch PaceMan stats:", error);
-      return null;
-    }
-  };
-
-  // Minefolio内 Elo 順位（rankings-query.server.ts の cron キャッシュ基準）。
-  // 公開プロフィール かつ Ranked統計を非表示にしていない場合のみ取得する
-  // （/rankings ranked_elo タブと同じ絞り込み条件 = getMinefolioEloRank 内で判定）
-  const resolveMinefolioEloRank = async () => {
-    if (player.profileVisibility !== "public" || player.showRankedStats === false) return null;
-    return getMinefolioEloRank(db, player.id);
-  };
-
-  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計・
-  // Minefolio内順位は互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
+  // gate 通過後に必要なクエリはすべて互いに独立（gate.id・session だけで引ける）ため、
+  // 重い player クエリと一緒に1つの Promise.all で並列実行する
   // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
-  const [presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
-    resolvePresetOverride(),
-    resolveProfileReactions(),
-    // プレイヤーの公開ガイドを取得
-    db.query.guides.findMany({
-      where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
-      // ピン留めを先頭に表示
-      orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
-      columns: {
-        id: true,
-        slug: true,
-        title: true,
-        summary: true,
-        tags: true,
-        coverImageUrl: true,
-        viewCount: true,
-        updatedAt: true,
-        isPinned: true,
-      },
-      extras: { likeCount: guideLikeCountSql().as("like_count") },
-    }).then(async (rows) => {
-      // ガイドの自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
-      const translations = await getGuideTranslations(db, rows.map((g) => g.id), viewerLocale);
-      return rows.map((g) => applyGuideTranslation(g, translations));
-    }),
-    resolvePacemanStats(),
-    resolveMinefolioEloRank(),
+  const [player, presets, presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
+    playerPromise,
+    presetsPromise,
+    presetOverridePromise,
+    reactionsPromise,
+    guidesPromise,
+    pacemanPromise,
+    eloRankPromise,
     // bio / shortBio の自動翻訳（docs/translation.md）。訳文が使えない（機能無効・opt-out・失効・
-    // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する
-    getUserBioTranslation(db, player, viewerLocale),
+    // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する。player 取得後に続けて走る
+    playerPromise.then((p) => (p ? getUserBioTranslation(db, p, viewerLocale) : null)),
   ]);
+
+  // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
+  if (!player) {
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
+  }
+
+  const selectedPreset = resolveSelectedPreset(presets);
 
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
@@ -719,14 +721,6 @@ export default function PlayerProfilePage() {
     const customLabel = customKeyLabelByCode.get(normalizeKeyCode(keyCode));
     if (customLabel) return customLabel;
     return getKeyLabel(t, keyCode);
-  };
-  const resolveKeyCombinationLabel = (combo: string): string => {
-    if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
-    const parsed = parseKeyCombination(combo);
-    const keyLabel = resolveKeyLabel(parsed.keyCode);
-    if (parsed.modifiers.length === 0) return keyLabel;
-    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
-    return [...modifierLabels, keyLabel].join("+");
   };
   // 同時押しを別 chip で並べるためのラベル配列ヘルパー
   const resolveKeyCombinationChips = (combo: string): string[] => {
@@ -2299,19 +2293,6 @@ function ItemLayoutRow({
 
 // KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
 
-// pbVideoUrl は http/https のみをリンク化する。過去に保存された javascript: 等の危険な
-// スキームを href として DOM に到達させないためのレンダー時ガード（書き込み側の検証は
-// routes/me/records.tsx にもある）。F6 所有の app/lib/safe-url.ts には依存しない局所実装。
-function isHttpVideoUrl(value: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return false;
-  }
-  return parsed.protocol === "http:" || parsed.protocol === "https:";
-}
-
 type RecordCardRecord = {
   id: string;
   category: string;
@@ -2331,7 +2312,6 @@ function RecordCard({
   record: RecordCardRecord;
 }) {
   const t = useT();
-  const locale = useLocale();
   return (
     // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
     <Card className={cn("gap-3 py-5", record.isPinned && "md:col-span-2 border-primary/40")}>
@@ -2366,7 +2346,7 @@ function RecordCard({
             )}
           </div>
         )}
-        {record.pbVideoUrl && isHttpVideoUrl(record.pbVideoUrl) && (
+        {record.pbVideoUrl && isHttpUrl(record.pbVideoUrl) && (
           <Button variant="outline" size="sm" asChild className="w-full mt-2">
             <a
               href={record.pbVideoUrl}
@@ -2469,7 +2449,6 @@ function formatCompactCount(count: number, locale: Locale): string {
 // 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
 function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
   const t = useT();
-  const locale = useLocale();
   const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
   const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
   const [stats, setStats] = useState<SocialStatsData | null>(null);
@@ -2658,27 +2637,6 @@ function CursorSpeedValue({ config }: { config: MouseReasonConfig }) {
       {cursorSpeed}
       <span className="ml-1 text-muted-foreground">DPI</span>
     </>
-  );
-}
-
-function SettingBadge({
-  label,
-  enabled,
-}: {
-  label: string;
-  enabled: boolean | null;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  if (enabled === null) return null;
-
-  return (
-    <div className="flex items-center gap-2">
-      <Badge variant={enabled ? "default" : "secondary"}>
-        {enabled ? t("common.on") : t("common.off")}
-      </Badge>
-      <span className="text-sm">{label}</span>
-    </div>
   );
 }
 
