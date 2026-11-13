@@ -63,13 +63,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = resolveLocale(request);
 
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
-  const viewer = session
-    ? await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      })
-    : null;
+  // viewer（session → users）と一覧の取得は互いに独立なので並行する（rows は下で起動）
+  const viewerPromise = getOptionalSession(request, auth).then((session) =>
+    session
+      ? db.query.users.findFirst({
+          where: eq(users.discordId, session.user.id),
+          columns: { id: true },
+        })
+      : null
+  );
 
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
@@ -99,7 +101,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       ? [desc(likeCount), desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)]
       : [desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)];
 
-  const rows = await db
+  const rowsPromise = db
     .select({
       id: searchCraftTemplates.id,
       title: searchCraftTemplates.title,
@@ -121,6 +123,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .where(and(...conditions))
     .orderBy(...orderBy)
     .limit(100);
+
+  const [viewer, rows] = await Promise.all([viewerPromise, rowsPromise]);
 
   let templates = rows.map((row) => ({
     id: row.id,
