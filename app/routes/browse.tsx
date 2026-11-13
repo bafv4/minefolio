@@ -1,5 +1,5 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
+import { useLoaderData, useSearchParams, useNavigation, Form, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
@@ -139,6 +139,17 @@ const INPUT_METHOD_LABELS: Record<string, string> = {
   touch: "Touch",
 };
 
+// view（表示形式）だけが変わるナビゲーションではサーバーデータが同一なので再取得しない
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  const strip = (url: URL) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("view");
+    return `${url.pathname}?${p.toString()}`;
+  };
+  if (strip(currentUrl) === strip(nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
+
 export default function BrowsePage() {
   const t = useT();
   const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
@@ -162,7 +173,18 @@ export default function BrowsePage() {
     extraParams: isLoggedIn ? { auth: "1" } : undefined,
   });
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  // 表示形式は URL の ?view=list に保持（既定のカードはパラメータなし）。
+  // 切替は履歴を積まない replace で行う（戻るボタンが表示切替で消費されないように）
+  const viewMode: "card" | "list" = searchParams.get("view") === "list" ? "list" : "card";
+  const setViewMode = (mode: "card" | "list") => {
+    const newParams = new URLSearchParams(searchParams);
+    if (mode === "list") {
+      newParams.set("view", "list");
+    } else {
+      newParams.delete("view");
+    }
+    setSearchParams(newParams, { replace: true, preventScrollReset: true });
+  };
 
   // ダイアログ内のドラフト状態（「完了」ボタンで適用）
   const [draftFilters, setDraftFilters] = useState(filters);

@@ -39,6 +39,11 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 `?sort=` は許可リスト（`BROWSE_SORTS` = 上記4値、`app/lib/browse-query.server.ts`）で検証し、未知の値は既定の `updatedAt` へ丸める（`parseBrowseSort()`）。ガイド・テンプレート一覧の `parseContentSort()` と同じ「不正な `sort` はエラーにせず既定へフォールバックする」方針を踏襲している。
 
+
+### 表示形式（カード / リスト）
+
+クエリパラメータ `view` に保持する。`?view=list` のときリスト、それ以外（既定のカード）はパラメータを付けない。切替は `replace`（履歴を積まない）で、フィルタ・並び順・ページ等の他のクエリは保持する。`view` だけが変わるナビゲーションでは loader を再実行しない（`shouldRevalidate`）。localStorage は使わない。
+
 ### フィルタ（複数選択対応）
 
 | パラメータ | 型 | 選択肢 |
