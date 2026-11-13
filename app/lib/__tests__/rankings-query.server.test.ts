@@ -181,6 +181,24 @@ describe("getMinefolioEloRank", () => {
     expect(await getMinefolioEloRank(db, last.id)).toEqual({ rank: 4, total: 4 });
   });
 
+  it("絞り込み対象外（非公開・Ranked統計非表示・Elo未確定・speedruncom 行）は順位にも総数にも数えない", async () => {
+    const db = await createTestDb();
+    const me = await seedUser(db, { slug: "me", mcid: "Me", showRankedStats: true });
+    const priv = await seedUser(db, { slug: "priv", mcid: "Priv", profileVisibility: "private", showRankedStats: true });
+    const off = await seedUser(db, { slug: "off2", mcid: "Off2", showRankedStats: false });
+    const noElo = await seedUser(db, { slug: "no-elo", mcid: "NoElo", showRankedStats: true });
+    const other = await seedUser(db, { slug: "other", mcid: "Other", showRankedStats: true });
+
+    await seedPlayerRanking(db, me.id, { rankingType: "ranked_elo", eloRate: 1000 });
+    await seedPlayerRanking(db, priv.id, { rankingType: "ranked_elo", eloRate: 3000 });
+    await seedPlayerRanking(db, off.id, { rankingType: "ranked_elo", eloRate: 3000 });
+    await seedPlayerRanking(db, noElo.id, { rankingType: "ranked_elo", eloRate: null });
+    await seedPlayerRanking(db, other.id, { rankingType: "ranked_elo", eloRate: 1200 });
+
+    expect(await getMinefolioEloRank(db, me.id)).toEqual({ rank: 2, total: 2 });
+    expect(await getMinefolioEloRank(db, noElo.id)).toBeNull();
+  });
+
   it("対象ユーザーが非公開プロフィールなら null", async () => {
     const db = await createTestDb();
     const hidden = await seedUser(db, {
