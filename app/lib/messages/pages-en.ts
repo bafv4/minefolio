@@ -1980,7 +1980,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     presetRequiredNotice:
       "Editing becomes available once you create a preset. Existing settings are view-only.",
     presetRequiredLink: "Create a preset",
-    pressKeyToAssign: "Press a key / Esc to leave unused",
+    pressKeyToAssign: "Press a key (Esc to cancel)",
+    keyRowAriaLabel: "{action}: {key} (click to change key)",
     remapsTitle: "Key remaps",
     fingersTitle: "Finger assignments",
     remapsNotConfigured: "No remaps have been set",

@@ -918,6 +918,11 @@ type CustomKeyEntry = {
 // キーキャプチャボタンは @/components/key-capture-button、
 // リマップ行（RemapRow / DialogRemapRow）は @/components/remap-row に抽出済み
 
+const MODIFIER_CODES = new Set([
+  "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
+  "AltLeft", "AltRight", "MetaLeft", "MetaRight",
+]);
+
 // キーバインド行コンポーネント（フォーカス状態をローカルで持つため独立コンポーネントに分割。
 // .map() コールバック内での useState 呼び出しは Rules of Hooks 違反になるため避ける）
 function KeybindingRow({
@@ -932,10 +937,22 @@ function KeybindingRow({
   getKeyLabelWithCustom: (keyCode: string) => string;
 }) {
   const t = useT();
-  const [isFocused, setIsFocused] = useState(false);
+  // フォーカスだけではキャプチャしない。クリック / Enter / Space で明示的に開始する
+  const [isCapturing, setIsCapturing] = useState(false);
+  const actionLabel = getActionLabel(t, kb.action);
+  const currentKeyLabel = isUnbound(kb.keyCode)
+    ? t("meKeybindings.notUsed")
+    : kb.keyCode
+      ? getKeyLabelWithCustom(kb.keyCode)
+      : t("meKeybindings.unassigned");
+  const commitKey = (e: React.SyntheticEvent, keyCode: string) => {
+    updateKeybindingKey(kb.id, keyCode);
+    setIsCapturing(false);
+    (e.currentTarget as HTMLElement).blur();
+  };
   return (
     <div className="flex items-center justify-between gap-2 py-2.5">
-      <span className="text-sm">{getActionLabel(t, kb.action)}</span>
+      <span className="text-sm">{actionLabel}</span>
       <div className="flex items-center gap-1">
         {isControllerMode ? (
           /* コントローラーモード: ドロップダウンでボタン選択 */
@@ -967,28 +984,51 @@ function KeybindingRow({
           /* キーボード/マウスモード: キーキャプチャ */
           <button
             type="button"
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+            aria-label={
+              isCapturing
+                ? t("meKeybindings.pressKeyToAssign")
+                : t("meKeybindings.keyRowAriaLabel", { action: actionLabel, key: currentKeyLabel })
+            }
+            onClick={() => setIsCapturing(true)}
+            onBlur={() => setIsCapturing(false)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                // ESCキーで不使用に設定
-                e.preventDefault();
-                updateKeybindingKey(kb.id, UNBOUND_KEY);
-                (e.target as HTMLElement).blur();
-              } else if (!["Tab", "Enter"].includes(e.key)) {
-                e.preventDefault();
-                updateKeybindingKey(kb.id, e.code);
-                (e.target as HTMLElement).blur();
+              if (!isCapturing) {
+                // 開始は Enter / Space のみ（他のキーは何もしない）
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsCapturing(true);
+                }
+                return;
               }
+              if (e.key === "Tab") {
+                // Tab / Shift+Tab はキャプチャせず、キャプチャを抜けてフォーカス移動に任せる
+                setIsCapturing(false);
+                return;
+              }
+              e.preventDefault();
+              if (e.repeat) return;
+              if (e.key === "Escape") {
+                // Esc はキャンセル（何も変更しない）。解除は × ボタンから
+                setIsCapturing(false);
+                return;
+              }
+              // 修飾キーは keyup まで確定しない（他のキーとの併用で誤って割り当てないため）
+              if (MODIFIER_CODES.has(e.code)) return;
+              commitKey(e, e.code);
+            }}
+            onKeyUp={(e) => {
+              if (!isCapturing || !MODIFIER_CODES.has(e.code)) return;
+              e.preventDefault();
+              commitKey(e, e.code);
             }}
             className={cn(
               "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
               "bg-secondary/50 hover:bg-secondary/70",
               "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-              isFocused ? "border-primary" : "border-input"
+              isCapturing ? "border-primary" : "border-input"
             )}
           >
-            {isFocused ? (
+            {isCapturing ? (
               <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyToAssign")}</span>
             ) : isUnbound(kb.keyCode) ? (
               <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
@@ -999,6 +1039,9 @@ function KeybindingRow({
             )}
           </button>
         )}
+        <span className="sr-only" aria-live="polite">
+          {isCapturing && !isControllerMode ? t("meKeybindings.pressKeyToAssign") : ""}
+        </span>
         <Button
           type="button"
           variant="ghost"
