@@ -3,6 +3,7 @@ import { del } from "@vercel/blob";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { plainJsonResponse, requireApiUser } from "@/lib/api-auth.server";
 import { isVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -15,29 +16,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  // 認証チェック
-  const session = await auth.api.getSession({
-    headers: request.headers,
-  });
-
-  if (!session) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // ユーザー取得
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
-
-  if (!user) {
-    return new Response(JSON.stringify({ error: "User not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  // 認証チェック（未ログイン 401 / users 行なし 404）
+  const { user, response } = await requireApiUser(db, auth, request, ["customCapeUrl"]);
+  if (!user) return response;
 
   const method = request.method.toUpperCase();
 
@@ -64,18 +45,10 @@ export async function action({ request }: ActionFunctionArgs) {
         })
         .where(eq(users.id, user.id));
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return plainJsonResponse({ success: true });
     } catch (error) {
       console.error("Delete cape error:", error);
-      return new Response(
-        JSON.stringify({ error: "Failed to delete cape" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return plainJsonResponse({ error: "Failed to delete cape" }, { status: 500 });
     }
   }
 
@@ -85,25 +58,16 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       body = await request.json();
     } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return plainJsonResponse({ error: "Invalid JSON" }, { status: 400 });
     }
     if (body === null || typeof body !== "object") {
-      return new Response(JSON.stringify({ error: "Invalid request" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return plainJsonResponse({ error: "Invalid request" }, { status: 400 });
     }
 
     const { url } = body as { url?: unknown };
 
     if (!url || typeof url !== "string") {
-      return new Response(JSON.stringify({ error: "URL is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return plainJsonResponse({ error: "URL is required" }, { status: 400 });
     }
 
     try {
@@ -111,10 +75,7 @@ export async function action({ request }: ActionFunctionArgs) {
       // 部分文字列一致（includes）はフラグメント等ですり抜けられるため、
       // new URL() でパースしてホスト名を許可リスト判定する（SSRF 対策）。
       if (!isVercelBlobUrl(url)) {
-        return new Response(JSON.stringify({ error: "Invalid blob URL" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return plainJsonResponse({ error: "Invalid blob URL" }, { status: 400 });
       }
 
       // 古いBlobを削除（新しいものと異なる場合）
@@ -136,29 +97,12 @@ export async function action({ request }: ActionFunctionArgs) {
         })
         .where(eq(users.id, user.id));
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          customCapeUrl: url,
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return plainJsonResponse({ success: true, customCapeUrl: url });
     } catch (error) {
       console.error("Save cape error:", error);
-      return new Response(
-        JSON.stringify({ error: "Failed to save cape" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return plainJsonResponse({ error: "Failed to save cape" }, { status: 500 });
     }
   }
 
-  return new Response(JSON.stringify({ error: "Method not allowed" }), {
-    status: 405,
-    headers: { "Content-Type": "application/json" },
-  });
+  return plainJsonResponse({ error: "Method not allowed" }, { status: 405 });
 }

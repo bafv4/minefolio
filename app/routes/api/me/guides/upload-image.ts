@@ -3,46 +3,24 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { plainJsonResponse, requireApiUser } from "@/lib/api-auth.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
-  if (!user) {
-    return new Response(JSON.stringify({ error: "User not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const { user, response } = await requireApiUser(db, auth, request, []);
+  if (!user) return response;
 
   let parsedBody: unknown;
   try {
     parsedBody = await request.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return plainJsonResponse({ error: "Invalid JSON" }, { status: 400 });
   }
   if (parsedBody === null || typeof parsedBody !== "object") {
-    return new Response(JSON.stringify({ error: "Invalid request" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return plainJsonResponse({ error: "Invalid request" }, { status: 400 });
   }
   const body = parsedBody as HandleUploadBody;
 

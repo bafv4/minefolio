@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { requireApiUser } from "@/lib/api-auth.server";
 import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { validateMcidFormat } from "@/lib/profile-edit-validation";
 import { users } from "@/lib/schema";
@@ -27,21 +28,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const user = await db.query.users.findFirst({ where: eq(users.discordId, session.user.id) });
-  if (!user) {
-    return new Response(JSON.stringify({ error: "User not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const { user, response } = await requireApiUser(db, auth, request, []);
+  if (!user) return response;
 
   const mcid = (new URL(request.url).searchParams.get("mcid") ?? "").trim();
   if (validateMcidFormat(mcid)) return json({ status: "invalid" });
