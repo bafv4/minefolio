@@ -269,8 +269,8 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - ローダーは公開版の原文を `getGuideTranslation()` に渡し、訳文（title / summary / 本文）が使えれば**既定で訳文を表示**する。使えない（機能無効・著者がオプトアウト・失効・未公開・原文と閲覧ロケールが同じ）ときは `null` で、従来どおり原文。**ドラフトプレビュー（`?draft=1`）では翻訳を引かない**
 - 訳文の本文も原文と同じ経路（サニタイズ → 表の整形 → 目次 → 埋め込みの抽出・描画 → `guide-content`）で描画するため、キー配置・サーチクラフト・ガイドリンクの埋め込みは訳文でも同じに動く（埋め込み div は翻訳対象外で原文のまま）
-- 記事上部（タグ行とメタ帯の間）に `GuideAutoTranslateBanner`（`app/components/guide-auto-translate-banner.tsx`）を出す。「この記事は自動翻訳です · 原文（日本語）を表示」。色は `border-info/40 bg-info/10`。誤訳が意味の反転になりうる技術記事のため、バナーと原文への切替は必須要素
-- **原文への切替は `?original=1`**（SSR で出し分け。共有・再読み込みでも状態が保てる）。原文表示中は「原文（日本語）を表示中 · 翻訳を表示」に変わり、クエリから `original` を外すだけで訳文に戻る。他のクエリ（`draft` 等）は維持する。原文ロケール名は `sourceLocale` から `LOCALE_NAMES` で引く
+- 記事上部（タグ行とメタ帯の間）に共通の `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。プロフィールと共用）を出す。「自動翻訳 · 原文を表示」（文言キーは `playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。色は `border-info/40 bg-info/10`。誤訳が意味の反転になりうる技術記事のため、注記と原文への切替は必須要素
+- **原文への切替は `?original=1`**（SSR で出し分け。共有・再読み込みでも状態が保てる）。原文表示中は「原文を表示中 · 翻訳を表示」に変わり、クエリから `original` を外すだけで訳文に戻る。他のクエリ（`draft` 等）は維持する
 - 訳文があるとき（原文表示中も含む）だけローダーが `autoTranslation: { sourceLocale, showingOriginal }` を返す。無いときは `null`＝バナーを出さない
 - **meta / OGP は常に原文**（クローラーには常に日本語。ローダーが `guide.metaTitle` / `guide.metaSummary` を別に返す）
 
@@ -374,7 +374,7 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 
 - `app/components/guide-editor/index.tsx` — TipTapガイドエディタ
 - `app/components/guide-list-views.tsx` — ガイド一覧のグリッド/リスト表示
-- `app/components/guide-auto-translate-banner.tsx` — 自動翻訳バナーと原文切替リンク（`?original=1`）
+- `app/components/auto-translate-notice.tsx` — 自動翻訳の注記と原文切替（ガイドは `to`＝`?original=1` のリンク、プロフィールは `onToggle`）
 - `app/lib/guide-translation-list.ts` — 一覧行へ訳文を適用する純関数（`applyGuideTranslation`）
 
 ### API

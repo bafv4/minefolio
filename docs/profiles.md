@@ -671,7 +671,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 - loader が `getUserBioTranslation(db, player, resolveLocale(request))`（`app/lib/content-translation.server.ts`）を呼び、`bioTranslation`（`{ bio, shortBio, sourceLocale }` | `null`）を返す。`player` の原文も従来どおり返すため、訳文と原文の両方がクライアントに渡る（500字以内で負担は小さい）。`null` は機能無効・オプトアウト・失効・原文と閲覧ロケールが同じ、のいずれかで、その場合は原文のみ
 - SSR 時点で訳文が出る（切替前に原文が一瞬見えることはない）。切替はクライアント状態（`showBioOriginal`）のみで、`bio` と `shortBio` が同時に切り替わる
-- 訳文が存在する欄の近くに `AutoTranslateNotice`（`app/components/profile/auto-translate-notice.tsx`）を出す: ヘッダーカードの `shortBio` の下と Bio カードの見出し直下。「自動翻訳 · 原文を表示」→ 原文表示中は「原文を表示中 · 翻訳を表示」（`playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。自動翻訳を著者の言葉として黙って出さないための必須要素
+- 訳文が存在する欄の近くに `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。ガイド記事ページと共通で、切替は `onToggle`〈ボタン〉または `to`〈URL リンク〉）を出す: ヘッダーカードの `shortBio` の下と Bio カードの見出し直下。「自動翻訳 · 原文を表示」→ 原文表示中は「原文を表示中 · 翻訳を表示」（`playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。自動翻訳を著者の言葉として黙って出さないための必須要素
 - 訳文の `bio` も原文と同じ `BioMarkdown`（`react-markdown` + `rehype-sanitize`）で描画する
 - `<meta>` の description / OGP・シェアの文面は原文（`shortBio`）のまま。一覧カード（`/browse`・ホーム・`/compare` 等）の `shortBio` は**未対応**（原文表示）
 

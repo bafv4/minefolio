@@ -6,10 +6,6 @@ export const PAGES_JA = {
     copy: "コピー",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
-    autoTranslatedNotice: "この記事は自動翻訳です",
-    viewingOriginalNotice: "原文（{language}）を表示中",
-    showOriginal: "原文（{language}）を表示",
-    showTranslation: "翻訳を表示",
   },
   /** テーマ切替（components/layout/theme-toggle.tsx） */
   theme: {

@@ -17,10 +17,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     draftPreviewNotice:
       "You're viewing a draft preview. It may differ from the published version.",
     embedUserNotFound: 'User "{slug}" not found',
-    autoTranslatedNotice: "This article was automatically translated",
-    viewingOriginalNotice: "Showing the original ({language})",
-    showOriginal: "Show original ({language})",
-    showTranslation: "Show translation",
   },
   theme: {
     toggle: "Toggle theme",

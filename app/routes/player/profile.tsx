@@ -76,7 +76,7 @@ import type { TwitchChannelStats } from "@/lib/twitch";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { getGuideTranslations, getUserBioTranslation } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
-import { AutoTranslateNotice } from "@/components/profile/auto-translate-notice";
+import { AutoTranslateNotice } from "@/components/auto-translate-notice";
 
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;

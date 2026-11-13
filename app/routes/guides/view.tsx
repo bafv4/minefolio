@@ -1,10 +1,11 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getGuideTranslation } from "@/lib/content-translation.server";
-import { GuideAutoTranslateBanner } from "@/components/guide-auto-translate-banner";
+import { AutoTranslateNotice } from "@/components/auto-translate-notice";
 import {
   useLoaderData,
   Link,
+  useSearchParams,
   redirect,
   type LoaderFunctionArgs,
 } from "react-router";
@@ -405,6 +406,15 @@ export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
   const { guide, author, embedUsers, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+  // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
+  const translationToggleSearch = (() => {
+    const next = new URLSearchParams(searchParams);
+    if (autoTranslation?.showingOriginal) next.delete("original");
+    else next.set("original", "1");
+    const s = next.toString();
+    return s ? `?${s}` : "";
+  })();
   const tags = parseGuideTags(guide.tags);
   const authorName = getLocalizedDisplayName(author, locale);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -532,9 +542,10 @@ export default function GuideViewPage() {
 
       {/* 自動翻訳の注記と原文切替（自動翻訳を著者の言葉として黙って出さない。docs/translation.md） */}
       {autoTranslation && (
-        <GuideAutoTranslateBanner
-          sourceLocale={autoTranslation.sourceLocale}
-          showingOriginal={autoTranslation.showingOriginal}
+        <AutoTranslateNotice
+          showOriginal={autoTranslation.showingOriginal}
+          to={{ search: translationToggleSearch }}
+          className="mb-6"
         />
       )}
 
