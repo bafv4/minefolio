@@ -2295,6 +2295,7 @@ export default function EditProfilePage() {
                 {draft.videos.map((video, index) => {
                   const thumbnail = getYouTubeThumbnailUrl(video.url);
                   const rowError = fieldErrors.videos?.[video.key];
+                  const videoLabel = video.title || t("meEdit.videoNoTitle");
                   const pending = video.id === null || isVideoEdited(video);
                   return (
                     <div key={video.key} className="space-y-1">
@@ -2331,6 +2332,7 @@ export default function EditProfilePage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={t("meEdit.moveUpItemAria", { label: videoLabel })}
                             type="button"
                             disabled={isSubmitting || index === 0}
                             onClick={() => handleVideoMove(video.key, "up")}
@@ -2340,16 +2342,17 @@ export default function EditProfilePage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={t("meEdit.moveDownItemAria", { label: videoLabel })}
                             type="button"
                             disabled={isSubmitting || index === draft.videos.length - 1}
                             onClick={() => handleVideoMove(video.key, "down")}
                           >
                             <ArrowDown className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" type="button" disabled={isSubmitting} onClick={() => handleOpenVideoEdit(video)}>
+                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleOpenVideoEdit(video)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" type="button" disabled={isSubmitting} onClick={() => handleVideoRemove(video.key)}>
+                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleVideoRemove(video.key)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -2604,10 +2607,10 @@ export default function EditProfilePage() {
                         {link.id !== null && isLinkEdited(link) && (
                           <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
                         )}
-                        <Button variant="ghost" size="icon" type="button" disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
+                        <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" type="button" disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
+                        <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -2666,8 +2669,8 @@ export default function EditProfilePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between p-4 border border-destructive/30 rounded-lg bg-destructive/5">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border border-destructive/30 rounded-lg bg-destructive/5">
+            <div className="min-w-0 flex-1 basis-56">
               <p className="font-medium">{t("meEdit.deleteAccount")}</p>
               <p className="text-sm text-muted-foreground">
                 {t("meEdit.deleteAccountDesc")}
