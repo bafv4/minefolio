@@ -221,13 +221,6 @@ export async function importFromLegacy(
       };
     }
 
-    // デバッグログ: インポートされるデータの確認
-    console.log("[Legacy Import] Data keys:", Object.keys(legacyData));
-    console.log("[Legacy Import] remappings:", legacyData.remappings);
-    console.log("[Legacy Import] remappings count:", legacyData.remappings ? Object.keys(legacyData.remappings).length : 0);
-    console.log("[Legacy Import] settings.fingerAssignments:", legacyData.settings?.fingerAssignments);
-    console.log("[Legacy Import] fingerAssignments count:", legacyData.settings?.fingerAssignments ? Object.keys(legacyData.settings.fingerAssignments).length : 0);
-
     let keybindingsImported = 0;
     let customKeysImported = 0;
     let remapsImported = 0;

@@ -1,14 +1,5 @@
 import type { Translator } from "@/lib/messages";
 
-/** users.mainPlatform の許容値（schema.ts と同じ列挙） */
-export type MainPlatform =
-  | "pc_windows"
-  | "pc_mac"
-  | "pc_linux"
-  | "switch"
-  | "mobile"
-  | "other";
-
 /**
  * メインプレイ環境（users.mainPlatform）の表示ラベルを一箇所に集約する。
  * - "full"（既定）: プロフィール詳細・設定フォームなど余白のあるコンテキスト向け（例: "PC（Windows）"）
