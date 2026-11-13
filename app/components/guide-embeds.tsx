@@ -24,6 +24,7 @@ import {
 import { KeyLabelText } from "@/components/shift-mark";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { decodeHtmlAttr } from "@/lib/guide-embed-attrs";
 import { ArrowRight } from "lucide-react";
 
 // ========================================
@@ -101,21 +102,24 @@ export function extractEmbedRefs(html: string): EmbedRef[] {
   while ((match = regex.exec(html)) !== null) {
     refs.push({
       type: match[1] as "keybind" | "searchcraft",
-      userSlug: match[2],
-      presetName: match[3] || null,
+      userSlug: decodeHtmlAttr(match[2]),
+      presetName: match[3] ? decodeHtmlAttr(match[3]) : null,
     });
   }
   // Also handle the case where data-preset-name comes before data-user-slug
   const regex2 = /data-(keybind|searchcraft)-embed[^>]*data-preset-name="([^"]*)"[^>]*data-user-slug="([^"]*)"[^>]*/g;
   while ((match = regex2.exec(html)) !== null) {
     const existing = refs.find(
-      (r) => r.type === match![1] && r.userSlug === match![3]
+      (r) => r.type === match![1] && r.userSlug === decodeHtmlAttr(match![3])
     );
-    if (!existing) {
+    if (existing) {
+      // 1本目の正規表現は属性が逆順だと presetName を拾えない（末尾の任意グループが空振りする）ため補う
+      if (!existing.presetName && match[2]) existing.presetName = decodeHtmlAttr(match[2]);
+    } else {
       refs.push({
         type: match[1] as "keybind" | "searchcraft",
-        userSlug: match[3],
-        presetName: match[2] || null,
+        userSlug: decodeHtmlAttr(match[3]),
+        presetName: match[2] ? decodeHtmlAttr(match[2]) : null,
       });
     }
   }
@@ -155,8 +159,8 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
 
     segments.push({
       type: `${embedType}-embed` as "keybind-embed" | "searchcraft-embed",
-      userSlug: slugMatch?.[1] ?? "",
-      presetName: presetMatch?.[1] ?? null,
+      userSlug: slugMatch ? decodeHtmlAttr(slugMatch[1]) : "",
+      presetName: presetMatch ? decodeHtmlAttr(presetMatch[1]) : null,
     });
 
     lastIndex = match.index + match[0].length;

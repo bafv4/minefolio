@@ -46,6 +46,7 @@ import {
   SearchCraftEmbedView,
   type EmbedUserData,
 } from "@/components/guide-embeds";
+import { collectPresetNames } from "@/lib/guide-embed-attrs";
 
 // コードブロックのコピーボタンに innerHTML で挿入する lucide アイコン（Copy / Check）。
 // stroke="currentColor" のため、ボタンの text-muted-foreground / hover 色がそのまま反映される。
@@ -364,10 +365,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const appUrl = env.APP_URL || "https://minefolio.app";
   // 埋め込みが data-preset-name で参照しているプリセット名（クライアントへ送るプリセットの絞り込み用）。
   // extractEmbedRefs の正規表現には取りこぼし得る形があるため、属性値を本文全体から集める（上位集合）
-  const presetNames = new Set<string>();
-  for (const m of contentWithIds.matchAll(/data-preset-name="([^"]*)"/g)) {
-    if (m[1]) presetNames.add(m[1]);
-  }
+  // 属性値は js-xss で HTML エスケープされているため、デコードして DB のプリセット名と比べる
+  const presetNames = collectPresetNames(contentWithIds);
   const embedUsers = await resolveEmbedUsers(db, embedSlugs, presetNames);
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
