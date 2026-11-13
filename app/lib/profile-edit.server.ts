@@ -1,0 +1,771 @@
+// /me/edit の「保存バーでの一括保存」本体（プロフィール列・MCID・リンク・動画を1リクエスト・1トランザクションで保存する）。
+// 仕様は docs/profiles.md「/me/edit の保存方式」。
+//
+// 流れ: ①検証（DB に触れない形式検証 → 既存データを読んだ最終状態の検証 → Mojang 照合）→
+//       ②DB 書き込みを単一トランザクションで実施 → ③commit 後に外部キャッシュのキック（失敗しても保存は成功扱い）。
+// ①で失敗したら DB は1行も変えない。外部 I/O（Mojang）は必ずトランザクションの外（①）で済ませる。
+import { z } from "zod";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
+import type { Translator } from "@/lib/messages";
+import { isUniqueConstraintError, type Database } from "@/lib/db";
+import { users, socialLinks, profileVideos } from "@/lib/schema";
+import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
+import { generateSlug } from "@/lib/slug";
+import { recordSlugChange } from "@/lib/slug-history.server";
+import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import type { CapeDisplay } from "@/lib/cape";
+import type { ProfileTabValue } from "@/lib/profile-tabs";
+import { isValidRtaStartedYearMonth } from "@/lib/rta-career";
+import {
+  runAfterResponse,
+  refreshTwitchVodsForLogin,
+  deleteTwitchVodsForLogin,
+  refreshYoutubeForChannel,
+  deleteYoutubeVideosForChannelIdentifier,
+  updateYoutubeCacheMcid,
+  refreshSrcRankingsForUser,
+} from "@/lib/targeted-refresh.server";
+import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
+import {
+  MAX_PROFILE_VIDEOS,
+  NEW_VIDEO_ORDER_PREFIX,
+  validateBedrockMcidFormat,
+  validateLinkInput,
+  validateMcidFormat,
+  validateVideoInput,
+  type ProfileChanges,
+  type ProfileFieldErrors,
+} from "@/lib/profile-edit-validation";
+
+type UserRow = typeof users.$inferSelect;
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+// enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
+const VISIBILITIES = users.profileVisibility.enumValues;
+const POSES = users.profilePose.enumValues;
+const CAPE_DISPLAYS: readonly string[] = users.capeDisplay.enumValues;
+const PLATFORMS = users.mainPlatform.enumValues;
+const ROLES = users.role.enumValues;
+
+// ============================================
+// 外部キャッシュのキック（リンクの追加/変更/削除）
+// ============================================
+
+/**
+ * ソーシャルリンクの追加/変更に応じて、外部キャッシュ（Twitch VOD / YouTube 動画 /
+ * Speedrun.com・MCSR Rankedランキング）の即時リフレッシュ・削除を `runAfterResponse()` 経由でキックする。
+ * action のレスポンスは待たせない・失敗させない（各関数は内部でエラーを握る）。
+ * 変更が無ければ何もしない。作成時は oldPlatform/oldIdentifier を null で呼ぶ
+ */
+export function scheduleSocialLinkKicks({
+  userId,
+  mcid,
+  oldPlatform,
+  oldIdentifier,
+  newPlatform,
+  newIdentifier,
+}: {
+  userId: string;
+  mcid: string | null;
+  oldPlatform: string | null;
+  oldIdentifier: string | null;
+  newPlatform: string;
+  newIdentifier: string;
+}) {
+  const changed = oldPlatform !== newPlatform || oldIdentifier !== newIdentifier;
+  if (!changed) return;
+
+  // Twitch: 旧がtwitchで(削除またはtwitch以外へ変更/identifier変更)なら旧を削除。新がtwitchなら即時取得。
+  // 旧新が同一チャンネルを指す変更（大文字小文字のみ等）で refresh 完了後に delete が走ると
+  // 次のcronまでキャッシュが空になるため、両方行う場合は必ず削除→取得の順に直列化する
+  const deleteOldTwitch =
+    oldPlatform === "twitch" && oldIdentifier && (newPlatform !== "twitch" || newIdentifier !== oldIdentifier)
+      ? () => deleteTwitchVodsForLogin(oldIdentifier)
+      : null;
+  const refreshNewTwitch =
+    newPlatform === "twitch" ? () => refreshTwitchVodsForLogin(newIdentifier) : null;
+  if (deleteOldTwitch && refreshNewTwitch) {
+    runAfterResponse(deleteOldTwitch().then(refreshNewTwitch));
+  } else if (deleteOldTwitch) {
+    runAfterResponse(deleteOldTwitch());
+  } else if (refreshNewTwitch) {
+    runAfterResponse(refreshNewTwitch());
+  }
+
+  // YouTube: 同上（@ハンドル↔UC-IDの変更も同一チャンネルでありうるため直列化。mcid未設定ユーザーは新規取得をスキップ）
+  const deleteOldYoutube =
+    oldPlatform === "youtube" && oldIdentifier && (newPlatform !== "youtube" || newIdentifier !== oldIdentifier)
+      ? () => deleteYoutubeVideosForChannelIdentifier(oldIdentifier)
+      : null;
+  const refreshNewYoutube =
+    newPlatform === "youtube" && mcid ? () => refreshYoutubeForChannel(newIdentifier, mcid) : null;
+  if (deleteOldYoutube && refreshNewYoutube) {
+    runAfterResponse(deleteOldYoutube().then(refreshNewYoutube));
+  } else if (deleteOldYoutube) {
+    runAfterResponse(deleteOldYoutube());
+  } else if (refreshNewYoutube) {
+    runAfterResponse(refreshNewYoutube());
+  }
+
+  // Speedrun.com: リンクの追加/変更/削除いずれも speedruncomUsername の変更を伴うためランキングを更新
+  if (newPlatform === "speedruncom" || oldPlatform === "speedruncom") {
+    runAfterResponse(refreshSrcRankingsForUser(userId));
+  }
+}
+
+/** リンク削除時に、削除したプラットフォームの外部キャッシュを削除する */
+export function scheduleSocialLinkDeleteKicks(userId: string, link: { platform: string; identifier: string }) {
+  if (link.platform === "twitch") {
+    runAfterResponse(deleteTwitchVodsForLogin(link.identifier));
+  } else if (link.platform === "youtube") {
+    runAfterResponse(deleteYoutubeVideosForChannelIdentifier(link.identifier));
+  } else if (link.platform === "speedruncom") {
+    runAfterResponse(refreshSrcRankingsForUser(userId));
+  }
+}
+
+// ============================================
+// プロフィール列のパース・検証
+// ============================================
+
+type ProfileFields = {
+  displayName: string | null;
+  displayNameAlphabet: string | null;
+  bio: string | null;
+  location: string | null;
+  pronouns: string | null;
+  profileVisibility: "public" | "unlisted" | "private";
+  profilePose: "standing" | "walking" | "waving";
+  slimSkin: boolean;
+  /** 未送信・不正値は null（列を更新対象から外す） */
+  capeDisplay: CapeDisplay | null;
+  defaultProfileTab: ProfileTabValue;
+  mainPlatform: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
+  role: "viewer" | "runner" | null;
+  shortBio: string | null;
+  rtaStartedYearMonth: string | null;
+  speedruncomUsername: string | null;
+  showPacemanOnHome: boolean;
+  showTwitchOnHome: boolean;
+  showYoutubeOnHome: boolean;
+  showRankedStats: boolean;
+  showPacemanStats: boolean;
+  /** 未送信は null（列を更新対象から外す） */
+  allowAutoTranslation: boolean | null;
+};
+
+function parseProfileFields(formData: FormData, t: Translator): { error: string } | { fields: ProfileFields } {
+  const displayName = (formData.get("displayName") as string)?.trim() || null;
+  const displayNameAlphabet = (formData.get("displayNameAlphabet") as string)?.trim() || null;
+  const bio = (formData.get("bio") as string)?.trim() || null;
+  const location = (formData.get("location") as string)?.trim() || null;
+  const pronouns = (formData.get("pronouns") as string)?.trim() || null;
+  const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
+  const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
+  const slimSkin = formData.get("slimSkin") === "true";
+  // マント表示。未送信（null）・不正値は列を更新対象から外す（null や既定値で上書きしない）
+  const capeDisplayRaw = formData.get("capeDisplay");
+  const capeDisplay =
+    typeof capeDisplayRaw === "string" && CAPE_DISPLAYS.includes(capeDisplayRaw)
+      ? (capeDisplayRaw as CapeDisplay)
+      : null;
+  // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
+  // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
+  const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
+  const mainPlatform = (formData.get("mainPlatform") as ProfileFields["mainPlatform"]) || null;
+  const role = (formData.get("role") as "viewer" | "runner") || null;
+  const shortBio = (formData.get("shortBio") as string)?.trim() || null;
+  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
+  const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
+  const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
+  const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
+  const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
+  const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
+  const showRankedStats = formData.get("showRankedStats") === "true";
+  const showPacemanStats = formData.get("showPacemanStats") === "true";
+  // 自己紹介の自動翻訳の許可。未送信（null）・不正値は列を更新対象から外す（既定値で上書きしない）
+  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
+  const allowAutoTranslation =
+    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
+
+  if (displayName && displayName.length > 50) return { error: t("meEdit.displayNameMax") };
+  if (displayNameAlphabet && displayNameAlphabet.length > 50) {
+    return { error: t("meEdit.displayNameAlphabetMax") };
+  }
+  // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
+  if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
+    return { error: t("meEdit.displayNameAlphabetInvalid") };
+  }
+  if (bio && bio.length > 500) return { error: t("meEdit.bioMax") };
+  if (location && location.length > 100) return { error: t("meEdit.locationMax") };
+  if (shortBio && shortBio.length > 50) return { error: t("meEdit.shortBioMax") };
+  if (pronouns && pronouns.length > 20) return { error: t("meEdit.pronounsMax") };
+  if (!VISIBILITIES.includes(profileVisibility)) return { error: t("meEdit.invalidOption") };
+  if (profilePose !== null && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
+  if (capeDisplayRaw !== null && capeDisplay === null) return { error: t("meEdit.invalidOption") };
+  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
+    return { error: t("meEdit.invalidOption") };
+  }
+  if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) return { error: t("meEdit.invalidOption") };
+  if (role !== null && !ROLES.includes(role)) return { error: t("meEdit.invalidOption") };
+  if (speedruncomUsername && speedruncomUsername.length > 50) {
+    return { error: t("meEdit.speedrunUsernameMax") };
+  }
+  // ソーシャルリンク欄の speedruncom identifier と同じ形式（英数字・ハイフン・アンダースコアのみ）を要求する
+  if (speedruncomUsername && !/^[\w\-]+$/.test(speedruncomUsername)) {
+    return { error: t("meEdit.speedrunUsernameInvalid") };
+  }
+  if (rtaStartedYearMonth && !isValidRtaStartedYearMonth(rtaStartedYearMonth)) {
+    return { error: t("meEdit.rtaStartedInvalid") };
+  }
+
+  return {
+    fields: {
+      displayName,
+      displayNameAlphabet,
+      bio,
+      location,
+      pronouns,
+      profileVisibility,
+      profilePose,
+      slimSkin,
+      capeDisplay,
+      defaultProfileTab,
+      mainPlatform,
+      role,
+      shortBio,
+      rtaStartedYearMonth,
+      speedruncomUsername,
+      showPacemanOnHome,
+      showTwitchOnHome,
+      showYoutubeOnHome,
+      showRankedStats,
+      showPacemanStats,
+      allowAutoTranslation,
+    },
+  };
+}
+
+// ============================================
+// 差分（changes）のスキーマ
+// ============================================
+
+const nullableTrimmed = z.string().nullable().optional();
+const linkPayload = {
+  platform: z.string().max(40),
+  identifier: z.string().max(500),
+  customLabel: nullableTrimmed,
+  customUrl: nullableTrimmed,
+};
+const videoPayload = {
+  url: z.string().max(2000),
+  title: z.string().max(500).nullable().optional(),
+  isPinned: z.boolean().optional(),
+};
+const mcidOp = z.union([
+  z.object({ op: z.literal("set"), value: z.string().max(200) }),
+  z.object({ op: z.literal("remove") }),
+]);
+
+const profileChangesSchema = z.object({
+  mcid: mcidOp.optional(),
+  bedrockMcid: mcidOp.optional(),
+  links: z
+    .object({
+      create: z.array(z.object({ key: z.string().max(100), ...linkPayload })).max(50).optional(),
+      update: z.array(z.object({ id: z.string().max(100), ...linkPayload })).max(50).optional(),
+      delete: z.array(z.string().max(100)).max(50).optional(),
+    })
+    .optional(),
+  videos: z
+    .object({
+      create: z.array(z.object({ key: z.string().max(100), ...videoPayload })).max(50).optional(),
+      update: z.array(z.object({ id: z.string().max(100), ...videoPayload })).max(50).optional(),
+      delete: z.array(z.string().max(100)).max(50).optional(),
+      order: z.array(z.string().max(120)).max(100).optional(),
+    })
+    .optional(),
+});
+
+function normalizeLink(input: { platform: string; identifier: string; customLabel?: string | null; customUrl?: string | null }) {
+  const platform = input.platform;
+  const identifier = input.identifier.trim();
+  const customLabel = input.customLabel?.trim() || null;
+  const customUrl = input.customUrl?.trim() || null;
+  return { platform, identifier, customLabel, customUrl };
+}
+
+function normalizeVideo(input: { url: string; title?: string | null; isPinned?: boolean }) {
+  return { url: input.url.trim(), title: input.title?.trim() || null, isPinned: input.isPinned === true };
+}
+
+// ============================================
+// 一括保存本体
+// ============================================
+
+export type SaveProfileResult =
+  | { success: true; action: "profile"; newSlug?: string; error?: undefined; fieldErrors?: undefined }
+  | { error: string; fieldErrors?: ProfileFieldErrors; action?: undefined; success?: undefined };
+
+export async function saveProfileBatch({
+  db,
+  t,
+  user,
+  formData,
+}: {
+  db: Database;
+  t: Translator;
+  user: UserRow;
+  formData: FormData;
+}): Promise<SaveProfileResult> {
+  // ---- ① 検証（DB に触れない） ----
+  const parsed = parseProfileFields(formData, t);
+  if ("error" in parsed) return { error: parsed.error };
+  const fields = parsed.fields;
+
+  let changes: ProfileChanges = {};
+  const rawChanges = formData.get("changes");
+  if (typeof rawChanges === "string" && rawChanges) {
+    let json: unknown;
+    try {
+      json = JSON.parse(rawChanges);
+    } catch {
+      return { error: t("meEdit.invalidOption") };
+    }
+    const result = profileChangesSchema.safeParse(json);
+    if (!result.success) return { error: t("meEdit.invalidOption") };
+    changes = result.data as ProfileChanges;
+  }
+
+  const fieldErrors: ProfileFieldErrors = {};
+  const addLinkError = (key: string, message: string) => {
+    fieldErrors.links = { ...fieldErrors.links, [key]: message };
+  };
+  const addVideoError = (key: string, message: string) => {
+    fieldErrors.videos = { ...fieldErrors.videos, [key]: message };
+  };
+
+  // MCID（Java）。現在値と同じ set は何もしない扱い
+  let mcidSet: string | null = null;
+  const mcidRemove = changes.mcid?.op === "remove" && user.mcid !== null;
+  if (changes.mcid?.op === "set") {
+    const value = changes.mcid.value.trim();
+    const key = validateMcidFormat(value);
+    if (key) fieldErrors.mcid = t(key);
+    else if (value !== user.mcid) mcidSet = value;
+  }
+
+  // Bedrock 版 MCID（自己申告）
+  let bedrockSet: string | null = null;
+  let bedrockRemove = false;
+  if (changes.bedrockMcid?.op === "set") {
+    const value = changes.bedrockMcid.value.trim();
+    const key = validateBedrockMcidFormat(value);
+    if (key) fieldErrors.bedrockMcid = t(key);
+    else bedrockSet = value;
+  } else if (changes.bedrockMcid?.op === "remove") {
+    bedrockRemove = true;
+  }
+
+  const linkCreates = (changes.links?.create ?? []).map((l) => ({ key: l.key, ...normalizeLink(l) }));
+  const linkUpdates = (changes.links?.update ?? []).map((l) => ({ id: l.id, ...normalizeLink(l) }));
+  for (const l of linkCreates) {
+    const key = validateLinkInput(l);
+    if (key) addLinkError(l.key, t(key));
+  }
+  for (const l of linkUpdates) {
+    const key = validateLinkInput(l);
+    if (key) addLinkError(l.id, t(key));
+  }
+
+  const videoCreates = (changes.videos?.create ?? []).map((v) => ({ key: v.key, ...normalizeVideo(v) }));
+  const videoUpdates = (changes.videos?.update ?? []).map((v) => ({ id: v.id, ...normalizeVideo(v) }));
+  for (const v of videoCreates) {
+    const key = validateVideoInput(v);
+    if (key) addVideoError(v.key, t(key));
+  }
+  for (const v of videoUpdates) {
+    const key = validateVideoInput(v);
+    if (key) addVideoError(v.id, t(key));
+  }
+
+  const failWithFieldErrors = (message?: string): SaveProfileResult => ({
+    error:
+      message ??
+      fieldErrors.mcid ??
+      fieldErrors.bedrockMcid ??
+      Object.values(fieldErrors.links ?? {})[0] ??
+      Object.values(fieldErrors.videos ?? {})[0] ??
+      t("meEdit.invalidOption"),
+    fieldErrors,
+  });
+  const hasFieldErrors = () =>
+    Boolean(fieldErrors.mcid || fieldErrors.bedrockMcid || fieldErrors.links || fieldErrors.videos);
+
+  if (hasFieldErrors()) return failWithFieldErrors();
+
+  // ---- ① 検証（既存データを読んで「最終状態」を検証） ----
+  const existingLinks = await db.query.socialLinks.findMany({
+    where: eq(socialLinks.userId, user.id),
+  });
+  const existingVideos = await db.query.profileVideos.findMany({
+    where: eq(profileVideos.userId, user.id),
+    orderBy: [asc(profileVideos.displayOrder)],
+  });
+  const linkById = new Map(existingLinks.map((l) => [l.id, l]));
+  const videoById = new Map(existingVideos.map((v) => [v.id, v]));
+
+  // 所有確認（IDOR 防止）。他人・存在しない id の更新はエラー、削除は無視する
+  const linkDeletes = [...new Set(changes.links?.delete ?? [])].filter((id) => linkById.has(id));
+  for (const l of linkUpdates) {
+    if (!linkById.has(l.id)) addLinkError(l.id, t("meEdit.linkSaveFailed"));
+  }
+  // 同じ id を重複して送られても件数計算・削除が二重にならないよう Set で重複除去する
+  const videoDeletes = [...new Set(changes.videos?.delete ?? [])].filter((id) => videoById.has(id));
+  const validVideoUpdates = videoUpdates.filter((v) => videoById.has(v.id) && !videoDeletes.includes(v.id));
+  const validLinkUpdates = linkUpdates.filter((l) => linkById.has(l.id) && !linkDeletes.includes(l.id));
+  if (hasFieldErrors()) return failWithFieldErrors();
+
+  // リンクの最終状態（削除・更新を反映した集合）で、カスタム以外のプラットフォーム重複を検出する
+  const finalLinks = [
+    ...existingLinks
+      .filter((l) => !linkDeletes.includes(l.id))
+      .map((l) => {
+        const upd = validLinkUpdates.find((u) => u.id === l.id);
+        return { key: l.id, platform: upd?.platform ?? l.platform, identifier: upd?.identifier ?? l.identifier };
+      }),
+    ...linkCreates.map((l) => ({ key: l.key, platform: l.platform, identifier: l.identifier })),
+  ];
+  // 検査するのは今回の保存で作成・更新するリンクのプラットフォームだけ。過去データに重複が残っていても、
+  // 無関係な項目（表示名など）の保存は妨げない
+  const touchedKeys = new Set([...linkCreates.map((l) => l.key), ...validLinkUpdates.map((l) => l.id)]);
+  const platformCounts = new Map<string, number>();
+  for (const l of finalLinks) {
+    if (l.platform !== "custom") platformCounts.set(l.platform, (platformCounts.get(l.platform) ?? 0) + 1);
+  }
+  for (const l of finalLinks) {
+    if (l.platform !== "custom" && touchedKeys.has(l.key) && (platformCounts.get(l.platform) ?? 0) > 1) {
+      addLinkError(l.key, t("meEdit.platformLinkExists"));
+    }
+  }
+  // Speedrun.com リンクから決まる speedruncomUsername は列の上限（50文字）に収める（リンクの identifier 上限は100）
+  for (const l of finalLinks) {
+    if (l.platform === "speedruncom" && touchedKeys.has(l.key) && l.identifier.length > 50) {
+      addLinkError(l.key, t("meEdit.speedrunUsernameMax"));
+    }
+  }
+  if (hasFieldErrors()) return failWithFieldErrors();
+
+  // 動画の件数上限（既存 − 削除 + 新規）。件数が増える保存だけ検査する（過去データが上限超でも他の保存は妨げない）
+  const finalVideoCount = existingVideos.length - videoDeletes.length + videoCreates.length;
+  if (finalVideoCount > MAX_PROFILE_VIDEOS && finalVideoCount > existingVideos.length) {
+    return { error: t("meEdit.videoMaxCount") };
+  }
+
+  // MCID 重複・Mojang 照合（トランザクションの外。失敗したら DB は何も変えない）
+  let mcidUuid: string | null = null;
+  if (mcidSet) {
+    const taken = await db.query.users.findFirst({ where: eq(users.mcid, mcidSet) });
+    if (taken && taken.id !== user.id) {
+      fieldErrors.mcid = t("meEdit.mcidTaken");
+      return failWithFieldErrors();
+    }
+    try {
+      mcidUuid = await fetchUuidFromMcid(mcidSet);
+      // 大文字小文字違いの MCID は mcid 列の比較（BINARY）をすり抜けるが uuid は同じになる。
+      // users.uuid の UNIQUE 違反を DB に起こさせず、MCID のエラーとして返す
+      const uuidOwner = await db.query.users.findFirst({ where: eq(users.uuid, mcidUuid) });
+      if (uuidOwner && uuidOwner.id !== user.id) {
+        fieldErrors.mcid = t("meEdit.mcidTaken");
+        return failWithFieldErrors();
+      }
+    } catch (error) {
+      fieldErrors.mcid =
+        error instanceof MojangError && error.code === "MCID_NOT_FOUND"
+          ? t("meEdit.mcidNotFound")
+          : t("meEdit.mcidVerifyFailed");
+      return failWithFieldErrors();
+    }
+  }
+
+  // ---- speedruncomUsername の決定 ----
+  // 同じ保存に speedrun.com リンクの追加/変更/削除が含まれる場合は「リンクの変更を優先」し、
+  // 列の値は最終状態の speedrun.com リンクの identifier から決める（現行の即時保存と同じ挙動）。
+  // speedrun.com に関わるリンク変更が無いときだけフォームの値を使い、social_links へ逆方向同期する
+  const srLinkChanged =
+    linkCreates.some((l) => l.platform === "speedruncom") ||
+    validLinkUpdates.some((l) => l.platform === "speedruncom" || linkById.get(l.id)?.platform === "speedruncom") ||
+    linkDeletes.some((id) => linkById.get(id)?.platform === "speedruncom");
+  const finalSrLink = finalLinks.find((l) => l.platform === "speedruncom");
+  const speedruncomUsername = srLinkChanged ? (finalSrLink?.identifier ?? null) : fields.speedruncomUsername;
+
+  // ---- 動画の最終並び（id の配列）。新規は先に id を採番して order の `new:<key>` を解決する ----
+  const newVideoIds = new Map(videoCreates.map((v) => [v.key, createId()]));
+  const orderedIds: string[] = [];
+  const pushId = (id: string | undefined) => {
+    if (id && !orderedIds.includes(id) && !videoDeletes.includes(id)) orderedIds.push(id);
+  };
+  for (const entry of changes.videos?.order ?? []) {
+    if (entry.startsWith(NEW_VIDEO_ORDER_PREFIX)) {
+      pushId(newVideoIds.get(entry.slice(NEW_VIDEO_ORDER_PREFIX.length)));
+    } else if (videoById.has(entry)) {
+      pushId(entry);
+    }
+  }
+  for (const v of existingVideos) pushId(v.id); // order に無い既存は元の順で後ろへ
+  for (const id of newVideoIds.values()) pushId(id); // order に無い新規は末尾
+
+  // ---- ② DB 書き込み（単一トランザクション） ----
+  const now = new Date();
+  let newSlug: string | undefined;
+  try {
+    await db.transaction(async (tx: Tx) => {
+      const userSet: Partial<typeof users.$inferInsert> = {};
+
+      // MCID（Java）: slug 再生成・旧slug履歴・お気に入り追従まで同じトランザクションで原子化
+      if (mcidSet && mcidUuid) {
+        newSlug = generateSlug(mcidSet, user.discordId);
+        userSet.mcid = mcidSet;
+        userSet.uuid = mcidUuid;
+        userSet.slug = newSlug;
+        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
+      } else if (mcidRemove) {
+        newSlug = generateSlug(null, user.discordId);
+        userSet.mcid = null;
+        userSet.uuid = null;
+        userSet.slug = newSlug;
+        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
+        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
+      }
+
+      if (bedrockSet) userSet.bedrockMcid = bedrockSet;
+      else if (bedrockRemove) userSet.bedrockMcid = null;
+
+      // リンク: 削除 → 更新 → 作成（削除を先に行い、同一プラットフォームの入れ替えを通す）
+      if (linkDeletes.length > 0) {
+        await tx.delete(socialLinks).where(and(inArray(socialLinks.id, linkDeletes), eq(socialLinks.userId, user.id)));
+      }
+      for (const l of validLinkUpdates) {
+        await tx
+          .update(socialLinks)
+          .set({
+            platform: l.platform as typeof socialLinks.$inferInsert.platform,
+            identifier: l.identifier,
+            customLabel: l.platform === "custom" ? l.customLabel : null,
+            customUrl: l.platform === "custom" ? l.customUrl : null,
+            updatedAt: now,
+          })
+          .where(and(eq(socialLinks.id, l.id), eq(socialLinks.userId, user.id)));
+      }
+      for (const l of linkCreates) {
+        await tx.insert(socialLinks).values({
+          id: createId(),
+          userId: user.id,
+          platform: l.platform as typeof socialLinks.$inferInsert.platform,
+          identifier: l.identifier,
+          customLabel: l.platform === "custom" ? l.customLabel : null,
+          customUrl: l.platform === "custom" ? l.customUrl : null,
+        });
+      }
+
+      // speedrun.com: リンクの変更があれば列をリンクから決める。無ければフォーム値を social_links へ逆方向同期
+      if (srLinkChanged) {
+        // 解決済みIDを残すと cron/即時更新が旧アカウントを見続けるため、値が変わったらリセットする
+        if (speedruncomUsername !== user.speedruncomUsername) userSet.speedruncomId = null;
+      } else {
+        const existingSr = existingLinks.find((l) => l.platform === "speedruncom");
+        if (speedruncomUsername) {
+          if (!existingSr) {
+            await tx.insert(socialLinks).values({
+              id: createId(),
+              userId: user.id,
+              platform: "speedruncom",
+              identifier: speedruncomUsername,
+            });
+          } else if (existingSr.identifier !== speedruncomUsername) {
+            await tx
+              .update(socialLinks)
+              .set({ identifier: speedruncomUsername, updatedAt: now })
+              .where(eq(socialLinks.id, existingSr.id));
+          }
+        } else if (existingSr) {
+          await tx.delete(socialLinks).where(eq(socialLinks.id, existingSr.id));
+        }
+        if (speedruncomUsername !== user.speedruncomUsername) userSet.speedruncomId = null;
+      }
+
+      // 動画: 削除 → 更新 → 作成 → 並び（displayOrder をインデックスで振り直す）
+      if (videoDeletes.length > 0) {
+        await tx
+          .delete(profileVideos)
+          .where(and(inArray(profileVideos.id, videoDeletes), eq(profileVideos.userId, user.id)));
+      }
+      for (const v of validVideoUpdates) {
+        await tx
+          .update(profileVideos)
+          .set({ url: v.url, title: v.title, isPinned: v.isPinned, updatedAt: now })
+          .where(and(eq(profileVideos.id, v.id), eq(profileVideos.userId, user.id)));
+      }
+      for (const v of videoCreates) {
+        await tx.insert(profileVideos).values({
+          id: newVideoIds.get(v.key)!,
+          userId: user.id,
+          url: v.url,
+          title: v.title,
+          isPinned: v.isPinned,
+          displayOrder: orderedIds.indexOf(newVideoIds.get(v.key)!),
+        });
+      }
+      for (const [index, id] of orderedIds.entries()) {
+        const existing = videoById.get(id);
+        if (existing && existing.displayOrder !== index) {
+          await tx
+            .update(profileVideos)
+            .set({ displayOrder: index, updatedAt: now })
+            .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
+        }
+      }
+
+      // プロフィール列
+      await tx
+        .update(users)
+        .set({
+          displayName: fields.displayName,
+          displayNameAlphabet: fields.displayNameAlphabet,
+          bio: fields.bio,
+          location: fields.location,
+          pronouns: fields.pronouns,
+          profileVisibility: fields.profileVisibility,
+          profilePose: fields.profilePose,
+          slimSkin: fields.slimSkin,
+          ...(fields.capeDisplay ? { capeDisplay: fields.capeDisplay } : {}),
+          defaultProfileTab: fields.defaultProfileTab,
+          mainPlatform: fields.mainPlatform,
+          role: fields.role,
+          shortBio: fields.shortBio,
+          rtaStartedYearMonth: fields.rtaStartedYearMonth,
+          speedruncomUsername,
+          showPacemanOnHome: fields.showPacemanOnHome,
+          showTwitchOnHome: fields.showTwitchOnHome,
+          showYoutubeOnHome: fields.showYoutubeOnHome,
+          showRankedStats: fields.showRankedStats,
+          showPacemanStats: fields.showPacemanStats,
+          ...(fields.allowAutoTranslation !== null ? { allowAutoTranslation: fields.allowAutoTranslation } : {}),
+          ...userSet,
+          updatedAt: now,
+        })
+        .where(eq(users.id, user.id));
+    });
+  } catch (e) {
+    console.error("Profile save error:", e);
+    if (isUniqueConstraintError(e)) {
+      // MCID の変更を含む保存での UNIQUE 違反は、競合（直前に他ユーザーが取得）として MCID のエラーにする
+      if (mcidSet) {
+        fieldErrors.mcid = t("meEdit.mcidTaken");
+        return failWithFieldErrors();
+      }
+      return { error: t("meEdit.platformLinkExists") };
+    }
+    return { error: t("meEdit.profileSaveFailed") };
+  }
+
+  // ---- ③ commit 後の副作用（失敗しても保存は成功扱い） ----
+  const effectiveMcid = mcidSet ?? (mcidRemove ? null : user.mcid);
+
+  // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
+  // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない）
+  if ((fields.allowAutoTranslation ?? user.allowAutoTranslation) === false || fields.profileVisibility === "private") {
+    await removeUserBioTranslations(db, user.id);
+  } else {
+    scheduleUserBioTranslation(db, user.id);
+  }
+
+  // MCID変更に伴う外部キャッシュの紐付け追従（YouTube動画キャッシュのMCID列を新値へ）。
+  // YouTube連携があれば新MCIDで即時取得もキックする（連携有無の検索もレスポンスを遅らせないようbackground側で行う）
+  if (mcidSet) {
+    const oldMcid = user.mcid;
+    const newMcid = mcidSet;
+    // 同じ保存で YouTube リンクを作成/変更した場合は、そのキック（新MCIDで取得）が取得を担うため、ここでは重複させない
+    const youtubeKicked =
+      linkCreates.some((l) => l.platform === "youtube") ||
+      validLinkUpdates.some((l) => {
+        const old = linkById.get(l.id)!;
+        return l.platform === "youtube" && (old.platform !== "youtube" || old.identifier !== l.identifier);
+      });
+    runAfterResponse(
+      (async () => {
+        if (oldMcid) {
+          await updateYoutubeCacheMcid(oldMcid, newMcid);
+        }
+        const youtubeLink = await db.query.socialLinks.findFirst({
+          where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "youtube")),
+        });
+        if (youtubeLink && !youtubeKicked) {
+          await refreshYoutubeForChannel(youtubeLink.identifier, newMcid);
+        }
+      })(),
+    );
+  }
+
+  for (const l of linkCreates) {
+    scheduleSocialLinkKicks({
+      userId: user.id,
+      mcid: effectiveMcid,
+      oldPlatform: null,
+      oldIdentifier: null,
+      newPlatform: l.platform,
+      newIdentifier: l.identifier,
+    });
+  }
+  for (const l of validLinkUpdates) {
+    const old = linkById.get(l.id)!;
+    scheduleSocialLinkKicks({
+      userId: user.id,
+      mcid: effectiveMcid,
+      oldPlatform: old.platform,
+      oldIdentifier: old.identifier,
+      newPlatform: l.platform,
+      newIdentifier: l.identifier,
+    });
+  }
+  for (const id of linkDeletes) {
+    const deleted = linkById.get(id)!;
+    // 同じ保存で同じ platform + identifier を作り直した（最終状態に残る）場合、削除キックは省く。
+    // 削除と refresh が並行すると、キャッシュが次の cron まで空になる（Twitch/YouTube は大文字小文字を区別しない）
+    const recreated = finalLinks.some(
+      (f) => f.platform === deleted.platform && f.identifier.toLowerCase() === deleted.identifier.toLowerCase(),
+    );
+    if (!recreated) scheduleSocialLinkDeleteKicks(user.id, deleted);
+  }
+
+  // speedrun.com リンク経由でない speedruncomUsername の変更（基本情報フォーム側）もランキングを即時更新する
+  if (!srLinkChanged && speedruncomUsername !== user.speedruncomUsername) {
+    runAfterResponse(refreshSrcRankingsForUser(user.id));
+  }
+
+  // 非公開→公開への切り替え時は、非公開中はcron対象外で取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる
+  // （連携有無の検索もレスポンスを遅らせないようbackground側で行う）
+  if (user.profileVisibility !== "public" && fields.profileVisibility === "public") {
+    const mcidAtSave = effectiveMcid;
+    runAfterResponse(
+      (async () => {
+        const externalLinksOnPublish = await db.query.socialLinks.findMany({
+          where: and(eq(socialLinks.userId, user.id), inArray(socialLinks.platform, ["twitch", "youtube"])),
+        });
+        for (const link of externalLinksOnPublish) {
+          if (link.platform === "twitch") {
+            await refreshTwitchVodsForLogin(link.identifier);
+          } else if (link.platform === "youtube" && mcidAtSave) {
+            await refreshYoutubeForChannel(link.identifier, mcidAtSave);
+          }
+        }
+        // SRC/MCSR Rankedランキングも非公開中はcron対象外のため追いつかせる
+        await refreshSrcRankingsForUser(user.id);
+      })(),
+    );
+  }
+
+  return { success: true, action: "profile", ...(newSlug ? { newSlug } : {}) };
+}

@@ -138,7 +138,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 **slug_history の記録・整理**（詳細は `app/lib/slug-history.server.ts` と `docs/database.md` の
 `slug_history` 節）:
-- `/me/edit` の `set_mcid` / `remove_mcid` アクションは、`users` 更新と `recordSlugChange()` を
+- `/me/edit` の `set_mcid` / `remove_mcid` アクション、および一括保存（`save_all`）の MCID 変更は、`users` 更新と `recordSlugChange()` を
   同一トランザクションでまとめて実行する（Mojang検証はトランザクションの外）
 - `recordSlugChange` は旧slugを小文字化して upsert（1つの旧slugは常に最新の元所有者1人だけを
   指す）し、新slugが過去に別ユーザーの旧slugとして記録されていればその履歴行を削除する
@@ -535,6 +535,8 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 
 どちらの経路で設定しても、ソーシャルリンク一覧・公開プロフィールの `SocialLinksCard` の両方に反映される。
 
+**一括保存（`save_all`）での優先規則**: 同じ保存に speedrun.com に関わるリンクの変更（作成 / 更新 / 削除。更新は旧・新どちらかが `speedruncom` の場合）が含まれる場合は**リンクの変更を優先**し、`speedruncomUsername` は最終状態の speedrun.com リンクの identifier から決める（無ければ `null`。`social_links` への逆方向同期は行わない）。speedrun.com に関わるリンク変更が無いときだけフォームの値を使い、従来どおり `social_links` へ逆方向同期する。クライアントも、リンクの下書きで speedrun.com リンクが増減・変更したらフォームの `speedruncomUsername` を同じ値に更新する（画面とサーバーの結果を揃える）。実装は `app/lib/profile-edit.server.ts`、テストは `app/routes/me/__tests__/edit-batch-save.test.ts`。
+
 ### YouTube / Twitch の統計表示（プロフィールタブ）
 
 プロフィールタブの「リンク」カードでは、YouTube / Twitch のリンクは統計付きのリッチカードで表示する
@@ -585,7 +587,7 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 
 ### 編集（`/me/edit` の「動画」カード）
 
-- ソーシャルリンクと同じ「Dialog + `_action`」パターン: `create_video` / `update_video` / `delete_video` / `move_video`（上下入替、displayOrderをインデックスで振り直し）
+- ソーシャルリンクと同じ「Dialog で下書きを編集 → 保存バーで一括保存」パターン（[/me/edit の保存方式](#medit-の保存方式保存バーでの一括保存)）。追加・編集・削除・上下入替はいずれも下書きだけを変え、保存時に `changes.videos`（`create` / `update` / `delete` / `order`）として送る。`order` の並び順でサーバーが `displayOrder` をインデックスで振り直す（旧 `create_video` / `update_video` / `delete_video` / `move_video` の `_action` もサーバー側に残る）
 - 最大10件。タイトルは100文字まで。ピン留めはダイアログ内のSwitch
 - 動画0件かつレガシー `featuredVideoUrl` があるとき、追加ダイアログにそのURLをプリフィルして移行を促す
 
@@ -721,6 +723,21 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
 
+### /me/edit の保存方式（保存バーでの一括保存）
+
+`/me/edit` の編集内容は**すべて下部の保存バー（`FloatingSaveBar`）で一括保存**する。対象はプロフィール列のフォーム値に加え、**Java 版 / Bedrock 版 MCID の設定・削除、ソーシャルリンクの追加・編集・削除、動画の追加・編集・削除・並び替え**。例外として、**アカウント削除（`delete_account`）とレガシーインポート（`import_legacy`）は編集ではないので即時実行のまま**。スキン/マントのアップロードも従来どおり即時（別 API）。
+
+- **下書き（draft）**: MCID・リンク・動画はクライアントの下書き状態にだけ持つ（`app/lib/profile-edit-draft.ts` の `ProfileDraft`。純関数でテスト済み）。ダイアログの確定は下書きの更新だけで、サーバーへは送らない。各ダイアログに「保存バーで保存するまで反映されません」の案内を出し、未保存の行には「未保存」バッジ、削除予定の行は取り消し線＋「取り消す」を出す。項目単位の取り消しと、保存バーの「変更を破棄」（フォーム値＋下書き全体を保存済みへ戻す）がある
+- **一時ID**: 新規のリンク・動画はクライアント生成の一時キー（`new-<uuid>`）を持つ。サーバーの ID としては使わず、サーバーが `createId()` で採番する。一時キーは `order`（動画は `new:<key>`）とエラー位置（`fieldErrors`）の参照にだけ使う。保存成功後は loader の再取得結果で下書き・保存済み両方を作り直す（実 ID に置き換わる）
+- **送信**: 保存バーの保存で `_action=save_all` ＋ プロフィール列 ＋ `changes`（JSON。`ProfileChanges`。差分が無ければ省略）を **1リクエスト**で送る。`_action` 未指定（従来の保存）も同じ経路で、`changes` が無いときはプロフィール列だけを保存する。`changes` は zod で検証し、不正なら何も保存しない
+- **サーバー処理**（`app/lib/profile-edit.server.ts` の `saveProfileBatch`）: ① 検証（形式 → 既存データを読んだ「最終状態」の検証〈所有確認・同一プラットフォーム重複・動画10件上限〉→ MCID 重複と Mojang 照合）→ ② DB 書き込みを**単一トランザクション**（MCID/slug 更新・slug 履歴・お気に入り追従・リンク〈削除→更新→作成〉・動画〈削除→更新→作成→並び〉・プロフィール列）→ ③ commit 後に外部キャッシュのキック（`scheduleSocialLinkKicks` 等。保存が失敗したら一切走らない）。①で失敗したら DB は1行も変わらない。他ユーザーの ID の更新はエラー、削除は無視する（IDOR 防止）
+- **MCID の Mojang 照合は二段構え**: ダイアログ確定時に `GET /api/me/mcid-check?mcid=`（認証必須・DB 非変更。形式 → 重複 → Mojang の順。`fetchUuidFromMcid` のキャッシュはインスタンス内メモリのため、Vercel では確認時と保存時で別インスタンスになり、Mojang を2回照合することがある。大文字小文字違いの MCID は `uuid` が同じになるため、`users.uuid` の他ユーザー使用も `taken` として弾く）で確認し、**確認できたものだけ**下書きに載せる（UUID・アバターのプレビュー可）。保存時にもサーバーが必ず再照合する（クライアントの結果は信用しない）。保存時に失敗したら `fieldErrors.mcid`（`mcidNotFound` / `mcidTaken` / `mcidVerifyFailed`）を返し、**他の変更も含め何も保存せず**、下書きはそのまま残る（MCID カード内に赤い Alert を出して再入力・再試行できる）。Bedrock 版は自己申告で Mojang 照合なし（形式検証のみ）
+- **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する
+- **未保存検知・離脱ガード**: `useUnsavedWarning(hasChanges)` は1つのまま、`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
+- **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
+- **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
+- **後方互換**: 個別の `_action`（`set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / `create_video` / `update_video` / `delete_video` / `move_video`）はサーバーに残してあるが、現在の `/me/edit` UI は使わない（既存テストが直接呼ぶ。入力検証は `app/lib/profile-edit-validation.ts` を共有）
+
 ### 自己紹介の自動翻訳の許可
 
 `bio` / `shortBio` の入力欄の直下に「自己紹介の自動翻訳を許可する」`Switch`（`users.allowAutoTranslation`、既定オン）と説明（外部サービス Anthropic に送る旨を含む）を置く。保存フォーム（`FloatingSaveBar` の一括保存）に `allowAutoTranslation`（`"true"` / `"false"`）を載せる。
@@ -829,6 +846,10 @@ Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=604
 | `app/lib/slug-history.server.ts` | 旧slug→現ユーザーの履歴管理（`recordSlugChange` / `claimSlug` / `resolveSlugFromHistory`） |
 | `app/routes/player/profile.tsx` | プロフィール表示ページ |
 | `app/routes/me/edit.tsx` | プロフィール編集ページ |
+| `app/lib/profile-edit.server.ts` | `/me/edit` の一括保存本体（`saveProfileBatch`。検証・単一トランザクション・外部キャッシュのキック） |
+| `app/lib/profile-edit-validation.ts` | リンク・動画・MCID の入力検証と `ProfileChanges` 型（クライアントとサーバーで共用） |
+| `app/lib/profile-edit-draft.ts` | 下書き（MCID・リンク・動画）の dirty 判定・差分生成・並び替え（純関数） |
+| `app/routes/api/me/mcid-check.ts` | MCID 変更ダイアログ用の事前照合 API（認証必須・DB 非変更） |
 | `app/routes/me/playstyle.tsx` | プレイスタイル編集ページ (`/me/playstyle`) |
 | `app/lib/playstyle.ts` | プレイスタイルの選択肢定義・型・表示条件ヘルパー・バリデーション（非 `.server`、編集/表示で共用） |
 | `scripts/add-playstyles-table.ts` | `playstyles` テーブルのDB反映スクリプト（`inputMethod` バックフィル同梱） |

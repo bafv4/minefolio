@@ -86,6 +86,7 @@ export default [
   // API routes (outside of layout)
   route("api/auth/*", "routes/api/auth/splat.tsx"),
   route("api/skin", "routes/api/skin.ts"),
+  route("api/me/mcid-check", "routes/api/me/mcid-check.ts"),
   route("api/me/skin", "routes/api/me/skin.ts"),
   route("api/me/skin/upload-token", "routes/api/me/skin/upload-token.ts"),
   route("api/cape", "routes/api/cape.ts"),
