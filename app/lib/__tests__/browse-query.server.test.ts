@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import * as schema from "../schema";
 import {
+  getFavoriteSlugsByDiscordId,
   loadBrowsePage,
   parseBrowseSearchParams,
   BROWSE_ITEMS_PER_PAGE,
@@ -20,6 +22,30 @@ function args(overrides: Partial<BrowseQueryArgs> = {}): BrowseQueryArgs {
     ...overrides,
   };
 }
+
+describe("getFavoriteSlugsByDiscordId", () => {
+  it("ユーザー不在は null、お気に入り0件は []", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { discordId: "d-none" });
+    expect(await getFavoriteSlugsByDiscordId(db, "d-missing")).toBeNull();
+    expect(await getFavoriteSlugsByDiscordId(db, "d-none")).toEqual([]);
+  });
+
+  it("favoriteSlug の辞書順で返す（登録順ではない）", async () => {
+    const db = await createTestDb();
+    const me = await seedUser(db, { discordId: "d-me" });
+    const base = Date.now();
+    // 登録順は c → a → b、辞書順は a → b → c
+    for (const [i, slug] of ["c", "a", "b"].entries()) {
+      await db.insert(schema.favorites).values({
+        userId: me.id,
+        favoriteSlug: slug,
+        createdAt: new Date(base + i * 1000),
+      });
+    }
+    expect(await getFavoriteSlugsByDiscordId(db, "d-me")).toEqual(["a", "b", "c"]);
+  });
+});
 
 describe("loadBrowsePage - 可視性フィルタ（セキュリティ回帰）", () => {
   it("public のユーザーのみ返し、unlisted / private は一覧に出さない", async () => {

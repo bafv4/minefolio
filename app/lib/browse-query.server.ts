@@ -143,6 +143,8 @@ export async function loadBrowsePage(
   args: BrowseQueryArgs,
   favoriteSlugs: string[] | Promise<string[]>,
 ) {
+  // buildWhere が同期 throw しても favoriteSlugs（Promise）が未処理 rejection にならないよう先に握る
+  Promise.resolve(favoriteSlugs).catch(() => {});
   const whereCondition = buildWhere(args);
 
   // count はお気に入りに依存しないので、お気に入り取得（Promise 可）と並行して発行する。
@@ -222,7 +224,7 @@ export async function loadBrowsePage(
 
 /**
  * discordId からユーザーの存在とお気に入り slug を 1 クエリ（users LEFT JOIN favorites）で取得する。
- * ユーザーが存在しなければ null。登録順（createdAt 昇順）で返す。
+ * ユーザーが存在しなければ null。favoriteSlug の辞書順で返す（変更前の既定順＝idx_favorites_user_slug の走査順を維持）。
  */
 export async function getFavoriteSlugsByDiscordId(
   db: Database,
@@ -233,7 +235,7 @@ export async function getFavoriteSlugsByDiscordId(
     .from(users)
     .leftJoin(favorites, eq(favorites.userId, users.id))
     .where(eq(users.discordId, discordId))
-    .orderBy(asc(favorites.createdAt));
+    .orderBy(asc(favorites.favoriteSlug));
   if (rows.length === 0) return null;
   return rows.flatMap((r) => (r.favoriteSlug ? [r.favoriteSlug] : []));
 }

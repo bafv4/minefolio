@@ -84,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     columns: FAVORITE_PLAYER_COLUMNS,
   });
 
-  // お気に入り順（DB登録順 = slugsの順）でソート
+  // お気に入り順（slugs の順 = favoriteSlug の辞書順）でソート
   const bySlug = new Map(rows.map((p) => [p.slug, p]));
   const sorted = slugs
     .map((s) => bySlug.get(s))
