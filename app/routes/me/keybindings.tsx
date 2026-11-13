@@ -2470,13 +2470,11 @@ export default function KeybindingsPage() {
               if (!bindings || bindings.length === 0) return null;
 
               return (
-                <Card key={group.key}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className={`text-base font-semibold ${group.color}`}>
-                      {group.label}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
+                <section key={group.key}>
+                  <h3 className={`border-b border-border/60 pb-2 text-base font-semibold ${group.color}`}>
+                    {group.label}
+                  </h3>
+                  <div>
                     <div className="divide-y">
                       {bindings.map((kb) => (
                         <KeybindingRow
@@ -2488,8 +2486,8 @@ export default function KeybindingsPage() {
                         />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </section>
               );
             })}
           </div>
@@ -2500,12 +2498,12 @@ export default function KeybindingsPage() {
         <TabsContent value="remaps" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</CardTitle>
-              <CardDescription>{t("meKeybindings.remapsDescription")}</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <section>
+            <header className="pb-4">
+              <h3 className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{t("meKeybindings.remapsDescription")}</p>
+            </header>
+            <div className="border-t border-border/60 pt-4">
               {localRemaps.filter((r) => !r._delete).length > 0 ? (
                 <div className="divide-y border-y">
                   {localRemaps.map((remap, index) => {
@@ -2543,8 +2541,8 @@ export default function KeybindingsPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meKeybindings.addRemap")}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
           </div>
         </TabsContent>
         )}
@@ -2554,14 +2552,14 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-keys" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</CardTitle>
-              <CardDescription>
+          <section>
+            <header className="pb-4">
+              <h3 className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t("meKeybindings.customKeysDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </p>
+            </header>
+            <div className="space-y-4 border-t border-border/60 pt-4">
               {activeCustomKeys.length > 0 ? (
                 <div className="space-y-2">
                   {localCustomKeys.map((ck, index) => {
@@ -2633,8 +2631,8 @@ export default function KeybindingsPage() {
                   </Button>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
           </div>
         </TabsContent>
         )}
@@ -2644,14 +2642,14 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-actions" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</CardTitle>
-              <CardDescription>
+          <section>
+            <header className="pb-4">
+              <h3 className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t("meKeybindings.customActionsDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </p>
+            </header>
+            <div className="space-y-4 border-t border-border/60 pt-4">
               {localCustomActions.filter((a) => !a._delete).length > 0 ? (
                 <div className="space-y-3">
                   {localCustomActions.map((action, index) => {
@@ -2677,8 +2675,8 @@ export default function KeybindingsPage() {
                 <Plus className="mr-1 h-4 w-4" />
                 {t("meKeybindings.addCustomAction")}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
           </div>
         </TabsContent>
         )}
