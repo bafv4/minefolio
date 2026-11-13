@@ -36,9 +36,21 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2, TriangleAlert } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, Settings, Copy, Gamepad2, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
 import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
@@ -1456,16 +1468,8 @@ export default function KeybindingsPage() {
 
   const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges;
 
-  // 未保存の変更があるままページを離れようとしたら警告（タブを閉じる/リロード等）
-  useEffect(() => {
-    if (!hasUnsavedChanges) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [hasUnsavedChanges]);
+  // 未保存の変更があるままページを離れようとしたら警告（タブを閉じる/リロード・アプリ内遷移）
+  const unsavedBlocker = useUnsavedWarning(hasUnsavedChanges);
 
   // 現在選択中のキーに関するデータ
   // 複数の操作が同じキーに割り当てられている場合はすべて取得
@@ -1652,6 +1656,27 @@ export default function KeybindingsPage() {
     setModalDraftFingerAssignments(null);
     setModalDraftCustomActions(null);
   }, []);
+
+  // ダイアログを開いた時点（＝ページ状態の複製）から下書きが変わっているか
+  const isKeyModalDirty =
+    (modalDraftKeybindingChanges !== null &&
+      JSON.stringify(modalDraftKeybindingChanges) !== JSON.stringify(keybindingChanges)) ||
+    (modalDraftRemaps !== null && JSON.stringify(modalDraftRemaps) !== JSON.stringify(localRemaps)) ||
+    (modalDraftFingerAssignments !== null &&
+      JSON.stringify(modalDraftFingerAssignments) !== JSON.stringify(localFingerAssignments)) ||
+    (modalDraftCustomActions !== null &&
+      JSON.stringify(modalDraftCustomActions) !== JSON.stringify(localCustomActions));
+
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+
+  // Esc / 外側クリック / キャンセルからの閉じ。下書きが変わっていれば破棄確認を挟む
+  const requestCloseKeyModal = useCallback(() => {
+    if (isKeyModalDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeKeyModal();
+  }, [isKeyModalDirty, closeKeyModal]);
 
   const saveKeyModalChanges = useCallback(() => {
     if (modalDraftKeybindingChanges) setKeybindingChanges(modalDraftKeybindingChanges);
@@ -2630,7 +2655,7 @@ export default function KeybindingsPage() {
         open={!!editingKeyCode}
         onOpenChange={(open) => {
           if (!open) {
-            closeKeyModal();
+            requestCloseKeyModal();
           }
         }}
       >
@@ -2830,17 +2855,40 @@ export default function KeybindingsPage() {
           </div>
 
           <DialogFooter className="px-6 py-4 border-t bg-background sticky bottom-0 z-10">
-            <Button variant="outline" onClick={closeKeyModal}>
+            <Button variant="outline" onClick={requestCloseKeyModal}>
               <X className="mr-2 h-4 w-4" />
               {t("meKeybindings.cancel")}
             </Button>
             <Button onClick={saveKeyModalChanges} disabled={!canEditPresetData}>
-              <Save className="mr-2 h-4 w-4" />
-              {t("meKeybindings.saveLabel")}
+              <Check className="mr-2 h-4 w-4" />
+              {t("meKeybindings.applyLabel")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* キー編集ダイアログの破棄確認 */}
+      <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("meKeybindings.discardDraftTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("meKeybindings.discardDraftDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("meKeybindings.discardDraftKeepEditing")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDiscardConfirmOpen(false);
+                closeKeyModal();
+              }}
+            >
+              {t("meKeybindings.discardDraftConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <UnsavedChangesDialog blocker={unsavedBlocker} />
 
       {/* プリセットからコピーダイアログ */}
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>

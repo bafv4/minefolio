@@ -1879,6 +1879,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     assignedToOtherKey: "already on {key}",
     add: "Add",
     saveLabel: "Save",
+    applyLabel: "Apply",
+    discardDraftTitle: "Discard your edits?",
+    discardDraftDesc: "Changes in this dialog haven't been applied yet. Closing will discard them.",
+    discardDraftKeepEditing: "Keep editing",
+    discardDraftConfirm: "Discard and close",
     actionsHelp:
       "You can assign multiple actions. Picking an action that's already on another key removes it from that key.",
     remapsHelp: "Set remaps for this key (including modifier combinations)",

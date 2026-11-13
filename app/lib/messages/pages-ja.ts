@@ -1835,6 +1835,11 @@ export const PAGES_JA = {
     assignedToOtherKey: "{key}に割当済",
     add: "追加",
     saveLabel: "保存",
+    applyLabel: "適用",
+    discardDraftTitle: "編集中の変更を破棄しますか？",
+    discardDraftDesc: "このダイアログでの変更はまだ適用されていません。閉じると破棄されます。",
+    discardDraftKeepEditing: "編集に戻る",
+    discardDraftConfirm: "破棄して閉じる",
     actionsHelp:
       "複数の操作を割り当てられます。他のキーに割当済の操作を選択すると、元のキーから削除されます。",
     remapsHelp: "このキー（および修飾キーとの組み合わせ）のリマップを設定できます",
