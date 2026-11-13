@@ -18,8 +18,6 @@ const MESSAGES: Record<Locale, PartialMessages<MessageSchema>> = {
   en: PAGES_EN,
 };
 
-export type AppLocale = Locale;
-
 type NestedMessageKey<T> = T extends string
   ? never
   : {
