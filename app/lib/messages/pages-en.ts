@@ -946,6 +946,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     eloRate: "Elo rating",
     ranking: "Ranking",
     seasonRecord: "This season's record",
+    seasonNoMatches: "No matches this season",
     allTimePb: "All-time PB",
     seasonPb: "Season PB",
     recentMatches: "Recent matches",

@@ -928,6 +928,7 @@ export const PAGES_JA = {
     eloRate: "Elo レート",
     ranking: "ランキング",
     seasonRecord: "今シーズン戦績",
+    seasonNoMatches: "今シーズン未出場",
     allTimePb: "全期間 PB",
     seasonPb: "今シーズン PB",
     recentMatches: "最近のマッチ",

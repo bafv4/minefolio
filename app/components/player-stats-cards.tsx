@@ -96,9 +96,14 @@ export function MCSRRankedCard({
           )}
           {ranked.seasonData && (
             <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">
-                {ranked.seasonData.records.win}W - {ranked.seasonData.records.lose}L
-              </p>
+              {seasonGames > 0 ? (
+                <p className="text-2xl font-bold">
+                  {seasonWins}W - {seasonLoses}L
+                </p>
+              ) : (
+                // 今シーズン未出場: 0W - 0L を大きく出さず控えめな表示にする
+                <p className="text-sm text-muted-foreground py-1">{t("playerStatsCards.seasonNoMatches")}</p>
+              )}
               <p className="text-xs text-muted-foreground">{t("playerStatsCards.seasonRecord")}</p>
             </div>
           )}
