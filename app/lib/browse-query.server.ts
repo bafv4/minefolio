@@ -1,12 +1,13 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
-import { users } from "./schema";
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { categoryRecords, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
 import { getFavoritesFromDb } from "./favorites";
 import { profilePageViewsSql } from "./page-view-stats.server";
+import { pickHighlightPb } from "./profile-highlights";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
 // ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
@@ -82,6 +83,7 @@ const BROWSE_LIST_COLUMNS = {
   role: true,
   mainEdition: true,
   mainPlatform: true,
+  inputMethod: true,
   updatedAt: true,
   shortBio: true,
   customSkinUrl: true,
@@ -178,6 +180,14 @@ export async function loadBrowsePage(
     db.query.users.findMany({
       where: whereCondition,
       columns: BROWSE_LIST_COLUMNS,
+      // 走者を見分ける表示用（メインカテゴリ + その PB）。with で一括取得し N+1 にしない
+      with: {
+        playstyle: { columns: { mainCategory: true } },
+        categoryRecords: {
+          columns: { category: true, categoryDisplayName: true, personalBest: true },
+          where: and(eq(categoryRecords.isVisible, true), isNotNull(categoryRecords.personalBest)),
+        },
+      },
       orderBy,
       limit: BROWSE_ITEMS_PER_PAGE,
       offset: (args.page - 1) * BROWSE_ITEMS_PER_PAGE,
@@ -188,8 +198,14 @@ export async function loadBrowsePage(
   const totalPages = Math.ceil(totalCount / BROWSE_ITEMS_PER_PAGE);
   const hasMore = args.page < totalPages;
 
+  const players = playerList.map(({ playstyle, categoryRecords: records, ...rest }) => {
+    const mainCategory = playstyle?.mainCategory ?? null;
+    const pb = pickHighlightPb(mainCategory, records);
+    return { ...rest, mainCategory, mainCategoryPb: pb?.record.personalBest ?? null };
+  });
+
   return {
-    players: playerList,
+    players,
     totalCount,
     totalPages,
     hasMore,

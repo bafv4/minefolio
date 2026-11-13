@@ -2,11 +2,14 @@ import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
-import { User, Clock3 } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { platformLabel } from "@/lib/platform-label";
+import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
+import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/time-utils";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -26,20 +29,57 @@ export interface ProfileFeedCardPlayer {
    * 任意（渡した一覧だけが表示する。ホームの「よく見られているプロフィール」専用）。
    */
   pageViews7d?: number;
+  /** 走者を見分ける表示用（任意。渡した一覧だけが表示する。/browse が渡す） */
+  inputMethod?: "keyboard_mouse" | "controller" | "touch" | null;
+  /** playstyle.mainCategory（CategoryKey）。未知の値は無視する */
+  mainCategory?: string | null;
+  /** メインカテゴリの PB（ミリ秒） */
+  mainCategoryPb?: number | null;
+}
+
+/** 既定値（Java / Windows / KBM / 走者）は全員同じで識別情報にならないため、カードには出さない */
+function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
+  const t = useT();
+  const tags: { key: string; label: string; variant: "secondary" | "outline"; mono?: boolean }[] = [];
+  if (isCategoryKey(player.mainCategory)) {
+    tags.push({ key: "category", label: categoryLabel(t, player.mainCategory), variant: "secondary" });
+    if (player.mainCategoryPb) {
+      tags.push({ key: "pb", label: formatTime(player.mainCategoryPb), variant: "outline", mono: true });
+    }
+  }
+  if (player.role === "viewer") tags.push({ key: "role", label: t("common.viewer"), variant: "secondary" });
+  if (player.mainEdition === "bedrock") tags.push({ key: "edition", label: "Bedrock", variant: "outline" });
+  const platformText =
+    player.mainPlatform && player.mainPlatform !== "pc_windows"
+      ? platformLabel(t, player.mainPlatform, "short")
+      : null;
+  if (platformText) tags.push({ key: "platform", label: platformText, variant: "outline" });
+  if (player.inputMethod && player.inputMethod !== "keyboard_mouse") {
+    tags.push({
+      key: "input",
+      label: player.inputMethod === "controller" ? t("browse.inputController") : t("browse.inputTouch"),
+      variant: "outline",
+    });
+  }
+  return (
+    <>
+      {tags.slice(0, 3).map((tag) => (
+        <Badge
+          key={tag.key}
+          variant={tag.variant}
+          className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px]", tag.mono && "font-mono")}
+        >
+          {tag.label}
+        </Badge>
+      ))}
+    </>
+  );
 }
 
 export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
   const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
-  const userRoleLabel =
-    player.role === "runner"
-      ? t("common.runner")
-      : player.role === "viewer"
-        ? t("common.viewer")
-        : null;
-  const editionLabel = player.mainEdition === "java" ? "Java" : player.mainEdition === "bedrock" ? "Bedrock" : null;
-  const platformText = platformLabel(t, player.mainPlatform, "short");
   return (
     <Link
       to={`/player/${player.slug}`}
@@ -74,22 +114,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
         {/* min-h-5: バッジ（約20px）の有無でフッター高が変わり、罫線位置が兄弟カードとずれるのを防ぐ */}
         <div className="flex min-h-5 min-w-0 flex-wrap items-center gap-1.5">
-          {userRoleLabel && (
-            <Badge variant="secondary" className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px]">
-              <User className="h-3 w-3 shrink-0" />
-              {userRoleLabel}
-            </Badge>
-          )}
-          {editionLabel && (
-            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-              {editionLabel}
-            </Badge>
-          )}
-          {platformText && (
-            <Badge variant="outline" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-              {platformText}
-            </Badge>
-          )}
+          <FeedCardTags player={player} />
           {player.pageViews7d !== undefined && <PageViews7dMeta count={player.pageViews7d} />}
         </div>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">

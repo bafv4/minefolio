@@ -155,7 +155,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 ### 表示
 
-- `ProfileFeedCard`（`/browse` と共通）でプレイヤーカード表示。role/edition/platform バッジ付き
+- `ProfileFeedCard`（`/browse` と共通）でプレイヤーカード表示。タグは最大3個で、既定値（走者・Java・Windows・KBM）は全員同じで識別情報にならないため出さない。メインカテゴリ（`playstyles.mainCategory`）とその PB（`category_records` のうち `category` が `mainCategory` と前方一致する最速、`app/lib/profile-highlights.ts` の `pickHighlightPb`）を先頭に出し、残り枠に viewer / Bedrock / Windows 以外のプラットフォーム / KBM 以外の入力方式を出す。これらの表示用フィールド（`inputMethod` / `mainCategory` / `mainCategoryPb`）は任意で、渡さない一覧（ホーム）は従来どおり描画される。`loadBrowsePage` が `with`（playstyle / categoryRecords）で一括取得する（N+1 なし）
 - `/browse` の見出し（件数行）は選択中の role フィルタに追従する（走者／視聴者／すべて）。件数の単位は「人」（en は people）に統一
 - お気に入りが空の場合、`EmptyState` で案内メッセージ + `/browse` への導線を表示
 - `FavoriteButton` コンポーネントで各プレイヤーカードにお気に入りトグルボタンを表示（v1.4.0 から `slug` プロップを受け取る）
