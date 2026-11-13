@@ -1,5 +1,5 @@
 import { useT } from "@/hooks/use-locale";
-import { Outlet, useLoaderData, type ShouldRevalidateFunctionArgs } from "react-router";
+import { Outlet, useLoaderData } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import type { Route } from "./+types/_layout";
 import { Header, Footer, NavigationProgress } from "@/components/layout";
@@ -15,23 +15,9 @@ import { getFavoritesFromDb } from "@/lib/favorites";
 import { LikesProvider } from "@/hooks/use-likes";
 import { getViewerLikedIds } from "@/lib/likes.server";
 
-// 同じ pathname で検索パラメータだけが変わる GET 遷移（タブ切替・ページ送り・フィルタ等）では、
-// このレイアウトのデータ（ヘッダーのユーザー・お気に入り・いいね済みid）は変わらないので再取得しない。
-// action 後（formMethod が GET 以外／actionResult あり）、パス変更、revalidator.revalidate()
-// （URL 不変）は従来どおり defaultShouldRevalidate に従う。
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  formMethod,
-  actionResult,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
-  if (actionResult !== undefined) return defaultShouldRevalidate;
-  if (currentUrl.pathname === nextUrl.pathname && currentUrl.search !== nextUrl.search) return false;
-  return defaultShouldRevalidate;
-}
-
+// 検索パラメータ遷移でも再実行する。いいね状態（use-likes の likedKeys）がこのローダー結果
+// （likedGuideIds / likedTemplateIds）に依存し、いいね自体は素の fetch でルーター再検証が起きないため、
+// shouldRevalidate で止めると並び替え/タブ切替後にいいねが未いいね表示へ戻る。
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
