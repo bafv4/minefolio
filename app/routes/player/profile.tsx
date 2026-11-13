@@ -1298,99 +1298,9 @@ export default function PlayerProfilePage() {
           {/* Header: Skin + Basic Info */}
           <Card className="py-5">
             <CardContent className="px-5">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-                {/* Skin - uuid か customSkinUrl があれば従来どおり。どちらも無い（MCID未登録）なら
-                    黒スキンのプレースホルダーを静止画で出し、直下に注釈を添える（3D 閲覧は無し） */}
-                {player.uuid || player.customSkinUrl ? (() => {
-                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
-                  const skinProps = {
-                    // customSkinUrl だけのユーザーもここに来るので uuid は null を許容する
-                    uuid: player.uuid ?? undefined,
-                    skinUrl: player.customSkinUrl ?? undefined,
-                    mcid: player.mcid ?? undefined,
-                    pose: (player.profilePose as PoseName) ?? "waving",
-                    slim:
-                      player.customSkinModel === "slim" || player.slimSkin || false,
-                    angle: -35,
-                    elevation: 5,
-                    zoom: 0.9,
-                    // カスタムマント → Mojang のマント → なし。capeDisplay が hidden なら {}
-                    ...resolveCapeProps({
-                      uuid: player.uuid,
-                      customCapeUrl: player.customCapeUrl,
-                      capeDisplay: player.capeDisplay,
-                    }),
-                  };
-                  const modalSize = { width: 360, height: 480 };
-                  return (
-                    <div className="flex justify-center sm:justify-start shrink-0">
-                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
-                        <DialogTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label={t("playerProfile.viewSkin3d")}
-                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                            <MinecraftFullBody
-                              {...skinProps}
-                              width={skinViewSize.width}
-                              height={skinViewSize.height}
-                              asImage
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                              <Maximize2
-                                className="h-8 w-8 text-foreground drop-shadow"
-                                aria-hidden
-                              />
-                            </div>
-                          </button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>
-                              {t("playerProfile.skinDialogTitle", { name: playerName })}
-                            </DialogTitle>
-                          </DialogHeader>
-                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
-                          {skin3dOpen && (
-                            <div className="flex justify-center">
-                              <MinecraftFullBody
-                                {...skinProps}
-                                {...modalSize}
-                                interactive
-                                showInteractiveHint
-                              />
-                            </div>
-                          )}
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  );
-                })() : (
-                  <div className="flex justify-center sm:justify-start shrink-0">
-                    <div className="flex flex-col items-center gap-2">
-                      <MinecraftFullBody
-                        pose={(player.profilePose as PoseName) ?? "waving"}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        width={skinViewSize.width}
-                        height={skinViewSize.height}
-                        asImage
-                      />
-                      <p
-                        className="max-w-full text-center text-xs text-muted-foreground"
-                        style={{ width: skinViewSize.width }}
-                      >
-                        {t("playerProfile.noMcidNote")}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {/* Info */}
-                <div className="flex-1 space-y-4">
+                <div className="contents sm:block sm:flex-1 sm:space-y-4">
                   <div className="text-center sm:text-left">
                     <h1 className="text-2xl font-bold">{playerName}</h1>
                     {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
@@ -1415,6 +1325,7 @@ export default function PlayerProfilePage() {
                     )}
                   </div>
 
+                  <div className="order-2 space-y-4">
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {player.role && (
@@ -1511,7 +1422,98 @@ export default function PlayerProfilePage() {
                     toggle={toggleReaction}
                     isLoggedIn={profileReactions.viewerHasAccount}
                   />
+                  </div>
                 </div>
+
+                {/* Skin - uuid か customSkinUrl があれば従来どおり。どちらも無い（MCID未登録）なら
+                    黒スキンのプレースホルダーを静止画で出し、直下に注釈を添える（3D 閲覧は無し） */}
+                {player.uuid || player.customSkinUrl ? (() => {
+                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
+                  const skinProps = {
+                    // customSkinUrl だけのユーザーもここに来るので uuid は null を許容する
+                    uuid: player.uuid ?? undefined,
+                    skinUrl: player.customSkinUrl ?? undefined,
+                    mcid: player.mcid ?? undefined,
+                    pose: (player.profilePose as PoseName) ?? "waving",
+                    slim:
+                      player.customSkinModel === "slim" || player.slimSkin || false,
+                    angle: -35,
+                    elevation: 5,
+                    zoom: 0.9,
+                    // カスタムマント → Mojang のマント → なし。capeDisplay が hidden なら {}
+                    ...resolveCapeProps({
+                      uuid: player.uuid,
+                      customCapeUrl: player.customCapeUrl,
+                      capeDisplay: player.capeDisplay,
+                    }),
+                  };
+                  const modalSize = { width: 360, height: 480 };
+                  return (
+                    <div className="order-1 flex justify-center sm:order-first sm:justify-start shrink-0">
+                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={t("playerProfile.viewSkin3d")}
+                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                            <MinecraftFullBody
+                              {...skinProps}
+                              width={skinViewSize.width}
+                              height={skinViewSize.height}
+                              asImage
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                              <Maximize2
+                                className="h-8 w-8 text-foreground drop-shadow"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {t("playerProfile.skinDialogTitle", { name: playerName })}
+                            </DialogTitle>
+                          </DialogHeader>
+                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
+                          {skin3dOpen && (
+                            <div className="flex justify-center">
+                              <MinecraftFullBody
+                                {...skinProps}
+                                {...modalSize}
+                                interactive
+                                showInteractiveHint
+                              />
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })() : (
+                  <div className="order-1 flex justify-center sm:order-first sm:justify-start shrink-0">
+                    <div className="flex flex-col items-center gap-2">
+                      <MinecraftFullBody
+                        pose={(player.profilePose as PoseName) ?? "waving"}
+                        angle={-35}
+                        elevation={5}
+                        zoom={0.9}
+                        width={skinViewSize.width}
+                        height={skinViewSize.height}
+                        asImage
+                      />
+                      <p
+                        className="max-w-full text-center text-xs text-muted-foreground"
+                        style={{ width: skinViewSize.width }}
+                      >
+                        {t("playerProfile.noMcidNote")}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
