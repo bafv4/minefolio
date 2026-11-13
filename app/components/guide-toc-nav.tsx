@@ -225,6 +225,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   const activeId = useActiveHeading(items);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useFollowActiveHeading(scrollRef, activeId);
+  const activeItem = items.find((i) => i.id === activeId);
   if (items.length < 2) return null;
 
   const handleNavigate = (id: string) => {
@@ -245,10 +246,18 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
         <SheetTrigger asChild>
           <button
             type="button"
+            aria-label={
+              activeItem
+                ? `${t("guideToc.title")}: ${activeItem.text}`
+                : undefined
+            }
             className="flex w-full items-center gap-2 px-4 py-3.5 text-sm font-semibold hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-6"
           >
-            <List className="h-4 w-4 text-muted-foreground" />
-            {t("guideToc.title")}
+            <List className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {/* 現在のセクション名を表示（未確定時は「目次」） */}
+            <span className="min-w-0 truncate">
+              {activeItem ? activeItem.text : t("guideToc.title")}
+            </span>
           </button>
         </SheetTrigger>
         <SheetContent
