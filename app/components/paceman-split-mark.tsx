@@ -48,12 +48,12 @@ export function PaceManSplitMark({
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <img
         src={splitMarkTextureUrl(itemId)}
-        alt={itemId}
+        alt={withLabel ? "" : timeline}
         width={size}
         height={size}
         loading="lazy"
         className="pixelated shrink-0"
-        style={{ width: size, height: size, imageRendering: "pixelated" }}
+        style={{ width: size, height: size }}
       />
       {withLabel && (
         <span className={cn("leading-none", labelClassName)}>{timeline}</span>
