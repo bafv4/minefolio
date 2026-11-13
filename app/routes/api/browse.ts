@@ -19,10 +19,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const args = parseBrowseSearchParams(url.searchParams);
-  const favoriteSlugs = await getViewerFavoriteSlugs(
-    db,
-    session?.user?.id ?? null,
-  );
+  // お気に入り取得は loadBrowsePage 内で count と並行して解決される
+  const favoriteSlugs = getViewerFavoriteSlugs(db, session?.user?.id ?? null);
   const { players, hasMore, totalCount, totalPages } = await loadBrowsePage(
     db,
     args,

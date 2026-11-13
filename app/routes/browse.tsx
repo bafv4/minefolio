@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { ProfileFeedCard, ProfileFeedListItem } from "@/components/profile-feed-card";
+import { ProfileFeedCard, ProfileFeedCardSkeleton, ProfileFeedListItem } from "@/components/profile-feed-card";
 import { ViewToggle } from "@/components/view-toggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -75,10 +75,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
 
   const args = parseBrowseSearchParams(url.searchParams);
-  const favoriteSlugs = await getViewerFavoriteSlugs(
-    db,
-    session?.user?.id ?? null,
-  );
+  // お気に入り取得は loadBrowsePage 内で count と並行して解決される
+  const favoriteSlugs = getViewerFavoriteSlugs(db, session?.user?.id ?? null);
   const { players, totalPages, totalCount, hasMore } = await loadBrowsePage(
     db,
     args,
@@ -102,26 +100,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
     appUrl: env.APP_URL || "https://minefolio.app",
   };
-}
-
-// ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）
-function PlayerCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-3.5 w-24" />
-          <Skeleton className="h-3 w-40" />
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-        <Skeleton className="h-5 w-16 rounded-full" />
-        <Skeleton className="h-3 w-12" />
-      </div>
-    </div>
-  );
 }
 
 // フィルタラベル
@@ -153,7 +131,7 @@ export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate 
 
 export default function BrowsePage() {
   const t = useT();
-  const { players, searchQuery, sortBy, currentPage, totalPages, totalCount, hasMore, filters, isLoggedIn } =
+  const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -277,12 +255,6 @@ export default function BrowsePage() {
   // 「すべてクリア」: ドラフトをクリア（適用は完了ボタン）
   const clearDraftFilters = () => {
     setDraftFilters({ roles: [], editions: [], inputMethods: [], platforms: [] });
-  };
-
-  const goToPage = (page: number) => {
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set("page", page.toString());
-    setSearchParams(newParams);
   };
 
   return (
@@ -614,7 +586,7 @@ export default function BrowsePage() {
         viewMode === "card" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
-              <PlayerCardSkeleton key={i} />
+              <ProfileFeedCardSkeleton key={i} />
             ))}
           </div>
         ) : (

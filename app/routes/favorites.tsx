@@ -7,10 +7,10 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
-import { eq, inArray } from "drizzle-orm";
-import { getFavoritesFromDb } from "@/lib/favorites";
+import { inArray } from "drizzle-orm";
+import { getFavoriteSlugsByDiscordId } from "@/lib/browse-query.server";
 import { getLocalFavorites } from "@/lib/favorites-client";
-import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
+import { ProfileFeedCard, ProfileFeedCardSkeleton, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,15 +71,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { players: [] as FavoritePlayer[], isLoggedIn: false, appUrl };
   }
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
-  if (!user) {
+  const slugs = await getFavoriteSlugsByDiscordId(db, session.user.id);
+  if (slugs === null) {
     return { players: [] as FavoritePlayer[], isLoggedIn: false, appUrl };
   }
-
-  const slugs = await getFavoritesFromDb(db, user.id);
   if (slugs.length === 0) {
     return { players: [] as FavoritePlayer[], isLoggedIn: true, appUrl };
   }
@@ -210,39 +205,18 @@ export default function FavoritesPage() {
   );
 }
 
-// ProfileFeedCard と同寸のスケルトンカード（rounded-xl / p-4 / アバター12x12 / フッター行）。
 // HydrateFallback とゲスト読み込み中（clientの by-slugs フェッチ）の両方で共有する。
-function FavoriteCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-3.5 w-24" />
-          <Skeleton className="h-3 w-40" />
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-        <Skeleton className="h-5 w-16 rounded-full" />
-        <Skeleton className="h-3 w-12" />
-      </div>
-    </div>
-  );
-}
-
 function FavoriteCardSkeletonGrid() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: 6 }).map((_, i) => (
-        <FavoriteCardSkeleton key={i} />
+        <ProfileFeedCardSkeleton key={i} />
       ))}
     </div>
   );
 }
 
 export function HydrateFallback() {
-  const t = useT();
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
