@@ -55,9 +55,10 @@ export function KeybindingsListLayout({
   const { isTabSwitching, targetPathname } = useTabNavigation();
 
   // フィルタ適用（数値範囲・ユーザー絞り込みはクライアント側）
+  const { applyToPlayers } = filters;
   const filteredPlayers = useMemo(
-    () => filters.applyToPlayers(players),
-    [players, filters],
+    () => applyToPlayers(players),
+    [players, applyToPlayers],
   );
   const remapsPlayers = useMemo(
     () => filteredPlayers.filter((p) => p.keyRemaps.length > 0),
