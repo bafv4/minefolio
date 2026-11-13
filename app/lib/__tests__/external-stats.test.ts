@@ -6,11 +6,13 @@ import {
   fetchMCSRRankedStats,
   fetchSpeedrunComStats,
   checkPaceManPlayer,
+  resetJpLeaderboardCache,
   getSpeedrunComVideoEmbedUrl,
   type SpeedrunComPersonalBest,
 } from "../external-stats";
 
 afterEach(() => {
+  resetJpLeaderboardCache();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -450,6 +452,35 @@ describe("fetchMCSRRankedStats - countryRank（国内Eloランキング順位）
 
     const result = await fetchMCSRRankedStats("runner");
     expect(result.countryRank).toBe(2);
+  });
+
+  it("JP leaderboard は TTL 内なら再取得せず共有し、失敗した取得はキャッシュしない", async () => {
+    let leaderboardCalls = 0;
+    let leaderboardOk = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/leaderboard")) {
+        leaderboardCalls++;
+        return {
+          ok: leaderboardOk,
+          status: leaderboardOk ? 200 : 500,
+          json: async () => leaderboardBody([{ uuid: "user-uuid" }]),
+        };
+      }
+      if (url.includes("/matches")) {
+        return { ok: true, status: 200, json: async () => ({ status: "success", data: [] }) };
+      }
+      return { ok: true, status: 200, json: async () => rankedUserBody({ country: "jp", eloRate: 1500 }) };
+    }));
+
+    // 1回目は失敗（500）→ countryRank は null、キャッシュされない
+    expect((await fetchMCSRRankedStats("runner")).countryRank).toBeNull();
+    // 2回目は成功 → 再取得される
+    leaderboardOk = true;
+    expect((await fetchMCSRRankedStats("runner")).countryRank).toBe(1);
+    // 3回目はキャッシュヒット（リーダーボードの fetch は増えない）
+    expect((await fetchMCSRRankedStats("runner")).countryRank).toBe(1);
+    expect(leaderboardCalls).toBe(2);
   });
 
   it("leaderboard.users に自分が含まれない（圏外）場合は null", async () => {
