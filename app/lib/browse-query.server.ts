@@ -167,9 +167,12 @@ export async function loadBrowsePage(
       : // updatedAt は NOT NULL なので NULL 対策は不要
         [desc(users.updatedAt)];
 
+  // 末尾に一意キー（id）を付けて全順序にする。updatedAt / displayName / mcid が同値（NULL 同士含む）の
+  // 行があると offset ページングで順序が揺れ、隣接ページ間で同じ走者が重複して返る
+  // （一覧の React key 重複警告の原因）。
   const orderBy = favoritePriority
-    ? [favoritePriority, ...orderByClause]
-    : orderByClause;
+    ? [favoritePriority, ...orderByClause, asc(users.id)]
+    : [...orderByClause, asc(users.id)];
 
   // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
   const [totalCountResult, playerList] = await Promise.all([
