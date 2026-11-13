@@ -49,25 +49,27 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const { slug } = params;
   const db = createDb();
   const auth = createAuth(db, env);
-  const session = await getOptionalSession(request, auth);
   const normalizedSlug = slug?.toLowerCase();
 
-  // slugで走者を検索
-  const player = await db.query.users.findFirst({
-    where: normalizedSlug
-      ? sql`lower(${users.slug}) = ${normalizedSlug}`
-      : sql`0 = 1`,
-    columns: {
-      id: true,
-      mcid: true,
-      slug: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      profileVisibility: true,
-      discordId: true,
+  // session の取得と slug での走者検索は独立しているため並列に実行する（profile.tsx と同じ）
+  const [session, player] = await Promise.all([
+    getOptionalSession(request, auth),
+    db.query.users.findFirst({
+      where: normalizedSlug
+        ? sql`lower(${users.slug}) = ${normalizedSlug}`
+        : sql`0 = 1`,
+      columns: {
+        id: true,
+        mcid: true,
+        slug: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        profileVisibility: true,
+        discordId: true,
       showRankedStats: true,
     },
-  });
+    }),
+  ]);
 
   if (!player) {
     if (slug) {

@@ -274,6 +274,35 @@ type RankedApiResponse = { status: string; data: any };
 // マッチタイプ定数
 const MATCH_TYPE_RANKED = 2;
 
+// JP リーダーボードは全員共通のため、モジュールスコープで短時間共有する（ranked-stats-cache.ts と同じ方針）。
+// 成功した（HTTP 200 かつ JSON として解釈できた）取得結果のみキャッシュし、失敗は次回再取得する。
+const JP_LEADERBOARD_TTL_MS = 5 * 60_000;
+type JpLeaderboardResponse = { status: string; data?: { users?: { uuid?: string }[] } } | null;
+let jpLeaderboardCache: { at: number; promise: Promise<JpLeaderboardResponse> } | null = null;
+
+/** テスト用: JP リーダーボードのキャッシュを破棄する */
+export function resetJpLeaderboardCache(): void {
+  jpLeaderboardCache = null;
+}
+
+function fetchJpLeaderboardCached(): Promise<JpLeaderboardResponse> {
+  if (jpLeaderboardCache && Date.now() - jpLeaderboardCache.at < JP_LEADERBOARD_TTL_MS) {
+    return jpLeaderboardCache.promise;
+  }
+  const promise = (async (): Promise<JpLeaderboardResponse> => {
+    const res = await fetch(`${RANKED_API_BASE}/leaderboard?country=jp`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`leaderboard HTTP ${res.status}`);
+    return (await res.json()) as JpLeaderboardResponse;
+  })();
+  const entry = { at: Date.now(), promise };
+  jpLeaderboardCache = entry;
+  // 失敗はキャッシュしない
+  promise.catch(() => {
+    if (jpLeaderboardCache === entry) jpLeaderboardCache = null;
+  });
+  return promise;
+}
+
 export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRankedStats> {
   try {
     // ユーザー情報を取得（存在確認を兼ねる）
@@ -399,12 +428,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     const fetchCountryRank = async (): Promise<number | null> => {
       if (user.country !== "jp" || user.eloRate === null) return null;
       try {
-        const leaderboardRes = await fetch(`${RANKED_API_BASE}/leaderboard?country=jp`, { signal: AbortSignal.timeout(10000) });
-        if (!leaderboardRes.ok) return null;
-
-        const leaderboardData = (await leaderboardRes.json()) as
-          | { status: string; data?: { users?: { uuid?: string }[] } }
-          | null;
+        const leaderboardData = await fetchJpLeaderboardCached();
         if (!leaderboardData || leaderboardData.status !== "success") return null;
 
         const leaderboardUsers = leaderboardData.data?.users;
