@@ -374,7 +374,6 @@ export const PAGES_JA = {
     ctaBrowse: "プロフィールを探す",
     ctaRandom: "ランダムで見る",
     profileTotal: "公開プロフィール総数",
-    profileActive: "アクティブプロフィール数（7日）",
     sectionProfiles: "プロフィール",
     sectionRecentlyUpdated: "最近の更新",
     sectionPopular: "注目（直近{days}日）",
@@ -418,6 +417,14 @@ export const PAGES_JA = {
     timelineEmpty: "区間データがありません",
     viewOnPaceMan: "{site} で見る",
     splitBreakdown: "区間タイムの内訳",
+    heroSampleLabel: "最近のペース（最深区間）",
+    statProfiles: "公開プロフィール",
+    statPaces: "記録ペース（直近2か月）",
+    statLive: "ライブ中",
+    welcomeBack: "おかえりなさい、{name}",
+    welcomeMyProfile: "マイプロフィール",
+    welcomeEditProfile: "プロフィール編集",
+    welcomeFavorites: "お気に入り",
   },
   paces: {
     /** スプリット名（PaceMan のイベントID に対応） */

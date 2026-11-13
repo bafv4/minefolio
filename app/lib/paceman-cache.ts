@@ -4,7 +4,7 @@ import { eq, and, gte, lt, desc, inArray, sql } from "drizzle-orm";
 import type { PaceManRecentRun } from "./paceman";
 
 // ペースキャッシュの保持期間の開始時刻（過去2か月）
-function getPaceRetentionStart(): Date {
+export function getPaceRetentionStart(): Date {
   const d = new Date();
   d.setMonth(d.getMonth() - 2);
   return d;

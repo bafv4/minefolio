@@ -6,11 +6,13 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, pageViewStats } from "@/lib/schema";
+import { users, guides, pageViewStats, playstyles, categoryRecords } from "@/lib/schema";
+import { pickHighlightPb, type HighlightPbRecord } from "@/lib/profile-highlights";
 import { excludeViewersCondition } from "@/lib/users-filter";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
-import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { getUserData } from "@/lib/home-user-data.server";
+import { countHomeRecordedPaces, getHomeSamplePace } from "@/lib/home-pace-sample.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
@@ -45,6 +47,9 @@ import {
   Timer,
   RefreshCw,
   AlertCircle,
+  User,
+  Pencil,
+  Heart,
 } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
@@ -81,12 +86,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
   // プロフィール一覧の select 列（更新順・PV順で共通。ProfileFeedCard が使わない
   // inputMethod は含めない）
   const profileFeedColumns = {
+    id: users.id,
+    inputMethod: users.inputMethod,
     mcid: users.mcid,
     uuid: users.uuid,
     slug: users.slug,
@@ -120,8 +124,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // セッション確認（→登録ユーザー判定）、ユーザーデータキャッシュ取得、コンテンツ5クエリは
   // 互いに独立なので並行して走らせる
-  const [currentUser, userData, [recentlyUpdatedUsers, popularUsers, recentlyUpdatedGuides, popularGuides, [profileCounts]]] =
-    await Promise.all([
+  const [
+    currentUser,
+    userData,
+    [recentlyUpdatedUsers, popularUsers, recentlyUpdatedGuides, popularGuides, [profileCounts]],
+    samplePace,
+    recordedPaceTotal,
+  ] = await Promise.all([
       // セッションをチェックしてユーザーが登録済みか確認
       (async () => {
         const session = await getOptionalSession(request, auth);
@@ -131,6 +140,9 @@ export async function loader({ request }: Route.LoaderArgs) {
           columns: {
             id: true,
             mcid: true,
+            slug: true,
+            displayName: true,
+            displayNameAlphabet: true,
             showPacemanOnHome: true,
             showYoutubeOnHome: true,
             showTwitchOnHome: true,
@@ -139,6 +151,9 @@ export async function loader({ request }: Route.LoaderArgs) {
         if (!existingUser) return null;
         return {
           mcid: existingUser.mcid,
+          slug: existingUser.slug,
+          displayName: existingUser.displayName,
+          displayNameAlphabet: existingUser.displayNameAlphabet,
           showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
           showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
           showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
@@ -198,29 +213,69 @@ export async function loader({ request }: Route.LoaderArgs) {
           .orderBy(desc(pageViewStats.pageviews))
           .limit(4),
         db
-          .select({
-            total: sql<number>`count(*)`,
-            active: sql<number>`count(*) filter (where ${gte(users.updatedAt, oneWeekAgo)})`,
-          })
+          .select({ total: sql<number>`count(*)` })
           .from(users)
           .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
       ]),
+      // ヒーローの実データ見本（最深区間のペース1件）と記録ペース総数。失敗してもホーム全体は落とさない
+      getHomeSamplePace(db).catch(() => null),
+      countHomeRecordedPaces(db).catch(() => null),
     ]);
   const { registeredMcids, mcidToUuid, mcidToSlug, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } =
     userData;
   const isRegistered = currentUser != null;
   const totalPublicProfiles = profileCounts?.total ?? 0;
-  const activePublicProfiles = profileCounts?.active ?? 0;
 
   // 自動翻訳（docs/translation.md）。更新順・PV順の両セクションのガイド id をまとめて 1 回で引き、
   // title / summary を差し替える。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・Cache-Control）が無く、
   // getUserData のキャッシュもロケール非依存のユーザー情報のみなので、閲覧ロケールごとの結果はここで毎回決まる。
   // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
-  const guideTranslations = await getGuideTranslations(
-    db,
-    [...recentlyUpdatedGuides, ...popularGuides].map((g) => g.id),
-    resolveLocale(request),
-  );
+  const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers].map((u) => u.id))];
+  const [guideTranslations, feedPlaystyles, feedRecords] = await Promise.all([
+    getGuideTranslations(
+      db,
+      [...recentlyUpdatedGuides, ...popularGuides].map((g) => g.id),
+      resolveLocale(request),
+    ),
+    // カードのタグ用（メインカテゴリ + その PB）。2つの一覧の全員分を各1クエリで取得し N+1 にしない
+    feedUserIds.length === 0
+      ? []
+      : db
+          .select({ userId: playstyles.userId, mainCategory: playstyles.mainCategory })
+          .from(playstyles)
+          .where(inArray(playstyles.userId, feedUserIds)),
+    feedUserIds.length === 0
+      ? []
+      : db
+          .select({
+            userId: categoryRecords.userId,
+            category: categoryRecords.category,
+            categoryDisplayName: categoryRecords.categoryDisplayName,
+            personalBest: categoryRecords.personalBest,
+          })
+          .from(categoryRecords)
+          .where(
+            and(
+              inArray(categoryRecords.userId, feedUserIds),
+              eq(categoryRecords.isVisible, true),
+              isNotNull(categoryRecords.personalBest),
+            ),
+          ),
+  ]);
+  const mainCategoryById = new Map(feedPlaystyles.map((p) => [p.userId, p.mainCategory]));
+  const recordsById = new Map<string, (HighlightPbRecord & { userId: string })[]>();
+  for (const r of feedRecords) {
+    const list = recordsById.get(r.userId);
+    if (list) list.push(r);
+    else recordsById.set(r.userId, [r]);
+  }
+  // id はクライアントに不要なので外し、カード用に mainCategory / mainCategoryPb を付ける
+  const withHighlights = <T extends { id: string }>(list: T[]) =>
+    list.map(({ id, ...rest }) => {
+      const mainCategory = mainCategoryById.get(id) ?? null;
+      const pb = pickHighlightPb(mainCategory, recordsById.get(id) ?? []);
+      return { ...rest, mainCategory, mainCategoryPb: pb?.record.personalBest ?? null };
+    });
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
@@ -232,12 +287,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     mcidToDisplayName,
     mcidToDisplayNameAlphabet,
     mcidToSkinUrl,
-    recentlyUpdatedUsers,
-    popularUsers,
+    recentlyUpdatedUsers: withHighlights(recentlyUpdatedUsers),
+    popularUsers: withHighlights(popularUsers),
     recentlyUpdatedGuides: recentlyUpdatedGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
     popularGuides: popularGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
     totalPublicProfiles,
-    activePublicProfiles,
+    samplePace,
+    recordedPaceTotal,
   };
 }
 
@@ -452,7 +508,8 @@ export default function HomePage() {
     recentlyUpdatedGuides,
     popularGuides,
     totalPublicProfiles,
-    activePublicProfiles,
+    samplePace,
+    recordedPaceTotal,
   } =
     useLoaderData<typeof loader>();
 
@@ -717,6 +774,35 @@ export default function HomePage() {
                 {t("home.heroDescription")}
               </p>
             </div>
+            {isRegistered && currentUser && (
+              <div className="space-y-2 rounded-xl border border-border/70 bg-background/80 px-4 py-3">
+                <p className="text-sm font-semibold">
+                  {t("home.welcomeBack", {
+                    name:
+                      pickDisplayName(
+                        { displayName: currentUser.displayName, displayNameAlphabet: currentUser.displayNameAlphabet },
+                        locale,
+                      ) ||
+                      currentUser.mcid ||
+                      currentUser.slug,
+                  })}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <Link to={`/player/${currentUser.slug}`} className="inline-flex items-center gap-1.5 text-primary hover:underline">
+                    <User className="h-4 w-4" />
+                    {t("home.welcomeMyProfile")}
+                  </Link>
+                  <Link to="/me/edit" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+                    <Pencil className="h-4 w-4" />
+                    {t("home.welcomeEditProfile")}
+                  </Link>
+                  <Link to="/favorites" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+                    <Heart className="h-4 w-4" />
+                    {t("home.welcomeFavorites")}
+                  </Link>
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {!isRegistered && (
                 <Button asChild size="lg" className="w-full sm:w-auto">
@@ -741,14 +827,43 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-              <p className="text-xs text-muted-foreground">{t("home.profileTotal")}</p>
-              <p className="mt-2 text-2xl font-bold">{totalPublicProfiles}</p>
-            </div>
-            <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-              <p className="text-xs text-muted-foreground">{t("home.profileActive")}</p>
-              <p className="mt-2 text-2xl font-bold">{activePublicProfiles}</p>
+          <div className="space-y-3">
+            {samplePace && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">{t("home.heroSampleLabel")}</p>
+                <PaceFeedCard
+                  run={samplePace.run}
+                  uuid={samplePace.uuid}
+                  displayName={
+                    (locale !== "ja" ? samplePace.displayNameAlphabet : null) ||
+                    samplePace.displayName ||
+                    undefined
+                  }
+                  skinUrl={samplePace.skinUrl ?? undefined}
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="flex items-baseline gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 py-2 sm:block sm:py-2.5">
+                <div className="text-xl font-bold tabular-nums">{totalPublicProfiles.toLocaleString(locale)}</div>
+                <p className="text-xs leading-tight text-muted-foreground sm:mt-0.5 sm:text-[11px]">{t("home.statProfiles")}</p>
+              </div>
+              <div className="flex items-baseline gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 py-2 sm:block sm:py-2.5">
+                <div className="text-xl font-bold tabular-nums">{recordedPaceTotal === null ? <span className="text-muted-foreground">-</span> : recordedPaceTotal.toLocaleString(locale)}</div>
+                <p className="text-xs leading-tight text-muted-foreground sm:mt-0.5 sm:text-[11px]">{t("home.statPaces")}</p>
+              </div>
+              <div className="flex items-baseline gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 py-2 sm:block sm:py-2.5">
+                <div className="text-xl font-bold tabular-nums">
+                  {feed.loading.liveRuns ? (
+                    <Skeleton className="h-7 w-8 rounded" />
+                  ) : feed.errors.liveRuns && feed.liveRunsCheckedAt === null ? (
+                    <span className="text-muted-foreground">-</span>
+                  ) : (
+                    sortedLiveRuns.length
+                  )}
+                </div>
+                <p className="text-xs leading-tight text-muted-foreground sm:mt-0.5 sm:text-[11px]">{t("home.statLive")}</p>
+              </div>
             </div>
           </div>
         </div>

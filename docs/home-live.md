@@ -25,7 +25,10 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 | 最近更新されたガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
 | よく読まれているガイド | `page_view_stats` テーブル + `guides` + `users` JOIN | `targetType = "guide"`、`isPublished = true` かつ著者が `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
 | 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
-| アクティブプロフィール数 | `users` テーブル | 上記 + `updatedAt` が1週間以内 |
+| ヒーローの見本ペース | `paceman_paces` + `users` JOIN（`lower(mcid)`） | `app/lib/home-pace-sample.server.ts` の `getHomeSamplePace`。公開プロフィール・視聴者除外・Enter Nether 除外・保持期間内。区間深度（`PACE_FEED_SPLITS` 順、Finish 最大）降順→日時降順で1件。0件なら見本カードを出さない |
+| 記録ペース総数 | 同上 | `countHomeRecordedPaces`。同条件の `count(distinct pacemanRunId)`（保持期間＝直近2か月） |
+
+ヒーロー右カラムは「見本ペース（`PaceFeedCard` 流用）＋統計行（公開プロフィール数・記録ペース数・ライブ中人数）」。ライブ中人数はクライアントの feed state（`liveRuns`）由来で、未取得はスケルトン・取得失敗は「-」。登録済みユーザー（`isRegistered`）にはヒーロー左カラムに「おかえりなさい」帯（マイプロフィール・プロフィール編集・お気に入りへの近道）を表示する。
 
 「よく見られている」「よく読まれている」は、`guideListOrderBy("popular")` のような相関サブクエリ＋フォールバックではなく、`page_view_stats` のスナップショット行を起点に対象テーブルへ `innerJoin` する（`app/lib/schema.ts` の `pageViewStats`）。この形なら PV スナップショットが1件も無い環境（cron `update-page-views` 未稼働）では**結果が自然に0件**になるため、UI側は件数だけで「PV欄を出すか」を判定でき、集計未稼働を示す注記は不要（要件どおり注記は出さない）。/guides 一覧の「人気順」（`guideListOrderBy("popular")`。相関サブクエリ＋いいね数・更新日時へのフォールバック）とは実装方針が異なる点に注意（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
 
