@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
@@ -338,10 +339,18 @@ export default function PacesPage() {
           viewerPrefs={viewerPrefs}
         />
       ) : (
-        <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
-          <History className="mx-auto mb-2 h-12 w-12 opacity-30" />
-          <p>{hasActiveFilters ? t("paces.emptyFiltered") : t("paces.empty")}</p>
-        </div>
+        <EmptyState
+          icon={<History className="h-12 w-12" />}
+          title={hasActiveFilters ? t("paces.emptyFiltered") : t("paces.empty")}
+          description={hasActiveFilters ? t("paces.emptyFilteredHint") : t("paces.emptyHint")}
+          action={
+            hasActiveFilters ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/paces">{t("paces.resetFilters")}</Link>
+              </Button>
+            ) : undefined
+          }
+        />
       )}
     </div>
   );
