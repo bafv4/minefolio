@@ -96,13 +96,14 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
+        <caption className="sr-only">{t("home.paceListCaption")}</caption>
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-3 font-medium">{t("home.paceListRunner")}</th>
-            <th className="text-left py-2 px-3 font-medium">{t("home.paceListVersion")}</th>
-            <th className="text-left py-2 px-3 font-medium">{t("home.paceListSplit")}</th>
-            <th className="text-right py-2 px-3 font-medium">{t("home.paceListTime")}</th>
-            <th className="text-center py-2 px-3 font-medium">{t("home.paceListStream")}</th>
+            <th className="text-left py-2 px-2 sm:px-3 font-medium">{t("home.paceListRunner")}</th>
+            <th className="hidden sm:table-cell text-left py-2 px-3 font-medium">{t("home.paceListVersion")}</th>
+            <th className="hidden sm:table-cell text-left py-2 px-3 font-medium">{t("home.paceListSplit")}</th>
+            <th className="text-right py-2 px-2 sm:px-3 font-medium">{t("home.paceListTime")}</th>
+            <th className="text-center py-2 px-2 sm:px-3 font-medium whitespace-nowrap">{t("home.paceListStream")}</th>
           </tr>
         </thead>
         <tbody>
@@ -118,9 +119,15 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
               (locale !== "ja" ? mcidToDisplayNameAlphabet?.[mcidLower] : undefined) ??
               mcidToDisplayName[mcidLower];
 
+            const splitBadge = latestSplit && (
+              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
+                <PaceManSplitMark timeline={getSplitTimeline(latestSplit.eventId)} size={13} />
+              </Badge>
+            );
+
             return (
               <tr key={run.worldId} className="border-b hover:bg-accent/50 transition-colors">
-                <td className="py-2 px-3">
+                <td className="py-2 px-2 sm:px-3 max-w-0 w-full sm:max-w-none sm:w-auto">
                   {isRegistered && slug ? (
                     <Link
                       to={`/player/${slug}`}
@@ -139,22 +146,17 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                       </div>
                     </Link>
                   ) : (
-                    <span className="font-medium">{run.nickname}</span>
+                    <span className="font-medium block truncate">{run.nickname}</span>
                   )}
+                  {splitBadge && <div className="mt-1 sm:hidden">{splitBadge}</div>}
                 </td>
-                <td className="py-2 px-3">
+                <td className="hidden sm:table-cell py-2 px-3">
                   <Badge variant="outline" className="text-xs">
                     {run.gameVersion}
                   </Badge>
                 </td>
-                <td className="py-2 px-3">
-                  {latestSplit && (
-                    <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
-                      <PaceManSplitMark timeline={getSplitTimeline(latestSplit.eventId)} size={13} />
-                    </Badge>
-                  )}
-                </td>
-                <td className="py-2 px-3 text-right font-mono font-semibold">
+                <td className="hidden sm:table-cell py-2 px-3">{splitBadge}</td>
+                <td className="py-2 px-2 sm:px-3 text-right font-mono font-semibold">
                   {latestSplit ? (
                     run.eventList.length > 1 ? (
                       <SplitBreakdown run={run} igt={latestSplit.igt} />
@@ -163,16 +165,16 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
                     )
                   ) : "-"}
                 </td>
-                <td className="py-2 px-3 text-center">
+                <td className="py-2 px-2 sm:px-3 text-center">
                   {run.user.liveAccount ? (
                     <a
                       href={`https://twitch.tv/${run.user.liveAccount}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
+                      className="inline-flex min-h-8 min-w-8 items-center justify-center gap-1 rounded text-primary hover:underline text-xs sm:min-h-0 sm:min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <ExternalLink className="h-3 w-3" />
-                      {t("home.paceListStream")}
+                      <span className="sr-only sm:not-sr-only">{t("home.paceListStream")}</span>
                     </a>
                   ) : (
                     <span className="text-muted-foreground text-xs">-</span>

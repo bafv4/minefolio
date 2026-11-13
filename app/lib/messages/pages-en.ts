@@ -395,6 +395,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     paceListSplit: "Split",
     paceListTime: "Time",
     paceListStream: "Stream",
+    paceListCaption: "Runs currently in progress",
     sectionVideos: "Latest videos",
     noProfiles: "No profiles yet",
     noProfilesDescription: "Be the first to create a profile.",

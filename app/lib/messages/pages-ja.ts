@@ -398,6 +398,7 @@ export const PAGES_JA = {
     paceListSplit: "区間",
     paceListTime: "タイム",
     paceListStream: "配信",
+    paceListCaption: "現在進行中のペース一覧",
     sectionVideos: "最新動画",
     noProfiles: "登録ユーザーはまだいません",
     noProfilesDescription: "最初のプロフィールを作成してみましょう。",
