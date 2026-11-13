@@ -8,6 +8,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
+  seedKeybinding,
+  seedPlayerConfig,
   seedUser,
   SHARED_MEMORY_URL,
   type TestDb,
@@ -299,6 +301,30 @@ describe("loader - translationEnabled", () => {
     signInAs("discord-runner");
 
     expect((await callLoader()).translationEnabled).toBe(true);
+  });
+});
+
+describe("loader - hasExistingData（EXISTS の相関）", () => {
+  async function callLoader(): Promise<Record<string, unknown>> {
+    const request = new Request("https://minefolio.app/me/edit");
+    return loader({ request, params: {}, context: {} } as never) as never;
+  }
+
+  it("キー配置等が無ければ false、当人の行があれば true、他人の行だけなら false", async () => {
+    const me = await seedUser(db, { slug: "me", discordId: "discord-me" });
+    const other = await seedUser(db, { slug: "other", discordId: "discord-other" });
+    signInAs("discord-me");
+
+    expect((await callLoader()).hasExistingData).toBe(false);
+
+    await seedKeybinding(db, other.id);
+    expect((await callLoader()).hasExistingData).toBe(false);
+
+    await seedPlayerConfig(db, me.id);
+    const data = await callLoader();
+    expect(data.hasExistingData).toBe(true);
+    // extras の列は user には混ぜない
+    expect(data.user).not.toHaveProperty("hasExistingData");
   });
 });
 

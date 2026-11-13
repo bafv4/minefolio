@@ -76,7 +76,7 @@ type ProfileVisibility = (typeof VISIBILITIES)[number];
 const TOTAL_STEPS = 5;
 
 // 連携ステップで扱うプラットフォーム（custom は扱わない）。
-// label / placeholder / prefix は edit.tsx の platformOptions に倣う
+// label / placeholder / prefix は /me/edit のリンク欄（platformOptions）に倣う
 const LINK_PLATFORMS = [
   { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@", icon: Youtube },
   { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/", icon: Twitch },
@@ -138,7 +138,7 @@ function discordNameAsAlphabet(name: string | null | undefined): string | null {
 }
 
 /**
- * ソーシャルリンク ID の形式検証。edit.tsx の create_link と同じ規則
+ * ソーシャルリンク ID の形式検証。/me/edit（app/lib/profile-edit.server.ts）が使う validateLinkInput と同じ規則
  * （100 文字以内、YouTube は禁止文字方式、それ以外は英数字・ハイフン・アンダースコアのみ）。
  * 問題なければ null を返す。
  */
@@ -356,7 +356,7 @@ export async function action({ request }: Route.ActionArgs) {
     const mcid = (formData.get("mcid") as string)?.trim() || "";
     const bedrockMcidInput = (formData.get("bedrockMcid") as string)?.trim() || "";
 
-    // Bedrock版MCID: edit.tsx の set_bedrock_mcid と同じ規則。空欄なら null（解除）。
+    // Bedrock版MCID: /me/edit の一括保存（save_all → app/lib/profile-edit.server.ts）と同じ規則。空欄なら null（解除）。
     // 自己申告の表示用テキストのためMojang検証はせず、uuid・スキン・slug には関与させない
     if (bedrockMcidInput) {
       const bedrockError = validateBedrockMcidFormat(bedrockMcidInput);
@@ -400,7 +400,7 @@ export async function action({ request }: Route.ActionArgs) {
           })
           .where(eq(users.id, user.id));
       });
-      // edit.tsx の set_mcid が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
+      // /me/edit の一括保存（save_all → mcid-change.server.ts の verifyMcidForUser / applyMcidSlugChange）が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
       // ここでは行わない。ウィザード中は常に非公開（cron 対象外）でキャッシュが存在せず、
       // 公開へ切り替えた時点で save_visibility が最新の MCID で追いつかせるため
     } else if (bedrockMcid !== user.bedrockMcid) {
@@ -540,7 +540,7 @@ export async function action({ request }: Route.ActionArgs) {
     } else if (profileVisibility === "unlisted") {
       // 限定公開もプロフィールは見られるが、SRC/MCSR Ranked ランキングの cron は public のみが対象で追いつかない。
       // 連携ステップ（save_links）では取得しないため、ここで SRC だけ即時に取得する
-      // （/me/edit の create_link なら限定公開でも即時取得される挙動に揃える）
+      // （/me/edit のリンク保存でも限定公開で即時取得される挙動に揃える）
       runAfterResponse(refreshSrcRankingsForUser(user.id));
     }
 
@@ -808,7 +808,7 @@ function MinecraftStep({
               name="mcid"
               defaultValue={user.mcid ?? ""}
               placeholder={t("onboarding.mcidPlaceholder")}
-              minLength={3}
+              minLength={PROFILE_FIELD_LIMITS.mcidMin}
               maxLength={PROFILE_FIELD_LIMITS.mcidMax}
               autoComplete="off"
             />
@@ -825,7 +825,7 @@ function MinecraftStep({
               name="bedrockMcid"
               defaultValue={user.bedrockMcid ?? ""}
               placeholder={t("meEdit.bedrockMcidExample")}
-              minLength={3}
+              minLength={PROFILE_FIELD_LIMITS.bedrockMcidMin}
               maxLength={PROFILE_FIELD_LIMITS.bedrockMcidMax}
               autoComplete="off"
             />

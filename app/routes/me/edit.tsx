@@ -22,7 +22,7 @@ import {
   keyRemaps,
 } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { safeExternalHref } from "@/lib/safe-url";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { importFromLegacy } from "@/lib/legacy-import";
@@ -31,6 +31,7 @@ import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
 import {
   MAX_PROFILE_VIDEOS,
+  PROFILE_FIELD_LIMITS,
   validateBedrockMcidFormat,
   validateLinkInput,
   validateMcidFormat,
@@ -153,22 +154,27 @@ export async function loader({ request }: Route.LoaderArgs) {
         orderBy: [asc(profileVideos.displayOrder)],
       },
     },
+    // キー配置等のデータが存在するか（レガシーインポート案内の出し分けにだけ使う）。
+    // 中身は不要なので EXISTS で users 取得と同じ 1 往復に畳み、関連データ全件をクライアントへ返さない
+    // ※ RQB の extras では列参照が非修飾（"id"）で出力され、サブクエリ側の列と衝突して常に false になるため、
+    //   外側の users.id はルート別名で明示的に修飾する（loader テストが相関を固定している）
+    extras: {
+      hasExistingData: sql<number>`(
+        exists(select 1 from ${keybindings} where ${keybindings.userId} = "users"."id")
+        or exists(select 1 from ${playerConfigs} where ${playerConfigs.userId} = "users"."id")
+        or exists(select 1 from ${itemLayouts} where ${itemLayouts.userId} = "users"."id")
+        or exists(select 1 from ${searchCrafts} where ${searchCrafts.userId} = "users"."id")
+        or exists(select 1 from ${keyRemaps} where ${keyRemaps.userId} = "users"."id")
+      )`.as("has_existing_data"),
+    },
   });
 
   if (!user) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  // キー配置等のデータが存在するかチェック（レガシーインポート案内の出し分けにだけ使う。
-  // 中身は不要なので各テーブル1行の存在確認だけにし、関連データ全件をクライアントへ返さない）
-  const existenceChecks = await Promise.all([
-    db.query.keybindings.findFirst({ where: eq(keybindings.userId, user.id), columns: { id: true } }),
-    db.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, user.id), columns: { id: true } }),
-    db.query.itemLayouts.findFirst({ where: eq(itemLayouts.userId, user.id), columns: { id: true } }),
-    db.query.searchCrafts.findFirst({ where: eq(searchCrafts.userId, user.id), columns: { id: true } }),
-    db.query.keyRemaps.findFirst({ where: eq(keyRemaps.userId, user.id), columns: { id: true } }),
-  ]);
-  const hasExistingData = existenceChecks.some((row) => row !== undefined);
+  const { hasExistingData: hasExistingDataRaw, ...userRow } = user;
+  const hasExistingData = Boolean(hasExistingDataRaw);
 
   // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
   const legacyApiUrl = env.LEGACY_API_URL;
@@ -177,7 +183,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const translationEnabled = isTranslationEnabled();
 
   return {
-    user,
+    user: userRow,
     links: user.socialLinks,
     videos: user.profileVideos,
     legacyApiUrl,
@@ -477,6 +483,7 @@ function SocialLinkDialog({
               defaultValue={editingLink?.identifier ?? ""}
               placeholder={currentOption?.placeholder}
               required
+              maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
               className="flex-1"
             />
           </div>
@@ -556,7 +563,7 @@ function VideoDialog({
             name="title"
             defaultValue={editingVideo?.title ?? ""}
             placeholder={t("meEdit.videoTitlePlaceholder")}
-            maxLength={100}
+            maxLength={PROFILE_FIELD_LIMITS.videoTitle}
           />
         </div>
         <div className="space-y-1">
@@ -1212,8 +1219,8 @@ export default function EditProfilePage() {
                   if (mcidCheck.status === "error") setMcidCheck({ status: "idle" });
                 }}
                 placeholder={t("meEdit.mcidExample")}
-                minLength={3}
-                maxLength={16}
+                minLength={PROFILE_FIELD_LIMITS.mcidMin}
+                maxLength={PROFILE_FIELD_LIMITS.mcidMax}
               />
             </div>
             {mcidCheck.status === "error" && (
@@ -1411,8 +1418,8 @@ export default function EditProfilePage() {
                               value={newBedrockMcid}
                               onChange={(e) => setNewBedrockMcid(e.target.value)}
                               placeholder={t("meEdit.bedrockMcidExample")}
-                              minLength={3}
-                              maxLength={24}
+                              minLength={PROFILE_FIELD_LIMITS.bedrockMcidMin}
+                              maxLength={PROFILE_FIELD_LIMITS.bedrockMcidMax}
                             />
                           </div>
                           {bedrockError && (
@@ -1639,7 +1646,7 @@ export default function EditProfilePage() {
                 value={formValues.displayName}
                 onChange={(e) => handleInputChange("displayName", e.target.value)}
                 placeholder={user.mcid || user.slug}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.displayName}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.fallbackToMcidOrSlug", { value: user.mcid ? "MCID" : "slug" })}
@@ -1653,7 +1660,7 @@ export default function EditProfilePage() {
                 value={formValues.displayNameAlphabet}
                 onChange={(e) => handleInputChange("displayNameAlphabet", e.target.value)}
                 placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.displayNameAlphabet}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.displayNameAlphabetHint")}
@@ -1667,7 +1674,7 @@ export default function EditProfilePage() {
                 value={formValues.bio}
                 onChange={(e) => handleInputChange("bio", e.target.value)}
                 placeholder={t("meEdit.bioPlaceholder")}
-                maxLength={500}
+                maxLength={PROFILE_FIELD_LIMITS.bio}
                 rows={3}
               />
             </div>
@@ -1680,7 +1687,7 @@ export default function EditProfilePage() {
                   value={formValues.location}
                   onChange={(e) => handleInputChange("location", e.target.value)}
                   placeholder={t("meEdit.locationExample")}
-                  maxLength={100}
+                  maxLength={PROFILE_FIELD_LIMITS.location}
                 />
               </div>
 
@@ -1689,7 +1696,7 @@ export default function EditProfilePage() {
                 <Combobox
                   options={pronounOptions}
                   value={formValues.pronouns}
-                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, 20))}
+                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}
                   placeholder={t("meEdit.pronounsExample")}
                   allowCustomValue={true}
                 />
@@ -1703,7 +1710,7 @@ export default function EditProfilePage() {
                 value={formValues.shortBio}
                 onChange={(e) => handleInputChange("shortBio", e.target.value)}
                 placeholder={t("meEdit.shortBioExample")}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.shortBio}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.shortBioHint")}
@@ -1872,7 +1879,7 @@ export default function EditProfilePage() {
                   value={formValues.speedruncomUsername}
                   onChange={(e) => handleInputChange("speedruncomUsername", e.target.value)}
                   placeholder={t("meEdit.speedrunUsernameExample")}
-                  maxLength={50}
+                  maxLength={PROFILE_FIELD_LIMITS.speedruncomUsername}
                   className="flex-1"
                 />
               </div>
@@ -2226,14 +2233,18 @@ export default function EditProfilePage() {
                             {platformLabel}
                             {pending && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
                           </p>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-muted-foreground hover:underline"
-                          >
-                            {link.identifier}
-                          </a>
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-muted-foreground hover:underline"
+                            >
+                              {link.identifier}
+                            </a>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">{link.identifier}</span>
+                          )}
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1">

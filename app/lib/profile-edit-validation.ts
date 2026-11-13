@@ -65,6 +65,7 @@ export const PROFILE_FIELD_LIMITS = {
   pronouns: 20,
   speedruncomUsername: 50,
   linkIdentifier: 100,
+  videoTitle: 100,
   mcidMin: 3,
   mcidMax: 16,
   bedrockMcidMin: 3,
@@ -153,7 +154,7 @@ export function validateVideoInput(input: VideoPayload): MessageKey | null {
   if (!input.url) return "meEdit.videoUrlRequired";
   // 動画IDを解決できないURLは登録不可（埋め込み時の X-Frame-Options ブロック防止）
   if (!getYouTubeVideoId(input.url)) return "meEdit.videoUrlInvalid";
-  if (input.title && input.title.length > 100) return "meEdit.videoTitleMaxLength";
+  if (input.title && input.title.length > PROFILE_FIELD_LIMITS.videoTitle) return "meEdit.videoTitleMaxLength";
   return null;
 }
 
