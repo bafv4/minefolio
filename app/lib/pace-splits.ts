@@ -9,5 +9,3 @@ export const PACE_FEED_SPLITS = [
   "Enter End",
   "Finish",
 ] as const;
-
-export type PaceFeedSplit = (typeof PACE_FEED_SPLITS)[number];
