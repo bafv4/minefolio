@@ -10,6 +10,7 @@
 // app/lib/blob-url を import している）。
 
 import { del, list, type ListBlobResultBlob } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
 /** Blob 削除のバッチサイズ（del() 1回あたりの件数） */
 const DELETE_BATCH_SIZE = 100;
@@ -78,4 +79,59 @@ export async function delBlobsInBatches(
     onBatchSettled?.(deleted + failed);
   }
   return { deleted, failed };
+}
+
+/**
+ * テクスチャ（スキン/マント）の Client Upload 用トークン発行の共通処理。
+ * `<prefix>/<userId>/` 配下の PNG（1MB 以下）だけを許可する。レスポンスは Content-Type のみ。
+ * 呼び出し側は認証・ユーザー解決を済ませてから呼ぶ（`userId` は解決済みの内部ID）。
+ */
+export async function handleTextureUploadToken(
+  request: Request,
+  { prefix, userId, logLabel }: { prefix: string; userId: string; logLabel: string },
+): Promise<Response> {
+  try {
+    const body = (await request.json()) as HandleUploadBody;
+
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname) => {
+        // パスがユーザーのディレクトリ内であることを確認
+        // パストラバーサル対策として '..' セグメントも拒否する
+        const expectedPrefix = `${prefix}/${userId}/`;
+        if (
+          !pathname.startsWith(expectedPrefix) ||
+          pathname.split("/").includes("..")
+        ) {
+          throw new Error("Invalid upload path");
+        }
+
+        return {
+          allowedContentTypes: ["image/png"],
+          maximumSizeInBytes: 1 * 1024 * 1024, // 1MB
+          // 固定パス（<prefix>/<userId>/<name>.png）のため、同名 blob への再アップロードは
+          // 既定（addRandomSuffix:false / allowOverwrite:false）だと「既に存在する」で失敗する。
+          // ランダムサフィックスを付けて毎回一意パスにし、差し替え失敗と URL キャッシュを防ぐ。
+          // 旧 blob は /api/me/<種別> の POST（旧 URL と異なる場合に del()）で削除される。
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ userId }),
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        // アップロード完了後のコールバック
+        // 注意: この時点ではDBを更新しない
+        // クライアントが別途 /api/me/<種別> にPOSTしてURLを保存する
+        console.log(`${logLabel} uploaded:`, blob.url, tokenPayload);
+      },
+    });
+
+    return Response.json(jsonResponse);
+  } catch (error) {
+    console.error("Upload token error:", error);
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Upload failed" },
+      { status: 400 },
+    );
+  }
 }
