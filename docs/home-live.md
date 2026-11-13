@@ -198,6 +198,7 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 | `split` | 区間 | `PACE_FEED_SPLITS`（`app/lib/pace-splits.ts`）のいずれか。指定時はその区間のRTAで表示・絞り込み |
 | `from` / `to` | 時期 | `YYYY-MM-DD`（JSTとして解釈、`to` はその日の終わりまで） |
 | `maxTime` | タイム上限 | `m:ss` 形式。表示される区間のRTAに対して適用 |
+| `sort` | 並び順 | `time`＝表示タイム（RTA）の昇順（同タイムは新しい順）。未指定・不正値は新しい順。`split` と併用すると区間別最速になる。キャッシュ済みベースのコピーに対して `getPublicPaceFeed` 内でソートする |
 
 ### 遅延ロード・無限スクロール
 

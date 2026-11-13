@@ -34,7 +34,12 @@ export interface PaceSearchFilters {
   from?: Date; // 時期（開始日）
   to?: Date; // 時期（終了日）
   maxRta?: number; // タイム上限（ミリ秒）
+  sort?: PaceSort; // 並び順（未指定は新しい順）
 }
+
+/** /paces の並び順。"time" は表示タイム（RTA）の昇順。未指定・不正値は新しい順 */
+export const PACE_SORTS = ["time"] as const;
+export type PaceSort = (typeof PACE_SORTS)[number];
 
 // 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（アプリは日本語圏向け）。
 // /videos の検索条件（videos-feed.server.ts）も同じ規約を共有する
@@ -71,6 +76,11 @@ export function parsePaceSearchParams(searchParams: URLSearchParams): PaceSearch
   filters.from = parseDateParam(searchParams.get("from"), false);
   filters.to = parseDateParam(searchParams.get("to"), true);
   filters.maxRta = parseTimeParamToMs(searchParams.get("maxTime"));
+
+  const sort = searchParams.get("sort");
+  if (sort && (PACE_SORTS as readonly string[]).includes(sort)) {
+    filters.sort = sort as PaceSort;
+  }
 
   return filters;
 }
@@ -194,6 +204,14 @@ export async function getPublicPaceFeed(
       const alphabet = mcidToDisplayNameAlphabet[mcidLower]?.toLowerCase() ?? "";
       return mcidLower.includes(q) || displayName.includes(q) || alphabet.includes(q);
     });
+  }
+
+  // タイム順（RTA昇順）。同タイムは新しい順（ランIDで決定的にタイブレークし、offsetページングを安定させる）。
+  // base.items を破壊しないようコピーしてからソートする（キャッシュ共有のため）
+  if (filters.sort === "time") {
+    items = [...items].sort(
+      (a, b) => a.rta - b.rta || b.time - a.time || b.pacemanRunId - a.pacemanRunId,
+    );
   }
 
   return { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };

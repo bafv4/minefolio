@@ -453,6 +453,9 @@ export const PAGES_JA = {
     filterPeriodTo: "終了日",
     filterMaxTime: "タイム上限",
     filterMaxTimePlaceholder: "例: 10:00",
+    filterSort: "並び順",
+    sortRecent: "新しい順",
+    sortTime: "タイム順（速い順）",
     loadMore: "もっと読み込む",
   },
   videos: {

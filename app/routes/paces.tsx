@@ -31,7 +31,7 @@ import { PACES_PAGE_SIZE } from "./api/paces";
 import { History, Activity, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
-const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime"] as const;
+const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime", "sort"] as const;
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -176,6 +176,8 @@ export default function PacesPage() {
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
   const [maxTime, setMaxTime] = useState(searchParams.get("maxTime") ?? "");
+  // 並び順（"recent"=新しい順 / "time"=タイム順。URLには "time" のみ載せる）
+  const [sort, setSort] = useState(searchParams.get("sort") === "time" ? "time" : "recent");
 
   useEffect(() => {
     setPlayer(searchParams.get("q") ?? "");
@@ -183,6 +185,7 @@ export default function PacesPage() {
     setFrom(searchParams.get("from") ?? "");
     setTo(searchParams.get("to") ?? "");
     setMaxTime(searchParams.get("maxTime") ?? "");
+    setSort(searchParams.get("sort") === "time" ? "time" : "recent");
   }, [searchParams]);
 
   const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
@@ -195,6 +198,7 @@ export default function PacesPage() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (maxTime.trim()) params.set("maxTime", maxTime.trim());
+    if (sort === "time") params.set("sort", "time");
     setSearchParams(params, { preventScrollReset: true });
   };
 
@@ -228,7 +232,7 @@ export default function PacesPage() {
         onSubmit={handleSearch}
         className="rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5"
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
           <div className="space-y-1.5">
             <Label htmlFor="pace-filter-player">{t("paces.filterPlayer")}</Label>
             <Input
@@ -294,6 +298,18 @@ export default function PacesPage() {
               pattern="\d{1,3}:[0-5]?\d"
               title={t("paces.filterMaxTimePlaceholder")}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pace-filter-sort">{t("paces.filterSort")}</Label>
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger id="pace-filter-sort" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>
+                <SelectItem value="time">{t("paces.sortTime")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2">

@@ -1,6 +1,6 @@
 // ペース一覧（/paces）の遅延ロード・無限スクロール用API
 // クエリパラメータ: page（1始まりのページ番号。use-infinite-scroll フックの規約）,
-// q, split, from, to, maxTime（検索条件）
+// q, split, from, to, maxTime（検索条件）, sort（"time"=タイム順。未指定は新しい順）
 // レスポンスはユーザー非依存（「自分のペースを隠す」設定はクライアント側で適用）。
 // CDNキャッシュ（s-maxage + stale-while-revalidate）でエッジ配信し、オリジン到達を最小化する。
 

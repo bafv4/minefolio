@@ -587,6 +587,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     filterPeriodTo: "End date",
     filterMaxTime: "Max time",
     filterMaxTimePlaceholder: "e.g. 10:00",
+    filterSort: "Sort by",
+    sortRecent: "Newest first",
+    sortTime: "Fastest time",
     loadMore: "Load more",
   },
   videos: {
