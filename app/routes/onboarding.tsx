@@ -17,13 +17,20 @@ import { createAuth } from "@/lib/auth";
 import { getSession, isRegistered } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
-import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug, getLocalizedDisplayName } from "@/lib/slug";
 import { sanitizeReturnTo } from "@/lib/return-to";
-import { claimSlug, recordSlugChange } from "@/lib/slug-history.server";
+import { claimSlug } from "@/lib/slug-history.server";
+import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
-import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import {
+  PRINTABLE_ASCII_RE,
+  PROFILE_FIELD_LIMITS,
+  validateBedrockMcidFormat,
+  validateLinkInput,
+  validateMcidFormat,
+  validateProfileTextFields,
+} from "@/lib/profile-edit-validation";
 import {
   runAfterResponse,
   refreshTwitchVodsForLogin,
@@ -116,9 +123,6 @@ const DISPLAY_TOGGLES = [
   { name: "showYoutubeOnHome", labelKey: "meEdit.showYoutubeOnHome" },
 ] as const;
 
-// 印字可能な ASCII のみ（英数字・空白・基本記号）。アルファベット表記の表示名の規則（edit.tsx と同じ）
-const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
-
 /**
  * Discord 表示名を「アルファベット表記の表示名」の既定値に使えるなら返す。
  * edit.tsx の基本情報フォームと同じ規則（印字可能 ASCII のみ・50 文字以内）を満たすときだけ採用し、
@@ -127,7 +131,7 @@ const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
  */
 function discordNameAsAlphabet(name: string | null | undefined): string | null {
   const value = name?.trim();
-  if (!value || value.length > 50 || !PRINTABLE_ASCII_RE.test(value)) {
+  if (!value || value.length > PROFILE_FIELD_LIMITS.displayNameAlphabet || !PRINTABLE_ASCII_RE.test(value)) {
     return null;
   }
   return value;
@@ -139,19 +143,8 @@ function discordNameAsAlphabet(name: string | null | undefined): string | null {
  * 問題なければ null を返す。
  */
 function validateLinkIdentifier(t: Translator, platform: LinkPlatform, identifier: string): string | null {
-  if (identifier.length > 100) {
-    return t("meEdit.idMaxLength");
-  }
-  if (platform === "youtube") {
-    // YouTubeハンドルは日本語などUnicode文字を許可。空白、@、URL特殊文字は禁止
-    if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
-      return t("meEdit.idInvalidChars");
-    }
-  } else if (!/^[\w\-]+$/.test(identifier)) {
-    // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
-    return t("meEdit.idAllowedChars");
-  }
-  return null;
+  const key = validateLinkInput({ platform, identifier, customLabel: null, customUrl: null });
+  return key ? t(key) : null;
 }
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -325,34 +318,17 @@ export async function action({ request }: Route.ActionArgs) {
     const location = (formData.get("location") as string)?.trim() || null;
     const pronouns = (formData.get("pronouns") as string)?.trim() || null;
 
-    // 以下の検証は edit.tsx の基本情報フォームと同じ規則
-    if (displayName && displayName.length > 50) {
-      return { error: t("meEdit.displayNameMax") };
-    }
-
-    if (displayNameAlphabet && displayNameAlphabet.length > 50) {
-      return { error: t("meEdit.displayNameAlphabetMax") };
-    }
-
-    // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
-    if (displayNameAlphabet && !PRINTABLE_ASCII_RE.test(displayNameAlphabet)) {
-      return { error: t("meEdit.displayNameAlphabetInvalid") };
-    }
-
-    if (bio && bio.length > 500) {
-      return { error: t("meEdit.bioMax") };
-    }
-
-    if (location && location.length > 100) {
-      return { error: t("meEdit.locationMax") };
-    }
-
-    if (shortBio && shortBio.length > 50) {
-      return { error: t("meEdit.shortBioMax") };
-    }
-
-    if (pronouns && pronouns.length > 20) {
-      return { error: t("meEdit.pronounsMax") };
+    // /me/edit の基本情報と同じ検証（profile-edit-validation.ts が単一情報源）
+    const textError = validateProfileTextFields({
+      displayName,
+      displayNameAlphabet,
+      bio,
+      location,
+      shortBio,
+      pronouns,
+    });
+    if (textError) {
+      return { error: t(textError) };
     }
 
     await db
@@ -383,13 +359,9 @@ export async function action({ request }: Route.ActionArgs) {
     // Bedrock版MCID: edit.tsx の set_bedrock_mcid と同じ規則。空欄なら null（解除）。
     // 自己申告の表示用テキストのためMojang検証はせず、uuid・スキン・slug には関与させない
     if (bedrockMcidInput) {
-      // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
-      if (bedrockMcidInput.length < 3 || bedrockMcidInput.length > 24) {
-        return { error: t("meEdit.bedrockMcidLength") };
-      }
-      // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
-      if (/[\u0000-\u001f\u007f]/.test(bedrockMcidInput)) {
-        return { error: t("meEdit.bedrockMcidInvalid") };
+      const bedrockError = validateBedrockMcidFormat(bedrockMcidInput);
+      if (bedrockError) {
+        return { error: t(bedrockError) };
       }
     }
     const bedrockMcid = bedrockMcidInput || null;
@@ -398,37 +370,25 @@ export async function action({ request }: Route.ActionArgs) {
     const mcidChanged = mcid ? mcid !== user.mcid : !!user.mcid;
 
     if (mcidChanged) {
-      // 設定/変更は edit.tsx の set_mcid、解除は remove_mcid と同じ処理
-      if (mcid) {
-        if (mcid.length < 3 || mcid.length > 16) {
-          return { error: t("meEdit.mcidLength") };
-        }
-
-        // 既に同じMCIDが登録されていないかチェック
-        const existingUser = await db.query.users.findFirst({
-          where: eq(users.mcid, mcid),
-        });
-
-        if (existingUser && existingUser.id !== user.id) {
-          return { error: t("meEdit.mcidTaken") };
-        }
-      }
-
-      // 設定時は Mojang API で検証して uuid を導出する（フォームの値は信用しない）。解除時は両方 null
+      // 設定/変更・解除とも /me/edit と同じ処理（mcid-change.server.ts）
+      // 設定時は形式・重複・Mojang 照合（uuid はフォームの値を信用せず導出）。解除時は両方 null
       let next: { mcid: string | null; uuid: string | null };
-      try {
-        next = mcid ? { mcid, uuid: await fetchUuidFromMcid(mcid) } : { mcid: null, uuid: null };
-      } catch (error) {
-        if (error instanceof MojangError && error.code === "MCID_NOT_FOUND") {
-          return { error: t("meEdit.mcidNotFound") };
+      if (mcid) {
+        const formatError = validateMcidFormat(mcid);
+        if (formatError) {
+          return { error: t(formatError) };
         }
-        return { error: t("meEdit.mcidVerifyFailed") };
+        const verified = await verifyMcidForUser(db, user, mcid);
+        if ("errorKey" in verified) {
+          return { error: t(verified.errorKey) };
+        }
+        next = { mcid, uuid: verified.uuid };
+      } else {
+        next = { mcid: null, uuid: null };
       }
-
-      // 解除時の slug は @{discordId} に戻る
-      const newSlug = generateSlug(next.mcid, session.user.id);
 
       await db.transaction(async (tx) => {
+        const newSlug = await applyMcidSlugChange(tx, user, next.mcid);
         await tx
           .update(users)
           .set({
@@ -439,9 +399,6 @@ export async function action({ request }: Route.ActionArgs) {
             updatedAt: new Date(),
           })
           .where(eq(users.id, user.id));
-
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       });
       // edit.tsx の set_mcid が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
       // ここでは行わない。ウィザード中は常に非公開（cron 対象外）でキャッシュが存在せず、
@@ -739,7 +696,7 @@ function ProfileStep({
               name="displayName"
               defaultValue={user.displayName ?? ""}
               placeholder={discordName ?? ""}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.displayName}
             />
             <p className="text-xs text-muted-foreground">
               {t("onboarding.displayNameHint", { name: discordName ?? "" })}
@@ -753,7 +710,7 @@ function ProfileStep({
               name="displayNameAlphabet"
               defaultValue={user.displayNameAlphabet ?? ""}
               placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.displayNameAlphabet}
             />
             <p className="text-xs text-muted-foreground">{t("meEdit.displayNameAlphabetHint")}</p>
           </div>
@@ -765,7 +722,7 @@ function ProfileStep({
               name="shortBio"
               defaultValue={user.shortBio ?? ""}
               placeholder={t("meEdit.shortBioExample")}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.shortBio}
             />
             <p className="text-xs text-muted-foreground">{t("meEdit.shortBioHint")}</p>
           </div>
@@ -777,7 +734,7 @@ function ProfileStep({
               name="bio"
               defaultValue={user.bio ?? ""}
               placeholder={t("meEdit.bioPlaceholder")}
-              maxLength={500}
+              maxLength={PROFILE_FIELD_LIMITS.bio}
               rows={3}
             />
           </div>
@@ -790,7 +747,7 @@ function ProfileStep({
                 name="location"
                 defaultValue={user.location ?? ""}
                 placeholder={t("meEdit.locationExample")}
-                maxLength={100}
+                maxLength={PROFILE_FIELD_LIMITS.location}
               />
             </div>
 
@@ -799,7 +756,7 @@ function ProfileStep({
               <Combobox
                 options={pronounOptions}
                 value={pronouns}
-                onValueChange={(value) => setPronouns(value.slice(0, 20))}
+                onValueChange={(value) => setPronouns(value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}
                 placeholder={t("meEdit.pronounsExample")}
                 allowCustomValue={true}
               />
@@ -852,7 +809,7 @@ function MinecraftStep({
               defaultValue={user.mcid ?? ""}
               placeholder={t("onboarding.mcidPlaceholder")}
               minLength={3}
-              maxLength={16}
+              maxLength={PROFILE_FIELD_LIMITS.mcidMax}
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">
@@ -869,7 +826,7 @@ function MinecraftStep({
               defaultValue={user.bedrockMcid ?? ""}
               placeholder={t("meEdit.bedrockMcidExample")}
               minLength={3}
-              maxLength={24}
+              maxLength={PROFILE_FIELD_LIMITS.bedrockMcidMax}
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
@@ -1008,7 +965,7 @@ function LinksStep({
                   name={platform.value}
                   defaultValue={links[platform.value]}
                   placeholder={platform.placeholder}
-                  maxLength={100}
+                  maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
                   autoComplete="off"
                   className="flex-1"
                 />

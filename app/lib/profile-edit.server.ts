@@ -10,10 +10,7 @@ import { createId } from "@paralleldrive/cuid2";
 import type { Translator } from "@/lib/messages";
 import { isUniqueConstraintError, type Database } from "@/lib/db";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
-import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
-import { generateSlug } from "@/lib/slug";
-import { recordSlugChange } from "@/lib/slug-history.server";
-import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import type { CapeDisplay } from "@/lib/cape";
 import type { ProfileTabValue } from "@/lib/profile-tabs";
 import { isValidRtaStartedYearMonth } from "@/lib/rta-career";
@@ -30,9 +27,12 @@ import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/con
 import {
   MAX_PROFILE_VIDEOS,
   NEW_VIDEO_ORDER_PREFIX,
+  PROFILE_FIELD_LIMITS,
+  linksTouchSpeedrun,
   validateBedrockMcidFormat,
   validateLinkInput,
   validateMcidFormat,
+  validateProfileTextFields,
   validateVideoInput,
   type ProfileChanges,
   type ProfileFieldErrors,
@@ -189,18 +189,8 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   const allowAutoTranslation =
     allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
 
-  if (displayName && displayName.length > 50) return { error: t("meEdit.displayNameMax") };
-  if (displayNameAlphabet && displayNameAlphabet.length > 50) {
-    return { error: t("meEdit.displayNameAlphabetMax") };
-  }
-  // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
-  if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
-    return { error: t("meEdit.displayNameAlphabetInvalid") };
-  }
-  if (bio && bio.length > 500) return { error: t("meEdit.bioMax") };
-  if (location && location.length > 100) return { error: t("meEdit.locationMax") };
-  if (shortBio && shortBio.length > 50) return { error: t("meEdit.shortBioMax") };
-  if (pronouns && pronouns.length > 20) return { error: t("meEdit.pronounsMax") };
+  const textError = validateProfileTextFields({ displayName, displayNameAlphabet, bio, location, shortBio, pronouns });
+  if (textError) return { error: t(textError) };
   if (!VISIBILITIES.includes(profileVisibility)) return { error: t("meEdit.invalidOption") };
   if (profilePose !== null && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
   if (capeDisplayRaw !== null && capeDisplay === null) return { error: t("meEdit.invalidOption") };
@@ -209,7 +199,7 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   }
   if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) return { error: t("meEdit.invalidOption") };
   if (role !== null && !ROLES.includes(role)) return { error: t("meEdit.invalidOption") };
-  if (speedruncomUsername && speedruncomUsername.length > 50) {
+  if (speedruncomUsername && speedruncomUsername.length > PROFILE_FIELD_LIMITS.speedruncomUsername) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
   // ソーシャルリンク欄の speedruncom identifier と同じ形式（英数字・ハイフン・アンダースコアのみ）を要求する
@@ -451,7 +441,7 @@ export async function saveProfileBatch({
   }
   // Speedrun.com リンクから決まる speedruncomUsername は列の上限（50文字）に収める（リンクの identifier 上限は100）
   for (const l of finalLinks) {
-    if (l.platform === "speedruncom" && touchedKeys.has(l.key) && l.identifier.length > 50) {
+    if (l.platform === "speedruncom" && touchedKeys.has(l.key) && l.identifier.length > PROFILE_FIELD_LIMITS.speedruncomUsername) {
       addLinkError(l.key, t("meEdit.speedrunUsernameMax"));
     }
   }
@@ -466,37 +456,22 @@ export async function saveProfileBatch({
   // MCID 重複・Mojang 照合（トランザクションの外。失敗したら DB は何も変えない）
   let mcidUuid: string | null = null;
   if (mcidSet) {
-    const taken = await db.query.users.findFirst({ where: eq(users.mcid, mcidSet) });
-    if (taken && taken.id !== user.id) {
-      fieldErrors.mcid = t("meEdit.mcidTaken");
+    const verified = await verifyMcidForUser(db, user, mcidSet);
+    if ("errorKey" in verified) {
+      fieldErrors.mcid = t(verified.errorKey);
       return failWithFieldErrors();
     }
-    try {
-      mcidUuid = await fetchUuidFromMcid(mcidSet);
-      // 大文字小文字違いの MCID は mcid 列の比較（BINARY）をすり抜けるが uuid は同じになる。
-      // users.uuid の UNIQUE 違反を DB に起こさせず、MCID のエラーとして返す
-      const uuidOwner = await db.query.users.findFirst({ where: eq(users.uuid, mcidUuid) });
-      if (uuidOwner && uuidOwner.id !== user.id) {
-        fieldErrors.mcid = t("meEdit.mcidTaken");
-        return failWithFieldErrors();
-      }
-    } catch (error) {
-      fieldErrors.mcid =
-        error instanceof MojangError && error.code === "MCID_NOT_FOUND"
-          ? t("meEdit.mcidNotFound")
-          : t("meEdit.mcidVerifyFailed");
-      return failWithFieldErrors();
-    }
+    mcidUuid = verified.uuid;
   }
 
   // ---- speedruncomUsername の決定 ----
   // 同じ保存に speedrun.com リンクの追加/変更/削除が含まれる場合は「リンクの変更を優先」し、
   // 列の値は最終状態の speedrun.com リンクの identifier から決める（現行の即時保存と同じ挙動）。
   // speedrun.com に関わるリンク変更が無いときだけフォームの値を使い、social_links へ逆方向同期する
-  const srLinkChanged =
-    linkCreates.some((l) => l.platform === "speedruncom") ||
-    validLinkUpdates.some((l) => l.platform === "speedruncom" || linkById.get(l.id)?.platform === "speedruncom") ||
-    linkDeletes.some((id) => linkById.get(id)?.platform === "speedruncom");
+  const srLinkChanged = linksTouchSpeedrun(
+    { create: linkCreates, update: validLinkUpdates, delete: linkDeletes },
+    (id) => linkById.get(id)?.platform,
+  );
   const finalSrLink = finalLinks.find((l) => l.platform === "speedruncom");
   const speedruncomUsername = srLinkChanged ? (finalSrLink?.identifier ?? null) : fields.speedruncomUsername;
 
@@ -525,19 +500,15 @@ export async function saveProfileBatch({
 
       // MCID（Java）: slug 再生成・旧slug履歴・お気に入り追従まで同じトランザクションで原子化
       if (mcidSet && mcidUuid) {
-        newSlug = generateSlug(mcidSet, user.discordId);
+        newSlug = await applyMcidSlugChange(tx, user, mcidSet);
         userSet.mcid = mcidSet;
         userSet.uuid = mcidUuid;
         userSet.slug = newSlug;
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       } else if (mcidRemove) {
-        newSlug = generateSlug(null, user.discordId);
+        newSlug = await applyMcidSlugChange(tx, user, null);
         userSet.mcid = null;
         userSet.uuid = null;
         userSet.slug = newSlug;
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       }
 
       if (bedrockSet) userSet.bedrockMcid = bedrockSet;

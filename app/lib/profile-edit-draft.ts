@@ -3,6 +3,7 @@
 // action へ1リクエストで送る。dirty 判定・差分生成・並び替えをここに集約し、コンポーネントから切り離してテストできるようにする。
 import {
   NEW_VIDEO_ORDER_PREFIX,
+  linksTouchSpeedrun,
   type LinkPayload,
   type ProfileChanges,
 } from "@/lib/profile-edit-validation";
@@ -187,11 +188,6 @@ export function resolveSpeedrunUsernameForSave(saved: ProfileDraft, draft: Profi
   const links = buildProfileChanges(saved, draft).links;
   if (!links) return formUsername;
   const savedById = new Map(saved.links.map((l) => [l.id, l]));
-  const touchesSpeedrun =
-    (links.create ?? []).some((l) => l.platform === "speedruncom") ||
-    (links.update ?? []).some(
-      (l) => l.platform === "speedruncom" || savedById.get(l.id)?.platform === "speedruncom",
-    ) ||
-    (links.delete ?? []).some((id) => savedById.get(id)?.platform === "speedruncom");
+  const touchesSpeedrun = linksTouchSpeedrun(links, (id) => savedById.get(id)?.platform);
   return touchesSpeedrun ? (speedrunLinkIdentifier(draft.links) ?? "") : formUsername;
 }
