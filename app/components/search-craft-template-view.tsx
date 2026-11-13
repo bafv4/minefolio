@@ -16,7 +16,6 @@ import type { FingerType, KeyboardLayout } from "@/lib/keybindings";
 import { FingerLegend } from "@/components/virtual-keyboard";
 import { CraftKeySequenceButton } from "@/components/search-craft-key-sequence-dialog";
 import {
-  renderVisibleSpaces,
   SearchStringText,
   KeyBadge,
   ShiftKeyGroup,
@@ -68,9 +67,9 @@ function useItemLang(gameLanguage: string | null | undefined): string {
   return lang;
 }
 
-// renderVisibleSpaces / SearchStringText は app/components/search-craft-badges.tsx が単一ソース
+// SearchStringText は app/components/search-craft-badges.tsx が単一ソース
 // （既存 importer — search-craft-loop-view.tsx・guide-embeds.tsx 等 — を無改修で保つための re-export）
-export { renderVisibleSpaces, SearchStringText };
+export { SearchStringText };
 
 /**
  * タイミングの表示メタ（この配列順が表示順）。

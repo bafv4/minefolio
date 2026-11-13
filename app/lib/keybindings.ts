@@ -840,17 +840,6 @@ export function isSingleKey(keyCode: string): boolean {
   return !keyCode.includes("+");
 }
 
-/**
- * 修飾キー組み合わせかどうかを判定
- *
- * @example
- * hasModifiers("Ctrl+KeyA") // => true
- * hasModifiers("KeyA") // => false
- */
-export function hasModifiers(keyCode: string): boolean {
-  return !isSingleKey(keyCode);
-}
-
 // =====================================
 // キーボードレイアウト（配列 × フルサイズ/テンキーレス）
 // =====================================

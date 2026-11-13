@@ -1,6 +1,6 @@
 // /keybindings 配下の URL ↔ state を統合管理する facade フック。
 // nuqs の useQueryStates をラップし、フィルタの派生値とプレイヤー適用ヘルパーを提供する。
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQueryStates } from "nuqs";
 import {
   keybindingsParsers,
@@ -87,7 +87,7 @@ export function useKeybindingsFilters() {
    * 数値範囲フィルタをプレイヤーリストに適用。
    * 検索（q）はサーバー側で適用済み前提。ここではマウス系のみ。
    */
-  function applyToPlayers<P extends FilterablePlayer>(players: P[]): P[] {
+  const applyToPlayers = useCallback(<P extends FilterablePlayer>(players: P[]): P[] => {
     const {
       dpiMin,
       dpiMax,
@@ -144,7 +144,7 @@ export function useKeybindingsFilters() {
       if (cm360Max != null && (cm360 == null || cm360 > cm360Max)) return false;
       return true;
     });
-  }
+  }, [params]);
 
   /** 表示件数に効くフィルタが1つでも有効か（空状態の文言・クリア導線の出し分け用） */
   const hasActiveFilters = activeFilterCount > 0 || params.users.length > 0;

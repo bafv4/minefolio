@@ -171,46 +171,103 @@ export async function loadKeybindingsStats(
     excludeViewersCondition,
   );
 
-  // 総走者数
-  const [totalResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(publicCondition);
+  // 独立した7クエリは並列に実行する（Turso は 1 往復ごとに HTTP RTT がかかるため）
+  const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
+  const [
+    [totalResult],
+    [keybindingCountResult],
+    [mouseCountResult],
+    trackedRows,
+    f3InputRemaps,
+    usersWithKeybindingsData,
+    mouseConfigs,
+  ] = await Promise.all([
+    // 総走者数
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(publicCondition),
+    // キーバインドを持つユーザー数
+    db
+      .select({ count: sql<number>`count(distinct ${keybindings.userId})` })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(publicCondition),
+    // マウス設定を持つユーザー数
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(playerConfigs)
+      .innerJoin(users, eq(playerConfigs.userId, users.id))
+      .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi))),
+    // キーバインド統計の元データ（TRACKED_ACTIONS 全アクション分を1クエリでまとめて取得し、JS側で集計する）
+    db
+      .select({
+        action: keybindings.action,
+        keyCode: keybindings.keyCode,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(and(publicCondition, inArray(keybindings.action, trackedActionNames))),
+    // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
+    db
+      .select({
+        userId: keyRemaps.userId,
+        sourceKey: keyRemaps.sourceKey,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keyRemaps)
+      .innerJoin(users, eq(keyRemaps.userId, users.id))
+      .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat"))),
+    db
+      .select({
+        userId: keybindings.userId,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(publicCondition)
+      .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl),
+    // マウス設定
+    db
+      .select({
+        mouseDpi: playerConfigs.mouseDpi,
+        gameSensitivity: playerConfigs.gameSensitivity,
+        windowsSpeed: playerConfigs.windowsSpeed,
+        windowsSpeedMultiplier: playerConfigs.windowsSpeedMultiplier,
+        rawInput: playerConfigs.rawInput,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(playerConfigs)
+      .innerJoin(users, eq(playerConfigs.userId, users.id))
+      .where(publicCondition),
+  ]);
   const totalPlayers = totalResult?.count ?? 0;
-
-  // キーバインドを持つユーザー数
-  const [keybindingCountResult] = await db
-    .select({ count: sql<number>`count(distinct ${keybindings.userId})` })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(publicCondition);
   const playersWithKeybindings = keybindingCountResult?.count ?? 0;
-
-  // マウス設定を持つユーザー数
-  const [mouseCountResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(playerConfigs)
-    .innerJoin(users, eq(playerConfigs.userId, users.id))
-    .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi)));
   const playersWithMouseSettings = mouseCountResult?.count ?? 0;
 
   // キーバインド統計（TRACKED_ACTIONS 全アクション分を1クエリでまとめて取得し、JS側で集計する）
   const keybindingStats: KeybindingStats[] = [];
-  const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
-  const trackedRows = await db
-    .select({
-      action: keybindings.action,
-      keyCode: keybindings.keyCode,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(and(publicCondition, inArray(keybindings.action, trackedActionNames)));
 
   const rowsByAction = new Map<string, typeof trackedRows>();
   for (const r of trackedRows) {
@@ -249,36 +306,8 @@ export async function loadKeybindingsStats(
   }
 
   // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
-  const f3InputRemaps = await db
-    .select({
-      userId: keyRemaps.userId,
-      sourceKey: keyRemaps.sourceKey,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keyRemaps)
-    .innerJoin(users, eq(keyRemaps.userId, users.id))
-    .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat")));
 
   const remappedToF3UserIds = new Set(f3InputRemaps.map((r) => r.userId));
-  const usersWithKeybindingsData = await db
-    .select({
-      userId: keybindings.userId,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(publicCondition)
-    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl);
 
   const f3DefaultUsers = usersWithKeybindingsData.filter(
     (u) => !remappedToF3UserIds.has(u.userId),
@@ -322,23 +351,6 @@ export async function loadKeybindingsStats(
   };
 
   // マウス設定
-  const mouseConfigs = await db
-    .select({
-      mouseDpi: playerConfigs.mouseDpi,
-      gameSensitivity: playerConfigs.gameSensitivity,
-      windowsSpeed: playerConfigs.windowsSpeed,
-      windowsSpeedMultiplier: playerConfigs.windowsSpeedMultiplier,
-      rawInput: playerConfigs.rawInput,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(playerConfigs)
-    .innerJoin(users, eq(playerConfigs.userId, users.id))
-    .where(publicCondition);
 
   // DPI 統計
   const dpiConfigs = mouseConfigs.filter((c) => c.mouseDpi != null);

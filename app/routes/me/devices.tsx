@@ -33,8 +33,6 @@ import {
   Mouse,
   Gamepad2,
   AlertCircle,
-  Settings,
-  Copy,
   Smartphone,
 } from "lucide-react";
 import {
@@ -142,8 +140,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
-  const locale = useLocale();
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -430,7 +426,6 @@ function parseControllerSettings(json: string | null | undefined): ControllerSet
  */
 function PresetRequiredNotice() {
   const t = useT();
-  const locale = useLocale();
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -1189,7 +1184,6 @@ export default function DevicesPage() {
 
 export function ErrorBoundary() {
   const t = useT();
-  const locale = useLocale();
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Card>

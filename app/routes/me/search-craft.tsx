@@ -28,8 +28,6 @@ import { toast } from "sonner";
 import {
   Search,
   AlertCircle,
-  Settings,
-  Copy,
   Share2,
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";

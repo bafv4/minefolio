@@ -4,8 +4,8 @@ import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
-import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
+import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { getRemapOutputLabel, getRemapSourceLabel, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
 
@@ -260,37 +260,6 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
   ],
 ];
 
-// テンキー定義
-const NUMPAD_LAYOUT: KeyboardRow[] = [
-  [
-    { code: "NumLock", label: "Num" },
-    { code: "NumpadDivide", label: "/" },
-    { code: "NumpadMultiply", label: "*" },
-    { code: "NumpadSubtract", label: "-" },
-  ],
-  [
-    { code: "Numpad7", label: "7" },
-    { code: "Numpad8", label: "8" },
-    { code: "Numpad9", label: "9" },
-    { code: "NumpadAdd", label: "+", height: 2 },
-  ],
-  [
-    { code: "Numpad4", label: "4" },
-    { code: "Numpad5", label: "5" },
-    { code: "Numpad6", label: "6" },
-  ],
-  [
-    { code: "Numpad1", label: "1" },
-    { code: "Numpad2", label: "2" },
-    { code: "Numpad3", label: "3" },
-    { code: "NumpadEnter", label: "Enter", height: 2 },
-  ],
-  [
-    { code: "Numpad0", label: "0", width: 2 },
-    { code: "NumpadDecimal", label: "." },
-  ],
-];
-
 // 指の種類から基本色名へのマッピング
 type FingerColorName = "pinky" | "ring" | "middle" | "index" | "thumb" | "palm";
 
@@ -433,7 +402,6 @@ interface VirtualKeyboardProps {
   fingerAssignments?: FingerAssignment;
   remaps?: RemapInfo[]; // リマップ情報
   customActions?: KeyInfoCustomAction[]; // カスタムアクション（トリガーキーごとにツールチップ/モーダルへ表示）
-  customKeyNames?: Record<string, string>; // カスタムキーコード → 表示名のマップ
   customKeys?: CustomKeyboardButton[]; // カスタムキーボードキー
   highlightedKeys?: string[];
   /**
@@ -575,7 +543,6 @@ function VirtualKeyboardComponent({
   fingerAssignments = {},
   remaps = [],
   customActions = [],
-  customKeyNames = {},
   customKeys = [],
   highlightedKeys = [],
   heldKeys = [],
@@ -701,20 +668,6 @@ function VirtualKeyboardComponent({
       remaps: keyRemaps,
       layout,
     });
-
-    // リマップのツールチップ説明を生成
-    const getRemapTooltipText = (r: RemapInfo): string => {
-      if (r.targetKey === null) {
-        return t("keyboardView.remapDisabled");
-      }
-      if (isSpecialRemapTarget(r.targetKey)) {
-        return t("keyboardView.remapOutputsChar", { char: r.targetKey });
-      }
-      if (r.targetKey) {
-        return getKeyLabel(t, r.targetKey, layout);
-      }
-      return t("keyboardView.remapDisabled");
-    };
 
     // リマップのソースキーの修飾キーマーク（シンボルで表示）
     const getModifierIcons = (r: RemapInfo): LucideIcon[] => {
@@ -963,7 +916,7 @@ function VirtualKeyboardComponent({
 
     return (
       <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
-        {customKeys.map((ck, index) => {
+        {customKeys.map((ck) => {
           const bindings = getBindingsForKey(ck.code);
           const fingers = getFingersForKey(ck.code);
           const finger: FingerType | undefined = fingers[0];
@@ -1254,7 +1207,7 @@ export function VirtualMouse({
     { code: "Mouse4", label: t("keyLabels.mouseSide2Short") },
   ];
 
-  const renderButton = (button: typeof buttons[0], index: number, isCustom = false) => {
+  const renderButton = (button: typeof buttons[0], isCustom = false) => {
     const bindings = getBindingsForButton(button.code);
     const fingers = showFingerAssignments ? getFingersForButton(button.code) : [];
     const finger: FingerType | undefined = fingers[0];
@@ -1393,21 +1346,21 @@ export function VirtualMouse({
           <div className="flex items-start" style={{ gap: `${gap}px` }}>
             {/* 左側: サイドボタン縦並び */}
             <div className="flex flex-col" style={{ gap: `${gap}px` }}>
-              {renderButton(buttons[3], 3)}
-              {renderButton(buttons[4], 4)}
+              {renderButton(buttons[3])}
+              {renderButton(buttons[4])}
             </div>
             {/* 右側: 左・中・右クリック横並び */}
             <div className="flex" style={{ gap: `${gap}px` }}>
-              {renderButton(buttons[0], 0)}
-              {renderButton(buttons[2], 2)}
-              {renderButton(buttons[1], 1)}
+              {renderButton(buttons[0])}
+              {renderButton(buttons[2])}
+              {renderButton(buttons[1])}
             </div>
           </div>
           {/* カスタムマウスボタン */}
           {customMouseButtons.length > 0 && (
             <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
-              {customMouseButtons.map((cb, index) =>
-                renderButton({ code: cb.code, label: cb.label }, buttons.length + index, true)
+              {customMouseButtons.map((cb) =>
+                renderButton({ code: cb.code, label: cb.label }, true)
               )}
             </div>
           )}
