@@ -63,7 +63,8 @@ export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   ];
 };
 
-const RANKINGS_CACHE_TTL = 5 * 60 * 1000;
+// 60秒: プロフィール非公開化・showRankedStats OFF を即時反映したいため短く保つ（getUserData の60秒と同じ前例）
+const RANKINGS_CACHE_TTL = 60 * 1000;
 const CATEGORIES_CACHE_KEY = "rankings:categories";
 type Categories = Awaited<ReturnType<typeof loadRankingCategories>>;
 type LoadedRankings = Awaited<ReturnType<typeof loadRankings>>;
