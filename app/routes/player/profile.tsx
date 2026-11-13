@@ -1064,6 +1064,12 @@ export default function PlayerProfilePage() {
   // 有効なタブ値のリスト
   const validTabs = ["profile", ...tabItems.map((t) => t.value)];
 
+  // 現在のタブ名（モバイルのメニュートグル表示・タブパネルのアクセシブルネーム用）。
+  // デスクトップ用 TabsList は lg 未満で hidden のため、パネルの aria-labelledby 参照に頼らない
+  const tabLabelOf = (value: string) =>
+    value === "profile" ? t("playerProfile.profile") : (tabItems.find((i) => i.value === value)?.label ?? "");
+  const panelA11yProps = (value: string) => ({ "aria-labelledby": undefined, "aria-label": tabLabelOf(value) });
+
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
   // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
   // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "profile" に落とす
@@ -1110,6 +1116,9 @@ export default function PlayerProfilePage() {
       <Button
         variant="outline"
         className="w-full justify-between h-14 py-3 touch-manipulation"
+        aria-expanded={mobileMenuOpen}
+        aria-controls="profile-mobile-menu"
+        aria-label={t("playerProfile.mobileTabMenuLabel", { tab: tabLabelOf(activeTab) })}
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
       >
         <div className="flex items-center gap-3">
@@ -1121,14 +1130,9 @@ export default function PlayerProfilePage() {
             size={32}
             className="rounded"
           />
-          <div className="text-left">
-            <p className="font-medium text-sm">{playerName}</p>
-            {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
-            {player.bedrockMcid && (
-              <p className="text-xs text-muted-foreground">
-                {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
-              </p>
-            )}
+          <div className="text-left min-w-0">
+            <p className="font-medium text-sm truncate">{playerName}</p>
+            <p className="text-xs text-primary font-medium truncate">{tabLabelOf(activeTab)}</p>
           </div>
         </div>
         {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
@@ -1136,8 +1140,10 @@ export default function PlayerProfilePage() {
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="mt-2 p-2 border rounded-xl bg-background space-y-1">
+        <div id="profile-mobile-menu" className="mt-2 p-2 border rounded-xl bg-background space-y-1">
           <button
+            type="button"
+            aria-current={activeTab === "profile" ? "page" : undefined}
             className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === "profile" ? "bg-secondary font-medium" : "hover:bg-muted")}
             onClick={() => { handleTabChange("profile"); setMobileMenuOpen(false); }}
           >
@@ -1147,6 +1153,8 @@ export default function PlayerProfilePage() {
           {tabItems.map((item) => (
             <button
               key={item.value}
+              type="button"
+              aria-current={activeTab === item.value ? "page" : undefined}
               className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === item.value ? "bg-secondary font-medium" : "hover:bg-muted")}
               onClick={() => { handleTabChange(item.value); setMobileMenuOpen(false); }}
             >
@@ -1169,6 +1177,7 @@ export default function PlayerProfilePage() {
             {/* Profile Tab with Avatar */}
             <TabsTrigger
               value="profile"
+              aria-label={t("playerProfile.profile")}
               className="h-auto w-full justify-start gap-3 rounded-md px-3 py-3 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
             >
               <MinecraftAvatar
@@ -1283,7 +1292,7 @@ export default function PlayerProfilePage() {
         )}
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="profile" {...panelA11yProps("profile")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
           <Card className="py-5">
             <CardContent className="px-5">
@@ -1568,7 +1577,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.keybindings.length > 0 ? (
             <>
               {/* Visual Keyboard */}
@@ -1792,7 +1801,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="stats" {...panelA11yProps("stats")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1803,7 +1812,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Playstyle Tab */}
-        <TabsContent value="playstyle" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {hasPlaystyleData ? (
             <>
               {/* プレイ内容 */}
@@ -1881,7 +1890,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="items" {...panelA11yProps("items")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.itemLayouts.length > 0 ? (
             <Card className="gap-3 py-5">
               <CardContent className="px-5">
@@ -1902,7 +1911,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1951,7 +1960,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="devices" {...panelA11yProps("devices")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {player.playerConfig ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2155,7 +2164,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="guides" {...panelA11yProps("guides")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">

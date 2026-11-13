@@ -717,6 +717,7 @@ export const PAGES_JA = {
     platformPcLinux: "PC（Linux）",
     notFound: "走者が見つかりません",
     profile: "プロフィール",
+    mobileTabMenuLabel: "表示するセクションを選ぶ（現在: {tab}）",
     activityAndStats: "活動・記録",
     keybindingsTab: "キー配置",
     devicesTab: "デバイス",

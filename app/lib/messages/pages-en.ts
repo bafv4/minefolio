@@ -741,6 +741,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     platformPcLinux: "PC (Linux)",
     notFound: "Runner not found",
     profile: "Profile",
+    mobileTabMenuLabel: "Choose a section to display (current: {tab})",
     activityAndStats: "Activity & records",
     keybindingsTab: "Controls",
     devicesTab: "Devices",
