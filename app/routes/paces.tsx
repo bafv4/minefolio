@@ -12,8 +12,10 @@ import {
   getPublicPaceFeed,
   getViewerPacePrefs,
   parsePaceSearchParams,
-  type PaceFeedItem,
+  withPaceProfiles,
+  type PaceFeedItemWithProfile,
 } from "@/lib/paces-feed.server";
+import { pickLocalizedName } from "@/lib/mcid-display-name";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,9 +65,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parsePaceSearchParams(url.searchParams);
-  const [{ items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }, viewerPrefs] =
+  const [{ items, userData }, viewerPrefs] =
     await Promise.all([
-      getPublicPaceFeed(db, filters),
+      getPublicPaceFeed(filters),
       getViewerPacePrefs(db, auth, request),
     ]);
 
@@ -76,13 +78,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     appUrl,
-    paces: items.slice(0, PACES_PAGE_SIZE),
+    // 走者情報（uuid・表示名・スキン）は1ページ目の分だけ各ペースに添える。
+    // 2ページ目以降は /api/paces が同じ形（profile 付き）で返す
+    paces: withPaceProfiles(items.slice(0, PACES_PAGE_SIZE), userData),
     total: items.length,
     visibleTotal,
-    mcidToUuid,
-    mcidToDisplayName,
-    mcidToDisplayNameAlphabet,
-    mcidToSkinUrl,
     viewerPrefs,
   };
 }
@@ -93,24 +93,16 @@ function PacesList({
   initialPaces,
   initialTotal,
   filterKey,
-  mcidToUuid,
-  mcidToDisplayName,
-  mcidToDisplayNameAlphabet,
-  mcidToSkinUrl,
   viewerPrefs,
 }: {
-  initialPaces: PaceFeedItem[];
+  initialPaces: PaceFeedItemWithProfile[];
   initialTotal: number;
   filterKey: string;
-  mcidToUuid: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  mcidToDisplayNameAlphabet: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
   viewerPrefs: OwnPacePrefs;
 }) {
   const t = useT();
   const locale = useLocale();
-  const infinite = useInfiniteScroll<PaceFeedItem>({
+  const infinite = useInfiniteScroll<PaceFeedItemWithProfile>({
     initialItems: initialPaces,
     initialPage: 1,
     initialHasMore: initialPaces.length < initialTotal,
@@ -132,13 +124,13 @@ function PacesList({
           <PaceFeedCard
             key={run.pacemanRunId}
             run={run}
-            uuid={mcidToUuid[run.mcid.toLowerCase()] ?? undefined}
-            displayName={
-              (locale !== "ja"
-                ? mcidToDisplayNameAlphabet[run.mcid.toLowerCase()]
-                : undefined) ?? mcidToDisplayName[run.mcid.toLowerCase()]
-            }
-            skinUrl={mcidToSkinUrl[run.mcid.toLowerCase()]}
+            uuid={run.profile?.uuid}
+            displayName={pickLocalizedName(
+              run.profile?.displayNameAlphabet,
+              run.profile?.displayName,
+              locale,
+            )}
+            skinUrl={run.profile?.skinUrl}
           />
         ))}
       </div>
@@ -168,7 +160,7 @@ function PacesList({
 
 export default function PacesPage() {
   const t = useT();
-  const { paces, total, visibleTotal, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl, viewerPrefs } =
+  const { paces, total, visibleTotal, viewerPrefs } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -355,10 +347,6 @@ export default function PacesPage() {
           initialPaces={paces}
           initialTotal={total}
           filterKey={filterKey}
-          mcidToUuid={mcidToUuid}
-          mcidToDisplayName={mcidToDisplayName}
-          mcidToDisplayNameAlphabet={mcidToDisplayNameAlphabet}
-          mcidToSkinUrl={mcidToSkinUrl}
           viewerPrefs={viewerPrefs}
         />
       ) : (

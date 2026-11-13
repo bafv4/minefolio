@@ -10,7 +10,7 @@ import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/li
 import { getTwitchAppToken, getLiveStreams, type TwitchStream } from "@/lib/twitch";
 import { getCached, setCached } from "@/lib/cache";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
-import { getUserData } from "@/lib/home-user-data.server";
+import { getUserData, pickUserDataForMcids, type McidUserMaps } from "@/lib/home-user-data.server";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -92,11 +92,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     case "live-runs": {
       // 共通キャッシュキー（ユーザーに依存しない）
       const cacheKey = "home-feed:live-runs:all";
-      type LiveRunsCache = { liveRuns: PaceManLiveRun[]; mcidToUuid: Record<string, string>; mcidToSkinUrl: Record<string, string> };
+      // マップは liveRuns に出てくる mcid の分だけ（全公開ユーザー分を15秒ポーリングで再送しない）
+      type LiveRunsCache = { liveRuns: PaceManLiveRun[] } & McidUserMaps;
 
       const cached = await getCached<LiveRunsCache>(cacheKey);
       if (cached) {
-        return jsonResponse({ liveRuns: cached.liveRuns, mcidToUuid: cached.mcidToUuid, mcidToSkinUrl: cached.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
+        return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
       }
 
       // ユーザーデータとライブランを並列取得
@@ -112,14 +113,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       const result: LiveRunsCache = {
         liveRuns: filteredLiveRuns,
-        mcidToUuid: userData.mcidToUuid,
-        mcidToSkinUrl: userData.mcidToSkinUrl,
+        ...pickUserDataForMcids(userData, filteredLiveRuns.map((run) => run.nickname)),
       };
 
       // キャッシュに保存
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
 
-      return jsonResponse({ liveRuns: result.liveRuns, mcidToUuid: result.mcidToUuid, mcidToSkinUrl: result.mcidToSkinUrl }, CDN_CACHE.LIVE_RUNS);
+      return jsonResponse(result, CDN_CACHE.LIVE_RUNS);
     }
 
     case "recent-paces": {
@@ -141,10 +141,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       return jsonResponse(
         {
           recentPaces,
-          mcidToUuid: userData.mcidToUuid,
-          mcidToDisplayName: userData.mcidToDisplayName,
-          mcidToDisplayNameAlphabet: userData.mcidToDisplayNameAlphabet,
-          mcidToSkinUrl: userData.mcidToSkinUrl,
+          // 表示する12件に出てくる mcid の分だけ（クライアントのカード表示・お気に入り並べ替え用）
+          ...pickUserDataForMcids(userData, recentPaces.map((p) => p.mcid)),
         },
         CDN_CACHE.PACES,
         CDN_SWR_LONG

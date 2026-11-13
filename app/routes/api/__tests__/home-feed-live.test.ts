@@ -114,6 +114,25 @@ describe("?type=live-runs", () => {
     expect(body.liveRuns.map((r) => r.nickname)).toEqual(["Runner1"]);
   });
 
+  it("マップは liveRuns に出てくる mcid の分だけ（全公開ユーザー分は載せない）", async () => {
+    await seedUser(db, {
+      slug: "runner1", mcid: "Runner1", uuid: "uuid-runner1", displayName: "走者1",
+      role: "runner", profileVisibility: "public",
+    });
+    await seedUser(db, {
+      slug: "other", mcid: "Other", uuid: "uuid-other", displayName: "他の人",
+      role: "runner", profileVisibility: "public",
+    });
+    pacemanMocks.fetchLiveRuns.mockResolvedValue([makeStubLiveRun("runner1")]);
+
+    const res = await callLoader("?type=live-runs");
+    const body = (await res.json()) as Record<string, Record<string, string>>;
+
+    expect(body.mcidToUuid).toEqual({ runner1: "uuid-runner1" });
+    expect(body.mcidToSlug).toEqual({ runner1: "runner1" });
+    expect(body.mcidToDisplayName).toEqual({ runner1: "走者1" });
+  });
+
   it("非公開ユーザーの mcid は登録済み扱いにならない", async () => {
     await seedUser(db, {
       slug: "hidden",

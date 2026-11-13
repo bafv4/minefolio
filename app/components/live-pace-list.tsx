@@ -7,6 +7,7 @@ import {
   getLatestSplit,
 } from "@/lib/paceman";
 import { formatTime } from "@/lib/time-utils";
+import { pickMcidDisplayName } from "@/lib/mcid-display-name";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { ExternalLink } from "lucide-react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -76,8 +77,8 @@ function SplitBreakdown({ run, igt }: { run: PaceManLiveRun; igt: number }) {
 }
 
 interface LivePaceListProps {
+  /** 登録（公開プロフィール）ユーザーのライブランのみ。mcidToSlug に無い走者はリンクなしの名前表示 */
   runs: PaceManLiveRun[];
-  registeredMcidSet: Set<string>;
   mcidToSlug: Record<string, string>;
   mcidToUuid: Record<string, string | null>;
   mcidToDisplayName: Record<string, string>;
@@ -86,7 +87,7 @@ interface LivePaceListProps {
   mcidToSkinUrl?: Record<string, string>;
 }
 
-export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }: LivePaceListProps) {
+export function LivePaceList({ runs, mcidToSlug, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl }: LivePaceListProps) {
   const t = useT();
   const locale = useLocale();
   if (runs.length === 0) {
@@ -110,14 +111,15 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
           {runs.map((run) => {
             const latestSplit = getLatestSplit(run);
             const mcidLower = run.nickname.toLowerCase();
-            const isRegistered = registeredMcidSet.has(mcidLower);
             const slug = mcidToSlug[mcidLower];
             const uuid = mcidToUuid[mcidLower];
             const skinUrl = mcidToSkinUrl?.[mcidLower];
             // 英語表示ではアルファベット表記を優先する
-            const displayName =
-              (locale !== "ja" ? mcidToDisplayNameAlphabet?.[mcidLower] : undefined) ??
-              mcidToDisplayName[mcidLower];
+            const displayName = pickMcidDisplayName(
+              { mcidToDisplayName, mcidToDisplayNameAlphabet },
+              mcidLower,
+              locale,
+            );
 
             const splitBadge = latestSplit && (
               <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
@@ -128,7 +130,7 @@ export function LivePaceList({ runs, registeredMcidSet, mcidToSlug, mcidToUuid, 
             return (
               <tr key={run.worldId} className="border-b hover:bg-accent/50 transition-colors">
                 <td className="py-2 px-2 sm:px-3 max-w-0 w-full sm:max-w-none sm:w-auto">
-                  {isRegistered && slug ? (
+                  {slug ? (
                     <Link
                       to={`/player/${slug}`}
                       className="flex items-center gap-2 hover:opacity-80 transition-opacity"

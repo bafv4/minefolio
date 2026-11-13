@@ -83,3 +83,33 @@ export async function getUserData(): Promise<UserDataCache> {
   if (cached) return cached;
   return fetchAndCacheUserData();
 }
+
+/** フィード応答に載せる、mcid 単位のユーザー情報マップ（registeredMcids を除く） */
+export type McidUserMaps = Omit<UserDataCache, "registeredMcids">;
+
+/**
+ * 応答に含めるアイテムの mcid の分だけにマップを絞る。
+ * 全公開ユーザー分のマップをフィード応答（SSR・15秒ポーリング）に載せないためのもの。
+ * mcid は大文字小文字を問わない（キーは小文字）。マップに無い mcid は単に含まれない。
+ */
+export function pickUserDataForMcids(userData: UserDataCache, mcids: Iterable<string>): McidUserMaps {
+  const picked: McidUserMaps = {
+    mcidToUuid: {},
+    mcidToSlug: {},
+    mcidToDisplayName: {},
+    mcidToDisplayNameAlphabet: {},
+    mcidToSkinUrl: {},
+  };
+  for (const mcid of mcids) {
+    const key = mcid.toLowerCase();
+    if (!Object.hasOwn(userData.mcidToUuid, key)) continue; // 公開ユーザーでない mcid は何も載せない
+    picked.mcidToUuid[key] = userData.mcidToUuid[key];
+    if (Object.hasOwn(userData.mcidToSlug, key)) picked.mcidToSlug[key] = userData.mcidToSlug[key];
+    if (Object.hasOwn(userData.mcidToDisplayName, key)) picked.mcidToDisplayName[key] = userData.mcidToDisplayName[key];
+    if (Object.hasOwn(userData.mcidToDisplayNameAlphabet, key)) {
+      picked.mcidToDisplayNameAlphabet[key] = userData.mcidToDisplayNameAlphabet[key];
+    }
+    if (Object.hasOwn(userData.mcidToSkinUrl, key)) picked.mcidToSkinUrl[key] = userData.mcidToSkinUrl[key];
+  }
+  return picked;
+}
