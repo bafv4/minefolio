@@ -16,18 +16,6 @@ export interface YouTubeVideoSnippet {
   liveBroadcastContent: "none" | "live" | "upcoming";
 }
 
-export interface YouTubeSearchResult {
-  kind: string;
-  etag: string;
-  id: {
-    kind: string;
-    videoId?: string;
-    channelId?: string;
-    playlistId?: string;
-  };
-  snippet: YouTubeVideoSnippet;
-}
-
 /**
  * YouTubeチャンネルハンドル（@username）からチャンネルIDを取得
  * forHandle APIを使用（クォータコスト: 1ユニット）

@@ -1,6 +1,7 @@
 import { createDb } from "./db";
 import { pacemanPaces, users } from "./schema";
 import { eq, and, gte, lt, desc, inArray, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import type { PaceManRecentRun } from "./paceman";
 
 // ペースキャッシュの保持期間の開始時刻（過去2か月）
@@ -190,28 +191,28 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     }
   }
 
-  // 削除→挿入を1トランザクションにまとめる
-  // （途中失敗で削除だけがコミットされると、取得ウィンドウ外の蓄積済みペースが復元不能になるため）
-  await db.transaction(async (tx) => {
-    // 取得したランの既存キャッシュを削除（重複防止・進行中ランのSplit更新）
-    // MCID単位ではなくランID単位で削除することで、取得ウィンドウ外の過去ペースを保持する
-    const fetchedRunIds = [...new Set(recentPaces.map((p) => p.id))];
-    const deleteBatchSize = 100;
-    for (let i = 0; i < fetchedRunIds.length; i += deleteBatchSize) {
-      const batch = fetchedRunIds.slice(i, i + deleteBatchSize);
-      await tx.delete(pacemanPaces).where(inArray(pacemanPaces.pacemanRunId, batch));
-    }
+  // 削除→挿入を1回の db.batch（libSQL では単一の暗黙トランザクション＝1往復）にまとめる
+  // （途中失敗で削除だけがコミットされると、取得ウィンドウ外の蓄積済みペースが復元不能になるため。
+  //  対話型トランザクションは1文ごとに往復が発生するので使わない）
+  // 取得したランの既存キャッシュを削除（重複防止・進行中ランのSplit更新）
+  // MCID単位ではなくランID単位で削除することで、取得ウィンドウ外の過去ペースを保持する
+  const fetchedRunIds = [...new Set(recentPaces.map((p) => p.id))];
+  const deleteBatchSize = 100;
+  const insertBatchSize = 50; // SQLiteの変数上限対策
+  const statements: BatchItem<"sqlite">[] = [];
 
-    // バッチサイズを制限してインサート（SQLiteの変数上限対策）
-    const batchSize = 50;
-    for (let i = 0; i < pacesToInsert.length; i += batchSize) {
-      const batch = pacesToInsert.slice(i, i + batchSize);
-      await tx.insert(pacemanPaces).values(batch);
-    }
+  for (let i = 0; i < fetchedRunIds.length; i += deleteBatchSize) {
+    const batch = fetchedRunIds.slice(i, i + deleteBatchSize);
+    statements.push(db.delete(pacemanPaces).where(inArray(pacemanPaces.pacemanRunId, batch)));
+  }
+  for (let i = 0; i < pacesToInsert.length; i += insertBatchSize) {
+    const batch = pacesToInsert.slice(i, i + insertBatchSize);
+    statements.push(db.insert(pacemanPaces).values(batch));
+  }
+  // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
+  statements.push(db.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart)));
 
-    // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
-    await tx.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart));
-  });
+  await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 }
 
 // フィード用ペースエントリ（ホームフィード・ペース一覧で共用）

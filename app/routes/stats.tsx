@@ -4,6 +4,7 @@ import { useLoaderData } from "react-router";
 import type { Route } from "./+types/stats";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
+import { getCached, setCached } from "@/lib/cache";
 import { keybindings, playerConfigs, users } from "@/lib/schema";
 import { isOutOfRangeSensitivity, isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
 import { SENSITIVITY_PERCENT_BINS } from "@/lib/keybindings-stats-shared";
@@ -144,11 +145,18 @@ function normalizeKeyCodeForStats(keyCode: string): string {
   return keyCode;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
-  const db = createDb();
+const STATS_CACHE_KEY = "stats:raw";
+const STATS_CACHE_TTL = 5 * 60 * 1000;
 
+async function loadStatsRaw(db: ReturnType<typeof createDb>) {
+  const cached = await getCached<Awaited<ReturnType<typeof queryStatsRaw>>>(STATS_CACHE_KEY);
+  if (cached) return cached;
+  const fresh = await queryStatsRaw(db);
+  await setCached(STATS_CACHE_KEY, fresh, STATS_CACHE_TTL);
+  return fresh;
+}
+
+async function queryStatsRaw(db: ReturnType<typeof createDb>) {
   // 互いに独立な4クエリ（総ユーザー数・KB保有ユーザー数・全キーバインド・全マウス設定）を並列実行
   const [
     [{ totalUsers }],
@@ -183,6 +191,19 @@ export async function loader({ request }: Route.LoaderArgs) {
       })
       .from(playerConfigs),
   ]);
+
+  return { totalUsers, usersWithKeybindings, allKeybindings, mouseConfigs };
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const t = createTranslator(resolveLocale(request));
+  const env = getEnv();
+  const db = createDb();
+
+  // 互いに独立な4クエリ（総ユーザー数・KB保有ユーザー数・全キーバインド・全マウス設定）を並列実行。
+  // 数分間はモジュールキャッシュした生データを使い回す（集計・ラベル生成はロケール依存なので毎回行う）
+  const raw = await loadStatsRaw(db);
+  const { totalUsers, usersWithKeybindings, allKeybindings, mouseConfigs } = raw;
 
   // 分布グラフの区間ラベル。単位は文字列として渡す（"5%" / "10cm" / "" ）
   const binUpTo = (max: string) => t("stats.binUpTo", { max });
