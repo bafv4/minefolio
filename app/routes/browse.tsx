@@ -558,48 +558,48 @@ export default function BrowsePage() {
         {activeFilterCount > 0 && (
           <div className="flex flex-wrap gap-2">
             {filters.roles.map((role) => (
-              <Badge key={role} variant="secondary" className="gap-1">
+              <Badge key={role} variant="secondary" className="gap-1 overflow-visible">
                 {roleLabels(t)[role]}
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
                   aria-label={t("browse.removeFilterAria", { label: roleLabels(t)[role] })}
-                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
             ))}
             {filters.editions.map((edition) => (
-              <Badge key={edition} variant="secondary" className="gap-1">
+              <Badge key={edition} variant="secondary" className="gap-1 overflow-visible">
                 {EDITION_LABELS[edition]}
                 <button
                   onClick={() => handleFilterChange("edition", edition, false)}
                   aria-label={t("browse.removeFilterAria", { label: EDITION_LABELS[edition] })}
-                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
             ))}
             {filters.platforms.map((platform) => (
-              <Badge key={platform} variant="secondary" className="gap-1">
+              <Badge key={platform} variant="secondary" className="gap-1 overflow-visible">
                 {platformLabel(t, platform, "short")}
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
                   aria-label={t("browse.removeFilterAria", { label: platformLabel(t, platform, "short") ?? platform })}
-                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
             ))}
             {filters.inputMethods.map((inputMethod) => (
-              <Badge key={inputMethod} variant="secondary" className="gap-1">
+              <Badge key={inputMethod} variant="secondary" className="gap-1 overflow-visible">
                 {INPUT_METHOD_LABELS[inputMethod]}
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
                   aria-label={t("browse.removeFilterAria", { label: INPUT_METHOD_LABELS[inputMethod] })}
-                  className="ml-1 -m-0.5 rounded p-0.5 hover:text-destructive"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
