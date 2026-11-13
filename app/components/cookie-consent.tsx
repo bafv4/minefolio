@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,16 +85,34 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
     onDecline?.();
   };
 
-  // 外部からshowが指定されている場合は、承諾済みでも表示しない
-  if (externalShow !== undefined) {
-    if (!isVisible) return null;
-  } else {
-    // 自動表示の場合は、承諾済みなら表示しない
-    if (!isVisible || hasConsent !== null) return null;
-  }
+  // 外部からshowが指定されている場合は、承諾済みでも表示しない。
+  // 自動表示の場合は、承諾済みなら表示しない
+  const shouldRender = externalShow !== undefined ? isVisible : isVisible && hasConsent === null;
+
+  // 表示中は「バナーの高さ + 余白」を --cookie-banner-offset として公開する。
+  // 画面下部の固定要素（FloatingSaveBar 等）がこの値を bottom に足して重なりを避ける
+  const bannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bannerRef.current;
+    if (!shouldRender || !el) return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty("--cookie-banner-offset", `${el.offsetHeight + 16}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--cookie-banner-offset");
+    };
+  }, [shouldRender]);
+
+  if (!shouldRender) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md">
+    <div
+      ref={bannerRef}
+      className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md"
+    >
       <Card className="border-2 shadow-lg">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">

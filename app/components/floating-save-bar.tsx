@@ -33,7 +33,8 @@ export function FloatingSaveBar({
       aria-label={t("common.saveBar")}
       aria-hidden={!hasChanges}
       className={cn(
-        "fixed bottom-4 left-0 right-0 mx-auto z-50",
+        // Cookie 同意バナー表示中は、その高さぶん上へ積む（cookie-consent.tsx が変数を公開）
+        "fixed bottom-[calc(1rem+var(--cookie-banner-offset,0px))] left-0 right-0 mx-auto z-50",
         "w-[calc(100%-2rem)] max-w-2xl",
         "flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3",
         "bg-card/95 backdrop-blur-sm supports-[backdrop-filter]:bg-card/80",
