@@ -12,6 +12,7 @@ interface FavoriteButtonProps {
   size?: "sm" | "default" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost";
   showLabel?: boolean;
+  className?: string;
 }
 
 export function FavoriteButton({
@@ -19,6 +20,7 @@ export function FavoriteButton({
   size = "sm",
   variant = "outline",
   showLabel = false,
+  className,
 }: FavoriteButtonProps) {
   const t = useT();
   const { hasConsent } = useCookieConsent();
@@ -58,6 +60,7 @@ export function FavoriteButton({
         className={cn(
           "transition-colors",
           favorite && "text-favorite hover:text-favorite/80",
+          className,
         )}
       >
         <Heart

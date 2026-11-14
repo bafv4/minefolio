@@ -4,12 +4,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
 import { FavoriteMark } from "@/components/favorite-mark";
+import { FavoriteButton } from "@/components/favorite-button";
 import { Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { platformLabel } from "@/lib/platform-label";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
+import { cn } from "@/lib/utils";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -74,20 +76,34 @@ function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
 export function ProfileFeedCard({
   player,
   isFavorite = false,
+  showFavoriteButton = false,
+  className,
 }: {
   player: ProfileFeedCardPlayer;
   /** true のとき名前行の右端（カードの右側）にハートを出す（/browse でお気に入りが先頭に来る理由の表示） */
   isFavorite?: boolean;
+  /** true のときヘッダー右端にお気に入りの追加/解除ボタンを出す（isFavorite のピルは出さない。ホームの推薦用） */
+  showFavoriteButton?: boolean;
+  /** 外枠への追加クラス（例: 親が flex-col のとき `flex-1` で高さを揃える） */
+  className?: string;
 }) {
   const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
   return (
-    <Link
-      to={`/player/${player.slug}`}
-      prefetch="intent"
-      className="group flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+    // オーバーレイリンク構成（ui.md）。hover の transform は外枠に置く。ボタンは relative z-10 でリンクより手前
+    <div
+      className={cn(
+        "group relative flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+        className,
+      )}
     >
+      <Link
+        to={`/player/${player.slug}`}
+        prefetch="intent"
+        aria-label={displayName}
+        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
       {/* flex-1 でヘッダー側が余白を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
       <div className="flex flex-1 items-start gap-3">
         <div className="h-12 w-12 shrink-0 rounded-xl">
@@ -97,7 +113,7 @@ export function ProfileFeedCard({
         {/* min-h-12 keeps header block height == avatar height, so rows stay aligned across cards
             even when optional fields (@mcid / bio) are missing */}
         <div className="flex min-h-12 min-w-0 flex-1 flex-col justify-center">
-          {isFavorite ? (
+          {isFavorite && !showFavoriteButton ? (
             <div className="flex min-w-0 items-center gap-2">
               <p className="min-w-0 flex-1 truncate font-semibold">{displayName}</p>
               <FavoriteMark />
@@ -119,6 +135,11 @@ export function ProfileFeedCard({
             {player.shortBio ?? "\u00A0"}
           </p>
         </div>
+        {showFavoriteButton && (
+          <div className="relative z-10 -my-1 -mr-2 shrink-0 self-start">
+            <FavoriteButton slug={player.slug} variant="ghost" size="icon" className="size-11" />
+          </div>
+        )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
         {/* min-h-5: バッジ（約20px）の有無でフッター高が変わり、罫線位置が兄弟カードとずれるのを防ぐ */}
@@ -131,7 +152,7 @@ export function ProfileFeedCard({
           {formatRelativeDate(t, player.updatedAt)}
         </span>
       </div>
-    </Link>
+    </div>
   );
 }
 
