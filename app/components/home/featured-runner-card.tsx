@@ -238,11 +238,12 @@ export function FeaturedNextButton({
   );
 }
 
-/** 注目の理由の行（日替わり・ランダムの人は出さないが、行の高さは保つ）。審査中の申請へのリンクを含む */
+/** 注目の理由の行（日替わり・ランダムの人は理由が無いので行ごと出さない）。審査中の申請へのリンクを含む */
 export function FeaturedReasonRow({ runner }: { runner: FeaturedRunner }) {
   const t = useT();
+  if (!runner.reason) return null;
   return (
-    <div className="flex min-h-5 flex-wrap items-start gap-x-3 gap-y-1 text-xs font-medium text-primary">
+    <div className="flex flex-wrap items-start gap-x-3 gap-y-1 text-xs font-medium text-primary">
       {runner.reason && (
         <>
           {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
@@ -362,32 +363,34 @@ export function FeaturedRunnerCard({
 
       {/* 高さを保つため、取得中は中身を薄くするだけで差し替えない */}
       <div aria-busy={loading} className={cn("mt-3 space-y-3 transition-opacity", loading && "opacity-50")}>
-        <FeaturedReasonRow runner={current} />
-
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
-          <div className="flex items-center gap-4">
-            <MinecraftAvatar
-              uuid={current.uuid}
-              skinUrl={current.customSkinUrl}
-              mcid={current.mcid}
-              size={64}
-              className="shrink-0 rounded-xl"
-            />
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="truncate text-lg font-bold leading-snug">
-                <Link
-                  to={`/player/${current.slug}`}
-                  prefetch="intent"
-                  className="rounded-sm after:absolute after:inset-0 after:z-0 after:rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {name}
-                </Link>
-              </p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <FeaturedCategoryPb runner={current} />
-                <FeaturedSensitivity runner={current} />
+          {/* 人のブロック: アバター＋名前の下に理由行（名前より後に読ませる）。lg 未満ではこの直下にキーが続く */}
+          <div className="min-w-0 space-y-3">
+            <div className="flex items-center gap-4">
+              <MinecraftAvatar
+                uuid={current.uuid}
+                skinUrl={current.customSkinUrl}
+                mcid={current.mcid}
+                size={64}
+                className="shrink-0 rounded-xl"
+              />
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="truncate text-lg font-bold leading-snug">
+                  <Link
+                    to={`/player/${current.slug}`}
+                    prefetch="intent"
+                    className="rounded-sm after:absolute after:inset-0 after:z-0 after:rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {name}
+                  </Link>
+                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <FeaturedCategoryPb runner={current} />
+                  <FeaturedSensitivity runner={current} />
+                </div>
               </div>
             </div>
+            <FeaturedReasonRow runner={current} />
           </div>
 
           <FeaturedKeys

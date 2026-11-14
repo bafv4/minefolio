@@ -206,8 +206,6 @@ export function GuestHero({
           {current ? (
             // 高さを保つため、取得中は中身を薄くするだけで差し替えない
             <div aria-busy={loading} className={cn("space-y-3 transition-opacity", loading && "opacity-50")}>
-              <FeaturedReasonRow runner={current} />
-
               <div className="flex items-center gap-4">
                 {/* 名前のリンクと同じ遷移先なので、タブ停止と読み上げは名前の方に任せる */}
                 <Link
@@ -241,6 +239,9 @@ export function GuestHero({
                   <FeaturedSensitivity runner={current} />
                 </div>
               </div>
+
+              {/* 人の情報（名前・自己ベスト・感度）の後に「直近7日に何があったか」を置く（名前より前だと誰の話か分からない） */}
+              <FeaturedReasonRow runner={current} />
 
               <FeaturedKeys runner={current} className="border-t border-border/60 pt-3" />
             </div>
