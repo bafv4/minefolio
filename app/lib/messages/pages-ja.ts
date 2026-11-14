@@ -486,6 +486,12 @@ export const PAGES_JA = {
     loadMore: "もっと読み込む",
     allShown: "すべて表示しました（{count}人）",
     removeFilterAria: "{label}の絞り込みを解除",
+    editionJava: "Java Edition",
+    editionBedrock: "Bedrock Edition",
+    /** フィルタダイアログの適用ボタン（ヒット件数つき） */
+    showCount: "{count}件を表示",
+    showCountNone: "該当なし（0件）",
+    roleDefaultNote: "ロールを選ばない場合、視聴者は表示されません。",
   },
   compare: {
     title: "走者比較",

@@ -439,6 +439,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     loadMore: "Load more",
     allShown: "All shown ({count} people)",
     removeFilterAria: "Remove {label} filter",
+    editionJava: "Java Edition",
+    editionBedrock: "Bedrock Edition",
+    showCount: "Show {count} results",
+    showCountNone: "No results (0)",
+    roleDefaultNote: "Viewers are hidden unless you select a role.",
   },
   favorites: {
     title: "Favorites",

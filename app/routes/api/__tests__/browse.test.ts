@@ -104,6 +104,26 @@ describe("Cache-Control の出し分け", () => {
   });
 });
 
+describe("?count=1（件数のみ）", () => {
+  it("{ total } だけを返し、items は含まない", async () => {
+    const res = await callLoader("?count=1");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ total: 1 });
+  });
+
+  it("フィルタを一覧と同じ条件で解釈する", async () => {
+    expect(await (await callLoader("?count=1&role=viewer")).json()).toEqual({ total: 0 });
+    expect(await (await callLoader("?count=1&q=runner")).json()).toEqual({ total: 1 });
+  });
+
+  it("ログイン有無に関わらず CDN キャッシュ可", async () => {
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "discord-runner1" } });
+    const res = await callLoader("?count=1");
+    expect(res.headers.get("Cache-Control")).toBe(ANONYMOUS_CACHE);
+  });
+});
+
 describe("レスポンス形", () => {
   it("items / hasMore / totalCount / totalPages / page を返す", async () => {
     const res = await callLoader("?page=1");

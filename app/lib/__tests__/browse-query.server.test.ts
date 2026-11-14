@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as schema from "../schema";
 import {
+  countBrowse,
   getFavoriteSlugsByDiscordId,
   loadBrowsePage,
   parseBrowseSearchParams,
@@ -107,6 +108,35 @@ describe("loadBrowsePage - LIKE 検索（セキュリティ回帰）", () => {
     const result = await loadBrowsePage(db, args({ q: "(a|a)+b" }), []);
     expect(result.players).toEqual([]);
     expect(result.totalCount).toBe(0);
+  });
+});
+
+describe("countBrowse - 一覧と同じ条件解釈", () => {
+  it("さまざまな条件で loadBrowsePage の totalCount と一致する（非公開・視聴者既定除外含む）", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "a", mcid: "Alpha", role: "runner", mainEdition: "java", inputMethod: "keyboard_mouse", mainPlatform: "pc_windows" });
+    await seedUser(db, { slug: "b", mcid: "Beta", role: null, mainEdition: "bedrock", inputMethod: "controller", mainPlatform: "switch" });
+    await seedUser(db, { slug: "v", mcid: "Viewer", role: "viewer", mainEdition: "java" });
+    await seedUser(db, { slug: "p", mcid: "Priv", role: "runner", profileVisibility: "private" });
+
+    const cases: Partial<BrowseQueryArgs>[] = [
+      {},
+      { roles: ["viewer"] },
+      { roles: ["runner", "viewer"] },
+      { editions: ["bedrock"] },
+      { inputMethods: ["controller"] },
+      { platforms: ["pc_windows", "switch"] },
+      { q: "alp" },
+      { q: "zzz" },
+      { roles: ["runner"], editions: ["java"], q: "a" },
+    ];
+    for (const c of cases) {
+      const a = args(c);
+      const list = await loadBrowsePage(db, a, []);
+      expect(await countBrowse(db, a)).toBe(list.totalCount);
+    }
+    expect(await countBrowse(db, args())).toBe(2);
+    expect(await countBrowse(db, args({ roles: ["viewer"] }))).toBe(1);
   });
 });
 

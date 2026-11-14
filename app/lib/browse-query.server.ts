@@ -137,6 +137,15 @@ function buildWhere(args: BrowseQueryArgs) {
   return and(...conditions);
 }
 
+/** 条件に一致する件数（一覧と同じ buildWhere を通す。行は取得せず count(*) のみ） */
+export async function countBrowse(db: Database, args: BrowseQueryArgs): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(buildWhere(args));
+  return Number(rows[0]?.count ?? 0);
+}
+
 /** 1 ページ分の走者リストを取得 */
 export async function loadBrowsePage(
   db: Database,
@@ -196,15 +205,7 @@ export async function loadBrowsePage(
     });
   };
 
-  const [totalCountResult, playerList] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(whereCondition),
-    buildList(),
-  ]);
-
-  const totalCount = totalCountResult[0]?.count ?? 0;
+  const [totalCount, playerList] = await Promise.all([countBrowse(db, args), buildList()]);
   const totalPages = Math.ceil(totalCount / BROWSE_ITEMS_PER_PAGE);
   const hasMore = args.page < totalPages;
 

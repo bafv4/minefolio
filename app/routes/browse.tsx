@@ -43,6 +43,7 @@ import type { Translator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { platformLabel } from "@/lib/platform-label";
 import { EmptyState } from "@/components/empty-state";
+import { cn } from "@/lib/utils";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -108,15 +109,16 @@ const roleLabels = (t: Translator): Record<string, string> => ({
   runner: t("browse.roleRunner"),
   viewer: t("browse.roleViewer"),
 });
-const EDITION_LABELS: Record<string, string> = {
-  java: "Java",
-  bedrock: "Bedrock",
-};
-const INPUT_METHOD_LABELS: Record<string, string> = {
-  keyboard_mouse: "KBM",
-  controller: "Controller",
-  touch: "Touch",
-};
+// ダイアログのチェックボックスと適用中チップで同じラベルを使う
+const editionLabels = (t: Translator): Record<string, string> => ({
+  java: t("browse.editionJava"),
+  bedrock: t("browse.editionBedrock"),
+});
+const inputMethodLabels = (t: Translator): Record<string, string> => ({
+  keyboard_mouse: t("browse.inputKeyboardMouse"),
+  controller: t("browse.inputController"),
+  touch: t("browse.inputTouch"),
+});
 
 // view（表示形式）だけが変わるナビゲーションではサーバーデータが同一なので再取得しない
 export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
@@ -174,6 +176,42 @@ export default function BrowsePage() {
       setDraftFilters(filters);
     }
   }, [isFilterDialogOpen, filters]);
+
+  // ダイアログ内の下書き条件でのヒット件数（null = 未取得/失敗 → 従来の「完了」表記）
+  const [draftCount, setDraftCount] = useState<number | null>(null);
+  const [isCountLoading, setIsCountLoading] = useState(false);
+  useEffect(() => {
+    if (!isFilterDialogOpen) {
+      setDraftCount(null);
+      return;
+    }
+    const controller = new AbortController();
+    setIsCountLoading(true);
+    const timer = setTimeout(async () => {
+      const params = new URLSearchParams({ count: "1" });
+      if (searchQuery) params.set("q", searchQuery);
+      draftFilters.roles.forEach((v) => params.append("role", v));
+      draftFilters.editions.forEach((v) => params.append("edition", v));
+      draftFilters.inputMethods.forEach((v) => params.append("input", v));
+      draftFilters.platforms.forEach((v) => params.append("platform", v));
+      try {
+        const res = await fetch(`/api/browse?${params.toString()}`, { signal: controller.signal });
+        if (!res.ok) throw new Error(String(res.status));
+        const json = (await res.json()) as { total?: unknown };
+        if (typeof json.total !== "number") throw new Error("invalid");
+        setDraftCount(json.total);
+        setIsCountLoading(false);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        setDraftCount(null);
+        setIsCountLoading(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isFilterDialogOpen, draftFilters, searchQuery]);
 
   // アクティブなフィルタ数（適用済み）
   const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
@@ -325,6 +363,9 @@ export default function BrowsePage() {
                   {/* ロール */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.role")}</div>
+                    {draftFilters.roles.length === 0 && (
+                      <p className="text-xs text-muted-foreground">{t("browse.roleDefaultNote")}</p>
+                    )}
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -361,7 +402,7 @@ export default function BrowsePage() {
                             handleDraftFilterChange("editions", "java", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="edition-java" className="cursor-pointer">Java Edition</RadixLabel>
+                        <RadixLabel htmlFor="edition-java" className="cursor-pointer">{t("browse.editionJava")}</RadixLabel>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -371,7 +412,7 @@ export default function BrowsePage() {
                             handleDraftFilterChange("editions", "bedrock", !!checked);
                           }}
                         />
-                        <RadixLabel htmlFor="edition-bedrock" className="cursor-pointer">Bedrock Edition</RadixLabel>
+                        <RadixLabel htmlFor="edition-bedrock" className="cursor-pointer">{t("browse.editionBedrock")}</RadixLabel>
                       </div>
                     </div>
                   </div>
@@ -496,7 +537,18 @@ export default function BrowsePage() {
                     className="w-full sm:w-auto"
                     onClick={applyDraftFilters}
                   >
-                    {t("common.complete")}
+                    <span
+                      className={cn(isCountLoading && draftCount !== null && "opacity-60")}
+                      aria-live="polite"
+                    >
+                      {draftCount === null
+                        ? isCountLoading
+                          ? "…"
+                          : t("common.complete")
+                        : draftCount === 0
+                          ? t("browse.showCountNone")
+                          : t("browse.showCount", { count: draftCount })}
+                    </span>
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -543,10 +595,10 @@ export default function BrowsePage() {
             ))}
             {filters.editions.map((edition) => (
               <Badge key={edition} variant="secondary" className="gap-1 overflow-visible">
-                {EDITION_LABELS[edition]}
+                {editionLabels(t)[edition]}
                 <button
                   onClick={() => handleFilterChange("edition", edition, false)}
-                  aria-label={t("browse.removeFilterAria", { label: EDITION_LABELS[edition] })}
+                  aria-label={t("browse.removeFilterAria", { label: editionLabels(t)[edition] })}
                   className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
@@ -567,10 +619,10 @@ export default function BrowsePage() {
             ))}
             {filters.inputMethods.map((inputMethod) => (
               <Badge key={inputMethod} variant="secondary" className="gap-1 overflow-visible">
-                {INPUT_METHOD_LABELS[inputMethod]}
+                {inputMethodLabels(t)[inputMethod]}
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
-                  aria-label={t("browse.removeFilterAria", { label: INPUT_METHOD_LABELS[inputMethod] })}
+                  aria-label={t("browse.removeFilterAria", { label: inputMethodLabels(t)[inputMethod] })}
                   className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
                 >
                   <X className="h-3 w-3" />
