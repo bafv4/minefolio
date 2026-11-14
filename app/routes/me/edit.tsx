@@ -709,6 +709,11 @@ export default function EditProfilePage() {
     allowAutoTranslation: user.allowAutoTranslation ?? true,
   });
 
+  // カスタムスキン/マントの URL。アップローダーが API 経由で即時保存するので、完了時にここだけ更新する
+  // （ページ再読込や loader 再検証をすると未保存の下書きが消えるため、loader の値を初期値にローカルで持つ）
+  const [customSkinUrl, setCustomSkinUrl] = useState<string | null>(user.customSkinUrl);
+  const [customCapeUrl, setCustomCapeUrl] = useState<string | null>(user.customCapeUrl);
+
   const [formValues, setFormValues] = useState(buildFormValues);
   // 保存済みの値（dirty 判定の基準）。保存成功時に送信時点のスナップショットへ更新する
   const [savedFormValues, setSavedFormValues] = useState(buildFormValues);
@@ -864,7 +869,7 @@ export default function EditProfilePage() {
   // ポーズプレビュー用のマント。capeDisplay は保存前のフォーム値を使う（選択が即プレビューに反映される）
   const capeProps = resolveCapeProps({
     uuid: user.uuid,
-    customCapeUrl: user.customCapeUrl,
+    customCapeUrl: customCapeUrl,
     capeDisplay: formValues.capeDisplay,
   });
 
@@ -1318,7 +1323,7 @@ export default function EditProfilePage() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0">
-                      <MinecraftAvatar uuid={draft.mcid.uuid} skinUrl={user.customSkinUrl} size={64} />
+                      <MinecraftAvatar uuid={draft.mcid.uuid} skinUrl={customSkinUrl} size={64} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium truncate">@{draft.mcid.value}</p>
@@ -1490,7 +1495,7 @@ export default function EditProfilePage() {
               <p className="text-sm text-muted-foreground">
                 {t("skinUploader.customSkinDesc")}
               </p>
-              {user.customSkinUrl && (
+              {customSkinUrl && (
                 <Alert className="mt-2">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -1500,13 +1505,9 @@ export default function EditProfilePage() {
               )}
               <SkinUploader
                 userId={user.id}
-                currentSkinUrl={user.customSkinUrl}
-                onUploadComplete={() => {
-                  window.location.reload();
-                }}
-                onDelete={() => {
-                  window.location.reload();
-                }}
+                currentSkinUrl={customSkinUrl}
+                onUploadComplete={(url) => setCustomSkinUrl(url)}
+                onDelete={() => setCustomSkinUrl(null)}
               />
             </div>
 
@@ -1518,7 +1519,7 @@ export default function EditProfilePage() {
               <p className="text-sm text-muted-foreground">
                 {t("capeUploader.customCapeDesc")}
               </p>
-              {user.customCapeUrl && (
+              {customCapeUrl && (
                 <Alert className="mt-2">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -1528,18 +1529,14 @@ export default function EditProfilePage() {
               )}
               <CapeUploader
                 userId={user.id}
-                currentCapeUrl={user.customCapeUrl}
-                onUploadComplete={() => {
-                  window.location.reload();
-                }}
-                onDelete={() => {
-                  window.location.reload();
-                }}
+                currentCapeUrl={customCapeUrl}
+                onUploadComplete={(url) => setCustomCapeUrl(url)}
+                onDelete={() => setCustomCapeUrl(null)}
               />
             </div>
 
             {/* Pose Selection - show when user has uuid OR custom skin */}
-            {(user.uuid || user.customSkinUrl) && (
+            {(user.uuid || customSkinUrl) && (
               <>
                 <Separator />
 
@@ -1563,7 +1560,7 @@ export default function EditProfilePage() {
                         <div className="w-16 h-24">
                           <MinecraftFullBody
                             uuid={user.uuid ?? undefined}
-                            skinUrl={user.customSkinUrl ?? undefined}
+                            skinUrl={customSkinUrl ?? undefined}
                             width={64}
                             height={96}
                             pose={pose}
