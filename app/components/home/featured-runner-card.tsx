@@ -15,7 +15,7 @@ import { ArrowRight, Sparkles, Shuffle, Trophy, Video, TrendingUp } from "lucide
 
 /** 主要操作・ホットバーのキーチップの見た目（クラス共通化はしない。見た目は ui.md「キーバッジ」と同系統） */
 const KEY_CHIP_CLASS =
-  "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1.5 font-mono text-sm font-semibold text-muted-foreground @[35rem]:px-1 @[35rem]:text-xs";
+  "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-xs font-semibold text-muted-foreground @[24rem]:px-1.5 @[24rem]:text-sm @[35rem]:px-1 @[35rem]:text-xs";
 const HOTBAR_CHIP_CLASS =
   "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-sm @[35rem]:text-xs font-semibold text-muted-foreground";
 
@@ -284,8 +284,8 @@ export function FeaturedKeys({ runner, className }: { runner: FeaturedRunner; cl
       {runner.keys.length > 0 && (
         <ul
           aria-label={t("home.featuredKeysLabel")}
-          // 列数はキー領域の幅で決める。モバイル（約16rem）は3列（4列だと「左Shift」等が切れる）、約31rem は 4+4、9列（ホットバーと列を揃える）には約35rem 要る
-          className="grid grid-cols-3 gap-x-1 gap-y-2.5 @[24rem]:grid-cols-4 @[35rem]:grid-cols-9"
+          // 列数はキー領域の幅で決める。モバイル（約19rem＝310px）も4列で 4+4 に揃える（チップは @[24rem] 未満で px-1・text-xs にして「左Shift」等を収める）。9列（ホットバーと列を揃える）には約35rem 要る
+          className="grid grid-cols-4 gap-x-1 gap-y-2.5 @[35rem]:grid-cols-9"
         >
           {runner.keys.map((k) => (
             <KeyChip key={k.action} k={k} />
