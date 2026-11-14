@@ -9,7 +9,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 
 /** プラットフォーム上の視聴ページURL */
-function getFeedVideoUrl(video: FeedVideo): string {
+export function getFeedVideoUrl(video: FeedVideo): string {
   return video.platform === "youtube"
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`
     : `https://www.twitch.tv/videos/${encodeURIComponent(video.videoId)}`;
@@ -19,7 +19,7 @@ function getFeedVideoUrl(video: FeedVideo): string {
  * 埋め込みプレイヤーURL。Twitch は parent パラメータに現在のホスト名が必須のため、
  * クリック後（クライアント側）にのみ呼ぶこと
  */
-function getEmbedUrl(video: FeedVideo): string {
+export function getEmbedUrl(video: FeedVideo): string {
   if (video.platform === "youtube") {
     return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1`;
   }

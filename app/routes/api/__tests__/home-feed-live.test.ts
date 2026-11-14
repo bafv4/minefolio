@@ -7,6 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
   seedUser,
+  seedPace,
+  daysAgo,
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
@@ -21,7 +23,7 @@ vi.mock("@/lib/paceman", () => ({ fetchLiveRuns: pacemanMocks.fetchLiveRuns }));
 
 import { loader } from "../home-feed";
 
-const LIVE_RUNS_CACHE_KEY = "home-feed:live-runs:all";
+const LIVE_RUNS_CACHE_KEY = "home-feed:live-runs:v2";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -165,5 +167,36 @@ describe("?type=live-runs", () => {
     const body = (await res.json()) as { liveRuns: unknown[] };
 
     expect(body.liveRuns).toHaveLength(20);
+  });
+});
+
+describe("?type=live-runs / recent-paces - showPacemanOnHome（全員のホームから除外）", () => {
+  it("showPacemanOnHome=false の人のライブランは除き、true・null は出す", async () => {
+    await seedUser(db, { slug: "off", mcid: "OffRunner", uuid: "uuid-off", role: "runner", profileVisibility: "public", showPacemanOnHome: false });
+    await seedUser(db, { slug: "on", mcid: "OnRunner", uuid: "uuid-on", role: "runner", profileVisibility: "public", showPacemanOnHome: true });
+    await seedUser(db, { slug: "unset", mcid: "UnsetRunner", uuid: "uuid-unset", role: "runner", profileVisibility: "public", showPacemanOnHome: null });
+    pacemanMocks.fetchLiveRuns.mockResolvedValue([
+      makeStubLiveRun("offrunner"), // 大文字小文字を無視して照合される
+      makeStubLiveRun("OnRunner"),
+      makeStubLiveRun("UnsetRunner"),
+    ]);
+
+    const res = await callLoader("?type=live-runs");
+    const body = (await res.json()) as { liveRuns: Array<{ nickname: string }>; mcidToSlug: Record<string, string> };
+
+    expect(body.liveRuns.map((r) => r.nickname)).toEqual(["OnRunner", "UnsetRunner"]);
+    expect(body.mcidToSlug.offrunner).toBeUndefined();
+  });
+
+  it("recent-paces からも showPacemanOnHome=false の人のペースを除く", async () => {
+    const off = await seedUser(db, { slug: "off", mcid: "OffRunner", uuid: "uuid-off", role: "runner", profileVisibility: "public", showPacemanOnHome: false });
+    const on = await seedUser(db, { slug: "on", mcid: "OnRunner", uuid: "uuid-on", role: "runner", profileVisibility: "public" });
+    await seedPace(db, { userId: off.id, mcid: "OffRunner", pacemanRunId: 1, timeline: "Bastion", date: daysAgo(0.1) });
+    await seedPace(db, { userId: on.id, mcid: "OnRunner", pacemanRunId: 2, timeline: "Bastion", date: daysAgo(0.1) });
+
+    const res = await callLoader("?type=recent-paces");
+    const body = (await res.json()) as { recentPaces: Array<{ mcid: string }> };
+
+    expect(body.recentPaces.map((p) => p.mcid)).toEqual(["OnRunner"]);
   });
 });

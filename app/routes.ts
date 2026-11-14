@@ -101,6 +101,8 @@ export default [
   route("api/set-locale", "routes/api/set-locale.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/home-featured", "routes/api/home-featured.ts"),
+  route("api/home-favorite-activity", "routes/api/home-favorite-activity.ts"),
   route("api/social-stats", "routes/api/social-stats.ts"),
   route("api/paces", "routes/api/paces.ts"),
   route("api/videos", "routes/api/videos.ts"),

@@ -12,6 +12,7 @@ import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import { parseDateParam } from "./paces-feed.server";
 import { videoRetentionCutoff, type FeedVideo } from "./feed-video";
+import { getHomeHiddenUsers } from "./home-visibility.server";
 
 // フィード全体のメモリキャッシュTTL（無限スクロールのページ毎の全走査を避ける）
 const VIDEOS_FEED_CACHE_TTL = 60 * 1000;
@@ -118,6 +119,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
         channelTitle: true,
         publishedAt: true,
         durationSeconds: true,
+        gameName: true,
       },
       orderBy: [desc(twitchVodCache.publishedAt)],
     }),
@@ -184,6 +186,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
       channelTitle: v.channelTitle,
       publishedAt: v.publishedAt,
       durationSeconds: v.durationSeconds,
+      gameName: v.gameName,
       minefolioMcid: link.mcid,
       uuid: link.uuid,
       slug: link.slug,
@@ -223,8 +226,21 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
 export async function getPublicVideoFeed(
   db: Db,
   filters: VideoSearchFilters = {},
+  options: { forHome?: boolean } = {},
 ): Promise<FeedVideo[]> {
   let items = await getVideoFeedBase(db);
+
+  // ホーム用: 「ホーム画面にYouTube動画／Twitch配信を表示」をオフにした人の動画を全員のホームから除く
+  // （/videos 等ホーム以外は forHome を渡さないので対象外。紐付けなし＝slug なしの旧データは残す）
+  if (options.forHome) {
+    const hidden = await getHomeHiddenUsers(db);
+    if (hidden.youtubeSlugs.size > 0 || hidden.twitchSlugs.size > 0) {
+      items = items.filter((v) => {
+        if (!v.slug) return true;
+        return !(v.platform === "youtube" ? hidden.youtubeSlugs : hidden.twitchSlugs).has(v.slug);
+      });
+    }
+  }
 
   if (filters.platform) {
     items = items.filter((v) => v.platform === filters.platform);

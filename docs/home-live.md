@@ -12,60 +12,89 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 - セッションがある場合、`users` テーブルから `discordId` で登録済みユーザーを検索
 - 登録済みの場合 `isRegistered = true` を返し、ユーザーの表示設定（`showPacemanOnHome`, `showYoutubeOnHome`, `showTwitchOnHome`）を取得
 
-### ホームフィードの構成
+### ホームの構成（2026-11 全面改修）
+
+**ログイン状態で先頭（ヒーロー / おかえりバー）を分け、以降は共通**。各欄は `section` + `aria-labelledby`（h2）。欄の見出しは「アイコンチップ + h2 + 件数 + すべて見る」のみで、英大文字の eyebrow・格子背景・ヒーローの統計タイルは無い（公開プロフィール数は「プロフィール」欄の見出し、ライブ人数は「ライブ」欄の見出しに移した。「記録ペース」の件数と `countHomeRecordedPaces` は廃止）。共通の欄枠は `app/components/home/home-section.tsx`。
+
+| 順 | ゲスト | ログイン済み（登録済み） |
+|---|---|---|
+| 1 | ヒーロー（左: h1・説明・「プロフィールを作る」「走者を探す」、右: 「注目の走者」カード） | おかえりバー（アバター・「おかえりなさい」・自分の最新ペースか PB・「プロフィールを編集」「マイプロフィール」「お気に入り」）。h1 は `sr-only` |
+| 2 | お気に入り走者の動き（ブラウザにお気に入りがある場合のみ） | お気に入り走者の動き（常に出す） |
+| 3 | ライブ / ペース（横レール） | ライブ / ペース（お気に入りを先頭・ハート印） |
+| 4 | 最新動画（YouTube カード3本 + Twitch「Twitchライブ」6行） | 同左 |
+| 5 | 新着ガイド（4件、著者1人1件） | 同左 |
+| 6 | （ヒーロー右に出すので無し） | 注目の走者（横長版） |
+| 7 | プロフィール（最近の更新 / よく見られている の2列コンパクト行、各4件） | 同左 |
+
+レイアウトの型は欄ごとに変える（ヒーロー＝左右分割 / ライブ＝横レール / お気に入りの動き＝縦タイムライン / ガイド＝カバー付きグリッド / プロフィール＝コンパクト行 / 動画＝メディアグリッド + リスト行）。時刻は `m:ss`（1時間以上は `h:mm:ss`。`app/lib/home-format.ts` の `formatClock`）で、ミリ秒はペースカードのタイムラインモーダル内だけ。タップ領域はモバイルで 44px 以上。モーションはライブ進行バーの遷移（200ms）とホバーだけで、`motion-reduce` では止める。
 
 #### サーバーサイドで取得（loader）
 
-「プロフィール」「ガイド」の各セクションは、**更新順**と**よく見られている／読まれている順（直近7日PV順）**の2段構成。それぞれ独立クエリで最大4件ずつ取得する。
-
 | データ | ソース | 条件 |
 |--------|--------|------|
-| 最近更新されたプロフィール | `users` テーブル | `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
-| よく見られているプロフィール | `page_view_stats` テーブル + `users` JOIN | `targetType = "profile"`、対象ユーザーが `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
-| 最近更新されたガイド | `guides` テーブル + `users` JOIN | `isPublished = true` かつ著者が `profileVisibility = "public"`、`updatedAt` 降順、最大4件 |
-| よく読まれているガイド | `page_view_stats` テーブル + `guides` + `users` JOIN | `targetType = "guide"`、`isPublished = true` かつ著者が `profileVisibility = "public"`、`pageviews` 降順、最大4件 |
-| 公開プロフィール数 | `users` テーブル | `profileVisibility = "public"` の COUNT |
-| ヒーローの見本ペース | `paceman_paces` + `users` JOIN（`user_id`） | `app/lib/home-pace-sample.server.ts` の `getHomeSamplePace`。公開プロフィール・視聴者除外・Enter Nether 除外・保持期間内。区間深度（`PACE_FEED_SPLITS` 順、Finish 最大）降順→日時降順で1件。0件なら見本カードを出さない |
-| 記録ペース総数 | 同上 | `countHomeRecordedPaces`。同条件の `count(distinct pacemanRunId)`（保持期間＝直近2か月） |
+| 最近更新されたプロフィール | `users` テーブル | `profileVisibility = "public"`、視聴者除外、`updatedAt` 降順、最大4件 |
+| よく見られているプロフィール | `page_view_stats` + `users` JOIN | `targetType = "profile"`、公開、`pageviews` 降順。「最近の更新」に出た人は除き、最大4件。右端は `home.views7d`（7日で n 閲覧） |
+| 新着ガイド | `guides` + `users` JOIN | 公開済み・著者が公開プロフィール、`updatedAt` 降順。**同じ著者は1件まで**、最大4件。注目順の段は廃止（並べ替えは `/guides` 側） |
+| 公開プロフィール数 | `users` COUNT | 「プロフィール」欄の見出しに表示 |
+| 注目の走者（ゲストのみ） | `getHomeSpotlight`（`app/lib/home-featured.server.ts`） | 下記。10分キャッシュ（ロケール非依存） |
+| 自分の最新ペース/PB（登録済みのみ） | `paceman_paces`（`user_id`、直近7日・保持期間内の最新1件）→ 無ければ `category_records` のメインカテゴリ PB | おかえりバー |
 
-ヒーロー右カラムは「見本ペース（`PaceFeedCard` 流用）＋統計行（公開プロフィール数・記録ペース数・ライブ中人数）」。ライブ中人数はクライアントの feed state（`liveRuns`）由来で、未取得はスケルトン・取得失敗は「-」。登録済みユーザー（`isRegistered`）にはヒーロー左カラムに「おかえりなさい」帯（マイプロフィール・プロフィール編集・お気に入りへの近道）を表示する。
+ガイドには自動翻訳（[`docs/translation.md`](./translation.md)）を反映する（表示する4件の id を `getGuideTranslations` に1回で渡す）。
 
-「よく見られている」「よく読まれている」は、`guideListOrderBy("popular")` のような相関サブクエリ＋フォールバックではなく、`page_view_stats` のスナップショット行を起点に対象テーブルへ `innerJoin` する（`app/lib/schema.ts` の `pageViewStats`）。この形なら PV スナップショットが1件も無い環境（cron `update-page-views` 未稼働）では**結果が自然に0件**になるため、UI側は件数だけで「PV欄を出すか」を判定でき、集計未稼働を示す注記は不要（要件どおり注記は出さない）。/guides 一覧の「人気順」（`guideListOrderBy("popular")`。相関サブクエリ＋いいね数・更新日時へのフォールバック）とは実装方針が異なる点に注意（[`docs/guides.md`](./guides.md#guides--ガイド一覧)）。
+##### 注目の走者（ヒーロー右）
+- **表示設定**: video 理由はその動画のプラットフォームの設定（`forHome` で除外）、`rankedPb` / `eloGain` は `showRankedStats`、speedrun.com 理由は設定なし。
 
-UI側は各セクションを「更新順（`home.sectionRecentlyUpdated`＝「最近の更新」）」→ 水平線 → 「PV順（`home.sectionPopular`＝「注目（直近7日）」。プロフィール・ガイド共通）」の2段で表示する。PV順リストが0件のときはその段（水平線を含む）自体を表示しない。プロフィールセクションの見出しは「プロフィール」（`home.sectionProfiles`）、ガイドセクションの見出しは「ガイド」（`home.sectionGuides`）。ガイドセクションの表示条件は「更新順・PV順のいずれかが1件以上」、「すべて見る」リンクは `/guides`（人気順に固定しない）。
+- **候補**: 直近7日の出来事から1人1件（最も点数の高いもの）を採用し、点数順（同点は新しい順）に最大5人。点数は `app/lib/home-featured.ts` の `scoreFeaturedReason`: speedrun.com の新規申請 90 > Ranked の PB 更新 80 > 新しい動画 60。Ranked のレート上昇は 40 + 上昇幅/5（上昇幅300で頭打ち＝最大100）。
+  - speedrun.com / Ranked PB: `player_rankings` の `recordDate`（`YYYY-MM-DD`）が期間内。`verificationStatus` が `new` でも対象（`rejected` は除く）。**ranked_pb 行は現状 `recordDate` が保存されないため、この出来事は日付が入るまで発火しない**
+  - speedrun.com の理由は `{ type, timeMs, categoryName, status }`。`categoryName` は `player_rankings.category_id` → `speedrun_categories.name`（未設定は null）、`status` は `verificationStatus`（`new`＝審査中 / `verified`＝承認済み。null は verified 扱い）。文言は「speedrun.com に {category} {time} を申請（審査中）」/「speedrun.com で {category} {time} が承認」（カテゴリ無しは category を省く）。**審査中のときだけ**理由行の右端に「審査中の記録を見る」リンク（`relative z-10`、縦余白でタップ約44px、理由文は truncate・リンクは shrink-0）を出し、`/player/<slug>?tab=stats&srcPending=1`（プロフィール側で審査中の記録を表示）へ飛ばす。承認済みは記録タブに既に出るためリンク無し
+  - Ranked レート上昇: `ranked_elo_snapshots`（cron `update-rankings` が日次で記録）の期間内最古と最新の差が20以上。最古のスナップショットが6日以上前でない間（導入後7日分たまるまで）は対象外
+  - 新しい動画: `getPublicVideoFeed`（YouTube / Twitch のキャッシュ）の公開日時が期間内
+  - Ranked 系（PB・レート上昇）は `users.show_ranked_stats = false` の人を除く。いずれも公開プロフィール・視聴者除外
+- **カードの内容**: 理由の1行（`home.featuredReason*`）→ スキン（`MinecraftAvatar` の2D）・名前・メインカテゴリ・PB（`m:ss`）・感度（`n% · x.x cm/180°`）→ 主要9操作（前進・後退・左・右〈WASD〉・ジャンプ・スニーク・ダッシュ・インベントリ・オフハンド）のキーチップ。キー配置が無い人はキーチップ行ごと出さない。その下に**ホットバー1〜9**（`hotbar1`〜`hotbar9`、`FeaturedRunner.hotbar`）を、番号ラベル無しの9列等幅グリッド（見出し「ホットバー（1〜9）」）（`HotbarRow`）で1行に出す。狭幅（モバイル・ゲストヒーロー右側）でも折り返さないよう、チップは `min-w-0` で `truncate`（全文は `title`）、未割り当てのスロットは薄い「-」。ホットバーの割り当てが1つも無い人は行ごと出さない。`wide` 版（ログイン時）は右列（`lg:w-[38rem]`）に主要9操作とホットバーを2段で縦に並べ、両段とも9列グリッドで列を揃える（主要操作の列数はビューポートではなくキー領域（`@container`）の幅で決める: 約35rem 以上で9列、26rem 以上で5列、未満は3列。チップは `max-w-full` + `truncate`（全文は `title`）、9列時は `text-xs`。アバターは64px。「プロフィールを見る」行は無く、名前リンクのオーバーレイでカード全体が遷移する。ラベルは通常の操作名のまま、truncate せず収まらなければ折り返す）。注目の走者の10分キャッシュキーは `home:spotlight:v5`（v5 は `FeaturedKey` から `isRemapped` / `gameKeyCode` を外したため、v4 は注目の走者の動画理由からホーム表示をオフにした人を除外するため。それ以前は `hotbar`・speedrun.com 理由のカテゴリ名/審査状態の追加で形状が変わったため版を上げた）。チップはゲーム内キーを出すために実際に押す物理キー（trigger 文脈の単一キーリマップの source）を出し。リマップの有無による強調（リング・枠色・ツールチップ）は出さず、全チップ同じ見た目（物理キーの位置のみ）。見た目は KeyBadge 系と同じクラスだが、`KeyBadge` の import が `item-icon`・`virtual-keyboard` をホームの初期表示へ引き込むため、指割り当て色・ツールチップを省いたホーム専用実装（`featured-runner-card.tsx` の `KeyChip`）。カード全体が走者プロフィールへのリンク。
+- **SSR の初期表示**: 候補の1位。候補が0人なら日替わり（キー配置〈主要9操作のうち4つ以上〉・感度・メインカテゴリが揃った公開プロフィールから、UTC 日付をシードに1人。理由の行は出さない）。それも0人なら「プロフィールで見られるもの」の静的説明。
+- **「別の走者」ボタン**（常に出す。`min-h-11`）: 押すと、まず SSR で渡した候補を点数順に順番に表示し、出し切った後・候補が無い日は `GET /api/home-featured?exclude=<表示中>,<直前>` で、揃った公開プロフィールからランダムに1人取得する（理由なし。母集団が尽きたら表示を据え置く。`Cache-Control: no-store`）。取得中は中身を薄くして `aria-busy`（高さは変えない）。切り替え後は `aria-live="polite"` で新しい走者の名前を読み上げる。
 
-ガイド2セクション（更新順・PV順）には自動翻訳（[`docs/translation.md`](./translation.md)）を反映する。ローダーで両セクションのガイド id をまとめて `getGuideTranslations(db, ids, resolveLocale(request))` に1回だけ渡し（N+1 にしない）、各行へ `applyGuideTranslation` を適用して `title` / `summary` を差し替え `autoTranslated` を付ける（カードの自動翻訳マーカーは `GuideCardGrid` が表示）。ホームのローダーにはガイド一覧のキャッシュ（ローダー内・`Cache-Control`）が無く、`getUserData` の60秒キャッシュ（`/api/home-feed` と `paces-feed.server.ts` が使用）もロケール非依存のユーザー情報のみのため、閲覧ロケールごとの結果はリクエスト毎に決まる（共有キャッシュへ訳文が混入しない）。機能無効（`ANTHROPIC_API_KEY` 未設定）・opt-out・原文と同じロケールでは Map が空になり、表示は原文のまま。
+##### 「お気に入りの動き」（縦タイムライン）
+- **表示設定**: ペースは `showPacemanOnHome`、動画はプラットフォーム別の設定で、オフにした人の分を除く。
 
-PV順の select は `page_view_stats.pageviews` を `pageViews7d` として追加で持ち、カード表示の根拠数値に使う（`common.pageViews7d`＝「直近{days}日の閲覧数」、`TrendingUp` アイコン。実体は `app/components/page-views-meta.tsx` の `PageViews7dMeta`、ガイドカードと共有）:
+- `POST /api/home-favorite-activity`（`app/routes/api/home-favorite-activity.ts` → `getFavoriteActivity`）。応答は `private, no-store`。ログイン済みは**サーバーのお気に入り**（`getFavoritesFromDb`、本文は無視）、未ログインは**ブラウザのお気に入りを本文 `{ slugs }` で受ける**（URL に載せない。上限100件・公開プロフィールのみ解決）。
+- 種類: ペース（直近7日・保持期間内。同じランは最深区間、1人2件まで）・動画（YouTube/Twitch キャッシュ）・プロフィール更新（`users.updatedAt`）・ガイド（公開済みの `updatedAt`。公開日時の列が無いため「公開・更新」の文言）。新しい順に10件。各1クエリ（お気に入りの userId 群に対して）。
+- お気に入り0人（解決できる公開プロフィールが0人）: 「走者をお気に入りに追加すると、ここに動きが並びます」＋よく見られている走者3人（`ProfileFeedCard`＝お気に入りボタン付き）。動きが0件: 「直近7日の動きはありません」。
+- 未ログインでお気に入りが無い（Cookie 未同意を含む）ときは欄ごと出さない。お気に入りの一覧は画面表示後にブラウザから取得するため、欄は5行のスケルトンで高さを確保してから埋める。
 
-- **よく見られているプロフィール**（`ProfileFeedCard`）: フッターメタ行の左側（役割・エディション等のバッジ群と同じ並び）に `pageViews7d` を追加表示する（既存表示への追加のみ）
-- **よく読まれているガイド**（`GuideCardGrid`）: このセクションのみ `pageViewsMode="replace"` を渡し、累計View数（`Eye` アイコン）の表示を `pageViews7d` に**置き換える**。「最近更新されたガイド」セクション（`pageViewsMode` 未指定＝既定の `"additional"`）や `/guides` の人気順（`guideListOrderBy("popular")`、`pageViews7d` を累計View数の隣に追加表示）は従来どおり累計View数を表示する
+「よく見られている」は `page_view_stats` のスナップショット行を起点に `innerJoin` する（PV スナップショットが無い環境では自然に0件。UI は件数だけで列を出すか判定）。
 
 #### クライアントサイドで遅延取得（/api/home-feed）
 
 | データ | キャッシュキー | CDNキャッシュ (s-maxage) | stale-while-revalidate |
 |--------|---------------|--------------|------|
-| YouTube動画 | `youtube_videos` | 30分 | 1日 |
-| Twitch VOD | `twitch_vods`（`twitch_vod_cache` テーブル読み） | 15分（空は60秒） | 1日 |
+| YouTube動画（`type=youtube-videos`） | `youtube_videos` | 30分 | 1日 |
+| Twitch VOD（`type=twitch-vods`） | `twitch_vods`（`twitch_vod_cache` テーブル読み） | 15分（空は60秒） | 1日 |
 | YouTubeライブ配信 | `youtube_live` | 1分 | 2分 |
-| PaceManペース | `recent_paces` | 5分 | 1日 |
-| Twitchストリーム | `twitch_streams` | 30秒 | 60秒 |
-| ライブラン | `live_runs` | 30秒 | 60秒 |
+| PaceManペース（`type=recent-paces`） | `recent_paces` | 5分 | 1日 |
+| Twitchストリーム（`type=twitch-streams`） | `twitch_streams` | 30秒 | 60秒 |
+| ライブラン（`type=live-runs`、v2 キャッシュ） | `live_runs` | 30秒 | 60秒 |
+| Ranked 対戦中（`type=ranked-live`） | `home-feed:ranked-live:v1`（30秒） | 30秒 | 60秒 |
 
-DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がcron更新間隔（30分 / 2時間）で決まるため、
-s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）でエッジから即時配信しつつバックグラウンド再検証する
-（低トラフィック時でもコールドスタート・DBアクセスの遅延をユーザーに見せないため）。
+DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がcron更新間隔（30分 / 2時間）で決まるため、s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）でエッジから即時配信しつつバックグラウンド再検証する。
 
-- 「ペース」セクションは「**ライブ**」と「**過去のペース**」の2段構成:
-  - **ライブ**（旧 `/live` から移設）: `/api/home-feed?type=live-runs` を初回取得＋**15秒間隔で自動更新**。手動の**更新ボタン**（`RefreshCw`、更新中はスピン表示）でも再取得できる。`LivePaceList` で表形式表示（タイムは最新区間の**IGT**。見出しも「IGT」。区間内訳ポップオーバーも IGT）。0件時は「現在ペース中の走者はいません」を表示
-  - **過去のペース**: **最新12件まで**表示。件数バッジは表示しない。サブ見出し右側の「すべて見る」からペース一覧画面（`/paces`）へ遷移できる（過去のペースが0件のときはこのサブセクション自体を表示しない）
-- **ローディングは2段で分離**: 両方読み込み中のときのみセクション全体のスケルトンを表示し、片方が先に完了したらセクションを描画して未完了側のみサブセクション単位のスケルトンにする（ライブ＝外部PaceMan API の遅延が、DBキャッシュ読みで速い過去のペースの表示をブロックしないようにするため）
-- セクション自体は、両方の読み込み完了後にライブ・過去のペースがどちらも0件のとき非表示
-- **過去のペースカードのタイムラインモーダル**: `PaceFeedCard`（`app/components/pace-feed-card.tsx`、ホームの過去のペース・`/paces`一覧の両方で共用）のカードをクリックすると、そのランの全スプリット（Enter Netherを含む進行順）を表示するモーダルが開く
-  - データ取得: `/api/home-feed?type=pace-timeline&mcid=...&runId=...`（`app/lib/paceman-cache.ts` の `getRunTimeline()`）。モーダルを開いたタイミングで遅延取得し、開くたびに再取得する
-  - 各スプリット行はキーリマップ種別チップ等と同じ `PaceManSplitMark`（アイコン+名称）で表示
-  - モーダル下部に外部リンク「PaceMan.gg で見る」を配置。**カード全体を覆っていた外部リンク（`<a>`）はこのモーダルを開くボタンに置き換わった**ため、PaceMan.ggへの遷移は必ずモーダル経由になる（従来はカードクリック即外部遷移だった）
-  - アバター・走者名（`z-10`）はカード全体のクリックハンドラ（`z-0`）より前面にあるため、そちらをクリックした場合は従来通りプレイヤープロフィールへ遷移し、モーダルは開かない
+`youtube-videos` / `twitch-vods` は `perRunner=1`（ホームが付ける）で**同じ走者（slug）の動画・VODを新しい順の先頭1件に絞って**から10件に切る（`/videos` 等の既存の呼び出しは従来どおり）。
+
+##### ライブ欄（横レール `app/components/home/live-rail.tsx`）
+- **表示設定**: PaceMan ライブラン・最近のペースは `showPacemanOnHome`、Twitch 配信中は `showTwitchOnHome` で除外（Ranked 対戦中は `showRankedStats` のみ）。
+
+- 見出し「ライブ」＋件数（赤い点1つ。`aria-live="polite"` の件数テキストは人数が変わったときだけ文字列が変わる）。`/api/home-feed?type=live-runs`・`ranked-live`・`twitch-streams` を初回取得＋**15秒間隔で自動更新**（タブ非表示中は停止、復帰時に即更新。ranked-live / twitch-streams の失敗は直前の値を保ち、欄全体のエラーにはしない）。更新ボタンは廃止。
+- 横レールは scroll-snap（デスクトップ4枚・タブレット約2.5枚・モバイル約1.2枚見え）。お気に入りの走者は先頭＋ハート印（各グループ内の並びは PaceMan → Ranked → Twitch）。カードは3種類:
+  - **PaceMan のライブラン**（ネザー入り以降のみ。PaceMan liveruns の範囲）: アバター・名前・バージョン、7点の区間進行バー（Nether → Bastion → Fortress → Blind → Stronghold → End → Finish。到達済みは塗り・現在区間を強調。`app/lib/home-live.ts` の `splitStage`）、最新区間の IGT（大きめ等幅・`aria-label` は「m分s秒」）、**ベスト比**。PaceMan に区間別 PB が無いため、ベスト比は「蓄積ペース（`paceman_paces`、直近2か月）内の同じ区間の最小 IGT との差」（進行中のランを比較対象にしないよう直近3時間の行は除外。`live-runs` 応答の `splitBests`）。ベストが無い走者は出さない。**ネザー入り（Enter Nether）・バスティオン入場（Bastion）の段階ではベスト比を出さない**（この段階の差はシードの運に大きく左右され、比較の意味が薄いため。`splitStage` が 3 以上のときだけ表示）。
+  - **Ranked 対戦中**: MCSR Ranked の `GET https://mcsrranked.com/api/live`（`app/lib/ranked-live.server.ts`。応答は `data.liveMatches[].{currentTime(ms), players[], data[uuid].liveUrl}`）のうち、Minefolio 登録者（`users.uuid` をハイフン無し・小文字に正規化して照合。公開プロフィール・視聴者除外・`show_ranked_stats` が false でない）が出ている試合を1試合1カードに。相手・両者のレート・経過時間を出す。サーバー側 30秒キャッシュ（レート制限 500回/10分に十分収まる）。
+  - **Twitch 配信中**（`TwitchLiveCard`）: `twitch-streams` で配信中と確認できた Minefolio 登録者。アバター・名前、配信タイトル（2行 clamp）、配信時間（`started_at` から）、視聴者数、「Twitch で見る」。**優先順位は PaceMan > Ranked > Twitch**: PaceMan のライブラン・Ranked 対戦中として既に出ている人は Twitch カードを出さない（slug、および PaceMan の `liveAccount`・Ranked の `liveUrl` の Twitch ログイン名〔小文字〕で照合。`pickTwitchOnlyStreams` / `twitchLoginFromUrl`、`app/lib/home-live.ts`）。**対象は Minecraft カテゴリ（`game_id === "27471"` または `game_name === "Minecraft"`）のみ**: スピードランのサイトのライブ欄に他ゲームの配信が並ぶのを避けるため（登録者が雑談・他ゲームで配信中でも出さない。「Twitchライブ」欄の `TwitchRecentList` はカテゴリで絞らない）。サムネイルは使わない（カード寸法を他2種に揃え、プライバシーポリシーに記載のない Twitch CDN 画像のブラウザ直接取得を増やさないため）。自分の `showTwitchOnHome = false` は自分の Twitch カードを隠す。
+  - 件数（見出し・`aria-live`）は3種類の合計。3種類がすべて0件のときだけ下記「0件のとき」に切り替わる。
+  - 自分の `showPacemanOnHome = false` はライブ・Ranked・最近のペースのすべてで自分を隠す。
+- **配信リンク**: PaceMan の `user.liveAccount` と Ranked の `liveUrl`（`sanitizeTwitchUrl` で Twitch のみ通す）があれば「Twitch で見る」。赤い「配信中」の印は、Minefolio に Twitch を登録していて `twitch-streams`（Helix の Get Streams）で配信中と確認できた人だけ（slug で照合）。**YouTube の配信中表示は無い**（`youtube_live_cache` はレート制限のため不使用）。
+  - **カードの段構成（全種別共通）**: ヘッダー（`CardHead`）→ 状態帯（`StateBand`、`h-10` 固定。PaceMan/最近のペース＝進行バー、Ranked＝対戦中ピル、Twitch＝タイトル2行 clamp）→ 時間ブロック（`TimeBlock`、ラベル行 `h-4`＋時刻 `leading-8`。右側の補足〈ベスト比・レート・視聴者数・相対時刻〉は下端揃え）→ リンク行（`LinkRow`、`mt-auto`＋`min-h-11 sm:min-h-8`。リンクが無いカードも同じ高さの空行を確保）。種別・状態によらず経過時間とリンクの縦位置が一致する。
+- **0件のとき**: 「いまライブ中の走者はいません」1行＋「最近のペース」3件（同じ走者は2件まで・同じカードの静止版、すべて見るは `/paces`）に差し替える。独立した「過去のペース」欄・`LivePaceList` は廃止。ライブ・最近のペースの各エラーは欄内に1行の再試行を出す。
+- **区間進行バー**（`StageBar`、`app/components/pace-stage-bar.tsx`）: ライブ欄カード・最近のペースカード・`/paces` の `PaceFeedCard`（ヘッダー直下、IGT・区間バッジの上）で共有。`PaceFeedCard` は過去のペースなので、そのランの最深区間（`splitStage(run.timeline)`）を現在区間として強調する。バーは `aria-hidden`（区間名はバッジのテキストで出る）。
+- **過去のペースカードのタイムラインモーダル**: `PaceFeedCard`（`app/components/pace-feed-card.tsx`、`/paces` 一覧で使用）のカードをクリックすると、そのランの全スプリット（Enter Netherを含む進行順）を表示するモーダルが開く。データは `/api/home-feed?type=pace-timeline&mcid=...&runId=...`（`getRunTimeline()`）で、モーダルを開くたびに遅延取得する。ミリ秒表示はこのモーダルの内側のみ。PaceMan.gg への外部リンクはモーダル下部。
 
 ### /api/home-feed
 
@@ -78,6 +107,7 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
 - **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N, stale-while-revalidate=M` を設定（上記の表を参照）
 
 ### 動画フィード（YouTube + Twitch VOD）
+- **表示設定**: ホームの呼び出し（`perRunner=1`）は `showYoutubeOnHome` / `showTwitchOnHome` をオフにした人の動画を除く。`/videos` は対象外。
 
 - YouTube動画（`type=youtube-videos`、`youtube_video_cache`）と Twitch 配信アーカイブ
   （`type=twitch-vods`、`twitch_vod_cache`）を並列取得し、クライアント側で
@@ -99,15 +129,11 @@ s-maxage を長めに取り、TTL切れ後も stale-while-revalidate（1日）�
     uploadsプレイリストIDを解決 + `playlistItems.list` で最新10件取得。いずれも1ユニット/リクエスト）で
     クォータを節約する。連携済み全チャンネルを毎回処理し、`privacyStatus === "public"` の動画のみ
     キャッシュする。非公開化・削除の検知は従来どおり `verify` cron（12時間毎、動画IDの存在確認）が担う
-- **ホームは新着6件のみ表示**（`HOME_VIDEO_DISPLAY_COUNT`。新着順で切り出してからお気に入りを先頭に並べ替え）。
-  セクションヘッダーの「すべて見る」から動画一覧ページ（`/videos`）へ遷移できる
-- カードは `FeedVideoCard`:
-  - **サムネイルクリックでその場に埋め込みプレイヤーを表示**（YouTube: `youtube.com/embed/{id}?autoplay=1`、
-    Twitch: `player.twitch.tv/?video={id}&parent={hostname}&autoplay=true`。parent が必須のため
-    埋め込みURLはクリック後にクライアント側で生成する）
-  - **タイトル・外部リンクアイコンからプラットフォームの視聴ページへ**（新規タブ）
-  - プラットフォームバッジ（YouTube=赤 / Twitch=紫）、Twitch VOD は配信時間バッジを表示
-- セクションのスケルトンは両方の読み込みが完了するまで表示。マージ後0件ならセクション非表示
+- **ホームの動画欄は YouTube と Twitch を分ける**（個人設定 `showYoutubeOnHome` / `showTwitchOnHome` は従来どおりクライアント側で効く）。「すべて見る」は `/videos`（`/videos` は従来どおり `FeedVideoCard` の混在一覧）
+  - **YouTube**（`app/components/home/home-video-card.tsx`）: 3本・同じ走者は1本まで。デスクトップ3列、モバイルは横レール。カード全体がその場で再生（`youtube-nocookie.com` の埋め込み）、外部リンクは右上の 44px アイコンボタン（Tab 停止点は再生・外部リンク・走者リンク）
+  - **Twitch「Twitchライブ」**（`app/components/home/twitch-recent-list.tsx`）: 1人1行（その人の最新アーカイブ）で6行、サムネイル・埋め込みは使わない。配信中の人（`twitch-streams`）を先頭に「配信中」の印付きで出し、その人の VOD 行は重複させない。行は左にアバターと名前、その右にタイトル → ゲーム名（`twitch_vod_cache.game_name`。null なら省く。配信中は Helix の `game_name`）→ 時間（相対時刻＋アーカイブの長さ `h:mm:ss`。配信中は経過時間）。行全体が Twitch への外部リンク（新しいタブ・アイコン付き・高さ 44px 以上）。`game_name` は cron が取り込み時点のチャンネルのカテゴリを保存する（取り込みが配信終了から遅れると次の配信のカテゴリになることがある）
+- 各取得は独立にスケルトン→失敗時は1行の再試行（YouTube・Twitch の片方だけ失敗なら失敗した側だけ再取得）。マージ後0件なら空状態
+- 旧 `FeedVideoCard` は `/videos` が引き続き使う（埋め込みURL生成 `getEmbedUrl` / `getFeedVideoUrl` はホームのカードも共用）。カード内の旧「サムネイルクリックで再生」「タイトルから視聴ページ」の挙動は `/videos` のまま
 
 ### 設定変更時の自動リフレッシュ（cronを待たない反映）
 
@@ -130,13 +156,18 @@ cron（YouTube 2時間毎・Twitch 30分毎）は全体の定期同期として�
 
 ### 表示制御フラグ
 
-ユーザーごとに以下のフラグで表示/非表示を制御する（`users` テーブル）:
+ユーザーごとに以下のフラグで表示/非表示を制御する（`users` テーブル）。**オフにした人の該当コンテンツは、誰のホームにも出さない**（本人の画面だけでなく全員のホームから除外）。
 
-| フラグ | デフォルト | 説明 |
+| フラグ | デフォルト | 除外されるもの（ホームのみ） |
 |--------|-----------|------|
-| `showPacemanOnHome` | `true` | PaceManペースの表示 |
-| `showTwitchOnHome` | `true` | 自分のTwitch VODをホームの動画フィードに表示 |
-| `showYoutubeOnHome` | `true` | 自分のYouTube動画をホームの動画フィードに表示 |
+| `showPacemanOnHome` | `true` | ライブ欄の PaceMan ライブラン（`type=live-runs`）・最近のペース（`type=recent-paces`）・お気に入りの動きのペース。ライブカードの「同区間ベスト」はライブランから派生するので同時に消える |
+| `showTwitchOnHome` | `true` | ライブ欄の Twitch 配信中カードと「Twitchライブ」の配信中行（`type=twitch-streams`）、最新動画の Twitch「Twitchライブ」（`type=twitch-vods&perRunner=1`）、注目の走者・お気に入りの動きの Twitch 動画 |
+| `showYoutubeOnHome` | `true` | 最新動画の YouTube カード（`type=youtube-videos&perRunner=1`）、注目の走者・お気に入りの動きの YouTube 動画 |
+
+- **適用範囲はホームのみ**。`/videos`・`/paces`・プロフィール等では従来どおり表示する（設定文言が「ホーム画面に」であるため）。`getPublicVideoFeed(db, filters, { forHome: true })` のオプションでホーム用の呼び出しだけが除外を行い、`/videos` と共用のフィード本体（`videos:feed:all`）は変えない。`type=youtube-videos` / `twitch-vods` は `perRunner=1`（ホームが付ける）のときだけ除外する
+- 除外は**サーバー側**（`app/lib/home-visibility.server.ts` の `getHomeHiddenUsers`＝フラグが明示的に `false` の人の mcid / slug 一覧）で行う。PaceMan のライブランは mcid（大文字小文字無視）で照合する。応答は閲覧者非依存のままなので CDN 共有キャッシュと矛盾しない。**設定を変えてから他人のホームに反映されるまではキャッシュ TTL（ライブ30秒・配信1分・ペース5分・動画15〜30分・注目の走者10分）ぶん遅れる**
+- **Ranked 対戦中**（`type=ranked-live`）は PaceMan 設定の対象外。`showRankedStats=false` の人だけを除外する（既存）。注目の走者の `rankedPb` / `eloGain` 理由も `showRankedStats`、speedrun.com 理由に設定は無い
+- 本人の画面だけは、設定変更の直後にキャッシュ TTL を待たず消えるよう、`home.tsx` で自分の分を従来どおりクライアント側でも除外する（冗長だが即時反映のため残している。おかえりバーの「自分の最新ペース」は本人の画面なので除外対象外）
 
 ### カスタムスキン対応
 
@@ -152,8 +183,11 @@ cron（YouTube 2時間毎・Twitch 30分毎）は全体の定期同期として�
 interface FeedState {
   recentVideos: FeedVideo[];
   twitchVods: FeedVideo[];
+  twitchStreams: HomeTwitchStream[];
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
+  rankedMatches: RankedLiveMatch[];
+  splitBests: Record<string, Record<string, number>>;
   mcidToUuid: Record<string, string>;
   mcidToSlug: Record<string, string>;
   mcidToDisplayName: Record<string, string>;
@@ -311,6 +345,9 @@ Twitch配信アーカイブ（VOD）のキャッシュ。cron `/api/cron/twitch-
 | `publishedAt` | timestamp | 公開日時 |
 | `lastVerifiedAt` | timestamp | 最終確認日時 |
 | `isAvailable` | boolean | VODが利用可能か（Twitch側で自動削除されたものは false） |
+| `gameName` | text (nullable) | 取り込み時点の**チャンネルの現在のカテゴリ名**（Helix `GET /channels` の `game_name`。VOD個別のカテゴリではない）。新規行にだけ保存し既存行は上書きしない。取得失敗・カテゴリ未設定は null |
+
+`gameName` は `getRecentVods`（`app/lib/twitch.ts`）が /users 解決後に全チャンネル分を `/channels?broadcaster_id=…`（100件ずつ）で一括取得して付与する（チャンネルごとのN回呼び出しはしない）。失敗しても取り込みは続行する。
 
 保持期間は90日。`verify` アクション（8時間毎）が削除済みVODを `isAvailable=false` にマークする
 （Twitch VODは配信者設定により14〜60日で自動削除されるため）。
@@ -345,8 +382,8 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - 保持期間は**過去2か月**。それより古い行はCron実行時に削除される
 - 読み取り側（`getPaceFeedEntries`）にも保持期間ガードがあり、Cronが止まっても期間外データは配信されない
 - **`user_id` の再リンク**: INSERT 時に `lower(mcid)` が一致する users（公開/視聴者判定なし）の id を `user_id` に入れる。後から MCID を登録・変更したユーザーの既存行は INSERT 時には紐づかないため、Cron が毎回 `relinkPacemanPaceUsers()`（`app/lib/paceman-cache.ts`）を実行し、保持期間内の行の `user_id` を「現在の `lower(users.mcid)` 一致のユーザー」に合わせ直す（未登録・MCID 変更/解除後の旧 MCID 行は `null`、別ユーザーが同 MCID を登録済みならそのユーザーへ付け替え。冪等）。取得結果が0件・登録ユーザー0人でも実行する
-- ホームの見本ペース/記録ペース総数（`home-pace-sample.server.ts`）は `users.id = paceman_paces.user_id` で結合する（`idx_paceman_paces_user_id` を使用。従来の `lower(mcid)` 結合はインデックスが効かなかった）。公開プロフィール・視聴者除外などの表示判定は結合側で行う。再リンク後は従来の `lower(mcid)` 結合と同じ結果になる（`app/lib/__tests__/home-pace-sample.server.test.ts`）
-- 許容している一時的なずれ: MCID の登録・変更から次の Cron（30分間隔）までの間は、該当ユーザーの過去行がホームの見本/件数に入らない（または旧 MCID 行が残る）。結果は10分キャッシュでもあり、最大で約40分遅れて反映される。他のフィード（`/paces` 等）は mcid 文字列で絞るため影響しない
+- ホームの「お気に入りの動き」「おかえりバーの最新ペース」は `paceman_paces.user_id` で絞る（`idx_paceman_paces_user_id`）。公開プロフィール・視聴者除外などの表示判定はユーザー側の条件で行う
+- 許容している一時的なずれ: MCID の登録・変更から次の Cron（30分間隔）までの間は、該当ユーザーの過去行が `user_id` で引けない。他のフィード（`/paces` 等）は mcid 文字列で絞るため影響しない
 
 ### apiCache
 
@@ -382,16 +419,22 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/lib/targeted-refresh.server.ts` - 設定変更時の1ユーザー/1チャンネル単位の即時リフレッシュ（`runAfterResponse` 経由）
 - `app/lib/feed-video.ts` - 動画フィードの共有ドメイン型・ユーティリティ（`FeedVideo` / 保持期間定数 / 自分の動画非表示フィルタ）
 - `app/lib/videos-feed.server.ts` - 動画一覧の共通ロジック（マージ・可視性・検索条件解析）
+- `app/lib/home-visibility.server.ts` - ホーム表示設定をオフにした人（mcid / slug）の一覧
 - `app/lib/paceman.ts` - PaceMan API連携（ライブラン取得）
 - `app/lib/paceman-cache.ts` - PaceManペースキャッシュ管理（蓄積・保持期間・フィード取得）
+- `app/lib/home-featured.ts` / `home-featured.server.ts` - 注目の走者（点数・候補・日替わり・ランダム）
+- `app/lib/home-favorite-activity.server.ts` - お気に入りの動き
+- `app/lib/ranked-live.server.ts` - MCSR Ranked のライブ試合
+- `app/lib/home-live.ts` / `home-format.ts` - 区間進行バー・時刻整形などの純粋ロジック
+- `app/routes/api/home-featured.ts` / `home-favorite-activity.ts` - 「別の走者」/お気に入りの動き API
 - `app/lib/paces-feed.server.ts` - ペース一覧の共通ロジック（検索条件解析・表示対象の絞り込み）
 - `app/lib/pace-splits.ts` - フィード対象区間の定数
 - `app/lib/cache.ts` - 汎用インメモリキャッシュ（`getCached`, `setCached`）
 
 ### コンポーネント
-- `app/components/feed-video-card.tsx` - 動画フィードカード（YouTube/Twitch VOD統一・埋め込み再生対応）
-- `app/components/live-pace-list.tsx` - ライブラン一覧（ホームのペースフィード内で使用）
-- `app/components/pace-feed-card.tsx` - ペースフィードカード（ホーム・ペース一覧で共用）
-- `app/components/profile-feed-card.tsx` - プロフィールフィードカード
+- `app/components/home/` - ホーム専用（`home-section` 欄枠 / `welcome-bar` / `featured-runner-card` / `live-rail` / `favorite-activity` / `compact-profiles` / `home-video-card` / `twitch-recent-list`）
+- `app/components/feed-video-card.tsx` - 動画フィードカード（`/videos` 用。YouTube/Twitch VOD統一・埋め込み再生対応）
+- `app/components/pace-feed-card.tsx` - ペースフィードカード（ペース一覧で使用）
+- `app/components/profile-feed-card.tsx` - プロフィールフィードカード（お気に入り0人時のおすすめで使用）
 - `app/components/paceman-split-mark.tsx` - PaceManスプリットマーク
 - `app/components/page-views-meta.tsx` - 直近7日PV表示（`PageViews7dMeta`。ガイドカード・プロフィールカードで共有）
