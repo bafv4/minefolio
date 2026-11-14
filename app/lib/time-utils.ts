@@ -26,3 +26,8 @@ export function parseTimeToMs(timeStr: string): number | null {
   
   return (minutes * 60 + seconds) * 1000 + milliseconds;
 }
+
+/** UTC の `YYYY-MM-DD`（snapshotDate・recordDate 等の日付キーの形式） */
+export function toUtcDateString(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}

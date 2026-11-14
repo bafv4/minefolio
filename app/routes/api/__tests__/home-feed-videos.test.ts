@@ -7,6 +7,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 import { invalidateCache } from "@/lib/cache";
+import { HOME_HIDDEN_USERS_CACHE_KEY } from "@/lib/home-visibility.server";
 import { loader } from "../home-feed";
 
 // youtube-videos / twitch-vods ケースはどちらもキャッシュテーブル（cron蓄積）からの読み出しで、
@@ -29,6 +30,7 @@ beforeEach(async () => {
   db = await createTestDbAt(SHARED_URL);
   // getPublicVideoFeed のメモリキャッシュを毎テスト無効化する
   await invalidateCache("videos:feed:all");
+  await invalidateCache(HOME_HIDDEN_USERS_CACHE_KEY);
 });
 
 afterEach(() => {
@@ -221,5 +223,19 @@ describe("表示設定（showYoutubeOnHome / showTwitchOnHome）: ホームか�
     await invalidateCache("videos:feed:all");
     const all = await (await callHome("youtube-videos", false)).json();
     expect(all.recentVideos.map((v: { videoId: string }) => v.videoId).sort()).toEqual(["v1", "v2"]);
+  });
+
+  it("perRunner=1 は同じ走者の動画を新しい順の先頭1本に絞り、perRunner なしでは絞らない（1人1本はサーバー側で完結）", async () => {
+    await seedUser(db, { slug: "multi", mcid: "multi", uuid: "u-m", role: "runner", profileVisibility: "public" });
+    await seedUser(db, { slug: "solo", mcid: "solo", uuid: "u-s", role: "runner", profileVisibility: "public" });
+    for (const [videoId, mcid, days] of [["m-new", "multi", 1], ["m-old", "multi", 3], ["s-1", "solo", 2]] as const) {
+      await db.insert(schema.youtubeVideoCache).values({ videoId, channelId: "UCtest", title: "t", publishedAt: daysAgo(days), minefolioMcid: mcid });
+    }
+
+    const home = await (await callHome("youtube-videos", true)).json();
+    expect(home.recentVideos.map((v: { videoId: string }) => v.videoId)).toEqual(["m-new", "s-1"]);
+
+    const all = await (await callHome("youtube-videos", false)).json();
+    expect(all.recentVideos.map((v: { videoId: string }) => v.videoId)).toEqual(["m-new", "s-1", "m-old"]);
   });
 });

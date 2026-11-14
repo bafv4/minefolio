@@ -6,25 +6,22 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { StageBar } from "@/components/pace-stage-bar";
 import { useT, useLocale } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { pickMcidDisplayName } from "@/lib/mcid-display-name";
 import { pickDisplayName } from "@/lib/slug";
 import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { formatClock, splitMinutesSeconds } from "@/lib/home-format";
-import { splitStage, type RankedLiveMatch } from "@/lib/home-live";
+import { splitStage, twitchChannelUrl, type HomeTwitchStream, type RankedLiveMatch } from "@/lib/home-live";
 import { getLatestSplit, getSplitTimeline, type PaceManLiveRun } from "@/lib/paceman";
 import type { CachedPace } from "@/lib/paceman-cache";
-import { AlertCircle, ChevronDown, ChevronUp, ExternalLink, Heart, History, RefreshCw, Swords } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Heart, History, Swords } from "lucide-react";
 import { Twitch } from "@/components/brand-icons";
-import type { HomeTwitchStream } from "@/components/home/twitch-recent-list";
+import type { McidUserMaps } from "@/lib/home-user-data.server";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
+import { StreamingBadge } from "@/components/home/streaming-badge";
 
-export interface McidMaps {
-  mcidToUuid: Record<string, string>;
-  mcidToSlug: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  mcidToDisplayNameAlphabet: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
-}
+export type McidMaps = McidUserMaps;
 
 const CARD_CLASS =
   "group relative flex flex-col gap-3 rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0";
@@ -71,12 +68,7 @@ function CardHead({
         </div>
         <p className="truncate text-xs text-muted-foreground">{sub}</p>
       </div>
-      {isStreaming && (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
-          <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
-          {t("home.liveStreaming")}
-        </span>
-      )}
+      {isStreaming && <StreamingBadge filled />}
     </div>
   );
 }
@@ -149,6 +141,12 @@ function TimeBlock({
   );
 }
 
+/** 時間の読み上げ用ラベル（「◯分◯秒」） */
+function igtAria(t: Translator, ms: number): string {
+  const { minutes, seconds } = splitMinutesSeconds(ms);
+  return t("home.igtAria", { minutes, seconds });
+}
+
 /** リンク行。リンクが無いカードでも同じ高さを確保し、カード下端に揃える */
 function LinkRow({ children }: { children?: ReactNode }) {
   return <div className="mt-auto flex min-h-11 items-center sm:min-h-8">{children}</div>;
@@ -170,13 +168,12 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, className }: L
   const key = run.nickname.toLowerCase();
   const latest = getLatestSplit(run);
   const timeline = latest ? getSplitTimeline(latest.eventId) : null;
-  const stage = latest ? splitStage(latest.eventId) : 0;
+  const stage = timeline ? splitStage(timeline) : 0;
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname;
   // ネザーイン・バスティオン入場の段階は差が運（シード）に大きく左右され比較の意味が薄いため、ベスト比を出さない
   const best = timeline && stage > 2 ? bests?.[timeline] : undefined;
   const diff = latest && best != null ? latest.igt - best : null;
-  const parts = latest ? splitMinutesSeconds(latest.igt) : null;
-  const twitchUrl = run.user.liveAccount ? `https://www.twitch.tv/${encodeURIComponent(run.user.liveAccount)}` : null;
+  const twitchUrl = run.user.liveAccount ? twitchChannelUrl(run.user.liveAccount) : null;
 
   return (
     <li className={cn(CARD_CLASS, className)}>
@@ -197,7 +194,7 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, className }: L
       <TimeBlock
         label={timeline ? <PaceManSplitMark timeline={timeline} size={16} /> : null}
         time={latest ? formatClock(latest.igt) : "-"}
-        aria={parts ? t("home.igtAria", { minutes: parts.minutes, seconds: parts.seconds }) : undefined}
+        aria={latest ? igtAria(t, latest.igt) : undefined}
         aside={
           diff != null && (
             <p
@@ -234,7 +231,6 @@ function RankedMatchCard({
   const t = useT();
   const locale = useLocale();
   const name = pickDisplayName(match, locale) || match.mcid;
-  const parts = splitMinutesSeconds(match.currentTimeMs);
   const progress = match.progress;
   return (
     <li className={cn(CARD_CLASS, className)}>
@@ -268,7 +264,7 @@ function RankedMatchCard({
           )
         }
         time={formatClock(match.currentTimeMs)}
-        aria={t("home.igtAria", { minutes: parts.minutes, seconds: parts.seconds })}
+        aria={igtAria(t, match.currentTimeMs)}
         aside={
           <div className="flex min-w-0 flex-col items-end text-xs leading-4 text-muted-foreground">
             <p className="max-w-full truncate">
@@ -309,9 +305,9 @@ function TwitchLiveCard({
   const t = useT();
   const locale = useLocale();
   const { stream } = item;
-  const name = item.displayName || stream.user_name;
+  const name = pickDisplayName(item, locale) || stream.user_name;
   const elapsedMs = Math.max(0, Date.now() - new Date(stream.started_at).getTime());
-  const href = `https://www.twitch.tv/${encodeURIComponent(stream.user_login)}`;
+  const href = twitchChannelUrl(stream.user_login);
   return (
     <li className={cn(CARD_CLASS, className)}>
       <CardHead
@@ -354,7 +350,6 @@ function RecentPaceCard({ run, maps, className }: { run: CachedPace; maps: McidM
   const locale = useLocale();
   const key = run.mcid.toLowerCase();
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname || run.mcid;
-  const parts = splitMinutesSeconds(run.rta);
   return (
     <li className={cn(CARD_CLASS, className)}>
       <CardHead
@@ -374,14 +369,13 @@ function RecentPaceCard({ run, maps, className }: { run: CachedPace; maps: McidM
       <TimeBlock
         label={<PaceManSplitMark timeline={run.timeline} size={16} />}
         time={formatClock(run.rta)}
-        aria={t("home.igtAria", { minutes: parts.minutes, seconds: parts.seconds })}
+        aria={igtAria(t, run.rta)}
         aside={
           <p className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
             {formatRelativeTimeInMinutes(t, new Date(run.time * 1000))}
           </p>
         }
       />
-      <LinkRow />
     </li>
   );
 }
@@ -453,17 +447,7 @@ export function LiveRail({
   }
 
   const notice = error && (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
-    >
-      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="min-w-0">{hasData ? t("home.liveStaleNote") : t("home.liveFetchFailed")}</span>
-      <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" onClick={onRetry}>
-        <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-        {t("home.feedRetry")}
-      </Button>
-    </div>
+    <FeedErrorNotice message={hasData ? t("home.liveStaleNote") : t("home.liveFetchFailed")} onRetry={onRetry} />
   );
 
   if (entries.length > 0) {
@@ -483,6 +467,8 @@ export function LiveRail({
         >
           {entries.map((e, i) => {
             const itemClass = cn(RAIL_ITEM, !expanded && collapsedItemClass(i));
+            const isFavorite = !!e.slug && favoriteSlugs.has(e.slug);
+            const isStreaming = !!e.slug && streamingSlugs.has(e.slug);
             return e.kind === "pace" ? (
               <LiveRunCard
                 key={e.id}
@@ -490,23 +476,18 @@ export function LiveRail({
                 run={e.run}
                 maps={maps}
                 bests={splitBests[e.run.nickname.toLowerCase()]}
-                isFavorite={!!e.slug && favoriteSlugs.has(e.slug)}
-                isStreaming={!!e.slug && streamingSlugs.has(e.slug)}
+                isFavorite={isFavorite}
+                isStreaming={isStreaming}
               />
             ) : e.kind === "twitch" ? (
-              <TwitchLiveCard
-                key={e.id}
-                className={itemClass}
-                item={e.item}
-                isFavorite={!!e.slug && favoriteSlugs.has(e.slug)}
-              />
+              <TwitchLiveCard key={e.id} className={itemClass} item={e.item} isFavorite={isFavorite} />
             ) : (
               <RankedMatchCard
                 key={e.id}
                 className={itemClass}
                 match={e.match}
-                isFavorite={favoriteSlugs.has(e.slug)}
-                isStreaming={streamingSlugs.has(e.slug)}
+                isFavorite={isFavorite}
+                isStreaming={isStreaming}
               />
             );
           })}
@@ -573,17 +554,7 @@ export function LiveRail({
           ))}
         </div>
       ) : recentError ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
-        >
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0">{t("home.pacesFetchFailed")}</span>
-          <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" onClick={onRetryRecent}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            {t("home.feedRetry")}
-          </Button>
-        </div>
+        <FeedErrorNotice message={t("home.pacesFetchFailed")} onRetry={onRetryRecent} />
       ) : recent.length > 0 ? (
         <div className="space-y-2">
           {/* /paces への導線は欄見出しの「最近のペース →」に一本化 */}

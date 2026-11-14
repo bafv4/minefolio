@@ -1,12 +1,12 @@
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { EmptyState } from "@/components/empty-state";
 import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
 import { HomeSection } from "@/components/home/home-section";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
 import { useT } from "@/hooks/use-locale";
-import { AlertCircle, Heart, RefreshCw } from "lucide-react";
+import { Heart } from "lucide-react";
 
 /**
  * 「お気に入りの動き」欄（縦タイムライン・新しい順 10 件）。
@@ -35,35 +35,21 @@ export function FavoriteActivity({
           ))}
         </div>
       ) : state.status === "error" ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
-        >
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0">{t("home.favFetchFailed")}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto min-h-11 shrink-0 sm:min-h-8"
-            onClick={retry}
-          >
-            <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            {t("home.feedRetry")}
-          </Button>
-        </div>
+        <FeedErrorNotice message={t("home.favFetchFailed")} onRetry={retry} />
       ) : state.data.favoritesCount === 0 ? (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{t("home.favEmpty")}</p>
-          {recommended.length > 0 ? (
+        // 勧める走者がいれば「お気に入りがいない」の文＋カード、いなければ空状態のみ（同じ文を2回出さない）
+        recommended.length > 0 ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">{t("home.favEmpty")}</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {recommended.map((p) => (
                 <ProfileFeedCard key={p.slug} player={p} />
               ))}
             </div>
-          ) : (
-            <EmptyState icon={<Heart className="h-12 w-12" />} title={t("home.favEmpty")} description="" />
-          )}
-        </div>
+          </div>
+        ) : (
+          <EmptyState icon={<Heart className="h-12 w-12" />} title={t("home.favEmpty")} description="" />
+        )
       ) : state.data.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("home.favNoActivity")}</p>
       ) : (

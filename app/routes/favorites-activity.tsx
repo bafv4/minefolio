@@ -1,5 +1,5 @@
 import { createTranslator } from "@/lib/messages";
-import { Link, useLoaderData } from "react-router";
+import { useLoaderData } from "react-router";
 import type { Route } from "./+types/favorites-activity";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -8,16 +8,16 @@ import { getEnv } from "@/lib/env.server";
 import { localeFromMatches } from "@/lib/locale";
 import { FAVORITE_ACTIVITY_PAGE_LIMIT, FAVORITE_ACTIVITY_PAGE_WINDOW_DAYS } from "@/lib/home-favorite-activity-shared";
 import type { FavoriteActivityItem } from "@/lib/home-favorite-activity.server";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FavoritesNav } from "@/components/favorites-nav";
+import { FavoritesCookieAlert, FavoritesEmptyState } from "@/components/favorites-shared";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { AlertCircle, Activity, Cookie, RefreshCw, Users } from "lucide-react";
+import { Activity } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -108,44 +108,14 @@ export default function FavoritesActivityPage() {
 
       <FavoritesNav current="activity" />
 
-      {showCookieAlert && (
-        <Alert>
-          <Cookie className="h-4 w-4" />
-          <AlertTitle>{t("favorites.cookieDisabled")}</AlertTitle>
-          <AlertDescription className="flex items-center justify-between">
-            <span>{t("favorites.cookieRequired")}</span>
-            <Button size="sm" onClick={acceptCookies} className="ml-4">
-              {t("favorites.enableCookie")}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {showCookieAlert && <FavoritesCookieAlert onAccept={acceptCookies} />}
 
       {loading ? (
         <ActivitySkeleton />
       ) : !shouldFetch || (state.status === "done" && state.data.favoritesCount === 0) ? (
-        <EmptyState
-          icon={<Users className="h-12 w-12" />}
-          title={t("favorites.emptyTitle")}
-          description={showCookieAlert ? t("favorites.cookieRequired") : t("favorites.emptyHelp")}
-          action={
-            <Button asChild className="mt-4">
-              <Link to="/browse">{t("favorites.browseRunner")}</Link>
-            </Button>
-          }
-        />
+        <FavoritesEmptyState cookieBlocked={showCookieAlert} />
       ) : state.status === "error" ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
-        >
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0">{t("home.favFetchFailed")}</span>
-          <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" onClick={retry}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            {t("home.feedRetry")}
-          </Button>
-        </div>
+        <FeedErrorNotice message={t("home.favFetchFailed")} onRetry={retry} />
       ) : state.status === "done" && state.data.items.length === 0 ? (
         <EmptyState
           icon={<Activity className="h-12 w-12" />}

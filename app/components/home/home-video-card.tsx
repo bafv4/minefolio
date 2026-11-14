@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { getEmbedUrl, getFeedVideoUrl } from "@/components/feed-video-card";
+import { getEmbedUrl, getFeedVideoThumbnailUrl, getFeedVideoUrl } from "@/components/feed-video-card";
 import { Youtube } from "@/components/brand-icons";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
@@ -21,9 +21,7 @@ export function HomeVideoCard({ video }: { video: FeedVideo }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const watchUrl = getFeedVideoUrl(video);
   const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
-  const thumb = thumbFailed
-    ? null
-    : video.thumbnailUrl || `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg`;
+  const thumb = thumbFailed ? null : getFeedVideoThumbnailUrl(video);
 
   return (
     // h-full: グリッド／横レールの枠いっぱいに伸ばし、タイトル1行・2行のカードでもフッター（走者・相対時刻）を下端にそろえる

@@ -66,6 +66,27 @@ describe("splitStage", () => {
     expect(splitStage("rsg.credits")).toBe(7);
     expect(splitStage("unknown")).toBe(0);
   });
+
+  it("Obtain Blaze Rods（pacemanPaces.timeline の区間名）は Fortress と同じ段階（3）", () => {
+    expect(splitStage("Obtain Blaze Rods")).toBe(3);
+    expect(splitStage("Fortress")).toBe(3);
+  });
+
+  it("タイムライン名とスプリットID の両方が同じ段階に解決される", () => {
+    for (const [id, name] of [
+      ["rsg.enter_nether", "Enter Nether"],
+      ["rsg.enter_bastion", "Bastion"],
+      ["rsg.enter_fortress", "Fortress"],
+      ["rsg.first_portal", "First Portal"],
+      ["rsg.second_portal", "Second Portal"],
+      ["rsg.enter_stronghold", "Enter Stronghold"],
+      ["rsg.enter_end", "Enter End"],
+      ["rsg.credits", "Finish"],
+    ] as const) {
+      expect(splitStage(id)).toBe(splitStage(name));
+      expect(splitStage(name)).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("rankedStage / rankedSplitName", () => {

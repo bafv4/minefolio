@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestDbAt, seedUser, seedPlayerRanking, seedSpeedrunCategory, schema, type TestDb } from "./helpers/test-db";
+import { createTestDbAt, seedConfigPreset, seedUser, seedPlayerRanking, seedSpeedrunCategory, schema, type TestDb } from "./helpers/test-db";
 import { invalidateCache } from "../cache";
 import { getFavoriteActivity } from "../home-favorite-activity.server";
 
@@ -173,12 +173,14 @@ describe("お気に入りの動き: srcSubmit", () => {
 describe("お気に入りの動き: settings", () => {
   it("1人・1日（UTC）・changeType ごとに最新1件へまとめ、種別ごとに遷移先タブが変わる", async () => {
     const u = await seedRunner("tweaker");
-    const day = Date.parse("2026-11-13T00:00:00Z");
+    const main = await seedConfigPreset(db, u.id, { isMain: true, isActive: true });
+    const day = Date.parse("2026-11-14T00:00:00Z"); // PUBLIC_CONFIG_HISTORY_SINCE 以降
     const insert = (changeType: "keybinding" | "device" | "game_setting", offsetMin: number) =>
       db.insert(schema.configHistory).values({
         userId: u.id,
         changeType,
         changeDescription: "x",
+        presetId: main.id, // 公開面に影響した変更（メインの preset_id）
         createdAt: new Date(day + offsetMin * 60_000),
       });
     await insert("keybinding", 60);
@@ -197,5 +199,20 @@ describe("お気に入りの動き: settings", () => {
     // ホーム既定（limit 10）は1人1件
     const home = await getFavoriteActivity(asDb(db), ["tweaker"], { now: NOW });
     expect(home.items.filter((i) => i.kind === "settings")).toHaveLength(1);
+  });
+
+  it("メインに関わらない変更（preset_id が null）と、規約開始（PUBLIC_CONFIG_HISTORY_SINCE）より前の行は出さない", async () => {
+    const u = await seedRunner("quiet");
+    const main = await seedConfigPreset(db, u.id, { isMain: true, isActive: true });
+    const base = { userId: u.id, changeDescription: "x" } as const;
+    // 非メインの編集・編集対象の切替など: preset_id なし
+    await db.insert(schema.configHistory).values({ ...base, changeType: "keybinding", createdAt: new Date(NOW - DAY) });
+    // 移行前の行: preset_id があっても SINCE（2026-11-14T00:00Z）より前なら公開影響なし扱い
+    await db.insert(schema.configHistory).values({ ...base, changeType: "device", presetId: main.id, createdAt: new Date(NOW - 3 * DAY) });
+    // 対象: SINCE 以降で preset_id あり
+    await db.insert(schema.configHistory).values({ ...base, changeType: "preset_switch", presetId: main.id, createdAt: new Date(NOW - 60_000) });
+
+    const settings = (await getFavoriteActivity(asDb(db), ["quiet"], opts)).items.filter((i) => i.kind === "settings");
+    expect(settings.map((i) => i.label)).toEqual(["preset_switch"]);
   });
 });

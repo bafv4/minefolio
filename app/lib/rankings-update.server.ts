@@ -5,6 +5,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { eq, and, inArray, lt } from "drizzle-orm";
 import type { Database } from "./db";
+import { toUtcDateString } from "./time-utils";
 import { users, speedrunCategories, playerRankings, rankedEloSnapshots } from "./schema";
 
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
@@ -138,10 +139,8 @@ async function sleep(ms: number): Promise<void> {
 /** スナップショットの保持日数（ホームで使うのは直近7日だけ） */
 export const ELO_SNAPSHOT_RETENTION_DAYS = 30;
 
-/** UTC の `YYYY-MM-DD`（snapshotDate の形式） */
-export function toUtcDateString(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
+// 日付キーの実装は軽量モジュール time-utils（クライアント・他サーバーモジュールと共用）。既存の import 元を保つため re-export
+export { toUtcDateString };
 
 /**
  * 取得できた Ranked レートを (userId, 当日UTC日付) で upsert する（同日に複数回走っても1行・レートは後の値）。

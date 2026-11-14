@@ -1,6 +1,9 @@
 // ホームのライブ欄で使う純粋ロジック（区間進行バー・Ranked 対戦カードの型）。
 // クライアントとサーバーの両方から import される（DB・外部アクセスは持たない）。
 
+import { getSplitTimeline } from "./pace-splits";
+import type { TwitchStream } from "./twitch";
+
 /** 進行バーの7点（Nether → Bastion → Fortress → Blind → Stronghold → End → Finish） */
 export const LIVE_STAGES = [
   "Nether",
@@ -12,20 +15,14 @@ export const LIVE_STAGES = [
   "Finish",
 ] as const;
 
-// PaceMan のスプリットID / pacemanPaces.timeline の語彙 → 進行バー上の到達点（1始まり）。
-// Second Portal は Blind の次の区間だが、バーの7点には無いため Blind 到達扱い（4）にする
-const STAGE_BY_KEY: Record<string, number> = {
-  "rsg.enter_nether": 1,
-  "rsg.enter_bastion": 2,
-  "rsg.enter_fortress": 3,
-  "rsg.first_portal": 4,
-  "rsg.second_portal": 4,
-  "rsg.enter_stronghold": 5,
-  "rsg.enter_end": 6,
-  "rsg.credits": 7,
+// pacemanPaces.timeline（PaceMan の正準タイムライン名）→ 進行バー上の到達点（1始まり）。
+// Second Portal は Blind の次の区間だが、バーの7点には無いため Blind 到達扱い（4）にする。
+// Obtain Blaze Rods は Fortress 内の区間なので Fortress と同じ段階（3）
+const STAGE_BY_TIMELINE: Record<string, number> = {
   "Enter Nether": 1,
   Bastion: 2,
   Fortress: 3,
+  "Obtain Blaze Rods": 3,
   "First Portal": 4,
   "Second Portal": 4,
   "Enter Stronghold": 5,
@@ -33,30 +30,35 @@ const STAGE_BY_KEY: Record<string, number> = {
   Finish: 7,
 };
 
-/** スプリットID またはタイムライン名から、進行バー上の到達点（0=未対応・1..7）を返す */
+/**
+ * スプリットID（rsg.*）またはタイムライン名から、進行バー上の到達点（0=未対応・1..7）を返す。
+ * スプリットID は getSplitTimeline でタイムライン名へ変換してから引く（タイムライン名はそのまま通る）
+ */
 export function splitStage(key: string): number {
-  return STAGE_BY_KEY[key] ?? 0;
+  return STAGE_BY_TIMELINE[getSplitTimeline(key)] ?? 0;
 }
 
-// MCSR Ranked ライブ API（GET /live）の timeline.type → 進行バー上の到達点と区間マーク名（PaceMan の timeline 語彙）。
+// MCSR Ranked ライブ API（GET /live）の timeline.type → 区間マーク名（PaceMan の timeline 語彙）。
+// 進行バー上の到達点は区間名から splitStage で導く。
 // Blind（projectelo.timeline.blind_travel）は PaceMan の First Portal に相当
-const RANKED_TIMELINE: Record<string, { stage: number; split: string }> = {
-  "story.enter_the_nether": { stage: 1, split: "Enter Nether" },
-  "nether.find_bastion": { stage: 2, split: "Bastion" },
-  "nether.find_fortress": { stage: 3, split: "Fortress" },
-  "projectelo.timeline.blind_travel": { stage: 4, split: "First Portal" },
-  "story.follow_ender_eye": { stage: 5, split: "Enter Stronghold" },
-  "story.enter_the_end": { stage: 6, split: "Enter End" },
+const RANKED_TIMELINE_SPLIT: Record<string, string> = {
+  "story.enter_the_nether": "Enter Nether",
+  "nether.find_bastion": "Bastion",
+  "nether.find_fortress": "Fortress",
+  "projectelo.timeline.blind_travel": "First Portal",
+  "story.follow_ender_eye": "Enter Stronghold",
+  "story.enter_the_end": "Enter End",
 };
 
 /** Ranked の timeline.type から進行バー上の到達点（0=未対応/timeline 無し・1..6）を返す */
 export function rankedStage(type: string | null | undefined): number {
-  return (type && RANKED_TIMELINE[type]?.stage) || 0;
+  const split = rankedSplitName(type);
+  return split ? splitStage(split) : 0;
 }
 
 /** Ranked の timeline.type から PaceManSplitMark に渡す区間名。未対応は null */
 export function rankedSplitName(type: string | null | undefined): string | null {
-  return (type && RANKED_TIMELINE[type]?.split) || null;
+  return (type && RANKED_TIMELINE_SPLIT[type]) || null;
 }
 
 /** Ranked 対戦中の選手の最新到達区間（最新1イベントのみ。途中経過は API に無い） */
@@ -91,6 +93,27 @@ export interface RankedLiveMatch {
 
 /** Twitch の「Minecraft」カテゴリの game_id */
 export const TWITCH_MINECRAFT_GAME_ID = "27471";
+
+/** ホームの Twitch 配信1件（/api/home-feed?type=twitch-streams の応答要素。配信情報＋紐付く Minefolio 走者） */
+export interface HomeTwitchStream {
+  stream: Pick<
+    TwitchStream,
+    "id" | "user_login" | "user_name" | "title" | "viewer_count" | "game_id" | "game_name" | "started_at"
+  >;
+  mcid: string | null;
+  uuid: string | null;
+  slug: string;
+  displayName: string | null;
+  /** アルファベット表記の表示名。ロケール解決（pickDisplayName）は表示側で行う */
+  displayNameAlphabet: string | null;
+  discordAvatar: string | null;
+  customSkinUrl: string | null;
+}
+
+/** Twitch チャンネルの URL（login は大文字小文字どちらでも可） */
+export function twitchChannelUrl(login: string): string {
+  return `https://www.twitch.tv/${encodeURIComponent(login)}`;
+}
 
 /** ライブ欄に Twitch カードとして出せる配信（HomeTwitchStream の必要部分） */
 export interface TwitchLiveCandidate {

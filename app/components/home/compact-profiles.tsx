@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { pickDisplayName } from "@/lib/slug";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
 import { formatClock } from "@/lib/home-format";
 import { formatRelativeDate } from "@/lib/relative-time";
@@ -34,7 +34,7 @@ export function CompactProfileList({
             >
               <MinecraftAvatar uuid={p.uuid} skinUrl={p.customSkinUrl} mcid={p.mcid} size={32} className="shrink-0 rounded-lg" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{pickDisplayName(p, locale) || p.mcid || p.slug}</span>
+                <span className="block truncate text-sm font-medium">{getLocalizedDisplayName(p, locale)}</span>
                 {isCategoryKey(p.mainCategory) && (
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">

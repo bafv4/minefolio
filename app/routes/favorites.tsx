@@ -11,13 +11,12 @@ import { inArray } from "drizzle-orm";
 import { getFavoriteSlugsByDiscordId } from "@/lib/browse-query.server";
 import { getLocalFavorites } from "@/lib/favorites-client";
 import { ProfileFeedCard, ProfileFeedCardSkeleton, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
-import { EmptyState } from "@/components/empty-state";
 import { FavoritesNav } from "@/components/favorites-nav";
+import { FavoritesCookieAlert, FavoritesEmptyState } from "@/components/favorites-shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, Users, ArrowLeft, Cookie } from "lucide-react";
+import { Heart, ArrowLeft } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useT } from "@/hooks/use-locale";
 import { localeFromMatches } from "@/lib/locale";
 
@@ -161,18 +160,7 @@ export default function FavoritesPage() {
       <FavoritesNav current="favorites" />
 
       {/* Cookie未承諾の警告（未ログインのみ） */}
-      {showCookieAlert && (
-        <Alert>
-          <Cookie className="h-4 w-4" />
-          <AlertTitle>{t("favorites.cookieDisabled")}</AlertTitle>
-          <AlertDescription className="flex items-center justify-between">
-            <span>{t("favorites.cookieRequired")}</span>
-            <Button size="sm" onClick={acceptCookies} className="ml-4">
-              {t("favorites.enableCookie")}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {showCookieAlert && <FavoritesCookieAlert onAccept={acceptCookies} />}
 
       {isLoadingList ? (
         <FavoriteCardSkeletonGrid />
@@ -183,20 +171,7 @@ export default function FavoritesPage() {
           ))}
         </div>
       ) : (
-        <EmptyState
-          icon={<Users className="h-12 w-12" />}
-          title={t("favorites.emptyTitle")}
-          description={
-            !isLoggedIn && hasConsent === false
-              ? t("favorites.cookieRequired")
-              : t("favorites.emptyHelp")
-          }
-          action={
-            <Button asChild className="mt-4">
-              <Link to="/browse">{t("favorites.browseRunner")}</Link>
-            </Button>
-          }
-        />
+        <FavoritesEmptyState cookieBlocked={showCookieAlert} />
       )}
 
       {!isLoggedIn && (

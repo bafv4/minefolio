@@ -4,30 +4,14 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { formatClock, formatClockSeconds } from "@/lib/home-format";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
 import { pickDisplayName } from "@/lib/slug";
+import { twitchChannelUrl, type HomeTwitchStream } from "@/lib/home-live";
+import { getFeedVideoUrl } from "@/components/feed-video-card";
+import { StreamingBadge } from "@/components/home/streaming-badge";
 import type { FeedVideo } from "@/lib/feed-video";
 import { ExternalLink } from "lucide-react";
 
-/** /api/home-feed?type=twitch-streams の1件（配信中の Minefolio 登録者） */
-export interface HomeTwitchStream {
-  stream: {
-    id: string;
-    user_login: string;
-    user_name: string;
-    game_id?: string;
-    game_name: string;
-    title: string;
-    started_at: string;
-    viewer_count?: number;
-  };
-  mcid: string | null;
-  uuid: string | null;
-  slug: string;
-  displayName: string | null;
-  customSkinUrl: string | null;
-}
-
 /** 「最近配信した人」の表示行数 */
-export const TWITCH_RECENT_ROWS = 6;
+const TWITCH_RECENT_ROWS = 6;
 
 interface Row {
   key: string;
@@ -68,10 +52,10 @@ export function TwitchRecentList({ streams, vods }: { streams: HomeTwitchStream[
         uuid: s.uuid,
         skinUrl: s.customSkinUrl,
         mcid: s.mcid,
-        name: s.displayName || s.stream.user_name,
+        name: pickDisplayName(s, locale) || s.stream.user_name,
         title: s.stream.title,
         game: s.stream.game_name || null,
-        href: `https://www.twitch.tv/${encodeURIComponent(s.stream.user_login)}`,
+        href: twitchChannelUrl(s.stream.user_login),
         at: s.stream.started_at,
         durationSeconds: null,
       });
@@ -90,7 +74,7 @@ export function TwitchRecentList({ streams, vods }: { streams: HomeTwitchStream[
         name: pickDisplayName(v, locale) || v.channelTitle || "Unknown",
         title: v.title,
         game: v.gameName || null,
-        href: `https://www.twitch.tv/videos/${encodeURIComponent(v.videoId)}`,
+        href: getFeedVideoUrl(v),
         at: v.publishedAt,
         durationSeconds: v.durationSeconds ?? null,
       });
@@ -112,24 +96,14 @@ export function TwitchRecentList({ streams, vods }: { streams: HomeTwitchStream[
               <MinecraftAvatar uuid={r.uuid} skinUrl={r.skinUrl} mcid={r.mcid} size={32} className="shrink-0 rounded-lg" />
               <span className="hidden min-w-0 sm:block">
                 <span className="block truncate text-sm font-medium">{r.name}</span>
-                {r.live && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-destructive">
-                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
-                    {t("home.liveStreaming")}
-                  </span>
-                )}
+                {r.live && <StreamingBadge />}
               </span>
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm sm:hidden font-medium">{r.name}</span>
               <span className="block truncate text-sm">{r.title}</span>
               <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                {r.live && (
-                  <span className="inline-flex items-center gap-1 font-medium text-destructive sm:hidden">
-                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
-                    {t("home.liveStreaming")}
-                  </span>
-                )}
+                {r.live && <StreamingBadge className="text-xs sm:hidden" />}
                 {r.game && <span className="truncate">{r.game}</span>}
               </span>
             </span>

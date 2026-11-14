@@ -6,15 +6,13 @@ import type { Route } from "./+types/home-favorite-activity";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
-import { getApiUser } from "@/lib/api-auth.server";
+import { apiJsonResponse, getApiUser } from "@/lib/api-auth.server";
 import { getFavoritesFromDb } from "@/lib/favorites";
-import { FAVORITE_SLUGS_MAX, clampFavoriteActivityOptions, getFavoriteActivity } from "@/lib/home-favorite-activity.server";
-
-const NO_STORE = { "Cache-Control": "private, no-store" };
+import { clampFavoriteActivityOptions, getFavoriteActivity } from "@/lib/home-favorite-activity.server";
 
 export async function action({ request }: Route.ActionArgs) {
   if (request.method.toUpperCase() !== "POST") {
-    return Response.json({ error: "Method not allowed" }, { status: 405, headers: NO_STORE });
+    return apiJsonResponse({ error: "Method not allowed" }, { status: 405 });
   }
   const db = createDb();
   const auth = createAuth(db, getEnv());
@@ -25,15 +23,11 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     body = ((await request.json()) as typeof body) ?? {};
   } catch {
-    if (!user) return Response.json({ error: "Invalid body" }, { status: 400, headers: NO_STORE });
+    if (!user) return apiJsonResponse({ error: "Invalid body" }, { status: 400 });
   }
 
-  let slugs: string[] = [];
-  if (user) {
-    slugs = await getFavoritesFromDb(db, user.id);
-  } else if (Array.isArray(body.slugs)) {
-    slugs = body.slugs.filter((s): s is string => typeof s === "string").slice(0, FAVORITE_SLUGS_MAX);
-  }
+  // 未ログインの本文 slugs は検証前の値。型・長さ・件数の検証は getFavoriteActivity に任せる
+  const slugs = user ? await getFavoritesFromDb(db, user.id) : Array.isArray(body.slugs) ? body.slugs : [];
   const result = await getFavoriteActivity(db, slugs, clampFavoriteActivityOptions(body));
-  return Response.json(result, { headers: NO_STORE });
+  return apiJsonResponse(result);
 }

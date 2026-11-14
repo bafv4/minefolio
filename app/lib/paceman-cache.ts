@@ -221,7 +221,7 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
  * - MCID を変更・解除したユーザーの旧 MCID 行は user_id を null に戻す（別ユーザーが同じ MCID を
  *   登録していればそのユーザーへ付け替わる）
  * リンク条件は cachePacemanPaces の INSERT 時（lower(mcid) 一致のみ。公開/視聴者判定はしない）と同じ。
- * 表示時の公開判定は参照側の結合（home-pace-sample.server.ts 等）に残す。
+ * 表示時の公開判定は参照側の結合（getPaceFeedEntries 等）に残す。
  * これにより user_id 結合が、従来の lower(users.mcid) = lower(paceman_paces.mcid) 結合と同じ結果になる。
  * cron（update-paceman-cache）から毎回呼ぶ。冪等。変更行数を返す。
  */

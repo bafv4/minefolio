@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { formatClockSeconds } from "@/lib/home-format";
 import { formatRelativeTimeInHours } from "@/lib/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
 import { Play, ExternalLink } from "lucide-react";
@@ -27,14 +28,17 @@ export function getEmbedUrl(video: FeedVideo): string {
   return `https://player.twitch.tv/?video=${encodeURIComponent(video.videoId)}&parent=${parent}&autoplay=true`;
 }
 
-/** 秒を "1:23:45" / "12:34" 形式に変換 */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const mm = hours > 0 ? String(minutes).padStart(2, "0") : String(minutes);
-  const ss = String(seconds).padStart(2, "0");
-  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+/**
+ * サムネイルURL。キャッシュ行に無い YouTube は規定のサムネイルURLで代替する
+ * （Twitch は代替が無いので null）
+ */
+export function getFeedVideoThumbnailUrl(video: FeedVideo): string | null {
+  return (
+    video.thumbnailUrl ||
+    (video.platform === "youtube"
+      ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg`
+      : null)
+  );
 }
 
 /**
@@ -51,9 +55,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
   const watchUrl = getFeedVideoUrl(video);
   const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
   const platformName = isYouTube ? "YouTube" : "Twitch";
-  const rawThumbnailUrl =
-    video.thumbnailUrl ||
-    (isYouTube ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg` : null);
+  const rawThumbnailUrl = getFeedVideoThumbnailUrl(video);
   // 処理中の Twitch VOD は `_404/404_processing_*.png` のプレースホルダURLになる（現状 403 だが、
   // 将来画像を返しても見栄えが悪いのでアイコン表示に落とす）。読み込み失敗時も同様
   const thumbnailUrl = thumbFailed || rawThumbnailUrl?.includes("_404") ? null : rawThumbnailUrl;
@@ -108,7 +110,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             {/* 配信時間（Twitch VOD） */}
             {video.durationSeconds != null && video.durationSeconds > 0 && (
               <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
-                {formatDuration(video.durationSeconds)}
+                {formatClockSeconds(video.durationSeconds)}
               </span>
             )}
           </button>

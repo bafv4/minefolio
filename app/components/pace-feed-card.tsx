@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { StageBar } from "@/components/pace-stage-bar";
+import { formatClock } from "@/lib/home-format";
 import { splitStage } from "@/lib/home-live";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
 import type { CachedPace } from "@/lib/paceman-cache";
-import { PaceTimelineModal, formatRunTime } from "@/components/pace-timeline-modal";
+import { PaceTimelineModal } from "@/components/pace-timeline-modal";
 import { Clock3 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
@@ -87,7 +88,7 @@ export function PaceFeedCard({
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <div className="min-w-0">
             <p className="text-[11px] text-muted-foreground">{t("home.igtTime")}</p>
-            <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
+            <p className="font-mono text-2xl font-semibold">{formatClock(run.rta)}</p>
           </div>
           <Badge variant="secondary" className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs">
             <PaceManSplitMark timeline={run.timeline} size={13} />

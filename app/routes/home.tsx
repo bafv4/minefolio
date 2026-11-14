@@ -1,9 +1,13 @@
 import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useFetcher, Link, data } from "react-router";
-import type { ReactNode } from "react";
-import { normalizeHomeSectionOrder, isDefaultHomeSectionOrder, type HomeSectionId } from "@/lib/home-sections";
+import { useEffect, useReducer, memo, useMemo, useCallback, Fragment, type ReactNode } from "react";
+import {
+  DEFAULT_HOME_SECTION_ORDER,
+  normalizeHomeSectionOrder,
+  isDefaultHomeSectionOrder,
+  type HomeSectionId,
+} from "@/lib/home-sections";
 import { HOME_SECTION_ORDER_FETCHER_KEY } from "@/components/home/home-settings-dialog";
-import { useEffect, useReducer, memo, useMemo, useCallback, Fragment } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -11,13 +15,16 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, pageViewStats, playstyles, categoryRecords } from "@/lib/schema";
 import { pickHighlightPb, type HighlightPbRecord } from "@/lib/profile-highlights";
-import { excludeViewersCondition } from "@/lib/users-filter";
+import { listedRunnerCondition } from "@/lib/users-filter";
 import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
-import { pickTwitchOnlyStreams, twitchLoginFromUrl, type RankedLiveMatch } from "@/lib/home-live";
+import type { McidUserMaps } from "@/lib/home-user-data.server";
+import { getHiddenPaceMcid, filterOwnPaces } from "@/lib/pace-visibility";
+import { groupByUserId } from "@/lib/group-by-user";
+import { pickTwitchOnlyStreams, twitchLoginFromUrl, type HomeTwitchStream, type RankedLiveMatch } from "@/lib/home-live";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,16 +36,17 @@ import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
 import { CompactProfileList } from "@/components/home/compact-profiles";
 import { HomeVideoCard } from "@/components/home/home-video-card";
-import { TwitchRecentList, type HomeTwitchStream } from "@/components/home/twitch-recent-list";
+import { TwitchRecentList } from "@/components/home/twitch-recent-list";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { filterOwnVideos, feedVideoKey, type FeedVideo } from "@/lib/feed-video";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
-import { pickDisplayName } from "@/lib/slug";
+import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Youtube, Twitch } from "@/components/brand-icons";
-import { ArrowRight, Search, UserCheck, BookOpen, Play, AlertCircle, RefreshCw, Radio } from "lucide-react";
+import { ArrowRight, Search, UserCheck, BookOpen, Play, Radio } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -117,52 +125,47 @@ export async function loader({ request }: Route.LoaderArgs) {
     authorMcid: users.mcid,
   };
 
-  // セッション確認（→登録ユーザー判定）。ログイン状態で上半分が分かれるため、先に確定させる
-  const currentUser = await (async () => {
-    const session = await getOptionalSession(request, auth);
-    if (!session) return null;
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: {
-        id: true,
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        customSkinUrl: true,
-        showPacemanOnHome: true,
-        showYoutubeOnHome: true,
-        showTwitchOnHome: true,
-        homeSectionOrder: true,
-        createdAt: true,
-      },
-    });
-    if (!existingUser) return null;
-    return {
-      id: existingUser.id,
-      mcid: existingUser.mcid,
-      uuid: existingUser.uuid,
-      slug: existingUser.slug,
-      displayName: existingUser.displayName,
-      displayNameAlphabet: existingUser.displayNameAlphabet,
-      customSkinUrl: existingUser.customSkinUrl,
-      showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
-      showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
-      showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
-      sectionOrder: normalizeHomeSectionOrder(existingUser.homeSectionOrder),
-      // 作成から24時間以内は「おかえりなさい」ではなく「ようこそ」にする（サーバーで判定し、時計差による hydration のずれを避ける）
-      isNewAccount: Date.now() - existingUser.createdAt.getTime() < NEW_ACCOUNT_WINDOW_MS,
-    };
-  })();
-  const isRegistered = currentUser != null;
-
-  const [recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight] = await Promise.all([
+  const [account, recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight] = await Promise.all([
+    // セッション確認（→登録ユーザー判定）。他の取得と並列に走らせる
+    (async () => {
+      const session = await getOptionalSession(request, auth);
+      if (!session) return null;
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.discordId, session.user.id),
+        columns: {
+          mcid: true,
+          uuid: true,
+          slug: true,
+          displayName: true,
+          displayNameAlphabet: true,
+          customSkinUrl: true,
+          showPacemanOnHome: true,
+          showYoutubeOnHome: true,
+          showTwitchOnHome: true,
+          homeSectionOrder: true,
+          createdAt: true,
+        },
+      });
+      if (!existingUser) return null;
+      const { homeSectionOrder, createdAt, ...profile } = existingUser;
+      return {
+        sectionOrder: normalizeHomeSectionOrder(homeSectionOrder),
+        // クライアントへそのまま渡す部分
+        user: {
+          ...profile,
+          showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
+          showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+          showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
+          // 作成から24時間以内は「おかえりなさい」ではなく「ようこそ」にする（サーバーで判定し、時計差による hydration のずれを避ける）
+          isNewAccount: Date.now() - createdAt.getTime() < NEW_ACCOUNT_WINDOW_MS,
+        },
+      };
+    })(),
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
     db
       .select(profileFeedColumns)
       .from(users)
-      .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition))
+      .where(listedRunnerCondition)
       .orderBy(desc(users.updatedAt))
       .limit(HOME_PROFILE_COUNT),
     // よく見られているプロフィール（直近7日PV順）。「最近の更新」との重複を除くため多めに取る。
@@ -171,13 +174,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       .select({ ...profileFeedColumns, pageViews7d: pageViewStats.pageviews })
       .from(pageViewStats)
       .innerJoin(users, eq(pageViewStats.targetId, users.id))
-      .where(
-        and(
-          eq(pageViewStats.targetType, "profile"),
-          eq(users.profileVisibility, "public"),
-          excludeViewersCondition,
-        ),
-      )
+      .where(and(eq(pageViewStats.targetType, "profile"), listedRunnerCondition))
       .orderBy(desc(pageViewStats.pageviews))
       .limit(HOME_PROFILE_COUNT * 3),
     // 新着ガイド（公開済み・更新日時順）。同じ著者は1件までにするため多めに取って絞る
@@ -185,20 +182,19 @@ export async function loader({ request }: Route.LoaderArgs) {
       .select(guideListColumns)
       .from(guides)
       .innerJoin(users, eq(guides.authorId, users.id))
-      // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない
+      // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない（視聴者ロールの著者は除外しない）
       .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
       .orderBy(desc(guides.updatedAt))
       .limit(HOME_GUIDE_COUNT * 6),
-    db
-      .select({ total: sql<number>`count(*)` })
-      .from(users)
-      .where(and(eq(users.profileVisibility, "public"), excludeViewersCondition)),
+    db.select({ total: sql<number>`count(*)` }).from(users).where(listedRunnerCondition),
     // 注目の走者（ゲストはヒーロー右、ログイン時は「プロフィール」欄の上。10分キャッシュ）。失敗してもホーム全体は落とさない
     getHomeSpotlight(db).catch((error) => {
       console.error("Failed to build home spotlight:", error);
       return null;
     }),
   ]);
+  const currentUser = account?.user ?? null;
+  const isRegistered = currentUser != null;
   const totalPublicProfiles = profileCounts?.total ?? 0;
 
   // 「最近の更新」と「よく見られている」の重複は除く
@@ -217,7 +213,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // 自動翻訳（docs/translation.md）。ガイド id をまとめて 1 回で引き、title / summary を差し替える。
   // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
-  const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers, ...popularUsersRaw].map((u) => u.id))];
+  // 表示する人（最近の更新・よく見られている）の分だけ引く
+  const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers].map((u) => u.id))];
   const [guideTranslations, feedPlaystyles, feedRecords] = await Promise.all([
     getGuideTranslations(db, newGuides.map((g) => g.id), resolveLocale(request)),
     // カードのタグ用（メインカテゴリ + その PB）。全員分を各1クエリで取得し N+1 にしない
@@ -246,12 +243,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           ),
   ]);
   const mainCategoryById = new Map(feedPlaystyles.map((p) => [p.userId, p.mainCategory]));
-  const recordsById = new Map<string, (HighlightPbRecord & { userId: string })[]>();
-  for (const r of feedRecords) {
-    const list = recordsById.get(r.userId);
-    if (list) list.push(r);
-    else recordsById.set(r.userId, [r]);
-  }
+  const recordsById = groupByUserId<HighlightPbRecord & { userId: string }>(feedRecords);
   // id はクライアントに不要なので外し、カード用に mainCategory / mainCategoryPb を付ける
   const withHighlights = <T extends { id: string }>(list: T[]) =>
     list.map(({ id, ...rest }) => {
@@ -262,28 +254,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const popular = withHighlights(popularUsers);
   const recent = withHighlights(recentlyUpdatedUsers);
-  // お気に入り 0 人のときに勧める走者（よく見られている → 無ければ最近の更新）。全員分の候補から3人
+  // お気に入り 0 人のときに勧める走者（よく見られている → 無ければ最近の更新）。表示する人の中から3人
   const recommended = (popular.length > 0 ? popular : recent).slice(0, 3);
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
     // 欄の並び（ゲストは既定順）。SSR の時点でこの順に描画する
-    sectionOrder: currentUser?.sectionOrder ?? normalizeHomeSectionOrder(null),
-    currentUser: currentUser
-      ? {
-          mcid: currentUser.mcid,
-          uuid: currentUser.uuid,
-          slug: currentUser.slug,
-          displayName: currentUser.displayName,
-          displayNameAlphabet: currentUser.displayNameAlphabet,
-          customSkinUrl: currentUser.customSkinUrl,
-          showPacemanOnHome: currentUser.showPacemanOnHome,
-          showYoutubeOnHome: currentUser.showYoutubeOnHome,
-          showTwitchOnHome: currentUser.showTwitchOnHome,
-          isNewAccount: currentUser.isNewAccount,
-        }
-      : null,
+    sectionOrder: account?.sectionOrder ?? [...DEFAULT_HOME_SECTION_ORDER],
+    currentUser,
     recentlyUpdatedUsers: recent,
     popularUsers: popular,
     recommended,
@@ -291,6 +270,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalPublicProfiles,
     spotlight,
   };
+}
+
+// ログイン状態・表示設定など閲覧者依存のデータを SSR に含むため、ブラウザ/CDN にキャッシュさせない
+// （共有キャッシュに載ると他人のログイン状態の表示が配信される。`.data` サブリクエストにも適用される）
+export function headers(_: Route.HeadersArgs) {
+  return { "Cache-Control": "private, no-store" };
 }
 
 /**
@@ -343,13 +328,7 @@ interface TwitchStreamsResponse {
 }
 
 // ライブ・過去ペースの応答に含まれる mcid（小文字）→ユーザー情報マップ。応答のアイテムに出てくる mcid の分のみ
-interface McidMapsResponse {
-  mcidToUuid: Record<string, string>;
-  mcidToSlug: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  mcidToDisplayNameAlphabet: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
-}
+type McidMapsResponse = McidUserMaps;
 
 interface RecentPacesResponse extends McidMapsResponse {
   recentPaces: CachedPace[];
@@ -513,24 +492,6 @@ async function fetchFeedJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-// 取得失敗時の文言 + 再試行ボタン
-function FeedErrorNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const t = useT();
-  return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-    >
-      <AlertCircle className="h-4 w-4 shrink-0" />
-      <span className="min-w-0">{message}</span>
-      <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" onClick={onRetry}>
-        <RefreshCw className="mr-1 h-3.5 w-3.5" />
-        {t("home.feedRetry")}
-      </Button>
-    </div>
-  );
-}
-
 // ホームの YouTube 動画の表示本数（全件は /videos）
 const HOME_YOUTUBE_COUNT = 3;
 
@@ -637,16 +598,16 @@ export default function HomePage() {
     };
   }, [fetchLiveRuns]);
 
-  const hideOwnPace = currentUser?.showPacemanOnHome === false && !!currentUser?.mcid;
-  const myMcid = currentUser?.mcid?.toLowerCase() ?? null;
+  // 自分のペースを隠す設定のときの除外対象 mcid（小文字）。無ければ null
+  const hiddenPaceMcid = currentUser ? getHiddenPaceMcid(currentUser) : null;
 
   // 表示設定（showPacemanOnHome / showYoutubeOnHome / showTwitchOnHome）をオフにした人は、サーバー側
   // （/api/home-feed 等）で全員のホームから除外される。ここでの「自分の分の除外」は、設定を変えた直後に
   // キャッシュ TTL を待たず自分の画面で即消すためのもの（Ranked 対戦は PaceMan 設定の対象外）。
   // 自分のペース・配信・動画を隠す設定（showPacemanOnHome）
   const filteredRecentPaces = useMemo(
-    () => (hideOwnPace ? feed.recentPaces.filter((run) => run.mcid.toLowerCase() !== myMcid) : feed.recentPaces),
-    [feed.recentPaces, hideOwnPace, myMcid],
+    () => (currentUser ? filterOwnPaces(feed.recentPaces, currentUser) : feed.recentPaces),
+    [feed.recentPaces, currentUser],
   );
 
   // 配信中の Twitch（自分の Twitch を隠す設定 showTwitchOnHome を適用）。ライブ欄・Twitch 一覧で共用
@@ -663,7 +624,7 @@ export default function HomePage() {
   const liveEntries = useMemo<LiveRailEntry[]>(() => {
     const entries: LiveRailEntry[] = [];
     for (const run of feed.liveRuns) {
-      if (hideOwnPace && run.nickname.toLowerCase() === myMcid) continue;
+      if (hiddenPaceMcid && run.nickname.toLowerCase() === hiddenPaceMcid) continue;
       entries.push({
         kind: "pace",
         id: `pace:${run.worldId}`,
@@ -688,33 +649,18 @@ export default function HomePage() {
     return favoriteSlugSet.size === 0
       ? entries
       : [...entries].sort((a, b) => Number(isFav(b)) - Number(isFav(a)));
-  }, [feed.liveRuns, feed.rankedMatches, feed.mcidToSlug, twitchStreams, favoriteSlugSet, hideOwnPace, myMcid]);
+  }, [feed.liveRuns, feed.rankedMatches, feed.mcidToSlug, twitchStreams, favoriteSlugSet, hiddenPaceMcid]);
 
   // 「配信中」の印: Minefolio に Twitch を登録していて、twitch-streams で配信中と確認できた人だけ
-  // （YouTube の配信中は出さない）。自分の Twitch を隠す設定のときは自分を除く
-  const streamingSlugs = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of feed.twitchStreams) {
-      if (!s.slug) continue;
-      if (currentUser?.showTwitchOnHome === false && s.slug === currentUser.slug) continue;
-      set.add(s.slug);
-    }
-    return set;
-  }, [feed.twitchStreams, currentUser?.showTwitchOnHome, currentUser?.slug]);
+  // （YouTube の配信中は出さない）。自分の Twitch を隠す設定のときは自分を除く（twitchStreams は適用済み）
+  const streamingSlugs = useMemo(() => new Set(twitchStreams.map((s) => s.slug).filter(Boolean)), [twitchStreams]);
 
-  // 動画: 自分の動画/VODを隠すユーザー設定を適用（プラットフォームごとのフラグ。/videos と共通）
-  const youtubeVideos = useMemo(() => {
-    const list = currentUser ? filterOwnVideos(feed.recentVideos, currentUser) : feed.recentVideos;
-    const seen = new Set<string>();
-    return list
-      .filter((v) => {
-        const key = v.slug ?? feedVideoKey(v);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, HOME_YOUTUBE_COUNT);
-  }, [feed.recentVideos, currentUser]);
+  // 動画: 自分の動画/VODを隠すユーザー設定を適用（プラットフォームごとのフラグ。/videos と共通）。
+  // 「1人1本」の絞り込みはサーバー（/api/home-feed の perRunner=1）で済んでいる
+  const youtubeVideos = useMemo(
+    () => (currentUser ? filterOwnVideos(feed.recentVideos, currentUser) : feed.recentVideos).slice(0, HOME_YOUTUBE_COUNT),
+    [feed.recentVideos, currentUser],
+  );
   const twitchVods = useMemo(
     () => (currentUser ? filterOwnVideos(feed.twitchVods, currentUser) : feed.twitchVods),
     [feed.twitchVods, currentUser],
@@ -804,14 +750,7 @@ export default function HomePage() {
     return `/guides/${item._authorSlug}/${guide.slug}`;
   }, []);
 
-  const welcomeName = currentUser
-    ? pickDisplayName(
-        { displayName: currentUser.displayName, displayNameAlphabet: currentUser.displayNameAlphabet },
-        locale,
-      ) ||
-      currentUser.mcid ||
-      currentUser.slug
-    : "";
+  const welcomeName = currentUser ? getLocalizedDisplayName(currentUser, locale) : "";
 
   const liveCount = liveEntries.length;
   const liveSettled = !feed.loading.liveRuns && (!feed.errors.liveRuns || feed.liveRunsCheckedAt !== null);
@@ -919,27 +858,27 @@ export default function HomePage() {
     ),
     guides:
       newGuides.length > 0 ? (
-          <HomeSection
-            id="home-guides"
-            icon={<BookOpen className="h-5 w-5 text-primary" />}
-            title={t("home.sectionGuides")}
-            badge={<span className="text-sm text-muted-foreground">{t("home.guidesOnePerAuthor")}</span>}
-            viewAllTo="/guides"
-          >
-            <GuideCardGrid
-              guides={newGuides.map(toGuideItem)}
-              linkFn={guideLinkFn}
-              gridCols="sm:grid-cols-2 xl:grid-cols-4"
-            />
-          </HomeSection>
+        <HomeSection
+          id="home-guides"
+          icon={<BookOpen className="h-5 w-5 text-primary" />}
+          title={t("home.sectionGuides")}
+          badge={<span className="text-sm text-muted-foreground">{t("home.guidesOnePerAuthor")}</span>}
+          viewAllTo="/guides"
+        >
+          <GuideCardGrid
+            guides={newGuides.map(toGuideItem)}
+            linkFn={guideLinkFn}
+            gridCols="sm:grid-cols-2 xl:grid-cols-4"
+          />
+        </HomeSection>
       ) : null,
     // ログイン時の注目の走者（ゲストはヒーロー右に出すので、ここはログイン時のみ）
     featured: isRegistered ? (
-        <FeaturedRunnerCard
-          candidates={spotlight?.candidates ?? []}
-          initial={spotlight?.fallback ?? null}
-          wide
-        />
+      <FeaturedRunnerCard
+        candidates={spotlight?.candidates ?? []}
+        initial={spotlight?.fallback ?? null}
+        wide
+      />
     ) : null,
     profiles: (
       <HomeSection

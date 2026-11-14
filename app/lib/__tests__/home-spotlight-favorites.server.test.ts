@@ -8,20 +8,29 @@ import {
   seedSpeedrunCategory,
   seedPace,
   seedGuide,
+  seedConfigPreset,
+  seedCategoryRecord,
   daysAgo,
   schema,
   type TestDb,
 } from "./helpers/test-db";
 import { eq } from "drizzle-orm";
+import { calculateCm360, toSensitivityPercent } from "../mouse-settings";
 import { invalidateCache } from "../cache";
-import { getHomeSpotlight, getRandomFeaturedRunner } from "../home-featured.server";
+import {
+  FEATURED_POOL_CACHE_KEY,
+  SPOTLIGHT_CACHE_KEY,
+  getHomeSpotlight,
+  getRandomFeaturedRunner,
+} from "../home-featured.server";
+import { HOME_HIDDEN_USERS_CACHE_KEY } from "../home-visibility.server";
 import { clampFavoriteActivityOptions, getFavoriteActivity } from "../home-favorite-activity.server";
 
 // ホームの注目の走者（候補・日替わり・ランダム）とお気に入りの動きを実DBで検証する。
 // 結果はメモリキャッシュされるため毎テスト無効化する
 
 const SHARED_URL = "file::memory:?cache=shared";
-const CACHE_KEYS = ["home:spotlight:v5", "home:featured-pool:v1", "videos:feed:all"];
+const CACHE_KEYS = [SPOTLIGHT_CACHE_KEY, FEATURED_POOL_CACHE_KEY, HOME_HIDDEN_USERS_CACHE_KEY, "videos:feed:all"];
 
 let db: TestDb;
 let originalUrl: string | undefined;
@@ -188,6 +197,136 @@ describe("getHomeSpotlight", () => {
   });
 });
 
+/** メインプリセットのスナップショット（keys は [action, keyCode]） */
+function presetSnapshot(keys: [string, string][] | null, config: Record<string, unknown> | null) {
+  return {
+    keybindingsData: keys ? JSON.stringify(keys.map(([action, keyCode]) => ({ action, keyCode, category: "movement" }))) : null,
+    playerConfigData: config ? JSON.stringify(config) : null,
+    remapsData: null,
+  };
+}
+
+const SNAPSHOT_KEYS: [string, string][] = [
+  ["forward", "KeyI"],
+  ["back", "KeyK"],
+  ["left", "KeyJ"],
+  ["right", "KeyL"],
+  ["jump", "Space"],
+];
+
+describe("注目の走者の設定の取得元（公開用のメインプリセット）", () => {
+  async function addRecentRanking(userId: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    await seedPlayerRanking(db, userId, { rankingType: "speedruncom", timeMs: 571000, recordDate: today });
+  }
+
+  it("メインが非アクティブならスナップショットのキー・感度を出し、ライブ（編集中）の値は出さない", async () => {
+    const user = await seedCompleteRunner("snap-runner"); // ライブ: W/S/A/D・感度0.3
+    await seedConfigPreset(db, user.id, {
+      isMain: true,
+      isActive: false,
+      ...presetSnapshot(SNAPSHOT_KEYS, { mouseDpi: 400, gameSensitivity: 0.5, rawInput: true }),
+    });
+    await addRecentRanking(user.id);
+
+    const runner = (await getHomeSpotlight(asDb(db))).candidates[0];
+    expect(runner.keys.find((k) => k.action === "forward")?.keyCode).toBe("KeyI");
+    expect(runner.keys.find((k) => k.action === "back")?.keyCode).toBe("KeyK");
+    expect(runner.sensitivityPercent).toBe(toSensitivityPercent(0.5));
+    expect(runner.cm180).toBeCloseTo(calculateCm360(400, 0.5, true, null, null) as number, 5);
+  });
+
+  it("メインが編集中（isActive）ならライブテーブルの値を出す（スナップショットは古い可能性がある）", async () => {
+    const user = await seedCompleteRunner("active-main");
+    await seedConfigPreset(db, user.id, {
+      isMain: true,
+      isActive: true,
+      ...presetSnapshot(SNAPSHOT_KEYS, { mouseDpi: 400, gameSensitivity: 0.5, rawInput: true }),
+    });
+    await addRecentRanking(user.id);
+
+    const runner = (await getHomeSpotlight(asDb(db))).candidates[0];
+    expect(runner.keys.find((k) => k.action === "forward")?.keyCode).toBe("KeyW");
+    expect(runner.sensitivityPercent).toBe(toSensitivityPercent(0.3));
+  });
+
+  it("スナップショットに無い種別は空として扱い、ライブへフォールバックしない", async () => {
+    const user = await seedCompleteRunner("empty-snap");
+    await seedConfigPreset(db, user.id, { isMain: true, isActive: false, ...presetSnapshot(null, null) });
+    await addRecentRanking(user.id);
+
+    const runner = (await getHomeSpotlight(asDb(db))).candidates[0];
+    expect(runner.keys).toEqual([]);
+    expect(runner.hotbar).toEqual([]);
+    expect(runner.sensitivityPercent).toBeNull();
+    expect(runner.cm180).toBeNull();
+  });
+
+  it("リマップもメインのスナップショットのものだけを使い、ライブ（編集中）のリマップは当てない", async () => {
+    const user = await seedCompleteRunner("remap-snap");
+    // ライブにだけある編集中のリマップ（forward=KeyW の物理キーを KeyZ にしている）
+    await db.insert(schema.keyRemaps).values({ userId: user.id, sourceKey: "KeyZ", targetKey: "KeyI", remapType: "trigger" } as never);
+    await seedConfigPreset(db, user.id, {
+      isMain: true,
+      isActive: false,
+      ...presetSnapshot(SNAPSHOT_KEYS, { mouseDpi: 400, gameSensitivity: 0.5 }),
+      // スナップショット側のリマップ: ゲーム内 KeyK（back）を物理 KeyX で押す
+      remapsData: JSON.stringify([{ sourceKey: "KeyX", targetKey: "KeyK", software: null, notes: null, remapType: "trigger" }]),
+    });
+    await addRecentRanking(user.id);
+
+    const keys = (await getHomeSpotlight(asDb(db))).candidates[0].keys;
+    expect(keys.find((k) => k.action === "back")?.keyCode).toBe("KeyX"); // スナップショットのリマップ
+    expect(keys.find((k) => k.action === "forward")?.keyCode).toBe("KeyI"); // ライブの KeyZ→KeyI は当てない
+  });
+
+  it("母集団の判定も同じ取得元: ライブは揃っていてもスナップショットが空の人は入らず、スナップショットだけ揃った人は入る", async () => {
+    const stale = await seedCompleteRunner("stale-live");
+    await seedConfigPreset(db, stale.id, { isMain: true, isActive: false, ...presetSnapshot(null, null) });
+
+    const snapOnly = await seedUser(db, { slug: "snap-only", mcid: "snaponly", uuid: "uuid-snaponly", role: "runner", profileVisibility: "public" });
+    await db.insert(schema.playstyles).values({ userId: snapOnly.id, mainCategory: "rsg" });
+    await seedConfigPreset(db, snapOnly.id, {
+      isMain: true,
+      isActive: false,
+      ...presetSnapshot(SNAPSHOT_KEYS, { mouseDpi: 800, gameSensitivity: 0.4 }),
+    });
+
+    const picked = await getRandomFeaturedRunner(asDb(db), []);
+    expect(picked?.slug).toBe("snap-only");
+    expect(picked?.keys.find((k) => k.action === "forward")?.keyCode).toBe("KeyI");
+    expect(await getRandomFeaturedRunner(asDb(db), ["snap-only"])).toBeNull();
+  });
+});
+
+describe("注目の走者: speedrun.com の理由に出さない記録", () => {
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  it("オーナーが非表示にした run（users.hiddenSpeedrunRecords）は理由にしない", async () => {
+    const hiddenOwner = await seedCompleteRunner("hide-owner");
+    await db.update(schema.users).set({ hiddenSpeedrunRecords: JSON.stringify(["run-hidden"]) }).where(eq(schema.users.id, hiddenOwner.id));
+    const visible = await seedCompleteRunner("visible-owner");
+    await seedPlayerRanking(db, hiddenOwner.id, { rankingType: "speedruncom", speedruncomRunId: "run-hidden", timeMs: 571000, recordDate: today() });
+    await seedPlayerRanking(db, visible.id, { rankingType: "speedruncom", speedruncomRunId: "run-visible", timeMs: 580000, recordDate: today() });
+
+    const spotlight = await getHomeSpotlight(asDb(db));
+    expect(spotlight.candidates.map((c) => c.slug)).toEqual(["visible-owner"]);
+  });
+
+  it("記録ページで非表示（category_records.isVisible=false）のカテゴリの記録は理由にしない", async () => {
+    const cat = await seedSpeedrunCategory(db, { name: "Any% RSG" });
+    const hiddenCat = await seedCompleteRunner("hidden-cat");
+    const shownCat = await seedCompleteRunner("shown-cat");
+    await seedCategoryRecord(db, hiddenCat.id, { categoryRefId: cat.id, isVisible: false });
+    await seedCategoryRecord(db, shownCat.id, { categoryRefId: cat.id, isVisible: true });
+    await seedPlayerRanking(db, hiddenCat.id, { rankingType: "speedruncom", categoryId: cat.id, timeMs: 571000, recordDate: today() });
+    await seedPlayerRanking(db, shownCat.id, { rankingType: "speedruncom", categoryId: cat.id, timeMs: 580000, recordDate: today() });
+
+    const spotlight = await getHomeSpotlight(asDb(db));
+    expect(spotlight.candidates.map((c) => c.slug)).toEqual(["shown-cat"]);
+  });
+});
+
 describe("getFavoriteActivity", () => {
   it("お気に入りの公開プロフィールのペース・ガイド・プロフィール更新を新しい順に返し、非お気に入り・非公開は含めない", async () => {
     const fav = await seedUser(db, { slug: "fav", mcid: "Fav", uuid: "uuid-fav", role: "runner", updatedAt: daysAgo(3) });
@@ -294,5 +433,15 @@ describe("表示設定（ホーム画面に〜を表示）: 全員のホーム�
     const result = await getFavoriteActivity(asDb(db), ["off", "on"]);
     const pairs = result.items.map((i) => `${i.kind}:${i.slug}`).sort();
     expect(pairs).toEqual(["guide:off", "pace:on", "video:on"]);
+  });
+
+  it("ネザーイン判定は専用列（isNetherEnter）で行う: 列が true の行は除き、false の行は区間名によらず出す", async () => {
+    const fav = await seedUser(db, { slug: "nether-fav", mcid: "NetherFav", uuid: "uuid-nf", role: "runner" });
+    await seedPace(db, { userId: fav.id, mcid: "NetherFav", pacemanRunId: 31, timeline: "Enter Nether", isNetherEnter: true, rta: 90000, date: daysAgo(1) });
+    await seedPace(db, { userId: fav.id, mcid: "NetherFav", pacemanRunId: 32, timeline: "Obtain Blaze Rods", isNetherEnter: false, rta: 400000, date: daysAgo(1) });
+
+    const { items } = await getFavoriteActivity(asDb(db), ["nether-fav"]);
+    const runIds = items.filter((i) => i.kind === "pace").map((i) => i.runId);
+    expect(runIds).toEqual([32]);
   });
 });

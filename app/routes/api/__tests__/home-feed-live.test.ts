@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
+  schema,
   seedUser,
   seedPace,
   daysAgo,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/__tests__/helpers/test-db";
 import { invalidateCache } from "@/lib/cache";
 import { USER_DATA_CACHE_KEY } from "@/lib/home-user-data.server";
+import { HOME_HIDDEN_USERS_CACHE_KEY } from "@/lib/home-visibility.server";
 
 const pacemanMocks = vi.hoisted(() => ({
   fetchLiveRuns: vi.fn(),
@@ -21,11 +23,21 @@ const pacemanMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/paceman", () => ({ fetchLiveRuns: pacemanMocks.fetchLiveRuns }));
 
+const twitchMocks = vi.hoisted(() => ({
+  getTwitchAppToken: vi.fn(),
+  getLiveStreams: vi.fn(),
+}));
+
+vi.mock("@/lib/twitch", () => ({
+  getTwitchAppToken: twitchMocks.getTwitchAppToken,
+  getLiveStreams: twitchMocks.getLiveStreams,
+}));
+
 import { loader } from "../home-feed";
 
-const LIVE_RUNS_CACHE_KEY = "home-feed:live-runs:v2";
+const LIVE_RUNS_CACHE_KEY = "home-feed:live-runs:v3";
 
-const ENV_KEYS = ["TURSO_DATABASE_URL"] as const;
+const ENV_KEYS = ["TURSO_DATABASE_URL", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
 let db: TestDb;
@@ -57,6 +69,7 @@ beforeEach(async () => {
   db = await createTestDbAt(SHARED_MEMORY_URL);
   await invalidateCache(LIVE_RUNS_CACHE_KEY);
   await invalidateCache(USER_DATA_CACHE_KEY);
+  await invalidateCache(HOME_HIDDEN_USERS_CACHE_KEY);
 });
 
 afterEach(() => {
@@ -80,6 +93,77 @@ describe("?type=pace-timeline - 入力検証", () => {
   it("runId が非数値は 400", async () => {
     const res = await callLoader("?type=pace-timeline&mcid=Runner&runId=abc");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("?type=pace-timeline - 登録有無の秘匿", () => {
+  const timelineOf = async (mcid: string, runId: number) =>
+    ((await (await callLoader(`?type=pace-timeline&mcid=${mcid}&runId=${runId}`)).json()) as {
+      timeline: Array<{ timeline: string }>;
+    }).timeline.map((e) => e.timeline);
+
+  it("公開プロフィール（視聴者除外）の mcid は全スプリットを返す（大文字小文字は無視）", async () => {
+    await seedUser(db, { slug: "pubrunner", mcid: "PubRunner", uuid: "uuid-pub", role: "runner", profileVisibility: "public" });
+    await seedPace(db, { mcid: "PubRunner", pacemanRunId: 501, timeline: "Bastion", rta: 100_000 });
+    await seedPace(db, { mcid: "PubRunner", pacemanRunId: 501, timeline: "Fortress", rta: 200_000 });
+
+    expect(await timelineOf("pubrunner", 501)).toEqual(["Bastion", "Fortress"]);
+  });
+
+  it("非公開・視聴者・未登録の mcid は、ペースが DB にあっても空（存在しない場合と区別できない）", async () => {
+    await seedUser(db, { slug: "privrunner", mcid: "PrivRunner", uuid: "uuid-priv", role: "runner", profileVisibility: "private" });
+    await seedUser(db, { slug: "viewerx", mcid: "ViewerX", uuid: "uuid-viewer", role: "viewer", profileVisibility: "public" });
+    await seedPace(db, { mcid: "PrivRunner", pacemanRunId: 601, timeline: "Bastion" });
+    await seedPace(db, { mcid: "ViewerX", pacemanRunId: 602, timeline: "Bastion" });
+    await seedPace(db, { mcid: "Nobody", pacemanRunId: 603, timeline: "Bastion" });
+
+    expect(await timelineOf("PrivRunner", 601)).toEqual([]);
+    expect(await timelineOf("ViewerX", 602)).toEqual([]);
+    expect(await timelineOf("Nobody", 603)).toEqual([]);
+    // 全く存在しない mcid / run と同じ応答
+    expect(await timelineOf("NoSuchPlayer", 999)).toEqual([]);
+  });
+});
+
+describe("?type=live-runs - showTwitchOnHome=false の人の配信リンク", () => {
+  it("liveAccount（Twitch で見る・配信中の印の元）を消し、他の人・Twitch 設定オンの人は残す", async () => {
+    await seedUser(db, { slug: "twoff", mcid: "TwOff", uuid: "u-off", role: "runner", profileVisibility: "public", showTwitchOnHome: false });
+    await seedUser(db, { slug: "twon", mcid: "TwOn", uuid: "u-on", role: "runner", profileVisibility: "public" });
+    const run = (nickname: string, liveAccount: string) => ({ ...makeStubLiveRun(nickname), user: { uuid: "x", liveAccount } });
+    pacemanMocks.fetchLiveRuns.mockResolvedValue([run("TwOff", "twoff_tv"), run("TwOn", "twon_tv")]);
+
+    const body = (await (await callLoader("?type=live-runs")).json()) as {
+      liveRuns: Array<{ nickname: string; user: { liveAccount: string | null } }>;
+    };
+    const byName = new Map(body.liveRuns.map((r) => [r.nickname, r.user.liveAccount]));
+    expect(byName.get("TwOff")).toBeNull(); // ライブランの行自体は残る（PaceMan 設定は別）
+    expect(byName.get("TwOn")).toBe("twon_tv");
+  });
+});
+
+describe("?type=twitch-streams", () => {
+  it("配信中の走者にアルファベット表記の表示名（displayNameAlphabet）を載せる（英語表示で他の欄と名前を揃えるため）", async () => {
+    process.env.TWITCH_CLIENT_ID = "cid";
+    process.env.TWITCH_CLIENT_SECRET = "secret";
+    await invalidateCache("home-feed:twitch:all:v2");
+    await invalidateCache("home-feed:twitch-links:v2");
+    const user = await seedUser(db, {
+      slug: "tw-runner", mcid: "TwRunner", uuid: "uuid-tw", displayName: "ツイッチ走者", displayNameAlphabet: "Twitch Runner",
+      role: "runner", profileVisibility: "public",
+    });
+    await db.insert(schema.socialLinks).values({ userId: user.id, platform: "twitch", identifier: "twrunner" });
+    twitchMocks.getTwitchAppToken.mockResolvedValue("token");
+    twitchMocks.getLiveStreams.mockResolvedValue([
+      { id: "1", user_login: "twrunner", user_name: "TwRunner", title: "RSG", game_id: "27471", game_name: "Minecraft", viewer_count: 5, started_at: new Date().toISOString() },
+    ]);
+
+    const res = await callLoader("?type=twitch-streams");
+    const body = (await res.json()) as { liveStreams: Array<{ slug: string; displayName: string | null; displayNameAlphabet: string | null }> };
+
+    expect(body.liveStreams).toHaveLength(1);
+    expect(body.liveStreams[0]).toMatchObject({ slug: "tw-runner", displayName: "ツイッチ走者", displayNameAlphabet: "Twitch Runner" });
+    await invalidateCache("home-feed:twitch:all:v2");
+    await invalidateCache("home-feed:twitch-links:v2");
   });
 });
 

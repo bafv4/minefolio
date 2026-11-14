@@ -228,18 +228,20 @@ export async function getPublicVideoFeed(
   filters: VideoSearchFilters = {},
   options: { forHome?: boolean } = {},
 ): Promise<FeedVideo[]> {
-  let items = await getVideoFeedBase(db);
+  // ホーム用の非表示一覧はフィード本体と独立なので並列で取る
+  const [baseItems, hidden] = await Promise.all([
+    getVideoFeedBase(db),
+    options.forHome ? getHomeHiddenUsers(db) : Promise.resolve(null),
+  ]);
+  let items = baseItems;
 
   // ホーム用: 「ホーム画面にYouTube動画／Twitch配信を表示」をオフにした人の動画を全員のホームから除く
   // （/videos 等ホーム以外は forHome を渡さないので対象外。紐付けなし＝slug なしの旧データは残す）
-  if (options.forHome) {
-    const hidden = await getHomeHiddenUsers(db);
-    if (hidden.youtubeSlugs.size > 0 || hidden.twitchSlugs.size > 0) {
-      items = items.filter((v) => {
-        if (!v.slug) return true;
-        return !(v.platform === "youtube" ? hidden.youtubeSlugs : hidden.twitchSlugs).has(v.slug);
-      });
-    }
+  if (hidden && (hidden.youtubeSlugs.size > 0 || hidden.twitchSlugs.size > 0)) {
+    items = items.filter((v) => {
+      if (!v.slug) return true;
+      return !(v.platform === "youtube" ? hidden.youtubeSlugs : hidden.twitchSlugs).has(v.slug);
+    });
   }
 
   if (filters.platform) {

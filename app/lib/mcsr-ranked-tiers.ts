@@ -86,3 +86,10 @@ export function getRankTier(eloRate: number): RankTier {
     label: formatLabel(matched.key, matched.division),
   };
 }
+
+const TIER_KEY_ORDER: readonly RankTierKey[] = ["coal", "iron", "gold", "emerald", "diamond", "netherite"];
+
+/** 階級（サブディビジョン含む）の大小比較用の序数。大きいほど上位 */
+export function rankTierOrder(tier: RankTier): number {
+  return TIER_KEY_ORDER.indexOf(tier.key) * 4 + (tier.division ?? 0);
+}

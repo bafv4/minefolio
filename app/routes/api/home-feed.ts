@@ -3,20 +3,20 @@
 // CDNキャッシュ（s-maxage + stale-while-revalidate）でエッジ配信し、オリジン到達を最小化する。
 
 import type { Route } from "./+types/home-feed";
-import { createDb } from "@/lib/db";
+import { createDb, type Database } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
 import { fetchLiveRuns, type PaceManLiveRun } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
-import { getTwitchAppToken, getLiveStreams, type TwitchStream } from "@/lib/twitch";
+import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getCached, setCached } from "@/lib/cache";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getHomeHiddenUsers } from "@/lib/home-visibility.server";
 import { getUserData, pickUserDataForMcids, type McidUserMaps } from "@/lib/home-user-data.server";
 import { fetchRankedLiveMatches } from "@/lib/ranked-live.server";
-import type { RankedLiveMatch } from "@/lib/home-live";
+import type { HomeTwitchStream, RankedLiveMatch } from "@/lib/home-live";
 import { pacemanPaces } from "@/lib/schema";
 import { and, inArray, lt, sql } from "drizzle-orm";
-import type { FeedVideo } from "@/lib/feed-video";
+import { feedVideoKey, type FeedVideo } from "@/lib/feed-video";
 
 // キャッシュTTL設定（ミリ秒）
 const CACHE_TTL = {
@@ -37,11 +37,21 @@ const SPLIT_BEST_EXCLUDE_MS = 3 * 60 * 60 * 1000;
 function onePerRunner(videos: FeedVideo[]): FeedVideo[] {
   const seen = new Set<string>();
   return videos.filter((v) => {
-    const key = v.slug ?? `${v.platform}:${v.videoId}`;
+    const key = v.slug ?? feedVideoKey(v);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * 動画フィード（youtube-videos / twitch-vods）の取得。perRunner=1（ホーム呼び出し）では
+ * ホーム表示をオフにした人（forHome）を除き、同じ走者を新しい順の先頭1件に絞ってから切り出す
+ */
+async function getHomeFeedVideos(db: Database, url: URL, platform: "youtube" | "twitch"): Promise<FeedVideo[]> {
+  const forHome = url.searchParams.get("perRunner") === "1";
+  const feed = await getPublicVideoFeed(db, { platform }, { forHome });
+  return (forHome ? onePerRunner(feed) : feed).slice(0, HOME_FEED_VIDEO_LIMIT);
 }
 
 // CDNキャッシュヘッダー（秒）
@@ -60,22 +70,15 @@ const CDN_CACHE = {
 // 低トラフィック時でもオリジン（コールドスタート・DBアクセス）の遅延をユーザーに見せないためのもの
 const CDN_SWR_LONG = 24 * 60 * 60;
 
-// Twitchリンク一覧のキャッシュ
-interface TwitchLinkData {
-  identifier: string;
-  mcid: string | null;
-  uuid: string | null;
-  slug: string;
-  displayName: string | null;
-  discordAvatar: string | null;
-  customSkinUrl: string | null;
-}
+// Twitchリンク一覧のキャッシュ（形状を変えたら版数を上げる）
+const TWITCH_LINKS_CACHE_KEY = "home-feed:twitch-links:v2";
+type TwitchLinkData = Awaited<ReturnType<typeof getPublicTwitchLinks>>[number];
 interface TwitchLinkCache {
   links: TwitchLinkData[];
 }
 
 async function getCachedTwitchLinks(): Promise<TwitchLinkCache | null> {
-  return getCached<TwitchLinkCache>("home-feed:twitch-links");
+  return getCached<TwitchLinkCache>(TWITCH_LINKS_CACHE_KEY);
 }
 
 async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
@@ -83,7 +86,7 @@ async function fetchAndCacheTwitchLinks(): Promise<TwitchLinkCache> {
   const twitchLinks = await getPublicTwitchLinks();
 
   const data: TwitchLinkCache = { links: twitchLinks };
-  await setCached("home-feed:twitch-links", data, CACHE_TTL.TWITCH_LINKS);
+  await setCached(TWITCH_LINKS_CACHE_KEY, data, CACHE_TTL.TWITCH_LINKS);
   return data;
 }
 
@@ -111,7 +114,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   switch (feedType) {
     case "live-runs": {
       // 共通キャッシュキー（ユーザーに依存しない）
-      const cacheKey = "home-feed:live-runs:v2";
+      const cacheKey = "home-feed:live-runs:v3";
       // マップは liveRuns に出てくる mcid の分だけ（全公開ユーザー分を15秒ポーリングで再送しない）。
       // splitBests: 走者ごとの「同区間のベスト IGT」（蓄積ペース〈直近2か月〉内の最小。区間名 → ミリ秒）
       type LiveRunsCache = {
@@ -138,7 +141,15 @@ export async function loader({ request }: Route.LoaderArgs) {
           const mcid = run.nickname.toLowerCase();
           return registeredMcidSet.has(mcid) && !hidden.pacemanMcids.has(mcid);
         })
-        .slice(0, 20);
+        .slice(0, 20)
+        // 「ホーム画面にTwitch配信を表示」をオフにした人は「Twitch で見る」リンク・配信中の印の元（liveAccount）も消す
+        // （閲覧者非依存のままサーバー側で除外。mcid → slug は公開ユーザーのマップで引く）
+        .map((run) => {
+          const slug = userData.mcidToSlug[run.nickname.toLowerCase()];
+          return slug && hidden.twitchSlugs.has(slug) && run.user.liveAccount
+            ? { ...run, user: { ...run.user, liveAccount: null } }
+            : run;
+        });
 
       // 同区間ベスト（ライブ走者の分だけ。失敗しても比較を出さないだけで一覧は返す）
       const splitBests: Record<string, Record<string, number>> = {};
@@ -208,7 +219,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     case "ranked-live": {
       // MCSR Ranked の公開ライブ試合のうち Minefolio 登録者が出ているもの。ユーザー非依存・30秒キャッシュ
-      const cacheKey = "home-feed:ranked-live:v1";
+      const cacheKey = "home-feed:ranked-live:v2";
       const cached = await getCached<{ matches: RankedLiveMatch[] }>(cacheKey);
       if (cached) return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
 
@@ -226,7 +237,14 @@ export async function loader({ request }: Route.LoaderArgs) {
         return Response.json({ error: "mcid and runId are required" }, { status: 400 });
       }
 
-      const cacheKey = `home-feed:pace-timeline:${mcid.toLowerCase()}:${runId}`;
+      // 公開プロフィール（視聴者除外）として登録されている mcid だけ。それ以外は「存在しない」場合と同じ空の応答にして、
+      // 登録の有無（非公開・視聴者・未登録）を応答から判別できないようにする
+      const mcidKey = mcid.toLowerCase();
+      if (!(await getUserData()).registeredMcids.includes(mcidKey)) {
+        return jsonResponse({ timeline: [] }, CDN_CACHE.PACES, CDN_SWR_LONG);
+      }
+
+      const cacheKey = `home-feed:pace-timeline:${mcidKey}:${runId}`;
       const cached = await getCached<PaceTimelineEntry[]>(cacheKey);
       if (cached) {
         return jsonResponse({ timeline: cached }, CDN_CACHE.PACES, CDN_SWR_LONG);
@@ -246,16 +264,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
 
       // 共通キャッシュキー
-      const cacheKey = "home-feed:twitch:all";
-      type HomeTwitchStream = {
-        stream: TwitchStream;
-        mcid: string | null;
-        uuid: string | null;
-        slug: string;
-        displayName: string | null;
-        discordAvatar: string | null;
-        customSkinUrl: string | null;
-      };
+      const cacheKey = "home-feed:twitch:all:v2";
       type TwitchCache = { liveStreams: HomeTwitchStream[] };
 
       const cached = await getCached<TwitchCache>(cacheKey);
@@ -285,7 +294,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         twitchLinks.map((l) => [l.identifier.toLowerCase(), l])
       );
 
-      const liveStreams = streams.map((stream) => {
+      const liveStreams = streams.map((stream): HomeTwitchStream => {
         const link = twitchLinkByIdentifier.get(stream.user_login.toLowerCase());
         return {
           stream,
@@ -293,6 +302,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           uuid: link?.uuid ?? null,
           slug: link?.slug ?? "",
           displayName: link?.displayName ?? null,
+          displayNameAlphabet: link?.displayNameAlphabet ?? null,
           discordAvatar: link?.discordAvatar ?? null,
           customSkinUrl: link?.customSkinUrl ?? null,
         };
@@ -309,12 +319,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       // /videos と同一の getPublicVideoFeed に委譲し、twitch-vods と同じ FeedVideo 形式で返す
       // perRunner=1（ホーム）: 同じ走者の動画は新しい順の先頭1本に絞ってから切り出す
       // perRunner=1（ホーム呼び出し）では showYoutubeOnHome=false の人の動画を除く
-      const isHomeYt = url.searchParams.get("perRunner") === "1";
-      const ytFeed = await getPublicVideoFeed(createDb(), { platform: "youtube" }, { forHome: isHomeYt });
-      const recentVideos = (isHomeYt ? onePerRunner(ytFeed) : ytFeed).slice(
-        0,
-        HOME_FEED_VIDEO_LIMIT,
-      );
+      const recentVideos = await getHomeFeedVideos(createDb(), url, "youtube");
 
       // 0件は、動画公開・障害復旧で即変わり得るため短TTLで返す
       // （長TTL+SWRだと空状態がエッジに最大1日残ってしまう）
@@ -329,12 +334,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       // キャッシュテーブル（twitch_vod_cache。Cronが30分毎に更新）から取得
       // perRunner=1（ホーム「最近配信した人」）: 1人1行にするため、人ごとの最新1件に絞ってから切り出す
       // perRunner=1（ホーム呼び出し）では showTwitchOnHome=false の人のVODを除く
-      const isHomeTw = url.searchParams.get("perRunner") === "1";
-      const twFeed = await getPublicVideoFeed(createDb(), { platform: "twitch" }, { forHome: isHomeTw });
-      const recentVods = (isHomeTw ? onePerRunner(twFeed) : twFeed).slice(
-        0,
-        HOME_FEED_VIDEO_LIMIT,
-      );
+      const recentVods = await getHomeFeedVideos(createDb(), url, "twitch");
 
       // 空状態はVOD公開・障害復旧で即変わり得るため短TTL（youtube-videos と同じ方針）
       if (recentVods.length === 0) {

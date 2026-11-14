@@ -1,20 +1,25 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
+import type { Translator } from "@/lib/messages";
 import { cn } from "@/lib/utils";
-import { pickDisplayName } from "@/lib/slug";
+import { getLocalizedDisplayName } from "@/lib/slug";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
 import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { formatClock } from "@/lib/home-format";
 import type { FeaturedReason, FeaturedRunner } from "@/lib/home-featured";
 import { ArrowRight, Sparkles, Shuffle, Trophy, Video, TrendingUp } from "lucide-react";
 
-type Translate = ReturnType<typeof useT>;
+/** 主要操作・ホットバーのキーチップの見た目（クラス共通化はしない。見た目は ui.md「キーバッジ」と同系統） */
+const KEY_CHIP_CLASS =
+  "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1.5 font-mono text-sm font-semibold text-muted-foreground @[35rem]:px-1 @[35rem]:text-xs";
+const HOTBAR_CHIP_CLASS =
+  "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-sm @[35rem]:text-xs font-semibold text-muted-foreground";
 
-function reasonText(t: Translate, reason: FeaturedReason): string {
+function reasonText(t: Translator, reason: FeaturedReason): string {
   switch (reason.type) {
     case "speedruncom":
     {
@@ -57,10 +62,7 @@ function KeyChip({ k }: { k: FeaturedRunner["keys"][number] }) {
       <span className="max-w-full break-words text-center text-[10px] leading-tight text-muted-foreground">
         {getActionLabel(t, k.action)}
       </span>
-      <span
-        title={label}
-        className="inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1.5 font-mono text-sm font-semibold text-muted-foreground @[35rem]:px-1 @[35rem]:text-xs"
-      >
+      <span title={label} className={KEY_CHIP_CLASS}>
         <span className="truncate">{label}</span>
       </span>
     </li>
@@ -84,13 +86,7 @@ function HotbarRow({ hotbar }: { hotbar: FeaturedRunner["hotbar"] }) {
           const title = k ? label : undefined;
           return (
             <li key={i} className="flex min-w-0 flex-col items-center">
-              <span
-                title={title}
-                className={cn(
-                  "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-sm @[35rem]:text-xs font-semibold text-muted-foreground",
-                  !k && "opacity-50",
-                )}
-              >
+              <span title={title} className={cn(HOTBAR_CHIP_CLASS, !k && "opacity-50")}>
                 <span className="truncate">{label}</span>
               </span>
             </li>
@@ -125,24 +121,15 @@ export function FeaturedRunnerCard({
   const [announce, setAnnounce] = useState("");
   const prevSlugRef = useRef<string | null>(null);
 
-  const show = useCallback(
-    (runner: FeaturedRunner) => {
-      setCurrent((cur) => {
-        prevSlugRef.current = cur?.slug ?? null;
-        return runner;
-      });
-      setAnnounce(
-        t("home.featuredAnnounce", {
-          name: pickDisplayName(runner, locale) || runner.mcid || runner.slug,
-        }),
-      );
-    },
-    [t, locale],
-  );
+  const show = (runner: FeaturedRunner) => {
+    prevSlugRef.current = current?.slug ?? null;
+    setCurrent(runner);
+    setAnnounce(t("home.featuredAnnounce", { name: getLocalizedDisplayName(runner, locale) }));
+  };
 
   const navigate = useNavigate();
 
-  const handleNext = useCallback(async () => {
+  const handleNext = async () => {
     if (loading) return;
     // 1) 直近7日の出来事の候補を点数順に順番に出す
     if (candidateIndex + 1 < candidates.length) {
@@ -167,7 +154,7 @@ export function FeaturedRunnerCard({
     } finally {
       setLoading(false);
     }
-  }, [loading, candidateIndex, candidates, current?.slug, show]);
+  };
 
   // 「別の走者」を Alt(Option) キー押下中にクリックすると隠しページへ（旧「ランダムで見る」から移設）。
   // Shift(新規ウィンドウ)/Ctrl・Cmd(新規タブ)やテキスト選択と競合しない Alt を使う
@@ -208,7 +195,7 @@ export function FeaturedRunnerCard({
     );
   }
 
-  const name = pickDisplayName(current, locale) || current.mcid || current.slug;
+  const name = getLocalizedDisplayName(current, locale);
   const sensitivity =
     current.sensitivityPercent != null
       ? current.cm180 != null
@@ -270,69 +257,66 @@ export function FeaturedRunnerCard({
         </div>
 
         <div className={cn(wide && "lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8")}>
-        <div className="flex items-center gap-4">
-          <MinecraftAvatar
-            uuid={current.uuid}
-            skinUrl={current.customSkinUrl}
-            mcid={current.mcid}
-            size={64}
-            className="shrink-0 rounded-xl"
-          />
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className="truncate text-lg font-bold leading-snug">
-              <Link
-                to={`/player/${current.slug}`}
-                prefetch="intent"
-                className="rounded-sm after:absolute after:inset-0 after:z-0 after:rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {name}
-              </Link>
-            </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              {isCategoryKey(current.mainCategory) && (
-                <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-                  {categoryLabel(t, current.mainCategory)}
-                </Badge>
-              )}
-              {current.pbMs != null && (
-                <span className="font-mono text-sm font-semibold tabular-nums">
-                  <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
-                  {formatClock(current.pbMs)}
-                </span>
-              )}
-              {sensitivity && (
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</span>
-              )}
+          <div className="flex items-center gap-4">
+            <MinecraftAvatar
+              uuid={current.uuid}
+              skinUrl={current.customSkinUrl}
+              mcid={current.mcid}
+              size={64}
+              className="shrink-0 rounded-xl"
+            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="truncate text-lg font-bold leading-snug">
+                <Link
+                  to={`/player/${current.slug}`}
+                  prefetch="intent"
+                  className="rounded-sm after:absolute after:inset-0 after:z-0 after:rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {name}
+                </Link>
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                {isCategoryKey(current.mainCategory) && (
+                  <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
+                    {categoryLabel(t, current.mainCategory)}
+                  </Badge>
+                )}
+                {current.pbMs != null && (
+                  <span className="font-mono text-sm font-semibold tabular-nums">
+                    <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
+                    {formatClock(current.pbMs)}
+                  </span>
+                )}
+                {sensitivity && (
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* 主要9操作とホットバー1〜9のキー。キー配置が無い人はそれぞれ行ごと出さない */}
-        {(current.keys.length > 0 || current.hotbar.length > 0) && (
-          <div
-            className={cn(
-              "@container mt-3 space-y-3 border-t border-border/60 pt-3",
-              wide && "lg:mt-0 lg:w-[38rem] lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8",
-            )}
-          >
-            {current.keys.length > 0 && (
-              <ul
-                aria-label={t("home.featuredKeysLabel")}
-                className={cn(
+          {/* 主要9操作とホットバー1〜9のキー。キー配置が無い人はそれぞれ行ごと出さない */}
+          {(current.keys.length > 0 || current.hotbar.length > 0) && (
+            <div
+              className={cn(
+                "@container mt-3 space-y-3 border-t border-border/60 pt-3",
+                wide && "lg:mt-0 lg:w-[38rem] lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8",
+              )}
+            >
+              {current.keys.length > 0 && (
+                <ul
+                  aria-label={t("home.featuredKeysLabel")}
                   // 列数はカード（キー領域）の幅で決める。9列（ホットバーと列を揃える）には約35rem 要る
-                  "grid grid-cols-3 gap-x-1 gap-y-2.5 @[26rem]:grid-cols-5 @[35rem]:grid-cols-9",
-                )}
-              >
-                {current.keys.map((k) => (
-                  <KeyChip key={k.action} k={k} />
-                ))}
-              </ul>
-            )}
-            {current.hotbar.length > 0 && <HotbarRow hotbar={current.hotbar} />}
-          </div>
-        )}
+                  className="grid grid-cols-3 gap-x-1 gap-y-2.5 @[26rem]:grid-cols-5 @[35rem]:grid-cols-9"
+                >
+                  {current.keys.map((k) => (
+                    <KeyChip key={k.action} k={k} />
+                  ))}
+                </ul>
+              )}
+              {current.hotbar.length > 0 && <HotbarRow hotbar={current.hotbar} />}
+            </div>
+          )}
         </div>
-
       </div>
 
       {/* 切り替え後に新しい走者の名前を読み上げる */}

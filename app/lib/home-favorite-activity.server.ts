@@ -2,7 +2,7 @@
 // ログイン済みはサーバーのお気に入り、未ログインはブラウザのお気に入り（POST 本文の slug）を呼び出し側が渡す。
 // 対象は公開プロフィール（視聴者除外）のみ。各種別を1クエリずつ（お気に入りの userId 群に対して）取得する。
 
-import { and, desc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import type { Database } from "./db";
 import {
   users,
@@ -13,9 +13,13 @@ import {
   rankedEloSnapshots,
   configHistory,
 } from "./schema";
-import { getRankTier, type RankTier } from "./mcsr-ranked-tiers";
+import { getRankTier, rankTierOrder, type RankTier } from "./mcsr-ranked-tiers";
 import { parseRunIdList } from "./run-id-list";
-import { excludeViewersCondition } from "./users-filter";
+import { isRankedStatsVisible, listedRunnerCondition } from "./users-filter";
+import { isHiddenOnHome } from "./home-visibility.server";
+import { publicConfigChangeCondition } from "./config-history";
+import { groupByUserId } from "./group-by-user";
+import { toUtcDateString } from "./time-utils";
 import { getPublicVideoFeed } from "./videos-feed.server";
 import { getPaceRetentionStart } from "./paceman-cache";
 import { splitStage } from "./home-live";
@@ -28,21 +32,8 @@ import {
   FAVORITE_SLUGS_MAX,
 } from "./home-favorite-activity-shared";
 
-export { FAVORITE_SLUGS_MAX };
-
 /** rankedEloSnapshots は期間より前の基準を探すため、この日数ぶん余分に遡って読む */
 const SNAPSHOT_LOOKBACK_DAYS = 14;
-
-/** UTC の日付キー（YYYY-MM-DD） */
-function utcDateKey(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-const TIER_KEY_ORDER = ["coal", "iron", "gold", "emerald", "diamond", "netherite"] as const;
-/** 階級（division 含む）の大小比較用の数値 */
-function tierOrder(tier: RankTier): number {
-  return TIER_KEY_ORDER.indexOf(tier.key) * 4 + (tier.division ?? 0);
-}
 
 export type FavoriteActivityKind =
   | "pace"
@@ -55,7 +46,7 @@ export type FavoriteActivityKind =
   | "settings";
 
 /** settings の label に入る config_history.change_type */
-export type FavoriteSettingsChangeType = "keybinding" | "device" | "game_setting" | "remap" | "preset_switch";
+export type FavoriteSettingsChangeType = (typeof configHistory.changeType.enumValues)[number];
 
 /** 変更履歴の種別ごとの遷移先プロフィールタブ */
 const SETTINGS_TAB: Record<FavoriteSettingsChangeType, string> = {
@@ -103,6 +94,14 @@ export interface FavoriteActivityOptions {
   now?: number;
 }
 
+/** 1人あたりの件数上限を消費する。上限に達していれば false（消費しない） */
+function takeQuota(counts: Map<string, number>, id: string, max: number): boolean {
+  const used = counts.get(id) ?? 0;
+  if (used >= max) return false;
+  counts.set(id, used + 1);
+  return true;
+}
+
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(value)));
@@ -121,7 +120,7 @@ export function clampFavoriteActivityOptions(raw: { windowDays?: unknown; limit?
 
 export async function getFavoriteActivity(
   db: Database,
-  slugs: string[],
+  slugs: readonly unknown[],
   options: FavoriteActivityOptions = {},
 ): Promise<FavoriteActivityResult> {
   const now = options.now ?? Date.now();
@@ -130,11 +129,11 @@ export async function getFavoriteActivity(
   const wide = limit > FAVORITE_ACTIVITY_LIMIT;
   const perPersonPaceMax = wide ? 5 : 2;
   // 新種別の1人あたり上限（ホームは控えめ、一覧は緩め）
-  const perPersonMax = { tierUp: wide ? 3 : 1, srcSubmit: wide ? 3 : 1, settings: wide ? 3 : 1 };
-  const unique = [...new Set(slugs.filter((s) => typeof s === "string" && s.length > 0 && s.length <= 100))].slice(
-    0,
-    FAVORITE_SLUGS_MAX,
-  );
+  const perPersonNewKindMax = wide ? 3 : 1;
+  // クライアント由来の値なので unknown として受け、ここで検証する（文字列・長さ・重複・上限）
+  const unique = [
+    ...new Set(slugs.filter((s): s is string => typeof s === "string" && s.length > 0 && s.length <= 100)),
+  ].slice(0, FAVORITE_SLUGS_MAX);
   if (unique.length === 0) return { favoritesCount: 0, items: [] };
 
   const people = await db
@@ -152,7 +151,7 @@ export async function getFavoriteActivity(
       hiddenSpeedrunRecords: users.hiddenSpeedrunRecords,
     })
     .from(users)
-    .where(and(inArray(users.slug, unique), eq(users.profileVisibility, "public"), excludeViewersCondition));
+    .where(and(inArray(users.slug, unique), listedRunnerCondition));
   if (people.length === 0) return { favoritesCount: 0, items: [] };
 
   const since = new Date(now - windowDays * DAY_MS);
@@ -168,9 +167,9 @@ export async function getFavoriteActivity(
     customSkinUrl: p.customSkinUrl,
   });
 
-  const sinceDate = utcDateKey(since.getTime());
+  const sinceDate = toUtcDateString(since);
   // Ranked 系は「Ranked 統計を表示しない」人を除く（プロフィールの Ranked 表示と同じ条件）
-  const rankedIds = people.filter((p) => p.showRankedStats !== false).map((p) => p.id);
+  const rankedIds = people.filter(isRankedStatsVisible).map((p) => p.id);
 
   const [paceRows, guideRows, videos, rankedPbRows, snapshotRows, srcRows, historyRows] = await Promise.all([
     db
@@ -185,7 +184,7 @@ export async function getFavoriteActivity(
       .where(
         and(
           inArray(pacemanPaces.userId, ids),
-          ne(pacemanPaces.timeline, "Enter Nether"),
+          eq(pacemanPaces.isNetherEnter, false),
           gte(pacemanPaces.date, new Date(Math.max(since.getTime(), getPaceRetentionStart().getTime()))),
         ),
       )
@@ -227,7 +226,7 @@ export async function getFavoriteActivity(
           .where(
             and(
               inArray(rankedEloSnapshots.userId, rankedIds),
-              gte(rankedEloSnapshots.snapshotDate, utcDateKey(since.getTime() - SNAPSHOT_LOOKBACK_DAYS * DAY_MS)),
+              gte(rankedEloSnapshots.snapshotDate, toUtcDateString(new Date(since.getTime() - SNAPSHOT_LOOKBACK_DAYS * DAY_MS))),
             ),
           )
           .orderBy(rankedEloSnapshots.snapshotDate)
@@ -260,13 +259,22 @@ export async function getFavoriteActivity(
     db
       .select({ userId: configHistory.userId, changeType: configHistory.changeType, createdAt: configHistory.createdAt })
       .from(configHistory)
-      .where(and(inArray(configHistory.userId, ids), gte(configHistory.createdAt, since)))
+      // 公開面に影響した変更（メインプリセットへの切替・メイン＝編集中の公開設定の保存）だけ
+      .where(and(inArray(configHistory.userId, ids), gte(configHistory.createdAt, since), publicConfigChangeCondition()))
       .orderBy(desc(configHistory.createdAt))
       .limit(Math.max(300, limit * 10))
       .catch(() => []),
   ]);
 
   const items: FavoriteActivityItem[] = [];
+  /** 1件追加する。label / timeMs / runId / dateOnly の既定値は「なし」 */
+  const push = (
+    p: (typeof people)[number],
+    item: Pick<FavoriteActivityItem, "kind" | "at" | "href"> &
+      Partial<Pick<FavoriteActivityItem, "label" | "timeMs" | "runId" | "dateOnly">>,
+  ) => {
+    items.push({ ...base(p), label: null, timeMs: null, runId: null, dateOnly: false, ...item });
+  };
 
   // ペース: 同じランは最も進んだ区間だけ。1人あたり2件まで
   const bestPerRun = new Map<string, (typeof paceRows)[number]>();
@@ -282,20 +290,9 @@ export async function getFavoriteActivity(
   for (const r of [...bestPerRun.values()].sort((a, b) => b.date.getTime() - a.date.getTime())) {
     const p = byId.get(r.userId as string);
     if (!p) continue;
-    if (p.showPacemanOnHome === false) continue; // 「ホーム画面にPaceManのペースを表示」オフの人は全員のホームから除く
-    const c = paceCount.get(p.id) ?? 0;
-    if (c >= perPersonPaceMax) continue;
-    paceCount.set(p.id, c + 1);
-    items.push({
-      ...base(p),
-      kind: "pace",
-      at: r.date.getTime(),
-      href: `/player/${p.slug}`,
-      label: r.timeline,
-      timeMs: r.rta,
-      runId: r.runId,
-      dateOnly: false,
-    });
+    if (isHiddenOnHome(p, "paceman")) continue; // 「ホーム画面にPaceManのペースを表示」オフの人は全員のホームから除く
+    if (!takeQuota(paceCount, p.id, perPersonPaceMax)) continue;
+    push(p, { kind: "pace", at: r.date.getTime(), href: `/player/${p.slug}`, label: r.timeline, timeMs: r.rta, runId: r.runId });
   }
 
   for (const v of videos) {
@@ -303,102 +300,51 @@ export async function getFavoriteActivity(
     if (at < since.getTime()) break;
     const p = v.slug ? bySlug.get(v.slug) : null;
     if (!p) continue;
-    items.push({
-      ...base(p),
-      kind: "video",
-      at,
-      href: `/player/${p.slug}`,
-      label: v.title,
-      timeMs: null,
-      runId: null,
-      dateOnly: false,
-    });
+    push(p, { kind: "video", at, href: `/player/${p.slug}`, label: v.title });
   }
 
   for (const g of guideRows) {
     const p = byId.get(g.authorId);
     if (!p) continue;
-    items.push({
-      ...base(p),
-      kind: "guide",
-      at: g.updatedAt.getTime(),
-      href: `/guides/${p.slug}/${g.slug}`,
-      label: g.title,
-      timeMs: null,
-      runId: null,
-      dateOnly: false,
-    });
+    push(p, { kind: "guide", at: g.updatedAt.getTime(), href: `/guides/${p.slug}/${g.slug}`, label: g.title });
   }
 
   for (const p of people) {
     if (p.updatedAt.getTime() < since.getTime()) continue;
-    items.push({
-      ...base(p),
-      kind: "profile",
-      at: p.updatedAt.getTime(),
-      href: `/player/${p.slug}`,
-      label: null,
-      timeMs: null,
-      runId: null,
-      dateOnly: false,
-    });
+    push(p, { kind: "profile", at: p.updatedAt.getTime(), href: `/player/${p.slug}` });
   }
 
   // 日付だけ分かる出来事の時刻: その UTC 日の正午（now は超えない）
   const dateOnlyAt = (date: string): number => Math.min(now, Date.parse(`${date}T12:00:00Z`));
 
   // Ranked のレート帯 UP: 基準（期間前の最新、無ければ期間内の最初）から見て、最高階級を更新した日だけ。到達階級を1日1件
-  const snapsByUser = new Map<string, { date: string; elo: number }[]>();
-  for (const s of snapshotRows) {
-    const list = snapsByUser.get(s.userId);
-    if (list) list.push(s);
-    else snapsByUser.set(s.userId, [s]);
-  }
-  for (const [userId, snaps] of snapsByUser) {
+  for (const [userId, snaps] of groupByUserId(snapshotRows)) {
     const p = byId.get(userId);
     if (!p) continue;
     const before = snaps.filter((s) => s.date < sinceDate);
     const inWindow = snaps.filter((s) => s.date >= sinceDate);
     const baseline = before.length > 0 ? before[before.length - 1] : inWindow[0];
     if (!baseline) continue;
-    let best = tierOrder(getRankTier(baseline.elo));
+    let best = rankTierOrder(getRankTier(baseline.elo));
     const ups: { date: string; tier: RankTier }[] = [];
     for (const s of inWindow) {
       if (s === baseline) continue;
       const tier = getRankTier(s.elo);
-      const order = tierOrder(tier);
+      const order = rankTierOrder(tier);
       if (order > best) {
         best = order;
         ups.push({ date: s.date, tier });
       }
     }
-    for (const u of ups.reverse().slice(0, perPersonMax.tierUp)) {
-      items.push({
-        ...base(p),
-        kind: "rankTierUp",
-        at: dateOnlyAt(u.date),
-        href: `/player/${p.slug}?tab=stats`,
-        label: u.tier.label,
-        timeMs: null,
-        runId: null,
-        dateOnly: true,
-      });
+    for (const u of ups.reverse().slice(0, perPersonNewKindMax)) {
+      push(p, { kind: "rankTierUp", at: dateOnlyAt(u.date), href: `/player/${p.slug}?tab=stats`, label: u.tier.label, dateOnly: true });
     }
   }
 
   for (const r of rankedPbRows) {
     const p = byId.get(r.userId);
     if (!p || !r.recordDate || r.timeMs == null) continue;
-    items.push({
-      ...base(p),
-      kind: "rankedPb",
-      at: dateOnlyAt(r.recordDate),
-      href: `/player/${p.slug}?tab=stats`,
-      label: null,
-      timeMs: r.timeMs,
-      runId: null,
-      dateOnly: true,
-    });
+    push(p, { kind: "rankedPb", at: dateOnlyAt(r.recordDate), href: `/player/${p.slug}?tab=stats`, timeMs: r.timeMs, dateOnly: true });
   }
 
   // speedrun.com への申請: オーナーが非表示にした run はプロフィールの審査中カードにも出ないので除く
@@ -408,18 +354,13 @@ export async function getFavoriteActivity(
     const p = byId.get(r.userId);
     if (!p || r.timeMs == null) continue;
     if (r.runId && hiddenByUser.get(p.id)?.has(r.runId)) continue;
-    const c = srcCount.get(p.id) ?? 0;
-    if (c >= perPersonMax.srcSubmit) continue;
-    srcCount.set(p.id, c + 1);
-    items.push({
-      ...base(p),
+    if (!takeQuota(srcCount, p.id, perPersonNewKindMax)) continue;
+    push(p, {
       kind: "srcSubmit",
       at: Math.min(now, r.createdAt.getTime()),
       href: `/player/${p.slug}?tab=stats&srcPending=1`,
       label: r.categoryName ?? null,
       timeMs: r.timeMs,
-      runId: null,
-      dateOnly: false,
     });
   }
 
@@ -429,21 +370,15 @@ export async function getFavoriteActivity(
   for (const h of historyRows) {
     const p = byId.get(h.userId);
     if (!p) continue;
-    const key = `${h.userId}:${utcDateKey(h.createdAt.getTime())}:${h.changeType}`;
+    const key = `${h.userId}:${toUtcDateString(h.createdAt)}:${h.changeType}`;
     if (seenSettings.has(key)) continue;
     seenSettings.add(key);
-    const c = settingsCount.get(p.id) ?? 0;
-    if (c >= perPersonMax.settings) continue;
-    settingsCount.set(p.id, c + 1);
-    items.push({
-      ...base(p),
+    if (!takeQuota(settingsCount, p.id, perPersonNewKindMax)) continue;
+    push(p, {
       kind: "settings",
       at: Math.min(now, h.createdAt.getTime()),
       href: `/player/${p.slug}?tab=${SETTINGS_TAB[h.changeType]}`,
       label: h.changeType,
-      timeMs: null,
-      runId: null,
-      dateOnly: false,
     });
   }
 

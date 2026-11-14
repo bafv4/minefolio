@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
-import { cn } from "@/lib/utils";
 
 /**
  * ホームの欄の共通枠。`section` + `aria-labelledby`（h2）でランドマークにし、見出しには
@@ -16,7 +15,6 @@ export function HomeSection({
   badge,
   viewAllTo,
   action,
-  className,
   children,
 }: {
   /** h2 の id 接頭辞（aria-labelledby 用。ページ内で一意） */
@@ -27,7 +25,6 @@ export function HomeSection({
   badge?: ReactNode;
   viewAllTo?: string;
   action?: ReactNode;
-  className?: string;
   children: ReactNode;
 }) {
   const t = useT();
@@ -35,7 +32,7 @@ export function HomeSection({
   return (
     <section
       aria-labelledby={headingId}
-      className={cn("space-y-4 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6", className)}
+      className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="rounded-xl bg-primary/10 p-2">{icon}</div>

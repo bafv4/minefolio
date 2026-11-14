@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { formatClock } from "@/lib/home-format";
 import {
   Dialog,
   DialogContent,
@@ -15,14 +16,6 @@ import { ExternalLink, Loader2 } from "lucide-react";
 
 interface PaceTimelineResponse {
   timeline: PaceTimelineEntry[];
-}
-
-// ミリ秒を "m:ss" 形式に変換
-export function formatRunTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 /** PaceMan ランの全スプリット一覧モーダル（ペースカード・お気に入りの動きで共用） */
@@ -57,7 +50,11 @@ export function PaceTimelineModal({
     let cancelled = false;
     setState({ status: "loading", entries: [] });
     fetch(`/api/home-feed?type=pace-timeline&mcid=${encodeURIComponent(mcid)}&runId=${runId}`)
-      .then((res) => res.json() as Promise<PaceTimelineResponse>)
+      .then((res) => {
+        // HTTP エラーを「タイムラインなし」と取り違えない（catch でエラー表示にする）
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<PaceTimelineResponse>;
+      })
       .then((data) => {
         if (cancelled) return;
         setState({ status: "done", entries: data.timeline || [] });
@@ -115,7 +112,7 @@ export function PaceTimelineModal({
                       )}
                     >
                       <span className="text-sm font-medium">{entry.timeline}</span>
-                      <span className="font-mono text-sm font-semibold">{formatRunTime(entry.rta)}</span>
+                      <span className="font-mono text-sm font-semibold">{formatClock(entry.rta)}</span>
                     </div>
                   </div>
                 );
