@@ -302,7 +302,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // cm/360分布（参考: mchotkeys のcm/180を2倍）
+  // 振り向き（cm/180°）分布。playerConfigs.cm360 は列名に反して 180° 分の距離
   const cm360Distribution: Record<string, number> = {};
   const cm360Ranges = [
     { label: binUpTo("10cm"), min: 0, max: 9 },
@@ -832,7 +832,7 @@ export default function StatsPage() {
               }
             />
             <DistributionCard
-              title="cm/360"
+              title="cm/180°"
               distribution={mouseStats.cm360Distribution}
             />
             <BooleanStatCard

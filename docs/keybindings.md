@@ -237,10 +237,10 @@ export const UNBOUND_KEY = "_UNBOUND";
 | windowsSpeedMultiplier | real (nullable) | 独自乗数（設定時はwindowsSpeedより優先） |
 | mouseAcceleration | boolean | マウス加速（デフォルト: false） |
 | rawInput | boolean | Raw Input（デフォルト: true） |
-| cm360 | real (nullable) | 振り向き距離（cm/360度） |
+| cm360 | real (nullable) | 振り向き距離。列名は cm360 だが、値は 180° 振り向く距離（cm/180°） |
 | mouseModel | text (nullable) | マウスモデル名 |
 
-### 振り向き計算式 (cm/360)
+### 振り向き計算式（cm/180°。関数名は calculateCm360）
 
 ```
 f = 0.6 * sensitivity + 0.2
@@ -446,7 +446,7 @@ type ControllerSettings = {
 - 対象ユーザー: 設定登録済みの全公開ユーザー（デフォルト）または個別指定（検索 UI）
 - API: `GET /api/keybindings-csv?sections=...&userSlugs=...`（`userSlugs` は任意、未指定なら全ユーザー）
 - キーバインドは各プレイヤーのキーボード配列に応じた表示ラベルで出力
-- `mouse` セクションの `cm/360` `Cursor Speed` は一覧と同じ計算関数（`calculateCm360` / `calculateCursorSpeed`）に統一されており、計算できない場合は空欄。`Win Sens Multiplier` 列も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` 列は有効範囲外の値も含め生データをそのまま出力する
+- `mouse` セクションの `cm/180°` `Cursor Speed` は一覧と同じ計算関数（`calculateCm360` / `calculateCursorSpeed`）に統一されており、計算できない場合は空欄。`Win Sens Multiplier` 列も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` 列は有効範囲外の値も含め生データをそのまま出力する
 
 ---
 
