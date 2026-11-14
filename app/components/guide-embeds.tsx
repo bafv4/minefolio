@@ -14,7 +14,7 @@ import {
   type ResolvedLoopStep,
 } from "@/lib/search-craft-loops";
 import { resolveVariations, type SearchCraftVariation } from "@/lib/search-craft-variations";
-import { VirtualKeyboard, keybindingsToMap } from "@/components/virtual-keyboard";
+import { VirtualKeyboard, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
   SearchStringText,
   ShiftKeyGroup,
@@ -226,6 +226,10 @@ export function KeybindEmbedView({
     }
   }
   const fingerAssignments = parseFingerAssignments(fingerAssignmentsJson);
+  // 指割り当てが1件も無い（キーボードに指色が出ない）場合は凡例を出さない
+  const hasFingerAssignments = Object.values(fingerAssignments).some(
+    (f) => Array.isArray(f) && f.length > 0,
+  );
 
   if (remaps.length === 0) {
     return (
@@ -260,6 +264,8 @@ export function KeybindEmbedView({
             hideNumpad
           />
         </div>
+        {/* 凡例は横スクロール領域の外に置く（狭い幅でキーボードと一緒に左へ流れて見えなくならないように） */}
+        {hasFingerAssignments && <FingerLegend className="px-4 pb-4" />}
       </div>
     </div>
   );
