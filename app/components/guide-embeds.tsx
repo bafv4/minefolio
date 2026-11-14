@@ -22,6 +22,7 @@ import {
   timingLabelById,
 } from "@/components/search-craft-template-view";
 import { KeyLabelText } from "@/components/shift-mark";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr } from "@/lib/guide-embed-attrs";
@@ -248,11 +249,20 @@ export function KeybindEmbedView({
             {presetName && <span className="text-muted-foreground ml-2">({presetName})</span>}
             {" — "}{t("playerProfile.remapTab")}
           </span>
-          <Link to={`/player/${userData.slug}`} className="text-xs text-primary hover:underline">
+          {/* 文字サイズは据え置きで、padding＋負マージンによりヘッダー高さを変えずに当たり判定だけ約40pxへ広げる */}
+          <Link
+            to={`/player/${userData.slug}`}
+            className="-mx-2 -my-3 inline-flex items-center px-2 py-3 text-xs text-primary hover:underline"
+          >
             {t("playerProfile.viewProfile")}
           </Link>
         </div>
-        <div className="custom-scrollbar p-4 overflow-x-auto">
+        {/* フェード・ヒントは bg-card 想定で、この埋め込みカードの背景（bg-card）と一致。ヒントは左右余白に揃える */}
+        <HorizontalScrollArea
+          className="p-4"
+          wrapperClassName="[&>p]:px-4 [&>p]:pt-3"
+          showHint
+        >
           <VirtualKeyboard
             layout={keyboardLayout}
             keybindings={keybindingsToMap(keybindingsRaw)}
@@ -263,7 +273,7 @@ export function KeybindEmbedView({
             alwaysShowActions={["chat"]}
             hideNumpad
           />
-        </div>
+        </HorizontalScrollArea>
         {/* 凡例は横スクロール領域の外に置く（狭い幅でキーボードと一緒に左へ流れて見えなくならないように） */}
         {hasFingerAssignments && <FingerLegend className="px-4 pb-4" />}
       </div>
