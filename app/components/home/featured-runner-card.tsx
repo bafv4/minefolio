@@ -273,6 +273,17 @@ export function FeaturedKeys({ runner, className }: { runner: FeaturedRunner; cl
       )}
       {/* ホットバーが無い走者も9スロット（未割り当ては「-」）で描き、切り替え時にカードの高さが跳ねないようにする */}
       <HotbarRow hotbar={runner.hotbar} />
+      {/* 操作設定一覧への動線。ワイドカードではカード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
+      <div className="flex justify-end">
+        <Link
+          to="/keybindings"
+          prefetch="intent"
+          className="relative z-10 -my-3 inline-flex items-center gap-0.5 rounded-sm py-3.5 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("home.featuredSeeAllKeybindings")}
+          <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 }

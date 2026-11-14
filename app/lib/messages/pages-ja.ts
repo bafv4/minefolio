@@ -424,6 +424,7 @@ export const PAGES_JA = {
     featuredReasonSpeedruncomVerified: "speedrun.com で {time} が承認",
     featuredReasonSpeedruncomVerifiedCategory: "speedrun.com で {category} {time} が承認",
     featuredPendingLink: "審査中の記録を見る",
+    featuredSeeAllKeybindings: "みんなの操作設定を見る",
     featuredReasonRankedPb: "Ranked で PB 更新 {time}",
     featuredReasonEloGain: "Ranked のレート +{gain}（7日間）",
     featuredReasonVideo: "新しい動画を公開",

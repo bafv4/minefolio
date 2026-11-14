@@ -423,6 +423,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     featuredReasonSpeedruncomVerified: "{time} verified on speedrun.com",
     featuredReasonSpeedruncomVerifiedCategory: "{category} {time} verified on speedrun.com",
     featuredPendingLink: "View pending runs",
+    featuredSeeAllKeybindings: "Browse everyone's controls",
     featuredReasonRankedPb: "New Ranked PB {time}",
     featuredReasonEloGain: "Ranked rating +{gain} (7 days)",
     featuredReasonVideo: "Published a new video",
