@@ -872,6 +872,26 @@ body {
 .guide-content.prose {
   font-size: 1rem;
   line-height: 1.65;
+  /* Tailwind Typography の配色をテーマトークンへ割り当てる（prose-invert / dark: は使わない。
+     3 テーマ（light / dark / ultra-dark）はトークン側で吸収する） */
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
 }
 
 /* 本文の行長制限（max-width + 中央寄せ）は設けない。一度 65ch → 36rem 固定カラムを
@@ -1020,8 +1040,8 @@ body {
 }
 
 .guide-content.prose :where(code):not(pre code) {
-  background: oklch(0.96 0.005 250);
-  color: oklch(0.5 0.12 255);
+  background: var(--muted);
+  color: var(--foreground);
   padding: 0.15em 0.4em;
   border-radius: 0.25em;
   font-size: 0.875em;
@@ -1030,21 +1050,13 @@ body {
   white-space: pre-wrap;
 }
 
-:is(.dark, .ultra-dark) .guide-content.prose :where(code):not(pre code) {
-  background: oklch(0.25 0.02 250);
-  color: oklch(0.72 0.12 255);
-}
-
 .guide-content.prose :where(pre) {
   position: relative;
-  background: oklch(0.96 0.005 250);
+  background: var(--muted);
+  color: var(--foreground);
   border-radius: 0.5em;
   margin-top: 0.75em;
   margin-bottom: 0.75em;
-}
-
-:is(.dark, .ultra-dark) .guide-content.prose :where(pre) {
-  background: oklch(0.2 0.02 260);
 }
 
 .guide-content.prose :where(pre code) {
@@ -1073,8 +1085,15 @@ body {
   font-size: 0.75em;
 }
 
-.guide-content.prose pre:hover .code-copy-btn {
+.guide-content.prose pre:hover .code-copy-btn,
+.guide-content.prose pre:focus-within .code-copy-btn,
+.guide-content.prose .code-copy-btn:focus-visible {
   opacity: 1;
+}
+
+.guide-content.prose .code-copy-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .guide-content.prose .code-copy-btn:hover {

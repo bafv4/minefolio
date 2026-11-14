@@ -454,6 +454,8 @@ export default function GuideViewPage() {
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
       btn.title = t("guideView.copy");
+      btn.setAttribute("aria-label", t("guideView.copy"));
+      btn.type = "button";
       btn.innerHTML = COPY_ICON_SVG;
       const controller = new AbortController();
       controllers.push(controller);
@@ -645,14 +647,14 @@ function GuideContent({
     return (
       <div
         ref={contentRef}
-        className="guide-content guide-content-demoted prose prose-neutral dark:prose-invert max-w-none"
+        className="guide-content guide-content-demoted prose max-w-none"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }
 
   return (
-    <div ref={contentRef} className="guide-content guide-content-demoted prose prose-neutral dark:prose-invert max-w-none">
+    <div ref={contentRef} className="guide-content guide-content-demoted prose max-w-none">
       {segments.map((seg, i) => {
         if (seg.type === "html") {
           return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;

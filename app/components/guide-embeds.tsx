@@ -233,7 +233,7 @@ export function KeybindEmbedView({
 
   if (remaps.length === 0) {
     return (
-      <div className="my-4 rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
         {displayName} — {t("playerProfile.noRemaps")}
       </div>
     );
@@ -241,7 +241,7 @@ export function KeybindEmbedView({
 
   return (
     <div className="my-4 not-prose">
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
           <span className="text-sm font-medium">
             {displayName}
@@ -386,7 +386,7 @@ export function SearchCraftEmbedView({
 
   if (crafts.length === 0) {
     return (
-      <div className="my-4 rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
         {displayName} — {t("playerProfile.noSearchCraft")}
       </div>
     );
@@ -437,7 +437,7 @@ export function SearchCraftEmbedView({
     const items = coerceStringArray(craft.items);
 
     return (
-      <div key={craft.id} className="rounded-md bg-muted/30 px-4 py-3">
+      <div key={craft.id} className="rounded-lg bg-muted/30 px-4 py-3">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {items.map((itemId: string, idx: number) => (
@@ -624,7 +624,7 @@ export function SearchCraftEmbedView({
   const renderLoop = (loop: EmbedLoopRow) => {
     const { resolved } = loop;
     return (
-      <div key={loop.id} className="rounded-md bg-muted/30 px-4 py-3">
+      <div key={loop.id} className="rounded-lg bg-muted/30 px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
           <span>{t("playerProfile.loopStepCount", { count: resolved.steps.length })}</span>
           {loop.timing && <span>{timingLabelById(t, loop.timing)}</span>}
@@ -647,7 +647,7 @@ export function SearchCraftEmbedView({
 
   return (
     <div className="my-4 not-prose">
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
           <span className="text-sm font-medium">
             {displayName}
