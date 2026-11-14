@@ -32,7 +32,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 #### 欄の並び順・表示の設定（ログイン済みのみ）
 
-上表の2〜7行目（ゲストでは「注目の走者」はヒーロー内）のうち、ログイン済みの6欄（お気に入り走者の動き `favoriteActivity` / ライブ `live` / 最新動画 `videos` / 新着ガイド `guides` / 注目の走者 `featured` / プロフィール `profiles`）の並びと表示は、おかえりバーの設定ボタン（`Settings2` アイコン）のモーダル（`app/components/home/home-settings-dialog.tsx`）で変更できる。おかえりバーは先頭固定で対象外。ログイン時の「注目の走者」（`FeaturedRunnerCard`）の見出しは他の欄と同じアイコンチップ＋h2 `text-xl font-bold`（「別の走者」は見出し行の右）、ゲストのヒーロー内は小見出し。ゲストは常に既定順・全欄表示。
+上表の2〜7行目（ゲストでは「注目の走者」はヒーロー内）のうち、ログイン済みの6欄（お気に入り走者の動き `favoriteActivity` / ライブ `live` / 最新動画 `videos` / 新着ガイド `guides` / 注目の走者 `featured` / プロフィール `profiles`）の並びと表示は、おかえりバーの設定ボタン（`Settings2` アイコン）のモーダル（`app/components/home/home-settings-dialog.tsx`）で変更できる。おかえりバーは先頭固定で対象外。ログイン時の「注目の走者」（`FeaturedRunnerCard`）の見出しは他の欄と同じアイコン（丸背景チップ無し）＋h2 `text-xl font-bold`（「別の走者」は見出し行の右）、ゲストのヒーロー内は小見出し。ゲストは常に既定順・全欄表示。
 
 - **おかえりバー**（`welcome-bar.tsx`）: DOM 順（＝フォーカス順）はアバター・挨拶 → 「プロフィールを編集」（outline。塗りの主ボタンではない）→「マイプロフィール」→「お気に入り」→ 設定。`order-*` による並べ替えは使わない。設定ボタンは sm 以上は「カスタマイズ」の文字付きで右端、モバイルは2段目（2段目＝編集〈ラベルあり〉＋マイプロフィール・お気に入り〈アイコンのみ・ラベルは sr-only〉）の末尾にアイコンのみ。いずれも44px。挨拶の下に、ライブ中の走者がいるときだけ「● {n}人が走行中」（`home.welcomeLiveChip`）＋いちばん先の区間の区間アイコンのリンクを出す。リンク先は `#home-live`（ライブ欄を非表示にしているときは `/paces`）。`aria-live` は付けない（件数の読み上げはライブ欄の見出し側）。
 - **ID・正規化**: `app/lib/home-sections.ts`（非 `.server`）。既定順は上記の並び。`normalizeHomeLayout` は JSON 文字列 / 配列 / オブジェクトを受けて `{ order, hidden }` を返す。旧形式（並びのみの配列）も読める（hidden は空）。解釈不能なら既定、未知 ID と重複を除き、order の欠けは既定順で末尾に補う（欄を増やしても既存の保存値が壊れない）。hidden が全欄を覆う値は hidden 空として扱う（全部消えたホームにしない）。`serializeHomeLayout` が保存用文字列を作り、`isDefaultHomeLayout`（既定順かつ全欄表示）なら `null`。

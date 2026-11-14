@@ -320,11 +320,9 @@ export function FeaturedRunnerCard({
       className="group relative rounded-2xl border border-border/70 bg-card/70 p-5 transition-all hover:border-primary/40 motion-reduce:transition-none sm:p-6"
     >
       <div className="flex items-center justify-between gap-3">
-        {/* 他の欄（HomeSection）と同じ見出し: アイコンチップ + h2 text-xl font-bold */}
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <div className="shrink-0 rounded-xl bg-primary/10 p-1.5 sm:p-2">
-            <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
+        {/* 他の欄（HomeSection）と同じ見出し: アイコン（丸背景チップ無し） + h2 text-xl font-bold */}
+        <div className="flex min-w-0 items-center gap-x-2 sm:gap-x-3">
+          <Sparkles className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <h2 id="home-featured-heading" className="min-w-0 truncate text-xl font-bold">
             {t("home.featuredTitle")}
           </h2>
