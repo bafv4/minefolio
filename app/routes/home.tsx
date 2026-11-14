@@ -1,18 +1,21 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, Link } from "react-router";
-import { useEffect, useReducer, memo, useMemo, useCallback } from "react";
+import { useLoaderData, useFetcher, Link, data } from "react-router";
+import type { ReactNode } from "react";
+import { normalizeHomeSectionOrder, isDefaultHomeSectionOrder, type HomeSectionId } from "@/lib/home-sections";
+import { HOME_SECTION_ORDER_FETCHER_KEY } from "@/components/home/home-settings-dialog";
+import { useEffect, useReducer, memo, useMemo, useCallback, Fragment } from "react";
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, pageViewStats, playstyles, categoryRecords, pacemanPaces } from "@/lib/schema";
+import { users, guides, pageViewStats, playstyles, categoryRecords } from "@/lib/schema";
 import { pickHighlightPb, type HighlightPbRecord } from "@/lib/profile-highlights";
 import { excludeViewersCondition } from "@/lib/users-filter";
-import { eq, desc, and, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
-import { getPaceRetentionStart, type CachedPace } from "@/lib/paceman-cache";
+import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import { pickTwitchOnlyStreams, twitchLoginFromUrl, type RankedLiveMatch } from "@/lib/home-live";
 import { Button } from "@/components/ui/button";
@@ -20,7 +23,7 @@ import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/c
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { HomeSection } from "@/components/home/home-section";
-import { WelcomeBar, type WelcomeHighlight } from "@/components/home/welcome-bar";
+import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
@@ -70,6 +73,9 @@ export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
 const HOME_GUIDE_COUNT = 4;
 /** 最近の更新・よく見られているの各表示件数 */
 const HOME_PROFILE_COUNT = 4;
+
+// おかえりバーで「ようこそ」と出す、アカウント作成からの期間
+const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
@@ -128,6 +134,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         showPacemanOnHome: true,
         showYoutubeOnHome: true,
         showTwitchOnHome: true,
+        homeSectionOrder: true,
+        createdAt: true,
       },
     });
     if (!existingUser) return null;
@@ -142,11 +150,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
       showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
       showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
+      sectionOrder: normalizeHomeSectionOrder(existingUser.homeSectionOrder),
+      // 作成から24時間以内は「おかえりなさい」ではなく「ようこそ」にする（サーバーで判定し、時計差による hydration のずれを避ける）
+      isNewAccount: Date.now() - existingUser.createdAt.getTime() < NEW_ACCOUNT_WINDOW_MS,
     };
   })();
   const isRegistered = currentUser != null;
 
-  const [recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight, myHighlight] = await Promise.all([
+  const [recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight] = await Promise.all([
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
     db
       .select(profileFeedColumns)
@@ -187,8 +198,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       console.error("Failed to build home spotlight:", error);
       return null;
     }),
-    // おかえりバーの「自分の最新ペースまたは PB」
-    currentUser ? getMyHighlight(db, currentUser.id) : Promise.resolve(null),
   ]);
   const totalPublicProfiles = profileCounts?.total ?? 0;
 
@@ -259,6 +268,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
+    // 欄の並び（ゲストは既定順）。SSR の時点でこの順に描画する
+    sectionOrder: currentUser?.sectionOrder ?? normalizeHomeSectionOrder(null),
     currentUser: currentUser
       ? {
           mcid: currentUser.mcid,
@@ -270,9 +281,9 @@ export async function loader({ request }: Route.LoaderArgs) {
           showPacemanOnHome: currentUser.showPacemanOnHome,
           showYoutubeOnHome: currentUser.showYoutubeOnHome,
           showTwitchOnHome: currentUser.showTwitchOnHome,
+          isNewAccount: currentUser.isNewAccount,
         }
       : null,
-    myHighlight,
     recentlyUpdatedUsers: recent,
     popularUsers: popular,
     recommended,
@@ -282,44 +293,40 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-/** おかえりバー用: 直近7日に自分のペースがあればその最深区間、無ければメインカテゴリの PB（無ければ null） */
-async function getMyHighlight(db: ReturnType<typeof createDb>, userId: string): Promise<WelcomeHighlight | null> {
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const since = new Date(Math.max(weekAgo.getTime(), getPaceRetentionStart().getTime()));
-  const [pace] = await db
-    .select({ timeline: pacemanPaces.timeline, rta: pacemanPaces.rta })
-    .from(pacemanPaces)
-    .where(
-      and(
-        eq(pacemanPaces.userId, userId),
-        ne(pacemanPaces.timeline, "Enter Nether"),
-        gte(pacemanPaces.date, since),
-      ),
-    )
-    .orderBy(desc(pacemanPaces.date))
-    .limit(1);
-  if (pace) return { kind: "pace", label: pace.timeline, timeMs: pace.rta };
-
-  const [style, records] = await Promise.all([
-    db.select({ mainCategory: playstyles.mainCategory }).from(playstyles).where(eq(playstyles.userId, userId)).limit(1),
-    db
-      .select({
-        category: categoryRecords.category,
-        categoryDisplayName: categoryRecords.categoryDisplayName,
-        personalBest: categoryRecords.personalBest,
-      })
-      .from(categoryRecords)
-      .where(
-        and(
-          eq(categoryRecords.userId, userId),
-          eq(categoryRecords.isVisible, true),
-          isNotNull(categoryRecords.personalBest),
-        ),
-      ),
-  ]);
-  const pb = pickHighlightPb(style[0]?.mainCategory ?? null, records, true);
-  if (!pb?.record.personalBest) return null;
-  return { kind: "pb", label: pb.record.categoryDisplayName, timeMs: pb.record.personalBest };
+/**
+ * ホームの欄の並び順を保存する（_action=saveHomeSectionOrder、order = 欄 ID の JSON 配列）。
+ * 既定順と同じなら null を保存して既定に戻す。users.updatedAt は更新しない
+ * （「お気に入り走者の動き」に「プロフィールを更新」と誤って出るため）。
+ */
+export async function action({ request }: Route.ActionArgs) {
+  const t = createTranslator(resolveLocale(request));
+  const env = getEnv();
+  const db = createDb();
+  const auth = createAuth(db, env);
+  const session = await getOptionalSession(request, auth);
+  const actionType = "saveHomeSectionOrder";
+  if (!session) {
+    return data({ error: t("home.settingsUnauthorized"), action: actionType }, { status: 401 });
+  }
+  const formData = await request.formData();
+  if (formData.get("_action") !== actionType) {
+    return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
+  }
+  const rawOrder = formData.get("order");
+  if (typeof rawOrder !== "string") {
+    return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
+  }
+  const order = normalizeHomeSectionOrder(rawOrder);
+  const stored = isDefaultHomeSectionOrder(order) ? null : JSON.stringify(order);
+  const updated = await db
+    .update(users)
+    .set({ homeSectionOrder: stored })
+    .where(eq(users.discordId, session.user.id))
+    .returning({ id: users.id });
+  if (updated.length === 0) {
+    return data({ error: t("home.settingsUnauthorized"), action: actionType }, { status: 401 });
+  }
+  return { success: true, action: actionType };
 }
 
 // APIレスポンスの型定義（動画系はどちらも FeedVideo 形式で返る）
@@ -551,14 +558,22 @@ export default function HomePage() {
   const {
     isRegistered,
     currentUser,
-    myHighlight,
     recentlyUpdatedUsers,
     popularUsers,
     recommended,
     newGuides,
     totalPublicProfiles,
     spotlight,
+    sectionOrder: savedSectionOrder,
   } = useLoaderData<typeof loader>();
+
+  // 設定モーダルの保存中は、送信した並びを楽観的に反映する（再検証で loader の値が追いつくまで）
+  const orderFetcher = useFetcher({ key: HOME_SECTION_ORDER_FETCHER_KEY });
+  const submittedOrder = orderFetcher.formData?.get("order");
+  const sectionOrder = useMemo(
+    () => (typeof submittedOrder === "string" ? normalizeHomeSectionOrder(submittedOrder) : savedSectionOrder),
+    [submittedOrder, savedSectionOrder],
+  );
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
@@ -806,61 +821,11 @@ export default function HomePage() {
 
   const hasProfiles = recentlyUpdatedUsers.length > 0;
 
-  return (
-    <div className="relative flex-1 space-y-7 sm:space-y-8">
-      {isRegistered && currentUser ? (
-        <>
-          {/* ログイン時は宣伝の見出し・説明を出さない。h1 は視覚的に隠したページ見出し */}
-          <h1 className="sr-only">{t("home.title")}</h1>
-          <WelcomeBar
-            name={welcomeName}
-            slug={currentUser.slug}
-            uuid={currentUser.uuid}
-            skinUrl={currentUser.customSkinUrl}
-            highlight={myHighlight}
-          />
-        </>
-      ) : (
-        <section
-          aria-labelledby="home-hero-heading"
-          className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8"
-        >
-          <div className="grid gap-7 lg:grid-cols-[1.05fr_1fr] lg:items-center">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                {/* 文言中の改行（ja: 「…から」の後）で区切る。改行の無い英語は text-balance で行長を揃える */}
-                <h1 id="home-hero-heading" className="whitespace-pre-line text-balance text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                  {t("home.heroTitle")}
-                </h1>
-                <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Button asChild size="lg" className="w-full sm:w-auto">
-                  <Link to="/login">
-                    {t("home.ctaStart")}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                  <Link to="/browse">
-                    <Search className="mr-2 h-4 w-4" />
-                    {t("home.ctaBrowse")}
-                  </Link>
-                </Button>
-              </div>
-              <p className="-mt-2 text-xs text-muted-foreground">{t("home.ctaLoginNote")}</p>
-            </div>
-            <FeaturedRunnerCard
-              candidates={spotlight?.candidates ?? []}
-              initial={spotlight?.fallback ?? null}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* お気に入り走者の動きはヒーロー / おかえりバーの直下 */}
+  const sections: Record<HomeSectionId, ReactNode> = {
+    favoriteActivity: (
       <FavoriteActivity isRegistered={isRegistered} recommended={recommended} />
-
+    ),
+    live: (
       <HomeSection
         id="home-live"
         icon={<Radio className="h-5 w-5 text-primary" />}
@@ -902,7 +867,8 @@ export default function HomePage() {
           onRetryRecent={retryPaces}
         />
       </HomeSection>
-
+    ),
+    videos: (
       <HomeSection
         id="home-videos"
         icon={<Play className="h-5 w-5 text-primary" />}
@@ -950,32 +916,32 @@ export default function HomePage() {
           </div>
         )}
       </HomeSection>
-
-      {newGuides.length > 0 && (
-        <HomeSection
-          id="home-guides"
-          icon={<BookOpen className="h-5 w-5 text-primary" />}
-          title={t("home.sectionGuides")}
-          badge={<span className="text-sm text-muted-foreground">{t("home.guidesOnePerAuthor")}</span>}
-          viewAllTo="/guides"
-        >
-          <GuideCardGrid
-            guides={newGuides.map(toGuideItem)}
-            linkFn={guideLinkFn}
-            gridCols="sm:grid-cols-2 xl:grid-cols-4"
-          />
-        </HomeSection>
-      )}
-
-      {/* ログイン時の注目の走者（ゲストはヒーロー右に出すので、ここはログイン時のみ） */}
-      {isRegistered && (
+    ),
+    guides:
+      newGuides.length > 0 ? (
+          <HomeSection
+            id="home-guides"
+            icon={<BookOpen className="h-5 w-5 text-primary" />}
+            title={t("home.sectionGuides")}
+            badge={<span className="text-sm text-muted-foreground">{t("home.guidesOnePerAuthor")}</span>}
+            viewAllTo="/guides"
+          >
+            <GuideCardGrid
+              guides={newGuides.map(toGuideItem)}
+              linkFn={guideLinkFn}
+              gridCols="sm:grid-cols-2 xl:grid-cols-4"
+            />
+          </HomeSection>
+      ) : null,
+    // ログイン時の注目の走者（ゲストはヒーロー右に出すので、ここはログイン時のみ）
+    featured: isRegistered ? (
         <FeaturedRunnerCard
           candidates={spotlight?.candidates ?? []}
           initial={spotlight?.fallback ?? null}
           wide
         />
-      )}
-
+    ) : null,
+    profiles: (
       <HomeSection
         id="home-profiles"
         icon={<UserCheck className="h-5 w-5 text-primary" />}
@@ -1004,7 +970,66 @@ export default function HomePage() {
           />
         )}
       </HomeSection>
+    ),
+  };
 
+  return (
+    <div className="relative flex-1 space-y-7 sm:space-y-8">
+      {isRegistered && currentUser ? (
+        <>
+          {/* ログイン時は宣伝の見出し・説明を出さない。h1 は視覚的に隠したページ見出し */}
+          <h1 className="sr-only">{t("home.title")}</h1>
+          <WelcomeBar
+            name={welcomeName}
+            slug={currentUser.slug}
+            uuid={currentUser.uuid}
+            skinUrl={currentUser.customSkinUrl}
+            isNewAccount={currentUser.isNewAccount}
+            sectionOrder={sectionOrder}
+          />
+        </>
+      ) : (
+        <section
+          aria-labelledby="home-hero-heading"
+          className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8"
+        >
+          <div className="grid gap-7 lg:grid-cols-[1.05fr_1fr] lg:items-center">
+            <div className="space-y-5">
+              <div className="space-y-3">
+                {/* 文言中の改行（ja: 「…から」の後）で区切る。改行の無い英語は text-balance で行長を揃える */}
+                <h1 id="home-hero-heading" className="whitespace-pre-line text-balance text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                  {t("home.heroTitle")}
+                </h1>
+                <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button asChild size="lg" className="w-full sm:w-auto">
+                  <Link to="/login">
+                    {t("home.ctaStart")}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+                  <Link to="/browse">
+                    <Search className="mr-2 h-4 w-4" />
+                    {t("home.ctaBrowse")}
+                  </Link>
+                </Button>
+              </div>
+              <p className="-mt-2 text-xs text-muted-foreground">{t("home.ctaLoginNote")}</p>
+            </div>
+            <FeaturedRunnerCard
+              candidates={spotlight?.candidates ?? []}
+              initial={spotlight?.fallback ?? null}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ウェルカムバー / ヒーローの下を、ユーザーの並び順（ゲストは既定順）で描画する */}
+      {sectionOrder.map((id) => (
+        <Fragment key={id}>{sections[id]}</Fragment>
+      ))}
     </div>
   );
 }

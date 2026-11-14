@@ -647,6 +647,7 @@ CREATE TABLE `users` (
 	`show_twitch_on_home` integer DEFAULT true,
 	`show_youtube_on_home` integer DEFAULT true,
 	`show_ranked_stats` integer DEFAULT true,
+	`home_section_order` text,
 	`show_paceman_stats` integer DEFAULT true,
 	`profile_views` integer DEFAULT 0 NOT NULL,
 	`last_active` integer,

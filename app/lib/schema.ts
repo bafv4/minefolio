@@ -63,6 +63,8 @@ export const users = sqliteTable("users", {
   showTwitchOnHome: integer("show_twitch_on_home", { mode: "boolean" }).default(true),
   showYoutubeOnHome: integer("show_youtube_on_home", { mode: "boolean" }).default(true),
   showRankedStats: integer("show_ranked_stats", { mode: "boolean" }).default(true),
+  // ホームの欄の並び順（欄 ID の JSON 配列。null は既定順。未知の ID は無視し、欠けた欄は既定順で末尾に補う〈正規化は app/lib/home-sections.ts 側〉）
+  homeSectionOrder: text("home_section_order"),
   showPacemanStats: integer("show_paceman_stats", { mode: "boolean" }).default(true),
 
   // 統計
