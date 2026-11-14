@@ -32,6 +32,8 @@ interface ComboboxProps {
   emptyText?: string
   allowCustomValue?: boolean
   className?: string
+  /** trigger ボタンに付与する id（`<Label htmlFor>` と結ぶ用） */
+  id?: string
 }
 
 export function Combobox({
@@ -43,6 +45,7 @@ export function Combobox({
   emptyText: emptyTextProp,
   allowCustomValue = false,
   className,
+  id,
 }: ComboboxProps) {
   // 既定値は本体で解決する（既定引数は useT() より先に評価されるため）
   const t = useT();
@@ -84,6 +87,7 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

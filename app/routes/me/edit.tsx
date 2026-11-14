@@ -433,7 +433,7 @@ function SocialLinkDialog({
             value={selectedPlatform}
             onValueChange={setSelectedPlatform}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="platform" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1694,6 +1694,7 @@ export default function EditProfilePage() {
               <div className="space-y-2">
                 <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
                 <Combobox
+                  id="pronouns"
                   options={pronounOptions}
                   value={formValues.pronouns}
                   onValueChange={(value) => handleInputChange("pronouns", value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}
@@ -1817,7 +1818,7 @@ export default function EditProfilePage() {
                   value={formValues.mainPlatform}
                   onValueChange={(value) => handleInputChange("mainPlatform", value)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="mainPlatform" className="w-full">
                     <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1837,7 +1838,7 @@ export default function EditProfilePage() {
                   value={formValues.role}
                   onValueChange={(value) => handleInputChange("role", value)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="role" className="w-full">
                     <SelectValue placeholder={t("meEdit.select")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -2052,7 +2053,7 @@ export default function EditProfilePage() {
                 value={formValues.profileVisibility}
                 onValueChange={(value) => handleInputChange("profileVisibility", value)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="profileVisibility" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2075,7 +2076,7 @@ export default function EditProfilePage() {
                 value={formValues.defaultProfileTab}
                 onValueChange={(value) => handleInputChange("defaultProfileTab", value)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="defaultProfileTab" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
