@@ -353,9 +353,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     heroTitleEmphasis: "runners",
     heroDescription:
       "Minefolio is a profile site built for the Minecraft speedrunning community.",
-    ctaStart: "Create profile / Log in",
+    ctaStart: "Create your profile",
     ctaBrowse: "Find runners",
-    ctaLoginNote: "A Discord account is required to create a profile or log in.",
+    ctaLoginNote: "Already registered? Use the same button to log in (requires a Discord account).",
     sectionProfiles: "Profiles",
     sectionRecentlyUpdated: "Recently updated",
     liveAllFetchFailed: "Couldn't load live or past paces.",
