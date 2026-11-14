@@ -20,9 +20,29 @@ const VOD_CACHE_CONFIG = {
 };
 
 /**
+ * 渡された vodId のうち、既に twitch_vod_cache にあるものを返す（getRecentVods の getKnownVodIds 用）。
+ * 新規 VOD を含むチャンネルだけ /channels でカテゴリ名を取るための判定。bind 変数上限を避けて500件ずつ引く
+ */
+export async function findKnownVodIds(vodIds: string[]): Promise<Set<string>> {
+  const known = new Set<string>();
+  if (vodIds.length === 0) return known;
+  const db = createDb();
+  for (let i = 0; i < vodIds.length; i += 500) {
+    const rows = await db.query.twitchVodCache.findMany({
+      where: inArray(twitchVodCache.vodId, vodIds.slice(i, i + 500)),
+      columns: { vodId: true },
+    });
+    for (const r of rows) known.add(r.vodId);
+  }
+  return known;
+}
+
+/**
  * 取得済みの VOD マップ（login→公開VOD配列。取得成功チャンネルのみキーを持つ）を DB に反映する。
  * vodId は UNIQUE のため1回のバッチupsertで書き込む（タイトル・サムネイル（処理中→生成済み）・
  * 配信時間（進行中→確定）が変わり得るため、既存行も excluded 値で更新する）。
+ * gameName（取り込み時点のチャンネルのカテゴリ名）は新規行にだけ入れ、既存行は上書きしない
+ * （conflict 時の set に含めない）。
  *
  * 取得に成功したチャンネル（0件の応答も含む＝ vods にキーがある）については、キャッシュにあるが
  * 今回の取得結果に含まれない行（Twitch側で削除 or 非公開化）を差分削除する。判定不能なチャンネル
@@ -65,6 +85,7 @@ export async function applyFetchedVods(
             channelTitle: v.userName,
             durationSeconds: v.durationSeconds,
             publishedAt: new Date(v.publishedAt),
+            gameName: v.gameName ?? null,
             lastVerifiedAt: now,
           }))
         )
@@ -127,7 +148,8 @@ export async function fetchAndCacheNewVods(
   const { vods, incompleteLogins } = await getRecentVods(
     clientId,
     token,
-    links.map((l) => l.identifier)
+    links.map((l) => l.identifier),
+    { getKnownVodIds: findKnownVodIds }
   );
 
   const result = await applyFetchedVods(vods, incompleteLogins);

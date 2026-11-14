@@ -23,6 +23,7 @@ vi.mock("../twitch", () => twitchMocks);
 
 const twitchVodCacheMocks = vi.hoisted(() => ({
   applyFetchedVods: vi.fn(),
+  findKnownVodIds: vi.fn(),
 }));
 vi.mock("../twitch-vod-cache", () => twitchVodCacheMocks);
 

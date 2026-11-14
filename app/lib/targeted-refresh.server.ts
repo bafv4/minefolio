@@ -12,7 +12,7 @@ import { getEnv } from "./env.server";
 import { createDb } from "./db";
 import { users, speedrunCategories, youtubeVideoCache, twitchVodCache } from "./schema";
 import { getTwitchAppToken, getRecentVods } from "./twitch";
-import { applyFetchedVods } from "./twitch-vod-cache";
+import { applyFetchedVods, findKnownVodIds } from "./twitch-vod-cache";
 import { resolveChannelId } from "./youtube";
 import { fetchChannelUploadsForCache, upsertVideoCache } from "./youtube-cache";
 import { updateUserRankings, cleanupDuplicateVerifiedRankings } from "./rankings-update.server";
@@ -48,7 +48,9 @@ export async function refreshTwitchVodsForLogin(login: string): Promise<void> {
     const token = await getTwitchAppToken(clientId, clientSecret);
     if (!token) return;
 
-    const { vods, incompleteLogins } = await getRecentVods(clientId, token, [login]);
+    const { vods, incompleteLogins } = await getRecentVods(clientId, token, [login], {
+      getKnownVodIds: findKnownVodIds,
+    });
     await applyFetchedVods(vods, incompleteLogins);
   } catch (error) {
     console.error(`[targeted-refresh] Failed to refresh Twitch VODs for ${login}:`, error);
