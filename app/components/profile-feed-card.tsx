@@ -10,8 +10,6 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { platformLabel } from "@/lib/platform-label";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
-import { cn } from "@/lib/utils";
-import { formatTime } from "@/lib/time-utils";
 
 export interface ProfileFeedCardPlayer {
   mcid: string | null;
@@ -35,19 +33,14 @@ export interface ProfileFeedCardPlayer {
   inputMethod?: "keyboard_mouse" | "controller" | "touch" | null;
   /** playstyle.mainCategory（CategoryKey）。未知の値は無視する */
   mainCategory?: string | null;
-  /** メインカテゴリの PB（ミリ秒） */
-  mainCategoryPb?: number | null;
 }
 
 /** 既定値（Java / Windows / KBM / 走者）は全員同じで識別情報にならないため、カードには出さない */
 function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
   const t = useT();
-  const tags: { key: string; label: string; variant: "secondary" | "outline"; mono?: boolean }[] = [];
+  const tags: { key: string; label: string; variant: "secondary" | "outline" }[] = [];
   if (isCategoryKey(player.mainCategory)) {
     tags.push({ key: "category", label: categoryLabel(t, player.mainCategory), variant: "secondary" });
-    if (player.mainCategoryPb) {
-      tags.push({ key: "pb", label: formatTime(player.mainCategoryPb), variant: "outline", mono: true });
-    }
   }
   if (player.role === "viewer") tags.push({ key: "role", label: t("common.viewer"), variant: "secondary" });
   if (player.mainEdition === "bedrock") tags.push({ key: "edition", label: "Bedrock", variant: "outline" });
@@ -69,7 +62,7 @@ function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
         <Badge
           key={tag.key}
           variant={tag.variant}
-          className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px]", tag.mono && "font-mono")}
+          className="shrink-0 rounded-full px-2 py-0.5 text-[11px]"
         >
           {tag.label}
         </Badge>

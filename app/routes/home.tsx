@@ -16,8 +16,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, pageViewStats, playstyles, categoryRecords } from "@/lib/schema";
-import { pickHighlightPb, type HighlightPbRecord } from "@/lib/profile-highlights";
+import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
 import { listedRunnerCondition } from "@/lib/users-filter";
 import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
@@ -26,7 +25,6 @@ import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
 import { getHiddenPaceMcid, filterOwnPaces } from "@/lib/pace-visibility";
-import { groupByUserId } from "@/lib/group-by-user";
 import {
   pickTwitchOnlyStreams,
   liveEntrySplit,
@@ -236,42 +234,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
   // 表示する人（最近の更新・よく見られている）の分だけ引く
   const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers].map((u) => u.id))];
-  const [guideTranslations, feedPlaystyles, feedRecords] = await Promise.all([
+  const [guideTranslations, feedPlaystyles] = await Promise.all([
     getGuideTranslations(db, newGuides.map((g) => g.id), resolveLocale(request)),
-    // カードのタグ用（メインカテゴリ + その PB）。全員分を各1クエリで取得し N+1 にしない
+    // カードのタグ用（メインカテゴリ）。全員分を1クエリで取得し N+1 にしない
     feedUserIds.length === 0
       ? []
       : db
           .select({ userId: playstyles.userId, mainCategory: playstyles.mainCategory })
           .from(playstyles)
           .where(inArray(playstyles.userId, feedUserIds)),
-    feedUserIds.length === 0
-      ? []
-      : db
-          .select({
-            userId: categoryRecords.userId,
-            category: categoryRecords.category,
-            categoryDisplayName: categoryRecords.categoryDisplayName,
-            personalBest: categoryRecords.personalBest,
-          })
-          .from(categoryRecords)
-          .where(
-            and(
-              inArray(categoryRecords.userId, feedUserIds),
-              eq(categoryRecords.isVisible, true),
-              isNotNull(categoryRecords.personalBest),
-            ),
-          ),
   ]);
   const mainCategoryById = new Map(feedPlaystyles.map((p) => [p.userId, p.mainCategory]));
-  const recordsById = groupByUserId<HighlightPbRecord & { userId: string }>(feedRecords);
-  // id はクライアントに不要なので外し、カード用に mainCategory / mainCategoryPb を付ける
+  // id はクライアントに不要なので外し、カード用に mainCategory を付ける
   const withHighlights = <T extends { id: string }>(list: T[]) =>
-    list.map(({ id, ...rest }) => {
-      const mainCategory = mainCategoryById.get(id) ?? null;
-      const pb = pickHighlightPb(mainCategory, recordsById.get(id) ?? []);
-      return { ...rest, mainCategory, mainCategoryPb: pb?.record.personalBest ?? null };
-    });
+    list.map(({ id, ...rest }) => ({ ...rest, mainCategory: mainCategoryById.get(id) ?? null }));
 
   const popular = withHighlights(popularUsers);
   const recent = withHighlights(recentlyUpdatedUsers);

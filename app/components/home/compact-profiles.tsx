@@ -4,12 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
-import { formatClock } from "@/lib/home-format";
 import { formatRelativeDate } from "@/lib/relative-time";
 import type { ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { Clock3, TrendingUp } from "lucide-react";
 
-/** 「最近の更新」「よく見られている」用のコンパクト行（アバター・名前・メインカテゴリ・PB・右端に時刻/閲覧数） */
+/** 「最近の更新」「よく見られている」用のコンパクト行（アバター・名前・メインカテゴリ・右端に時刻/閲覧数） */
 export function CompactProfileList({
   title,
   players,
@@ -41,9 +40,6 @@ export function CompactProfileList({
                     <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[11px]">
                       {categoryLabel(t, p.mainCategory)}
                     </Badge>
-                    {p.mainCategoryPb ? (
-                      <span className="font-mono tabular-nums">{formatClock(p.mainCategoryPb)}</span>
-                    ) : null}
                   </span>
                 )}
               </span>
