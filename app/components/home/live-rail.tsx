@@ -77,7 +77,7 @@ function CardHead({
           ) : (
             <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
           )}
-          {isFavorite && <FavoriteMark className="h-3.5 w-3.5" />}
+          {isFavorite && <FavoriteMark />}
         </div>
         <p className="truncate text-xs text-muted-foreground">{sub}</p>
       </div>

@@ -83,7 +83,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 ### お気に入り並べ替え
 
 - ログイン中ユーザーのお気に入りを `loader` で DB から取得し、リストの先頭に並び替える
-- 先頭に来たお気に入りには、カード・リスト行の右側（カードは名前行の右端、リスト行はタグ・時刻の手前）に塗りつぶしのハート（`--favorite`）を表示する。ログイン中でお気に入りが1人以上いるときは、ページ上部（件数の下）に「ハートが付き先頭に表示される」旨の補足行（`browse.favoritesFirstNote`）を出す（`ProfileFeedCard` / `ProfileFeedListItem` の `isFavorite` prop。`browse.tsx` が `useFavorites().isFavorite(slug)` を渡す。他画面は渡さない）
+- 先頭に来たお気に入りには、カード・リスト行の右側（カードは名前行の右端、リスト行はタグ・時刻の手前）に「お気に入り」の小さなピル（塗りハート＋文言、地は `bg-favorite/10`、文字は前景色。表示専用の `FavoriteMark`）を表示する。ログイン中でお気に入りが1人以上いるときは、ページ上部（件数の下）に「ハートが付き先頭に表示される」旨の補足行（`browse.favoritesFirstNote`）を出す（`ProfileFeedCard` / `ProfileFeedListItem` の `isFavorite` prop。`browse.tsx` が `useFavorites().isFavorite(slug)` を渡す。他画面は渡さない）
 - 未ログイン時は SSR 時点でのお気に入り情報がないため、初期表示は通常順序のまま（クライアント側 hydrate 後に `useFavorites` フックの状態を参照）
 
 ### 表示コンポーネント

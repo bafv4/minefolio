@@ -524,7 +524,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Favorites",
     add: "Add to favorites",
     remove: "Remove from favorites",
-    favoriteMark: "Favorite runner",
+    favoriteMark: "Favorite",
     metaTitle: "Favorites - Minefolio",
     description: "Runners you have favorited",
     totalCount: "Favorited runners",

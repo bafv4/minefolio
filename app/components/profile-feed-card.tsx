@@ -100,7 +100,7 @@ export function ProfileFeedCard({
           {isFavorite ? (
             <div className="flex min-w-0 items-center gap-2">
               <p className="min-w-0 flex-1 truncate font-semibold">{displayName}</p>
-              <FavoriteMark className="h-4 w-4" />
+              <FavoriteMark />
             </div>
           ) : (
             <p className="truncate font-semibold">{displayName}</p>
@@ -170,7 +170,7 @@ export function ProfileFeedListItem({
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        {isFavorite && <FavoriteMark className="mr-1 h-3.5 w-3.5" />}
+        {isFavorite && <FavoriteMark />}
         {/* カードと同じ規則（既定値は出さず、識別に効くタグだけ最大3個） */}
         <FeedCardTags player={player} />
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">
