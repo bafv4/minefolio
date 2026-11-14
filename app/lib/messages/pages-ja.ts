@@ -435,6 +435,7 @@ export const PAGES_JA = {
     liveTitle: "ライブ / ペース",
     liveCount: "{count}人",
     liveCountAria: "{count}人がライブ中",
+    liveTeaser: "ライブ {count}人",
     liveSplitsAria: "区間ごとの走行中の人数: {list}",
     liveSplitsItem: "{name} {count}人",
     liveSplitsSeparator: "、",

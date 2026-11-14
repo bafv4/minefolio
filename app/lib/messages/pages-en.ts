@@ -434,6 +434,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     liveTitle: "Live / Paces",
     liveCount: "{count} live",
     liveCountAria: "{count} live now",
+    liveTeaser: "Live: {count}",
     liveSplitsAria: "Runners per split: {list}",
     liveSplitsItem: "{name} {count}",
     liveSplitsSeparator: ", ",

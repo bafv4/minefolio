@@ -54,6 +54,7 @@ import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
 import { GuestHero } from "@/components/home/guest-hero";
+import { LiveTeaser } from "@/components/home/live-teaser";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
 import { LiveSplitStrip } from "@/components/home/live-split-strip";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
@@ -1074,6 +1075,13 @@ export default function HomePage() {
           candidates={spotlight?.candidates ?? []}
           initial={spotlight?.fallback ?? null}
           faces={heroFaces}
+          // lg 未満はヒーローが縦積みでライブ欄が遠いので、CTA の下に人数だけ先に出してライブ欄へ送る（lg 以上は非表示）
+          liveTeaser={
+            <LiveTeaser
+              count={liveSettled ? liveCount : 0}
+              href={layout.hidden.includes("live") ? "/paces" : "#home-live"}
+            />
+          }
         />
       )}
 

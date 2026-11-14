@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -143,10 +143,13 @@ export function GuestHero({
   candidates,
   initial,
   faces,
+  liveTeaser,
 }: {
   candidates: FeaturedRunner[];
   initial: FeaturedRunner | null;
   faces: HeroFace[];
+  /** lg 未満で CTA の下（注目の走者より上）に出す「ライブ N人 →」の帯。縦積みでライブ欄が1画面目の外に出るため */
+  liveTeaser?: ReactNode;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -188,6 +191,7 @@ export function GuestHero({
             </Button>
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">{t("home.ctaLoginNote")}</p>
+          {liveTeaser}
         </div>
 
         {/* 主役: 注目の走者（枠で包まず、リンクは顔と名前だけ） */}
