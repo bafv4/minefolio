@@ -44,6 +44,7 @@ export function HomeSection({
   const headingId = `${id}-heading`;
   return (
     <section
+      id={id}
       aria-labelledby={headingId}
       className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6"
     >

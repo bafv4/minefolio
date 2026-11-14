@@ -83,6 +83,7 @@
 - テーマカラーは **oklch** 形式でCSS変数に定義
 - セマンティックカラー: `--success`, `--warning`, `--info`, `--destructive`
 - ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）、`--youtube` / `--twitch` / `--gold` / `--bronze`
+- 区間モチーフ（進行バー `StageBar`・ホームのライブの区間分布の帯）: 現在区間／人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`。区間の分布の帯は人が居なくても7段を描く（0人の段は `bg-muted`・人数なし）。終了カード（ライブ欄で消えて少しの間残すもの）の進行バーは現在区間も `bg-brand/40`（強調なし）
 - コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
 - 意味を持つ色（成功・警告・情報・エラー/破壊的）は必ずセマンティックトークン（`text-success` / `text-warning` / `text-info` / `text-destructive` と各 `bg-*/10` 等）を使う。`green-500` などのパレット直指定・生 hex は禁止
 - セマンティックトークンは `text-*` としても使うため、各テーマの値は背景（ライト=白系、ダーク=暗色）に対して文字コントラスト 4.5:1 以上を保つ（例: ライトの `--warning` は黄色ではなく amber-700 相当）。トークン値を変えるときは全テーマで測る

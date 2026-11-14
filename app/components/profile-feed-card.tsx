@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
-import { Clock3, Heart } from "lucide-react";
+import { FavoriteMark } from "@/components/favorite-mark";
+import { Clock3 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -73,17 +74,6 @@ function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
           {tag.label}
         </Badge>
       ))}
-    </>
-  );
-}
-
-/** お気に入り走者の印（塗りつぶしハート）。読み上げ用の文言を sr-only で添える */
-function FavoriteMark({ className }: { className: string }) {
-  const t = useT();
-  return (
-    <>
-      <Heart className={cn("shrink-0 fill-favorite text-favorite", className)} aria-hidden="true" />
-      <span className="sr-only">{t("favorites.favoriteMark")}</span>
     </>
   );
 }

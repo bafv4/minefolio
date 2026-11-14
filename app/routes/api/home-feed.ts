@@ -12,8 +12,8 @@ import { getCached, setCached } from "@/lib/cache";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getHomeHiddenUsers } from "@/lib/home-visibility.server";
 import { getUserData, pickUserDataForMcids, type McidUserMaps } from "@/lib/home-user-data.server";
-import { fetchRankedLiveMatches } from "@/lib/ranked-live.server";
-import type { HomeTwitchStream, RankedLiveMatch } from "@/lib/home-live";
+import { fetchRankedLiveMatches, fetchRankedResult } from "@/lib/ranked-live.server";
+import { SECOND_STRUCTURE_BEST_KEY, type HomeTwitchStream, type RankedLiveMatch } from "@/lib/home-live";
 import { pacemanPaces } from "@/lib/schema";
 import { and, inArray, lt, sql } from "drizzle-orm";
 import { feedVideoKey, type FeedVideo } from "@/lib/feed-video";
@@ -96,6 +96,11 @@ async function getTwitchLinks(): Promise<TwitchLinkCache> {
   return fetchAndCacheTwitchLinks();
 }
 
+// 上流 API の失敗応答。0 件の正常応答と区別するため 502 にし、どこにもキャッシュさせない
+function upstreamFailure(): Response {
+  return Response.json({ error: "Upstream unavailable" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+}
+
 // JSONレスポンスとCDNキャッシュヘッダーを生成
 function jsonResponse(data: unknown, cdnMaxAge: number, staleWhileRevalidate = cdnMaxAge * 2): Response {
   return Response.json(data, {
@@ -134,6 +139,9 @@ export async function loader({ request }: Route.LoaderArgs) {
         getHomeHiddenUsers(createDb()),
       ]);
 
+      // 上流（PaceMan）の失敗は 0 件と区別してエラー応答にする（サーバー・CDN ともキャッシュしない）
+      if (liveRuns === null) return upstreamFailure();
+
       // 「ホーム画面にPaceManのペースを表示」をオフにした人は全員のホームから除く（mcid は大文字小文字を無視）
       const registeredMcidSet = new Set(userData.registeredMcids);
       const filteredLiveRuns = liveRuns
@@ -154,26 +162,48 @@ export async function loader({ request }: Route.LoaderArgs) {
       // 同区間ベスト（ライブ走者の分だけ。失敗しても比較を出さないだけで一覧は返す）
       const splitBests: Record<string, Record<string, number>> = {};
       if (filteredLiveRuns.length > 0) {
-        const rows = await createDb()
+        const db = createDb();
+        const scope = and(
+          inArray(
+            sql`lower(${pacemanPaces.mcid})`,
+            filteredLiveRuns.map((run) => run.nickname.toLowerCase()),
+          ),
+          lt(pacemanPaces.date, new Date(Date.now() - SPLIT_BEST_EXCLUDE_MS)),
+        );
+        // 2つ目の構造物: 蓄積ペースは構造物を種類でしか持たないので、同じランで Bastion・Fortress の両方に
+        // 着いたものの遅い方を2つ目とし、その最小を取る（1つ目の速い記録と比べないため）
+        const structureRuns = db
           .select({
-            mcid: sql<string>`lower(${pacemanPaces.mcid})`,
-            timeline: pacemanPaces.timeline,
-            best: sql<number>`min(${pacemanPaces.rta})`,
+            mcid: sql<string>`lower(${pacemanPaces.mcid})`.as("mcid"),
+            secondAt: sql<number>`max(${pacemanPaces.rta})`.as("second_at"),
           })
           .from(pacemanPaces)
-          .where(
-            and(
-              inArray(
-                sql`lower(${pacemanPaces.mcid})`,
-                filteredLiveRuns.map((run) => run.nickname.toLowerCase()),
-              ),
-              lt(pacemanPaces.date, new Date(Date.now() - SPLIT_BEST_EXCLUDE_MS)),
-            ),
-          )
-          .groupBy(sql`lower(${pacemanPaces.mcid})`, pacemanPaces.timeline)
-          .catch(() => []);
+          .where(and(scope, inArray(pacemanPaces.timeline, ["Bastion", "Fortress"])))
+          .groupBy(sql`lower(${pacemanPaces.mcid})`, pacemanPaces.pacemanRunId)
+          .having(sql`count(distinct ${pacemanPaces.timeline}) = 2`)
+          .as("structure_runs");
+        const [rows, secondRows] = await Promise.all([
+          db
+            .select({
+              mcid: sql<string>`lower(${pacemanPaces.mcid})`,
+              timeline: pacemanPaces.timeline,
+              best: sql<number>`min(${pacemanPaces.rta})`,
+            })
+            .from(pacemanPaces)
+            .where(scope)
+            .groupBy(sql`lower(${pacemanPaces.mcid})`, pacemanPaces.timeline)
+            .catch(() => []),
+          db
+            .select({ mcid: structureRuns.mcid, best: sql<number>`min(${structureRuns.secondAt})` })
+            .from(structureRuns)
+            .groupBy(sql`${structureRuns.mcid}`)
+            .catch(() => []),
+        ]);
         for (const r of rows) {
           (splitBests[r.mcid] ??= {})[r.timeline] = Number(r.best);
+        }
+        for (const r of secondRows) {
+          (splitBests[r.mcid] ??= {})[SECOND_STRUCTURE_BEST_KEY] = Number(r.best);
         }
       }
 
@@ -219,13 +249,26 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     case "ranked-live": {
       // MCSR Ranked の公開ライブ試合のうち Minefolio 登録者が出ているもの。ユーザー非依存・30秒キャッシュ
-      const cacheKey = "home-feed:ranked-live:v2";
-      const cached = await getCached<{ matches: RankedLiveMatch[] }>(cacheKey);
+      const cacheKey = "home-feed:ranked-live:v3";
+      const cached = await getCached<{ matches: RankedLiveMatch[]; fetchedAt: number }>(cacheKey);
       if (cached) return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
 
-      const result = { matches: await fetchRankedLiveMatches(createDb()) };
+      const matches = await fetchRankedLiveMatches(createDb());
+      if (matches === null) return upstreamFailure();
+      // fetchedAt: 取得時刻（クライアントが試合開始時刻を推定する基準。配信遅延・端末時計のずれの影響を受けない）
+      const result = { matches, fetchedAt: Date.now() };
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
       return jsonResponse(result, CDN_CACHE.LIVE_RUNS);
+    }
+
+    case "ranked-result": {
+      // 終了した Ranked 試合の結果。登録者以外・未確定・上流失敗はどれも同じ pending（キャッシュしない）
+      const result = await fetchRankedResult(createDb(), {
+        uuid: url.searchParams.get("uuid") ?? "",
+        opponent: url.searchParams.get("opponent") ?? "",
+        sinceMs: Number(url.searchParams.get("since") ?? "NaN"),
+      });
+      return Response.json(result, { headers: { "Cache-Control": "no-store" } });
     }
 
     case "pace-timeline": {

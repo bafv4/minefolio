@@ -284,3 +284,41 @@ describe("?type=live-runs / recent-paces - showPacemanOnHome（全員のホー�
     expect(body.recentPaces.map((p) => p.mcid)).toEqual(["OnRunner"]);
   });
 });
+
+describe("?type=live-runs - 上流失敗", () => {
+  it("fetchLiveRuns が null（上流失敗）なら 502 + no-store で返し、キャッシュしない", async () => {
+    pacemanMocks.fetchLiveRuns.mockResolvedValue(null);
+    const res = await callLoader("?type=live-runs");
+    expect(res.status).toBe(502);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+
+    // 直後に復旧したら失敗がキャッシュされておらず正常応答になる
+    pacemanMocks.fetchLiveRuns.mockResolvedValue([]);
+    const ok = await callLoader("?type=live-runs");
+    expect(ok.status).toBe(200);
+  });
+});
+
+describe("?type=live-runs - 同区間ベスト（splitBests）", () => {
+  it("2つ目の構造物は、同じランで両方に着いたものの遅い方の最小を Second Structure に入れる（種類別のベストとは別）", async () => {
+    await seedUser(db, { slug: "sbrunner", mcid: "SbRunner", uuid: "u-sb", role: "runner", profileVisibility: "public" });
+    const old = daysAgo(1);
+    // ラン 1: Bastion → Fortress（2つ目 = Fortress 250s）
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 701, timeline: "Bastion", rta: 100_000, date: old });
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 701, timeline: "Fortress", rta: 250_000, date: old });
+    // ラン 2: Fortress → Bastion（2つ目 = Bastion 200s）
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 702, timeline: "Fortress", rta: 90_000, date: old });
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 702, timeline: "Bastion", rta: 200_000, date: old });
+    // ラン 3: Bastion だけ（2つ目なし）
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 703, timeline: "Bastion", rta: 80_000, date: old });
+    // 直近3時間のラン（進行中のラン自身）は比較対象にしない
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 704, timeline: "Bastion", rta: 150_000 });
+    await seedPace(db, { mcid: "SbRunner", pacemanRunId: 704, timeline: "Fortress", rta: 160_000 });
+    pacemanMocks.fetchLiveRuns.mockResolvedValue([makeStubLiveRun("SbRunner")]);
+
+    const body = (await (await callLoader("?type=live-runs")).json()) as {
+      splitBests: Record<string, Record<string, number>>;
+    };
+    expect(body.splitBests.sbrunner).toEqual({ Bastion: 80_000, Fortress: 90_000, "Second Structure": 200_000 });
+  });
+});

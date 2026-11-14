@@ -28,9 +28,10 @@ export interface PaceManLiveRun {
 }
 
 /**
- * PaceMan APIからライブペース一覧を取得
+ * PaceMan APIからライブペース一覧を取得。
+ * 上流の失敗（非 2xx・例外）は null（0件の正常応答 [] と区別する。呼び出し側は失敗をキャッシュしない）
  */
-export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
+export async function fetchLiveRuns(): Promise<PaceManLiveRun[] | null> {
   // キャッシュチェック
   const cacheKey = getPaceManCacheKey("liveruns");
   const cached = await getCached<PaceManLiveRun[]>(cacheKey);
@@ -40,8 +41,9 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
 
   try {
     const res = await fetch(PACEMAN_API, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const data = (await res.json()) as PaceManLiveRun[];
+    if (!Array.isArray(data)) return null;
     // 非表示・チート検出されたものを除外
     const filteredData = data.filter((run) => !run.isHidden && !run.isCheated);
 
@@ -51,7 +53,7 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
     return filteredData;
   } catch (error) {
     console.error("PaceMan API error:", error);
-    return [];
+    return null;
   }
 }
 
@@ -80,10 +82,12 @@ export function getSplitOrder(eventId: string): number {
  */
 export function getLatestSplit(run: PaceManLiveRun): PaceManEvent | null {
   if (run.eventList.length === 0) return null;
-  // スプリット順でソートして最後のものを取得
-  const sorted = [...run.eventList].sort(
-    (a, b) => getSplitOrder(b.eventId) - getSplitOrder(a.eventId)
-  );
+  // スプリット順でソートして最後のものを取得。ただし構造物（Bastion / Fortress）はどちらが先でもよいので
+  // 同じ順位として扱い、着いたのが後（rta が大きい）方を最新にする（Fortress → Bastion の順に進んだランで、
+  // Bastion に着いた後も Fortress を最新として出さないため）
+  const rank = (eventId: string) =>
+    eventId === "rsg.enter_bastion" || eventId === "rsg.enter_fortress" ? 2 : getSplitOrder(eventId);
+  const sorted = [...run.eventList].sort((a, b) => rank(b.eventId) - rank(a.eventId) || b.rta - a.rta);
   return sorted[0];
 }
 

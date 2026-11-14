@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useFetcher, Link, data } from "react-router";
-import { useEffect, useReducer, memo, useMemo, useCallback, Fragment, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, memo, useMemo, useCallback, Fragment, type ReactNode } from "react";
 import {
   defaultHomeLayout,
   normalizeHomeLayout,
@@ -27,7 +27,24 @@ import type { PaceManLiveRun } from "@/lib/paceman";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
 import { getHiddenPaceMcid, filterOwnPaces } from "@/lib/pace-visibility";
 import { groupByUserId } from "@/lib/group-by-user";
-import { pickTwitchOnlyStreams, twitchLoginFromUrl, type HomeTwitchStream, type RankedLiveMatch } from "@/lib/home-live";
+import {
+  pickTwitchOnlyStreams,
+  liveEntrySplit,
+  twitchLoginFromUrl,
+  compareLiveEntries,
+  insertEndedAtPrevIndex,
+  advanceLiveEnded,
+  applyRankedResult,
+  pruneLiveEnded,
+  initialLiveEndedState,
+  rankedOpponentUuid,
+  LIVE_POLL_INTERVAL_MS,
+  type HomeTwitchStream,
+  type RankedLiveMatch,
+  type RankedLiveResult,
+  type RankedResultResponse,
+  type LiveEndedState,
+} from "@/lib/home-live";
 import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +53,7 @@ import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
+import { LiveSplitStrip } from "@/components/home/live-split-strip";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
 import { CompactProfileList } from "@/components/home/compact-profiles";
 import { HomeVideoCard } from "@/components/home/home-video-card";
@@ -49,7 +67,7 @@ import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Youtube, Twitch } from "@/components/brand-icons";
-import { ArrowRight, Search, UserCheck, BookOpen, Play, Radio } from "lucide-react";
+import { ArrowRight, Search, UserCheck, BookOpen, Play, Radio, Heart } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -361,6 +379,8 @@ interface FeedState {
   recentPaces: CachedPace[];
   liveRuns: PaceManLiveRun[];
   rankedMatches: RankedLiveMatch[];
+  /** 一覧から消えたカードを「終了」として少しの間残すための状態（docs/home-live.md） */
+  liveEnded: LiveEndedState;
   splitBests: Record<string, Record<string, number>>;
   mcidToUuid: Record<string, string>;
   mcidToSlug: Record<string, string>;
@@ -393,9 +413,15 @@ type FeedAction =
         liveRuns: PaceManLiveRun[];
         splitBests: Record<string, Record<string, number>>;
         rankedMatches: RankedLiveMatch[] | null;
+        /** ranked-live 応答のサーバー取得時刻（ms）。試合開始の推定に使う */
+        rankedFetchedAt: number;
         twitchStreams: HomeTwitchStream[] | null;
+        /** この取得を受け取った時刻（ms。reducer は純粋に保つため呼び出し側で渡す） */
+        now: number;
       };
     }
+  | { type: "PRUNE_LIVE_ENDED"; payload: { now: number } }
+  | { type: "SET_RANKED_RESULT"; payload: { id: string; endedAt: number; result: RankedLiveResult } }
   | { type: "SET_ERROR"; payload: keyof FeedState["errors"] }
   | { type: "RETRY"; payload: keyof FeedState["errors"] };
 
@@ -406,6 +432,7 @@ const initialFeedState: FeedState = {
   recentPaces: [],
   liveRuns: [],
   rankedMatches: [],
+  liveEnded: initialLiveEndedState,
   splitBests: {},
   mcidToUuid: {},
   mcidToSlug: {},
@@ -480,7 +507,22 @@ function feedReducer(state: FeedState, action: FeedAction): FeedState {
         ...mergeMcidMaps(state, action.payload),
         errors: { ...state.errors, liveRuns: false },
         loading: { ...state.loading, liveRuns: false },
-        liveRunsCheckedAt: Date.now(),
+        liveRunsCheckedAt: action.payload.now,
+        // 成功した取得同士の差分で「終了」を決める（失敗した取得ではここへ来ない）
+        liveEnded: advanceLiveEnded(state.liveEnded, {
+          now: action.payload.now,
+          runs: action.payload.liveRuns,
+          matches: action.payload.rankedMatches
+            ? { list: action.payload.rankedMatches, fetchedAt: action.payload.rankedFetchedAt }
+            : null,
+        }),
+      };
+    case "PRUNE_LIVE_ENDED":
+      return { ...state, liveEnded: pruneLiveEnded(state.liveEnded, action.payload.now) };
+    case "SET_RANKED_RESULT":
+      return {
+        ...state,
+        liveEnded: applyRankedResult(state.liveEnded, action.payload.id, action.payload.endedAt, action.payload.result),
       };
     case "SET_ERROR":
       return {
@@ -564,10 +606,13 @@ export default function HomePage() {
   const fetchLiveRuns = useCallback(() => {
     return Promise.all([
       fetchFeedJson<LiveRunsResponse>("/api/home-feed?type=live-runs"),
-      fetchFeedJson<{ matches: RankedLiveMatch[] }>("/api/home-feed?type=ranked-live").catch(() => null),
+      fetchFeedJson<{ matches: RankedLiveMatch[]; fetchedAt?: number }>("/api/home-feed?type=ranked-live").catch(
+        () => null,
+      ),
       fetchFeedJson<TwitchStreamsResponse>("/api/home-feed?type=twitch-streams").catch(() => null),
     ])
       .then(([live, ranked, streams]) => {
+        const now = Date.now();
         dispatch({
           type: "SET_LIVE_RUNS",
           payload: {
@@ -575,6 +620,9 @@ export default function HomePage() {
             liveRuns: live.liveRuns || [],
             splitBests: live.splitBests ?? {},
             rankedMatches: ranked ? ranked.matches || [] : null,
+            // サーバーの取得時刻（無い旧応答は受信時刻で代用）
+            rankedFetchedAt: ranked?.fetchedAt ?? now,
+            now,
             twitchStreams: streams ? streams.liveStreams || [] : null,
           },
         });
@@ -582,6 +630,8 @@ export default function HomePage() {
       .catch((err) => {
         console.error("Failed to fetch live runs:", err);
         dispatch({ type: "SET_ERROR", payload: "liveRuns" });
+        // 取得に失敗し続けても、終了カードは保持時間で消す
+        dispatch({ type: "PRUNE_LIVE_ENDED", payload: { now: Date.now() } });
       });
   }, []);
 
@@ -596,7 +646,7 @@ export default function HomePage() {
     };
     const start = () => {
       stop();
-      interval = setInterval(fetchLiveRuns, 15000);
+      interval = setInterval(fetchLiveRuns, LIVE_POLL_INTERVAL_MS);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -613,6 +663,35 @@ export default function HomePage() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [fetchLiveRuns]);
+
+  // 終了した Ranked 試合の結果取得。ライブの自動更新と同じタイミング（成功した取得のたび）に、結果が取れるまで問い合わせる。
+  // 自動更新が止まっている（タブ非表示）間は liveRunsCheckedAt が変わらないので、これも止まる
+  const resultInFlight = useRef(new Set<string>());
+  useEffect(() => {
+    if (feed.liveRunsCheckedAt === null) return;
+    for (const item of feed.liveEnded.ended) {
+      if (item.kind !== "ranked" || item.result) continue;
+      const opponent = rankedOpponentUuid(item.match);
+      if (!opponent) continue;
+      const flightKey = `${item.id}@${item.endedAt}`;
+      if (resultInFlight.current.has(flightKey)) continue;
+      resultInFlight.current.add(flightKey);
+      const params = new URLSearchParams({
+        type: "ranked-result",
+        uuid: item.match.uuid,
+        opponent,
+        since: String(Math.round(item.startedAtMs)),
+      });
+      fetchFeedJson<RankedResultResponse>(`/api/home-feed?${params}`)
+        .then((res) => {
+          if (res.status !== "done") return;
+          const { status: _status, ...result } = res;
+          dispatch({ type: "SET_RANKED_RESULT", payload: { id: item.id, endedAt: item.endedAt, result } });
+        })
+        .catch(() => {})
+        .finally(() => resultInFlight.current.delete(flightKey));
+    }
+  }, [feed.liveRunsCheckedAt, feed.liveEnded.ended]);
 
   // 自分のペースを隠す設定のときの除外対象 mcid（小文字）。無ければ null
   const hiddenPaceMcid = currentUser ? getHiddenPaceMcid(currentUser) : null;
@@ -635,13 +714,13 @@ export default function HomePage() {
     [feed.twitchStreams, currentUser],
   );
 
-  // ライブ欄の並び: PaceMan のライブラン → Ranked 対戦 → Twitch 配信（Minecraft のみ）。
-  // お気に入りは先頭へ（安定ソートなので各グループ内の順は保つ）
+  // ライブ欄の並び: PaceMan のライブラン・Ranked 対戦を混ぜて「区間が深い順 → 同じ深さなら到達タイムが速い順」（PaceMan 本家に倣う）、
+  // 消えて保持中の終了カードは直前の位置、最後に Twitch 配信（Minecraft のみ）。お気に入りは先頭へ（安定ソートなので各グループ内の順は保つ）
   const liveEntries = useMemo<LiveRailEntry[]>(() => {
-    const entries: LiveRailEntry[] = [];
+    const live: LiveRailEntry[] = [];
     for (const run of feed.liveRuns) {
       if (hiddenPaceMcid && run.nickname.toLowerCase() === hiddenPaceMcid) continue;
-      entries.push({
+      live.push({
         kind: "pace",
         id: `pace:${run.worldId}`,
         slug: feed.mcidToSlug[run.nickname.toLowerCase()],
@@ -649,9 +728,26 @@ export default function HomePage() {
       });
     }
     for (const match of feed.rankedMatches) {
-      entries.push({ kind: "ranked", id: `ranked:${match.key}`, slug: match.slug, match });
+      live.push({ kind: "ranked", id: `ranked:${match.key}`, slug: match.slug, match });
     }
-    // Twitch は PaceMan・Ranked に出ていない人だけ（slug / Twitch ログイン名で照合）
+    live.sort(compareLiveEntries);
+    const endedEntries: { item: LiveRailEntry; index: number }[] = [];
+    for (const i of feed.liveEnded.ended) {
+      if (i.kind === "pace") {
+        // 終了カードにもライブカードと同じ除外（自分のペースを隠す設定）をかける
+        if (hiddenPaceMcid && i.run.nickname.toLowerCase() === hiddenPaceMcid) continue;
+        endedEntries.push({
+          index: i.index,
+          item: { kind: "pace", id: i.id, slug: feed.mcidToSlug[i.run.nickname.toLowerCase()], run: i.run, ended: true },
+        });
+      } else {
+        endedEntries.push({
+          index: i.index,
+          item: { kind: "ranked", id: i.id, slug: i.match.slug, match: i.match, ended: true, result: i.result },
+        });
+      }
+    }
+    const entries = insertEndedAtPrevIndex(live, endedEntries);
     const twitchOnly = pickTwitchOnlyStreams(twitchStreams, {
       slugs: entries.map((e) => e.slug),
       logins: entries.map((e) =>
@@ -665,7 +761,7 @@ export default function HomePage() {
     return favoriteSlugSet.size === 0
       ? entries
       : [...entries].sort((a, b) => Number(isFav(b)) - Number(isFav(a)));
-  }, [feed.liveRuns, feed.rankedMatches, feed.mcidToSlug, twitchStreams, favoriteSlugSet, hiddenPaceMcid]);
+  }, [feed.liveRuns, feed.rankedMatches, feed.liveEnded.ended, feed.mcidToSlug, twitchStreams, favoriteSlugSet, hiddenPaceMcid]);
 
   // 「配信中」の印: Minefolio に Twitch を登録していて、twitch-streams で配信中と確認できた人だけ
   // （YouTube の配信中は出さない）。自分の Twitch を隠す設定のときは自分を除く（twitchStreams は適用済み）
@@ -768,8 +864,21 @@ export default function HomePage() {
 
   const welcomeName = currentUser ? getLocalizedDisplayName(currentUser, locale) : "";
 
-  const liveCount = liveEntries.length;
+  // 見出しの件数・区間の分布・おかえりバーには、終了カード（保持中）を含めない
+  const activeLiveEntries = useMemo(() => liveEntries.filter((e) => !e.ended), [liveEntries]);
+  const liveCount = activeLiveEntries.length;
+  // ライブ欄にお気に入りの走者のカードがあるときだけ、ハートの意味を補足する（終了カードも含む）
+  const hasFavoriteLive = liveEntries.some((e) => !!e.slug && favoriteSlugSet.has(e.slug));
   const liveSettled = !feed.loading.liveRuns && (!feed.errors.liveRuns || feed.liveRunsCheckedAt !== null);
+  // おかえりバーの「N人が走行中」に添える区間: いちばん先の区間にいる走者のもの（区間の無い配信だけの項目は判定から外す）
+  const leadingLiveSplit = useMemo(() => {
+    let best: { stage: number; split: string } | null = null;
+    for (const e of activeLiveEntries) {
+      const s = liveEntrySplit(e);
+      if (s && (!best || s.stage > best.stage)) best = s;
+    }
+    return best?.split ?? null;
+  }, [activeLiveEntries]);
   const videosLoading = feed.loading.videos || feed.loading.twitchVods;
   const showTwitch = twitchStreams.length > 0 || twitchVods.length > 0;
   const noVideoData = youtubeVideos.length === 0 && !showTwitch;
@@ -787,7 +896,7 @@ export default function HomePage() {
         title={t("home.liveTitle")}
         action={
           // ライブの有無にかかわらず最近のペース（/paces）へ行けるようにする（0件時のペース3件表示だけに頼らない）
-          <SectionHeaderLink to="/paces" label={t("home.recentPacesTitle")} prefetch="intent" />
+          <SectionHeaderLink to="/paces" label={t("home.pacesLink")} prefetch="intent" />
         }
         badge={
           // 人数が変わったときだけ読み上げる（15秒ごとの再描画では文字列が変わらない）。時刻など他の変動文字は入れない
@@ -803,6 +912,17 @@ export default function HomePage() {
           </span>
         }
       >
+        {hasFavoriteLive && (
+          // /browse の補足行と同じ見た目（2行に折り返してもハートは1行目に揃える）
+          <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+            <Heart className="mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite" aria-hidden="true" />
+            {t("home.liveFavoritesFirstNote")}
+          </p>
+        )}
+        {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
+        {(feed.loading.liveRuns || liveSettled) && (
+          <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
+        )}
         <LiveRail
           entries={liveEntries}
           maps={feed}
@@ -938,6 +1058,8 @@ export default function HomePage() {
             skinUrl={currentUser.customSkinUrl}
             isNewAccount={currentUser.isNewAccount}
             layout={layout}
+            liveCount={liveSettled ? liveCount : 0}
+            liveSplit={leadingLiveSplit}
           />
         </>
       ) : (

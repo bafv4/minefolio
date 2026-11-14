@@ -10,14 +10,20 @@ import { listedRunnerCondition, rankedStatsVisibleCondition } from "./users-filt
 import { getCached, setCached } from "./cache";
 import { getHomeHiddenUsers } from "./home-visibility.server";
 import {
+  normalizeUuid,
   rankedSplitName,
   rankedStage,
   sanitizeTwitchUrl,
+  judgeRankedResult,
   type RankedLiveMatch,
   type RankedLiveProgress,
+  type RankedResultResponse,
 } from "./home-live";
 
-const RANKED_LIVE_URL = "https://mcsrranked.com/api/live";
+// 既存定義（external-stats.ts / rankings-update.server.ts）と同じベース URL
+const RANKED_API_BASE = "https://mcsrranked.com/api";
+export { normalizeUuid };
+const RANKED_LIVE_URL = `${RANKED_API_BASE}/live`;
 
 // 登録者の一覧は60秒キャッシュ（ライブ応答は30秒キャッシュ。毎回の全公開ユーザー走査を避ける）。
 // 設定変更が反映されるまでの最悪値に +60 秒が加わる
@@ -67,11 +73,6 @@ function findEntry(data: RankedLiveEntry | undefined, uuid: string) {
   return data?.[uuid] ?? data?.[normalizeUuid(uuid)];
 }
 
-/** UUID をハイフン無し・小文字に正規化する（users.uuid は両形式が混在するため両側で揃える） */
-export function normalizeUuid(uuid: string): string {
-  return uuid.replace(/-/g, "").toLowerCase();
-}
-
 /** Ranked の応答から、登録者が出ている試合を1試合1カードに変換する（純粋関数。テスト対象） */
 export function buildRankedLiveMatches(
   response: RankedLiveResponse | null,
@@ -105,7 +106,7 @@ export function buildRankedLiveMatches(
 }
 
 /** Ranked 統計を公開している登録者（公開プロフィール・視聴者除外・uuid あり）を normalizedUuid で引ける形にする */
-async function getRegisteredByUuid(db: Database): Promise<Map<string, RegisteredRunner>> {
+export async function getRegisteredByUuid(db: Database): Promise<Map<string, RegisteredRunner>> {
   // キャッシュするのは Map の元になる配列（JSON 化できる形）
   let runners = await getCached<(RegisteredRunner & { key: string })[]>(RANKED_REGISTERED_CACHE_KEY);
   if (!runners) {
@@ -144,13 +145,13 @@ async function getRegisteredByUuid(db: Database): Promise<Map<string, Registered
   );
 }
 
-/** Minefolio 登録者が出ている Ranked のライブ試合一覧。外部取得に失敗したら空配列（ホーム全体は落とさない） */
-export async function fetchRankedLiveMatches(db: Database): Promise<RankedLiveMatch[]> {
+/** Minefolio 登録者が出ている Ranked のライブ試合一覧。外部取得に失敗したら null（0試合の [] と区別する。呼び出し側は失敗をキャッシュしない） */
+export async function fetchRankedLiveMatches(db: Database): Promise<RankedLiveMatch[] | null> {
   try {
     const res = await fetch(RANKED_LIVE_URL, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const json = (await res.json()) as RankedLiveResponse;
-    if (json.status !== "success") return [];
+    if (json.status !== "success") return null;
     // 登録者の照合は応答に試合があるときだけ（0試合なら DB を引かない）
     if (!json.data?.liveMatches?.length) return [];
     const matches = buildRankedLiveMatches(json, await getRegisteredByUuid(db));
@@ -160,6 +161,49 @@ export async function fetchRankedLiveMatches(db: Database): Promise<RankedLiveMa
     return matches.map((m) => (m.liveUrl && hidden.twitchSlugs.has(m.slug) ? { ...m, liveUrl: null } : m));
   } catch (error) {
     console.error("MCSR Ranked live error:", error);
-    return [];
+    return null;
   }
+}
+
+/** 登録走者の最新 Ranked 試合のキャッシュ（uuid 単位）。結果待ちのクライアントが重なっても上流への問い合わせを抑える */
+const RANKED_LATEST_TTL = 15 * 1000;
+const rankedLatestKey = (uuid: string) => `home:ranked-latest:v1:${uuid}`;
+const HEX32 = /^[0-9a-f]{32}$/;
+
+/**
+ * 終了した Ranked 試合の結果（登録走者から見た勝敗）。
+ * uuid はライブ欄に出せる登録者（getRegisteredByUuid と同じ条件）に限り、それ以外・形式不正・上流失敗・未確定は
+ * すべて { status: "pending" } を返す（登録の有無を応答から判別できないようにする）。上流失敗はキャッシュしない
+ */
+export async function fetchRankedResult(
+  db: Database,
+  args: { uuid: string; opponent: string; sinceMs: number },
+): Promise<RankedResultResponse> {
+  const pending: RankedResultResponse = { status: "pending" };
+  const opponent = normalizeUuid(args.opponent);
+  if (!HEX32.test(opponent) || !Number.isFinite(args.sinceMs)) return pending;
+  const runner = (await getRegisteredByUuid(db)).get(normalizeUuid(args.uuid));
+  if (!runner) return pending;
+  // 上流 URL は照会値ではなく登録済みの uuid から組み立てる
+  const uuid = normalizeUuid(runner.uuid);
+
+  const key = rankedLatestKey(uuid);
+  let latest = await getCached<{ match: unknown }>(key);
+  if (!latest) {
+    try {
+      const res = await fetch(`${RANKED_API_BASE}/users/${uuid}/matches?count=1&type=2`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return pending;
+      const json = (await res.json()) as { status?: string; data?: unknown[] };
+      if (json.status !== "success" || !Array.isArray(json.data)) return pending;
+      latest = { match: json.data[0] ?? null };
+      await setCached(key, latest, RANKED_LATEST_TTL);
+    } catch (error) {
+      console.error("MCSR Ranked result error:", error);
+      return pending;
+    }
+  }
+  const result = judgeRankedResult(latest.match, { uuid, opponent, sinceMs: args.sinceMs });
+  return result ? { status: "done", ...result } : pending;
 }

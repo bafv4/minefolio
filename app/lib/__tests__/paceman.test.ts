@@ -64,6 +64,25 @@ describe("getLatestSplit", () => {
     expect(getLatestSplit(liveRun([]))).toBeNull();
   });
 
+  it("構造物は種類ではなく着いた順で、後の方を最新にする（Fortress → Bastion なら Bastion）", () => {
+    const fortressFirst = liveRun([
+      event("rsg.enter_nether", { rta: 90_000 }),
+      event("rsg.enter_fortress", { rta: 160_000 }),
+      event("rsg.enter_bastion", { rta: 262_000 }),
+    ]);
+    expect(getLatestSplit(fortressFirst)?.eventId).toBe("rsg.enter_bastion");
+    const bastionFirst = liveRun([
+      event("rsg.enter_nether", { rta: 90_000 }),
+      event("rsg.enter_bastion", { rta: 150_000 }),
+      event("rsg.enter_fortress", { rta: 300_000 }),
+    ]);
+    expect(getLatestSplit(bastionFirst)?.eventId).toBe("rsg.enter_fortress");
+    // 構造物より先の区間は従来どおり優先
+    expect(getLatestSplit(liveRun([...fortressFirst.eventList, event("rsg.first_portal", { rta: 400_000 })]))?.eventId).toBe(
+      "rsg.first_portal",
+    );
+  });
+
   it("未知の eventId（order 0）は既知のイベントより優先されない", () => {
     const run = liveRun([event("rsg.unknown_event"), event("rsg.enter_nether")]);
     expect(getLatestSplit(run)?.eventId).toBe("rsg.enter_nether");
