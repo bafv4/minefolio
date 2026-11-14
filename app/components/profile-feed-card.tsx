@@ -132,13 +132,6 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
   const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
-  const userRoleLabel =
-    player.role === "runner"
-      ? t("common.runner")
-      : player.role === "viewer"
-        ? t("common.viewer")
-        : null;
-  const editionLabel = player.mainEdition === "java" ? "Java" : player.mainEdition === "bedrock" ? "Bedrock" : null;
 
   return (
     <Link
@@ -163,16 +156,8 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        {userRoleLabel && (
-          <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
-            {userRoleLabel}
-          </Badge>
-        )}
-        {editionLabel && (
-          <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px]">
-            {editionLabel}
-          </Badge>
-        )}
+        {/* カードと同じ規則（既定値は出さず、識別に効くタグだけ最大3個） */}
+        <FeedCardTags player={player} />
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">
           <Clock3 className="h-3 w-3" />
           {formatRelativeDate(t, player.updatedAt)}
