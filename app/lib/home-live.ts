@@ -1,8 +1,8 @@
 // ホームのライブ欄で使う純粋ロジック（区間進行バー・Ranked 対戦カードの型）。
 // クライアントとサーバーの両方から import される（DB・外部アクセスは持たない）。
 
-import { getSplitTimeline } from "./pace-splits";
-import { getLatestSplit, type PaceManLiveRun } from "./paceman";
+import { getLatestSplit, getSplitTimeline } from "./pace-splits";
+import type { PaceManLiveRun } from "./paceman";
 import type { TwitchStream } from "./twitch";
 
 /** 進行バーの7点（Nether → Bastion → Fortress → Blind → Stronghold → End → Finish） */

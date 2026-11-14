@@ -486,7 +486,7 @@ PaceManペースのキャッシュ。Cron（`/api/cron/update-paceman-cache`）�
 - `app/lib/home-live.ts` / `home-format.ts` - 区間進行バー・時刻整形などの純粋ロジック
 - `app/routes/api/home-featured.ts` / `home-favorite-activity.ts` - 「別の走者」/お気に入りの動き API
 - `app/lib/paces-feed.server.ts` - ペース一覧の共通ロジック（検索条件解析・表示対象の絞り込み）
-- `app/lib/pace-splits.ts` - フィード対象区間の定数
+- `app/lib/pace-splits.ts` - フィード対象区間の定数、スプリットID → ラベル/タイムライン名、進行順（`getSplitOrder`）・最新区間（`getLatestSplit`）。クライアントからも使うため DB・cache を引き込まない軽量モジュール（`paceman.ts` からも re-export）
 - `app/lib/cache.ts` - 汎用インメモリキャッシュ（`getCached`, `setCached`）
 
 ### コンポーネント

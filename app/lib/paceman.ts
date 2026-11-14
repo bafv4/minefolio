@@ -58,38 +58,7 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[] | null> {
 }
 
 // スプリットID → 英語ラベル / タイムライン名の変換は、クライアントからも使うため軽量モジュールに置く（cache・DB を引き込まない）
-export { getSplitLabelEnglish, getSplitTimeline } from "./pace-splits";
-
-/**
- * スプリットIDの進行順序を取得（ソート用）
- */
-export function getSplitOrder(eventId: string): number {
-  const order: Record<string, number> = {
-    "rsg.enter_nether": 1,
-    "rsg.enter_bastion": 2,
-    "rsg.enter_fortress": 3,
-    "rsg.first_portal": 4,
-    "rsg.second_portal": 5,
-    "rsg.enter_stronghold": 6,
-    "rsg.enter_end": 7,
-    "rsg.credits": 8,
-  };
-  return order[eventId] || 0;
-}
-
-/**
- * ライブペースの最新スプリットを取得
- */
-export function getLatestSplit(run: PaceManLiveRun): PaceManEvent | null {
-  if (run.eventList.length === 0) return null;
-  // スプリット順でソートして最後のものを取得。ただし構造物（Bastion / Fortress）はどちらが先でもよいので
-  // 同じ順位として扱い、着いたのが後（rta が大きい）方を最新にする（Fortress → Bastion の順に進んだランで、
-  // Bastion に着いた後も Fortress を最新として出さないため）
-  const rank = (eventId: string) =>
-    eventId === "rsg.enter_bastion" || eventId === "rsg.enter_fortress" ? 2 : getSplitOrder(eventId);
-  const sorted = [...run.eventList].sort((a, b) => rank(b.eventId) - rank(a.eventId) || b.rta - a.rta);
-  return sorted[0];
-}
+export { getSplitLabelEnglish, getSplitTimeline, getSplitOrder, getLatestSplit } from "./pace-splits";
 
 // ============================================
 // PaceMan Stats API - 最近のペース履歴

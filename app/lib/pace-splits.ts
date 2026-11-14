@@ -1,3 +1,5 @@
+import type { PaceManEvent, PaceManLiveRun } from "./paceman";
+
 // ペースフィードで扱う区間（Enter Nether を除く、進行順）
 // サーバー側のバリデーションとクライアント側の選択肢で共用する
 export const PACE_FEED_SPLITS = [
@@ -42,4 +44,45 @@ export function getSplitLabelEnglish(eventId: string): string {
  */
 export function getSplitTimeline(eventId: string): string {
   return SPLIT_TIMELINES[eventId] || getSplitLabelEnglish(eventId);
+}
+
+const SPLIT_ORDER: Record<string, number> = {
+  "rsg.enter_nether": 1,
+  "rsg.enter_bastion": 2,
+  "rsg.enter_fortress": 3,
+  "rsg.first_portal": 4,
+  "rsg.second_portal": 5,
+  "rsg.enter_stronghold": 6,
+  "rsg.enter_end": 7,
+  "rsg.credits": 8,
+};
+
+/**
+ * スプリットIDの進行順序を取得（ソート用）
+ */
+export function getSplitOrder(eventId: string): number {
+  return SPLIT_ORDER[eventId] || 0;
+}
+
+/**
+ * ライブペースの最新スプリットを取得
+ */
+export function getLatestSplit(run: PaceManLiveRun): PaceManEvent | null {
+  if (run.eventList.length === 0) return null;
+  // スプリット順で最大のものを取得。ただし構造物（Bastion / Fortress）はどちらが先でもよいので
+  // 同じ順位として扱い、着いたのが後（rta が大きい）方を最新にする（Fortress → Bastion の順に進んだランで、
+  // Bastion に着いた後も Fortress を最新として出さないため）
+  const rank = (eventId: string) =>
+    eventId === "rsg.enter_bastion" || eventId === "rsg.enter_fortress" ? 2 : getSplitOrder(eventId);
+  let best = run.eventList[0];
+  let bestRank = rank(best.eventId);
+  for (let i = 1; i < run.eventList.length; i++) {
+    const e = run.eventList[i];
+    const r = rank(e.eventId);
+    if (r > bestRank || (r === bestRank && e.rta > best.rta)) {
+      best = e;
+      bestRank = r;
+    }
+  }
+  return best;
 }

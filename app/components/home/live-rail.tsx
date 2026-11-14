@@ -25,7 +25,8 @@ import {
   type RankedLiveMatch,
   type RankedLiveResult,
 } from "@/lib/home-live";
-import { getLatestSplit, getSplitTimeline, type PaceManLiveRun } from "@/lib/paceman";
+import { getLatestSplit, getSplitTimeline } from "@/lib/pace-splits";
+import type { PaceManLiveRun } from "@/lib/paceman";
 import type { CachedPace } from "@/lib/paceman-cache";
 import { ChevronDown, ChevronUp, ExternalLink, History, Swords } from "lucide-react";
 import { FavoriteMark } from "@/components/favorite-mark";
