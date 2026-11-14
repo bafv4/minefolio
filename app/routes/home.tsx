@@ -1058,7 +1058,7 @@ export default function HomePage() {
       {isRegistered && currentUser ? (
         <>
           {/* ログイン時は宣伝の見出し・説明を出さない。h1 は視覚的に隠したページ見出し */}
-          <h1 className="sr-only">{t("home.title")}</h1>
+          <h1 className="sr-only">{t("home.pageHeading")}</h1>
           <WelcomeBar
             name={welcomeName}
             slug={currentUser.slug}
