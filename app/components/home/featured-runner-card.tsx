@@ -59,8 +59,8 @@ function KeyChip({ k }: { k: FeaturedRunner["keys"][number] }) {
   const label = getKeyLabel(t, k.keyCode);
   return (
     <li className="flex min-w-0 flex-col items-center gap-1">
-      {/* 仮想キーボード用の省略名（ｲﾝﾍﾞﾝﾄﾘ / OH 等）ではなく通常の操作名を使う。列幅に収まらなければ切らずに折り返す */}
-      <span className="max-w-full break-words text-center text-[11px] leading-tight text-muted-foreground">
+      {/* 仮想キーボード用の省略名（ｲﾝﾍﾞﾝﾄﾘ / OH 等）ではなく通常の操作名を使う。日本語は語の途中で折らず（break-keep）、列から少しはみ出しても1行のまま中央に置く。英語は空白で折り返す */}
+      <span className="break-keep text-center text-[11px] leading-tight text-muted-foreground">
         {getActionLabel(t, k.action)}
       </span>
       <span title={label} className={KEY_CHIP_CLASS}>
