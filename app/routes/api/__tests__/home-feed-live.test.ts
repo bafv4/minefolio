@@ -23,6 +23,16 @@ const pacemanMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/paceman", () => ({ fetchLiveRuns: pacemanMocks.fetchLiveRuns }));
 
+const rankedMocks = vi.hoisted(() => ({
+  fetchRankedLiveMatches: vi.fn(),
+  fetchRankedResult: vi.fn(),
+}));
+
+vi.mock("@/lib/ranked-live.server", () => ({
+  fetchRankedLiveMatches: rankedMocks.fetchRankedLiveMatches,
+  fetchRankedResult: rankedMocks.fetchRankedResult,
+}));
+
 const twitchMocks = vi.hoisted(() => ({
   getTwitchAppToken: vi.fn(),
   getLiveStreams: vi.fn(),
@@ -36,6 +46,7 @@ vi.mock("@/lib/twitch", () => ({
 import { loader } from "../home-feed";
 
 const LIVE_RUNS_CACHE_KEY = "home-feed:live-runs:v3";
+const RANKED_LIVE_CACHE_KEY = "home-feed:ranked-live:v3";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -68,6 +79,9 @@ beforeEach(async () => {
   process.env.TURSO_DATABASE_URL = SHARED_MEMORY_URL;
   db = await createTestDbAt(SHARED_MEMORY_URL);
   await invalidateCache(LIVE_RUNS_CACHE_KEY);
+  await invalidateCache(`${LIVE_RUNS_CACHE_KEY}:fail`);
+  await invalidateCache(RANKED_LIVE_CACHE_KEY);
+  await invalidateCache(`${RANKED_LIVE_CACHE_KEY}:fail`);
   await invalidateCache(USER_DATA_CACHE_KEY);
   await invalidateCache(HOME_HIDDEN_USERS_CACHE_KEY);
 });
@@ -286,16 +300,57 @@ describe("?type=live-runs / recent-paces - showPacemanOnHome（全員のホー�
 });
 
 describe("?type=live-runs - 上流失敗", () => {
-  it("fetchLiveRuns が null（上流失敗）なら 502 + no-store で返し、キャッシュしない", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fetchLiveRuns が null（上流失敗）なら 502 + no-store で返し、10秒間は上流を呼ばずに 502、過ぎたら再試行して復旧を反映する", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     pacemanMocks.fetchLiveRuns.mockResolvedValue(null);
     const res = await callLoader("?type=live-runs");
     expect(res.status).toBe(502);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(pacemanMocks.fetchLiveRuns).toHaveBeenCalledTimes(1);
 
-    // 直後に復旧したら失敗がキャッシュされておらず正常応答になる
+    // 失敗直後（10秒以内）は、上流が復旧していても呼ばずに同じ 502 を返す
     pacemanMocks.fetchLiveRuns.mockResolvedValue([]);
+    vi.advanceTimersByTime(9_000);
+    const again = await callLoader("?type=live-runs");
+    expect(again.status).toBe(502);
+    expect(again.headers.get("Cache-Control")).toBe("no-store");
+    expect(pacemanMocks.fetchLiveRuns).toHaveBeenCalledTimes(1);
+
+    // 10秒を過ぎたら上流を再試行し、復旧していれば正常応答
+    vi.advanceTimersByTime(1_500);
     const ok = await callLoader("?type=live-runs");
     expect(ok.status).toBe(200);
+    expect(pacemanMocks.fetchLiveRuns).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("?type=ranked-live - 上流失敗", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fetchRankedLiveMatches が null なら 502 + no-store、10秒間は上流を呼ばず、過ぎたら再試行して復旧を反映する", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    rankedMocks.fetchRankedLiveMatches.mockResolvedValue(null);
+    const res = await callLoader("?type=ranked-live");
+    expect(res.status).toBe(502);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(rankedMocks.fetchRankedLiveMatches).toHaveBeenCalledTimes(1);
+
+    rankedMocks.fetchRankedLiveMatches.mockResolvedValue([]);
+    vi.advanceTimersByTime(9_000);
+    const again = await callLoader("?type=ranked-live");
+    expect(again.status).toBe(502);
+    expect(rankedMocks.fetchRankedLiveMatches).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1_500);
+    const ok = await callLoader("?type=ranked-live");
+    expect(ok.status).toBe(200);
+    expect(rankedMocks.fetchRankedLiveMatches).toHaveBeenCalledTimes(2);
   });
 });
 

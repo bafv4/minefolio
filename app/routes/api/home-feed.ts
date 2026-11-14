@@ -27,6 +27,11 @@ const CACHE_TTL = {
   TWITCH_LINKS: 5 * 60 * 1000, // 5分（Twitchリンク一覧）
 };
 
+// 上流（PaceMan / MCSR Ranked）の失敗を覚えておく時間。障害中は、ホームを開いている全タブの15秒ごとの
+// ポーリングがそのまま上流へ届き、上流が応答しないとタイムアウト（10秒 / 8秒）まで関数が待ち続けるため、
+// この間は上流を呼ばずに即 502 を返す。復旧の反映は最大でこの時間だけ遅れる（インスタンス単位のメモリ。CDN には載せない）
+const UPSTREAM_FAILURE_TTL = 10 * 1000;
+
 // 動画フィード（youtube-videos / twitch-vods）でホームに返す最大件数
 const HOME_FEED_VIDEO_LIMIT = 10;
 
@@ -131,6 +136,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (cached) {
         return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
       }
+      // 直前に上流（PaceMan）が失敗していたら、期限内は上流を呼ばずに失敗を返す
+      const failKey = `${cacheKey}:fail`;
+      if (await getCached<true>(failKey)) return upstreamFailure();
 
       // ユーザーデータとライブランを並列取得
       const [userData, liveRuns, hidden] = await Promise.all([
@@ -140,7 +148,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       ]);
 
       // 上流（PaceMan）の失敗は 0 件と区別してエラー応答にする（サーバー・CDN ともキャッシュしない）
-      if (liveRuns === null) return upstreamFailure();
+      // 負キャッシュは上流（PaceMan）の失敗だけ。DB 側の一時エラーは例外として伝わり、覚えない
+      if (liveRuns === null) {
+        await setCached(failKey, true, UPSTREAM_FAILURE_TTL);
+        return upstreamFailure();
+      }
 
       // 「ホーム画面にPaceManのペースを表示」をオフにした人は全員のホームから除く（mcid は大文字小文字を無視）
       const registeredMcidSet = new Set(userData.registeredMcids);
@@ -253,8 +265,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       const cached = await getCached<{ matches: RankedLiveMatch[]; fetchedAt: number }>(cacheKey);
       if (cached) return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
 
+      // 直前に上流（MCSR Ranked）が失敗していたら、期限内は上流を呼ばずに失敗を返す
+      const failKey = `${cacheKey}:fail`;
+      if (await getCached<true>(failKey)) return upstreamFailure();
+
       const matches = await fetchRankedLiveMatches(createDb());
-      if (matches === null) return upstreamFailure();
+      if (matches === null) {
+        await setCached(failKey, true, UPSTREAM_FAILURE_TTL);
+        return upstreamFailure();
+      }
       // fetchedAt: 取得時刻（クライアントが試合開始時刻を推定する基準。配信遅延・端末時計のずれの影響を受けない）
       const result = { matches, fetchedAt: Date.now() };
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
