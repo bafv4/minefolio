@@ -13,7 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import { defaultHomeLayout, HOME_SECTION_LABEL_KEYS, type HomeLayout, type HomeSectionId } from "@/lib/home-sections";
+import {
+  defaultHomeLayout,
+  HOME_SECTION_LABEL_KEYS,
+  sameHomeLayout,
+  type HomeLayout,
+  type HomeSectionId,
+} from "@/lib/home-sections";
 import { ArrowDown, ArrowUp, RotateCcw } from "lucide-react";
 
 /** ホームと設定モーダルで同じ fetcher（保存中の楽観表示用）を共有するキー */
@@ -34,8 +40,7 @@ export function HomeSettingsDialog({
   const fetcher = useFetcher<{ success?: boolean; error?: string; action?: string }>({
     key: HOME_SECTION_ORDER_FETCHER_KEY,
   });
-  const [draft, setDraft] = useState<HomeSectionId[]>(layout.order);
-  const [hidden, setHidden] = useState<HomeSectionId[]>(layout.hidden);
+  const [draft, setDraft] = useState<HomeLayout>(layout);
   const [announcement, setAnnouncement] = useState("");
   const submitted = useRef(false);
   const [pendingFocus, setPendingFocus] = useState<{ id: HomeSectionId; dir: "up" | "down" } | null>(null);
@@ -45,8 +50,7 @@ export function HomeSettingsDialog({
   // 開くたびに現在の並びから編集し直す
   useEffect(() => {
     if (open) {
-      setDraft(layout.order);
-      setHidden(layout.hidden);
+      setDraft(layout);
       setAnnouncement("");
       submitted.current = false;
     }
@@ -77,29 +81,27 @@ export function HomeSettingsDialog({
 
   const move = (index: number, delta: -1 | 1) => {
     const target = index + delta;
-    if (target < 0 || target >= draft.length) return;
-    const next = [...draft];
+    if (target < 0 || target >= draft.order.length) return;
+    const next = [...draft.order];
     const [item] = next.splice(index, 1);
     next.splice(target, 0, item);
-    setDraft(next);
+    setDraft((d) => ({ ...d, order: next }));
     setPendingFocus({ id: item, dir: delta === -1 ? "up" : "down" });
     setAnnouncement(t("home.settingsMoved", { name: t(HOME_SECTION_LABEL_KEYS[item]), position: target + 1 }));
   };
 
-  const visibleCount = draft.length - hidden.length;
+  const { order, hidden } = draft;
+  const visibleCount = order.length - hidden.length;
   const toggleVisible = (id: HomeSectionId, visible: boolean) =>
-    setHidden((prev) => (visible ? prev.filter((h) => h !== id) : prev.includes(id) ? prev : [...prev, id]));
+    setDraft((d) => ({
+      ...d,
+      hidden: visible ? d.hidden.filter((h) => h !== id) : d.hidden.includes(id) ? d.hidden : [...d.hidden, id],
+    }));
 
-  const initial = layout;
-  const changed =
-    draft.some((id, i) => id !== initial.order[i]) ||
-    hidden.length !== initial.hidden.length ||
-    hidden.some((id) => !initial.hidden.includes(id));
+  const changed = !sameHomeLayout(draft, layout);
 
   const reset = () => {
-    const def = defaultHomeLayout();
-    setDraft(def.order);
-    setHidden(def.hidden);
+    setDraft(defaultHomeLayout());
     setAnnouncement("");
   };
 
@@ -107,7 +109,7 @@ export function HomeSettingsDialog({
   const save = () => {
     submitted.current = true;
     fetcher.submit(
-      { _action: "saveHomeSectionOrder", order: JSON.stringify(draft), hidden: JSON.stringify(hidden) },
+      { _action: "saveHomeSectionOrder", order: JSON.stringify(order), hidden: JSON.stringify(hidden) },
       // ホームは index ルートなので ?index を付けないと親レイアウト（action なし）に送られる
       { method: "post", action: "/?index" },
     );
@@ -142,7 +144,7 @@ export function HomeSettingsDialog({
             </Button>
           </div>
           <ul ref={listRef} className="divide-y rounded-xl border border-border/70 bg-background/80">
-            {draft.map((id, index) => {
+            {order.map((id, index) => {
               const name = t(HOME_SECTION_LABEL_KEYS[id]);
               const visible = !hidden.includes(id);
               const lastVisible = visible && visibleCount <= 1;
@@ -191,7 +193,7 @@ export function HomeSettingsDialog({
                       if (el) buttonRefs.current.set(`${id}:down`, el);
                       else buttonRefs.current.delete(`${id}:down`);
                     }}
-                    disabled={index === draft.length - 1}
+                    disabled={index === order.length - 1}
                     aria-label={t("home.settingsMoveDown", { name })}
                     onClick={() => move(index, 1)}
                   >

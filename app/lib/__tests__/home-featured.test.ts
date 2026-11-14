@@ -6,8 +6,8 @@ import {
   type FeaturedEvent,
 } from "../home-featured";
 import { formatClock, formatClockSeconds } from "../home-format";
-import { rankedSplitName, rankedStage, sanitizeTwitchUrl, splitStage } from "../home-live";
-import { buildRankedLiveMatches, normalizeUuid } from "../ranked-live.server";
+import { normalizeUuid, rankedSplitName, rankedStage, sanitizeTwitchUrl, splitStage } from "../home-live";
+import { buildRankedLiveMatches } from "../ranked-live.server";
 
 describe("scoreFeaturedReason / pickFeaturedCandidates", () => {
   it("1人につき最も点数の高い出来事を理由にし、点数順（同点は新しい順）に最大5人まで返す", () => {

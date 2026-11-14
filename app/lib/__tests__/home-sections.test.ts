@@ -4,6 +4,8 @@ import {
   HOME_SECTION_IDS,
   isDefaultHomeLayout,
   normalizeHomeLayout,
+  parseHomeLayoutFields,
+  sameHomeLayout,
   serializeHomeLayout,
 } from "../home-sections";
 
@@ -68,5 +70,32 @@ describe("isDefaultHomeLayout / serializeHomeLayout", () => {
     expect(serializeHomeLayout({ order: [...DEFAULT_HOME_SECTION_ORDER], hidden: [] })).toBeNull();
     const layout = { order: [...DEFAULT_HOME_SECTION_ORDER], hidden: ["live" as const] };
     expect(JSON.parse(serializeHomeLayout(layout)!)).toEqual(layout);
+  });
+});
+
+describe("parseHomeLayoutFields", () => {
+  it("order / hidden の JSON を解析する。hidden が無ければ []", () => {
+    expect(parseHomeLayoutFields('["live"]', '["videos"]')).toEqual({ order: ["live"], hidden: ["videos"] });
+    expect(parseHomeLayoutFields('["live"]', null)).toEqual({ order: ["live"], hidden: [] });
+    expect(parseHomeLayoutFields('["live"]', undefined)).toEqual({ order: ["live"], hidden: [] });
+  });
+
+  it("文字列でない・JSON として壊れているときは null", () => {
+    expect(parseHomeLayoutFields(null, "[]")).toBeNull();
+    expect(parseHomeLayoutFields(new File([], "x"), "[]")).toBeNull();
+    expect(parseHomeLayoutFields("[]", new File([], "x"))).toBeNull();
+    expect(parseHomeLayoutFields("{oops", "[]")).toBeNull();
+    expect(parseHomeLayoutFields("[]", "{oops")).toBeNull();
+  });
+});
+
+describe("sameHomeLayout", () => {
+  const base = { order: [...DEFAULT_HOME_SECTION_ORDER], hidden: ["live" as const, "videos" as const] };
+
+  it("hidden は順序を問わず、order は順序まで比べる", () => {
+    expect(sameHomeLayout(base, { order: [...base.order], hidden: ["videos", "live"] })).toBe(true);
+    expect(sameHomeLayout(base, { order: [...base.order].reverse(), hidden: base.hidden })).toBe(false);
+    expect(sameHomeLayout(base, { order: base.order, hidden: ["live"] })).toBe(false);
+    expect(sameHomeLayout(base, { order: base.order, hidden: ["live", "guides"] })).toBe(false);
   });
 });

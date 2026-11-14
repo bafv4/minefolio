@@ -6,10 +6,10 @@ import { createId } from "@paralleldrive/cuid2";
 import { eq, and, inArray, lt } from "drizzle-orm";
 import type { Database } from "./db";
 import { toUtcDateString } from "./time-utils";
+import { RANKED_API_BASE } from "./external-stats";
 import { users, speedrunCategories, playerRankings, rankedEloSnapshots } from "./schema";
 
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
-const RANKED_API_BASE = "https://mcsrranked.com/api";
 
 // ============================================
 // 型定義

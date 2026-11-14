@@ -18,7 +18,6 @@ import {
   liveSortKey,
   paceBestKey,
   paceElapsedRtaMs,
-  showsPaceBestDiff,
   splitStage,
   twitchChannelUrl,
   type HomeTwitchStream,
@@ -41,7 +40,7 @@ const CARD_CLASS =
   "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0";
 
 /** カード枠。終了カード（一覧から消えて少しの間だけ残しているもの）は枠を一段弱める（本文テキストの濃さは変えない） */
-const cardClass = (ended: boolean | undefined) => cn(CARD_CLASS, ended ? "border-border/40" : "border-border/70");
+const cardClass = (ended?: boolean) => cn(CARD_CLASS, ended ? "border-border/40" : "border-border/70");
 
 /** カード全面クリック用のオーバーレイ（名前リンクの ::after）。配信リンク等は relative z-10 で手前に出す */
 const NAME_LINK_CLASS =
@@ -135,24 +134,25 @@ function PaceManSourceLine({ gameVersion, status }: { gameVersion?: string; stat
   );
 }
 
+/** 時間ブロックの高さ（ラベル行 h-5 + gap-1 + 時刻 leading-8 = 56px）。Twitch カードの同じ段の枠と共有して揃える */
+const TIME_SLOT_CLASS = "h-14";
+
 /** 時間ブロック。ラベル行（h-5）＋隙間＋時刻（leading-8）の固定高。右側の補足は下端に揃える */
 function TimeBlock({
   label,
   time,
   aria,
   aside,
-  hydrationSafe,
 }: {
   label: ReactNode;
   time: string;
   aria?: string;
   aside?: ReactNode;
-  hydrationSafe?: boolean;
 }) {
   // ラベル行（区間名＋経過）はカードの全幅を使い、右の補足（ベスト比・相手の情報・相対時刻）は大きな数字と
   // 同じ行に置く。ラベルが長いとき（「Enter Stronghold 経過 11:27」等）に補足が押しつぶされて1文字ずつ折れないように
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", TIME_SLOT_CLASS)}>
       <div className="flex h-5 min-w-0 items-center overflow-hidden whitespace-nowrap text-xs leading-5 text-muted-foreground">
         {label}
       </div>
@@ -160,7 +160,6 @@ function TimeBlock({
         <p
           className="shrink-0 font-mono text-2xl font-semibold leading-8 tabular-nums"
           aria-label={aria}
-          suppressHydrationWarning={hydrationSafe}
         >
           {time}
         </p>
@@ -212,16 +211,17 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname;
   // ベスト比は 2つ目の構造物（Second Structure）以降だけ（構造物は到達順で数える）
   // （2つ目の構造物は種類別のベストではなく、2つ目の構造物どうしのベストと比べる）
-  const best = timeline && showsPaceBestDiff(run) ? bests?.[paceBestKey(run, timeline)] : undefined;
+  const bestKey = timeline ? paceBestKey(run, timeline, stage) : null;
+  const best = bestKey ? bests?.[bestKey] : undefined;
   const diff = latest && best != null ? latest.igt - best : null;
-  // 経過時間（RTA）は Ranked のカードと同じく区間名の右に小さく添える。完走・終了したランは
-  // lastUpdated からの経過がランの時間ではなくなるので出さない
-  const elapsedMs = !ended && !isFinishedRun(run) ? paceElapsedRtaMs(run, Date.now()) : null;
-  // 終了カードの liveAccount は消える直前の記録なので、今も配信中（streamingSlugs）のときだけリンクを出す
-  const twitchUrl = run.user.liveAccount && (!ended || isStreaming) ? twitchChannelUrl(run.user.liveAccount) : null;
   // 完走（credits あり）は一覧に残っている間から「完走」。credits の無いまま消えたものは「リセット」
   // （PaceMan のライブ一覧から credits 無しで消えるのは実際上ほぼリセットのため、その名前で出す）
   const finished = isFinishedRun(run);
+  // 経過時間（RTA）は Ranked のカードと同じく区間名の右に小さく添える。完走・終了したランは
+  // lastUpdated からの経過がランの時間ではなくなるので出さない
+  const elapsedMs = !ended && !finished ? paceElapsedRtaMs(run, Date.now()) : null;
+  // 終了カードの liveAccount は消える直前の記録なので、今も配信中（streamingSlugs）のときだけリンクを出す
+  const twitchUrl = run.user.liveAccount && (!ended || isStreaming) ? twitchChannelUrl(run.user.liveAccount) : null;
   const status = finished ? (
     <span className="shrink-0 font-semibold text-gold">{t("home.liveFinished")}</span>
   ) : ended ? (
@@ -301,6 +301,7 @@ function RankedMatchCard({
   const progress = match.progress;
   // 勝利（降参でない）のときは大きな数字を完走タイムにする。それ以外は最後に確認できた状態のまま
   const finishTimeMs = ended && result?.outcome === "win" && !result.forfeited ? result.timeMs : null;
+  const shownTimeMs = finishTimeMs ?? (progress ? progress.timeMs : match.currentTimeMs);
   const liveUrl = match.liveUrl && (!ended || isStreaming) ? match.liveUrl : null;
   const resultLabel = !ended
     ? null
@@ -376,8 +377,8 @@ function RankedMatchCard({
             t("home.rankedElapsed")
           )
         }
-        time={formatClock(finishTimeMs ?? (progress ? progress.timeMs : match.currentTimeMs))}
-        aria={igtAria(t, finishTimeMs ?? (progress ? progress.timeMs : match.currentTimeMs))}
+        time={formatClock(shownTimeMs)}
+        aria={igtAria(t, shownTimeMs)}
         aside={
           <div className="flex min-w-0 flex-col items-end text-xs leading-4 text-muted-foreground">
             {/* ここは相手の情報だけ（本人のレートは上の「Ranked 対戦中」の行の右） */}
@@ -422,7 +423,7 @@ function TwitchLiveCard({
   const elapsedMs = Math.max(0, Date.now() - new Date(stream.started_at).getTime());
   const href = twitchChannelUrl(stream.user_login);
   return (
-    <li className={cn(cardClass(false), className)}>
+    <li className={cn(cardClass(), className)}>
       <CardHead
         slug={item.slug || undefined}
         uuid={item.uuid ?? undefined}
@@ -448,7 +449,7 @@ function TwitchLiveCard({
           )}
         </p>
       </StateBand>
-      <div className="flex h-14 items-start">
+      <div className={cn("flex items-start", TIME_SLOT_CLASS)}>
         <p className="line-clamp-2 text-sm leading-6 font-medium" title={stream.title}>
           {stream.title}
         </p>
@@ -467,7 +468,7 @@ function RecentPaceCard({ run, maps, className }: { run: CachedPace; maps: McidM
   const key = run.mcid.toLowerCase();
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname || run.mcid;
   return (
-    <li className={cn(cardClass(false), className)}>
+    <li className={cn(cardClass(), className)}>
       <CardHead
         slug={maps.mcidToSlug[key]}
         uuid={maps.mcidToUuid[key]}

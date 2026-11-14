@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
-import { Search, Users, Heart, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
+import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import {
@@ -44,6 +44,7 @@ import type { Translator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { platformLabel } from "@/lib/platform-label";
 import { EmptyState } from "@/components/empty-state";
+import { FavoritesFirstNote } from "@/components/favorite-mark";
 import { cn } from "@/lib/utils";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
@@ -346,10 +347,7 @@ export default function BrowsePage() {
         {/* 並びの優先はログイン中だけに効く。お気に入りが1人以上いるときだけ理由を示す */}
         {isLoggedIn && favorites.length > 0 && (
           // 狭い画面で2行に折り返したときもハートは1行目に揃える（items-start + 行高 20px に対する 3px 下げ）
-          <p className="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
-            <Heart className="mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite" aria-hidden="true" />
-            {t("browse.favoritesFirstNote")}
-          </p>
+          <FavoritesFirstNote className="mt-2">{t("browse.favoritesFirstNote")}</FavoritesFirstNote>
         )}
       </div>
 

@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
+  FeaturedCategoryPb,
   FeaturedKeys,
   FeaturedNextButton,
   FeaturedReasonRow,
+  featuredSensitivityText,
   useFeaturedRotation,
 } from "@/components/home/featured-runner-card";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
-import { formatClock } from "@/lib/home-format";
 import type { FeaturedRunner } from "@/lib/home-featured";
 import { ArrowRight, Search, Sparkles } from "lucide-react";
 
@@ -27,12 +27,10 @@ export interface HeroFace {
   customSkinUrl?: string | null;
 }
 
-/** 見出しに入れ替えで出す人数の上限 */
-const MAX_FACES = 12;
 /** 見出しのスキンを入れ替える間隔 */
 const FACE_ROTATE_MS = 8000;
 /** 翻訳文中の {emphasis} の位置を見つけるための目印（制御文字なので文言には現れない） */
-const EMPHASIS_MARK = "";
+const EMPHASIS_MARK = "\u0001";
 
 /** index の人。ただし除外対象なら次の除外対象でない人（全員が除外対象なら -1） */
 function resolveFaceIndex(faces: HeroFace[], from: number, excludeSlug: string | null): number {
@@ -59,36 +57,22 @@ function RotatingHeadingSkins({ faces, excludeSlug }: { faces: HeroFace[]; exclu
 
   const eligible = faces.filter((f) => f.slug !== excludeSlug).length;
   const canRotate = eligible >= 2;
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   useEffect(() => {
-    if (!canRotate) return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const stop = () => {
-      if (timer) clearInterval(timer);
-      timer = null;
-    };
-    const start = () => {
-      stop();
-      if (media.matches) return;
-      timer = setInterval(() => {
-        if (document.visibilityState !== "visible") return;
-        setIndex((i) => {
-          // いま表示中の人（除外対象なら次の人）の、さらに次の除外対象でない人へ進める
-          const shown = resolveFaceIndex(faces, i, excludeRef.current);
-          if (shown < 0) return i;
-          const next = resolveFaceIndex(faces, shown + 1, excludeRef.current);
-          return next < 0 ? i : next;
-        });
-      }, FACE_ROTATE_MS);
-    };
-    start();
-    media.addEventListener("change", start);
-    return () => {
-      stop();
-      media.removeEventListener("change", start);
-    };
-  }, [canRotate, faces]);
+    if (!canRotate || reducedMotion) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setIndex((i) => {
+        // いま表示中の人（除外対象なら次の人）の、さらに次の除外対象でない人へ進める
+        const shown = resolveFaceIndex(faces, i, excludeRef.current);
+        if (shown < 0) return i;
+        const next = resolveFaceIndex(faces, shown + 1, excludeRef.current);
+        return next < 0 ? i : next;
+      });
+    }, FACE_ROTATE_MS);
+    return () => clearInterval(timer);
+  }, [canRotate, reducedMotion, faces]);
 
   const shownIndex = resolveFaceIndex(faces, index, excludeSlug);
   const nextIndex = shownIndex < 0 ? -1 : resolveFaceIndex(faces, shownIndex + 1, excludeSlug);
@@ -169,16 +153,8 @@ export function GuestHero({
   const { current, loading, announce, handleClick } = useFeaturedRotation(candidates, initial);
   const nextButton = <FeaturedNextButton onClick={handleClick} loading={loading} />;
 
-  // 同じ配列を渡し続ける（スキンの入れ替えタイマーは faces に依存するので、再描画のたびに作り直すと8秒のカウントが巻き戻る）
-  const headingFaces = useMemo(() => faces.slice(0, MAX_FACES), [faces]);
-
   const name = current ? getLocalizedDisplayName(current, locale) : "";
-  const sensitivity =
-    current?.sensitivityPercent != null
-      ? current.cm180 != null
-        ? `${current.sensitivityPercent}% · ${current.cm180.toFixed(1)} cm/180°`
-        : `${current.sensitivityPercent}%`
-      : null;
+  const sensitivity = current ? featuredSensitivityText(current) : null;
 
   return (
     <section aria-labelledby="home-hero-heading" className="rounded-2xl border border-border/70 bg-card p-6 sm:p-8">
@@ -194,7 +170,7 @@ export function GuestHero({
               id="home-hero-heading"
               className="whitespace-pre-line text-balance text-2xl font-bold leading-tight tracking-tight sm:text-4xl"
             >
-              <HeroHeading faces={headingFaces} excludeSlug={current?.slug ?? null} />
+              <HeroHeading faces={faces} excludeSlug={current?.slug ?? null} />
             </h1>
             <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
           </div>
@@ -261,17 +237,7 @@ export function GuestHero({
                     </Link>
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    {isCategoryKey(current.mainCategory) && (
-                      <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-                        {categoryLabel(t, current.mainCategory)}
-                      </Badge>
-                    )}
-                    {current.pbMs != null && (
-                      <span className="font-mono text-sm font-semibold tabular-nums">
-                        <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
-                        {formatClock(current.pbMs)}
-                      </span>
-                    )}
+                    <FeaturedCategoryPb runner={current} />
                   </div>
                   {sensitivity && (
                     <p className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</p>

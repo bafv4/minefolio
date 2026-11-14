@@ -20,6 +20,35 @@ const KEY_CHIP_CLASS =
 const HOTBAR_CHIP_CLASS =
   "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-sm @[35rem]:text-xs font-semibold text-muted-foreground";
 
+/** 感度の表示文字列（「40% · 31.5 cm/180°」。感度が無ければ null） */
+export function featuredSensitivityText(runner: FeaturedRunner): string | null {
+  if (runner.sensitivityPercent == null) return null;
+  return runner.cm180 != null
+    ? `${runner.sensitivityPercent}% · ${runner.cm180.toFixed(1)} cm/180°`
+    : `${runner.sensitivityPercent}%`;
+}
+
+/** メインカテゴリのバッジと PB（どちらも無ければ何も出さない）。flex の子として並べる Fragment */
+export function FeaturedCategoryPb({ runner }: { runner: FeaturedRunner }) {
+  const t = useT();
+  return (
+    <>
+      {isCategoryKey(runner.mainCategory) && (
+        <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
+          {categoryLabel(t, runner.mainCategory)}
+        </Badge>
+      )}
+      {runner.pbMs != null && (
+        <span className="font-mono text-sm font-semibold tabular-nums">
+          {/* カテゴリは直前のバッジが示すので、ここは「PB」だけ（理由の行は「直近7日」で区別する） */}
+          <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
+          {formatClock(runner.pbMs)}
+        </span>
+      )}
+    </>
+  );
+}
+
 function reasonText(t: Translator, reason: FeaturedReason): string {
   switch (reason.type) {
     case "speedruncom":
@@ -282,12 +311,7 @@ export function FeaturedRunnerCard({
   }
 
   const name = getLocalizedDisplayName(current, locale);
-  const sensitivity =
-    current.sensitivityPercent != null
-      ? current.cm180 != null
-        ? `${current.sensitivityPercent}% · ${current.cm180.toFixed(1)} cm/180°`
-        : `${current.sensitivityPercent}%`
-      : null;
+  const sensitivity = featuredSensitivityText(current);
 
   return (
     <section
@@ -332,18 +356,7 @@ export function FeaturedRunnerCard({
                 </Link>
               </p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                {isCategoryKey(current.mainCategory) && (
-                  <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-                    {categoryLabel(t, current.mainCategory)}
-                  </Badge>
-                )}
-                {current.pbMs != null && (
-                  <span className="font-mono text-sm font-semibold tabular-nums">
-                    {/* カテゴリは直前のバッジが示すので、ここは「PB」だけ（理由の行は「直近7日」で区別する） */}
-                    <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
-                    {formatClock(current.pbMs)}
-                  </span>
-                )}
+                <FeaturedCategoryPb runner={current} />
                 {sensitivity && (
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</span>
                 )}

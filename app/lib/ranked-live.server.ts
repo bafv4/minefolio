@@ -9,6 +9,7 @@ import { users } from "./schema";
 import { listedRunnerCondition, rankedStatsVisibleCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import { getHomeHiddenUsers } from "./home-visibility.server";
+import { RANKED_API_BASE, MATCH_TYPE_RANKED } from "./external-stats";
 import {
   normalizeUuid,
   rankedSplitName,
@@ -20,9 +21,6 @@ import {
   type RankedResultResponse,
 } from "./home-live";
 
-// 既存定義（external-stats.ts / rankings-update.server.ts）と同じベース URL
-const RANKED_API_BASE = "https://mcsrranked.com/api";
-export { normalizeUuid };
 const RANKED_LIVE_URL = `${RANKED_API_BASE}/live`;
 
 // 登録者の一覧は60秒キャッシュ（ライブ応答は30秒キャッシュ。毎回の全公開ユーザー走査を避ける）。
@@ -105,8 +103,10 @@ export function buildRankedLiveMatches(
   return result;
 }
 
+const registeredMapCache = new WeakMap<object, Map<string, RegisteredRunner>>();
+
 /** Ranked 統計を公開している登録者（公開プロフィール・視聴者除外・uuid あり）を normalizedUuid で引ける形にする */
-export async function getRegisteredByUuid(db: Database): Promise<Map<string, RegisteredRunner>> {
+async function getRegisteredByUuid(db: Database): Promise<Map<string, RegisteredRunner>> {
   // キャッシュするのは Map の元になる配列（JSON 化できる形）
   let runners = await getCached<(RegisteredRunner & { key: string })[]>(RANKED_REGISTERED_CACHE_KEY);
   if (!runners) {
@@ -140,9 +140,13 @@ export async function getRegisteredByUuid(db: Database): Promise<Map<string, Reg
     }));
     await setCached(RANKED_REGISTERED_CACHE_KEY, runners, REGISTERED_TTL);
   }
-  return new Map(
-    runners.map(({ key, ...runner }) => [key, runner]),
-  );
+  // キャッシュが同じ配列を返す間は Map も使い回す（ranked-result の照会のたびに登録者数ぶん作り直さない）
+  let map = registeredMapCache.get(runners);
+  if (!map) {
+    map = new Map(runners.map(({ key, ...runner }) => [key, runner]));
+    registeredMapCache.set(runners, map);
+  }
+  return map;
 }
 
 /** Minefolio 登録者が出ている Ranked のライブ試合一覧。外部取得に失敗したら null（0試合の [] と区別する。呼び出し側は失敗をキャッシュしない） */
@@ -191,7 +195,7 @@ export async function fetchRankedResult(
   let latest = await getCached<{ match: unknown }>(key);
   if (!latest) {
     try {
-      const res = await fetch(`${RANKED_API_BASE}/users/${uuid}/matches?count=1&type=2`, {
+      const res = await fetch(`${RANKED_API_BASE}/users/${uuid}/matches?count=1&type=${MATCH_TYPE_RANKED}`, {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) return pending;

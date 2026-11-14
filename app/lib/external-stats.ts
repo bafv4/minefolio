@@ -266,13 +266,13 @@ export async function checkPaceManPlayer(playerName: string): Promise<PaceManSta
 // ============================================
 // MCSR Ranked API
 // ============================================
-const RANKED_API_BASE = "https://mcsrranked.com/api";
+export const RANKED_API_BASE = "https://mcsrranked.com/api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RankedApiResponse = { status: string; data: any };
 
 // マッチタイプ定数
-const MATCH_TYPE_RANKED = 2;
+export const MATCH_TYPE_RANKED = 2;
 
 // JP リーダーボードは全員共通のため、モジュールスコープで短時間共有する（ranked-stats-cache.ts と同じ方針）。
 // 成功した（HTTP 200 かつ JSON として解釈できた）取得結果のみキャッシュし、失敗は次回再取得する。

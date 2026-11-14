@@ -369,19 +369,19 @@ export function paceElapsedRtaMs(
  */
 export const SECOND_STRUCTURE_BEST_KEY = "Second Structure";
 
-/** ライブランの最新区間に対応する splitBests のキー（2つ目の構造物は SECOND_STRUCTURE_BEST_KEY） */
-export function paceBestKey(run: PaceManLiveRun, timeline: string): string {
-  return (timeline === "Bastion" || timeline === "Fortress") && (liveSortKey({ kind: "pace", run })?.depth ?? 0) >= 3
-    ? SECOND_STRUCTURE_BEST_KEY
-    : timeline;
-}
-
 /**
- * ベスト比を出す区間か。2つ目の構造物（Second Structure）以降だけ（並び順と同じく構造物は到達順で数える）。
- * ネザーイン・1つ目の構造物は差が運（シード）に大きく左右され、比較の意味が薄いため
+ * ライブランの最新区間に対応する splitBests のキー（2つ目の構造物は SECOND_STRUCTURE_BEST_KEY）。
+ * ベスト比を出さない区間は null。ベスト比は 2つ目の構造物（Second Structure）以降だけ（並び順と同じく
+ * 構造物は到達順で数える〈liveSortKey の深さが 3 以上〉）。ネザーイン・1つ目の構造物は差が運（シード）に
+ * 大きく左右され、比較の意味が薄いため。depth は呼び出し側で liveSortKey を計算済みなら渡して再計算を避ける
  */
-export function showsPaceBestDiff(run: PaceManLiveRun): boolean {
-  return (liveSortKey({ kind: "pace", run })?.depth ?? 0) >= 3;
+export function paceBestKey(
+  run: PaceManLiveRun,
+  timeline: string,
+  depth: number = liveSortKey({ kind: "pace", run })?.depth ?? 0,
+): string | null {
+  if (depth < 3) return null;
+  return timeline === "Bastion" || timeline === "Fortress" ? SECOND_STRUCTURE_BEST_KEY : timeline;
 }
 
 /** 完走済みのラン（rsg.credits がある。一覧に数分残る間もカードは「完走」表示にする） */

@@ -74,12 +74,35 @@ export function normalizeHomeLayout(raw: unknown): HomeLayout {
   return { order, hidden: hidden.length >= order.length ? [] : hidden };
 }
 
-export function isDefaultHomeLayout(layout: HomeLayout): boolean {
+/** 2つのレイアウトが同じか（order は順序まで、hidden は順序を問わない） */
+export function sameHomeLayout(a: HomeLayout, b: HomeLayout): boolean {
   return (
-    layout.hidden.length === 0 &&
-    layout.order.length === DEFAULT_HOME_SECTION_ORDER.length &&
-    layout.order.every((id, i) => id === DEFAULT_HOME_SECTION_ORDER[i])
+    a.order.length === b.order.length &&
+    a.order.every((id, i) => id === b.order[i]) &&
+    a.hidden.length === b.hidden.length &&
+    a.hidden.every((id) => b.hidden.includes(id))
   );
+}
+
+export function isDefaultHomeLayout(layout: HomeLayout): boolean {
+  return sameHomeLayout(layout, defaultHomeLayout());
+}
+
+/**
+ * 保存フォームの `order` / `hidden`（JSON 文字列）を解析する。order が文字列でない・どちらかが
+ * JSON として壊れている場合は null。hidden が無いときは `[]`。中身の検証は normalizeHomeLayout に任せる
+ */
+export function parseHomeLayoutFields(
+  rawOrder: FormDataEntryValue | null | undefined,
+  rawHidden: FormDataEntryValue | null | undefined,
+): { order: unknown; hidden: unknown } | null {
+  const hiddenText = rawHidden ?? "[]";
+  if (typeof rawOrder !== "string" || typeof hiddenText !== "string") return null;
+  try {
+    return { order: JSON.parse(rawOrder), hidden: JSON.parse(hiddenText) };
+  } catch {
+    return null;
+  }
 }
 
 /** 保存用の文字列。既定のときは null（列を空にする） */

@@ -1,9 +1,10 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, useFetcher, Link, data } from "react-router";
+import { useLoaderData, useFetcher, data } from "react-router";
 import { useEffect, useReducer, useRef, memo, useMemo, useCallback, Fragment, type ReactNode } from "react";
 import {
   defaultHomeLayout,
   normalizeHomeLayout,
+  parseHomeLayoutFields,
   pickKnownHomeSectionIds,
   serializeHomeLayout,
   HOME_SECTION_IDS,
@@ -36,6 +37,8 @@ import {
   pruneLiveEnded,
   initialLiveEndedState,
   rankedOpponentUuid,
+  livePaceId,
+  liveRankedId,
   LIVE_POLL_INTERVAL_MS,
   type HomeTwitchStream,
   type RankedLiveMatch,
@@ -46,6 +49,7 @@ import {
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { FavoritesFirstNote } from "@/components/favorite-mark";
 import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
@@ -65,7 +69,7 @@ import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Youtube, Twitch } from "@/components/brand-icons";
-import { UserCheck, BookOpen, Play, Radio, Heart } from "lucide-react";
+import { UserCheck, BookOpen, Play, Radio } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -100,7 +104,7 @@ export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
 const HOME_GUIDE_COUNT = 4;
 /** 最近の更新・よく見られているの各表示件数 */
 const HOME_PROFILE_COUNT = 4;
-// ゲストのヒーローの顔ぶれの帯で引く人数（注目の走者と重なる分を除いても帯の最大人数が残るよう、帯の上限より多め）
+// ゲストのヒーローの見出しで入れ替えて見せる走者の人数の上限（単一情報源。注目の走者と重なる分は描画側で除く）
 const HERO_FACE_POOL = 12;
 
 // おかえりバーで「ようこそ」と出す、アカウント作成からの期間
@@ -113,7 +117,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // プロフィール一覧の select 列（更新順・PV順で共通）
   const profileFeedColumns = {
-    id: users.id,
     inputMethod: users.inputMethod,
     mcid: users.mcid,
     uuid: users.uuid,
@@ -266,12 +269,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const popularUsers = popularUsersRaw.filter((u) => !recentSlugs.has(u.slug)).slice(0, HOME_PROFILE_COUNT);
 
   const { newGuides, guideTranslations } = guidesWithTranslations;
-  // id はクライアントに不要なので外し、mainCategory を末尾へ置く
-  const withHighlights = <T extends { id: string; mainCategory: string | null }>(list: T[]) =>
-    list.map(({ id: _id, mainCategory, ...rest }) => ({ ...rest, mainCategory: mainCategory ?? null }));
-
-  const popular = withHighlights(popularUsers);
-  const recent = withHighlights(recentlyUpdatedUsers);
+  const popular = popularUsers;
+  const recent = recentlyUpdatedUsers;
   // お気に入り 0 人のときに勧める走者（よく見られている → 無ければ最近の更新）。表示する人の中から3人
   const recommended = (popular.length > 0 ? popular : recent).slice(0, 3);
 
@@ -316,19 +315,11 @@ export async function action({ request }: Route.ActionArgs) {
   if (formData.get("_action") !== actionType) {
     return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
   }
-  const rawOrder = formData.get("order");
-  const rawHidden = formData.get("hidden") ?? "[]";
-  if (typeof rawOrder !== "string" || typeof rawHidden !== "string") {
+  const fields = parseHomeLayoutFields(formData.get("order"), formData.get("hidden"));
+  if (!fields) {
     return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
   }
-  let parsedOrder: unknown;
-  let parsedHidden: unknown;
-  try {
-    parsedOrder = JSON.parse(rawOrder);
-    parsedHidden = JSON.parse(rawHidden);
-  } catch {
-    return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
-  }
+  const { order: parsedOrder, hidden: parsedHidden } = fields;
   if (pickKnownHomeSectionIds(parsedHidden).length >= HOME_SECTION_IDS.length) {
     return data({ error: t("home.settingsAllHidden"), action: actionType }, { status: 400 });
   }
@@ -582,15 +573,8 @@ export default function HomePage() {
   const submittedOrder = orderFetcher.formData?.get("order");
   const submittedHidden = orderFetcher.formData?.get("hidden");
   const layout = useMemo<HomeLayout>(() => {
-    if (typeof submittedOrder !== "string") return savedLayout;
-    try {
-      return normalizeHomeLayout({
-        order: JSON.parse(submittedOrder),
-        hidden: typeof submittedHidden === "string" ? JSON.parse(submittedHidden) : [],
-      });
-    } catch {
-      return savedLayout;
-    }
+    const fields = parseHomeLayoutFields(submittedOrder, submittedHidden);
+    return fields ? normalizeHomeLayout(fields) : savedLayout;
   }, [submittedOrder, submittedHidden, savedLayout]);
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
@@ -664,10 +648,12 @@ export default function HomePage() {
   }, [fetchLiveRuns]);
 
   // 終了した Ranked 試合の結果取得。ライブの自動更新と同じタイミング（成功した取得のたび）に、結果が取れるまで問い合わせる。
-  // 自動更新が止まっている（タブ非表示）間は liveRunsCheckedAt が変わらないので、これも止まる
+  // 自動更新が止まっている（タブ非表示）間は liveRunsCheckedAt が変わらないので、これも止まる。
+  // 結果を使うのはライブ欄の終了カードだけなので、ライブ欄が非表示の間は問い合わせない（表示に戻ったら次の取得から再開）
+  const liveVisible = !layout.hidden.includes("live");
   const resultInFlight = useRef(new Set<string>());
   useEffect(() => {
-    if (feed.liveRunsCheckedAt === null) return;
+    if (!liveVisible || feed.liveRunsCheckedAt === null) return;
     for (const item of feed.liveEnded.ended) {
       if (item.kind !== "ranked" || item.result) continue;
       const opponent = rankedOpponentUuid(item.match);
@@ -690,7 +676,7 @@ export default function HomePage() {
         .catch(() => {})
         .finally(() => resultInFlight.current.delete(flightKey));
     }
-  }, [feed.liveRunsCheckedAt, feed.liveEnded.ended]);
+  }, [liveVisible, feed.liveRunsCheckedAt, feed.liveEnded.ended]);
 
   // 自分のペースを隠す設定のときの除外対象 mcid（小文字）。無ければ null
   const hiddenPaceMcid = currentUser ? getHiddenPaceMcid(currentUser) : null;
@@ -721,13 +707,13 @@ export default function HomePage() {
       if (hiddenPaceMcid && run.nickname.toLowerCase() === hiddenPaceMcid) continue;
       live.push({
         kind: "pace",
-        id: `pace:${run.worldId}`,
+        id: livePaceId(run),
         slug: feed.mcidToSlug[run.nickname.toLowerCase()],
         run,
       });
     }
     for (const match of feed.rankedMatches) {
-      live.push({ kind: "ranked", id: `ranked:${match.key}`, slug: match.slug, match });
+      live.push({ kind: "ranked", id: liveRankedId(match), slug: match.slug, match });
     }
     live.sort(compareLiveEntries);
     const endedEntries: { item: LiveRailEntry; index: number }[] = [];
@@ -845,7 +831,6 @@ export default function HomePage() {
   // 動画（YouTube / Twitch VOD）は videos 欄、過去のペースは live 欄が表示されているときだけ取る。
   // 非表示 → 表示に切り替えた時点で未取得なら取る（取得済みなら再表示でも取り直さない）
   const videosVisible = !layout.hidden.includes("videos");
-  const liveVisible = !layout.hidden.includes("live");
   const videosFetched = useRef(false);
   const pacesFetched = useRef(false);
   useEffect(() => {
@@ -930,11 +915,7 @@ export default function HomePage() {
         }
       >
         {hasFavoriteLive && (
-          // /browse の補足行と同じ見た目（2行に折り返してもハートは1行目に揃える）
-          <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-            <Heart className="mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite" aria-hidden="true" />
-            {t("home.liveFavoritesFirstNote")}
-          </p>
+          <FavoritesFirstNote>{t("home.liveFavoritesFirstNote")}</FavoritesFirstNote>
         )}
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
         {(feed.loading.liveRuns || liveSettled) && (

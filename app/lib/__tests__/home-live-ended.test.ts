@@ -16,7 +16,6 @@ import {
   SECOND_STRUCTURE_BEST_KEY,
   pruneLiveEnded,
   rankedOpponentUuid,
-  showsPaceBestDiff,
   type LiveEndedState,
   type LiveSortEntry,
   type RankedLiveMatch,
@@ -148,17 +147,17 @@ describe("paceBestKey", () => {
   });
 });
 
-describe("showsPaceBestDiff", () => {
-  it("2つ目の構造物以降だけ（構造物は到達順で数える）", () => {
-    expect(showsPaceBestDiff(run("a", "w", [["rsg.enter_nether", 1]]))).toBe(false);
+describe("paceBestKey（ベスト比を出す区間か）", () => {
+  it("2つ目の構造物以降だけ（構造物は到達順で数える。出さない区間は null）", () => {
+    expect(paceBestKey(run("a", "w", [["rsg.enter_nether", 1]]), "Enter Nether")).toBeNull();
     // 1つ目の構造物は Fortress でも出さない
-    expect(showsPaceBestDiff(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_fortress", 2]]))).toBe(false);
-    expect(showsPaceBestDiff(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_bastion", 2]]))).toBe(false);
+    expect(paceBestKey(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_fortress", 2]]), "Fortress")).toBeNull();
+    expect(paceBestKey(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_bastion", 2]]), "Bastion")).toBeNull();
     // 2つ目の構造物は Bastion でも出す
     expect(
-      showsPaceBestDiff(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_fortress", 2], ["rsg.enter_bastion", 3]])),
-    ).toBe(true);
-    expect(showsPaceBestDiff(run("a", "w", [["rsg.first_portal", 5]]))).toBe(true);
+      paceBestKey(run("a", "w", [["rsg.enter_nether", 1], ["rsg.enter_fortress", 2], ["rsg.enter_bastion", 3]]), "Bastion"),
+    ).not.toBeNull();
+    expect(paceBestKey(run("a", "w", [["rsg.first_portal", 5]]), "First Portal")).not.toBeNull();
   });
 });
 

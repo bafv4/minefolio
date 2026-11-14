@@ -38,11 +38,15 @@ function dateOnlyRelative(t: Translator, at: number): string {
   return t("relativeDate.daysAgo", { count: days });
 }
 
+/** 文中の結果の値（タイム・ティア）の前後に置く目印（制御文字なので文言には現れない） */
+const VALUE_MARK = "\u0001";
+const mark = (value: string) => `${VALUE_MARK}${value}${VALUE_MARK}`;
+
 /**
  * 動き 1 件の文（ホームの欄と /favorites/activity で共用）。name は表示名（解決済み）。
- * mark は結果の値（タイム・ティア）を包む関数。モバイルで値だけを切り詰めから守るため、値の前後を分けて描画する際に使う
+ * 結果の値（タイム・ティア）は VALUE_MARK で包む。モバイルで値だけを切り詰めから守るため、値の前後を分けて描画する際に使う
  */
-function buildSentence(t: Translator, name: string, item: FavoriteActivityItem, mark: (value: string) => string): string {
+function buildMarkedSentence(t: Translator, name: string, item: FavoriteActivityItem): string {
   const time = () => mark(formatClock(item.timeMs ?? 0));
   switch (item.kind) {
     case "pace":
@@ -80,29 +84,29 @@ function buildSentence(t: Translator, name: string, item: FavoriteActivityItem, 
   }
 }
 
-const VALUE_MARK = "";
-
-/** 文を「値の前 / 値 / 値の後」に分ける。値の無い種別は before のみ */
+/** 文を「値の前 / 値 / 値の後」に分ける（値の無い種別は before のみ）。sentence は目印を除いた全文（読み上げ用） */
 function favoriteActivityParts(t: Translator, name: string, item: FavoriteActivityItem) {
-  const [before, value, after] = buildSentence(t, name, item, (v) => `${VALUE_MARK}${v}${VALUE_MARK}`).split(VALUE_MARK);
+  const marked = buildMarkedSentence(t, name, item);
+  const [before, value, after] = marked.split(VALUE_MARK);
   return {
+    sentence: marked.replaceAll(VALUE_MARK, ""),
     before: (before ?? "").trim(),
     value: value?.trim() || null,
     after: (after ?? "").trim(),
   };
 }
 
-/** 記録系の出来事（Ranked PB・speedrun.com 申請・完走・ティア昇格）は強調し、アイコンも色付けする */
-function recordTone(item: FavoriteActivityItem): { icon: string } | null {
+/** 記録系の出来事（Ranked PB・speedrun.com 申請・完走・ティア昇格）は強調し、アイコンも色付けする。記録系でなければ null */
+function recordIconClass(item: FavoriteActivityItem): string | null {
   switch (item.kind) {
     case "rankedPb":
-      return { icon: "text-gold" };
+      return "text-gold";
     case "pace":
-      return item.label === "Finish" ? { icon: "text-gold" } : null;
+      return item.label === "Finish" ? "text-gold" : null;
     case "rankTierUp":
-      return { icon: "text-success" };
+      return "text-success";
     case "srcSubmit":
-      return { icon: "text-info" };
+      return "text-info";
     default:
       return null;
   }
@@ -120,13 +124,11 @@ const TIME_CLASS = "ml-auto shrink-0 pr-1 text-xs text-muted-foreground";
  */
 function ActivitySentence({
   parts,
-  sentence,
   emphasized,
   muted,
   className,
 }: {
   parts: ReturnType<typeof favoriteActivityParts>;
-  sentence: string;
   emphasized: boolean;
   muted: boolean;
   className?: string;
@@ -140,7 +142,7 @@ function ActivitySentence({
         className,
       )}
     >
-      <span className="sr-only">{sentence}</span>
+      <span className="sr-only">{parts.sentence}</span>
       {parts.before && (
         <span aria-hidden="true" className="min-w-0 truncate">
           {parts.before}
@@ -170,10 +172,10 @@ export function FavoriteActivityRow({
   const [open, setOpen] = useState(false);
   const name = getLocalizedDisplayName(item, locale);
   const parts = favoriteActivityParts(t, name, item);
-  const sentence = buildSentence(t, name, item, (v) => v);
-  const record = recordTone(item);
+  const { sentence } = parts;
+  const recordIcon = recordIconClass(item);
   const muted = item.kind === "profile" || item.kind === "settings";
-  const iconClass = cn("h-4 w-4 shrink-0", record ? record.icon : "text-muted-foreground");
+  const iconClass = cn("h-4 w-4 shrink-0", recordIcon ?? "text-muted-foreground");
   const Icon =
     item.kind === "settings"
       ? (SETTINGS_ICON[item.label as keyof typeof SETTINGS_ICON] ?? KIND_ICON.settings)
@@ -205,7 +207,7 @@ export function FavoriteActivityRow({
           {avatar}
         </span>
         <Icon className={cn(iconClass, "pointer-events-none relative")} aria-hidden="true" />
-        <ActivitySentence parts={parts} sentence={sentence} emphasized={!!record} muted={muted} className="pointer-events-none relative" />
+        <ActivitySentence parts={parts} emphasized={recordIcon !== null} muted={muted} className="pointer-events-none relative" />
         <span className={cn(TIME_CLASS, "pointer-events-none relative")} suppressHydrationWarning>
           {timeText}
         </span>
@@ -221,7 +223,7 @@ export function FavoriteActivityRow({
     >
       <span className="relative z-10 shrink-0 rounded-lg bg-card">{avatar}</span>
       <Icon className={iconClass} aria-hidden="true" />
-      <ActivitySentence parts={parts} sentence={sentence} emphasized={!!record} muted={muted} />
+      <ActivitySentence parts={parts} emphasized={recordIcon !== null} muted={muted} />
       <span className={TIME_CLASS} suppressHydrationWarning>
         {timeText}
       </span>
