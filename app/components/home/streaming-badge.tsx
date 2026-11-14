@@ -11,7 +11,9 @@ export function StreamingBadge({ filled, className }: { filled?: boolean; classN
     <span
       className={cn(
         "inline-flex items-center gap-1 text-[11px] font-medium text-destructive",
-        filled && "shrink-0 rounded-full bg-destructive/10 px-2 py-0.5",
+        // 塗りピルの文字は前景色にし、赤は点と淡い地で示す（/10 の地に destructive の文字だと light で 4.5:1 を割る。
+        // 不透明な赤に白文字は、dark の destructive が明るいため逆に割る）
+        filled && "shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-foreground",
         className,
       )}
     >
