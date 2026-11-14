@@ -1918,7 +1918,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     fingerClear: "Clear finger assignment",
     settingsSuffix: " settings",
     notUsed: "Unused",
-    unassignAction: "Clear binding",
+    unassignAction: "Clear binding for {action}",
+    keyAssignedAnnounce: "{action} set to {key}",
+    skipToActions: "Skip keyboard view and go to action bindings",
     presetRequired: "Create a preset before editing settings",
     presetRequiredNotice:
       "Editing becomes available once you create a preset. Existing settings are view-only.",

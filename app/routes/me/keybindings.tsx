@@ -1,5 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { flushSync } from "react-dom";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
@@ -977,10 +978,14 @@ function KeybindingRow({
     : kb.keyCode
       ? getKeyLabelWithCustom(kb.keyCode)
       : t("meKeybindings.unassigned");
-  const commitKey = (e: React.SyntheticEvent, keyCode: string) => {
+  // 確定結果をスクリーンリーダーへ伝える（フォーカスはボタンに残す）
+  const [announcement, setAnnouncement] = useState("");
+  const commitKey = (keyCode: string) => {
     updateKeybindingKey(kb.id, keyCode);
     setIsCapturing(false);
-    (e.currentTarget as HTMLElement).blur();
+    setAnnouncement(
+      t("meKeybindings.keyAssignedAnnounce", { action: actionLabel, key: getKeyLabelWithCustom(keyCode) })
+    );
   };
   return (
     <div className="flex items-center justify-between gap-2 py-2.5">
@@ -1021,7 +1026,10 @@ function KeybindingRow({
                 ? t("meKeybindings.pressKeyToAssign")
                 : t("meKeybindings.keyRowAriaLabel", { action: actionLabel, key: currentKeyLabel })
             }
-            onClick={() => setIsCapturing(true)}
+            onClick={() => {
+              setAnnouncement("");
+              setIsCapturing(true);
+            }}
             onBlur={() => setIsCapturing(false)}
             onKeyDown={(e) => {
               if (!isCapturing) {
@@ -1046,12 +1054,18 @@ function KeybindingRow({
               }
               // 修飾キーは keyup まで確定しない（他のキーとの併用で誤って割り当てないため）
               if (MODIFIER_CODES.has(e.code)) return;
-              commitKey(e, e.code);
+              commitKey(e.code);
             }}
             onKeyUp={(e) => {
-              if (!isCapturing || !MODIFIER_CODES.has(e.code)) return;
+              // Space で確定した直後の keyup で Firefox が click を発火し、キャプチャが再開するのを防ぐ
+              // （確定後もフォーカスを残すため）
+              if (!isCapturing) {
+                if (e.key === " ") e.preventDefault();
+                return;
+              }
+              if (!MODIFIER_CODES.has(e.code)) return;
               e.preventDefault();
-              commitKey(e, e.code);
+              commitKey(e.code);
             }}
             className={cn(
               "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
@@ -1072,14 +1086,14 @@ function KeybindingRow({
           </button>
         )}
         <span className="sr-only" aria-live="polite">
-          {isCapturing && !isControllerMode ? t("meKeybindings.pressKeyToAssign") : ""}
+          {isControllerMode ? "" : isCapturing ? t("meKeybindings.pressKeyToAssign") : announcement}
         </span>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={t("meKeybindings.unassignAction")}
-          title={t("meKeybindings.unassignAction")}
+          aria-label={t("meKeybindings.unassignAction", { action: actionLabel })}
+          title={t("meKeybindings.unassignAction", { action: actionLabel })}
           onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
           disabled={!kb.keyCode || isUnbound(kb.keyCode)}
           className={cn(
@@ -2227,7 +2241,7 @@ export default function KeybindingsPage() {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <CardTitle role="heading" aria-level={2} className="text-base font-semibold flex items-center gap-2">
                 <Gamepad2 className="h-5 w-5" />
                 {t("meKeybindings.controllerView")}
               </CardTitle>
@@ -2306,7 +2320,7 @@ export default function KeybindingsPage() {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
+              <CardTitle role="heading" aria-level={2} className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
               <div className="flex flex-wrap items-center gap-3">
                 {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
                 {hasTypedRemaps && (
@@ -2321,6 +2335,18 @@ export default function KeybindingsPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-start gap-4">
+              {/* 仮想キー約100個を飛ばして操作割り当てへ移動するスキップリンク */}
+              <a
+                href="#keybindings-actions-heading"
+                onClick={(e) => {
+                  e.preventDefault();
+                  flushSync(() => setActiveTab("keybindings"));
+                  document.getElementById("keybindings-actions-heading")?.focus();
+                }}
+                className="sr-only rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+              >
+                {t("meKeybindings.skipToActions")}
+              </a>
               {/* メインキーボード */}
               <HorizontalScrollArea showHint>
                 <VirtualKeyboard
@@ -2392,6 +2418,10 @@ export default function KeybindingsPage() {
         <TabsContent value="keybindings" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-4", !canEditPresetData && "pointer-events-none opacity-50")}>
+            {/* 見出し階層（h1 > h2 > h3）用。スキップリンクの移動先も兼ねる */}
+            <h2 id="keybindings-actions-heading" tabIndex={-1} className="sr-only">
+              {t("meKeybindings.tabActions")}
+            </h2>
             {displayGroups.map((group) => {
               const bindings = group.bindings;
               if (!bindings || bindings.length === 0) return null;
@@ -2427,7 +2457,7 @@ export default function KeybindingsPage() {
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <section>
             <header className="pb-4">
-              <h3 className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</h3>
+              <h2 className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{t("meKeybindings.remapsDescription")}</p>
             </header>
             <div className="border-t border-border/60 pt-4">
@@ -2481,7 +2511,7 @@ export default function KeybindingsPage() {
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <section>
             <header className="pb-4">
-              <h3 className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</h3>
+              <h2 className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("meKeybindings.customKeysDescription")}
               </p>
@@ -2571,7 +2601,7 @@ export default function KeybindingsPage() {
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
           <section>
             <header className="pb-4">
-              <h3 className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</h3>
+              <h2 className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("meKeybindings.customActionsDescription")}
               </p>
