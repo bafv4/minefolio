@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
+import { StageBar } from "@/components/pace-stage-bar";
+import { splitStage } from "@/lib/home-live";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
 import type { CachedPace, PaceTimelineEntry } from "@/lib/paceman-cache";
 import { Clock3, ExternalLink, Loader2 } from "lucide-react";
@@ -47,7 +49,6 @@ export function PaceFeedCard({
   skinUrl?: string;
 }) {
   const t = useT();
-  const isFinished = run.timeline === "Finish";
   const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -55,7 +56,8 @@ export function PaceFeedCard({
     <div
       className={cn(
         "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
-        isFinished && "border-info/60 bg-info/10"
+        // Finish は枠線色だけ強調（背景は全カード共通の bg-background/80）
+        run.timeline === "Finish" && "border-info/60"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
@@ -91,6 +93,11 @@ export function PaceFeedCard({
             @{run.mcid}
           </p>
         </Link>
+      </div>
+
+      {/* 区間進行バー（ライブ欄カードと同じ。区間名は下のバッジのテキストで出る） */}
+      <div className="mt-3">
+        <StageBar stage={splitStage(run.timeline)} />
       </div>
 
       <div className="mt-3">
