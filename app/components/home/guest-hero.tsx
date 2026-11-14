@@ -162,7 +162,7 @@ export function GuestHero({
     <section aria-labelledby="home-hero-heading" className="rounded-2xl border border-border/70 bg-card p-6 sm:p-8">
       {/* 左列を広めに取り、ja の1行目（「RTAを［スキン］パーソナリティから」）が lg 以上で1行に収まるようにする。
           xl 以上は幅に余裕があるので比率を戻し、右列のキーを1段に並べる幅を残す */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start lg:gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <div className="space-y-3">
             {/* 文言中の改行（ja: 「…から」の後）で区切る。改行の無い英語は text-balance で行長を揃える。
