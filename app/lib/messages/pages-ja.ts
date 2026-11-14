@@ -457,7 +457,7 @@ export const PAGES_JA = {
     rankedForfeited: "降参",
     rankedDraw: "引き分け",
     rankedElapsed: "経過時間",
-    liveElapsedShort: "経過",
+    liveElapsedShort: "現在",
     rankedOpponentStage: "相手",
     rankedOwnRate: "レート",
     twitchDurationMinutes: "配信 {minutes}分",

@@ -86,7 +86,7 @@ function CardHead({
   );
 }
 
-/** 時間ブロックのラベル行で区間名の右に添える小さな「経過 m:ss」（PaceMan・Ranked 共通） */
+/** 時間ブロックのラベル行で区間名の右に添える小さな「現在 m:ss」（ランの現在のタイム。区間に入ってからの時間と読まれないよう「経過」ではなく「現在」。PaceMan・Ranked 共通） */
 function ElapsedShort({ ms }: { ms: number }) {
   const t = useT();
   return (

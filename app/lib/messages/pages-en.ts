@@ -456,7 +456,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     rankedForfeited: "Forfeited",
     rankedDraw: "Draw",
     rankedElapsed: "Elapsed",
-    liveElapsedShort: "Elapsed",
+    liveElapsedShort: "Now",
     rankedOpponentStage: "Opponent",
     rankedOwnRate: "Elo",
     twitchDurationMinutes: "Live {minutes}m",
