@@ -140,7 +140,9 @@ export function useInfiniteScroll<T>({
     const el = sentinelRef.current;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
+        // 負荷が高いと複数エントリが1回にまとまって届く（[非交差, 交差] など）。entries[0] は最古で、
+        // それだけを見ると最新の交差を取りこぼし、センチネルが可視のままだと以後通知が来ず停止する
+        if (entries.some((entry) => entry.isIntersecting)) {
           loadMore();
         }
       },
