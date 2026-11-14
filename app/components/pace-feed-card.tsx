@@ -1,41 +1,23 @@
 import { Link } from "react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { StageBar } from "@/components/pace-stage-bar";
 import { splitStage } from "@/lib/home-live";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
-import type { CachedPace, PaceTimelineEntry } from "@/lib/paceman-cache";
-import { Clock3, ExternalLink, Loader2 } from "lucide-react";
+import type { CachedPace } from "@/lib/paceman-cache";
+import { PaceTimelineModal, formatRunTime } from "@/components/pace-timeline-modal";
+import { Clock3 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
 export type PaceFeedRun = Pick<
   CachedPace,
   "mcid" | "nickname" | "timeline" | "rta" | "time" | "pacemanRunId"
 >;
-
-interface PaceTimelineResponse {
-  timeline: PaceTimelineEntry[];
-}
-
-// ミリ秒を "m:ss" 形式に変換
-function formatRunTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
 
 export function PaceFeedCard({
   run,
@@ -49,7 +31,6 @@ export function PaceFeedCard({
   skinUrl?: string;
 }) {
   const t = useT();
-  const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -125,120 +106,10 @@ export function PaceFeedCard({
       <PaceTimelineModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
-        run={run}
-        displayName={displayName}
-        paceManUrl={paceManUrl}
+        mcid={run.mcid}
+        runId={run.pacemanRunId}
+        title={displayName || run.nickname || run.mcid}
       />
     </div>
-  );
-}
-
-function PaceTimelineModal({
-  open,
-  onOpenChange,
-  run,
-  displayName,
-  paceManUrl,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  run: PaceFeedRun;
-  displayName?: string;
-  paceManUrl: string;
-}) {
-  const t = useT();
-  const [state, setState] = useState<{
-    status: "idle" | "loading" | "done" | "error";
-    entries: PaceTimelineEntry[];
-  }>({ status: "idle", entries: [] });
-
-  useEffect(() => {
-    // state.status を依存に含めると、setState(loading) 自体が再実行の
-    // トリガーとなり、直前のfetchを即キャンセルしてしまう（キャンセル判定が
-    // 古いクロージャの cancelled を見るため、結果が反映されなくなる）。
-    // open の立ち上がりだけをトリガーにする（idle判定は行わない）
-    if (!open) return;
-
-    let cancelled = false;
-    setState({ status: "loading", entries: [] });
-    fetch(`/api/home-feed?type=pace-timeline&mcid=${encodeURIComponent(run.mcid)}&runId=${run.pacemanRunId}`)
-      .then((res) => res.json() as Promise<PaceTimelineResponse>)
-      .then((data) => {
-        if (cancelled) return;
-        setState({ status: "done", entries: data.timeline || [] });
-      })
-      .catch((err) => {
-        console.error("Failed to fetch pace timeline:", err);
-        if (cancelled) return;
-        setState({ status: "error", entries: [] });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, run.mcid, run.pacemanRunId]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{displayName || run.nickname || run.mcid}</DialogTitle>
-          <DialogDescription>{t("home.timelineDescription")}</DialogDescription>
-        </DialogHeader>
-
-        {state.status === "loading" && (
-          <div className="flex items-center justify-center py-8 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        )}
-
-        {state.status === "error" && (
-          <p className="py-4 text-center text-sm text-muted-foreground">{t("home.timelineError")}</p>
-        )}
-
-        {state.status === "done" && (
-          <div>
-            {state.entries.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">{t("home.timelineEmpty")}</p>
-            ) : (
-              state.entries.map((entry, index) => {
-                const isLast = index === state.entries.length - 1;
-                return (
-                  <div key={entry.timeline} className="flex gap-3">
-                    {/* アイコン列: 丸アイコンを縦線でつなぐ */}
-                    <div className="flex flex-col items-center">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-secondary">
-                        <PaceManSplitMark timeline={entry.timeline} withLabel={false} size={16} />
-                      </div>
-                      {!isLast && <div className="w-px flex-1 bg-border" />}
-                    </div>
-                    {/* 区間名 + タイム */}
-                    <div
-                      className={cn(
-                        "flex flex-1 items-center justify-between",
-                        isLast ? "pb-1" : "pb-4"
-                      )}
-                    >
-                      <span className="text-sm font-medium">{entry.timeline}</span>
-                      <span className="font-mono text-sm font-semibold">{formatRunTime(entry.rta)}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        <a
-          href={paceManUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
-        >
-          {t("home.viewOnPaceMan", { site: "PaceMan.gg" })}
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </DialogContent>
-    </Dialog>
   );
 }

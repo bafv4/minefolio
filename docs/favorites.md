@@ -159,11 +159,24 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 | ページ | お気に入りの利用 |
 |---|---|
 | `/favorites` | お気に入り一覧。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
+| `/favorites/activity` | お気に入り走者の動き一覧（下記）。ホームの「お気に入り走者の動き」の「すべて見る」の遷移先 |
 | `/browse` | ログイン時のみ、お気に入りを上位に並べ替え（loader で DB から取得） |
 | `/player/:slug` | `<FavoriteButton slug={player.slug} />` でトグル |
 | ホーム（`/`） | ライブ・ペース・動画でお気に入りを先頭に並べ替え。クライアント側の `useFavorites()` で適用し、ゲスト（Cookie 同意済み）も対象。`/api/home-feed` 自体はユーザー非依存（お気に入り・セッションを参照せず、CDN キャッシュ） |
 
 ---
+
+## お気に入り走者の動き一覧 (/favorites/activity)
+
+お気に入りにした走者の最近の動き（PaceMan のペース・YouTube/Twitch の動画・プロフィール更新・ガイドの公開/更新）を新しい順に並べるページ。ホームの「お気に入り走者の動き」欄（直近7日・10件）の全件版。
+
+- **期間・件数**: 直近30日・最大100件（ホームは7日・10件）。サーバー側で `clampFavoriteActivityOptions`（`app/lib/home-favorite-activity-shared.ts`）が日数を最大30・件数を最大100に丸め、不正値は既定に戻す。同じ走者のペースはホームでは1人2件、このページでは1人5件まで。
+- **お気に入りの解決**: ログイン済みはサーバーのお気に入り、未ログインはブラウザのお気に入り（ホームと同じ）。取得は `POST /api/home-favorite-activity`（本文に `windowDays` / `limit`）をクライアントから呼ぶ（`useFavoriteActivity`、`app/hooks/use-favorite-activity.ts`）。
+- **除外**: 非公開・限定公開プロフィールは含めない。ホーム表示設定（`showPacemanOnHome` / `showYoutubeOnHome` / `showTwitchOnHome`）がオフの人の該当コンテンツも除外する（ホームと同じ `getFavoriteActivity`）。
+- **表示**: 日付見出し（今日・昨日・それ以前は日付）で区切り、各行に時刻（HH:mm、端末のタイムゾーン）。行の文言と行コンポーネントはホームと共用（`app/components/favorite-activity-row.tsx`）。お気に入り0件・動き0件は `EmptyState`。
+- **イベント種別**: ペース・動画・プロフィール更新・ガイドに加え、Ranked のレート帯 UP（`rankTierUp`）・Ranked PB 更新（`rankedPb`）・speedrun.com への申請（`srcSubmit`、審査中）・操作設定の変更（`settings`、1人1日 changeType ごと1件）がある。データ元・精度・除外条件・文面は [home-live.md](./home-live.md#お気に入りの動き縦タイムライン) の「種類（追加分）」を参照。日付精度の種別（`rankTierUp` / `rankedPb`）はこのページの時刻列を空欄にする。Ranked 系は `showRankedStats === false` の人を除外する。一覧では rankTierUp・srcSubmit・settings は1人3件まで。
+- **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。走者プロフィールへはアバターが別リンク（z-10）として残る。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
+- **相互ナビ**: `/favorites` と `/favorites/activity` の両方のヘッダ直下に共通の切り替え `FavoritesNav`（「お気に入り走者」｜「動き」、現在ページに `aria-current="page"`）。
 
 ## SSR の扱い
 
@@ -185,6 +198,10 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 | `app/routes/api/favorites.ts` | GET / POST / PUT のお気に入り API |
 | `app/routes/api/users/by-slugs.ts` | スラッグ配列→ユーザー詳細 API |
 | `app/routes/favorites.tsx` | `/favorites` ページ |
+| `app/routes/favorites-activity.tsx` | `/favorites/activity` ページ |
+| `app/components/favorites-nav.tsx` | 上記2ページを行き来するルート間ナビ（`aria-current="page"`） |
+| `app/components/favorite-activity-row.tsx` / `app/hooks/use-favorite-activity.ts` | 動きの行・文言 / 取得フック（ホーム欄と共用） |
+| `app/lib/home-favorite-activity-shared.ts` | 期間・件数の定数（クライアントからも参照） |
 | `app/routes/_layout.tsx` | `FavoritesProvider` のマウント |
 | `app/components/favorite-button.tsx` | お気に入りトグルボタン（slug ベース） |
 | `app/components/cookie-consent.tsx` | Cookie 同意フック |

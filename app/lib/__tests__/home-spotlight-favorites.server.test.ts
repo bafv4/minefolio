@@ -15,7 +15,7 @@ import {
 import { eq } from "drizzle-orm";
 import { invalidateCache } from "../cache";
 import { getHomeSpotlight, getRandomFeaturedRunner } from "../home-featured.server";
-import { getFavoriteActivity } from "../home-favorite-activity.server";
+import { clampFavoriteActivityOptions, getFavoriteActivity } from "../home-favorite-activity.server";
 
 // ホームの注目の走者（候補・日替わり・ランダム）とお気に入りの動きを実DBで検証する。
 // 結果はメモリキャッシュされるため毎テスト無効化する
@@ -202,12 +202,62 @@ describe("getFavoriteActivity", () => {
     expect(result.favoritesCount).toBe(1);
     expect(result.items.map((i) => i.kind)).toEqual(["pace", "guide", "profile"]);
     // 同じランは最も進んだ区間だけ
-    expect(result.items[0]).toMatchObject({ kind: "pace", label: "Fortress", timeMs: 200000 });
+    expect(result.items[0]).toMatchObject({ kind: "pace", label: "Fortress", timeMs: 200000, runId: 1, mcid: "Fav" });
+    // ペース以外は runId を持たない
+    expect(result.items.slice(1).every((i) => i.runId === null)).toBe(true);
   });
 
   it("お気に入りが空・解決できなければ favoritesCount 0", async () => {
     expect(await getFavoriteActivity(asDb(db), [])).toEqual({ favoritesCount: 0, items: [] });
     expect(await getFavoriteActivity(asDb(db), ["nobody"])).toEqual({ favoritesCount: 0, items: [] });
+  });
+});
+
+describe("getFavoriteActivity: 期間・件数のオプション", () => {
+  it("既定は直近7日・10件。windowDays を広げると古い動きも含め、limit で件数を絞る", async () => {
+    const fav = await seedUser(db, { slug: "fav", mcid: "Fav", uuid: "uuid-fav", role: "runner", updatedAt: daysAgo(60) });
+    await seedGuide(db, fav.id, { slug: "g-old", title: "Old", isPublished: true, updatedAt: daysAgo(20) });
+    await seedGuide(db, fav.id, { slug: "g-new", title: "New", isPublished: true, updatedAt: daysAgo(1) });
+    await seedGuide(db, fav.id, { slug: "g-mid", title: "Mid", isPublished: true, updatedAt: daysAgo(10) });
+
+    const def = await getFavoriteActivity(asDb(db), ["fav"]);
+    expect(def.items.map((i) => i.label)).toEqual(["New"]);
+
+    const wide = await getFavoriteActivity(asDb(db), ["fav"], { windowDays: 30, limit: 100 });
+    expect(wide.items.map((i) => i.label)).toEqual(["New", "Mid", "Old"]);
+
+    const limited = await getFavoriteActivity(asDb(db), ["fav"], { windowDays: 30, limit: 2 });
+    expect(limited.items.map((i) => i.label)).toEqual(["New", "Mid"]);
+  });
+
+  it("上限を超える指定（windowDays 9999）でも30日でクランプされる", async () => {
+    const fav = await seedUser(db, { slug: "fav", mcid: "Fav", uuid: "uuid-fav", role: "runner", updatedAt: daysAgo(60) });
+    await seedGuide(db, fav.id, { slug: "g-40", title: "Forty", isPublished: true, updatedAt: daysAgo(40) });
+    const result = await getFavoriteActivity(asDb(db), ["fav"], { windowDays: 9999 });
+    expect(result.items).toEqual([]);
+  });
+
+  it("一覧向け（limit>10）は1人あたりのペースを5件まで、ホーム既定は2件まで", async () => {
+    const fav = await seedUser(db, { slug: "fav", mcid: "Fav", uuid: "uuid-fav", role: "runner", updatedAt: daysAgo(60) });
+    for (let i = 1; i <= 6; i++) {
+      await seedPace(db, { userId: fav.id, mcid: "Fav", pacemanRunId: i, timeline: "Bastion", rta: 100000 + i, date: daysAgo(i / 10) });
+    }
+    expect((await getFavoriteActivity(asDb(db), ["fav"])).items).toHaveLength(2);
+    expect((await getFavoriteActivity(asDb(db), ["fav"], { windowDays: 30, limit: 100 })).items).toHaveLength(5);
+  });
+});
+
+describe("clampFavoriteActivityOptions", () => {
+  it("未指定・不正値は既定（7日・10件）", () => {
+    expect(clampFavoriteActivityOptions({})).toEqual({ windowDays: 7, limit: 10 });
+    expect(clampFavoriteActivityOptions({ windowDays: "30", limit: NaN })).toEqual({ windowDays: 7, limit: 10 });
+    expect(clampFavoriteActivityOptions({ windowDays: null, limit: Infinity })).toEqual({ windowDays: 7, limit: 10 });
+  });
+
+  it("上限（30日・100件）と下限（1）でクランプし、小数は切り捨てる", () => {
+    expect(clampFavoriteActivityOptions({ windowDays: 9999, limit: 100000 })).toEqual({ windowDays: 30, limit: 100 });
+    expect(clampFavoriteActivityOptions({ windowDays: 0, limit: -5 })).toEqual({ windowDays: 1, limit: 1 });
+    expect(clampFavoriteActivityOptions({ windowDays: 14.9, limit: 50.5 })).toEqual({ windowDays: 14, limit: 50 });
   });
 });
 

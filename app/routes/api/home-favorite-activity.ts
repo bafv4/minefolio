@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { getApiUser } from "@/lib/api-auth.server";
 import { getFavoritesFromDb } from "@/lib/favorites";
-import { FAVORITE_SLUGS_MAX, getFavoriteActivity } from "@/lib/home-favorite-activity.server";
+import { FAVORITE_SLUGS_MAX, clampFavoriteActivityOptions, getFavoriteActivity } from "@/lib/home-favorite-activity.server";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
@@ -20,19 +20,20 @@ export async function action({ request }: Route.ActionArgs) {
   const auth = createAuth(db, getEnv());
   const user = await getApiUser(db, auth, request);
 
+  // 本文 { slugs?, windowDays?, limit? }。期間・件数はサーバー側でクランプする（ログイン済みでも読む）
+  let body: { slugs?: unknown; windowDays?: unknown; limit?: unknown } = {};
+  try {
+    body = ((await request.json()) as typeof body) ?? {};
+  } catch {
+    if (!user) return Response.json({ error: "Invalid body" }, { status: 400, headers: NO_STORE });
+  }
+
   let slugs: string[] = [];
   if (user) {
     slugs = await getFavoritesFromDb(db, user.id);
-  } else {
-    try {
-      const body = (await request.json()) as { slugs?: unknown };
-      if (Array.isArray(body.slugs)) {
-        slugs = body.slugs.filter((s): s is string => typeof s === "string").slice(0, FAVORITE_SLUGS_MAX);
-      }
-    } catch {
-      return Response.json({ error: "Invalid body" }, { status: 400, headers: NO_STORE });
-    }
+  } else if (Array.isArray(body.slugs)) {
+    slugs = body.slugs.filter((s): s is string => typeof s === "string").slice(0, FAVORITE_SLUGS_MAX);
   }
-  const result = await getFavoriteActivity(db, slugs);
+  const result = await getFavoriteActivity(db, slugs, clampFavoriteActivityOptions(body));
   return Response.json(result, { headers: NO_STORE });
 }

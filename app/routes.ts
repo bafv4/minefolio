@@ -39,6 +39,7 @@ export default [
     route("compare", "routes/compare.tsx"),
     route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),
+    route("favorites/activity", "routes/favorites-activity.tsx"),
     route("feedback", "routes/feedback.tsx"),
     route("privacy", "routes/privacy.tsx"),
     route("terms", "routes/terms.tsx"),

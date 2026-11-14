@@ -59,8 +59,16 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 - `POST /api/home-favorite-activity`（`app/routes/api/home-favorite-activity.ts` → `getFavoriteActivity`）。応答は `private, no-store`。ログイン済みは**サーバーのお気に入り**（`getFavoritesFromDb`、本文は無視）、未ログインは**ブラウザのお気に入りを本文 `{ slugs }` で受ける**（URL に載せない。上限100件・公開プロフィールのみ解決）。
 - 種類: ペース（直近7日・保持期間内。同じランは最深区間、1人2件まで）・動画（YouTube/Twitch キャッシュ）・プロフィール更新（`users.updatedAt`）・ガイド（公開済みの `updatedAt`。公開日時の列が無いため「公開・更新」の文言）。新しい順に10件。各1クエリ（お気に入りの userId 群に対して）。
+- 種類（追加分）: **rankTierUp**（Ranked のレート帯 UP。`ranked_elo_snapshots` を `getRankTier`〈division 含む。Gold III→Emerald I、Emerald I→II も対象〉で段階化し、期間前の最新スナップショット〈無ければ期間内の最初〉を基準に「それまでの最高段階を更新した日」だけを出す。境目の行き来では増やさず、複数段階上がった日は到達段階1件。文面「{name} が {tier} に昇格」）・**rankedPb**（`player_rankings` の `ranked_pb` で `recordDate` が期間内。「{name} が Ranked PB を更新：{time}」）・**srcSubmit**（speedrun.com への新規申請。`verificationStatus = "new"` で行の `createdAt`〈cron が初めて検知した時刻〉と `recordDate`〈ランの日付〉がともに期間内。連携直後に古い審査中記録が「今提出した」ように見えるのを防ぐ。rejected は出さず、オーナーが非表示にした run〈`hiddenSpeedrunRecords`〉も除く。時刻は `createdAt`）・**settings**（操作設定の変更。`config_history` を1人・1日〈UTC〉・`changeType` ごとに最新1件へ集約し、文面・アイコンは changeType で分ける: keybinding=キー配置 / device=デバイス設定 / game_setting=ゲーム設定〈アイテム配置・サーチクラフト・プリセットへの保存・テンプレート適用が混在〉 / remap=リマップ〈現状この種別を書く箇所は無い〉 / preset_switch=プリセット。`changeDescription` は書き込み時のロケールの文字列なので表示に使わない）。
+- 精度: rankTierUp〈`snapshotDate`〉・rankedPb〈`recordDate`〉は日付までしか分からないため `FavoriteActivityItem.dateOnly = true`、`at` はその UTC 日の正午（now を超えない）。ホームの相対表示は「今日／昨日／N日前」（UTC 日単位）、一覧ページの時刻列は空欄。srcSubmit・settings は時刻つき。
+- 1人あたりの上限: ホームは rankTierUp・srcSubmit・settings とも1件（一覧は3件、rankedPb は常に1件）。
+- 除外: Ranked 系（rankTierUp・rankedPb）は `users.showRankedStats === false` の人を除く（プロフィールの Ranked 表示と同じ条件。MCSR Ranked 側の非公開を示すデータはアプリ内に無い）。いずれも公開プロフィールのみ・視聴者除外。各取得は独立に失敗させる（`.catch(() => [])`）。
+- 遷移先: rankTierUp・rankedPb→`/player/{slug}?tab=stats`、srcSubmit→`/player/{slug}?tab=stats&srcPending=1`、settings→`?tab=keybindings`（keybinding・remap・preset_switch・game_setting〈混在する種別のため汎用の文面にし、遷移先もキー配置タブにする〉）/`devices`（device）。
 - お気に入り0人（解決できる公開プロフィールが0人）: 「走者をお気に入りに追加すると、ここに動きが並びます」＋よく見られている走者3人（`ProfileFeedCard`＝お気に入りボタン付き）。動きが0件: 「直近7日の動きはありません」。
 - 未ログインでお気に入りが無い（Cookie 未同意を含む）ときは欄ごと出さない。お気に入りの一覧は画面表示後にブラウザから取得するため、欄は5行のスケルトンで高さを確保してから埋める。
+- **「すべて見る」の遷移先は `/favorites/activity`**（動きの一覧ページ。仕様は [favorites.md](./favorites.md#お気に入り走者の動き一覧-favoritesactivity)）。
+- **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。走者プロフィールへはアバターが別リンク（z-10）として残る。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
+- API は本文の `windowDays`（既定7・最大30）・`limit`（既定10・最大100）で期間・件数を指定でき、サーバー側（`clampFavoriteActivityOptions`）で検証・クランプする（不正値は既定）。ホーム欄は指定しない（7日・10件）。取得ロジックはフック `useFavoriteActivity`（`app/hooks/use-favorite-activity.ts`）、行の描画・文言は `FavoriteActivityRow`（`app/components/favorite-activity-row.tsx`）をホーム欄と一覧ページで共用する。
 
 「よく見られている」は `page_view_stats` のスナップショット行を起点に `innerJoin` する（PV スナップショットが無い環境では自然に0件。UI は件数だけで列を出すか判定）。
 

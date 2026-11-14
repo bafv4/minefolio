@@ -12,6 +12,7 @@ import { getFavoriteSlugsByDiscordId } from "@/lib/browse-query.server";
 import { getLocalFavorites } from "@/lib/favorites-client";
 import { ProfileFeedCard, ProfileFeedCardSkeleton, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { EmptyState } from "@/components/empty-state";
+import { FavoritesNav } from "@/components/favorites-nav";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, Users, ArrowLeft, Cookie } from "lucide-react";
@@ -156,6 +157,8 @@ export default function FavoritesPage() {
           </Link>
         </Button>
       </div>
+
+      <FavoritesNav current="favorites" />
 
       {/* Cookie未承諾の警告（未ログインのみ） */}
       {showCookieAlert && (
