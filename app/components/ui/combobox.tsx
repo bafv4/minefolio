@@ -88,10 +88,10 @@ export function Combobox({
       <PopoverTrigger asChild>
         <Button
           id={id}
-          variant="outline"
+          variant="ghost"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between font-normal", className)}
+          className={cn("w-full justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input", className)}
         >
           <span className={cn(!value && "text-muted-foreground")}>
             {selectedLabel}
