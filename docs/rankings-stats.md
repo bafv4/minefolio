@@ -176,12 +176,22 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | `/api/cron/youtube-update` | YouTube動画のキャッシュ更新（ライブ配信確認は現在停止中。詳細は [`docs/home-live.md`](./home-live.md#youtubelivecache)） |
 | `/api/cron/twitch-update` | Twitch配信アーカイブ（VOD）のキャッシュ更新（詳細は [`docs/home-live.md`](./home-live.md#twitchvodcache)） |
 | `/api/cron/update-paceman-cache` | PaceManペースデータのキャッシュ更新 |
-| `/api/cron/update-rankings` | ランキングデータの更新 |
+| `/api/cron/update-rankings` | ランキングデータの更新。あわせて Ranked レートを `ranked_elo_snapshots` に日次記録（下記） |
 
 ### 認証
 
 - リクエストヘッダーまたはクエリパラメータで `CRON_SECRET` を検証
 - 不正なリクエストは拒否
+
+### Ranked レート日次スナップショット
+
+`update-rankings` cron が各ユーザーの Ranked レート（eloRate）を取得できたとき、`ranked_elo_snapshots` に `(userId, 当日UTCの YYYY-MM-DD)` で upsert する（`upsertEloSnapshot`、`app/lib/rankings-update.server.ts`）。同日に複数回走っても1行で、`eloRate` と `updatedAt` が後の値に更新される。レートが取れない／uuid 未登録のユーザーは書かない。1ユーザー分の処理（`updateUserRankings`）に入っているため、`targeted-refresh.server.ts` の即時更新でも同様に記録される。
+
+保持期間は30日（`ELO_SNAPSHOT_RETENTION_DAYS`）。cron 1回の最後に `cleanupOldEloSnapshots` が、30日より古い `snapshot_date` を1文の DELETE で削除する（レスポンスの `stats.eloSnapshotsRemoved`）。ホームで使うのは直近7日のみ。
+
+### Ranked PB の recordDate
+
+MCSR Ranked API は PB を出した日時を返さないため、`ranked_pb` 行の `recordDate`（`YYYY-MM-DD`、UTC）は cron が「前回より速くなった」ことを検出した日だけ入れる。PB が変わらない・遅くなる更新では既存値を書き換えない。初回挿入（行がまだ無い）は過去の PB を「今日の更新」と誤認しないよう null のまま。
 
 ---
 
