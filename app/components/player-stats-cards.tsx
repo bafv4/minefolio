@@ -61,7 +61,7 @@ export function MCSRRankedCard({
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
           <Swords className="h-5 w-5" />
           MCSR Ranked
         </CardTitle>
@@ -164,7 +164,7 @@ export function MCSRRankedCard({
         {/* 最近のマッチ */}
         {ranked.recentMatches.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.recentMatches")}</h4>
+            <h3 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.recentMatches")}</h3>
             <div className="space-y-1">
               {ranked.recentMatches.slice(0, 5).map((match) => (
                 <div
@@ -225,7 +225,7 @@ export function PaceManLinkCard({ mcid }: { mcid: string }) {
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
           <Timer className="h-5 w-5" />
           PaceMan Stats
         </CardTitle>
@@ -314,7 +314,7 @@ export function PaceManStatsCard({
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
           <Timer className="h-5 w-5" />
           PaceMan Stats
         </CardTitle>
@@ -340,7 +340,7 @@ export function PaceManStatsCard({
 
         {mainPaces.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.mainPacesListTitle")}</h4>
+            <h3 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.mainPacesListTitle")}</h3>
             <div className="space-y-1">
               {mainPaces.map((pace) => (
                 <PaceRow key={pace.pacemanRunId} pace={pace} />
@@ -392,7 +392,7 @@ export function SpeedrunComCard({
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
           <Trophy className="h-5 w-5" />
           Speedrun.com
         </CardTitle>

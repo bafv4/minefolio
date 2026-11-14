@@ -331,7 +331,7 @@ function SearchCraftGroupCard({
     <Card className="gap-3 py-5">
       {title && (
         <CardHeader className="px-5">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <CardTitle role="heading" aria-level={3} className="text-base font-semibold flex items-center gap-2">
             {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
             {title}
             <span className="text-xs font-normal text-muted-foreground">

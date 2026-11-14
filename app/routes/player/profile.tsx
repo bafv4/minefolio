@@ -1284,6 +1284,9 @@ export default function PlayerProfilePage() {
           </div>
         )}
 
+        {/* h1 は概要タブのヘッダーカードにしか無い（非アクティブパネルは unmount される）ため、他タブでは視覚非表示の h1 で補う */}
+        {activeTab !== "profile" && <h1 className="sr-only">{playerName}</h1>}
+
         {/* Profile Tab */}
         <TabsContent value="profile" {...panelA11yProps("profile")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
           {/* Header: Skin + Basic Info */}
@@ -1528,7 +1531,7 @@ export default function PlayerProfilePage() {
           {displayBio && (
             <Card className="gap-3 py-5">
               <CardHeader className="px-5">
-                <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
+                <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.bio")}</CardTitle>
                 {hasTranslatedBio && (
                   <AutoTranslateNotice showOriginal={showBioOriginal} onToggle={toggleBioOriginal} />
                 )}
@@ -1551,7 +1554,7 @@ export default function PlayerProfilePage() {
           {displayVideos.length > 0 && (
             <Card className="gap-3 py-5">
               <CardHeader className="px-5">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                   <Video className="h-5 w-5" />
                   {t("playerProfile.videos")}
                 </CardTitle>
@@ -1589,7 +1592,7 @@ export default function PlayerProfilePage() {
               <Card className="gap-3 py-5">
                 <CardHeader className="px-5">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
+                    <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
                     <div className="flex flex-wrap items-center gap-3">
                       {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
                       {hasTypedRemaps && (
@@ -1676,7 +1679,7 @@ export default function PlayerProfilePage() {
                   return (
                     <Card key={group.key} className="gap-3 py-5">
                       <CardHeader className="px-5">
-                        <CardTitle className={`text-base ${group.colorClass}`}>
+                        <CardTitle role="heading" aria-level={2} className={`text-base ${group.colorClass}`}>
                           {group.label}
                         </CardTitle>
                       </CardHeader>
@@ -1703,7 +1706,7 @@ export default function PlayerProfilePage() {
                 {player.customActions.length > 0 && (
                   <Card className="gap-3 py-5">
                     <CardHeader className="px-5">
-                      <CardTitle className="text-base">
+                      <CardTitle role="heading" aria-level={2} className="text-base">
                         {t("playerProfile.customActions")}
                       </CardTitle>
                     </CardHeader>
@@ -1741,7 +1744,7 @@ export default function PlayerProfilePage() {
                 {player.keyRemaps.length > 0 && (
                   <Card className="gap-3 py-5">
                     <CardHeader className="px-5">
-                      <CardTitle className="text-base">
+                      <CardTitle role="heading" aria-level={2} className="text-base">
                         {t("playerProfile.remaps")}
                       </CardTitle>
                     </CardHeader>
@@ -1824,7 +1827,7 @@ export default function PlayerProfilePage() {
               {hasPlaystylePlayContent && (
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
+                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                       <Layers className="h-5 w-5" />
                       {t("playerProfile.playstylePlayContent")}
                     </CardTitle>
@@ -1844,7 +1847,7 @@ export default function PlayerProfilePage() {
               {hasPlaystyleControls && (
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
+                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                       <SlidersHorizontal className="h-5 w-5" />
                       {t("playerProfile.playstyleControls")}
                     </CardTitle>
@@ -1863,7 +1866,7 @@ export default function PlayerProfilePage() {
               {hasPlaystyleTechnique && (
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
+                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                       <Sparkles className="h-5 w-5" />
                       {t("playerProfile.playstyleTechnique")}
                     </CardTitle>
@@ -1896,6 +1899,7 @@ export default function PlayerProfilePage() {
 
         {/* Item Layouts Tab */}
         <TabsContent value="items" {...panelA11yProps("items")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+          <h2 className="sr-only">{tabLabelOf("items")}</h2>
           {player.itemLayouts.length > 0 ? (
             <Card className="gap-3 py-5">
               <CardContent className="px-5">
@@ -1917,6 +1921,7 @@ export default function PlayerProfilePage() {
 
         {/* Search Craft Tab */}
         <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+          <h2 className="sr-only">{tabLabelOf("searchcraft")}</h2>
           {player.searchCrafts.length > 0 ? (
             <>
               {/* サマリーバー: ゲーム言語・件数・凡例 */}
@@ -1972,7 +1977,7 @@ export default function PlayerProfilePage() {
                 {/* Keyboard */}
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
+                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                       <Keyboard className="h-5 w-5" />
                       {t("playerProfile.keyboard")}
                     </CardTitle>
@@ -2004,7 +2009,7 @@ export default function PlayerProfilePage() {
                 {/* Mouse */}
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
+                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                       <Mouse className="h-5 w-5" />
                       {t("playerProfile.mouse")}
                     </CardTitle>
@@ -2103,7 +2108,7 @@ export default function PlayerProfilePage() {
               {/* Game Settings */}
               <Card className="gap-3 py-5">
                 <CardHeader className="px-5">
-                  <CardTitle className="text-base flex items-center gap-2">
+                  <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
                     <Settings className="h-5 w-5" />
                     {t("playerProfile.inGameSettings")}
                   </CardTitle>
@@ -2170,6 +2175,7 @@ export default function PlayerProfilePage() {
 
         {/* Guides Tab */}
         <TabsContent value="guides" {...panelA11yProps("guides")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+          <h2 className="sr-only">{tabLabelOf("guides")}</h2>
           {playerGuides.length > 0 ? (
             <>
               <div className="flex justify-end">
@@ -2314,7 +2320,7 @@ function RecordCard({
       <CardHeader className="px-5">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-base flex items-center gap-1.5">
+            <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-1.5">
               {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
               {record.categoryDisplayName}
             </CardTitle>
@@ -2469,7 +2475,7 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.links")}</CardTitle>
       </CardHeader>
       <CardContent className="px-5 space-y-2">
         {hasRichLinks && (
@@ -2897,7 +2903,7 @@ function StatsContent({
       {player.categoryRecords.length > 0 && (
         <Card className="gap-3 py-5">
           <CardHeader className="px-5">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
               <Target className="h-5 w-5" />
               {t("playerProfile.customRecords")}
             </CardTitle>
