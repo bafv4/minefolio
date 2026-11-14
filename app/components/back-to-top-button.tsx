@@ -62,7 +62,7 @@ export function BackToTopButton({ threshold = 200 }: Props) {
           onClick={handleClick}
           aria-label={t("backToTop.label")}
           className={cn(
-            "fixed bottom-6 right-6 z-50 inline-flex items-center justify-center",
+            "fixed bottom-[calc(1.5rem+var(--bottom-dock-height,0px))] right-6 z-50 inline-flex items-center justify-center",
             "h-11 w-11 rounded-full bg-brand text-brand-foreground shadow-lg",
             "transition-all duration-200 ease-out will-change-transform",
             "hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",

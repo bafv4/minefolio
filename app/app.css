@@ -335,6 +335,19 @@ body {
        コンテンツの順で描画させる。html にも背景色があるため body 背景は canvas に
        伝播せず、これが無いと body 背景が負 z-index の模様レイヤーを塗りつぶす */
     isolation: isolate;
+    /* 下端固定ドック（[data-bottom-dock]）の高さぶん末尾を空ける。ドック無し・md 以上は 0px */
+    padding-bottom: var(--bottom-dock-height);
+  }
+
+  /* 下端ドック（モバイルのみ）。変数は下方向にしか継承されないため :root で解決する。
+     ドックを持つページ（コンテナに data-bottom-dock）でだけ値が入る */
+  :root {
+    --bottom-dock-height: 0px;
+  }
+  @media (width < 48rem) {
+    :root:has([data-bottom-dock]) {
+      --bottom-dock-height: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    }
   }
 
   /* ページ背景の模様レイヤー（root.tsx の BackgroundPattern が描画）。

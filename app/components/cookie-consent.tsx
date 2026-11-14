@@ -112,7 +112,7 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
   return (
     <div
       ref={bannerRef}
-      className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md"
+      className="fixed bottom-[calc(1rem+var(--bottom-dock-height,0px))] left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md"
     >
       {/* モバイルは Card 基底の py-6 を外し、CardContent の p-3 だけにする（下端固定で画面を覆う高さを抑える） */}
       <Card className="border-2 py-0 shadow-lg sm:py-6">
