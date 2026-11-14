@@ -1844,6 +1844,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     customActionsDescription: "Register your own actions such as a DPI switch or a macro. Triggers can include modifier combinations (Ctrl, Shift, Alt).",
     keyModalDescription: "Edit the settings for this key",
     assignedToOtherKey: "already on {key}",
+    sharedKeyConflict: "Another action shares this key",
     add: "Add",
     applyLabel: "Apply",
     discardDraftTitle: "Discard your edits?",

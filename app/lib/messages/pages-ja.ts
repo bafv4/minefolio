@@ -1799,6 +1799,7 @@ export const PAGES_JA = {
     customActionsDescription: "DPIスイッチやマクロなど、ユーザー定義のアクションを登録します。修飾キー（Ctrl, Shift, Alt）との組み合わせでトリガーを設定できます。",
     keyModalDescription: "このキーに関する設定を編集します",
     assignedToOtherKey: "{key}に割当済",
+    sharedKeyConflict: "同じキーに他の操作もあります",
     add: "追加",
     applyLabel: "適用",
     discardDraftTitle: "編集中の変更を破棄しますか？",

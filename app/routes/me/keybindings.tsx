@@ -11,6 +11,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import { countAssignedToKey, getActionAssignmentStatus } from "@/lib/keybindings-assignment";
 import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, parseKeyCombination, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
@@ -1667,6 +1668,11 @@ export default function KeybindingsPage() {
     [modalKeybindingsWithLocalChanges]
   );
 
+  const modalAssignedCountOnKey = useMemo(
+    () => (editingKeyCode ? countAssignedToKey(modalKeybindingsWithLocalChanges, editingKeyCode) : 0),
+    [editingKeyCode, modalKeybindingsWithLocalChanges],
+  );
+
   const modalActionToKeyMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const kb of modalKeybindingsWithLocalChanges) {
@@ -2659,7 +2665,7 @@ export default function KeybindingsPage() {
         }}
       >
         <DialogContent
-          className="sm:max-w-lg max-h-[80vh] p-0 overflow-hidden flex flex-col"
+          className="sm:max-w-lg max-h-[calc(100dvh-2rem)] p-0 overflow-hidden flex flex-col"
           onKeyDown={isCapturing ? handleKeyCapture : undefined}
           onMouseDown={isCapturing ? handleMouseCapture : undefined}
           onContextMenu={isCapturing ? (e) => e.preventDefault() : undefined}
@@ -2685,7 +2691,7 @@ export default function KeybindingsPage() {
                   ? t("meKeybindings.actionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-              <div className="max-h-64 overflow-y-auto border rounded-md p-2">
+              <div className="border rounded-md p-2">
                 {categoryOrder.map((category) => {
                   const bindings = modalByCategory[category];
                   if (!bindings || bindings.length === 0) return null;
@@ -2698,7 +2704,9 @@ export default function KeybindingsPage() {
                       <div className="space-y-1.5 pl-2">
                         {bindings.map((kb) => {
                           const isAssignedToThisKey = kb.keyCode === editingKeyCode;
-                          const isAssignedToOtherKey = !!(kb.keyCode && kb.keyCode !== editingKeyCode);
+                          const assignmentStatus = editingKeyCode
+                            ? getActionAssignmentStatus(kb, editingKeyCode, modalAssignedCountOnKey)
+                            : "none";
                           const assignedTo = modalActionToKeyMap[kb.action];
 
                           return (
@@ -2717,9 +2725,14 @@ export default function KeybindingsPage() {
                                 className="text-sm cursor-pointer select-none"
                               >
                                 {getActionLabel(t, kb.action)}
-                                {isAssignedToOtherKey && (
+                                {assignmentStatus === "conflict" && (
                                   <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
                                     <TriangleAlert className="h-3.5 w-3.5" />
+                                    {t("meKeybindings.sharedKeyConflict")}
+                                  </span>
+                                )}
+                                {assignmentStatus === "moves" && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
                                     {t("meKeybindings.assignedToOtherKey", {
                                       key: getKeyLabelWithCustom(assignedTo),
                                     })}
@@ -2762,7 +2775,7 @@ export default function KeybindingsPage() {
               </p>
 
               {modalSelectedKeyRemaps.length > 0 ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2">
                   {modalSelectedKeyRemaps.map((remap) => {
                     // 同一 sourceKey の行が他にある場合は All を選択不可にする（リマップ全体で判定）
                     const hasSameSourceSibling =
@@ -2830,7 +2843,7 @@ export default function KeybindingsPage() {
               </p>
 
               {modalSelectedKeyCustomActions.length > 0 ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2">
                   {modalSelectedKeyCustomActions.map((action) => (
                     <DialogCustomActionRow
                       key={action.id || `new-${action._index}`}
