@@ -51,7 +51,7 @@ export function WelcomeBar({
           <Link
             to={liveHref}
             aria-label={t("home.liveCountAria", { count: liveCount })}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-1 inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mt-0.5"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
             <span className="truncate">{t("home.welcomeLiveChip", { count: liveCount })}</span>
@@ -62,12 +62,15 @@ export function WelcomeBar({
       {/* DOM 順（＝フォーカス順）は 編集 → マイプロフィール → お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
       <div className="flex w-full items-center gap-x-1 sm:w-auto sm:gap-x-2">
         <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
-          <Link to="/me/edit">
+          {/* モバイルは「カスタマイズ」の文字を残すぶん、編集は短い表記にして1行に収める（読み上げは全文） */}
+          <Link to="/me/edit" aria-label={t("home.welcomeEditProfile")}>
             <Pencil className="mr-1.5 h-4 w-4" />
-            {t("home.welcomeEditProfile")}
+            <span className="sm:hidden">{t("home.welcomeEditProfileShort")}</span>
+            <span className="max-sm:hidden">{t("home.welcomeEditProfile")}</span>
           </Link>
         </Button>
-        {/* モバイルは2つ目以降をアイコンのみ（44px 角）にして1行に収める。ラベルは sr-only で残す */}
+        {/* モバイルはプロフィール・お気に入りをアイコンのみ（44px 角）にして1行に収める。ラベルは sr-only で残す。
+            カスタマイズはアイコンだけでは並べ替えと分からないので文字を残す */}
         <Button asChild variant="ghost" className="min-h-11 max-sm:w-11 max-sm:px-0 sm:min-h-9">
           <Link to={`/player/${slug}`}>
             <User className="h-4 w-4 sm:mr-1.5" />
@@ -83,11 +86,11 @@ export function WelcomeBar({
         <Button
           type="button"
           variant="ghost"
-          className="ml-auto min-h-11 max-sm:w-11 max-sm:px-0 sm:ml-0 sm:min-h-9"
+          className="ml-auto min-h-11 max-sm:px-2 sm:ml-0 sm:min-h-9"
           onClick={() => setSettingsOpen(true)}
         >
-          <Settings2 className="h-4 w-4 sm:mr-1.5" />
-          <span className="sr-only sm:not-sr-only">{t("home.welcomeCustomize")}</span>
+          <Settings2 className="mr-1.5 h-4 w-4" />
+          {t("home.welcomeCustomize")}
         </Button>
       </div>
       <HomeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} layout={layout} />

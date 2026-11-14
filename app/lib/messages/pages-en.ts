@@ -393,6 +393,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     welcomeNew: "Welcome, {name}",
     welcomeMyProfile: "My profile",
     welcomeEditProfile: "Edit profile",
+    welcomeEditProfileShort: "Edit",
     welcomeFavorites: "Favorites",
     settingsTitle: "Home settings",
     settingsDescription: "Change the order of the sections on the home page and choose which ones to show. The welcome bar always stays at the top.",

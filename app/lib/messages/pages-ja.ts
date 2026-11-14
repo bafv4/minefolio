@@ -394,6 +394,7 @@ export const PAGES_JA = {
     welcomeNew: "ようこそ、{name}さん",
     welcomeMyProfile: "マイプロフィール",
     welcomeEditProfile: "プロフィールを編集",
+    welcomeEditProfileShort: "編集",
     welcomeFavorites: "お気に入り",
     settingsTitle: "ホーム設定",
     settingsDescription: "ホームに表示する欄の並び順と、表示・非表示を変更できます。「おかえりなさい」のバーは常に先頭に表示されます。",
