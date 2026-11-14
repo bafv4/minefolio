@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useSearchParams, useNavigation, Form, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -137,6 +137,10 @@ export default function BrowsePage() {
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
+  // IME 変換中は URL に反映しない（確定後に debounce で反映）
+  const [isComposing, setIsComposing] = useState(false);
+  // 最後に URL へ反映した（または URL から取り込んだ）検索語。同値の重複ナビゲーションを避ける
+  const lastAppliedQuery = useRef(searchQuery);
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
 
@@ -223,21 +227,45 @@ export default function BrowsePage() {
     setSearchParams(newParams);
   };
 
-  // q を URL に反映して検索を実行
+  // q を URL に反映して検索を実行（ページ上の直接操作なので即時反映。入力途中で履歴を
+  // 積まないよう replace。連続ナビゲーションは react-router が前のローダーを打ち切る）
   const applySearch = (value: string) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (value) {
-      newParams.set("q", value);
-    } else {
-      newParams.delete("q");
-    }
-    newParams.delete("page");
-    setSearchParams(newParams);
+    lastAppliedQuery.current = value;
+    setSearchParams(
+      (prev) => {
+        const newParams = new URLSearchParams(prev);
+        if (value) {
+          newParams.set("q", value);
+        } else {
+          newParams.delete("q");
+        }
+        newParams.delete("page");
+        return newParams;
+      },
+      { replace: true, preventScrollReset: true },
+    );
   };
 
+  // 入力の debounce 反映（IME 変換中は待つ）
+  useEffect(() => {
+    if (isComposing || inputValue === lastAppliedQuery.current) return;
+    const timer = setTimeout(() => applySearch(inputValue), 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputValue, isComposing]);
+
+  // 戻る/進む等、自分以外の要因で URL の q が変わったら入力欄へ取り込む
+  useEffect(() => {
+    if (searchQuery !== lastAppliedQuery.current) {
+      lastAppliedQuery.current = searchQuery;
+      setInputValue(searchQuery);
+    }
+  }, [searchQuery]);
+
+  // Enter／検索ボタン: debounce を待たず即時反映
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    applySearch(inputValue);
+    if (inputValue !== lastAppliedQuery.current) applySearch(inputValue);
   };
 
   // 適用済みフィルタを直接URLから操作（フィルタチップの×ボタン用）
@@ -328,6 +356,8 @@ export default function BrowsePage() {
                   aria-label={t("browse.searchAria")}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
                   className="pl-10"
                 />
               </div>
@@ -633,8 +663,9 @@ export default function BrowsePage() {
         )}
       </div>
 
-      {/* 走者一覧 */}
-      {isNavigating ? (
+      {/* 走者一覧。検索語は入力中に即時反映するため、読み込み中も表示中の一覧は残して薄くする
+          （入力のたびにスケルトンへ切り替えるとちらつく）。表示中の一覧が無いときだけスケルトン */}
+      {isNavigating && infinite.items.length === 0 ? (
         viewMode === "card" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
@@ -656,13 +687,22 @@ export default function BrowsePage() {
         )
       ) : infinite.items.length > 0 ? (
         viewMode === "card" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            aria-busy={isNavigating}
+            className={cn(
+              "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity",
+              isNavigating && "opacity-60",
+            )}
+          >
             {infinite.items.map((player) => (
               <ProfileFeedCard key={player.slug} player={player} />
             ))}
           </div>
         ) : (
-          <div className="divide-y">
+          <div
+            aria-busy={isNavigating}
+            className={cn("divide-y transition-opacity", isNavigating && "opacity-60")}
+          >
             {infinite.items.map((player) => (
               <ProfileFeedListItem key={player.slug} player={player} />
             ))}
@@ -688,6 +728,7 @@ export default function BrowsePage() {
                 className="mt-4"
                 onClick={() => {
                   setInputValue("");
+                  lastAppliedQuery.current = "";
                   const newParams = new URLSearchParams();
                   if (sortBy !== "updatedAt") {
                     newParams.set("sort", sortBy);
