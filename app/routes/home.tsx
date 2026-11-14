@@ -868,7 +868,7 @@ export default function HomePage() {
             </div>
             {popularUsers.length > 0 && (
               <>
-                <div className="border-t border-border/70" />
+                <div className="border-t border-border/60" />
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-muted-foreground">
                     {t("home.sectionPopular", { days: PAGE_VIEW_WINDOW_DAYS })}
@@ -920,7 +920,7 @@ export default function HomePage() {
               </div>
             )}
             {recentlyUpdatedGuides.length > 0 && popularGuides.length > 0 && (
-              <div className="border-t border-border/70" />
+              <div className="border-t border-border/60" />
             )}
             {popularGuides.length > 0 && (
               <div className="space-y-3">

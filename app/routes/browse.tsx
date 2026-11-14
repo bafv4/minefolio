@@ -643,7 +643,7 @@ export default function BrowsePage() {
                   setSearchParams(newParams);
                 }}
               >
-                {t("browse.clearSearchAndFilters")}
+                {t("common.resetFilters")}
               </Button>
             )
           }

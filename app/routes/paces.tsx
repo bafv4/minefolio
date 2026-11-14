@@ -219,7 +219,7 @@ export default function PacesPage() {
           </p>
           <h1 className="text-2xl font-bold">{t("paces.title")}</h1>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
           <Activity className="h-3.5 w-3.5" />
           {t("paces.count", { count: visibleTotal })}
         </span>
@@ -335,7 +335,7 @@ export default function PacesPage() {
           {hasActiveFilters && (
             <Button type="button" variant="ghost" size="sm" onClick={handleClear}>
               <X className="mr-1 h-4 w-4" />
-              {t("common.clear")}
+              {t("common.resetFilters")}
             </Button>
           )}
         </div>
@@ -357,7 +357,7 @@ export default function PacesPage() {
           action={
             hasActiveFilters ? (
               <Button asChild variant="outline" size="sm">
-                <Link to="/paces">{t("paces.resetFilters")}</Link>
+                <Link to="/paces">{t("common.resetFilters")}</Link>
               </Button>
             ) : undefined
           }

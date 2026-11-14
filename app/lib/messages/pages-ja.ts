@@ -315,6 +315,7 @@ export const PAGES_JA = {
     complete: "完了",
     clear: "クリア",
     clearAll: "すべてクリア",
+    resetFilters: "条件をリセット",
     search: "検索",
     save: "保存",
     saving: "保存中",
@@ -415,7 +416,6 @@ export const PAGES_JA = {
     emptyFiltered: "条件に一致するペースが見つかりません",
     emptyHint: "ペースが記録されるとここに表示されます",
     emptyFilteredHint: "検索条件を変えるか、条件をリセットしてください",
-    resetFilters: "条件をリセット",
     filterToggle: "検索条件",
     filterActiveCount: "{count}件適用中",
     filterPlayer: "プレイヤー",
@@ -483,7 +483,6 @@ export const PAGES_JA = {
     sortDisplayName: "名前順",
     /** 直近7日のプロフィール閲覧数が多い順（page_view_stats） */
     sortPopular: "人気順",
-    clearSearchAndFilters: "検索・フィルタをクリア",
     loadMore: "もっと読み込む",
     allShown: "すべて表示しました（{count}人）",
     removeFilterAria: "{label}の絞り込みを解除",
@@ -933,9 +932,9 @@ export const PAGES_JA = {
     dashToggle: "ダッシュ切替",
     sensitivityExcludedNote: "範囲外のため除外: {count}人",
   },
+  meEdit: {
     linkPlaceholderExample: "例: couriern3w",
     linkPlaceholderUsername: "例: username",
-  meEdit: {
     title: "プロフィール編集 - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     legacyApiNotConfigured: "レガシーAPIが設定されていません",

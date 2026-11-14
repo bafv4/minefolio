@@ -85,7 +85,7 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
     <Link
       to={`/player/${player.slug}`}
       prefetch="intent"
-      className="group flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+      className="group flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
     >
       {/* flex-1 でヘッダー側が余白を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
       <div className="flex flex-1 items-start gap-3">

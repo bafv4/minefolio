@@ -55,7 +55,7 @@ export function PaceFeedCard({
     <div
       className={cn(
         "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
-        isFinished && "border-info/60 bg-info/5"
+        isFinished && "border-info/60 bg-info/10"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
