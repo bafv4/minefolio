@@ -226,6 +226,7 @@ import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import { EmptyState } from "@/components/empty-state";
+import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
 import {
   Dialog,
   DialogContent,
@@ -1039,6 +1040,28 @@ export default function PlayerProfilePage() {
   const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
   const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
 
+  // デバイスタブ: 中身のあるカードだけ出す（閲覧者に空カードを見せない）
+  const pc = player.playerConfig;
+  const hasKeyboardInfo = !!(pc?.keyboardModel || pc?.keyboardLayout);
+  // 感度だけ登録している人もマウスカードを出す（各行は値が無ければ行ごと省くか「-」を表示する）
+  const hasMouseInfo = !!(
+    pc?.mouseModel ||
+    pc?.mouseDpi ||
+    pc?.gameSensitivity != null ||
+    pc?.windowsSpeed != null ||
+    pc?.windowsSpeedMultiplier != null
+  );
+  const hasInGameSettings =
+    pc != null &&
+    (pc.toggleSprint != null ||
+      pc.toggleSneak != null ||
+      pc.autoJump != null ||
+      !!pc.gameLanguage ||
+      pc.fov != null ||
+      pc.guiScale != null ||
+      !!pc.notes);
+  const hasDevicesData = hasKeyboardInfo || hasMouseInfo || hasInGameSettings;
+
   // タブ項目の定義（編集画面のメニュー順に合わせる）。
   // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
   const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
@@ -1757,7 +1780,7 @@ export default function PlayerProfilePage() {
                               ? [remap.outputCharacter]
                               : remap.targetKey
                               ? resolveKeyCombinationChips(remap.targetKey)
-                              : ["-"];
+                              : [];
                           const renderChipGroup = (
                             chips: string[],
                             justify: "start" | "end",
@@ -1767,6 +1790,11 @@ export default function PlayerProfilePage() {
                                 justify === "start" ? "justify-start" : "justify-end"
                               }`}
                             >
+                              {chips.length === 0 && (
+                                <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                  <EmptyValue />
+                                </kbd>
+                              )}
                               {chips.map((label, i) => (
                                 <span key={i} className="flex items-center gap-1">
                                   {i > 0 && (
@@ -1804,6 +1832,7 @@ export default function PlayerProfilePage() {
               icon={<Keyboard className="h-12 w-12" />}
               title={t("playerProfile.noKeybindingsTitle")}
               description={t("playerProfile.noKeybindings")}
+              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : undefined}
             />
           )}
         </TabsContent>
@@ -1816,6 +1845,7 @@ export default function PlayerProfilePage() {
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             pacemanStats={pacemanStats}
             minefolioEloRank={minefolioEloRank}
+            isOwner={isOwner}
           />
         </TabsContent>
 
@@ -1915,6 +1945,7 @@ export default function PlayerProfilePage() {
               icon={<Package className="h-12 w-12" />}
               title={t("playerProfile.noItemLayoutsTitle")}
               description={t("playerProfile.noItemLayouts")}
+              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : undefined}
             />
           )}
         </TabsContent>
@@ -1965,16 +1996,19 @@ export default function PlayerProfilePage() {
               icon={<Search className="h-12 w-12" />}
               title={t("playerProfile.searchCraftNoneTitle")}
               description={t("playerProfile.noSearchCraft")}
+              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : undefined}
             />
           )}
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
         <TabsContent value="devices" {...panelA11yProps("devices")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {player.playerConfig ? (
+          {player.playerConfig && hasDevicesData ? (
             <>
+              {(hasKeyboardInfo || hasMouseInfo) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Keyboard */}
+                {hasKeyboardInfo && (
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
                     <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
@@ -1998,15 +2032,13 @@ export default function PlayerProfilePage() {
                           />
                         )}
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground py-2">
-                        {t("playerProfile.keyboardNoInfo")}
-                      </p>
-                    )}
+                    ) : null}
                   </CardContent>
                 </Card>
+                )}
 
                 {/* Mouse */}
+                {hasMouseInfo && (
                 <Card className="gap-3 py-5">
                   <CardHeader className="px-5">
                     <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
@@ -2015,7 +2047,7 @@ export default function PlayerProfilePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-5">
-                    {player.playerConfig.mouseModel || player.playerConfig.mouseDpi ? (
+                    {hasMouseInfo ? (
                       <div className="divide-y">
                         {/* モデル */}
                         {player.playerConfig.mouseModel && (
@@ -2050,7 +2082,7 @@ export default function PlayerProfilePage() {
                         ) : (
                           <DeviceRow
                             label={t("playerProfile.winSens")}
-                            value={t("playerProfile.noValue")}
+                            value={<EmptyValue />}
                           />
                         )}
                         {/* マウス加速 */}
@@ -2096,16 +2128,15 @@ export default function PlayerProfilePage() {
                           value={<CursorSpeedValue config={player.playerConfig} />}
                         />
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground py-2">
-                        {t("playerProfile.mouseNoInfo")}
-                      </p>
-                    )}
+                    ) : null}
                   </CardContent>
                 </Card>
+                )}
               </div>
+              )}
 
               {/* Game Settings */}
+              {hasInGameSettings && (
               <Card className="gap-3 py-5">
                 <CardHeader className="px-5">
                   <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
@@ -2163,12 +2194,14 @@ export default function PlayerProfilePage() {
                   )}
                 </CardContent>
               </Card>
+              )}
             </>
           ) : (
             <EmptyState
               icon={<Mouse className="h-12 w-12" />}
               title={t("playerProfile.noDevicesTitle")}
               description={t("playerProfile.noDevices")}
+              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : undefined}
             />
           )}
         </TabsContent>
@@ -2199,6 +2232,7 @@ export default function PlayerProfilePage() {
               icon={<BookOpen className="h-12 w-12" />}
               title={t("playerProfile.noGuidesTitle")}
               description={t("playerProfile.noGuidesDescription")}
+              action={isOwner ? <OwnerEditAction to="/my-guides" label={t("playerProfile.editLinkGuides")} /> : undefined}
             />
           )}
         </TabsContent>
@@ -2718,12 +2752,14 @@ function StatsTabContent({
   pinnedSpeedrunRecords,
   pacemanStats,
   minefolioEloRank,
+  isOwner,
 }: {
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
+  isOwner: boolean;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
@@ -2804,6 +2840,7 @@ function StatsTabContent({
       pinnedSpeedrunRecords={pinnedSpeedrunRecords}
       pacemanStats={pacemanStats}
       minefolioEloRank={minefolioEloRank}
+      isOwner={isOwner}
       loadState={loadState}
     />
   );
@@ -2825,6 +2862,7 @@ function StatsContent({
   pinnedSpeedrunRecords,
   pacemanStats,
   minefolioEloRank,
+  isOwner,
   loadState,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
@@ -2833,6 +2871,7 @@ function StatsContent({
   pinnedSpeedrunRecords: string[];
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
+  isOwner: boolean;
   loadState: {
     ranked: "loading" | "done" | "error";
     paceman: "loading" | "done" | "error";
@@ -2924,6 +2963,7 @@ function StatsContent({
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}
           description={t("playerProfile.noStatsDescription")}
+          action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : undefined}
         />
       )}
     </>
