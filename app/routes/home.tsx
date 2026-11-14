@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { HomeSection } from "@/components/home/home-section";
+import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
@@ -512,17 +512,11 @@ const HOME_YOUTUBE_COUNT = 3;
 // 動画欄のローディングスケルトン（memo化）
 const VideosSkeleton = memo(function VideosSkeleton() {
   return (
-    <div className="space-y-4" aria-hidden="true">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-56 rounded-xl" />
-        ))}
-      </div>
-      <div className="space-y-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-14 rounded-xl" />
-        ))}
-      </div>
+    // YouTube のカード行1段ぶん（モバイルは横レールの見た目）。空状態に縮んでも下の欄が跳ねにくい高さ
+    <div className="flex gap-4 overflow-hidden md:grid md:grid-cols-3 md:overflow-visible" aria-hidden="true">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="h-56 w-[83%] shrink-0 rounded-xl md:w-auto" />
+      ))}
     </div>
   );
 });
@@ -793,12 +787,7 @@ export default function HomePage() {
         title={t("home.liveTitle")}
         action={
           // ライブの有無にかかわらず最近のペース（/paces）へ行けるようにする（0件時のペース3件表示だけに頼らない）
-          <Button variant="ghost" size="sm" asChild className="min-h-11 sm:min-h-0">
-            <Link to="/paces" prefetch="intent">
-              {t("home.recentPacesTitle")}
-              <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
-          </Button>
+          <SectionHeaderLink to="/paces" label={t("home.recentPacesTitle")} prefetch="intent" />
         }
         badge={
           // 人数が変わったときだけ読み上げる（15秒ごとの再描画では文字列が変わらない）。時刻など他の変動文字は入れない
@@ -844,7 +833,8 @@ export default function HomePage() {
           <FeedErrorNotice message={t("home.videosFetchFailed")} onRetry={retryVideos} />
         ) : noVideoData ? (
           <EmptyState
-            icon={<Play className="h-12 w-12" />}
+            size="compact"
+            icon={<Play className="h-5 w-5" />}
             title={t("home.noVideos")}
             description={t("home.noVideosDescription")}
           />
@@ -886,7 +876,6 @@ export default function HomePage() {
           id="home-guides"
           icon={<BookOpen className="h-5 w-5 text-primary" />}
           title={t("home.sectionGuides")}
-          badge={<span className="text-sm text-muted-foreground">{t("home.guidesOnePerAuthor")}</span>}
           viewAllTo="/guides"
         >
           <GuideCardGrid
@@ -911,7 +900,7 @@ export default function HomePage() {
         title={t("home.sectionProfiles")}
         badge={
           totalPublicProfiles > 0 ? (
-            <span className="text-sm text-muted-foreground">
+            <span className="hidden text-sm text-muted-foreground sm:inline">
               {t("home.profileCount", { count: totalPublicProfiles.toLocaleString(locale) })}
             </span>
           ) : undefined

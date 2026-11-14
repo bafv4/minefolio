@@ -81,6 +81,8 @@ export function LikeButton({
         className={cn(
           // relative z-10: カード全体を覆うリンクのオーバーレイより手前に置く
           "relative z-10 -mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors",
+          // 見た目は小さいまま、押せる範囲だけ擬似要素で約 44px 四方に広げる（フッター行の gap-x-3 を超えない横幅）
+          "after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']",
           "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:pointer-events-none",
           liked && "text-brand hover:text-brand",

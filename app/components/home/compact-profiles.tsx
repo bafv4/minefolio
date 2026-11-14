@@ -37,7 +37,7 @@ export function CompactProfileList({
                 <span className="block truncate text-sm font-medium">{getLocalizedDisplayName(p, locale)}</span>
                 {isCategoryKey(p.mainCategory) && (
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">
+                    <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[11px]">
                       {categoryLabel(t, p.mainCategory)}
                     </Badge>
                     {p.mainCategoryPb ? (

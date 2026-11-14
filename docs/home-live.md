@@ -15,7 +15,9 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 ### ホームの構成（2026-11 全面改修）
 
-**ログイン状態で先頭（ヒーロー / おかえりバー）を分け、以降は共通**。各欄は `section` + `aria-labelledby`（h2）。欄の見出しは「アイコンチップ + h2 + 件数 + すべて見る」のみで、英大文字の eyebrow・格子背景・ヒーローの統計タイルは無い（公開プロフィール数は「プロフィール」欄の見出し、ライブ人数は「ライブ」欄の見出しに移した。「記録ペース」の件数と `countHomeRecordedPaces` は廃止）。共通の欄枠は `app/components/home/home-section.tsx`。
+**ログイン状態で先頭（ヒーロー / おかえりバー）を分け、以降は共通**。各欄は `section` + `aria-labelledby`（h2）。欄の見出しは「アイコンチップ + h2 + 件数 + 右のリンク」のみで、英大文字の eyebrow・格子背景・ヒーローの統計タイルは無い（公開プロフィール数は「プロフィール」欄の見出し、ライブ人数は「ライブ」欄の見出しに移した。「記録ペース」の件数と `countHomeRecordedPaces` は廃止）。共通の欄枠は `app/components/home/home-section.tsx`。
+
+- **見出し行は折り返さない**（`flex-nowrap`）。h2 は `text-xl` で truncate 可、モバイルはチップと隙間を詰める。右のリンク（「すべて見る」「最近のペース（PaceMan）」）は `SectionHeaderLink` で、sm 未満はアイコンのみ（44px 角・ラベルは sr-only）。プロフィール欄の公開プロフィール数はモバイルでは出さない。
 
 | 順 | ゲスト | ログイン済み（登録済み） |
 |---|---|---|
@@ -29,7 +31,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 #### 欄の並び順・表示の設定（ログイン済みのみ）
 
-上表の2〜7行目（ゲストでは「注目の走者」はヒーロー内）のうち、ログイン済みの6欄（お気に入り走者の動き `favoriteActivity` / ライブ `live` / 最新動画 `videos` / 新着ガイド `guides` / 注目の走者 `featured` / プロフィール `profiles`）の並びと表示は、おかえりバーの設定ボタン（`Settings2` アイコン）のモーダル（`app/components/home/home-settings-dialog.tsx`）で変更できる。おかえりバーは先頭固定で対象外。ログイン時の「注目の走者」（`wide`）の見出しは他の欄と同じアイコンチップ＋h2 `text-xl font-bold`（「別の走者」は見出し行の右）、ゲストのヒーロー内は小見出し。お気に入りの動きの文はモバイルで2行まで折り返し（sm 以上は1行 truncate）。ゲストは常に既定順・全欄表示。
+上表の2〜7行目（ゲストでは「注目の走者」はヒーロー内）のうち、ログイン済みの6欄（お気に入り走者の動き `favoriteActivity` / ライブ `live` / 最新動画 `videos` / 新着ガイド `guides` / 注目の走者 `featured` / プロフィール `profiles`）の並びと表示は、おかえりバーの設定ボタン（`Settings2` アイコン）のモーダル（`app/components/home/home-settings-dialog.tsx`）で変更できる。おかえりバーは先頭固定で対象外。ログイン時の「注目の走者」（`wide`）の見出しは他の欄と同じアイコンチップ＋h2 `text-xl font-bold`（「別の走者」は見出し行の右）、ゲストのヒーロー内は小見出し。ゲストは常に既定順・全欄表示。
 
 - **おかえりバー**（`welcome-bar.tsx`）: DOM 順（＝フォーカス順）はアバター・挨拶 → 「プロフィールを編集」（outline。塗りの主ボタンではない）→「マイプロフィール」→「お気に入り」→ 設定。`order-*` による並べ替えは使わない。設定ボタンは sm 以上は「カスタマイズ」の文字付きで右端、モバイルは2段目（2段目＝編集〈ラベルあり〉＋マイプロフィール・お気に入り〈アイコンのみ・ラベルは sr-only〉）の末尾にアイコンのみ。いずれも44px。
 - **ID・正規化**: `app/lib/home-sections.ts`（非 `.server`）。既定順は上記の並び。`normalizeHomeLayout` は JSON 文字列 / 配列 / オブジェクトを受けて `{ order, hidden }` を返す。旧形式（並びのみの配列）も読める（hidden は空）。解釈不能なら既定、未知 ID と重複を除き、order の欠けは既定順で末尾に補う（欄を増やしても既存の保存値が壊れない）。hidden が全欄を覆う値は hidden 空として扱う（全部消えたホームにしない）。`serializeHomeLayout` が保存用文字列を作り、`isDefaultHomeLayout`（既定順かつ全欄表示）なら `null`。
@@ -61,9 +63,9 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
   - Ranked レート上昇: `ranked_elo_snapshots`（cron `update-rankings` が日次で記録）の期間内最古と最新の差が20以上。最古のスナップショットが6日以上前でない間（導入後7日分たまるまで）は対象外
   - 新しい動画: `getPublicVideoFeed`（YouTube / Twitch のキャッシュ）の公開日時が期間内
   - Ranked 系（PB・レート上昇）は `users.show_ranked_stats = false` の人を除く。いずれも公開プロフィール・視聴者除外
-- **カードの内容**: 理由の1行（`home.featuredReason*`）→ スキン（`MinecraftAvatar` の2D）・名前・メインカテゴリ・PB（`m:ss`）・感度（`n% · x.x cm/180°`）→ 主要9操作（前進・後退・左・右〈WASD〉・ジャンプ・スニーク・ダッシュ・インベントリ・オフハンド）のキーチップ。キー配置が無い人はキーチップ行ごと出さない。その下に**ホットバー1〜9**（`hotbar1`〜`hotbar9`、`FeaturedRunner.hotbar`）を、番号ラベル無しの9列等幅グリッド（見出し「ホットバー（1〜9）」）（`HotbarRow`）で1行に出す。狭幅（モバイル・ゲストヒーロー右側）でも折り返さないよう、チップは `min-w-0` で `truncate`（全文は `title`）、未割り当てのスロットは薄い「-」。ホットバーの割り当てが1つも無い人は行ごと出さない。`wide` 版（ログイン時）は右列（`lg:w-[38rem]`）に主要9操作とホットバーを2段で縦に並べ、両段とも9列グリッドで列を揃える（主要操作の列数はビューポートではなくキー領域（`@container`）の幅で決める: 約35rem 以上で9列、26rem 以上で5列、未満は3列。チップは `max-w-full` + `truncate`（全文は `title`）、9列時は `text-xs`。アバターは64px。「プロフィールを見る」行は無く、名前リンクのオーバーレイでカード全体が遷移する。ラベルは通常の操作名のまま、truncate せず収まらなければ折り返す）。注目の走者の10分キャッシュキーは `home:spotlight:v6`（v6 は設定の取得元を公開用のメインプリセットへ変えたため〈次項〉、v5 は `FeaturedKey` から `isRemapped` / `gameKeyCode` を外したため、v4 は注目の走者の動画理由からホーム表示をオフにした人を除外するため。それ以前は `hotbar`・speedrun.com 理由のカテゴリ名/審査状態の追加で形状が変わったため版を上げた）。**キー・感度・リマップの取得元は、プロフィール・操作設定一覧と同じ規則**（`docs/presets.md`）: メインプリセット（`isMain`）が非アクティブ（`isActive = false`）ならそのスナップショット（`decodePresetConfig`。`null` の種別は空として扱いライブへフォールバックしない）、メインが無い／編集中ならライブテーブル（`shouldUsePresetSnapshot` が単一の決定点）。編集中のプリセットの内容を公開面に出さないため。日替わり・ランダムの母集団（キー4つ以上・感度あり・メインカテゴリあり。キャッシュキー `home:featured-pool:v2`）も同じ取得元で判定する。チップはゲーム内キーを出すために実際に押す物理キー（trigger 文脈の単一キーリマップの source）を出し。リマップの有無による強調（リング・枠色・ツールチップ）は出さず、全チップ同じ見た目（物理キーの位置のみ）。見た目は KeyBadge 系と同じクラスだが、`KeyBadge` の import が `item-icon`・`virtual-keyboard` をホームの初期表示へ引き込むため、指割り当て色・ツールチップを省いたホーム専用実装（`featured-runner-card.tsx` の `KeyChip`）。カード全体が走者プロフィールへのリンク。
+- **カードの内容**: 理由の1行（`home.featuredReason*`。行頭に「直近7日」のラベル `home.featuredReasonLabel`）→ スキン（`MinecraftAvatar` の2D）・名前・メインカテゴリ・PB（`m:ss`。ラベルは「PB」のまま、カテゴリは直前のバッジが示す）・感度（`n% · x.x cm/180°`）→ 主要9操作（前進・後退・左・右〈WASD〉・ジャンプ・スニーク・ダッシュ・インベントリ・オフハンド）のキーチップ。キー配置が無い人はキーチップ行ごと出さない。その下に**ホットバー1〜9**（`hotbar1`〜`hotbar9`、`FeaturedRunner.hotbar`）を、番号ラベル無しの9列等幅グリッド（見出し「ホットバー（1〜9）」）（`HotbarRow`）で1行に出す。狭幅（モバイル・ゲストヒーロー右側）でも折り返さないよう、チップは `min-w-0` で `truncate`（全文は `title`）、未割り当てのスロットは薄い「-」。ホットバーの割り当てが1つも無い人は行ごと出さない。`wide` 版（ログイン時）は右列（`lg:w-[38rem]`）に主要9操作とホットバーを2段で縦に並べ、両段とも9列グリッドで列を揃える（主要操作の列数はビューポートではなくキー領域（`@container`）の幅で決める: 約35rem 以上で9列、26rem 以上で5列、未満は3列。チップは `max-w-full` + `truncate`（全文は `title`）、9列時は `text-xs`。アバターは64px。「プロフィールを見る」行は無く、名前リンクのオーバーレイでカード全体が遷移する。ラベルは通常の操作名のまま、truncate せず収まらなければ折り返す）。注目の走者の10分キャッシュキーは `home:spotlight:v6`（v6 は設定の取得元を公開用のメインプリセットへ変えたため〈次項〉、v5 は `FeaturedKey` から `isRemapped` / `gameKeyCode` を外したため、v4 は注目の走者の動画理由からホーム表示をオフにした人を除外するため。それ以前は `hotbar`・speedrun.com 理由のカテゴリ名/審査状態の追加で形状が変わったため版を上げた）。**キー・感度・リマップの取得元は、プロフィール・操作設定一覧と同じ規則**（`docs/presets.md`）: メインプリセット（`isMain`）が非アクティブ（`isActive = false`）ならそのスナップショット（`decodePresetConfig`。`null` の種別は空として扱いライブへフォールバックしない）、メインが無い／編集中ならライブテーブル（`shouldUsePresetSnapshot` が単一の決定点）。編集中のプリセットの内容を公開面に出さないため。日替わり・ランダムの母集団（キー4つ以上・感度あり・メインカテゴリあり。キャッシュキー `home:featured-pool:v2`）も同じ取得元で判定する。チップはゲーム内キーを出すために実際に押す物理キー（trigger 文脈の単一キーリマップの source）を出し。リマップの有無による強調（リング・枠色・ツールチップ）は出さず、全チップ同じ見た目（物理キーの位置のみ）。見た目は KeyBadge 系と同じクラスだが、`KeyBadge` の import が `item-icon`・`virtual-keyboard` をホームの初期表示へ引き込むため、指割り当て色・ツールチップを省いたホーム専用実装（`featured-runner-card.tsx` の `KeyChip`）。カード全体が走者プロフィールへのリンク。
 - **SSR の初期表示**: 候補の1位。候補が0人なら日替わり（キー配置〈主要9操作のうち4つ以上〉・感度・メインカテゴリが揃った公開プロフィールから、UTC 日付をシードに1人。理由の行は出さない）。それも0人なら「プロフィールで見られるもの」の静的説明。
-- **「別の走者」ボタン**（常に出す。`min-h-11`）: 押すと、まず SSR で渡した候補を点数順に順番に表示し、出し切った後・候補が無い日は `GET /api/home-featured?exclude=<表示中>,<直前>` で、揃った公開プロフィールからランダムに1人取得する（理由なし。母集団が尽きたら表示を据え置く。`Cache-Control: no-store`）。取得中は中身を薄くして `aria-busy`（高さは変えない）。切り替え後は `aria-live="polite"` で新しい走者の名前を読み上げる。
+- **「別の走者」ボタン**（常に出す。`min-h-11`）: 押すと、まず SSR で渡した候補を点数順に順番に表示し、出し切った後・候補が無い日は `GET /api/home-featured?exclude=<表示中>,<直前>` で、揃った公開プロフィールからランダムに1人取得する（理由なし。母集団が尽きたら表示を据え置き、トースト「ほかに表示できる走者がいません」で知らせる。取得に失敗したときもエラートースト。`Cache-Control: no-store`）。取得中は中身を薄くして `aria-busy`（高さは変えない）。切り替え後は `aria-live="polite"` で新しい走者の名前を読み上げる。
 
 ##### 「お気に入りの動き」（縦タイムライン）
 - **表示設定**: ペースは `showPacemanOnHome`、動画はプラットフォーム別の設定で、オフにした人の分を除く。
@@ -78,7 +80,8 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 - お気に入り0人（解決できる公開プロフィールが0人）: 「走者をお気に入りに追加すると、ここに動きが並びます」＋よく見られている走者3人（`ProfileFeedCard`＝お気に入りボタン付き）。動きが0件: 「直近7日の動きはありません」。
 - 未ログインでお気に入りが無い（Cookie 未同意を含む）ときは欄ごと出さない。お気に入りの一覧は画面表示後にブラウザから取得するため、欄は5行のスケルトンで高さを確保してから埋める。
 - **「すべて見る」の遷移先は `/favorites/activity`**（動きの一覧ページ。仕様は [favorites.md](./favorites.md#お気に入り走者の動き一覧-favoritesactivity)）。
-- **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。走者プロフィールへはアバターが別リンク（z-10）として残る。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
+- **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。アバターは装飾（リンクではない）。走者プロフィールへは、モーダルの `profileHref` prop（`pace-timeline-modal.tsx` の任意 prop。あるときだけ走者のプロフィールへのリンクを出す）経由で行ける（ホームの動きの行からのみ渡す。`/paces` のペースカードからは出さない）。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
+- **行の見た目**（`FavoriteActivityRow`、ホームと `/favorites/activity` 共通）: 記録系（Ranked PB・完走〈ペースの Finish〉＝アイコン `text-gold`、ティア昇格＝`text-success`、speedrun.com 申請＝`text-info`）は文を `font-medium text-foreground`、プロフィール更新・設定系は文を muted、それ以外（途中区間のペース・動画・ガイド）は通常。文は値（タイム・ティア）を切り詰めない: モバイルは2行（1行目＝名前と文脈、2行目＝値と述語）、sm 以上は1行で前半だけ省略する。読み上げは sr-only の全文。
 - API は本文の `windowDays`（既定7・最大30）・`limit`（既定10・最大100）で期間・件数を指定でき、サーバー側（`clampFavoriteActivityOptions`）で検証・クランプする（不正値は既定）。ホーム欄は指定しない（7日・10件）。取得ロジックはフック `useFavoriteActivity`（`app/hooks/use-favorite-activity.ts`）、行の描画・文言は `FavoriteActivityRow`（`app/components/favorite-activity-row.tsx`）をホーム欄と一覧ページで共用する。
 
 「よく見られている」は `page_view_stats` のスナップショット行を起点に `innerJoin` する（PV スナップショットが無い環境では自然に0件。UI は件数だけで列を出すか判定）。
@@ -115,6 +118,7 @@ DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がc
   - **カードの段構成（全種別共通）**: ヘッダー（`CardHead`）→ 状態帯（`StateBand`、`h-10` 固定。PaceMan/最近のペース＝「PaceMan RSG Any%」の1行＋進行バー、Ranked＝小さな「対戦中」ラベル＋登録走者の進行バー、Twitch＝タイトル2行 clamp）→ 時間ブロック（`TimeBlock`、ラベル行 `h-5`〈`text-xs`、区間マークのアイコン 16px〉＋隙間 `gap-1`＋時刻 `leading-8`。右側の補足〈ベスト比・レート・視聴者数・相対時刻〉は下端揃え）→ リンク行（`LinkRow`、`mt-auto`＋`min-h-11 sm:min-h-8`。ライブ欄の3種別はリンクが無いカードも同じ高さの空行を確保。0件時の「最近のペース」カードはライブカードと同じグリッドに並ばず、リンクも無いので置かない）。種別・状態によらず経過時間とリンクの縦位置が一致する。
 - **0件のとき**: 「いまライブ中の走者はいません」1行＋「最近のペース」3件（同じ走者は2件まで・同じカードの静止版、すべて見るは `/paces`）に差し替える。独立した「過去のペース」欄・`LivePaceList` は廃止。ライブ・最近のペースの各エラーは欄内に1行の再試行を出す。
 - **区間進行バー**（`StageBar`、`app/components/pace-stage-bar.tsx`）: ライブ欄カード・最近のペースカード・`/paces` の `PaceFeedCard`（ヘッダー直下、IGT・区間バッジの上）で共有。`PaceFeedCard` は過去のペースなので、そのランの最深区間（`splitStage(run.timeline)`）を現在区間として強調する。バーは `aria-hidden`（区間名はバッジのテキストで出る）。
+- **取得失敗の帯**（`FeedErrorNotice`、`app/components/home/feed-error-notice.tsx`）: `role="status"`、文言は本文色（`text-foreground`）で赤はアイコンと枠だけ、任意の補足 `note`（`text-xs` muted）と再試行ボタン。ホームの各欄とお気に入りの動き一覧（`/favorites/activity`）で共用する。
 - **過去のペースカードのタイムラインモーダル**: `PaceFeedCard`（`app/components/pace-feed-card.tsx`、`/paces` 一覧で使用）のカードをクリックすると、そのランの全スプリット（Enter Netherを含む進行順）を表示するモーダルが開く。データは `/api/home-feed?type=pace-timeline&mcid=...&runId=...`（`getRunTimeline()`）で、モーダルを開くたびに遅延取得する。時刻は `formatClock`（`app/lib/home-format.ts`。1時間以上は h:mm:ss）で他の欄と揃える。HTTP エラー（`!res.ok`）は「区間データがありません」ではなくエラー表示にする。**応答は公開プロフィール（視聴者除外）として登録されている mcid（`getUserData().registeredMcids`、小文字比較）に限る**。非公開・視聴者・未登録の mcid は、存在しない場合と同じ `{ timeline: [] }` を返し、登録の有無を応答から判別できないようにする。PaceMan.gg への外部リンクはモーダル下部。
 
 ### /api/home-feed
@@ -155,7 +159,7 @@ DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がc
 - **ホームの動画欄は YouTube と Twitch を分ける**（個人設定 `showYoutubeOnHome` / `showTwitchOnHome` は従来どおりクライアント側で効く）。「すべて見る」は `/videos`（`/videos` は従来どおり `FeedVideoCard` の混在一覧）
   - **YouTube**（`app/components/home/home-video-card.tsx`）: 3本・同じ走者は1本まで。デスクトップ3列、モバイルは横レール。カード全体がその場で再生（`youtube-nocookie.com` の埋め込み）、外部リンクは右上の 44px アイコンボタン（Tab 停止点は再生・外部リンク・走者リンク）
   - **Twitch「Twitchライブ」**（`app/components/home/twitch-recent-list.tsx`）: 1人1行（その人の最新アーカイブ）で6行、サムネイル・埋め込みは使わない。配信中の人（`twitch-streams`）を先頭に「配信中」の印付きで出し、その人の VOD 行は重複させない。行は左にアバターと名前、その右にタイトル → ゲーム名（`twitch_vod_cache.game_name`。null なら省く。配信中は Helix の `game_name`）→ 時間（相対時刻＋アーカイブの長さ `h:mm:ss`。配信中は経過時間）。行全体が Twitch への外部リンク（新しいタブ・アイコン付き・高さ 44px 以上）。`game_name` は cron が取り込み時点のチャンネルのカテゴリを保存する（取り込みが配信終了から遅れると次の配信のカテゴリになることがある）
-- 各取得は独立にスケルトン→失敗時は1行の再試行（YouTube・Twitch の片方だけ失敗なら失敗した側だけ再取得）。マージ後0件なら空状態
+- 各取得は独立にスケルトン（1段・YouTube カード3枚分）→失敗時は1行の再試行（YouTube・Twitch の片方だけ失敗なら失敗した側だけ再取得）。マージ後0件なら `EmptyState` の `size="compact"`（1〜2行）
 - 旧 `FeedVideoCard` は `/videos` が引き続き使う（埋め込みURL生成 `getEmbedUrl` / `getFeedVideoUrl` はホームのカードも共用）。カード内の旧「サムネイルクリックで再生」「タイトルから視聴ページ」の挙動は `/videos` のまま
 
 ### 設定変更時の自動リフレッシュ（cronを待たない反映）

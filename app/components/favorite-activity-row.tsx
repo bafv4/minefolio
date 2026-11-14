@@ -38,14 +38,18 @@ function dateOnlyRelative(t: Translator, at: number): string {
   return t("relativeDate.daysAgo", { count: days });
 }
 
-/** 動き 1 件の文（ホームの欄と /favorites/activity で共用）。name は表示名（解決済み） */
-function favoriteActivitySentence(t: Translator, name: string, item: FavoriteActivityItem): string {
+/**
+ * 動き 1 件の文（ホームの欄と /favorites/activity で共用）。name は表示名（解決済み）。
+ * mark は結果の値（タイム・ティア）を包む関数。モバイルで値だけを切り詰めから守るため、値の前後を分けて描画する際に使う
+ */
+function buildSentence(t: Translator, name: string, item: FavoriteActivityItem, mark: (value: string) => string): string {
+  const time = () => mark(formatClock(item.timeMs ?? 0));
   switch (item.kind) {
     case "pace":
       // 区間名（英語の PaceMan 語彙）を日本語の文に埋め込むと不自然なので、ラベル: 値 の形にする。完走だけは文で言う
       return item.label === "Finish"
-        ? t("home.favPaceFinish", { name, time: formatClock(item.timeMs ?? 0) })
-        : t("home.favPace", { name, split: item.label ?? "", time: formatClock(item.timeMs ?? 0) });
+        ? t("home.favPaceFinish", { name, time: time() })
+        : t("home.favPace", { name, split: item.label ?? "", time: time() });
     case "video":
       return t("home.favVideo", { name, title: item.label ?? "" });
     case "guide":
@@ -53,13 +57,13 @@ function favoriteActivitySentence(t: Translator, name: string, item: FavoriteAct
     case "profile":
       return t("home.favProfile", { name });
     case "rankTierUp":
-      return t("home.favTierUp", { name, tier: item.label ?? "" });
+      return t("home.favTierUp", { name, tier: mark(item.label ?? "") });
     case "rankedPb":
-      return t("home.favRankedPb", { name, time: formatClock(item.timeMs ?? 0) });
+      return t("home.favRankedPb", { name, time: time() });
     case "srcSubmit":
       return item.label
-        ? t("home.favSrcSubmit", { name, category: item.label, time: formatClock(item.timeMs ?? 0) })
-        : t("home.favSrcSubmitNoCategory", { name, time: formatClock(item.timeMs ?? 0) });
+        ? t("home.favSrcSubmit", { name, category: item.label, time: time() })
+        : t("home.favSrcSubmitNoCategory", { name, time: time() });
     case "settings":
       switch (item.label) {
         case "device":
@@ -76,14 +80,83 @@ function favoriteActivitySentence(t: Translator, name: string, item: FavoriteAct
   }
 }
 
+const VALUE_MARK = "";
+
+/** 文を「値の前 / 値 / 値の後」に分ける。値の無い種別は before のみ */
+function favoriteActivityParts(t: Translator, name: string, item: FavoriteActivityItem) {
+  const [before, value, after] = buildSentence(t, name, item, (v) => `${VALUE_MARK}${v}${VALUE_MARK}`).split(VALUE_MARK);
+  return {
+    before: (before ?? "").trim(),
+    value: value?.trim() || null,
+    after: (after ?? "").trim(),
+  };
+}
+
+/** 記録系の出来事（Ranked PB・speedrun.com 申請・完走・ティア昇格）は強調し、アイコンも色付けする */
+function recordTone(item: FavoriteActivityItem): { icon: string } | null {
+  switch (item.kind) {
+    case "rankedPb":
+      return { icon: "text-gold" };
+    case "pace":
+      return item.label === "Finish" ? { icon: "text-gold" } : null;
+    case "rankTierUp":
+      return { icon: "text-success" };
+    case "srcSubmit":
+      return { icon: "text-info" };
+    default:
+      return null;
+  }
+}
+
 /** 行の共通クラス（クリック領域になる行全体。リンク行・ペース行で共用） */
 const ROW_CLASS = "relative flex min-h-11 items-center gap-3 rounded-lg py-1.5 transition-colors hover:bg-muted/50";
-/** 文: モバイルは2行まで折り返して読めるようにし（leading-snug 以上）、sm 以上は1行 truncate */
-const SENTENCE_CLASS = "min-w-0 flex-1 text-sm leading-snug max-sm:line-clamp-2 sm:truncate";
 /** 時刻（右端） */
 const TIME_CLASS = "ml-auto shrink-0 pr-1 text-xs text-muted-foreground";
 
-/** タイムラインの 1 行（アバター・種別アイコン・文・時刻。行全体が該当ページへのリンク。PaceMan のペースだけはタイムラインモーダルを開くボタンで、プロフィールへはアバターがリンクになる） */
+/**
+ * 文。値（タイム・ティア）は切り詰めない。モバイルは2行（1行目＝名前と文脈、2行目＝値と述語）、
+ * sm 以上は1行で、前（名前・カテゴリ）だけを省略する。
+ * 見た目は部品に分けるとアクセシブルネームで語がつながるため、読み上げは sr-only の全文に任せる
+ */
+function ActivitySentence({
+  parts,
+  sentence,
+  emphasized,
+  muted,
+  className,
+}: {
+  parts: ReturnType<typeof favoriteActivityParts>;
+  sentence: string;
+  emphasized: boolean;
+  muted: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 flex-1 flex-col text-sm leading-snug sm:flex-row sm:items-baseline sm:gap-x-1",
+        emphasized && "font-medium text-foreground",
+        muted && "text-muted-foreground",
+        className,
+      )}
+    >
+      <span className="sr-only">{sentence}</span>
+      {parts.before && (
+        <span aria-hidden="true" className="min-w-0 truncate">
+          {parts.before}
+        </span>
+      )}
+      {(parts.value || parts.after) && (
+        <span aria-hidden="true" className="flex min-w-0 items-baseline gap-x-1 sm:shrink-0">
+          {parts.value && <span className="shrink-0 whitespace-nowrap">{parts.value}</span>}
+          {parts.after && <span className="min-w-0 truncate">{parts.after}</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** タイムラインの 1 行（アバター・種別アイコン・文・時刻。行全体が該当ページへのリンク。PaceMan のペースだけはどこを押してもタイムラインモーダルを開くボタンで、プロフィールへのリンクはモーダル内に置く） */
 export function FavoriteActivityRow({
   item,
   time = "relative",
@@ -96,7 +169,11 @@ export function FavoriteActivityRow({
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const name = getLocalizedDisplayName(item, locale);
-  const sentence = favoriteActivitySentence(t, name, item);
+  const parts = favoriteActivityParts(t, name, item);
+  const sentence = buildSentence(t, name, item, (v) => v);
+  const record = recordTone(item);
+  const muted = item.kind === "profile" || item.kind === "settings";
+  const iconClass = cn("h-4 w-4 shrink-0", record ? record.icon : "text-muted-foreground");
   const Icon =
     item.kind === "settings"
       ? (SETTINGS_ICON[item.label as keyof typeof SETTINGS_ICON] ?? KIND_ICON.settings)
@@ -124,19 +201,15 @@ export function FavoriteActivityRow({
           aria-label={`${sentence}: ${t("home.viewTimeline")}`}
           className="absolute inset-0 z-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-        <Link
-          to={item.href}
-          aria-label={name}
-          className="relative z-10 shrink-0 rounded-lg bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <span aria-hidden="true" className="pointer-events-none relative shrink-0 rounded-lg">
           {avatar}
-        </Link>
-        <Icon className="pointer-events-none relative h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className={cn(SENTENCE_CLASS, "pointer-events-none relative")}>{sentence}</span>
+        </span>
+        <Icon className={cn(iconClass, "pointer-events-none relative")} aria-hidden="true" />
+        <ActivitySentence parts={parts} sentence={sentence} emphasized={!!record} muted={muted} className="pointer-events-none relative" />
         <span className={cn(TIME_CLASS, "pointer-events-none relative")} suppressHydrationWarning>
           {timeText}
         </span>
-        <PaceTimelineModal open={open} onOpenChange={setOpen} mcid={item.mcid} runId={item.runId} title={name} />
+        <PaceTimelineModal open={open} onOpenChange={setOpen} mcid={item.mcid} runId={item.runId} title={name} profileHref={item.href} />
       </div>
     );
   }
@@ -147,8 +220,8 @@ export function FavoriteActivityRow({
       className={cn(ROW_CLASS, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
     >
       <span className="relative z-10 shrink-0 rounded-lg bg-card">{avatar}</span>
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span className={SENTENCE_CLASS}>{sentence}</span>
+      <Icon className={iconClass} aria-hidden="true" />
+      <ActivitySentence parts={parts} sentence={sentence} emphasized={!!record} muted={muted} />
       <span className={TIME_CLASS} suppressHydrationWarning>
         {timeText}
       </span>

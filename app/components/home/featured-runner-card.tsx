@@ -11,6 +11,7 @@ import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
 import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { formatClock } from "@/lib/home-format";
 import type { FeaturedReason, FeaturedRunner } from "@/lib/home-featured";
+import { toast } from "sonner";
 import { ArrowRight, Sparkles, Shuffle, Trophy, Video, TrendingUp } from "lucide-react";
 
 /** 主要操作・ホットバーのキーチップの見た目（クラス共通化はしない。見た目は ui.md「キーバッジ」と同系統） */
@@ -59,7 +60,7 @@ function KeyChip({ k }: { k: FeaturedRunner["keys"][number] }) {
   return (
     <li className="flex min-w-0 flex-col items-center gap-1">
       {/* 仮想キーボード用の省略名（ｲﾝﾍﾞﾝﾄﾘ / OH 等）ではなく通常の操作名を使う。列幅に収まらなければ切らずに折り返す */}
-      <span className="max-w-full break-words text-center text-[10px] leading-tight text-muted-foreground">
+      <span className="max-w-full break-words text-center text-[11px] leading-tight text-muted-foreground">
         {getActionLabel(t, k.action)}
       </span>
       <span title={label} className={KEY_CHIP_CLASS}>
@@ -78,7 +79,7 @@ function HotbarRow({ hotbar }: { hotbar: FeaturedRunner["hotbar"] }) {
   const bySlot = new Map(hotbar.map((k) => [k.action, k]));
   return (
     <div>
-      <p className="mb-1 text-[10px] text-muted-foreground">{t("home.featuredHotbarLabel")}</p>
+      <p className="mb-1 text-[11px] text-muted-foreground">{t("home.featuredHotbarLabel")}</p>
       <ul aria-label={t("home.featuredHotbarLabel")} className="grid grid-cols-9 gap-1">
         {Array.from({ length: 9 }, (_, i) => {
           const k = bySlot.get(`hotbar${i + 1}` as FeaturedRunner["hotbar"][number]["action"]);
@@ -148,9 +149,12 @@ export function FeaturedRunnerCard({
       if (data.runner) {
         setCandidateIndex(candidates.length); // 候補は出し切った扱い（以降は常にランダム）
         show(data.runner);
+      } else {
+        toast(t("home.featuredNoMore"));
       }
     } catch (error) {
       console.error("Failed to fetch featured runner:", error);
+      toast.error(t("home.featuredFetchFailed"));
     } finally {
       setLoading(false);
     }
@@ -211,11 +215,11 @@ export function FeaturedRunnerCard({
       <div className="flex items-center justify-between gap-3">
         {wide ? (
           // ログイン時（ページ幅いっぱい）は他の欄（HomeSection）と同じ見出し: アイコンチップ + h2 text-xl font-bold
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="rounded-xl bg-primary/10 p-2">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="shrink-0 rounded-xl bg-primary/10 p-1.5 sm:p-2">
               <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
             </div>
-            <h2 id="home-featured-heading" className="text-xl font-bold">
+            <h2 id="home-featured-heading" className="min-w-0 truncate text-xl font-bold">
               {t("home.featuredTitle")}
             </h2>
           </div>
@@ -238,7 +242,10 @@ export function FeaturedRunnerCard({
               {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
               <p className="flex min-w-0 items-start gap-1.5">
                 <ReasonIcon reason={current.reason} />
-                <span className="line-clamp-2">{reasonText(t, current.reason)}</span>
+                <span className="line-clamp-2">
+                  <span className="mr-1.5 font-normal text-muted-foreground">{t("home.featuredReasonLabel")}</span>
+                  {reasonText(t, current.reason)}
+                </span>
               </p>
               {/* 審査中の申請は記録タブに出ないため、審査中の記録を表示した状態のプロフィールへ誘導する。
                   カード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
@@ -283,6 +290,7 @@ export function FeaturedRunnerCard({
                 )}
                 {current.pbMs != null && (
                   <span className="font-mono text-sm font-semibold tabular-nums">
+                    {/* カテゴリは直前のバッジが示すので、ここは「PB」だけ（理由の行は「直近7日」で区別する） */}
                     <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
                     {formatClock(current.pbMs)}
                   </span>

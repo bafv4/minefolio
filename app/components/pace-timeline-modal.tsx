@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import { formatClock } from "@/lib/home-format";
@@ -12,7 +13,7 @@ import {
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
 import type { PaceTimelineEntry } from "@/lib/paceman-cache";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 
 interface PaceTimelineResponse {
   timeline: PaceTimelineEntry[];
@@ -25,6 +26,7 @@ export function PaceTimelineModal({
   mcid,
   runId,
   title,
+  profileHref,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,6 +34,8 @@ export function PaceTimelineModal({
   /** PaceMan のラン ID */
   runId: number;
   title: string;
+  /** 走者のプロフィールの URL。渡されたときだけモーダル内にリンクを出す */
+  profileHref?: string;
 }) {
   const t = useT();
   const paceManUrl = `https://paceman.gg/stats/run/${runId}`;
@@ -121,6 +125,16 @@ export function PaceTimelineModal({
           </div>
         )}
 
+        {profileHref && (
+          <Link
+            to={profileHref}
+            prefetch="intent"
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
+          >
+            {t("playerProfile.viewProfile")}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        )}
         <a
           href={paceManUrl}
           target="_blank"
