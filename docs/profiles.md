@@ -693,6 +693,15 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 `stats` タブの MCSR Ranked カード（レート帯チップ・Win Rate/FF Rate・国内順位・Minefolio内順位・最近のマッチ）は `/player/:slug/stats` と共通の表示コンポーネントで、算出ロジックの詳細は [`docs/rankings-stats.md`](./rankings-stats.md#mcsr-ranked連携)「MCSR Ranked連携」を参照。
 
+#### 審査中の speedrun.com 記録
+
+承認済み記録のみを返す personal-bests API では出ない「審査中」（`player_rankings.verificationStatus = "new"`、`rankingType = "speedruncom"`）の記録を、`stats` タブの Speedrun.com カードの下の専用カード（`PendingSpeedrunRecordsCard`）に出す。
+
+- 取得は loader で `loadPendingSpeedrunRecords`（`app/lib/speedruncom-pending.server.ts`）。cron が保存済みの行を読むだけで speedrun.com API は叩かない。承認済み・却下・他ユーザーの行は含めず、オーナーが非表示にした run ID は除外、タイムの速い順。非公開プロフィールは loader 冒頭のゲートで本人以外に 404 のため漏れない
+- 0 件の人にはカードごと出さない。カード右上の「審査中の記録も表示」トグルをオンにすると、カテゴリ名・タイム・「審査中」バッジ（`warning` トークン）・speedrun.com のランページへの外部リンク（新しいタブ）を並べる
+- トグル状態は URL の `srcPending=1` が唯一の指定元（切替は `replace` で履歴を汚さない）。`?tab=stats&srcPending=1` で開くと最初からオンで、カードの位置までスクロールする（ホームの注目の走者カードからの導線。形式は変更しない）
+- テスト: `app/lib/__tests__/speedruncom-pending.server.test.ts`
+
 ### モバイルタブ選択ドロワー
 
 モバイル表示時の上部スティッキーボタンには `ChevronsDown` アイコンを使用（v1.4.0 でハンバーガー `Menu` から変更）。展開中は `X` アイコンに切り替わる。

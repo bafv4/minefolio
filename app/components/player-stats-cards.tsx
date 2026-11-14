@@ -8,12 +8,14 @@ import type { GroupedPaceEntry } from "@/lib/paceman-cache";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { EloRateGraph } from "@/components/elo-rate-graph";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 
 // MCSR Ranked / PaceMan / Speedrun.com の統計カード。
 // プロフィール（player/profile.tsx の活動・記録タブ）と /player/:slug/stats（player/stats.tsx）で
@@ -460,6 +462,70 @@ export function SpeedrunComCard({
             })}
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// ============================================
+// Speedrun.com 審査中の記録（承認前のため公式記録カードには出ない）
+// ============================================
+export function PendingSpeedrunRecordsCard({
+  records,
+  show,
+  onShowChange,
+}: {
+  records: PendingSpeedrunRecord[];
+  show: boolean;
+  onShowChange: (show: boolean) => void;
+}) {
+  const t = useT();
+  return (
+    <Card id="pending-speedruncom-records" className="gap-3 py-5 scroll-mt-20">
+      <CardHeader className="px-5">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
+            <Clock className="h-5 w-5 text-warning" />
+            {t("playerStatsCards.pendingRecordsTitle")}
+          </CardTitle>
+          <label className="flex shrink-0 items-center gap-2 text-sm">
+            <Switch checked={show} onCheckedChange={onShowChange} />
+            {t("playerStatsCards.pendingRecordsToggle")}
+          </label>
+        </div>
+        {show && <CardDescription>{t("playerStatsCards.pendingRecordsDescription")}</CardDescription>}
+      </CardHeader>
+      {show && (
+        <CardContent className="px-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {records.map((r, i) => (
+              <div
+                key={r.runId ?? `${r.categoryName}-${i}`}
+                className="p-3 bg-secondary/50 rounded-lg space-y-1 border border-warning/40"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm truncate">{r.categoryName}</span>
+                  <Badge variant="outline" className="shrink-0 border-warning/40 bg-warning/10 text-warning">
+                    {t("playerStatsCards.pendingBadge")}
+                  </Badge>
+                </div>
+                <p className="font-mono font-bold text-xl">{r.timeFormatted ?? formatTime(r.timeMs)}</p>
+                {r.recordDate && <p className="text-xs text-muted-foreground">{r.recordDate}</p>}
+                {r.runWeblink && (
+                  <a
+                    href={r.runWeblink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t("playerStatsCards.viewRecord")}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }

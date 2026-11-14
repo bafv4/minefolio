@@ -9,6 +9,7 @@ import {
 } from "@/components/guide-list-views";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
+import { loadPendingSpeedrunRecords, type PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -27,6 +28,7 @@ import {
   PaceManLinkCard,
   PaceManStatsCard,
   SpeedrunComCard,
+  PendingSpeedrunRecordsCard,
   StatsServiceLoadingCard,
 } from "@/components/player-stats-cards";
 import { platformLabel } from "@/lib/platform-label";
@@ -603,6 +605,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
   const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
+  // 審査中の speedrun.com 記録（cron が保存済みの player_rankings から。外部APIは叩かない）。
+  // 非公開プロフィールは上のゲートで本人以外を弾き済み
+  const pendingSpeedrunRecords = await loadPendingSpeedrunRecords(db, gate.id, new Set(hiddenSpeedrunRecords));
+
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
@@ -624,6 +630,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     profileReactions,
     hiddenSpeedrunRecords,
     pinnedSpeedrunRecords,
+    pendingSpeedrunRecords,
     pacemanStats,
     minefolioEloRank,
     bioTranslation,
@@ -644,7 +651,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, minefolioEloRank, bioTranslation, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pendingSpeedrunRecords, pacemanStats, minefolioEloRank, bioTranslation, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
@@ -1110,6 +1117,19 @@ export default function PlayerProfilePage() {
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set("tab", tab);
+        return next;
+      },
+      { preventScrollReset: true, replace: true },
+    );
+  };
+
+  // 審査中記録のトグル: URL の `srcPending=1` を唯一の指定元にする（共有・再訪に対応）。履歴は汚さない
+  const handleShowPendingChange = (show: boolean) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (show) next.set("srcPending", "1");
+        else next.delete("srcPending");
         return next;
       },
       { preventScrollReset: true, replace: true },
@@ -1850,6 +1870,9 @@ export default function PlayerProfilePage() {
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+            pendingSpeedrunRecords={pendingSpeedrunRecords}
+            showPending={searchParams.get("srcPending") === "1"}
+            onShowPendingChange={handleShowPendingChange}
             pacemanStats={pacemanStats}
             minefolioEloRank={minefolioEloRank}
             isOwner={isOwner}
@@ -2757,6 +2780,9 @@ function StatsTabContent({
   player,
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
+  pendingSpeedrunRecords,
+  showPending,
+  onShowPendingChange,
   pacemanStats,
   minefolioEloRank,
   isOwner,
@@ -2764,6 +2790,9 @@ function StatsTabContent({
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
+  pendingSpeedrunRecords: PendingSpeedrunRecord[];
+  showPending: boolean;
+  onShowPendingChange: (show: boolean) => void;
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
@@ -2845,6 +2874,9 @@ function StatsTabContent({
       player={player}
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
       pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+      pendingSpeedrunRecords={pendingSpeedrunRecords}
+      showPending={showPending}
+      onShowPendingChange={onShowPendingChange}
       pacemanStats={pacemanStats}
       minefolioEloRank={minefolioEloRank}
       isOwner={isOwner}
@@ -2867,6 +2899,9 @@ function StatsContent({
   player,
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
+  pendingSpeedrunRecords,
+  showPending,
+  onShowPendingChange,
   pacemanStats,
   minefolioEloRank,
   isOwner,
@@ -2876,6 +2911,9 @@ function StatsContent({
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
+  pendingSpeedrunRecords: PendingSpeedrunRecord[];
+  showPending: boolean;
+  onShowPendingChange: (show: boolean) => void;
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
@@ -2886,6 +2924,14 @@ function StatsContent({
   };
 }) {
   const t = useT();
+  // ?srcPending=1 で開いた直後に、審査中記録カードの位置へ移動する（外部統計の取得完了で上のカードが
+  // 伸びてずれるため、最初のレンダー後と取得完了後の2回合わせる）
+  const hasPending = pendingSpeedrunRecords.length > 0;
+  const externalDone = loadState.ranked !== "loading" && loadState.paceman !== "loading" && loadState.speedruncom !== "loading";
+  useEffect(() => {
+    if (!showPending || !hasPending) return;
+    document.getElementById("pending-speedruncom-records")?.scrollIntoView({ block: "start" });
+  }, [externalDone]); // eslint-disable-line react-hooks/exhaustive-deps
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
@@ -2945,6 +2991,15 @@ function StatsContent({
         />
       )}
 
+      {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
+      {pendingSpeedrunRecords.length > 0 && (
+        <PendingSpeedrunRecordsCard
+          records={pendingSpeedrunRecords}
+          show={showPending}
+          onShowChange={onShowPendingChange}
+        />
+      )}
+
       {/* カスタム記録 */}
       {player.categoryRecords.length > 0 && (
         <Card className="gap-3 py-5">
@@ -2965,7 +3020,7 @@ function StatsContent({
       )}
 
       {/* データがない場合（外部サービスがエラーの場合は各セクションのエラー表示に任せ、ここでは出さない） */}
-      {allExternalResolved && !hasExternalError && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
+      {allExternalResolved && !hasExternalError && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && pendingSpeedrunRecords.length === 0 && player.categoryRecords.length === 0) && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}
