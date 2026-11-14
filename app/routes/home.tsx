@@ -18,7 +18,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
 import { listedRunnerCondition } from "@/lib/users-filter";
-import { eq, desc, and, inArray, isNotNull, sql } from "drizzle-orm";
+import { eq, desc, and, or, isNotNull, inArray, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
@@ -43,13 +43,13 @@ import {
   type RankedResultResponse,
   type LiveEndedState,
 } from "@/lib/home-live";
-import { Button } from "@/components/ui/button";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
+import { GuestHero } from "@/components/home/guest-hero";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
 import { LiveSplitStrip } from "@/components/home/live-split-strip";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
@@ -65,7 +65,7 @@ import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Youtube, Twitch } from "@/components/brand-icons";
-import { ArrowRight, Search, UserCheck, BookOpen, Play, Radio, Heart } from "lucide-react";
+import { UserCheck, BookOpen, Play, Radio, Heart } from "lucide-react";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -100,6 +100,8 @@ export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
 const HOME_GUIDE_COUNT = 4;
 /** 最近の更新・よく見られているの各表示件数 */
 const HOME_PROFILE_COUNT = 4;
+// ゲストのヒーローの顔ぶれの帯で引く人数（注目の走者と重なる分を除いても帯の最大人数が残るよう、帯の上限より多め）
+const HERO_FACE_POOL = 12;
 
 // おかえりバーで「ようこそ」と出す、アカウント作成からの期間
 const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -144,42 +146,45 @@ export async function loader({ request }: Route.LoaderArgs) {
     authorMcid: users.mcid,
   };
 
-  const [account, recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight] = await Promise.all([
-    // セッション確認（→登録ユーザー判定）。他の取得と並列に走らせる
-    (async () => {
-      const session = await getOptionalSession(request, auth);
-      if (!session) return null;
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: {
-          mcid: true,
-          uuid: true,
-          slug: true,
-          displayName: true,
-          displayNameAlphabet: true,
-          customSkinUrl: true,
-          showPacemanOnHome: true,
-          showYoutubeOnHome: true,
-          showTwitchOnHome: true,
-          homeSectionOrder: true,
-          createdAt: true,
-        },
-      });
-      if (!existingUser) return null;
-      const { homeSectionOrder, createdAt, ...profile } = existingUser;
-      return {
-        layout: normalizeHomeLayout(homeSectionOrder),
-        // クライアントへそのまま渡す部分
-        user: {
-          ...profile,
-          showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
-          showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
-          showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
-          // 作成から24時間以内は「おかえりなさい」ではなく「ようこそ」にする（サーバーで判定し、時計差による hydration のずれを避ける）
-          isNewAccount: Date.now() - createdAt.getTime() < NEW_ACCOUNT_WINDOW_MS,
-        },
-      };
-    })(),
+  // セッション確認（→登録ユーザー判定）。他の取得と並列に走らせる
+  const accountPromise = (async () => {
+    const session = await getOptionalSession(request, auth);
+    if (!session) return null;
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.discordId, session.user.id),
+      columns: {
+        mcid: true,
+        uuid: true,
+        slug: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        customSkinUrl: true,
+        showPacemanOnHome: true,
+        showYoutubeOnHome: true,
+        showTwitchOnHome: true,
+        homeSectionOrder: true,
+        createdAt: true,
+      },
+    });
+    if (!existingUser) return null;
+    const { homeSectionOrder, createdAt, ...profile } = existingUser;
+    return {
+      layout: normalizeHomeLayout(homeSectionOrder),
+      // クライアントへそのまま渡す部分
+      user: {
+        ...profile,
+        showPacemanOnHome: existingUser.showPacemanOnHome ?? true,
+        showYoutubeOnHome: existingUser.showYoutubeOnHome ?? true,
+        showTwitchOnHome: existingUser.showTwitchOnHome ?? true,
+        // 作成から24時間以内は「おかえりなさい」ではなく「ようこそ」にする（サーバーで判定し、時計差による hydration のずれを避ける）
+        isNewAccount: Date.now() - createdAt.getTime() < NEW_ACCOUNT_WINDOW_MS,
+      },
+    };
+  })();
+
+  const [account, recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight, heroFaces] =
+    await Promise.all([
+    accountPromise,
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
     db
       .select(profileFeedColumns)
@@ -211,6 +216,24 @@ export async function loader({ request }: Route.LoaderArgs) {
       console.error("Failed to build home spotlight:", error);
       return null;
     }),
+    // ゲストのヒーローの「顔ぶれ」の帯用。ログイン時は DB に行かない。公開一覧に出ている項目のうち表示に要る列だけ
+    accountPromise.then((acct) =>
+      acct
+        ? []
+        : db
+            .select({
+              slug: users.slug,
+              mcid: users.mcid,
+              uuid: users.uuid,
+              customSkinUrl: users.customSkinUrl,
+              displayName: users.displayName,
+              displayNameAlphabet: users.displayNameAlphabet,
+            })
+            .from(users)
+            .where(and(listedRunnerCondition, or(isNotNull(users.uuid), isNotNull(users.customSkinUrl))))
+            .orderBy(desc(users.updatedAt))
+            .limit(HERO_FACE_POOL),
+    ),
   ]);
   const currentUser = account?.user ?? null;
   const isRegistered = currentUser != null;
@@ -266,6 +289,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     newGuides: newGuides.map((g) => applyGuideTranslation(g, guideTranslations)),
     totalPublicProfiles,
     spotlight,
+    heroFaces,
   };
 }
 
@@ -551,6 +575,7 @@ export default function HomePage() {
     newGuides,
     totalPublicProfiles,
     spotlight,
+    heroFaces,
     layout: savedLayout,
   } = useLoaderData<typeof loader>();
 
@@ -987,7 +1012,6 @@ export default function HomePage() {
       <FeaturedRunnerCard
         candidates={spotlight?.candidates ?? []}
         initial={spotlight?.fallback ?? null}
-        wide
       />
     ) : null,
     profiles: (
@@ -1040,41 +1064,12 @@ export default function HomePage() {
           />
         </>
       ) : (
-        <section
-          aria-labelledby="home-hero-heading"
-          className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm sm:p-8"
-        >
-          <div className="grid gap-7 lg:grid-cols-[1.05fr_1fr] lg:items-center">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                {/* 文言中の改行（ja: 「…から」の後）で区切る。改行の無い英語は text-balance で行長を揃える */}
-                <h1 id="home-hero-heading" className="whitespace-pre-line text-balance text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                  {t("home.heroTitle")}
-                </h1>
-                <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Button asChild size="lg" className="w-full sm:w-auto">
-                  <Link to="/login">
-                    {t("home.ctaStart")}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                  <Link to="/browse">
-                    <Search className="mr-2 h-4 w-4" />
-                    {t("home.ctaBrowse")}
-                  </Link>
-                </Button>
-              </div>
-              <p className="-mt-2 text-xs text-muted-foreground">{t("home.ctaLoginNote")}</p>
-            </div>
-            <FeaturedRunnerCard
-              candidates={spotlight?.candidates ?? []}
-              initial={spotlight?.fallback ?? null}
-            />
-          </div>
-        </section>
+        <GuestHero
+          candidates={spotlight?.candidates ?? []}
+          initial={spotlight?.fallback ?? null}
+          faces={heroFaces}
+          totalPublicProfiles={totalPublicProfiles}
+        />
       )}
 
       {/* ウェルカムバー / ヒーローの下を、ユーザーの並び順（ゲストは既定順）で描画する */}

@@ -99,23 +99,16 @@ function HotbarRow({ hotbar }: { hotbar: FeaturedRunner["hotbar"] }) {
 }
 
 /**
- * ゲスト向けヒーロー右側の「注目の走者」カード。
+ * 注目の走者を回す処理（ログイン時のワイド版 FeaturedRunnerCard とゲストヒーロー GuestHero で共有）。
  * 候補（直近7日の出来事・点数順）を「別の走者」で順に切り替え、出し切った後・候補が無い日は
  * /api/home-featured から揃った公開プロフィールをランダムに1人取得する（表示中と直前の人は除外）。
  * SSR の初期表示は常に「候補の1位、または日替わりの人」。クライアント乱数は初期描画に使わない。
+ * 読み上げ文は `announce`（呼び出し側が sr-only の aria-live 要素に入れる）。
  */
-export function FeaturedRunnerCard({
-  candidates,
-  initial,
-  wide = false,
-}: {
-  candidates: FeaturedRunner[];
-  initial: FeaturedRunner | null;
-  /** ページ幅いっぱいに置くとき（ログイン時）。lg 以上で走者情報とキーを横並びにし、キーが間延びしないようにする */
-  wide?: boolean;
-}) {
+export function useFeaturedRotation(candidates: FeaturedRunner[], initial: FeaturedRunner | null) {
   const t = useT();
   const locale = useLocale();
+  const navigate = useNavigate();
   const [current, setCurrent] = useState<FeaturedRunner | null>(candidates[0] ?? initial);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -127,8 +120,6 @@ export function FeaturedRunnerCard({
     setCurrent(runner);
     setAnnounce(t("home.featuredAnnounce", { name: getLocalizedDisplayName(runner, locale) }));
   };
-
-  const navigate = useNavigate();
 
   const handleNext = async () => {
     if (loading) return;
@@ -171,12 +162,24 @@ export function FeaturedRunnerCard({
     void handleNext();
   };
 
-  const nextButton = (
+  return { current, loading, announce, handleClick };
+}
+
+/** 「別の走者」ボタン */
+export function FeaturedNextButton({
+  onClick,
+  loading,
+}: {
+  onClick: (e: React.MouseEvent) => void;
+  loading: boolean;
+}) {
+  const t = useT();
+  return (
     <Button
       type="button"
       variant="outline"
       size="sm"
-      onClick={handleClick}
+      onClick={onClick}
       disabled={loading}
       className="relative z-10 min-h-11 shrink-0 sm:min-h-8"
     >
@@ -184,6 +187,82 @@ export function FeaturedRunnerCard({
       {t("home.featuredNext")}
     </Button>
   );
+}
+
+/** 注目の理由の行（日替わり・ランダムの人は出さないが、行の高さは保つ）。審査中の申請へのリンクを含む */
+export function FeaturedReasonRow({ runner }: { runner: FeaturedRunner }) {
+  const t = useT();
+  return (
+    <div className="flex min-h-5 flex-wrap items-start gap-x-3 gap-y-1 text-xs font-medium text-primary">
+      {runner.reason && (
+        <>
+          {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
+          <p className="flex min-w-0 items-start gap-1.5">
+            <ReasonIcon reason={runner.reason} />
+            <span className="line-clamp-2">
+              <span className="mr-1.5 font-normal text-muted-foreground">{t("home.featuredReasonLabel")}</span>
+              {reasonText(t, runner.reason)}
+            </span>
+          </p>
+          {/* 審査中の申請は記録タブに出ないため、審査中の記録を表示した状態のプロフィールへ誘導する。
+              カード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
+          {runner.reason.type === "speedruncom" && runner.reason.status === "new" && (
+            <Link
+              to={`/player/${runner.slug}?tab=stats&srcPending=1`}
+              prefetch="intent"
+              className="relative z-10 -my-3.5 ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm py-3.5 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {t("home.featuredPendingLink")}
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            </Link>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 主要9操作とホットバー1〜9のキー。キー配置が無い人はそれぞれ行ごと出さない。
+ * 列数は自身の幅（@container）で決まる。余白・罫線などの外側の指定は className で渡す
+ */
+export function FeaturedKeys({ runner, className }: { runner: FeaturedRunner; className?: string }) {
+  const t = useT();
+  if (runner.keys.length === 0 && runner.hotbar.length === 0) return null;
+  return (
+    <div className={cn("@container space-y-3", className)}>
+      {runner.keys.length > 0 && (
+        <ul
+          aria-label={t("home.featuredKeysLabel")}
+          // 列数はキー領域の幅で決める。モバイル（約16rem）は3列（4列だと「左Shift」等が切れる）、約31rem は 4+4、9列（ホットバーと列を揃える）には約35rem 要る
+          className="grid grid-cols-3 gap-x-1 gap-y-2.5 @[24rem]:grid-cols-4 @[35rem]:grid-cols-9"
+        >
+          {runner.keys.map((k) => (
+            <KeyChip key={k.action} k={k} />
+          ))}
+        </ul>
+      )}
+      {/* ホットバーが無い走者も9スロット（未割り当ては「-」）で描き、切り替え時にカードの高さが跳ねないようにする */}
+      <HotbarRow hotbar={runner.hotbar} />
+    </div>
+  );
+}
+
+/**
+ * ログイン時の「注目の走者」（ページ幅の大型パネル。ホームの「プロフィール」欄の上）。
+ * ゲストのヒーローは GuestHero が同じ hook・部品を使って描く。
+ */
+export function FeaturedRunnerCard({
+  candidates,
+  initial,
+}: {
+  candidates: FeaturedRunner[];
+  initial: FeaturedRunner | null;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const { current, loading, announce, handleClick } = useFeaturedRotation(candidates, initial);
+  const nextButton = <FeaturedNextButton onClick={handleClick} loading={loading} />;
 
   if (!current) {
     // 候補も日替わりも無い（揃った公開プロフィールが無い）: プロフィールで見られるものの静的な説明
@@ -217,57 +296,23 @@ export function FeaturedRunnerCard({
       className="group relative rounded-2xl border border-border/70 bg-card/70 p-5 transition-all hover:border-primary/40 motion-reduce:transition-none sm:p-6"
     >
       <div className="flex items-center justify-between gap-3">
-        {wide ? (
-          // ログイン時（ページ幅いっぱい）は他の欄（HomeSection）と同じ見出し: アイコンチップ + h2 text-xl font-bold
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <div className="shrink-0 rounded-xl bg-primary/10 p-1.5 sm:p-2">
-              <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
-            </div>
-            <h2 id="home-featured-heading" className="min-w-0 truncate text-xl font-bold">
-              {t("home.featuredTitle")}
-            </h2>
+        {/* 他の欄（HomeSection）と同じ見出し: アイコンチップ + h2 text-xl font-bold */}
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="shrink-0 rounded-xl bg-primary/10 p-1.5 sm:p-2">
+            <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
           </div>
-        ) : (
-          // ゲストのヒーロー内は小見出しのまま
-          <h2 id="home-featured-heading" className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+          <h2 id="home-featured-heading" className="min-w-0 truncate text-xl font-bold">
             {t("home.featuredTitle")}
           </h2>
-        )}
+        </div>
         {nextButton}
       </div>
 
       {/* 高さを保つため、取得中は中身を薄くするだけで差し替えない */}
       <div aria-busy={loading} className={cn("mt-3 space-y-3 transition-opacity", loading && "opacity-50")}>
-        {/* 注目の理由（日替わり・ランダムの人は出さないが、行の高さは保つ） */}
-        <div className="flex min-h-5 flex-wrap items-start gap-x-3 gap-y-1 text-xs font-medium text-primary">
-          {current.reason && (
-            <>
-              {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
-              <p className="flex min-w-0 items-start gap-1.5">
-                <ReasonIcon reason={current.reason} />
-                <span className="line-clamp-2">
-                  <span className="mr-1.5 font-normal text-muted-foreground">{t("home.featuredReasonLabel")}</span>
-                  {reasonText(t, current.reason)}
-                </span>
-              </p>
-              {/* 審査中の申請は記録タブに出ないため、審査中の記録を表示した状態のプロフィールへ誘導する。
-                  カード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
-              {current.reason.type === "speedruncom" && current.reason.status === "new" && (
-                <Link
-                  to={`/player/${current.slug}?tab=stats&srcPending=1`}
-                  prefetch="intent"
-                  className="relative z-10 -my-3.5 ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm py-3.5 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("home.featuredPendingLink")}
-                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                </Link>
-              )}
-            </>
-          )}
-        </div>
+        <FeaturedReasonRow runner={current} />
 
-        <div className={cn(wide && "lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8")}>
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
           <div className="flex items-center gap-4">
             <MinecraftAvatar
               uuid={current.uuid}
@@ -306,28 +351,10 @@ export function FeaturedRunnerCard({
             </div>
           </div>
 
-          {/* 主要9操作とホットバー1〜9のキー。キー配置が無い人はそれぞれ行ごと出さない */}
-          {(current.keys.length > 0 || current.hotbar.length > 0) && (
-            <div
-              className={cn(
-                "@container mt-3 space-y-3 border-t border-border/60 pt-3",
-                wide && "lg:mt-0 lg:w-[38rem] lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8",
-              )}
-            >
-              {current.keys.length > 0 && (
-                <ul
-                  aria-label={t("home.featuredKeysLabel")}
-                  // 列数はカード（キー領域）の幅で決める。9列（ホットバーと列を揃える）には約35rem 要る
-                  className="grid grid-cols-3 gap-x-1 gap-y-2.5 @[26rem]:grid-cols-5 @[35rem]:grid-cols-9"
-                >
-                  {current.keys.map((k) => (
-                    <KeyChip key={k.action} k={k} />
-                  ))}
-                </ul>
-              )}
-              {current.hotbar.length > 0 && <HotbarRow hotbar={current.hotbar} />}
-            </div>
-          )}
+          <FeaturedKeys
+            runner={current}
+            className="mt-3 border-t border-border/60 pt-3 lg:mt-0 lg:w-[38rem] lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8"
+          />
         </div>
       </div>
 
