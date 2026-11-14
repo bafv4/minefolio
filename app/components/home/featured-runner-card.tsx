@@ -1,13 +1,12 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
+import { categoryLabel, isCategoryKey, isVersionKey, versionLabel } from "@/lib/playstyle";
 import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { formatClock } from "@/lib/home-format";
 import type { FeaturedReason, FeaturedRunner } from "@/lib/home-featured";
@@ -20,33 +19,54 @@ const KEY_CHIP_CLASS =
 const HOTBAR_CHIP_CLASS =
   "inline-flex h-7 min-w-7 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-1 font-mono text-sm @[35rem]:text-xs font-semibold text-muted-foreground";
 
-/** 感度の表示文字列（「40% · 31.5 cm/180°」。感度が無ければ null） */
-export function featuredSensitivityText(runner: FeaturedRunner): string | null {
+/** 感度の行（「感度 40% · 振り向き 31.5 cm/180°」。ラベルは sans の muted、値は mono。感度が無ければ何も出さない） */
+export function FeaturedSensitivity({ runner, className }: { runner: FeaturedRunner; className?: string }) {
+  const t = useT();
   if (runner.sensitivityPercent == null) return null;
-  return runner.cm180 != null
-    ? `${runner.sensitivityPercent}% · ${runner.cm180.toFixed(1)} cm/180°`
-    : `${runner.sensitivityPercent}%`;
+  return (
+    <p className={cn("text-xs text-muted-foreground", className)}>
+      <span>{t("home.featuredSensitivityLabel")}</span>{" "}
+      <span className="font-mono tabular-nums">{runner.sensitivityPercent}%</span>
+      {runner.cm180 != null && (
+        <>
+          <span aria-hidden="true"> · </span>
+          <span>{t("home.featuredTurnLabel")}</span>{" "}
+          <span className="font-mono tabular-nums">{runner.cm180.toFixed(1)} cm/180°</span>
+        </>
+      )}
+    </p>
+  );
 }
 
-/** メインカテゴリのバッジと PB（どちらも無ければ何も出さない）。flex の子として並べる Fragment */
+/**
+ * メインカテゴリの自己ベスト（公式記録のみ。出どころは home-featured.server.ts の hydrateRunners）。
+ * PB があれば「{カテゴリ}の自己ベスト」＋時刻（ranked 以外はバージョンを添える）。
+ * PB が無くカテゴリだけなら「メイン: カテゴリ」（バージョンがあれば括弧書き）、どちらも無ければ何も出さない。
+ * flex の子として置く1要素
+ */
 export function FeaturedCategoryPb({ runner }: { runner: FeaturedRunner }) {
   const t = useT();
-  return (
-    <>
-      {isCategoryKey(runner.mainCategory) && (
-        <Badge variant="secondary" className="shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-          {categoryLabel(t, runner.mainCategory)}
-        </Badge>
-      )}
-      {runner.pbMs != null && (
-        <span className="font-mono text-sm font-semibold tabular-nums">
-          {/* カテゴリは直前のバッジが示すので、ここは「PB」だけ（理由の行は「直近7日」で区別する） */}
-          <span className="mr-1 text-[11px] font-normal text-muted-foreground">PB</span>
-          {formatClock(runner.pbMs)}
+  const category = isCategoryKey(runner.mainCategory) ? categoryLabel(t, runner.mainCategory) : null;
+  const version =
+    runner.mainCategory !== "ranked" && isVersionKey(runner.mainVersion) ? versionLabel(runner.mainVersion) : null;
+  if (runner.pbMs != null && category) {
+    return (
+      <p className="flex flex-wrap items-baseline gap-x-1.5">
+        <span className="text-xs text-muted-foreground">
+          {t("home.featuredPb", { category: version ? `${category} ${version}` : category })}
         </span>
-      )}
-    </>
-  );
+        <span className="font-mono text-sm font-semibold tabular-nums">{formatClock(runner.pbMs)}</span>
+      </p>
+    );
+  }
+  if (category) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {t("home.featuredMainCategory", { category: version ? `${category} (${version})` : category })}
+      </p>
+    );
+  }
+  return null;
 }
 
 function reasonText(t: Translator, reason: FeaturedReason): string {
@@ -322,7 +342,6 @@ export function FeaturedRunnerCard({
   }
 
   const name = getLocalizedDisplayName(current, locale);
-  const sensitivity = featuredSensitivityText(current);
 
   return (
     <section
@@ -366,9 +385,7 @@ export function FeaturedRunnerCard({
               </p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <FeaturedCategoryPb runner={current} />
-                {sensitivity && (
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</span>
-                )}
+                <FeaturedSensitivity runner={current} />
               </div>
             </div>
           </div>

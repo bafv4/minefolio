@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   dailyPickIndex,
+  officialCategorySlug,
   pickFeaturedCandidates,
+  pickOfficialPb,
   scoreFeaturedReason,
   type FeaturedEvent,
 } from "../home-featured";
@@ -207,5 +209,47 @@ describe("buildRankedLiveMatches", () => {
   it("応答が不正なら空配列、UUID はハイフン有無を同一視する", () => {
     expect(buildRankedLiveMatches(null, registered)).toEqual([]);
     expect(normalizeUuid("069A79F4-44E9-4726-A5BE-FCA90E38AAF5")).toBe("069a79f444e94726a5befca90e38aaf5");
+  });
+});
+
+describe("officialCategorySlug", () => {
+  it("(カテゴリ, バージョン) が1つに対応するときだけ slug を返す", () => {
+    expect(officialCategorySlug("rsg", "java:1_16_1_19")).toBe("java-rsg-1.16-1.19");
+    expect(officialCategorySlug("ssg", "java:1_16_1_19")).toBe("java-ssg-1.16-1.19");
+    expect(officialCategorySlug("ssg", "java:1_20_plus")).toBe("java-ssg-1.20");
+  });
+
+  it("バージョン未設定・Bedrock・範囲外・対応の無いカテゴリは null", () => {
+    expect(officialCategorySlug("rsg", null)).toBeNull();
+    expect(officialCategorySlug("rsg", "java:1_20_plus")).toBeNull(); // RSG 1.20+ の定義は無い
+    expect(officialCategorySlug("rsg", "java:1_13_1_15")).toBeNull();
+    expect(officialCategorySlug("rsg", "bedrock:1_18")).toBeNull();
+    for (const c of ["aa", "ce", "ranked", "other", null]) {
+      expect(officialCategorySlug(c, "java:1_16_1_19")).toBeNull();
+    }
+  });
+});
+
+describe("pickOfficialPb", () => {
+  const base = { showRankedStats: true, rankedAllTimeMs: null, srcRuns: [] };
+
+  it("ranked は全期間ベスト。非表示設定の人・記録なしは null", () => {
+    expect(pickOfficialPb({ ...base, mainCategory: "ranked", rankedAllTimeMs: 600000 })).toBe(600000);
+    expect(pickOfficialPb({ ...base, mainCategory: "ranked", showRankedStats: null, rankedAllTimeMs: 600000 })).toBe(600000);
+    expect(pickOfficialPb({ ...base, mainCategory: "ranked", showRankedStats: false, rankedAllTimeMs: 600000 })).toBeNull();
+    expect(pickOfficialPb({ ...base, mainCategory: "ranked" })).toBeNull();
+  });
+
+  it("speedrun.com は verified の最速だけ（new / rejected / 時間なしは無視）", () => {
+    const srcRuns = [
+      { timeMs: 700000, verificationStatus: "verified" },
+      { timeMs: 650000, verificationStatus: "verified" },
+      { timeMs: 500000, verificationStatus: "new" },
+      { timeMs: 400000, verificationStatus: "rejected" },
+      { timeMs: null, verificationStatus: "verified" },
+    ];
+    expect(pickOfficialPb({ ...base, mainCategory: "rsg", srcRuns })).toBe(650000);
+    expect(pickOfficialPb({ ...base, mainCategory: "rsg", srcRuns: srcRuns.slice(2) })).toBeNull();
+    expect(pickOfficialPb({ ...base, mainCategory: null, rankedAllTimeMs: 1 })).toBeNull();
   });
 });

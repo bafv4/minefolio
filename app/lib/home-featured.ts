@@ -60,7 +60,9 @@ export interface FeaturedRunner {
   displayNameAlphabet: string | null;
   customSkinUrl: string | null;
   mainCategory: string | null;
-  /** メインカテゴリの PB（ミリ秒） */
+  /** メインバージョン（"java:1_16_1_19" 形式。未設定は null）。カテゴリ名への添え字に使う */
+  mainVersion: string | null;
+  /** メインカテゴリの公式記録の自己ベスト（ミリ秒。speedrun.com の承認済み / MCSR Ranked の全期間。対応なし・記録なしは null） */
   pbMs: number | null;
   sensitivityPercent: number | null;
   /** 振り向き距離（cm/180°） */
@@ -128,4 +130,38 @@ export function dailyPickIndex(dateKey: string, n: number): number {
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0) % n;
+}
+
+/**
+ * メインカテゴリ・メインバージョンに対応する speedrun.com カテゴリ（`speedrun_categories.slug`）。
+ * (カテゴリ, バージョン) がちょうど1つに確実に対応する組み合わせだけ返す（`app/lib/seed-categories.ts` の定義）。
+ * バージョン未設定・Bedrock・定義の無い範囲（RSG 1.20+ など）・AA / CE / other / ranked は null
+ */
+export function officialCategorySlug(mainCategory: string | null, mainVersion: string | null): string | null {
+  if (mainCategory === "rsg" && mainVersion === "java:1_16_1_19") return "java-rsg-1.16-1.19";
+  if (mainCategory === "ssg" && mainVersion === "java:1_16_1_19") return "java-ssg-1.16-1.19";
+  if (mainCategory === "ssg" && mainVersion === "java:1_20_plus") return "java-ssg-1.20";
+  return null;
+}
+
+/**
+ * 注目の走者に出す自己ベスト（公式記録だけ。手入力記録は使わない）。
+ * - ranked: `ranked_pb_all_time`。「Ranked 統計を表示しない」人（showRankedStats === false）は null
+ * - それ以外: 対応する speedrun.com カテゴリの承認済み（verified）記録のうち最速（呼び出し側が対応カテゴリの行だけを渡す）
+ */
+export function pickOfficialPb(input: {
+  mainCategory: string | null;
+  showRankedStats: boolean | null;
+  rankedAllTimeMs: number | null;
+  srcRuns: { timeMs: number | null; verificationStatus: string | null }[];
+}): number | null {
+  if (input.mainCategory === "ranked") {
+    return input.showRankedStats === false ? null : input.rankedAllTimeMs;
+  }
+  let best: number | null = null;
+  for (const r of input.srcRuns) {
+    if (r.verificationStatus !== "verified" || r.timeMs == null) continue;
+    if (best == null || r.timeMs < best) best = r.timeMs;
+  }
+  return best;
 }

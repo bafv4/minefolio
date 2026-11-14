@@ -7,7 +7,7 @@ import {
   FeaturedKeys,
   FeaturedNextButton,
   FeaturedReasonRow,
-  featuredSensitivityText,
+  FeaturedSensitivity,
   useFeaturedRotation,
 } from "@/components/home/featured-runner-card";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -154,7 +154,6 @@ export function GuestHero({
   const nextButton = <FeaturedNextButton onClick={handleClick} loading={loading} />;
 
   const name = current ? getLocalizedDisplayName(current, locale) : "";
-  const sensitivity = current ? featuredSensitivityText(current) : null;
 
   return (
     <section aria-labelledby="home-hero-heading" className="rounded-2xl border border-border/70 bg-card p-6 sm:p-8">
@@ -239,9 +238,7 @@ export function GuestHero({
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <FeaturedCategoryPb runner={current} />
                   </div>
-                  {sensitivity && (
-                    <p className="font-mono text-xs tabular-nums text-muted-foreground">{sensitivity}</p>
-                  )}
+                  <FeaturedSensitivity runner={current} />
                 </div>
               </div>
 

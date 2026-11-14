@@ -19,12 +19,12 @@ import {
 import { listedRunnerCondition, rankedStatsVisibleCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import { getPublicVideoFeed } from "./videos-feed.server";
-import { pickHighlightPb } from "./profile-highlights";
 import { calculateCm360, isValidSensitivity, toSensitivityPercent } from "./mouse-settings";
 import { filterRemapsForTrigger, isSpecialRemapTarget } from "./remap-utils";
 import { UNBOUND_KEY, isControllerKeyCode, isUnbound, keysEqual, normalizeKeyCode } from "./keybindings";
 import { decodePresetConfig, shouldUsePresetSnapshot } from "./preset-read";
 import { parseRunIdList } from "./run-id-list";
+import { isVersionKey } from "./playstyle";
 import { groupByUserId } from "./group-by-user";
 import { toUtcDateString } from "./time-utils";
 import { DAY_MS } from "./home-favorite-activity-shared";
@@ -33,7 +33,9 @@ import {
   FEATURED_KEY_ACTIONS,
   FEATURED_MIN_KEYS,
   dailyPickIndex,
+  officialCategorySlug,
   pickFeaturedCandidates,
+  pickOfficialPb,
   type FeaturedEvent,
   type FeaturedKey,
   type FeaturedReason,
@@ -46,7 +48,7 @@ const WINDOW_DAYS = 7;
 const MIN_ELO_GAIN = 20;
 
 /** キャッシュキー。形状・選定規則を変えたら版数を上げる（テストからも参照する） */
-export const SPOTLIGHT_CACHE_KEY = "home:spotlight:v6";
+export const SPOTLIGHT_CACHE_KEY = "home:spotlight:v7";
 export const FEATURED_POOL_CACHE_KEY = "home:featured-pool:v2";
 
 export interface HomeSpotlight {
@@ -113,7 +115,7 @@ async function hydrateRunners(
   if (picks.length === 0) return [];
   const ids = picks.map((p) => p.userId);
 
-  const [userRows, styleRows, recordRows, presetRows] = await Promise.all([
+  const [userRows, styleRows, rankingRows, presetRows] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -123,26 +125,35 @@ async function hydrateRunners(
         displayName: users.displayName,
         displayNameAlphabet: users.displayNameAlphabet,
         customSkinUrl: users.customSkinUrl,
+        showRankedStats: users.showRankedStats,
+        hiddenSpeedrunRecords: users.hiddenSpeedrunRecords,
       })
       .from(users)
       .where(and(inArray(users.id, ids), listedRunnerCondition)),
     db
-      .select({ userId: playstyles.userId, mainCategory: playstyles.mainCategory })
+      .select({
+        userId: playstyles.userId,
+        mainCategory: playstyles.mainCategory,
+        mainVersion: playstyles.mainVersion,
+      })
       .from(playstyles)
       .where(inArray(playstyles.userId, ids)),
+    // 公式記録だけ（cron が取得済みの player_rankings）。手入力の記録（category_records）は使わない
     db
       .select({
-        userId: categoryRecords.userId,
-        category: categoryRecords.category,
-        categoryDisplayName: categoryRecords.categoryDisplayName,
-        personalBest: categoryRecords.personalBest,
+        userId: playerRankings.userId,
+        type: playerRankings.rankingType,
+        categoryId: playerRankings.categoryId,
+        timeMs: playerRankings.timeMs,
+        verificationStatus: playerRankings.verificationStatus,
+        speedruncomRunId: playerRankings.speedruncomRunId,
       })
-      .from(categoryRecords)
+      .from(playerRankings)
       .where(
         and(
-          inArray(categoryRecords.userId, ids),
-          eq(categoryRecords.isVisible, true),
-          isNotNull(categoryRecords.personalBest),
+          inArray(playerRankings.userId, ids),
+          isNotNull(playerRankings.timeMs),
+          or(eq(playerRankings.rankingType, "ranked_pb_all_time"), eq(playerRankings.rankingType, "speedruncom")),
         ),
       ),
     db
@@ -203,15 +214,51 @@ async function hydrateRunners(
   }
 
   const userById = new Map(userRows.map((u) => [u.id, u]));
-  const styleById = new Map(styleRows.map((s) => [s.userId, s.mainCategory]));
-  const recordsById = groupByUserId(recordRows);
+  const styleById = new Map(styleRows.map((s) => [s.userId, s]));
+  const rankingsById = groupByUserId(rankingRows);
+  // 対応する speedrun.com カテゴリ（slug → id）。選ばれた数人ぶんの対応 slug だけ引く
+  const wantedSlugs = [
+    ...new Set(
+      styleRows
+        .map((s) => officialCategorySlug(s.mainCategory, s.mainVersion))
+        .filter((s): s is string => s != null),
+    ),
+  ];
+  const categoryIdBySlug = new Map<string, string>();
+  if (wantedSlugs.length > 0) {
+    const catRows = await db
+      .select({ id: speedrunCategories.id, slug: speedrunCategories.slug })
+      .from(speedrunCategories)
+      .where(and(inArray(speedrunCategories.slug, wantedSlugs), eq(speedrunCategories.categoryType, "speedruncom")));
+    for (const c of catRows) categoryIdBySlug.set(c.slug, c.id);
+  }
 
   const result: FeaturedRunner[] = [];
   for (const pick of picks) {
     const u = userById.get(pick.userId);
     if (!u) continue; // 非公開化・視聴者化・退会した人は出さない
-    const mainCategory = styleById.get(u.id) ?? null;
-    const pb = pickHighlightPb(mainCategory, recordsById.get(u.id) ?? []);
+    const style = styleById.get(u.id);
+    const mainCategory = style?.mainCategory ?? null;
+    const mainVersion = isVersionKey(style?.mainVersion) ? style.mainVersion : null;
+    // 公式記録の自己ベスト。対応するカテゴリが slug から確実に1つ引けるときだけ speedrun.com を見る
+    const userRankings = rankingsById.get(u.id) ?? [];
+    const slug = officialCategorySlug(mainCategory, mainVersion);
+    const categoryId = slug ? (categoryIdBySlug.get(slug) ?? null) : null;
+    const hiddenRunIds = new Set(parseRunIdList(u.hiddenSpeedrunRecords));
+    const pbMs = pickOfficialPb({
+      mainCategory,
+      showRankedStats: u.showRankedStats,
+      rankedAllTimeMs: userRankings.find((r) => r.type === "ranked_pb_all_time")?.timeMs ?? null,
+      srcRuns:
+        categoryId == null
+          ? []
+          : userRankings.filter(
+              (r) =>
+                r.type === "speedruncom" &&
+                r.categoryId === categoryId &&
+                !(r.speedruncomRunId && hiddenRunIds.has(r.speedruncomRunId)),
+            ),
+    });
     const { config, keys: boundKeys, remaps: allRemaps } = settingsById.get(u.id) as RunnerSettings;
     const sensitivityPercent =
       config && isValidSensitivity(config.gameSensitivity) ? toSensitivityPercent(config.gameSensitivity) : null;
@@ -248,7 +295,8 @@ async function hydrateRunners(
       displayNameAlphabet: u.displayNameAlphabet,
       customSkinUrl: u.customSkinUrl,
       mainCategory,
-      pbMs: pb?.record.personalBest ?? null,
+      mainVersion,
+      pbMs,
       sensitivityPercent,
       cm180,
       keys,

@@ -445,3 +445,74 @@ describe("表示設定（ホーム画面に〜を表示）: 全員のホーム�
     expect(runIds).toEqual([32]);
   });
 });
+
+describe("注目の走者の自己ベスト（公式記録だけ）", () => {
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  /** メインカテゴリ・バージョンを設定した走者を作り、候補に入るよう直近の speedrun.com 行を1件足す */
+  async function seedRunner(slug: string, main: { mainCategory: string; mainVersion?: string | null }, userOverrides = {}) {
+    const user = await seedCompleteRunner(slug);
+    await db
+      .update(schema.playstyles)
+      .set({ mainCategory: main.mainCategory, mainVersion: main.mainVersion ?? null })
+      .where(eq(schema.playstyles.userId, user.id));
+    if (Object.keys(userOverrides).length > 0) await db.update(schema.users).set(userOverrides).where(eq(schema.users.id, user.id));
+    await seedPlayerRanking(db, user.id, { rankingType: "ranked_pb", timeMs: 999000, recordDate: today() });
+    return user;
+  }
+  async function pbOf(slug: string) {
+    const spotlight = await getHomeSpotlight(asDb(db));
+    const runner = [...spotlight.candidates, spotlight.fallback].find((r) => r?.slug === slug);
+    expect(runner).toBeTruthy();
+    return runner;
+  }
+
+  it("ranked は ranked_pb_all_time（シーズンの ranked_pb ではない）を出し、手入力記録は使わない", async () => {
+    const user = await seedRunner("pb-ranked", { mainCategory: "ranked" });
+    await seedPlayerRanking(db, user.id, { rankingType: "ranked_pb_all_time", timeMs: 612345 });
+    await seedCategoryRecord(db, user.id, { category: "ranked", personalBest: 400000, isVisible: true });
+    const runner = await pbOf("pb-ranked");
+    expect(runner?.pbMs).toBe(612345);
+    expect(runner?.mainVersion).toBeNull();
+  });
+
+  it("ranked でも Ranked 統計を表示しない人は null", async () => {
+    const user = await seedRunner("pb-ranked-hidden", { mainCategory: "ranked" }, { showRankedStats: false });
+    await seedPlayerRanking(db, user.id, { rankingType: "ranked_pb_all_time", timeMs: 612345 });
+    expect((await pbOf("pb-ranked-hidden"))?.pbMs).toBeNull();
+  });
+
+  it("rsg + 1.16-1.19 は対応カテゴリの verified の最速だけ（new・別カテゴリ・非表示の run・手入力は除く）", async () => {
+    const cat = await seedSpeedrunCategory(db, { name: "Java: RSG 1.16-1.19", slug: "java-rsg-1.16-1.19" });
+    const other = await seedSpeedrunCategory(db, { name: "Java: SSG 1.20+", slug: "java-ssg-1.20" });
+    const user = await seedRunner(
+      "pb-rsg",
+      { mainCategory: "rsg", mainVersion: "java:1_16_1_19" },
+      { hiddenSpeedrunRecords: JSON.stringify(["run-hidden"]) },
+    );
+    const base = { rankingType: "speedruncom" as const, verificationStatus: "verified" as const };
+    await seedPlayerRanking(db, user.id, { ...base, categoryId: cat.id, timeMs: 700000, speedruncomRunId: "run-a" });
+    await seedPlayerRanking(db, user.id, { ...base, categoryId: cat.id, timeMs: 650000, speedruncomRunId: "run-b" });
+    await seedPlayerRanking(db, user.id, { ...base, categoryId: cat.id, timeMs: 500000, speedruncomRunId: "run-hidden" });
+    await seedPlayerRanking(db, user.id, { ...base, verificationStatus: "new", categoryId: cat.id, timeMs: 400000, speedruncomRunId: "run-new" });
+    await seedPlayerRanking(db, user.id, { ...base, categoryId: other.id, timeMs: 300000, speedruncomRunId: "run-other" });
+    await seedCategoryRecord(db, user.id, { category: "rsg", personalBest: 200000, isVisible: true });
+    const runner = await pbOf("pb-rsg");
+    expect(runner?.pbMs).toBe(650000);
+    expect(runner?.mainVersion).toBe("java:1_16_1_19");
+  });
+
+  it("バージョン未設定・対応の無い範囲・カテゴリ定義が無いときは null（手入力記録があっても出さない）", async () => {
+    const cat = await seedSpeedrunCategory(db, { name: "Java: RSG 1.16-1.19", slug: "java-rsg-1.16-1.19" });
+    const noVersion = await seedRunner("pb-nover", { mainCategory: "rsg" });
+    const outOfRange = await seedRunner("pb-range", { mainCategory: "rsg", mainVersion: "java:1_20_plus" });
+    const noCategory = await seedRunner("pb-nocat", { mainCategory: "ssg", mainVersion: "java:1_16_1_19" });
+    for (const u of [noVersion, outOfRange, noCategory]) {
+      await seedPlayerRanking(db, u.id, { rankingType: "speedruncom", verificationStatus: "verified", categoryId: cat.id, timeMs: 600000 });
+      await seedCategoryRecord(db, u.id, { category: "rsg", personalBest: 500000, isVisible: true });
+    }
+    expect((await pbOf("pb-nover"))?.pbMs).toBeNull();
+    expect((await pbOf("pb-range"))?.pbMs).toBeNull();
+    expect((await pbOf("pb-nocat"))?.pbMs).toBeNull();
+  });
+});
