@@ -30,6 +30,8 @@ export const PAGES_JA = {
     title: "Cookieの使用について",
     body1: "お気に入り機能を利用するためにCookieを使用します。",
     body2: "Cookieにはお気に入りに登録した走者のIDのみが保存されます。",
+    bodyShort: "お気に入り機能のためにCookieを使用し、登録した走者のIDのみを保存します。",
+    details: "詳細",
     accept: "同意する",
     decline: "拒否する",
     declineAndClose: "拒否して閉じる",

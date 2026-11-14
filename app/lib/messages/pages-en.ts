@@ -38,6 +38,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "About cookies",
     body1: "We use cookies so that favorites work.",
     body2: "Only the IDs of the runners you favorite are stored.",
+    bodyShort: "We use cookies for favorites and store only the IDs of the runners you favorite.",
+    details: "Details",
     accept: "Accept",
     decline: "Decline",
     declineAndClose: "Decline and close",

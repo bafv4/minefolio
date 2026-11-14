@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router";
 import { useT } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -113,16 +114,25 @@ export function CookieConsentBanner({ show: externalShow, onAccept, onDecline }:
       ref={bannerRef}
       className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md"
     >
-      <Card className="border-2 shadow-lg">
+      {/* モバイルは Card 基底の py-6 を外し、CardContent の p-3 だけにする（下端固定で画面を覆う高さを抑える） */}
+      <Card className="border-2 py-0 shadow-lg sm:py-6">
         <CardContent className="p-3 sm:p-4">
           <div className="flex items-start gap-2 sm:gap-3">
             <Cookie className="hidden h-5 w-5 text-muted-foreground shrink-0 mt-0.5 sm:block" />
             <div className="flex-1 space-y-2 sm:space-y-3">
               <div>
-                <p className="font-medium text-sm">{t("cookieConsent.title")}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 sm:mt-1">
-                  {t("cookieConsent.body1")}{" "}
-                  {t("cookieConsent.body2")}
+                <p className="sr-only font-medium text-sm sm:not-sr-only">{t("cookieConsent.title")}</p>
+                <p className="text-xs text-muted-foreground sm:mt-1">
+                  <span className="sm:hidden">
+                    {t("cookieConsent.bodyShort")}{" "}
+                    <Link to="/privacy" className="underline underline-offset-2">
+                      {t("cookieConsent.details")}
+                    </Link>
+                  </span>
+                  <span className="hidden sm:inline">
+                    {t("cookieConsent.body1")}{" "}
+                    {t("cookieConsent.body2")}
+                  </span>
                 </p>
               </div>
               <div className="flex gap-2">
