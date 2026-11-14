@@ -28,7 +28,7 @@ export function FavoriteActivity({
   if (!shouldShow) return null;
 
   return (
-    <HomeSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t("home.favTitle")} viewAllTo="/favorites/activity">
+    <HomeSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t("home.favTitle")} viewAllTo={state.status !== "loading" && state.status !== "error" && state.data.favoritesCount === 0 ? undefined : "/favorites/activity"}>
       {state.status === "loading" ? (
         <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 5 }).map((_, i) => (
