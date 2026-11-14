@@ -755,6 +755,14 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **モバイル表示と追加ダイアログ**: MCID 行はモバイルでボタンが下に縦積みになり（`sm` 以上は横並び）、MCID は長くても折り返して全体を表示する。ソーシャルリンク追加・動画追加ダイアログにはキャンセルボタン（`DialogClose`）を置く
 - **共有モジュール**: MCID 検証と slug 変更は `app/lib/mcid-change.server.ts`（`verifyMcidForUser` / `applyMcidSlugChange`。onboarding も同じものを使い、uuid の重複チェックを含む）、入力上限と検証は `app/lib/profile-edit-validation.ts`（`PROFILE_FIELD_LIMITS` / `validateProfileTextFields` / `validateLinkInput` / `linksTouchSpeedrun`）
 
+### `users.updatedAt`（ホームの「最近の更新」の基準）
+
+`users.updatedAt` はホームの「最近の更新」と、お気に入り走者の動きの「プロフィールを更新」の元になる。**プロフィールの内容が変わったときだけ**進め、露出を減らす操作・表示設定の変更では進めない（非公開化や非表示にした操作が、かえって「更新」として目立たないようにするため）。
+
+- 進める: `/me/edit` の保存で、MCID・Bedrock MCID・表示名・表示名のアルファベット表記・自己紹介（`bio` / `shortBio`）・場所・代名詞・ポーズ・スリム・マント・既定タブ・メインプラットフォーム・ロール・RTA 歴・speedrun.com ユーザー名、ソーシャルリンク、動画（追加・削除・内容変更・並び替え）のいずれかが**既存値と違う**とき。記録（`category_records`）の追加・編集、speedrun.com 記録のピン留め切替
+- 進めない: `/me/edit` の保存で変化した列が `profileVisibility` / `showPacemanOnHome` / `showTwitchOnHome` / `showYoutubeOnHome` / `showRankedStats` / `showPacemanStats` / `allowAutoTranslation` だけのとき（何も変わらない保存も同様）、`/me/records` の speedrun.com 記録の非表示切替、ホームの並び順保存
+- 判定は送信値ではなく既存値との差分で行う（`saveProfileBatch` の `contentChanged`）。
+
 ### 自己紹介の自動翻訳の許可
 
 `bio` / `shortBio` の入力欄の直下に「自己紹介の自動翻訳を許可する」`Switch`（`users.allowAutoTranslation`、既定オン）と説明（外部サービス Anthropic に送る旨を含む）を置く。保存フォーム（`FloatingSaveBar` の一括保存）に `allowAutoTranslation`（`"true"` / `"false"`）を載せる。

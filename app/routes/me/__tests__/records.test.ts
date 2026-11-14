@@ -149,3 +149,21 @@ describe("action - 登録上限（50件）", () => {
     expect(await recordCount(user.id)).toBe(50);
   });
 });
+
+describe("action - toggleSpeedrunRecord と updatedAt", () => {
+  it("非表示の切替は hiddenSpeedrunRecords だけ更新し、updatedAt（最近の更新）を進めない", async () => {
+    const past = new Date("2020-01-01T00:00:00Z");
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", updatedAt: past });
+    signInAs("discord-runner");
+
+    const fd = new FormData();
+    fd.set("_action", "toggleSpeedrunRecord");
+    fd.set("runId", "run-1");
+    const res = await callAction(fd);
+
+    expect(res).toMatchObject({ success: true });
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+    expect(JSON.parse(after!.hiddenSpeedrunRecords ?? "[]")).toEqual(["run-1"]);
+    expect(after!.updatedAt?.getTime()).toBe(past.getTime());
+  });
+});

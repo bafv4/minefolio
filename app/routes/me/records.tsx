@@ -261,7 +261,7 @@ export async function action({ request }: Route.ActionArgs) {
       .update(users)
       .set({
         hiddenSpeedrunRecords: JSON.stringify(newHidden),
-        updatedAt: new Date(),
+        // 非表示は露出を減らす操作なので updatedAt（ホームの「最近の更新」等）は更新しない
       })
       .where(eq(users.id, user.id));
 

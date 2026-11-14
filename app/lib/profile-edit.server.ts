@@ -491,6 +491,60 @@ export async function saveProfileBatch({
   for (const v of existingVideos) pushId(v.id); // order に無い既存は元の順で後ろへ
   for (const id of newVideoIds.values()) pushId(id); // order に無い新規は末尾
 
+  // ---- 「プロフィール内容の変化」判定（updatedAt を進めるかどうか） ----
+  // 表示・公開範囲系の列（profileVisibility / show* / allowAutoTranslation）だけの変更は、露出を減らす操作でも
+  // ホームの「最近の更新」等に出てしまうため updatedAt を進めない。それ以外の列・リンク・動画の変化は内容の変化。
+  // 判定は送信値ではなく既存値との差分で行う
+  const nn = <T,>(v: T | null | undefined) => v ?? null;
+  const userContentChanged =
+    mcidSet !== null ||
+    mcidRemove ||
+    bedrockSet !== null ||
+    bedrockRemove ||
+    nn(fields.displayName) !== nn(user.displayName) ||
+    nn(fields.displayNameAlphabet) !== nn(user.displayNameAlphabet) ||
+    nn(fields.bio) !== nn(user.bio) ||
+    nn(fields.location) !== nn(user.location) ||
+    nn(fields.pronouns) !== nn(user.pronouns) ||
+    fields.profilePose !== user.profilePose ||
+    fields.slimSkin !== user.slimSkin ||
+    (fields.capeDisplay !== null && fields.capeDisplay !== user.capeDisplay) ||
+    fields.defaultProfileTab !== user.defaultProfileTab ||
+    nn(fields.mainPlatform) !== nn(user.mainPlatform) ||
+    nn(fields.role) !== nn(user.role) ||
+    nn(fields.shortBio) !== nn(user.shortBio) ||
+    nn(fields.rtaStartedYearMonth) !== nn(user.rtaStartedYearMonth) ||
+    nn(speedruncomUsername) !== nn(user.speedruncomUsername);
+  const linksChanged =
+    linkCreates.length > 0 ||
+    linkDeletes.length > 0 ||
+    validLinkUpdates.some((l) => {
+      const old = linkById.get(l.id)!;
+      return (
+        old.platform !== l.platform ||
+        old.identifier !== l.identifier ||
+        nn(old.customLabel) !== (l.platform === "custom" ? nn(l.customLabel) : null) ||
+        nn(old.customUrl) !== (l.platform === "custom" ? nn(l.customUrl) : null)
+      );
+    }) ||
+    // speedrun.com 列 → リンクの逆方向同期で social_links が変わる場合
+    (!srLinkChanged &&
+      (speedruncomUsername
+        ? existingLinks.find((l) => l.platform === "speedruncom")?.identifier !== speedruncomUsername
+        : existingLinks.some((l) => l.platform === "speedruncom")));
+  const videosChanged =
+    videoCreates.length > 0 ||
+    videoDeletes.length > 0 ||
+    validVideoUpdates.some((v) => {
+      const old = videoById.get(v.id)!;
+      return old.url !== v.url || nn(old.title) !== nn(v.title) || Boolean(old.isPinned) !== v.isPinned;
+    }) ||
+    orderedIds.some((id, index) => {
+      const existing = videoById.get(id);
+      return existing !== undefined && existing.displayOrder !== index;
+    });
+  const contentChanged = userContentChanged || linksChanged || videosChanged;
+
   // ---- ② DB 書き込み（単一トランザクション） ----
   const now = new Date();
   let newSlug: string | undefined;
@@ -625,7 +679,7 @@ export async function saveProfileBatch({
           showPacemanStats: fields.showPacemanStats,
           ...(fields.allowAutoTranslation !== null ? { allowAutoTranslation: fields.allowAutoTranslation } : {}),
           ...userSet,
-          updatedAt: now,
+          ...(contentChanged ? { updatedAt: now } : {}),
         })
         .where(eq(users.id, user.id));
     });

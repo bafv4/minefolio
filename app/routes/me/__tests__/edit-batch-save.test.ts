@@ -666,3 +666,83 @@ describe("save_all - レビュー指摘の回帰", () => {
     expect(await linksOf(user.id)).toHaveLength(0);
   });
 });
+
+describe("save_all - updatedAt（ホームの「最近の更新」）の基準", () => {
+  const PAST = new Date("2020-01-01T00:00:00Z");
+  async function seedRunner(discordId: string) {
+    const user = await seedUser(db, {
+      discordId,
+      displayName: "Runner",
+      profileVisibility: "public",
+      profilePose: "waving",
+      slimSkin: false,
+      showPacemanOnHome: true,
+      showTwitchOnHome: true,
+      showYoutubeOnHome: true,
+      showRankedStats: true,
+      showPacemanStats: true,
+      updatedAt: PAST,
+    });
+    signInAs(discordId);
+    return user;
+  }
+  const updatedAtOf = async (id: string) => (await userRow(id))?.updatedAt?.getTime();
+
+  it("表示・公開範囲系の列だけの変更では updatedAt を進めない", async () => {
+    const user = await seedRunner("d-ua-vis");
+    const res = await callAction(
+      saveAllForm(null, { defaultProfileTab: "profile",
+        profileVisibility: "unlisted",
+        showPacemanOnHome: "false",
+        showTwitchOnHome: "false",
+        showYoutubeOnHome: "false",
+        showRankedStats: "false",
+        showPacemanStats: "false",
+      }),
+    );
+    expect(res).toMatchObject({ success: true });
+    const after = await userRow(user.id);
+    expect(after?.profileVisibility).toBe("unlisted");
+    expect(after?.showRankedStats).toBe(false);
+    expect(after?.updatedAt?.getTime()).toBe(PAST.getTime());
+  });
+
+  it("何も変えない保存でも updatedAt を進めない", async () => {
+    const user = await seedRunner("d-ua-noop");
+    await callAction(saveAllForm(null, { defaultProfileTab: "profile" }));
+    expect(await updatedAtOf(user.id)).toBe(PAST.getTime());
+  });
+
+  it("表示名などプロフィール内容が変わると updatedAt を進める", async () => {
+    const user = await seedRunner("d-ua-name");
+    await callAction(saveAllForm(null, { defaultProfileTab: "profile", displayName: "Renamed" }));
+    expect(await updatedAtOf(user.id)).toBeGreaterThan(PAST.getTime());
+  });
+
+  it("リンクの追加で updatedAt を進める", async () => {
+    const user = await seedRunner("d-ua-link");
+    await callAction(
+      saveAllForm({
+        links: { create: [{ key: "a", platform: "twitch", identifier: "tw", customLabel: null, customUrl: null }] },
+      }),
+    );
+    expect(await updatedAtOf(user.id)).toBeGreaterThan(PAST.getTime());
+  });
+
+  it("動画の追加で updatedAt を進める", async () => {
+    const user = await seedRunner("d-ua-video");
+    await callAction(
+      saveAllForm({ videos: { create: [{ key: "v", url: YT("abcdefghijk"), title: "T", isPinned: false }] } }, { defaultProfileTab: "profile" }),
+    );
+    expect(await updatedAtOf(user.id)).toBeGreaterThan(PAST.getTime());
+  });
+
+  it("内容が同じ動画更新（既存値と差が無い）では updatedAt を進めない", async () => {
+    const user = await seedRunner("d-ua-samevideo");
+    await seedVideo(user.id, "v1", 0, YT("abcdefghijk"));
+    await callAction(
+      saveAllForm({ videos: { update: [{ id: "v1", url: YT("abcdefghijk"), title: "v1", isPinned: false }] } }, { defaultProfileTab: "profile" }),
+    );
+    expect(await updatedAtOf(user.id)).toBe(PAST.getTime());
+  });
+});
