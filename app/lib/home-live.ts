@@ -38,6 +38,37 @@ export function splitStage(key: string): number {
   return STAGE_BY_KEY[key] ?? 0;
 }
 
+// MCSR Ranked ライブ API（GET /live）の timeline.type → 進行バー上の到達点と区間マーク名（PaceMan の timeline 語彙）。
+// Blind（projectelo.timeline.blind_travel）は PaceMan の First Portal に相当
+const RANKED_TIMELINE: Record<string, { stage: number; split: string }> = {
+  "story.enter_the_nether": { stage: 1, split: "Enter Nether" },
+  "nether.find_bastion": { stage: 2, split: "Bastion" },
+  "nether.find_fortress": { stage: 3, split: "Fortress" },
+  "projectelo.timeline.blind_travel": { stage: 4, split: "First Portal" },
+  "story.follow_ender_eye": { stage: 5, split: "Enter Stronghold" },
+  "story.enter_the_end": { stage: 6, split: "Enter End" },
+};
+
+/** Ranked の timeline.type から進行バー上の到達点（0=未対応/timeline 無し・1..6）を返す */
+export function rankedStage(type: string | null | undefined): number {
+  return (type && RANKED_TIMELINE[type]?.stage) || 0;
+}
+
+/** Ranked の timeline.type から PaceManSplitMark に渡す区間名。未対応は null */
+export function rankedSplitName(type: string | null | undefined): string | null {
+  return (type && RANKED_TIMELINE[type]?.split) || null;
+}
+
+/** Ranked 対戦中の選手の最新到達区間（最新1イベントのみ。途中経過は API に無い） */
+export interface RankedLiveProgress {
+  /** 進行バー上の到達点（1..6） */
+  stage: number;
+  /** 区間マーク名（PaceManSplitMark の timeline） */
+  split: string;
+  /** 区間への到達時刻（試合開始からのミリ秒） */
+  timeMs: number;
+}
+
 /** Ranked 対戦中カード（/api/home-feed?type=ranked-live の1件） */
 export interface RankedLiveMatch {
   /** 試合の一意キー（Minefolio 登録者の uuid 群） */
@@ -49,7 +80,9 @@ export interface RankedLiveMatch {
   displayNameAlphabet: string | null;
   skinUrl: string | null;
   eloRate: number | null;
-  opponent: { nickname: string; eloRate: number | null };
+  opponent: { nickname: string; eloRate: number | null; progress: RankedLiveProgress | null };
+  /** 登録走者の最新到達区間（timeline 無し・未知の type は null） */
+  progress: RankedLiveProgress | null;
   /** 試合の経過時間（ミリ秒。取得時点） */
   currentTimeMs: number;
   /** Twitch の配信URL（Twitch 以外は null） */

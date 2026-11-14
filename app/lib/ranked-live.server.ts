@@ -7,7 +7,13 @@ import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 import type { Database } from "./db";
 import { users } from "./schema";
 import { excludeViewersCondition } from "./users-filter";
-import { sanitizeTwitchUrl, type RankedLiveMatch } from "./home-live";
+import {
+  rankedSplitName,
+  rankedStage,
+  sanitizeTwitchUrl,
+  type RankedLiveMatch,
+  type RankedLiveProgress,
+} from "./home-live";
 
 const RANKED_LIVE_URL = "https://mcsrranked.com/api/live";
 
@@ -22,9 +28,28 @@ interface RankedLiveResponse {
     liveMatches?: {
       currentTime?: number;
       players?: RankedLivePlayer[];
-      data?: Record<string, { liveUrl?: string | null } | undefined>;
+      data?: Record<
+        string,
+        { liveUrl?: string | null; timeline?: { time?: number; type?: string } | null } | undefined
+      >;
     }[];
   };
+}
+
+type RankedLiveEntry = NonNullable<NonNullable<RankedLiveResponse["data"]>["liveMatches"]>[number]["data"];
+
+/** 選手の最新 timeline を進行バー用に変換する。timeline 無し・未知の type・不正な time は null */
+function toProgress(entry: NonNullable<RankedLiveEntry>[string] | undefined): RankedLiveProgress | null {
+  const tl = entry?.timeline;
+  if (!tl || typeof tl.time !== "number" || !Number.isFinite(tl.time)) return null;
+  const stage = rankedStage(tl.type);
+  const split = rankedSplitName(tl.type);
+  if (!stage || !split) return null;
+  return { stage, split, timeMs: tl.time };
+}
+
+function findEntry(data: RankedLiveEntry, uuid: string) {
+  return data?.[uuid] ?? data?.[normalizeUuid(uuid)];
 }
 
 /** UUID をハイフン無し・小文字に正規化する（users.uuid は両形式が混在するため両側で揃える） */
@@ -49,7 +74,7 @@ export function buildRankedLiveMatches(
     if (!featured) continue;
     const me = registered.get(normalizeUuid(featured.uuid))!;
     const opponent = players.find((p) => p !== featured);
-    const dataEntry = m.data?.[featured.uuid] ?? m.data?.[normalizeUuid(featured.uuid)];
+    const dataEntry = findEntry(m.data, featured.uuid);
     result.push({
       key: players.map((p) => normalizeUuid(p.uuid)).join("-"),
       mcid: me.mcid,
@@ -59,7 +84,12 @@ export function buildRankedLiveMatches(
       displayNameAlphabet: me.displayNameAlphabet,
       skinUrl: me.skinUrl,
       eloRate: featured.eloRate ?? null,
-      opponent: { nickname: opponent?.nickname ?? "", eloRate: opponent?.eloRate ?? null },
+      opponent: {
+        nickname: opponent?.nickname ?? "",
+        eloRate: opponent?.eloRate ?? null,
+        progress: opponent ? toProgress(findEntry(m.data, opponent.uuid)) : null,
+      },
+      progress: toProgress(dataEntry),
       currentTimeMs: typeof m.currentTime === "number" ? m.currentTime : 0,
       liveUrl: sanitizeTwitchUrl(dataEntry?.liveUrl),
     });

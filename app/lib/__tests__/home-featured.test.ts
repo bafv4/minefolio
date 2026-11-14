@@ -6,7 +6,7 @@ import {
   type FeaturedEvent,
 } from "../home-featured";
 import { formatClock, formatClockSeconds } from "../home-format";
-import { sanitizeTwitchUrl, splitStage } from "../home-live";
+import { rankedSplitName, rankedStage, sanitizeTwitchUrl, splitStage } from "../home-live";
 import { buildRankedLiveMatches, normalizeUuid } from "../ranked-live.server";
 
 describe("scoreFeaturedReason / pickFeaturedCandidates", () => {
@@ -68,6 +68,29 @@ describe("splitStage", () => {
   });
 });
 
+describe("rankedStage / rankedSplitName", () => {
+  it("Ranked の timeline.type を進行バーの到達点と区間名に対応づける", () => {
+    const cases: [string, number, string][] = [
+      ["story.enter_the_nether", 1, "Enter Nether"],
+      ["nether.find_bastion", 2, "Bastion"],
+      ["nether.find_fortress", 3, "Fortress"],
+      ["projectelo.timeline.blind_travel", 4, "First Portal"],
+      ["story.follow_ender_eye", 5, "Enter Stronghold"],
+      ["story.enter_the_end", 6, "Enter End"],
+    ];
+    for (const [type, stage, split] of cases) {
+      expect(rankedStage(type)).toBe(stage);
+      expect(rankedSplitName(type)).toBe(split);
+    }
+  });
+  it("未知の type・null は 0 / null", () => {
+    expect(rankedStage("unknown.type")).toBe(0);
+    expect(rankedStage(null)).toBe(0);
+    expect(rankedSplitName("unknown.type")).toBeNull();
+    expect(rankedSplitName(undefined)).toBeNull();
+  });
+});
+
 describe("sanitizeTwitchUrl", () => {
   it("Twitch の URL だけ通す", () => {
     expect(sanitizeTwitchUrl("https://twitch.tv/foo")).toBe("https://www.twitch.tv/foo");
@@ -121,6 +144,43 @@ describe("buildRankedLiveMatches", () => {
       liveUrl: "https://www.twitch.tv/foo",
       opponent: { nickname: "Bar", eloRate: 1450 },
     });
+  });
+
+  it("両選手の最新 timeline を拾う（ハイフン有りキー・timeline 無し・未知 type は null）", () => {
+    const match = (data: Record<string, unknown>) =>
+      buildRankedLiveMatches(
+        {
+          status: "success",
+          data: {
+            liveMatches: [
+              {
+                currentTime: 400000,
+                players: [
+                  { uuid: "069a79f4-44e9-4726-a5be-fca90e38aaf5", nickname: "Foo", eloRate: 1500 },
+                  { uuid: "ffffffffffffffffffffffffffffffff", nickname: "Bar", eloRate: 1450 },
+                ],
+                data: data as never,
+              },
+            ],
+          },
+        },
+        registered,
+      )[0];
+
+    const both = match({
+      "069a79f4-44e9-4726-a5be-fca90e38aaf5": { liveUrl: null, timeline: { time: 312000, type: "nether.find_fortress" } },
+      ffffffffffffffffffffffffffffffff: { liveUrl: null, timeline: { time: 200000, type: "nether.find_bastion" } },
+    });
+    expect(both.progress).toEqual({ stage: 3, split: "Fortress", timeMs: 312000 });
+    expect(both.opponent.progress).toEqual({ stage: 2, split: "Bastion", timeMs: 200000 });
+
+    const none = match({
+      "069a79f444e94726a5befca90e38aaf5": { liveUrl: null, timeline: null },
+      ffffffffffffffffffffffffffffffff: { liveUrl: null, timeline: { time: 1, type: "some.unknown" } },
+    });
+    expect(none.progress).toBeNull();
+    expect(none.opponent.progress).toBeNull();
+    expect(match({}).progress).toBeNull();
   });
 
   it("応答が不正なら空配列、UUID はハイフン有無を同一視する", () => {
