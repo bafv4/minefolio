@@ -351,7 +351,7 @@ export function getFingerKeyStyle(
 }
 
 // チップ用の色（操作名表示用）- CSS変数を使用。
-// 文字色は --finger-chip-fg（ライト=白 / ダーク・ウルトラダーク=黒）を参照。
+// 文字色は --finger-chip-fg（ライト=暗色 / ダーク・ウルトラダーク=白。全指で 4.5:1 以上）を参照。
 // dark: 変種ではなく変数で切り替えることで、画像出力プレビューなど
 // グローバルとは別テーマを局所適用するコンテナ内でも正しく描画できる。
 export const FINGER_CHIP_COLORS: Record<FingerType, string> = {
@@ -746,10 +746,10 @@ function VirtualKeyboardComponent({
                       ))}
                     </span>
                   )}
-                  <span className="font-medium text-[10px] text-muted-foreground/50">
+                  <span className="font-medium text-[10px] text-muted-foreground">
                     {displayLabel}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/40">→</span>
+                  <span className="text-[10px] text-muted-foreground/70">→</span>
                   <span className={cn(
                     "font-bold text-[10px]",
                     isDisabled ? "text-destructive/80" : "text-foreground"
@@ -760,7 +760,7 @@ function VirtualKeyboardComponent({
               );
             })}
             {keyRemaps.length > 2 && (
-              <span className="text-[10px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
+              <span className="text-[10px] text-muted-foreground">+{keyRemaps.length - 2}</span>
             )}
           </div>
         ) : (
@@ -986,14 +986,14 @@ function VirtualKeyboardComponent({
                   <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
                     <span
                       className={cn(
-                        "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                        "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground",
                         labelFontClass(ck.label),
                       )}
                     >
                       {ck.label}
                     </span>
                     <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                      <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+                      <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
                       <span
                         className={cn(
                           "font-bold leading-tight truncate min-w-0",
@@ -1009,13 +1009,13 @@ function VirtualKeyboardComponent({
                   <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
                     <span
                       className={cn(
-                        "font-medium leading-none truncate min-w-0 text-muted-foreground/50",
+                        "font-medium leading-none truncate min-w-0 text-muted-foreground",
                         labelFontClass(ck.label),
                       )}
                     >
                       {ck.label}
                     </span>
-                    <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+                    <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
                     <span
                       className={cn(
                         "font-bold leading-tight truncate min-w-0",
@@ -1262,14 +1262,14 @@ export function VirtualMouse({
             <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
               <span
                 className={cn(
-                  "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                  "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground",
                   labelFontClass(button.label),
                 )}
               >
                 {button.label}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
                 <span
                   className={cn(
                     "font-bold leading-tight truncate min-w-0",
@@ -1283,10 +1283,10 @@ export function VirtualMouse({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground/50">
+              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
                 {button.label}
               </span>
-              <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
                 isRemapDisabled ? "text-destructive/80" : "text-foreground"
@@ -1522,11 +1522,11 @@ export function VirtualNumpad({
         {remap ? (
           isRemapStacked ? (
             <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
-              <span className="font-medium leading-tight truncate min-w-0 max-w-full text-center text-[10px] text-muted-foreground/50">
+              <span className="font-medium leading-tight truncate min-w-0 max-w-full text-center text-[10px] text-muted-foreground">
                 {displayLabel}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
                 <span className={cn(
                   "font-bold leading-tight truncate min-w-0 text-[11px]",
                   isRemapDisabled ? "text-destructive/80" : "text-foreground"
@@ -1537,10 +1537,10 @@ export function VirtualNumpad({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground/50">
+              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
                 {displayLabel}
               </span>
-              <span className="leading-none text-[10px] text-muted-foreground/40 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
                 isRemapDisabled ? "text-destructive/80" : "text-foreground"

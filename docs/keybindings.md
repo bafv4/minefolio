@@ -469,7 +469,7 @@ type ControllerSettings = {
 - **記載内容**: リマップ・指の色・操作内容 をスイッチで個別にオン/オフ（`VirtualKeyboard` 等の `showRemaps` / `showFingerAssignments` / `showActionLabels` に対応）
   - 指の色を表示する場合は `FingerLegend`（凡例）も自動で出力に含める
 - **テーマ**: ライト / ダーク / ウルトラダーク を選択。プレビュー用ノードにテーマクラス（`.light` / `.dark` / `.ultra-dark`）を付与して CSS 変数を局所適用するため、ページのグローバルテーマに依存せず出力できる
-  - そのため指色チップの文字色は `dark:` 変種ではなく CSS 変数 `--finger-chip-fg`（`--color-finger-chip-foreground`）で切り替える
+  - そのため指色チップの文字色は `dark:` 変種ではなく CSS 変数 `--finger-chip-fg`（`--color-finger-chip-foreground`）で切り替える（ライト=暗色 / ダーク・ウルトラダーク=白。指色背景に対し全指で 4.5:1 以上）
 - 画像化はプレビューノードを `html-to-image` でラスタライズ（クライアントサイド完結）
   - **ダウンロード**: `toPng` で PNG データURLを生成して保存
   - **コピー**: `toBlob` で PNG Blob を生成し `navigator.clipboard.write`（`ClipboardItem`）でクリップボードへ。非対応ブラウザ（`ClipboardItem` 無し）ではコピーボタンを表示しない
