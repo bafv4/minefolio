@@ -12,7 +12,7 @@
  * 用語集のバージョン。
  * GLOSSARY を変更したら必ずインクリメントする（既存の翻訳がすべて失効し、再翻訳される）。
  */
-export const GLOSSARY_VERSION = 1;
+export const GLOSSARY_VERSION = 2;
 
 /** 対訳 1 件。note は訳し分けの指示（任意） */
 export interface GlossaryEntry {
@@ -62,7 +62,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   { ja: "キー配置", en: "keybindings" },
   { ja: "リマップ", en: "key remap" },
   { ja: "サーチクラフト", en: "search craft" },
-  { ja: "振り向き", en: "cm/360", note: "マウス感度の指標。turning around ではない" },
+  { ja: "振り向き", en: "cm/180°", note: "マウス感度の指標（180° 振り向くのに必要なマウスの移動距離）。turning around ではない。cm/360 と訳さない" },
   { ja: "指割り当て", en: "finger assignment" },
   { ja: "プリセット", en: "preset" },
 ];
