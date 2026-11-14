@@ -86,7 +86,7 @@ function CardHead({
   );
 }
 
-/** 時間ブロックのラベル行で区間名の右に添える小さな「現在 m:ss」（ランの現在のタイム。区間に入ってからの時間と読まれないよう「経過」ではなく「現在」。PaceMan・Ranked 共通） */
+/** 時間ブロックのラベル行の右肩に添える小さな「現在 m:ss」（ランの現在のタイム。大きな数字は区間に着いたタイムなので、それより新しい今のタイムとして右肩に離して置く。PaceMan・Ranked 共通） */
 function ElapsedShort({ ms }: { ms: number }) {
   const t = useT();
   return (
@@ -140,21 +140,26 @@ const TIME_SLOT_CLASS = "h-14";
 /** 時間ブロック。ラベル行（h-5）＋隙間＋時刻（leading-8）の固定高。右側の補足は下端に揃える */
 function TimeBlock({
   label,
+  now,
   time,
   aria,
   aside,
 }: {
   label: ReactNode;
+  /** ラベル行の右肩に出す「現在 m:ss」（任意。出す・出さないでも行の高さは変わらない） */
+  now?: ReactNode;
   time: string;
   aria?: string;
   aside?: ReactNode;
 }) {
-  // ラベル行（区間名＋経過）はカードの全幅を使い、右の補足（ベスト比・相手の情報・相対時刻）は大きな数字と
-  // 同じ行に置く。ラベルが長いとき（「Enter Stronghold 経過 11:27」等）に補足が押しつぶされて1文字ずつ折れないように
+  // 区間マーク＋区間名のすぐ下に大きな数字（区間に着いたタイム）が来て「Enter End 12:51」と読める並び。
+  // 「現在 m:ss」はラベル行の右端（shrink-0）に寄せる。右の補足（ベスト比・相手の情報・相対時刻）は大きな数字と
+  // 同じ行に置き、ラベルが長いときに補足が押しつぶされて1文字ずつ折れないようにする
   return (
     <div className={cn("flex flex-col gap-1", TIME_SLOT_CLASS)}>
-      <div className="flex h-5 min-w-0 items-center overflow-hidden whitespace-nowrap text-xs leading-5 text-muted-foreground">
-        {label}
+      <div className="flex h-5 min-w-0 items-center justify-between gap-2 whitespace-nowrap text-xs leading-5 text-muted-foreground">
+        <div className="min-w-0 overflow-hidden">{label}</div>
+        {now && <div className="shrink-0">{now}</div>}
       </div>
       <div className="flex items-end justify-between gap-2">
         <p
@@ -246,14 +251,8 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
         <StageBar stage={stage} muted={ended} />
       </StateBand>
       <TimeBlock
-        label={
-          timeline ? (
-            <span className="inline-flex min-w-0 items-center gap-2">
-              <PaceManSplitMark timeline={timeline} size={16} />
-              {elapsedMs != null && <ElapsedShort ms={elapsedMs} />}
-            </span>
-          ) : null
-        }
+        label={timeline ? <PaceManSplitMark timeline={timeline} size={16} /> : null}
+        now={elapsedMs != null ? <ElapsedShort ms={elapsedMs} /> : undefined}
         time={latest ? formatClock(latest.igt) : "-"}
         aria={latest ? igtAria(t, latest.igt) : undefined}
         aside={
@@ -363,20 +362,18 @@ function RankedMatchCard({
         <StageBar stage={finishTimeMs != null ? LIVE_STAGES.length : (progress?.stage ?? 0)} muted={ended} />
       </StateBand>
       {/* 大きな数字は PaceMan のカードと同じく「最新区間に着いたタイム」に揃える（横に並ぶカードを同じ物差しで比べられるように）。
-          試合の経過時間は区間名の右に小さく添える。まだ区間に着いていないときだけ経過時間を大きく出す */}
+          試合の経過時間は右肩に小さく添える。まだ区間に着いていないときだけ経過時間を大きく出す */}
       <TimeBlock
         label={
           finishTimeMs != null ? (
             <PaceManSplitMark timeline="Finish" size={16} />
           ) : progress ? (
-            <span className="inline-flex min-w-0 items-center gap-2">
-              <PaceManSplitMark timeline={progress.split} size={16} />
-              <ElapsedShort ms={match.currentTimeMs} />
-            </span>
+            <PaceManSplitMark timeline={progress.split} size={16} />
           ) : (
-            t("home.rankedElapsed")
+            t("home.liveElapsedShort")
           )
         }
+        now={finishTimeMs == null && progress ? <ElapsedShort ms={match.currentTimeMs} /> : undefined}
         time={formatClock(shownTimeMs)}
         aria={igtAria(t, shownTimeMs)}
         aside={

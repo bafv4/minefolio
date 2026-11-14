@@ -456,7 +456,6 @@ export const PAGES_JA = {
     rankedLost: "敗北",
     rankedForfeited: "降参",
     rankedDraw: "引き分け",
-    rankedElapsed: "経過時間",
     liveElapsedShort: "現在",
     rankedOpponentStage: "相手",
     rankedOwnRate: "レート",
