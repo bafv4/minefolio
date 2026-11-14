@@ -1378,9 +1378,10 @@ export default function PlayerProfilePage() {
                     )}
                     {player.inputMethod && (
                       <Badge variant="outline">
-                        {player.inputMethod === "keyboard_mouse" && "KBM"}
-                        {player.inputMethod === "controller" && "Controller"}
-                        {player.inputMethod === "touch" && "Touch"}
+                        {/* 入力方法の表示名は設定画面（/me/playstyle）の選択肢と同じキーを使う */}
+                        {player.inputMethod === "keyboard_mouse" && t("mePlaystyle.inputMethodKeyboardMouse")}
+                        {player.inputMethod === "controller" && t("mePlaystyle.inputMethodController")}
+                        {player.inputMethod === "touch" && t("mePlaystyle.inputMethodTouch")}
                       </Badge>
                     )}
                   </div>

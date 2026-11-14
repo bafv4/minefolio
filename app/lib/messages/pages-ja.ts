@@ -1266,7 +1266,7 @@ export const PAGES_JA = {
     categories: "カテゴリ",
     mainCategory: "メインカテゴリ",
     inputMethod: "入力方法",
-    inputMethodKeyboardMouse: "キーボード/マウス",
+    inputMethodKeyboardMouse: "キーボード+マウス",
     inputMethodController: "コントローラー",
     inputMethodTouch: "タッチ",
     inputMethodHint: "プロフィールのバッジと、/me/keybindings・/me/devices の編集モードに反映されます",
