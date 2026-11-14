@@ -80,6 +80,7 @@ import {
 } from "@/components/ui/select";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -325,11 +326,11 @@ const pronounOptions = [
 ];
 
 const platformOptions = [
-  { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
-  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@" },
-  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
-  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
-  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
+  { value: "speedruncom", label: "Speedrun.com", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "speedrun.com/users/" },
+  { value: "youtube", label: "YouTube", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "youtube.com/@" },
+  { value: "twitch", label: "Twitch", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "twitch.tv/" },
+  { value: "twitter", label: "Twitter/X", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "x.com/" },
+  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholderKey: null, prefix: "" },
 ] as const;
 
 // 既定タブ Select のラベル。値の集合・順序は SELECTABLE_PROFILE_TABS（@/lib/profile-tabs）が単一情報源
@@ -483,7 +484,7 @@ function SocialLinkDialog({
               id="link-identifier"
               name="identifier"
               defaultValue={editingLink?.identifier ?? ""}
-              placeholder={currentOption?.placeholder}
+              placeholder={currentOption?.placeholderKey ? t(currentOption.placeholderKey) : t("meEdit.linkPlaceholderUsername")}
               required
               maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
               className="flex-1"
@@ -502,6 +503,9 @@ function SocialLinkDialog({
         <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
       <DialogFooter>
+        <DialogClose asChild>
+          <Button type="button" variant="outline">{t("meEdit.cancel")}</Button>
+        </DialogClose>
         <Button type="submit">{editingLink ? t("meEdit.updateLink") : t("meEdit.addLink")}</Button>
       </DialogFooter>
     </form>
@@ -1904,6 +1908,128 @@ export default function EditProfilePage() {
           </CardContent>
         </Card>
 
+        {/* Social Links Section（下書き。保存バーで一括保存） */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Share2 className="h-5 w-5" />
+                  {t("meEdit.socialLinks")}
+                </CardTitle>
+                <CardDescription>
+                  {t("meEdit.socialLinksDesc")}
+                </CardDescription>
+              </div>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handleOpenCreate} disabled={isSubmitting}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t("meEdit.add")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <SocialLinkDialog
+                    // 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする
+                    key={`${isDialogOpen}-${editingLink?.key ?? "new"}`}
+                    editingLink={editingLink}
+                    otherPlatforms={draft.links
+                      .filter((l) => l.key !== editingLink?.key && l.platform !== "custom")
+                      .map((l) => l.platform)}
+                    onSubmit={handleLinkSubmit}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {draft.links.length > 0 || deletedLinks.length > 0 ? (
+              <div className="space-y-2">
+                {draft.links.map((link) => {
+                  const platformLabel = link.platform === "custom" && link.customLabel
+                    ? link.customLabel
+                    : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
+                  const url = getPlatformUrl(link.platform, link.identifier, link.customUrl || null);
+                  const rowError = fieldErrors.links?.[link.key];
+                  const pending = link.id === null || isLinkEdited(link);
+                  return (
+                    <div key={link.key} className="space-y-1">
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {getPlatformIcon(link.platform)}
+                          <div className="min-w-0">
+                            <p className="font-medium flex items-center gap-2">
+                              {platformLabel}
+                              {pending && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
+                            </p>
+                            {url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-muted-foreground hover:underline"
+                              >
+                                {link.identifier}
+                              </a>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">{link.identifier}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          {link.id !== null && isLinkEdited(link) && (
+                            <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
+                          )}
+                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {rowError && <p className="text-xs text-destructive">{rowError}</p>}
+                    </div>
+                  );
+                })}
+                {deletedLinks.map((link) => {
+                  const platformLabel = link.platform === "custom" && link.customLabel
+                    ? link.customLabel
+                    : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
+                  return (
+                    <div
+                      key={link.key}
+                      className="flex items-center justify-between gap-3 p-3 border border-dashed rounded-lg opacity-70"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {getPlatformIcon(link.platform)}
+                        <div className="min-w-0">
+                          <p className="font-medium line-through">{platformLabel}</p>
+                          <p className="text-sm text-muted-foreground line-through truncate">{link.identifier}</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <PendingBadge>{t("meEdit.pendingDeleteBadge")}</PendingBadge>
+                        <UndoButton
+                          onClick={() => handleLinkRestore(link)}
+                          disabled={isSubmitting || isRestoreBlocked(link)}
+                          title={isRestoreBlocked(link) ? t("meEdit.restoreBlockedPlatform") : undefined}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Share2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
+                <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継）。下書き（保存バーで一括保存） */}
         <Card>
           <CardHeader>
@@ -2192,128 +2318,6 @@ export default function EditProfilePage() {
         />
         <UnsavedChangesDialog blocker={blocker} />
       </div>
-
-      {/* Social Links Section（下書き。保存バーで一括保存） */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Share2 className="h-5 w-5" />
-                {t("meEdit.socialLinks")}
-              </CardTitle>
-              <CardDescription>
-                {t("meEdit.socialLinksDesc")}
-              </CardDescription>
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" onClick={handleOpenCreate} disabled={isSubmitting}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t("meEdit.add")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <SocialLinkDialog
-                  // 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする
-                  key={`${isDialogOpen}-${editingLink?.key ?? "new"}`}
-                  editingLink={editingLink}
-                  otherPlatforms={draft.links
-                    .filter((l) => l.key !== editingLink?.key && l.platform !== "custom")
-                    .map((l) => l.platform)}
-                  onSubmit={handleLinkSubmit}
-                />
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {draft.links.length > 0 || deletedLinks.length > 0 ? (
-            <div className="space-y-2">
-              {draft.links.map((link) => {
-                const platformLabel = link.platform === "custom" && link.customLabel
-                  ? link.customLabel
-                  : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
-                const url = getPlatformUrl(link.platform, link.identifier, link.customUrl || null);
-                const rowError = fieldErrors.links?.[link.key];
-                const pending = link.id === null || isLinkEdited(link);
-                return (
-                  <div key={link.key} className="space-y-1">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {getPlatformIcon(link.platform)}
-                        <div className="min-w-0">
-                          <p className="font-medium flex items-center gap-2">
-                            {platformLabel}
-                            {pending && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
-                          </p>
-                          {url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-muted-foreground hover:underline"
-                            >
-                              {link.identifier}
-                            </a>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">{link.identifier}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-1">
-                        {link.id !== null && isLinkEdited(link) && (
-                          <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
-                        )}
-                        <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    {rowError && <p className="text-xs text-destructive">{rowError}</p>}
-                  </div>
-                );
-              })}
-              {deletedLinks.map((link) => {
-                const platformLabel = link.platform === "custom" && link.customLabel
-                  ? link.customLabel
-                  : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
-                return (
-                  <div
-                    key={link.key}
-                    className="flex items-center justify-between gap-3 p-3 border border-dashed rounded-lg opacity-70"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {getPlatformIcon(link.platform)}
-                      <div className="min-w-0">
-                        <p className="font-medium line-through">{platformLabel}</p>
-                        <p className="text-sm text-muted-foreground line-through truncate">{link.identifier}</p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <PendingBadge>{t("meEdit.pendingDeleteBadge")}</PendingBadge>
-                      <UndoButton
-                        onClick={() => handleLinkRestore(link)}
-                        disabled={isSubmitting || isRestoreBlocked(link)}
-                        title={isRestoreBlocked(link) ? t("meEdit.restoreBlockedPlatform") : undefined}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Share2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
-              <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Danger Zone */}
       <Card className="border-destructive/50">

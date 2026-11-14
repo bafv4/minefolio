@@ -933,6 +933,8 @@ export const PAGES_JA = {
     dashToggle: "ダッシュ切替",
     sensitivityExcludedNote: "範囲外のため除外: {count}人",
   },
+    linkPlaceholderExample: "例: couriern3w",
+    linkPlaceholderUsername: "例: username",
   meEdit: {
     title: "プロフィール編集 - Minefolio",
     userNotFound: "ユーザーが見つかりません",

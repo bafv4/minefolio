@@ -954,6 +954,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     dashToggle: "Toggle sprint",
     sensitivityExcludedNote: "Excluded as out of range: {count}",
   },
+    linkPlaceholderExample: "e.g. couriern3w",
+    linkPlaceholderUsername: "e.g. username",
   meEdit: {
     title: "Edit profile - Minefolio",
     userNotFound: "User not found",
