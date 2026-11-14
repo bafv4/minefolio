@@ -677,3 +677,36 @@ describe("action - まとめ書き込み（CASE UPDATE / db.batch / upsert）", 
     expect(JSON.parse(snapshot!.customActionsData!)).toHaveLength(2);
   });
 });
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  async function saveRemapsAndGetHistory(userId: string, presetId: string) {
+    await callAction(
+      formDataOf({
+        intent: "save-all",
+        presetId,
+        remaps: JSON.stringify([{ sourceKey: "KeyA", targetKey: "KeyX", remapType: "trigger" }]),
+      }),
+    );
+    return findKeybindingHistory(userId);
+  }
+
+  it("メイン＝編集中の保存は preset_id にメインの id を入れる", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.update(schema.configPresets).set({ isMain: true }).where(eq(schema.configPresets.id, preset.id));
+
+    const history = await saveRemapsAndGetHistory(user.id, preset.id);
+
+    expect(history).toHaveLength(1);
+    expect(history[0].presetId).toBe(preset.id);
+  });
+
+  it("メインでない編集中プリセットの保存は preset_id を入れない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedConfigPreset(db, user.id, { name: "公開用", isMain: true });
+
+    const history = await saveRemapsAndGetHistory(user.id, preset.id);
+
+    expect(history).toHaveLength(1);
+    expect(history[0].presetId).toBeNull();
+  });
+});

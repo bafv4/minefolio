@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/view";
 import { createDb } from "@/lib/db";
+import { resolvePublicPresetId } from "@/lib/config-history";
 import { createAuth } from "@/lib/auth";
 import { getSession, getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -293,7 +294,8 @@ export async function action({ request, params }: Route.ActionArgs) {
         title: template.title,
         name: presetName,
       }),
-      presetId,
+      // 反映先（または新規作成）プリセットがメインのときだけ公開影響あり
+      presetId: await resolvePublicPresetId(db, user.id, presetId),
       createdAt: now,
     });
 

@@ -226,8 +226,20 @@
 | `changeDescription` | text | 変更内容の説明（必須） |
 | `previousData` | text (JSON) | 変更前のデータ |
 | `newData` | text (JSON) | 変更後のデータ |
-| `presetId` | text (FK → configPresets) | 関連プリセットID（任意、ON DELETE SET NULL） |
+| `presetId` | text (FK → configPresets) | **公開面に影響する変更のときだけ**そのメインプリセットの id（それ以外は null。下記「公開影響の記録規約」。ON DELETE SET NULL） |
 | `createdAt` | timestamp | 作成日時 |
+
+### 公開影響の記録規約（お気に入り走者の動き用）
+
+公開面はメインのスナップショットを表示するため、メインでない編集は公開内容を変えない。
+「お気に入り走者の動き」に操作設定の変更を出す対象を、書き込み時点で `presetId` に畳み込む（スキーマ変更なし）。
+判定の単一情報源は `app/lib/config-history.ts`。
+
+- **公開影響あり（`presetId` = メインの id）**: ①メインへの切替（`set-main`）／初回作成などでメインが新しく決まった作成（`create-preset`・`createPreset()`・Playground・テンプレート反映で自動メインになった場合）②メイン＝編集中（isActive）プリセットへの保存（キー配置・リマップ・指割り当て・デバイス・アイテム配置・サーチクラフト）、メインを反映先にした Playground / テンプレート反映
+- **公開影響なし（`presetId` = null）**: 非メインの編集・作成・削除、編集対象の切替（`apply-preset`）
+- 書き込み側は `resolvePublicPresetId()`（指定プリセットがメインなら id）／`resolveActivePublicPresetId()`（編集中がメインなら id）の返り値を `presetId` に入れる。**`changeType` は従来どおり**（メイン切替は `preset_switch`）
+- 読み取り側は `publicConfigChangeCondition()` で絞る（`presetId IS NOT NULL` かつ `createdAt >= PUBLIC_CONFIG_HISTORY_SINCE`）。旧実装は apply-preset や非メイン作成でも `presetId` を入れていたため、`PUBLIC_CONFIG_HISTORY_SINCE` より前の行は一律で公開影響なし扱い（プライバシー保護側）
+- `/me/presets` の履歴表示は `presetId` を読まない（`id` / `changeType` / `changeDescription` / `createdAt` のみ）
 
 ### インデックス
 

@@ -619,7 +619,8 @@ export async function createPreset(
       userId,
       changeType: "preset_switch",
       changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
-      presetId,
+      // 公開面に影響するのは、このプリセットが（初回作成で）メインになる場合だけ
+      presetId: isMain ? presetId : null,
       createdAt: now,
     });
   });

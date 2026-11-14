@@ -90,6 +90,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
@@ -355,6 +356,7 @@ export async function action({ request }: Route.ActionArgs) {
         userId: user.id,
         changeType: "game_setting",
         changeDescription: t("meItems.itemLayoutChangeHistory"),
+        presetId: await resolveActivePublicPresetId(db, user.id),
         createdAt: now,
       });
 

@@ -338,3 +338,22 @@ describe("action - controllerSettings の検証", () => {
     expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
   });
 });
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  it("メイン＝編集中の保存は preset_id にメインの id、非メイン編集中は null", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    expect(preset.isMain).toBe(true);
+
+    await callAction(baseFormData(preset.id));
+    await db.update(schema.configPresets).set({ isMain: false }).where(eq(schema.configPresets.id, preset.id));
+    await callAction(baseFormData(preset.id));
+
+    const history = await db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, user.id),
+    });
+    const deviceRows = history.filter((h) => h.changeType === "device");
+    expect(deviceRows).toHaveLength(2);
+    expect(deviceRows.filter((h) => h.presetId === preset.id)).toHaveLength(1);
+    expect(deviceRows.filter((h) => h.presetId === null)).toHaveLength(1);
+  });
+});

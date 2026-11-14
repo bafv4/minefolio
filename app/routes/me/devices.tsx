@@ -62,6 +62,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { gameLanguageOptions } from "@/lib/game-languages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
@@ -378,6 +379,7 @@ export async function action({ request }: Route.ActionArgs) {
     userId: user.id,
     changeType: "device",
     changeDescription: t("meDevices.deviceChangeHistory"),
+    presetId: await resolveActivePublicPresetId(db, user.id),
     createdAt: new Date(),
   });
 

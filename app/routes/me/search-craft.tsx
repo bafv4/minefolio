@@ -49,6 +49,7 @@ import {
 import { useT } from "@/hooks/use-locale";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 
@@ -408,6 +409,7 @@ export async function action({ request }: Route.ActionArgs) {
         userId: user.id,
         changeType: "game_setting",
         changeDescription: t("meSearchCraft.searchCraftChangeHistory"),
+        presetId: await resolveActivePublicPresetId(db, user.id),
         createdAt: now,
       });
 

@@ -421,3 +421,30 @@ describe("action - プリセットゲート", () => {
     expect(await findCrafts(user.id)).toHaveLength(2);
   });
 });
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  async function saveAndGetHistory(userId: string, presetId: string) {
+    await callAction(formDataOf({ _action: "saveAll", presetId, crafts: JSON.stringify([]) }));
+    return db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, userId) });
+  }
+
+  it("メイン＝編集中の保存は preset_id にメインの id を入れる", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.update(schema.configPresets).set({ isMain: true }).where(eq(schema.configPresets.id, preset.id));
+
+    const history = await saveAndGetHistory(user.id, preset.id);
+
+    expect(history).toHaveLength(1);
+    expect(history[0].presetId).toBe(preset.id);
+  });
+
+  it("メインでない編集中プリセットの保存は preset_id を入れない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedConfigPreset(db, user.id, { name: "公開用", isMain: true });
+
+    const history = await saveAndGetHistory(user.id, preset.id);
+
+    expect(history).toHaveLength(1);
+    expect(history[0].presetId).toBeNull();
+  });
+});

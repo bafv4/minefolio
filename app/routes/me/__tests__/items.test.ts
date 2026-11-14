@@ -292,3 +292,23 @@ describe("action - 未知のアクション", () => {
     expect(await findLayouts(user.id)).toHaveLength(1);
   });
 });
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  it("メイン＝編集中の保存は preset_id にメインの id を入れる", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.update(schema.configPresets).set({ isMain: true }).where(eq(schema.configPresets.id, preset.id));
+
+    await callAction(saveForm([validLayout({ id: "new-1" })], preset.id));
+
+    expect((await findHistory(user.id))[0].presetId).toBe(preset.id);
+  });
+
+  it("メインでない編集中プリセットの保存は preset_id を入れない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedConfigPreset(db, user.id, { name: "公開用", isMain: true });
+
+    await callAction(saveForm([validLayout({ id: "new-1" })], preset.id));
+
+    expect((await findHistory(user.id))[0].presetId).toBeNull();
+  });
+});

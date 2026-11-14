@@ -1005,3 +1005,68 @@ describe("action - set-main / 未知の intent", () => {
     expect(await callAction({ intent: "bogus" })).toEqual({ error: "不明な操作です" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. 変更履歴の公開影響（config_history.preset_id 規約。app/lib/config-history.ts）
+// ---------------------------------------------------------------------------
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  async function presetSwitchRows(userId: string) {
+    return db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, userId),
+    });
+  }
+
+  it("set-main はメインになったプリセットの id を入れる（公開影響あり）", async () => {
+    const user = await setupUser();
+    await insertPreset(user.id, { name: "旧メイン", isMain: true, isActive: true });
+    const other = await insertPreset(user.id, { name: "新メイン" });
+
+    await callAction({ intent: "set-main", presetId: other.id });
+
+    const rows = await presetSwitchRows(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ changeType: "preset_switch", presetId: other.id });
+  });
+
+  it("apply-preset（編集対象の切替）は、メインを適用しても preset_id を入れない", async () => {
+    const user = await setupUser();
+    const main = await insertPreset(user.id, { name: "メイン", isMain: true });
+    await insertPreset(user.id, { name: "編集中", isActive: true });
+
+    await callAction({ intent: "apply-preset", presetId: main.id });
+
+    const rows = await presetSwitchRows(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ changeType: "preset_switch", presetId: null });
+  });
+
+  it("非メインの削除は preset_id を入れない", async () => {
+    const user = await setupUser();
+    await insertPreset(user.id, { name: "メイン", isMain: true, isActive: true });
+    const plain = await insertPreset(user.id, { name: "その他" });
+
+    await callAction({ intent: "delete-preset", presetId: plain.id });
+
+    const rows = await presetSwitchRows(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].presetId).toBeNull();
+  });
+
+  it("create-preset は、初回（自動でメイン）だけ preset_id を入れ、メインがある状態での作成は入れない", async () => {
+    const user = await setupUser();
+
+    await callAction({ intent: "create-preset", name: "初回", sourceType: "current" });
+    await callAction({ intent: "create-preset", name: "二件目", sourceType: "current" });
+
+    const rows = await presetSwitchRows(user.id);
+    const first = rows.find((r) => r.changeDescription.includes("初回"));
+    const second = rows.find((r) => r.changeDescription.includes("二件目"));
+    const firstPreset = await db.query.configPresets.findFirst({
+      where: eq(schema.configPresets.name, "初回"),
+    });
+    expect(first?.presetId).toBe(firstPreset?.id);
+    expect(first?.presetId).not.toBeNull();
+    expect(second?.presetId).toBeNull();
+  });
+});

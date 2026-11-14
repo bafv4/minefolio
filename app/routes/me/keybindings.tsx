@@ -8,6 +8,7 @@ import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -676,6 +677,7 @@ export async function action({ request }: Route.ActionArgs) {
             changeType: "keybinding",
             changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join(t("common.listSeparator")) }),
             newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
+            presetId: await resolveActivePublicPresetId(tx, user.id),
             createdAt: now,
           });
         }

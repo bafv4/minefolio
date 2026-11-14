@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/playground";
 import { createDb } from "@/lib/db";
+import { resolvePublicPresetId } from "@/lib/config-history";
 import { createAuth } from "@/lib/auth";
 import { getSession, getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -331,7 +332,8 @@ export async function action({ request }: Route.ActionArgs) {
       userId: user.id,
       changeType: "preset_switch",
       changeDescription: t("playground.saveNewPresetHistory", { name }),
-      presetId: result.presetId,
+      // 新規プリセットがメイン（初回作成）になった場合だけ公開影響あり
+      presetId: await resolvePublicPresetId(db, user.id, result.presetId),
       createdAt: now,
     });
 
@@ -358,7 +360,8 @@ export async function action({ request }: Route.ActionArgs) {
       userId: user.id,
       changeType: "game_setting",
       changeDescription: t("playground.saveToPresetHistory", { name: result.presetName }),
-      presetId: result.presetId,
+      // 反映先がメインのときだけ公開影響あり
+      presetId: await resolvePublicPresetId(db, user.id, result.presetId),
       createdAt: now,
     });
 

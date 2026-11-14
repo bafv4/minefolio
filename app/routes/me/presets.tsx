@@ -693,7 +693,8 @@ export async function action({ request }: Route.ActionArgs) {
         userId: user.id,
         changeType: "preset_switch",
         changeDescription: description,
-        presetId,
+        // 公開面に影響するのは、新規プリセットが（初回作成で）メインになる場合だけ
+        presetId: isMain ? presetId : null,
         createdAt: now,
       });
     });
@@ -970,7 +971,7 @@ export async function action({ request }: Route.ActionArgs) {
         changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
         previousData: previousKeybindings,
         newData: preset.keybindingsData,
-        presetId,
+        // 編集対象の切替は公開内容を変えない（presetId は入れない）
         createdAt: now,
       });
     });
