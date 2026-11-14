@@ -224,6 +224,7 @@ const MAX_SEARCH_VARIATIONS = 5; // 1エントリあたりの上限（並べ替�
 - **タイミングの変更＝ブロック間D&D**: `@dnd-kit` のマルチコンテナ Sortable パターン（単一 `DndContext` + ブロックごとの `SortableContext` + 空ブロック用 `useDroppable` ゾーン）。ブロック間へドロップすると対象クラフトの `timing` が移動先ブロックの値に更新される。クラフトと繋ぎ方（Loop）は同一 `DndContext` を共有し、`collisionDetection` をドラッグ中の対象と同じドメイン（craft/loop）に絞り込むことで互いの干渉を防ぐ（`useDraggable`/`useDroppable` は最も近い祖先の `DndContext` にしか束縛できないため、ブロックカード内でクラフト行と Loop 行を同居させたまま完全に別の `DndContext` に分離することはできない）
 - **繋ぎ方（Loop）サブセクション**: 各ブロック内、クラフトリストの下に配置。Loop 行の編集UI（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` からエクスポート）はステップ選択・遷移行・プレビュー・コメント・削除を持つが、行ヘッダーに timing Select は無い（timing の変更はやはりブロック間D&D）。0件のブロックでは通常サブセクション自体を出さず、**Loop のドラッグ中のみ**全ブロックに破線のドロップゾーンを表示する
 - **ブロック内の追加ボタン**: 各ブロックに「クラフトを追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満なら disabled）を配置
+- **表示側（テンプレート詳細などの閲覧ビュー）の未知 timing**: enum 外の `timing` を持つクラフトは「その他（`other`）」グループとして描画し、件数と描画数を一致させる（`resolveCraftTiming()` / `groupCraftsByTiming()`、`app/lib/search-craft-templates.ts`。`search-craft-template-view.tsx` が使用）。`null` は従来どおり「指定なし」
 - **空ブロック**: クラフト0件のブロックは破線のプレースホルダを表示し、そのままドロップ先として機能する
 - **未知の timing**: 通常は起こらないが、`crafts`/`loops` の `timing` が7ブロックのいずれにも一致しない値だった場合、「指定なし」ブロックへ正規化して表示する（データは残るが未知キーのまま非表示になる、という黙った消失を避けるための防御）
 - 保存時の `sequence` は「ブロック表示順にグループを連結したフラット配列」になる。ユーザー操作（D&D・追加・削除・更新）のたびに正規化される（初期ロード時点では再emitしないため、ブロック順に並んでいない既存データを開いてもそれだけでは変更扱いにならない）

@@ -162,6 +162,7 @@ export const UNBOUND_KEY = "_UNBOUND";
 
 #### 表示
 
+- 横長のキー配置を包む `HorizontalScrollArea`（`app/components/horizontal-scroll-area.tsx`）は、はみ出し時（md 未満）に「横にスクロールできます」のヒントを**スクロール領域の上**に表示し（下だと縦に長い内容で見落とす・下端固定 UI に隠れるため）、左右端のフェードは `w-12`。`/player`・`/me/keybindings`・ガイドのキー配置埋め込みで共通
 - プロフィールのバーチャルキーボードは **Trigger / Chat の表示切替**を持つ（`trigger` / `chat` の行が1件もなければ切替UIは非表示）。切替セグメントは `RemapViewToggle`（`app/components/remap-view-toggle.tsx`）として共通化
 - `/keybindings` のビジュアルカードビューにも同じ **Trigger / Chat 表示切替**がある。切替は全カード共通（切替UIはリスト上部に1つ。種別付きリマップを持つプレイヤーが1人もいなければ非表示）
 - プロフィールのリマップ一覧は全種別を表示し、`RemapTypeBadge`（`app/components/remap-type-badge.tsx`）で種別バッジを付ける（`unset` はバッジなし）
@@ -446,6 +447,18 @@ type ControllerSettings = {
 - API: `GET /api/keybindings-csv?sections=...&userSlugs=...`（`userSlugs` は任意、未指定なら全ユーザー）
 - キーバインドは各プレイヤーのキーボード配列に応じた表示ラベルで出力
 - `mouse` セクションの `cm/360` `Cursor Speed` は一覧と同じ計算関数（`calculateCm360` / `calculateCursorSpeed`）に統一されており、計算できない場合は空欄。`Win Sens Multiplier` 列も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` 列は有効範囲外の値も含め生データをそのまま出力する
+
+---
+
+## キー編集ダイアログの操作割り当て（`/me/keybindings`）
+
+キーを選んで開くダイアログの「操作割り当て」行は、状態を `getActionAssignmentStatus()`（`app/lib/keybindings-assignment.ts`）で3つに分ける。ほぼ全ての操作がどこかのキーに割り当て済みのため、「他キーに割当済」を警告にすると全行が警告になり本当の衝突が埋もれる。
+
+- `conflict`: このキーに割り当て済みで、同じキーに他の操作も載っている場合だけ警告表示（`text-warning`「同じキーに他の操作もあります」）
+- `moves`: 他のキーに割り当て済み。控えめな注記のみ（チェックするとそのキーから移動する）
+- `none`: 上記以外。`_UNBOUND`（不使用）は割り当て済みに数えない
+
+ダイアログのスクロール領域は本文1つだけにする（`max-h-[calc(100dvh-2rem)]`）。内側のリストに `max-h` / `overflow-y-auto` を付けない（二重スクロールになるため）。
 
 ---
 

@@ -210,6 +210,12 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 | `maxTime` | タイム上限 | `m:ss` 形式。表示される区間のIGTに対して適用 |
 | `sort` | 並び順 | `time`＝表示タイム（IGT）の昇順（同タイムは新しい順）。未指定・不正値は新しい順。`split` と併用すると区間別最速になる。キャッシュ済みベースのコピーに対して `getPublicPaceFeed` 内でソートする |
 
+検索 UI の挙動（`app/routes/paces.tsx`）:
+
+- 検索条件パネルはモバイルで畳める。畳んだ間も、URL に適用済みの条件を丸ピル（`rounded-full` のチップ）で表示する（入力中の下書きは含めない）
+- 並び順はセレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す
+- タイム上限は `m:ss`（`^\d{1,3}:[0-5]?\d$`、サーバーの `parseTimeParamToMs` と同じ）をクライアントで検証し、不正なら送信せず入力欄の下にエラーを表示する（`aria-invalid` / `aria-describedby` でエラー文・ヒント文を関連付け）
+
 区間名（セレクトの選択肢・カード・バッジ）は日本語ロケールでも **PaceMan の英語正規名**（Bastion / Fortress / Enter Stronghold 等）のまま表示する（ユーザー判断。`app/lib/paceman.ts` の `getSplitTimeline` / `PaceManSplitMark` が語彙の基準）。
 
 ### 遅延ロード・無限スクロール

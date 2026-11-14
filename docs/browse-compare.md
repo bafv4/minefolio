@@ -63,6 +63,13 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - フィルタダイアログ内のチェックボックスはローカル `draftFilters` のみを更新
 - 「完了」ボタンで URL 検索パラメータに反映 → `loader` が再実行される
 - ダイアログ外のフィルタチップ（×ボタン）は即時反映
+- 完了ボタンは「{n}件を表示」になる（`browse.showCount`）。下書き条件を 300ms debounce で `GET /api/browse?count=1` へ問い合わせ、前のリクエストは中断する。0件は「該当なし（0件）」、取得失敗時は従来の「完了」に戻る。検索語は URL に適用済みのもの（`q`）だけを渡す
+- ロール未選択時は、視聴者を除外している旨の補足文をダイアログに表示する（`browse.roleDefaultNote`）
+- エディション・入力方式の表記は、ダイアログのチェックボックスと適用中チップで同じ翻訳ラベルを使う
+
+#### 件数専用モード (`GET /api/browse?count=1`)
+
+同じ絞り込みパラメータ（`q` / `role` / `edition` / `input` / `platform`）を受け取り `{ total }` だけを返す。一覧と同じ `buildWhere` を通す `countBrowse()`（`app/lib/browse-query.server.ts`）で `count(*)` のみ実行し、一覧 loader の総件数もこの関数を共有する。お気に入り順に依存しないためセッションは見ず、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300`。
 
 ### ページネーション
 
@@ -80,6 +87,8 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - `ProfileFeedCard` - カード表示モード
 - `ProfileFeedListItem` - リスト表示モード
 - `PlayerViewToggle` - 表示切替
+
+リスト表示のタグはカード表示と同じ規則（`FeedCardTags`）。既定値（Java / Windows / KBM / 走者）は出さず、識別に効くタグを最大3個表示する。
 
 ---
 

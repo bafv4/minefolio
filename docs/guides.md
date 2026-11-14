@@ -109,7 +109,7 @@
 
 #### 公開表示での見出しレベル
 
-ページタイトルが `h1` を占有するため、公開閲覧（`/guides/:author/:slug`、自動翻訳・ドラフトプレビュー含む）では本文見出しを**表示時に1段下げる**（h1→h2 … h5→h6、h6 は据え置き）。保存データ・エディタの見出しレベルは変えない。変換は `app/lib/guide-heading-demote.ts` の `demoteGuideHeadings`（サニタイズ・目次生成の後に適用。目次は元のレベル 1〜3 のまま扱い、id は保持される）。見た目は `.guide-content-demoted`（`app/app.css`）で下げる前と同じサイズに対応付ける。エディタ内は変換しない（`.guide-content` のみ）。
+ページタイトルが `h1` を占有するため、公開閲覧（`/guides/:author/:slug`、自動翻訳・ドラフトプレビュー含む）では本文見出しを、**本文中の最小レベルが h2 になるようシフトして表示する**（h1 始まりは +1、h2 始まりは 0、h3 始まりは -1。相対的な階層は保ち h6 を超えない。見出しが無ければ何もしない）。保存データ・エディタの見出しレベルは変えない。変換は `app/lib/guide-heading-demote.ts` の `demoteGuideHeadings`（サニタイズ・目次生成の後に適用。目次は元のレベル 1〜3 のまま扱い、id は保持される）。降格後の開きタグには元のレベルを `data-guide-level` として付与し、`.guide-content-demoted`（`app/app.css`）がその属性で、エディタで選んだレベルの見た目（サイズ）を保つ。エディタ内は変換しない（`.guide-content` のみ）。
 
 #### 文字サイズと見出しの関係
 
@@ -138,6 +138,7 @@
 
 - 画像ツールバー（ホバー / タッチで選択）の字幕アイコンから Popover で入力・編集する。入力は即時に node の `alt` 属性へ反映され、空なら装飾画像（`alt=""`）扱い。挿入直後の alt は空（以前はファイル名を自動で入れていた）
 - alt は `guide-sanitize.server.ts` の許可属性（`img`）・`guide-translate-html.server.ts`（翻訳対象）を通って落ちない
+- キー配置の埋め込み（`app/components/guide-embeds.tsx`）は横長になるため `HorizontalScrollArea` で包み、はみ出し時（md 未満）に「横にスクロールできます」のヒントを出す（詳細は [`docs/keybindings.md`](./keybindings.md)）。ヘッダーの「プロフィールを見る」リンクは、文字サイズ・ヘッダー高さを変えずに padding＋負マージンで当たり判定を約40pxへ広げている
 - 旧エディタが入れていた固定値 `alt="image"` は、公開表示時に `lib/guide-image-alt.ts` の `blankGenericImageAlt()` で `alt=""` に変換する（保存データは書き換えない。`/guides/:author/:slug` の loader で見出し降格と同じ段階に適用。`lib/__tests__/guide-image-alt.test.ts`）
 
 ### 画像アップロード

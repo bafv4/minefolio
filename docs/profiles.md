@@ -675,6 +675,12 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - 訳文の `bio` も原文と同じ `BioMarkdown`（`react-markdown` + `rehype-sanitize`）で描画する
 - `<meta>` の description / OGP・シェアの文面は原文（`shortBio`）のまま。一覧カード（`/browse`・ホーム・`/compare` 等）の `shortBio` は**未対応**（原文表示）
 
+### 値なし表記・空タブの扱い（`/player/:slug`）
+
+- 値が無い項目の表記は「-」に統一し、共有コンポーネント `EmptyValue`（`app/components/player-profile-bits.tsx`）で描画する（スクリーンリーダー向けに sr-only「値なし」を併記）。キー配置の空チップも同様
+- デバイスタブは中身のあるカードだけ表示する（キーボード＝モデル/配列、マウス＝モデル/DPI/ゲーム内感度/Windows 速度のいずれか、ゲーム内設定）。全部空なら空状態。初期値のままの Raw Input/加速だけでは「データあり」とみなさない。旧「キーボード/マウス情報なし」の文言カードは廃止
+- 本人（`isOwner`）が見たときだけ、空タブの空状態とカード見出しに編集ページへの導線（`OwnerEditAction`）を出す。遷移先は `/me/keybindings`・`/me/items`・`/me/search-craft`・`/me/devices`・`/me/records`・`/my-guides`
+
 ### デバイスタブのマウス設定表示
 
 `devices` タブのマウス設定は、値が出せない/不正なケースでも行を消さず「-」+ 理由（または警告）を表示する。計算ロジック・警告UIは `/keybindings` 一覧と共有しており、詳細は [`docs/keybindings.md`](./keybindings.md#マウス設定)（振り向き・カーソル速度・バリデーション節）を参照:
@@ -725,7 +731,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### /me/edit の保存方式（保存バーでの一括保存）
 
-`/me/edit` の編集内容は**すべて下部の保存バー（`FloatingSaveBar`）で一括保存**する。対象はプロフィール列のフォーム値に加え、**Java 版 / Bedrock 版 MCID の設定・削除、ソーシャルリンクの追加・編集・削除、動画の追加・編集・削除・並び替え**。例外として、**アカウント削除（`delete_account`）とレガシーインポート（`import_legacy`）は編集ではないので即時実行のまま**。スキン/マントのアップロードも従来どおり即時（別 API）。
+`/me/edit` の編集内容は**すべて下部の保存バー（`FloatingSaveBar`）で一括保存**する。対象はプロフィール列のフォーム値に加え、**Java 版 / Bedrock 版 MCID の設定・削除、ソーシャルリンクの追加・編集・削除、動画の追加・編集・削除・並び替え**。例外として、**アカウント削除（`delete_account`）とレガシーインポート（`import_legacy`）は編集ではないので即時実行のまま**。スキン/マントのアップロード・削除も保存バーとは別に即時保存される（別 API）。完了時はページを再読込せず、返ってきた新しい URL だけをローカル state（`customSkinUrl` / `customCapeUrl`）へ反映して画面（アバター・プレビュー）を更新する（再読込・loader 再検証をすると未保存の下書きが消えるため。下書きは保たれる）。
 
 - **下書き（draft）**: MCID・リンク・動画はクライアントの下書き状態にだけ持つ（`app/lib/profile-edit-draft.ts` の `ProfileDraft`。純関数でテスト済み）。ダイアログの確定は下書きの更新だけで、サーバーへは送らない。各ダイアログに「保存バーで保存するまで反映されません」の案内を出し、未保存の行には「未保存」バッジ、削除予定の行は取り消し線＋「取り消す」を出す。項目単位の取り消しと、保存バーの「変更を破棄」（フォーム値＋下書き全体を保存済みへ戻す）がある
 - **一時ID**: 新規のリンク・動画はクライアント生成の一時キー（`new-<uuid>`）を持つ。サーバーの ID としては使わず、サーバーが `createId()` で採番する。一時キーは `order`（動画は `new:<key>`）とエラー位置（`fieldErrors`）の参照にだけ使う。保存成功後は loader の再取得結果で下書き・保存済み両方を作り直す（実 ID に置き換わる）
@@ -737,6 +743,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
 - **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
 - **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action に残るのは `save_all`（`saveProfileBatch`）・`import_legacy`・`delete_account` のみ
+- **モバイル表示と追加ダイアログ**: MCID 行はモバイルでボタンが下に縦積みになり（`sm` 以上は横並び）、MCID は長くても折り返して全体を表示する。ソーシャルリンク追加・動画追加ダイアログにはキャンセルボタン（`DialogClose`）を置く
 - **共有モジュール**: MCID 検証と slug 変更は `app/lib/mcid-change.server.ts`（`verifyMcidForUser` / `applyMcidSlugChange`。onboarding も同じものを使い、uuid の重複チェックを含む）、入力上限と検証は `app/lib/profile-edit-validation.ts`（`PROFILE_FIELD_LIMITS` / `validateProfileTextFields` / `validateLinkInput` / `linksTouchSpeedrun`）
 
 ### 自己紹介の自動翻訳の許可
