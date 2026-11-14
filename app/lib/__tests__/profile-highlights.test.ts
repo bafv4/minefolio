@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  nextTileOffset,
-  normalizeLoopScroll,
   pickHighlightSpeedrunComPb,
   speedrunComPbMatchesMainCategory,
   type HighlightSpeedrunComPb,
@@ -70,30 +68,5 @@ describe("pickHighlightSpeedrunComPb", () => {
   });
   it("PB が無ければ null", () => {
     expect(pickHighlightSpeedrunComPb("rsg", [], [], [])).toBeNull();
-  });
-});
-
-describe("ループ自動スクロールの位置計算", () => {
-  it("nextTileOffset は現在位置より右の最初のタイルへ進む（複製側も含む）", () => {
-    const offsets = [0, 100, 200, 300, 400, 500]; // 元3枚 + 複製3枚、period=300
-    expect(nextTileOffset(0, offsets)).toBe(100);
-    expect(nextTileOffset(200, offsets)).toBe(300);
-    expect(nextTileOffset(500, offsets)).toBeNull();
-  });
-  it("normalizeLoopScroll は複製側の位置を元セットの対応位置へ戻し、元セット内は変えない", () => {
-    expect(normalizeLoopScroll(0, 300)).toBe(0);
-    expect(normalizeLoopScroll(299, 300)).toBe(299);
-    expect(normalizeLoopScroll(300, 300)).toBe(0);
-    expect(normalizeLoopScroll(350, 300)).toBe(50);
-    expect(normalizeLoopScroll(100, 0)).toBe(100);
-  });
-  it("継ぎ目: 末尾 → 複製先頭（=period）→ 戻した後に次の進みが連続する", () => {
-    const offsets = [0, 100, 200, 300, 400, 500];
-    let pos = 200;
-    pos = nextTileOffset(pos, offsets)!; // 300 = 複製の先頭
-    expect(pos).toBe(300);
-    pos = normalizeLoopScroll(pos, 300); // 0 へ瞬時に戻す（見た目は同一）
-    expect(pos).toBe(0);
-    expect(nextTileOffset(pos, offsets)).toBe(100);
   });
 });

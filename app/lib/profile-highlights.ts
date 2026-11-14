@@ -113,23 +113,3 @@ export function pickHighlightSpeedrunComPb<T extends HighlightSpeedrunComPb>(
 
   return visible.reduce((best, pb) => (pb.place < best.place ? pb : best));
 }
-
-// ============================================
-// ハイライト行の無限ループ自動スクロール（純粋関数）
-// ============================================
-
-/** 現在位置より右にある最初のタイルの左端（相対オフセット）。無ければ null */
-export function nextTileOffset(scrollLeft: number, tileOffsets: readonly number[]): number | null {
-  const next = tileOffsets.find((o) => o > scrollLeft + 1);
-  return next ?? null;
-}
-
-/**
- * 複製セットに入ったスクロール位置を元セットの対応位置へ戻す。
- * period は元セット先頭から複製セット先頭までの距離（タイル幅の合計 + gap）。
- * 元セット内（period 未満）ならそのまま返す。
- */
-export function normalizeLoopScroll(scrollLeft: number, period: number): number {
-  if (period <= 0 || scrollLeft < period) return scrollLeft;
-  return scrollLeft - Math.floor(scrollLeft / period) * period;
-}

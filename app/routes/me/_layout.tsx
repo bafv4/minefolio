@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Outlet, NavLink, redirect, useLoaderData, useLocation, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
@@ -63,15 +63,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { user, appUrl };
 }
 
-// 主要なナビゲーション項目
+// 主要なナビゲーション項目（プロフィールのホットバーと同じ 2 群: 人物系 | セットアップ系。群の間に区切りを入れる）
 const mainNavItems = [
-  { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil },
-  { to: "/me/playstyle", labelKey: "meLayout.playstyle" as const, icon: Gamepad2 },
-  { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy },
-  { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard },
-  { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse },
-  { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package },
-  { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search },
+  { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil, startsGroup: false },
+  { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy, startsGroup: false },
+  { to: "/me/playstyle", labelKey: "meLayout.playstyle" as const, icon: Gamepad2, startsGroup: true },
+  { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard, startsGroup: false },
+  { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse, startsGroup: false },
+  { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package, startsGroup: false },
+  { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search, startsGroup: false },
 ];
 
 // 補助的なナビゲーション項目（区切り線の下）
@@ -137,8 +137,9 @@ export default function MeLayout() {
           <div id="me-mobile-menu" className={cn("space-y-1", !mobileMenuOpen && "hidden", "lg:block")}>
           {/* 主要なナビゲーション項目 */}
           {mainNavItems.map((item) => (
+            <Fragment key={item.to}>
+            {item.startsGroup && <div aria-hidden="true" className="my-3 border-t" />}
             <NavLink
-              key={item.to}
               to={item.to}
               end
               className={({ isActive, isPending }) =>
@@ -163,6 +164,7 @@ export default function MeLayout() {
                 </>
               )}
             </NavLink>
+            </Fragment>
           ))}
 
           {/* 区切り線 */}
