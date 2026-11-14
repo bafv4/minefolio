@@ -208,7 +208,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - `app/lib/users-filter.ts` - 視聴者ロール除外条件 `excludeViewersCondition`
 - `app/lib/page-view-stats.server.ts` - `popular` ソートで使うページビュー相関サブクエリ（`profilePageViewsSql`）
 - `app/lib/favorites.ts` - サーバー側 DB CRUD（`getFavoritesFromDb` / `addFavoriteToDb` / `removeFavoriteFromDb` / `syncLocalFavoritesToDb`）+ 旧 Cookie 削除ヘッダー生成
-- `app/lib/favorites-client.ts` - クライアント側 localStorage / sessionStorage 操作
+- `app/lib/favorites-client.ts` - クライアント側 localStorage 操作
 - `app/hooks/use-favorites.tsx` - `FavoritesProvider` + `useFavorites` フック
 - `app/lib/keybindings.ts` - キーバインドのラベル変換（`getActionLabel`, `getKeyLabel`, `normalizeKeyCode`）
 

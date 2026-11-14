@@ -32,7 +32,7 @@
 
 | ユーザー種別 | 正本 | クライアント側キャッシュ |
 |---|---|---|
-| ログイン中 | DB `favorites` | sessionStorage `minefolio_favorites_cache` |
+| ログイン中 | DB `favorites` | なし（SSR の `initialFavorites` を正とする） |
 | 未ログイン（Cookie 同意済み） | localStorage `minefolio_favorites` | （正本=ローカル） |
 | 未ログイン（Cookie 同意なし） | 利用不可 | — |
 
@@ -81,7 +81,6 @@
 ### `app/lib/favorites-client.ts`
 
 - `getLocalFavorites()` / `setLocalFavorites(slugs)` / `addLocalFavorite(slug)` / `removeLocalFavorite(slug)` / `clearLocalFavorites()`
-- `getSessionFavorites()` / `setSessionFavorites(slugs)`
 - SSR セーフ（`typeof window === "undefined"` ガード、`try/catch` で QuotaExceeded 等を吸収）
 
 ### `app/lib/favorites.ts`
@@ -131,9 +130,8 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 **ログイン中:**
 
-1. localStorage に未同期エントリが**無い**場合: SSR の `initialFavorites`（`_layout` ローダーが同一リクエストで DB から取得。失敗時はページ全体が落ちるため「0件」と区別できる）を正とし、sessionStorage に書くだけ。`GET /api/favorites` は出さない。sessionStorage のキャッシュは使わない（0件の人に古いキャッシュを出したまま残さないよう、この判定を先に行う）
-2. 未同期エントリが**ある**場合は、同期の応答待ちの間だけ sessionStorage から即時表示（`initialFavorites` が空のときのフォールバック）
-3. 続けて `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`、応答で state と sessionStorage を更新。PUT が失敗したときだけ `GET /api/favorites` にフォールバック
+1. localStorage に未同期エントリが**無い**場合: SSR の `initialFavorites`（`_layout` ローダーが同一リクエストで DB から取得。失敗時はページ全体が落ちるため「0件」と区別できる）を正とし、何もしない（`useState` の初期値のまま）。`GET /api/favorites` は出さない
+2. 未同期エントリが**ある**場合は `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`、応答で state を更新。PUT が失敗したときだけ `GET /api/favorites` にフォールバック
 
 **未ログイン:**
 
@@ -193,7 +191,7 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 | `app/lib/schema.ts` | `favorites` テーブル定義 |
 | `app/lib/favorites.ts` | サーバー側 DB CRUD + 旧 Cookie 削除ヘッダー + slug 変更時の追従更新（`retargetFavoritesOnSlugChange`） |
 | `app/lib/mcid-change.server.ts` | `applyMcidSlugChange` から `retargetFavoritesOnSlugChange` を呼び出し（`/me/edit` の `save_all`・onboarding 共用） |
-| `app/lib/favorites-client.ts` | クライアント側 localStorage / sessionStorage 操作 |
+| `app/lib/favorites-client.ts` | クライアント側 localStorage 操作 |
 | `app/hooks/use-favorites.tsx` | `FavoritesProvider` + `useFavorites` |
 | `app/routes/api/favorites.ts` | GET / POST / PUT のお気に入り API |
 | `app/routes/api/users/by-slugs.ts` | スラッグ配列→ユーザー詳細 API |
@@ -222,3 +220,4 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 - 未ログインユーザー向けに localStorage ベースへ切替
 - `/api/favorites` の応答（GET / POST / PUT）で旧 Cookie を `Max-Age=0` で自動削除（ログイン時の初期化では GET を出さなくなったため、お気に入りの追加・削除・同期のときに消える）
 - `POST /api/users/by-slugs` を新設し、未ログインの一覧表示でも detail 取得を可能に
+- ログイン中の sessionStorage キャッシュ（`minefolio_favorites_cache`）を廃止（SSR の `initialFavorites` を正とし、GET も出さないため不要になった）
