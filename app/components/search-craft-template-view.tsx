@@ -10,7 +10,7 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
 import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
-import type { SearchCraftTiming } from "@/lib/search-craft-templates";
+import { groupCraftsByTiming, resolveCraftTiming, type SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { FingerType, KeyboardLayout } from "@/lib/keybindings";
 import { FingerLegend } from "@/components/virtual-keyboard";
@@ -247,9 +247,11 @@ export function SearchCraftGroupedList({
   const t = useT();
   const lang = useItemLang(gameLanguage);
 
-  const timingsFromCrafts = new Set(crafts.map((c) => c.timing));
-  const extraOnlyTimings = (extraTimings ?? []).filter((timing) => !timingsFromCrafts.has(timing));
-  const hasAnyTiming = crafts.some((c) => c.timing) || extraOnlyTimings.length > 0;
+  const timingsFromCrafts = new Set(crafts.map((c) => resolveCraftTiming(c.timing)));
+  const extraOnlyTimings = (extraTimings ?? []).filter(
+    (timing) => !timingsFromCrafts.has(resolveCraftTiming(timing)),
+  );
+  const hasAnyTiming = crafts.some((c) => resolveCraftTiming(c.timing)) || extraOnlyTimings.length > 0;
 
   if (!hasAnyTiming) {
     return (
@@ -265,12 +267,8 @@ export function SearchCraftGroupedList({
   }
 
   // タイミング別にグループ化
-  const grouped = new Map<string | null, SearchCraftRowData[]>();
-  for (const craft of crafts) {
-    const key = craft.timing;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(craft);
-  }
+  // enum 外の timing は "other" に寄せる（件数と描画対象を一致させる）
+  const grouped: Map<string | null, SearchCraftRowData[]> = groupCraftsByTiming(crafts);
   // extraTimings のうち crafts 側に無いものは、空のグループとして追加する
   for (const timing of extraOnlyTimings) {
     if (!grouped.has(timing)) grouped.set(timing, []);

@@ -62,6 +62,33 @@ export type TemplateCraft = {
   variations: SearchCraftVariation[];
 };
 
+/**
+ * 表示用のタイミング解決。null（指定なし）と既知の区分はそのまま返し、
+ * enum 外の値（旧データ・手編集の混入など）は "other" に寄せる。
+ * 描画側のグループ化はこれを通すので、「件数に数えたが描画されない」行が生まれない
+ * （件数 = 描画される行数が常に一致する）。
+ */
+export function resolveCraftTiming(timing: string | null | undefined): SearchCraftTiming | null {
+  if (timing == null) return null;
+  return SEARCH_CRAFT_TIMINGS.includes(timing as SearchCraftTiming)
+    ? (timing as SearchCraftTiming)
+    : "other";
+}
+
+/** クラフトを表示用タイミング（resolveCraftTiming 済み）ごとにグループ化する。全件がいずれかのグループに入る */
+export function groupCraftsByTiming<T extends { timing: string | null }>(
+  crafts: T[],
+): Map<SearchCraftTiming | null, T[]> {
+  const grouped = new Map<SearchCraftTiming | null, T[]>();
+  for (const craft of crafts) {
+    const key = resolveCraftTiming(craft.timing);
+    const list = grouped.get(key);
+    if (list) list.push(craft);
+    else grouped.set(key, [craft]);
+  }
+  return grouped;
+}
+
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
   return SEARCH_CRAFT_TIMINGS.includes(value as SearchCraftTiming)
     ? (value as SearchCraftTiming)
