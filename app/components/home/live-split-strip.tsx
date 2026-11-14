@@ -36,7 +36,7 @@ export function LiveSplitStrip({ entries, loading = false }: { entries: LiveSpli
                 {n > 0 && <span className="text-xs font-semibold tabular-nums">×{n}</span>}
               </div>
               <span className={cn("h-1.5 rounded-full", n > 0 ? "bg-brand" : "bg-muted")} />
-              <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{name}</span>
+              <span className={cn("truncate text-[11px] text-muted-foreground", n === 0 && "hidden sm:block")}>{name}</span>
             </div>
           );
         })}
