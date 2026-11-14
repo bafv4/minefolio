@@ -184,7 +184,8 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, className }: L
         name={name}
         mcid={run.nickname}
         isFavorite={isFavorite}
-        isStreaming={isStreaming}
+        // PaceMan 上で配信中（liveAccount あり。Twitch 非表示の人はサーバーで null 済み）、または Minefolio 登録の Twitch で配信中
+        isStreaming={isStreaming || !!run.user.liveAccount}
         sub={`@${run.nickname}`}
       />
       <StateBand className="gap-1.5">
@@ -241,7 +242,8 @@ function RankedMatchCard({
         name={name}
         mcid={match.mcid}
         isFavorite={isFavorite}
-        isStreaming={isStreaming}
+        // 配信URLがある（Twitch 非表示の人はサーバーで null 済み）、または Minefolio 登録の Twitch で配信中
+        isStreaming={isStreaming || !!match.liveUrl}
         sub={`@${match.mcid}`}
       />
       <StateBand className="gap-1.5">
@@ -317,7 +319,7 @@ function TwitchLiveCard({
         name={name}
         mcid={item.mcid ?? stream.user_login}
         isFavorite={isFavorite}
-        isStreaming={false}
+        isStreaming
         sub={`@${stream.user_login}`}
       />
       <StateBand>

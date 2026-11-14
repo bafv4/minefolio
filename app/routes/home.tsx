@@ -784,7 +784,9 @@ export default function HomePage() {
             {liveSettled && liveCount > 0 && (
               <>
                 <span className="h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
-                {t("home.liveCount", { count: liveCount })}
+                {/* 見た目は短く、読み上げは従来どおり「N人がライブ中」 */}
+                <span aria-hidden="true">{t("home.liveCount", { count: liveCount })}</span>
+                <span className="sr-only">{t("home.liveCountAria", { count: liveCount })}</span>
               </>
             )}
           </span>
