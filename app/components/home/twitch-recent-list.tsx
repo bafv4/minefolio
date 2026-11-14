@@ -83,7 +83,7 @@ export function TwitchRecentList({ streams, vods }: { streams: HomeTwitchStream[
   }, [streams, vods, locale]);
 
   return (
-    <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-background/80">
+    <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-card">
       {rows.map((r) => (
         <li key={r.key}>
           <a

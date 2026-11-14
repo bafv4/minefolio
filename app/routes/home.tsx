@@ -892,7 +892,7 @@ export default function HomePage() {
     live: (
       <HomeSection
         id="home-live"
-        icon={<Radio className="h-5 w-5 text-primary" />}
+        icon={<Radio className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("home.liveTitle")}
         action={
           // ライブの有無にかかわらず最近のペース（/paces）へ行けるようにする（0件時のペース3件表示だけに頼らない）
@@ -943,7 +943,7 @@ export default function HomePage() {
     videos: (
       <HomeSection
         id="home-videos"
-        icon={<Play className="h-5 w-5 text-primary" />}
+        icon={<Play className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
         title={t("home.sectionVideos")}
         viewAllTo="/videos"
       >
@@ -994,7 +994,7 @@ export default function HomePage() {
       newGuides.length > 0 ? (
         <HomeSection
           id="home-guides"
-          icon={<BookOpen className="h-5 w-5 text-primary" />}
+            icon={<BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
           title={t("home.sectionGuides")}
           viewAllTo="/guides"
         >
@@ -1002,6 +1002,7 @@ export default function HomePage() {
             guides={newGuides.map(toGuideItem)}
             linkFn={guideLinkFn}
             gridCols="sm:grid-cols-2 xl:grid-cols-4"
+            surface="card"
           />
         </HomeSection>
       ) : null,
@@ -1016,7 +1017,7 @@ export default function HomePage() {
     profiles: (
       <HomeSection
         id="home-profiles"
-        icon={<UserCheck className="h-5 w-5 text-primary" />}
+        icon={<UserCheck className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
         title={t("home.sectionProfiles")}
         badge={
           totalPublicProfiles > 0 ? (

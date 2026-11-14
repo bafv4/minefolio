@@ -24,13 +24,14 @@ export function CompactProfileList({
   return (
     <div className="min-w-0 space-y-2">
       <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-      <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-background/80">
+      <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-card">
         {players.map((p) => (
           <li key={p.slug}>
             <Link
               to={`/player/${p.slug}`}
               prefetch="intent"
-              className="flex min-h-11 items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              // 行の高さはカテゴリ（2行目）の有無によらず 2行分（h-14 = 56px）で揃え、1行だけの行は上下中央に置く
+              className="flex h-14 items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <MinecraftAvatar uuid={p.uuid} skinUrl={p.customSkinUrl} mcid={p.mcid} size={32} className="shrink-0 rounded-lg" />
               <span className="min-w-0 flex-1">

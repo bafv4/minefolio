@@ -63,10 +63,16 @@ export function GuideCardGrid({
   linkFn,
   gridCols = "sm:grid-cols-2 lg:grid-cols-3",
   pageViewsMode = "additional",
+  surface = "default",
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
+  /**
+   * カードの面。"default"（既定）はサイト共通の `bg-background/80`、"card" は不透明の `bg-card`
+   * （ホームのように箱なしのセクションでページ背景に直接置くとき。dark 系で背景と同化しないように）
+   */
+  surface?: "default" | "card";
   /**
    * `pageViews7d`（直近7日PV）の表示方法。
    * - "additional"（既定）: 累計View数（Eye）の隣に追加表示する（/guides の人気順など）
@@ -103,7 +109,8 @@ export function GuideCardGrid({
             />
             <div
               className={cn(
-                "flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all group-hover:border-primary/40 group-hover:shadow-md",
+                "flex h-full flex-col overflow-hidden rounded-xl border border-border/70 transition-all group-hover:border-primary/40 group-hover:shadow-md",
+                surface === "card" ? "bg-card" : "bg-background/80",
                 guide.isPinned && "border-primary/40",
               )}
             >

@@ -188,7 +188,10 @@ export function FeaturedRunnerCard({
   if (!current) {
     // 候補も日替わりも無い（揃った公開プロフィールが無い）: プロフィールで見られるものの静的な説明
     return (
-      <section aria-labelledby="home-featured-heading" className="rounded-2xl border border-border/70 bg-background/80 p-5">
+      <section
+        aria-labelledby="home-featured-heading"
+        className="rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6"
+      >
         <h2 id="home-featured-heading" className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
           {t("home.featuredEmptyTitle")}
@@ -210,7 +213,8 @@ export function FeaturedRunnerCard({
   return (
     <section
       aria-labelledby="home-featured-heading"
-      className="group relative rounded-2xl border border-border/70 bg-background/80 p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      // ページ幅の大型パネル（おかえりバーと同じ系統）。浮かせず、ホバーは枠色だけ
+      className="group relative rounded-2xl border border-border/70 bg-card/70 p-5 transition-all hover:border-primary/40 motion-reduce:transition-none sm:p-6"
     >
       <div className="flex items-center justify-between gap-3">
         {wide ? (

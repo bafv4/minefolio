@@ -37,7 +37,7 @@ import { StreamingBadge } from "@/components/home/streaming-badge";
 export type McidMaps = McidUserMaps;
 
 const CARD_CLASS =
-  "group relative flex flex-col gap-3 rounded-xl border bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0";
+  "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0";
 
 /** カード枠。終了カード（一覧から消えて少しの間だけ残しているもの）は枠を一段弱める（本文テキストの濃さは変えない） */
 const cardClass = (ended: boolean | undefined) => cn(CARD_CLASS, ended ? "border-border/40" : "border-border/70");

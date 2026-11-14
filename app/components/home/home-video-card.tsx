@@ -25,7 +25,7 @@ export function HomeVideoCard({ video }: { video: FeedVideo }) {
 
   return (
     // h-full: グリッド／横レールの枠いっぱいに伸ばし、タイトル1行・2行のカードでもフッター（走者・相対時刻）を下端にそろえる
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       {!isPlaying && (
         <button
           type="button"

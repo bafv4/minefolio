@@ -18,7 +18,8 @@ export function SectionHeaderLink({ to, label, prefetch }: { to: string; label: 
 
 /**
  * ホームの欄の共通枠。`section` + `aria-labelledby`（h2）でランドマークにし、見出しには
- * 丸背景アイコンチップ・件数（badge）・「すべて見る」（viewAllTo）だけを置く（eyebrow は使わない）。
+ * アイコン・件数（badge）・「すべて見る」（viewAllTo）だけを置く（eyebrow は使わない）。
+ * 箱なし（上罫線 `border-foreground/15` のみ）の1種類。アイコンは呼び出し側の色のまま見出しの左に置く。
  * 見出し行は折り返さない（モバイルで右のリンクがアイコンのみになるのもそのため）。
  */
 export function HomeSection({
@@ -46,10 +47,10 @@ export function HomeSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-5 sm:p-6"
+      className="space-y-4 border-t border-foreground/15 pt-6"
     >
       <div className="flex flex-nowrap items-center gap-x-2 sm:gap-x-3">
-        <div className="rounded-xl bg-primary/10 p-2">{icon}</div>
+        <div className="shrink-0">{icon}</div>
         {/* 見出しは本文との段差（1.25倍以上）を保つため text-xl のまま。モバイルは隙間を詰めて、
             アイコン＋見出し＋件数＋右のアイコンリンクを1行に収める（収まらない言語では truncate）。
             長い件数表示はモバイルで出さないよう呼び出し側で隠す（例: プロフィール欄の総数） */}
