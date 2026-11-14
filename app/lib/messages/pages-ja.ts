@@ -607,6 +607,8 @@ export const PAGES_JA = {
     title: "お気に入り",
     add: "お気に入り",
     remove: "お気に入り解除",
+    addNamed: "{name}をお気に入りに追加",
+    removeNamed: "{name}をお気に入りから外す",
     favoriteMark: "お気に入り",
     metaTitle: "お気に入り - Minefolio",
     description: "お気に入りに登録した走者一覧",

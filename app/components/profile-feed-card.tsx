@@ -137,7 +137,7 @@ export function ProfileFeedCard({
         </div>
         {showFavoriteButton && (
           <div className="relative z-10 -my-1 -mr-2 shrink-0 self-start">
-            <FavoriteButton slug={player.slug} variant="ghost" size="icon" className="size-11" />
+            <FavoriteButton slug={player.slug} name={displayName} variant="ghost" size="icon" className="size-11" />
           </div>
         )}
       </div>
