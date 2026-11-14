@@ -593,6 +593,9 @@ function VideoDialog({
         <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
       <DialogFooter>
+        <DialogClose asChild>
+          <Button type="button" variant="outline">{t("meEdit.cancel")}</Button>
+        </DialogClose>
         <Button type="submit">{editingVideo ? t("meEdit.videoUpdate") : t("meEdit.videoAdd")}</Button>
       </DialogFooter>
     </form>
