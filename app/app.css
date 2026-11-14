@@ -895,7 +895,7 @@ body {
 .guide-content.prose :where(h1, h2, h3) {
   scroll-margin-top: 7.5rem;
 }
-/* 公開表示は本文見出しを1段下げるため、旧 h3 は h4 になる（guide-heading-demote.ts） */
+/* 公開表示は本文見出しを降格するため（最小レベルが h2。guide-heading-demote.ts）h4 まで出うる */
 .guide-content-demoted.prose :where(h4) {
   scroll-margin-top: 7.5rem;
 }
@@ -940,9 +940,10 @@ body {
   margin-bottom: 0.15em;
 }
 
-/* 公開表示では本文見出しを1段下げて出力する（ページタイトルが h1。guide-heading-demote.ts）。
-   見た目は元のレベルと同じになるよう h2→旧h1 / h3→旧h2 / h4→旧h3 / h5,h6→旧h4-6 に対応付ける。 */
-.guide-content-demoted.guide-content.prose :where(h2) {
+/* 公開表示では本文見出しを、最小レベルが h2 になるよう降格して出力する（ページタイトルが h1。
+   降格量は記事ごとに可変: guide-heading-demote.ts）。見た目は降格後のタグではなく、
+   降格時に付与する元レベル data-guide-level に対応付けて、エディタで選んだレベルの見た目を保つ。 */
+.guide-content-demoted.guide-content.prose :where([data-guide-level="1"]) {
   font-size: 1.875em;
   font-weight: 700;
   margin-top: 2em;
@@ -950,7 +951,7 @@ body {
   line-height: 1.25;
 }
 
-.guide-content-demoted.guide-content.prose :where(h3) {
+.guide-content-demoted.guide-content.prose :where([data-guide-level="2"]) {
   font-size: 1.5em;
   font-weight: 700;
   margin-top: 1.5em;
@@ -958,7 +959,7 @@ body {
   line-height: 1.3;
 }
 
-.guide-content-demoted.guide-content.prose :where(h4) {
+.guide-content-demoted.guide-content.prose :where([data-guide-level="3"]) {
   font-size: 1.15em;
   font-weight: 600;
   margin-top: 1.25em;
@@ -966,7 +967,7 @@ body {
   line-height: 1.35;
 }
 
-.guide-content-demoted.guide-content.prose :where(h5, h6) {
+.guide-content-demoted.guide-content.prose :where([data-guide-level="4"], [data-guide-level="5"], [data-guide-level="6"]) {
   font-size: 1em;
   font-weight: 600;
   margin-top: 1em;
