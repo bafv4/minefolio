@@ -39,3 +39,6 @@ local.db-wal
 
 # graphify（ナレッジグラフ）: 成果物はすべて各環境でローカル生成し、リポジトリには含めない
 /graphify-out/
+
+# impeccable（デザイン critique のスナップショット等）: ローカル専用
+/.impeccable/
