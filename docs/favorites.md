@@ -131,9 +131,9 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 **ログイン中:**
 
-1. sessionStorage から即時表示（`initialFavorites` が空のときのフォールバック）
-2. localStorage に未同期エントリがあれば `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`
-3. `GET /api/favorites` で最新を取得し state と sessionStorage を更新
+1. localStorage に未同期エントリが**無い**場合: SSR の `initialFavorites`（`_layout` ローダーが同一リクエストで DB から取得。失敗時はページ全体が落ちるため「0件」と区別できる）を正とし、sessionStorage に書くだけ。`GET /api/favorites` は出さない。sessionStorage のキャッシュは使わない（0件の人に古いキャッシュを出したまま残さないよう、この判定を先に行う）
+2. 未同期エントリが**ある**場合は、同期の応答待ちの間だけ sessionStorage から即時表示（`initialFavorites` が空のときのフォールバック）
+3. 続けて `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`、応答で state と sessionStorage を更新。PUT が失敗したときだけ `GET /api/favorites` にフォールバック
 
 **未ログイン:**
 
@@ -220,5 +220,5 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 - `favoriteMcid` を `favoriteSlug` にリネーム（インデックスも `idx_favorites_user_slug` に）
 - ログインユーザーの正本を DB に移行、デバイス間共有を実現
 - 未ログインユーザー向けに localStorage ベースへ切替
-- `GET /api/favorites` のレスポンスで旧 Cookie を `Max-Age=0` で自動削除
+- `/api/favorites` の応答（GET / POST / PUT）で旧 Cookie を `Max-Age=0` で自動削除（ログイン時の初期化では GET を出さなくなったため、お気に入りの追加・削除・同期のときに消える）
 - `POST /api/users/by-slugs` を新設し、未ログインの一覧表示でも detail 取得を可能に
