@@ -1,4 +1,4 @@
-// ホームの action（欄の並び順の保存）。セッションはモックし、実DBで検証する（favorites.test.ts と同じ方針）。
+// ホームの action（欄の並び・表示の保存）。セッションはモックし、実DBで検証する（favorites.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -32,8 +32,8 @@ async function callAction(fields: Record<string, string>) {
   return (await action({ request, params: {}, context: {} } as never)) as unknown;
 }
 
-const save = (order: unknown) =>
-  callAction({ _action: "saveHomeSectionOrder", order: typeof order === "string" ? order : JSON.stringify(order) });
+const save = (order: unknown, hidden: unknown = []) =>
+  callAction({ _action: "saveHomeSectionOrder", order: JSON.stringify(order), hidden: JSON.stringify(hidden) });
 
 async function storedOrder(id: string) {
   const row = await db.query.users.findFirst({ where: eq(schema.users.id, id) });
@@ -66,7 +66,7 @@ describe("action - saveHomeSectionOrder", () => {
     expect((await storedOrder(user.id))?.homeSectionOrder).toBeNull();
   });
 
-  it("正規化した並びを JSON で保存し、updatedAt は変えない", async () => {
+  it("正規化した並び・表示を新形式 JSON で保存し、updatedAt は変えない", async () => {
     const user = await seedUser(db, { discordId: "d1" });
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
     const before = (await storedOrder(user.id))!.updatedAt;
@@ -75,14 +75,10 @@ describe("action - saveHomeSectionOrder", () => {
 
     expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
     const row = (await storedOrder(user.id))!;
-    expect(JSON.parse(row.homeSectionOrder!)).toEqual([
-      "profiles",
-      "live",
-      "favoriteActivity",
-      "videos",
-      "guides",
-      "featured",
-    ]);
+    expect(JSON.parse(row.homeSectionOrder!)).toEqual({
+      order: ["profiles", "live", "favoriteActivity", "videos", "guides", "featured"],
+      hidden: [],
+    });
     expect(row.updatedAt.getTime()).toBe(before.getTime());
   });
 
@@ -94,6 +90,52 @@ describe("action - saveHomeSectionOrder", () => {
 
     expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
     expect((await storedOrder(user.id))?.homeSectionOrder).toBeNull();
+  });
+
+  it("hidden を新形式で保存する（未知 ID・重複は除く）", async () => {
+    const user = await seedUser(db, { discordId: "d1" });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
+
+    const res = await save(["favoriteActivity", "live", "videos", "guides", "featured", "profiles"], ["videos", "bogus", "videos"]);
+
+    expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
+    expect(JSON.parse((await storedOrder(user.id))!.homeSectionOrder!)).toEqual({
+      order: ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
+      hidden: ["videos"],
+    });
+  });
+
+  it("旧形式（配列）が入っている行も、既定に戻す保存で null になる", async () => {
+    const user = await seedUser(db, { discordId: "d1", homeSectionOrder: '["profiles","live"]' });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
+
+    await save(["favoriteActivity", "live", "videos", "guides", "featured", "profiles"], []);
+
+    expect((await storedOrder(user.id))?.homeSectionOrder).toBeNull();
+  });
+
+  it("全欄を非表示にする保存は 400 で拒否し、DB 無変更", async () => {
+    const stored = '{"order":["live"],"hidden":["videos"]}';
+    const user = await seedUser(db, { discordId: "d1", homeSectionOrder: stored });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
+
+    const res = (await save(
+      ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
+      ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
+    )) as { init: { status: number }; data: { error: string } };
+
+    expect(res.init.status).toBe(400);
+    expect(res.data.error).toBeTruthy();
+    expect((await storedOrder(user.id))?.homeSectionOrder).toBe(stored);
+  });
+
+  it("不正な JSON は 400", async () => {
+    await seedUser(db, { discordId: "d1" });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
+    const res = (await callAction({ _action: "saveHomeSectionOrder", order: "{bad", hidden: "[]" })) as {
+      init: { status: number };
+    };
+    expect(res.init.status).toBe(400);
   });
 
   it("他ユーザーの行は変えない", async () => {

@@ -2,9 +2,12 @@ import { createTranslator } from "@/lib/messages";
 import { useLoaderData, useFetcher, Link, data } from "react-router";
 import { useEffect, useReducer, memo, useMemo, useCallback, Fragment, type ReactNode } from "react";
 import {
-  DEFAULT_HOME_SECTION_ORDER,
-  normalizeHomeSectionOrder,
-  isDefaultHomeSectionOrder,
+  defaultHomeLayout,
+  normalizeHomeLayout,
+  pickKnownHomeSectionIds,
+  serializeHomeLayout,
+  HOME_SECTION_IDS,
+  type HomeLayout,
   type HomeSectionId,
 } from "@/lib/home-sections";
 import { HOME_SECTION_ORDER_FETCHER_KEY } from "@/components/home/home-settings-dialog";
@@ -149,7 +152,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (!existingUser) return null;
       const { homeSectionOrder, createdAt, ...profile } = existingUser;
       return {
-        sectionOrder: normalizeHomeSectionOrder(homeSectionOrder),
+        layout: normalizeHomeLayout(homeSectionOrder),
         // クライアントへそのまま渡す部分
         user: {
           ...profile,
@@ -260,8 +263,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
     isRegistered,
-    // 欄の並び（ゲストは既定順）。SSR の時点でこの順に描画する
-    sectionOrder: account?.sectionOrder ?? [...DEFAULT_HOME_SECTION_ORDER],
+    // 欄の並び・表示（ゲストは既定）。SSR の時点でこの内容で描画する
+    layout: account?.layout ?? defaultHomeLayout(),
     currentUser,
     recentlyUpdatedUsers: recent,
     popularUsers: popular,
@@ -279,8 +282,8 @@ export function headers(_: Route.HeadersArgs) {
 }
 
 /**
- * ホームの欄の並び順を保存する（_action=saveHomeSectionOrder、order = 欄 ID の JSON 配列）。
- * 既定順と同じなら null を保存して既定に戻す。users.updatedAt は更新しない
+ * ホームの欄の並び・表示を保存する（_action=saveHomeSectionOrder、order / hidden = 欄 ID の JSON 配列）。
+ * 全欄を非表示にする保存は拒否する。既定（既定順かつ全欄表示）なら null を保存して既定に戻す。users.updatedAt は更新しない
  * （「お気に入り走者の動き」に「プロフィールを更新」と誤って出るため）。
  */
 export async function action({ request }: Route.ActionArgs) {
@@ -298,11 +301,22 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
   }
   const rawOrder = formData.get("order");
-  if (typeof rawOrder !== "string") {
+  const rawHidden = formData.get("hidden") ?? "[]";
+  if (typeof rawOrder !== "string" || typeof rawHidden !== "string") {
     return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
   }
-  const order = normalizeHomeSectionOrder(rawOrder);
-  const stored = isDefaultHomeSectionOrder(order) ? null : JSON.stringify(order);
+  let parsedOrder: unknown;
+  let parsedHidden: unknown;
+  try {
+    parsedOrder = JSON.parse(rawOrder);
+    parsedHidden = JSON.parse(rawHidden);
+  } catch {
+    return data({ error: t("home.settingsInvalid"), action: actionType }, { status: 400 });
+  }
+  if (pickKnownHomeSectionIds(parsedHidden).length >= HOME_SECTION_IDS.length) {
+    return data({ error: t("home.settingsAllHidden"), action: actionType }, { status: 400 });
+  }
+  const stored = serializeHomeLayout(normalizeHomeLayout({ order: parsedOrder, hidden: parsedHidden }));
   const updated = await db
     .update(users)
     .set({ homeSectionOrder: stored })
@@ -525,16 +539,24 @@ export default function HomePage() {
     newGuides,
     totalPublicProfiles,
     spotlight,
-    sectionOrder: savedSectionOrder,
+    layout: savedLayout,
   } = useLoaderData<typeof loader>();
 
-  // 設定モーダルの保存中は、送信した並びを楽観的に反映する（再検証で loader の値が追いつくまで）
+  // 設定モーダルの保存中は、送信した並び・表示を楽観的に反映する（再検証で loader の値が追いつくまで）
   const orderFetcher = useFetcher({ key: HOME_SECTION_ORDER_FETCHER_KEY });
   const submittedOrder = orderFetcher.formData?.get("order");
-  const sectionOrder = useMemo(
-    () => (typeof submittedOrder === "string" ? normalizeHomeSectionOrder(submittedOrder) : savedSectionOrder),
-    [submittedOrder, savedSectionOrder],
-  );
+  const submittedHidden = orderFetcher.formData?.get("hidden");
+  const layout = useMemo<HomeLayout>(() => {
+    if (typeof submittedOrder !== "string") return savedLayout;
+    try {
+      return normalizeHomeLayout({
+        order: JSON.parse(submittedOrder),
+        hidden: typeof submittedHidden === "string" ? JSON.parse(submittedHidden) : [],
+      });
+    } catch {
+      return savedLayout;
+    }
+  }, [submittedOrder, submittedHidden, savedLayout]);
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
 
@@ -926,7 +948,7 @@ export default function HomePage() {
             uuid={currentUser.uuid}
             skinUrl={currentUser.customSkinUrl}
             isNewAccount={currentUser.isNewAccount}
-            sectionOrder={sectionOrder}
+            layout={layout}
           />
         </>
       ) : (
@@ -968,9 +990,11 @@ export default function HomePage() {
       )}
 
       {/* ウェルカムバー / ヒーローの下を、ユーザーの並び順（ゲストは既定順）で描画する */}
-      {sectionOrder.map((id) => (
-        <Fragment key={id}>{sections[id]}</Fragment>
-      ))}
+      {layout.order
+        .filter((id) => !layout.hidden.includes(id))
+        .map((id) => (
+          <Fragment key={id}>{sections[id]}</Fragment>
+        ))}
     </div>
   );
 }

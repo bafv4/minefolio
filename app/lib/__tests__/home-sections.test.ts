@@ -2,33 +2,34 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_HOME_SECTION_ORDER,
   HOME_SECTION_IDS,
-  isDefaultHomeSectionOrder,
-  normalizeHomeSectionOrder,
+  isDefaultHomeLayout,
+  normalizeHomeLayout,
+  serializeHomeLayout,
 } from "../home-sections";
 
-describe("normalizeHomeSectionOrder", () => {
+describe("normalizeHomeLayout", () => {
   const def = [...DEFAULT_HOME_SECTION_ORDER];
+  const defLayout = { order: def, hidden: [] };
 
-  it("null / undefined / 非文字列・非配列は既定順", () => {
-    expect(normalizeHomeSectionOrder(null)).toEqual(def);
-    expect(normalizeHomeSectionOrder(undefined)).toEqual(def);
-    expect(normalizeHomeSectionOrder(42)).toEqual(def);
-    expect(normalizeHomeSectionOrder({ a: 1 })).toEqual(def);
+  it("null / undefined / 非文字列・非配列は既定", () => {
+    expect(normalizeHomeLayout(null)).toEqual(defLayout);
+    expect(normalizeHomeLayout(undefined)).toEqual(defLayout);
+    expect(normalizeHomeLayout(42)).toEqual(defLayout);
   });
 
-  it("壊れた JSON は既定順", () => {
-    expect(normalizeHomeSectionOrder("{not json")).toEqual(def);
-    expect(normalizeHomeSectionOrder('{"a":1}')).toEqual(def);
+  it("壊れた JSON は既定", () => {
+    expect(normalizeHomeLayout("{not json")).toEqual(defLayout);
+    expect(normalizeHomeLayout('"x"')).toEqual(defLayout);
   });
 
-  it("JSON 文字列・配列のどちらも受け付ける", () => {
+  it("旧形式（配列）は order のみ・hidden 空", () => {
     const order = ["profiles", "live", "videos", "guides", "featured", "favoriteActivity"];
-    expect(normalizeHomeSectionOrder(JSON.stringify(order))).toEqual(order);
-    expect(normalizeHomeSectionOrder(order)).toEqual(order);
+    expect(normalizeHomeLayout(JSON.stringify(order))).toEqual({ order, hidden: [] });
+    expect(normalizeHomeLayout(order)).toEqual({ order, hidden: [] });
   });
 
-  it("未知 ID と非文字列を除く", () => {
-    expect(normalizeHomeSectionOrder(["bogus", "videos", 1, null, "live"])).toEqual([
+  it("旧形式でも未知 ID・重複を除き、欠けは既定順で末尾に補う", () => {
+    expect(normalizeHomeLayout(["bogus", "videos", 1, "live", "live"]).order).toEqual([
       "videos",
       "live",
       "favoriteActivity",
@@ -36,30 +37,36 @@ describe("normalizeHomeSectionOrder", () => {
       "featured",
       "profiles",
     ]);
+    expect(normalizeHomeLayout([]).order).toEqual(def);
   });
 
-  it("重複は最初の出現のみ残す", () => {
-    const result = normalizeHomeSectionOrder(["live", "live", "videos", "live"]);
-    expect(result.slice(0, 2)).toEqual(["live", "videos"]);
-    expect(new Set(result).size).toBe(HOME_SECTION_IDS.length);
+  it("新形式の order / hidden を読む", () => {
+    const layout = normalizeHomeLayout('{"order":["live","videos"],"hidden":["videos","bogus","videos",3]}');
+    expect(layout.order).toEqual(["live", "videos", "favoriteActivity", "guides", "featured", "profiles"]);
+    expect(layout.hidden).toEqual(["videos"]);
   });
 
-  it("欠けた ID は既定順で末尾に補う", () => {
-    expect(normalizeHomeSectionOrder(["profiles"])).toEqual([
-      "profiles",
-      "favoriteActivity",
-      "live",
-      "videos",
-      "guides",
-      "featured",
-    ]);
-    expect(normalizeHomeSectionOrder([])).toEqual(def);
+  it("新形式で order が欠けていても hidden は有効", () => {
+    expect(normalizeHomeLayout({ hidden: ["guides"] })).toEqual({ order: def, hidden: ["guides"] });
+  });
+
+  it("全欄が hidden のときは hidden を空にする", () => {
+    expect(normalizeHomeLayout({ order: def, hidden: [...HOME_SECTION_IDS] })).toEqual(defLayout);
   });
 });
 
-describe("isDefaultHomeSectionOrder", () => {
-  it("既定順のみ true", () => {
-    expect(isDefaultHomeSectionOrder([...DEFAULT_HOME_SECTION_ORDER])).toBe(true);
-    expect(isDefaultHomeSectionOrder(["live", ...DEFAULT_HOME_SECTION_ORDER.filter((i) => i !== "live")])).toBe(false);
+describe("isDefaultHomeLayout / serializeHomeLayout", () => {
+  it("既定順かつ hidden 空のみ既定", () => {
+    expect(isDefaultHomeLayout({ order: [...DEFAULT_HOME_SECTION_ORDER], hidden: [] })).toBe(true);
+    expect(isDefaultHomeLayout({ order: [...DEFAULT_HOME_SECTION_ORDER], hidden: ["live"] })).toBe(false);
+    expect(
+      isDefaultHomeLayout({ order: ["live", ...DEFAULT_HOME_SECTION_ORDER.filter((i) => i !== "live")], hidden: [] }),
+    ).toBe(false);
+  });
+
+  it("既定は null、それ以外は新形式 JSON", () => {
+    expect(serializeHomeLayout({ order: [...DEFAULT_HOME_SECTION_ORDER], hidden: [] })).toBeNull();
+    const layout = { order: [...DEFAULT_HOME_SECTION_ORDER], hidden: ["live" as const] };
+    expect(JSON.parse(serializeHomeLayout(layout)!)).toEqual(layout);
   });
 });

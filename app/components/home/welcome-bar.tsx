@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import type { HomeSectionId } from "@/lib/home-sections";
+import type { HomeLayout } from "@/lib/home-sections";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { HomeSettingsDialog } from "@/components/home/home-settings-dialog";
 import { useT } from "@/hooks/use-locale";
@@ -15,7 +14,7 @@ export function WelcomeBar({
   uuid,
   skinUrl,
   isNewAccount = false,
-  sectionOrder,
+  layout,
 }: {
   name: string;
   slug: string;
@@ -23,8 +22,8 @@ export function WelcomeBar({
   skinUrl: string | null;
   /** アカウント作成から24時間以内（初回訪問に「おかえりなさい」と出さない） */
   isNewAccount?: boolean;
-  /** 設定モーダルの編集初期値（現在の欄の並び） */
-  sectionOrder: HomeSectionId[];
+  /** 設定モーダルの編集初期値（現在の欄の並び・表示） */
+  layout: HomeLayout;
 }) {
   const t = useT();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -40,24 +39,9 @@ export function WelcomeBar({
       <div className="min-w-0 flex-1">
         <p className="truncate text-base font-semibold">{greeting}</p>
       </div>
-      {/* モバイル: 1段目＝アバター・挨拶・設定（右端）、2段目＝ナビ。sm 以上は1行（ナビ → 設定の順） */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="order-3 size-11 shrink-0 sm:order-4 sm:size-9"
-            aria-label={t("home.settingsTitle")}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings2 />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t("home.settingsTitle")}</TooltipContent>
-      </Tooltip>
-      <div className="order-4 flex w-full items-center gap-x-1 sm:order-3 sm:w-auto sm:gap-x-2">
-        <Button asChild className="min-h-11 sm:min-h-9">
+      {/* DOM 順（＝フォーカス順）は 編集 → マイプロフィール → お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
+      <div className="flex w-full items-center gap-x-1 sm:w-auto sm:gap-x-2">
+        <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
           <Link to="/me/edit">
             <Pencil className="mr-1.5 h-4 w-4" />
             {t("home.welcomeEditProfile")}
@@ -76,8 +60,17 @@ export function WelcomeBar({
             <span className="sr-only sm:not-sr-only">{t("home.welcomeFavorites")}</span>
           </Link>
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="ml-auto min-h-11 max-sm:w-11 max-sm:px-0 sm:ml-0 sm:min-h-9"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Settings2 className="h-4 w-4 sm:mr-1.5" />
+          <span className="sr-only sm:not-sr-only">{t("home.welcomeCustomize")}</span>
+        </Button>
       </div>
-      <HomeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} order={sectionOrder} />
+      <HomeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} layout={layout} />
     </section>
   );
 }

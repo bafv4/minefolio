@@ -244,7 +244,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `show_youtube_on_home` | bool? | 既定 true |
 | `show_ranked_stats` | bool? | 既定 true |
 | `show_paceman_stats` | bool? | 既定 true |
-| `home_section_order` | json? | ホームの欄の並び順（欄 ID の JSON 配列）。null は既定順。未知の ID は無視し、欠けた欄は既定順で末尾に補う（正規化は `app/lib/home-sections.ts`） |
+| `home_section_order` | json? | ホームの欄の並び順・表示（JSON `{"order":[...],"hidden":[...]}`。旧形式の欄 ID の配列＝並びのみも読める）。null は既定（既定順かつ全欄表示）。未知の ID は無視し、order の欠けた欄は既定順で末尾に補う。hidden が全欄を覆う値は空として扱う（正規化は `app/lib/home-sections.ts` の `normalizeHomeLayout`） |
 | `profile_views` | int | 既定 0 |
 | `last_active` | ts? | |
 | `custom_skin_url` | text? | Vercel Blob の URL |
