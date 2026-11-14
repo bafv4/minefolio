@@ -143,6 +143,7 @@
 
 ## ダイアログ・モーダル
 - shadcn/ui の `Dialog` コンポーネントを使用
+- `DialogContent` 基底は `max-h-[calc(100dvh-2rem)] overflow-y-auto` を持つ（低い画面でも内部スクロールで閉じるボタン/フッターに届く）。内側で独自にスクロールさせたい場合のみ消費側で `max-h-*`/`overflow-hidden` を上書きする
 - 構造: `DialogHeader` → `DialogTitle` → コンテンツ → `DialogFooter`（キャンセル + アクションボタン）
 
 ## トースト通知
