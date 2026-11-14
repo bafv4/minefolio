@@ -271,8 +271,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { newGuides, guideTranslations } = guidesWithTranslations;
   const popular = popularUsers;
   const recent = recentlyUpdatedUsers;
-  // お気に入り 0 人のときに勧める走者（よく見られている → 無ければ最近の更新）。表示する人の中から3人
-  const recommended = (popular.length > 0 ? popular : recent).slice(0, 3);
+  // お気に入り 0 人のときに勧める走者（3人）。自分自身は勧めない。下のプロフィール欄（最近の更新・よく見られている）と
+  // 同じ顔ぶれにならないよう、よく見られている人のうち欄に出ていない人を先に選び、足りなければ欄に出ている人で埋める
+  const shownSlugs = new Set([...recent, ...popular].map((u) => u.slug));
+  const notSelf = <T extends { slug: string }>(u: T) => u.slug !== currentUser?.slug;
+  const recommended = [
+    ...popularUsersRaw.filter((u) => notSelf(u) && !shownSlugs.has(u.slug)),
+    ...popular.filter(notSelf),
+    ...recent.filter(notSelf),
+  ]
+    .filter((u, i, list) => list.findIndex((v) => v.slug === u.slug) === i)
+    .slice(0, 3);
 
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
