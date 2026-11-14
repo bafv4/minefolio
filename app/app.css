@@ -133,19 +133,19 @@ body {
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
 
-  /* Brand accent (emerald) — primary interactive color */
-  --brand: oklch(0.53 0.13 162);
+  /* Brand accent (emerald) — primary interactive color。text-brand を /10 ティント上でも 4.5:1 以上にするため、ライトは L=0.50、ダークは L=0.62（カード上ティントで 4.69:1。brand-foreground の暗色文字は 5.5:1 を維持） */
+  --brand: oklch(0.50 0.13 162);
   --brand-foreground: oklch(0.985 0.01 162);
   --brand-link: oklch(0.48 0.13 160);
 
   /* Semantic colors */
-  --success: oklch(0.56 0.16 139);
+  --success: oklch(0.50 0.15 139);
   --success-foreground: oklch(0.985 0.01 139);
   /* ライトでは文字色としても使う（text-warning）ため白背景で 4.5:1 以上を確保する（amber-700 相当、約5.0:1）。
      旧値 oklch(0.828 0.189 84.429) は約1.7:1 で、警告文言が読めなかった */
   --warning: oklch(0.555 0.163 48.998);
   --warning-foreground: oklch(0.129 0.042 264.695);
-  --info: oklch(0.623 0.214 259.815);
+  --info: oklch(0.53 0.19 259.8);
   --info-foreground: oklch(1 0 0);
 
   /* Keybinding category colors */
@@ -226,8 +226,8 @@ body {
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
-  /* Brand accent (emerald) — primary interactive color */
-  --brand: oklch(0.58 0.14 162);
+  /* Brand accent (emerald) — primary interactive color。text-brand を /10 ティント上でも 4.5:1 以上にするため、ライトは L=0.50、ダークは L=0.62（カード上ティントで 4.69:1。brand-foreground の暗色文字は 5.5:1 を維持） */
+  --brand: oklch(0.62 0.14 162);
   --brand-foreground: oklch(0.18 0.03 162);
   --brand-link: oklch(0.74 0.14 160);
 
