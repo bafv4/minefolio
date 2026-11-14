@@ -1320,20 +1320,20 @@ export default function EditProfilePage() {
             <div className="space-y-3">
               <Label>{t("meEdit.minecraftIdTitle")}</Label>
               {draft.mcid.value ? (
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0">
                       <MinecraftAvatar uuid={draft.mcid.uuid} skinUrl={customSkinUrl} size={64} />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium truncate">@{draft.mcid.value}</p>
+                      <p className="font-medium break-all">@{draft.mcid.value}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         UUID: {draft.mcid.uuid}
                       </p>
                       {isMcidChanged && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     {isMcidChanged && <UndoButton onClick={handleMcidUndo} disabled={isSubmitting} />}
                     {renderMcidDialog(
                       <Button variant="outline" size="sm" disabled={isSubmitting}>
