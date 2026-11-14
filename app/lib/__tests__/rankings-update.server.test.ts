@@ -18,7 +18,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function stubRanked(eloRate: number | null, bestTime?: number) {
+function stubRanked(eloRate: number | null, bestTime?: number, allTime?: number | { ranked?: number; casual?: number }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -26,7 +26,7 @@ function stubRanked(eloRate: number | null, bestTime?: number) {
       status: 200,
       json: async () => ({
         status: "success",
-        data: { uuid: "u", nickname: "n", eloRate, eloRank: 1, statistics: { season: bestTime ? { bestTime: { ranked: bestTime } } : {} } },
+        data: { uuid: "u", nickname: "n", eloRate, eloRank: 1, statistics: { season: bestTime ? { bestTime: { ranked: bestTime } } : {}, ...(allTime ? { total: { bestTime: allTime } } : {}) } },
       }),
     }))
   );
@@ -148,5 +148,49 @@ describe("ranked_pb の recordDate", () => {
     stubRanked(1500, 650000);
     await updateUserRankings(db, [], input(user.id, "pb3"));
     expect((await pbRow(user.id))?.recordDate).toBe("2026-01-02");
+  });
+});
+
+describe("ranked_pb_all_time（全期間ベスト）", () => {
+  const input = (id: string, slug: string) => ({
+    id, mcid: slug, uuid: `uuid-${slug}`, speedruncomId: null, speedruncomUsername: null,
+  });
+  async function rowsOf(userId: string, type: "ranked_pb" | "ranked_pb_all_time") {
+    return db.query.playerRankings.findMany({
+      where: (r, { and, eq }) => and(eq(r.userId, userId), eq(r.rankingType, type)),
+    });
+  }
+
+  it("シーズン PB とは別の行として新規保存する（recordDate は null）", async () => {
+    const user = await seedUser(db, { slug: "at1", mcid: "at1", uuid: "uuid-at1" });
+    stubRanked(1500, 650000, { ranked: 590000, casual: 100000 });
+    await updateUserRankings(db, [], input(user.id, "at1"));
+    const all = await rowsOf(user.id, "ranked_pb_all_time");
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ timeMs: 590000, recordDate: null });
+    const season = await rowsOf(user.id, "ranked_pb");
+    expect(season).toHaveLength(1);
+    expect(season[0].timeMs).toBe(650000);
+  });
+
+  it("数値で返る場合も保存し、再実行では同じ行を更新する（1行のまま）", async () => {
+    const user = await seedUser(db, { slug: "at2", mcid: "at2", uuid: "uuid-at2" });
+    stubRanked(1500, undefined, 600000);
+    await updateUserRankings(db, [], input(user.id, "at2"));
+    stubRanked(1500, undefined, 580000);
+    await updateUserRankings(db, [], input(user.id, "at2"));
+    const all = await rowsOf(user.id, "ranked_pb_all_time");
+    expect(all).toHaveLength(1);
+    expect(all[0].timeMs).toBe(580000);
+    expect(await rowsOf(user.id, "ranked_pb")).toHaveLength(0);
+  });
+
+  it("全期間ベストが取れない応答では既存行に触らない", async () => {
+    const user = await seedUser(db, { slug: "at3", mcid: "at3", uuid: "uuid-at3" });
+    stubRanked(1500, undefined, 600000);
+    await updateUserRankings(db, [], input(user.id, "at3"));
+    stubRanked(1500, 650000);
+    await updateUserRankings(db, [], input(user.id, "at3"));
+    expect((await rowsOf(user.id, "ranked_pb_all_time"))[0].timeMs).toBe(600000);
   });
 });

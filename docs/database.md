@@ -668,7 +668,7 @@ MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `us
 |---|---|---|
 | `id` | text | PK |
 | `user_id` | text | → `users.id` (cascade) |
-| `ranking_type` | enum | `speedruncom` / `ranked_pb` / `ranked_elo` |
+| `ranking_type` | enum | `speedruncom` / `ranked_pb`（MCSR Ranked の今シーズンのベスト）/ `ranked_pb_all_time`（同・全期間のベスト。ホーム「注目の走者」の PB 表示用。`/rankings` 等の既存集計は `ranked_pb` のみを見る）/ `ranked_elo` |
 | `category_id` | text? | → `speedrun_categories.id` (cascade)。Ranked Elo では null |
 | `speedruncom_run_id` | text? | |
 | `speedruncom_player_id` | text? | |

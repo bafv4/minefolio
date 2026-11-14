@@ -75,6 +75,10 @@ interface RankedUserResponse {
         wins?: number | { ranked?: number };
         loses?: number | { ranked?: number };
       };
+      // 全期間。bestTime は数値、または { ranked, casual } のオブジェクトで返ることがある（external-stats.ts と同じ扱い）
+      total?: {
+        bestTime?: number | { ranked?: number | null } | null;
+      };
     };
   };
 }
@@ -296,7 +300,7 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 // 判定ソースとし、DBへの読み取りは行わない（書き込みSQLは従来どおり都度実行する）。
 interface LocalRankingRow {
   id: string;
-  rankingType: "speedruncom" | "ranked_pb" | "ranked_elo";
+  rankingType: "speedruncom" | "ranked_pb" | "ranked_pb_all_time" | "ranked_elo";
   categoryId: string | null;
   speedruncomRunId: string | null;
   verificationStatus: "verified" | "new" | "rejected" | null;
@@ -647,6 +651,45 @@ export async function updateUserRankings(
           }
 
           rankedPbUpdates++;
+        }
+
+        // 全期間ベスト（ranked_pb_all_time）。同じ応答の statistics.total から取る。シーズン PB と同じく
+        // 値が取れなかったときは既存行に触らない。recordDate は使わない（ホームの出来事の対象外）
+        const rawAllTime = userData.statistics?.total?.bestTime;
+        const allTimeBest = typeof rawAllTime === "number" ? rawAllTime : rawAllTime?.ranked;
+        if (allTimeBest) {
+          const existingAllTime = userRankings.find((r) => r.rankingType === "ranked_pb_all_time");
+          if (existingAllTime) {
+            await db
+              .update(playerRankings)
+              .set({
+                timeMs: allTimeBest,
+                timeFormatted: formatTimeMs(allTimeBest),
+                lastFetched: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(playerRankings.id, existingAllTime.id));
+            existingAllTime.timeMs = allTimeBest;
+          } else {
+            const newId = createId();
+            await db.insert(playerRankings).values({
+              id: newId,
+              userId: user.id,
+              rankingType: "ranked_pb_all_time",
+              timeMs: allTimeBest,
+              timeFormatted: formatTimeMs(allTimeBest),
+              recordDate: null,
+              lastFetched: new Date(),
+            });
+            userRankings.push({
+              id: newId,
+              rankingType: "ranked_pb_all_time",
+              categoryId: null,
+              speedruncomRunId: null,
+              verificationStatus: "verified",
+              timeMs: allTimeBest,
+            });
+          }
         }
 
         // Eloランキング

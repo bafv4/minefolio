@@ -193,6 +193,8 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 MCSR Ranked API は PB を出した日時を返さないため、`ranked_pb` 行の `recordDate`（`YYYY-MM-DD`、UTC）は cron が「前回より速くなった」ことを検出した日だけ入れる。PB が変わらない・遅くなる更新では既存値を書き換えない。初回挿入（行がまだ無い）は過去の PB を「今日の更新」と誤認しないよう null のまま。
 
+cron は同じ MCSR Ranked 応答の `statistics.total.bestTime`（数値、または `{ ranked, casual }`）から全期間ベストも `ranking_type = 'ranked_pb_all_time'` の行として保存する（追加の API 呼び出しなし・`recordDate` は常に null・取れない応答では既存行を触らない）。ホームの注目の走者の自己ベストが使う（`ranked_pb` を数える既存の集計には混ざらない）。
+
 ---
 
 ## 関連ファイル

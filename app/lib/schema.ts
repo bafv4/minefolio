@@ -1049,7 +1049,7 @@ export const playerRankings = sqliteTable("player_rankings", {
 
   // ランキング種別
   rankingType: text("ranking_type", {
-    enum: ["speedruncom", "ranked_pb", "ranked_elo"]
+    enum: ["speedruncom", "ranked_pb", "ranked_pb_all_time", "ranked_elo"]
   }).notNull(),
 
   // カテゴリ（Speedrun.comの場合）
