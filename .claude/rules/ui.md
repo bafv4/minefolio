@@ -84,6 +84,7 @@
 ## カラーシステム
 - テーマカラーは **oklch** 形式でCSS変数に定義
 - セマンティックカラー: `--success`, `--warning`, `--info`, `--destructive`
+- 枠線 `--border` と背景の格子模様 `--page-grid-line`（`.page-bg-pattern`）は別トークン。枠線はカードを背景から区切れる濃さ（light は slate-200 と 300 の間、dark 白14%、ultra-dark 白12%）、格子模様は背景として控えめな濃さ（light slate-200、dark 白10%、ultra-dark 白8%）。枠線を調整するときに背景まで濃くならないよう、格子模様に `--border` を使わない
 - ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）、`--youtube` / `--twitch` / `--gold` / `--bronze`
 - 区間モチーフ（進行バー `StageBar`・ホームのライブの区間分布の帯）: 現在区間／人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`。区間の分布の帯は人が居なくても7段を描く（0人の段は `bg-muted`・人数なし）。終了カード（ライブ欄で消えて少しの間残すもの）の進行バーは現在区間も `bg-brand/40`（強調なし）
 - コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
