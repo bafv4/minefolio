@@ -461,6 +461,18 @@ CREATE TABLE `profile_videos` (
 );
 
 CREATE INDEX `idx_profile_videos_user_id` ON `profile_videos` (`user_id`);
+CREATE TABLE `ranked_elo_snapshots` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`snapshot_date` text NOT NULL,
+	`elo_rate` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `ranked_elo_snapshots_user_date_uniq` ON `ranked_elo_snapshots` (`user_id`,`snapshot_date`);
+CREATE INDEX `idx_ranked_elo_snapshots_date` ON `ranked_elo_snapshots` (`snapshot_date`);
 CREATE TABLE `rankings_cache` (
 	`id` text PRIMARY KEY NOT NULL,
 	`cache_key` text NOT NULL,
@@ -589,6 +601,7 @@ CREATE TABLE `twitch_vod_cache` (
 	`title` text NOT NULL,
 	`thumbnail_url` text,
 	`channel_title` text,
+	`game_name` text,
 	`duration_seconds` integer,
 	`published_at` integer NOT NULL,
 	`last_verified_at` integer NOT NULL,

@@ -889,6 +889,9 @@ export const twitchVodCache = sqliteTable("twitch_vod_cache", {
   title: text("title").notNull(),
   thumbnailUrl: text("thumbnail_url"), // サイズ解決済みURL。処理中VODは null
   channelTitle: text("channel_title"), // 配信者の表示名（user_name）
+  // 取り込み時点のチャンネルのカテゴリ（ゲーム）名。Helix の videos API はアーカイブ単位のゲーム名を
+  // 返さないため cron が取り込み時に保存する。既存行・取得不能時は null
+  gameName: text("game_name"),
   durationSeconds: integer("duration_seconds"), // 配信時間（秒）
   publishedAt: integer("published_at", { mode: "timestamp" }).notNull(),
   // キャッシュ管理
@@ -1386,6 +1389,34 @@ export const pageViewStats = sqliteTable("page_view_stats", {
 
 export type PageViewStat = typeof pageViewStats.$inferSelect;
 export type NewPageViewStat = typeof pageViewStats.$inferInsert;
+
+// ============================================
+// ranked_elo_snapshots（Ranked レートの日次スナップショット）
+// ============================================
+// ホームの「注目の走者」で「直近7日のレート上がり幅」を出すための履歴。cron（update-rankings、12時間ごと）が
+// 各ユーザーのその時点のレートを (userId, snapshotDate) で upsert する（同日に複数回走っても1行）。
+//
+// 【snapshotDate】`YYYY-MM-DD` の text。**UTC 日付**で統一する（サーバー/cron は UTC 動作で、
+//   JST 換算を挟むと境界ずれの余地が増えるため。text なので辞書順比較で期間検索できる）。
+// 【整合性ポリシー】userId は users.id への外部キー（onDelete cascade）。ユーザー削除で履歴も消える。
+export const rankedEloSnapshots = sqliteTable("ranked_elo_snapshots", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** スナップショット日（UTC、`YYYY-MM-DD`） */
+  snapshotDate: text("snapshot_date").notNull(),
+  /** その日（最後の記録時点）の Ranked レート */
+  eloRate: integer("elo_rate").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  // 1ユーザー1日1行（upsert の衝突ターゲット）。userId 先頭なので「ユーザー別の期間検索」もこの索引で引ける
+  uniqueIndex("ranked_elo_snapshots_user_date_uniq").on(table.userId, table.snapshotDate),
+  // 期間検索（直近7日分の全ユーザー取得）用
+  index("idx_ranked_elo_snapshots_date").on(table.snapshotDate),
+]);
+
+export type RankedEloSnapshot = typeof rankedEloSnapshots.$inferSelect;
+export type NewRankedEloSnapshot = typeof rankedEloSnapshots.$inferInsert;
 
 // ============================================
 // playstyles（プレイスタイル）

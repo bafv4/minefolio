@@ -4,7 +4,7 @@ Minefolio の DB スキーマ全体を俯瞰するためのドキュメント。
 
 - DBMS: **libSQL（Turso）／ SQLite 方言**、ORM は **Drizzle ORM**
 - 主キーは原則 `text` の **CUID2**（`@paralleldrive/cuid2` の `createId()`）。例外は `app_meta`（`key` が PK）と better-auth 管理テーブル
-- テーブル数: **40**
+- テーブル数: **41**
 - スキーマ変更の反映手順は [CLAUDE.md](../CLAUDE.md) の「データベース」節（`db:push` / `db:push:remote`）を参照
 
 ## 凡例
@@ -60,6 +60,7 @@ erDiagram
     config_presets ||--o{ config_history : preset_id
 
     users ||--o{ player_rankings : user_id
+    users ||--o{ ranked_elo_snapshots : user_id
     users ||--o{ paceman_paces : user_id
     speedrun_categories ||--o{ player_rankings : category_id
     speedrun_categories ||--o{ rankings_cache : category_id
@@ -143,11 +144,12 @@ erDiagram
 | 33 | [`api_cache`](#api_cache) | 7 | 汎用 API キャッシュ | なし |
 | 34 | [`youtube_video_cache`](#youtube_video_cache) | 13 | YouTube 動画キャッシュ | なし（弱参照） |
 | 35 | [`youtube_live_cache`](#youtube_live_cache) | 15 | YouTube ライブ配信キャッシュ | なし（弱参照） |
-| 36 | [`twitch_vod_cache`](#twitch_vod_cache) | 12 | Twitch アーカイブキャッシュ | なし（弱参照） |
+| 36 | [`twitch_vod_cache`](#twitch_vod_cache) | 13 | Twitch アーカイブキャッシュ | なし（弱参照） |
 | 37 | [`content_translations`](#content_translations) | 15 | 利用者コンテンツの自動翻訳 | なし（弱参照） |
 | 38 | [`page_view_stats`](#page_view_stats) | 7 | ページビュー集計スナップショット | なし（弱参照） |
 | 39 | [`app_meta`](#app_meta) | 3 | アプリ全体の key-value | なし |
 | 40 | [`slug_history`](#slug_history) | 5 | 旧 slug からのリダイレクト解決 | 1 : N |
+| 41 | [`ranked_elo_snapshots`](#ranked_elo_snapshots) | 6 | Ranked レートの日次スナップショット | 1 : N |
 
 ---
 
@@ -959,6 +961,7 @@ MCID を持たないユーザーの VOD も扱うため **`mcid` 列を持たな
 | `title` | text | |
 | `thumbnail_url` | text? | 処理中 VOD は null |
 | `channel_title` | text? | |
+| `game_name` | text? | 取り込み時点のチャンネルのカテゴリ名（cron が保存）。既存行は null |
 | `duration_seconds` | int? | |
 | `published_at` | ts | |
 | `last_verified_at` | ts | |
@@ -1017,6 +1020,22 @@ Vercel Web Analytics の path 別 PV を Minefolio の対象へ解決したス�
 索引: **UNIQUE** `(target_type, target_id)`
 
 cron（`/api/cron/update-page-views`）が数時間おきに `target_type` 単位で全置換する。読み手は対象テーブル側を起点に相関サブクエリで引くため、孤児行が一覧へ漏れることはない。
+
+#### `ranked_elo_snapshots`
+
+Ranked レートの日次スナップショット。ホーム「注目の走者」の「直近 7 日のレート上がり幅」の元データ。
+cron `update-rankings`（12 時間ごと）が各ユーザーのレートを `(user_id, snapshot_date)` で upsert する（同日に複数回走っても 1 行）。
+
+| カラム | 型 | 制約・参照 |
+|---|---|---|
+| `id` | text | PK |
+| `user_id` | text | ⇢ `users.id`（cascade） |
+| `snapshot_date` | text | `YYYY-MM-DD`、**UTC 日付**（text のため辞書順比較で期間検索できる） |
+| `elo_rate` | int | その日（最後の記録時点）のレート |
+| `created_at` | ts | |
+| `updated_at` | ts | |
+
+索引: **UNIQUE** `(user_id, snapshot_date)` / `(snapshot_date)`
 
 #### `app_meta`
 
