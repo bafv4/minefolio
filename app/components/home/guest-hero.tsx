@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,7 @@ import { formatClock } from "@/lib/home-format";
 import type { FeaturedRunner } from "@/lib/home-featured";
 import { ArrowRight, Search, Sparkles } from "lucide-react";
 
-/** 顔ぶれの帯に出す走者（公開一覧に出ている項目の部分集合） */
+/** 見出しで入れ替えて出す走者（公開一覧に出ている項目の部分集合） */
 export interface HeroFace {
   slug: string;
   mcid: string | null;
@@ -26,68 +27,150 @@ export interface HeroFace {
   customSkinUrl?: string | null;
 }
 
-/** 帯に並べる最大人数（1行） */
-const MAX_FACES = 10;
+/** 見出しに入れ替えで出す人数の上限 */
+const MAX_FACES = 12;
+/** 見出しのスキンを入れ替える間隔 */
+const FACE_ROTATE_MS = 8000;
+/** 翻訳文中の {emphasis} の位置を見つけるための目印（制御文字なので文言には現れない） */
+const EMPHASIS_MARK = "";
+
+/** index の人。ただし除外対象なら次の除外対象でない人（全員が除外対象なら -1） */
+function resolveFaceIndex(faces: HeroFace[], from: number, excludeSlug: string | null): number {
+  for (let k = 0; k < faces.length; k++) {
+    const i = (from + k) % faces.length;
+    if (faces[i].slug !== excludeSlug) return i;
+  }
+  return -1;
+}
 
 /**
- * 帯の幅（@container）に収まる人数だけ出すための表示クラス。タイル 48px・間隔 8px なので、
- * i 番目（0始まり）のタイルには 56i + 48 px の幅が要る。収まらないタイルは display:none にして
- * はみ出しと見えないリンクへのフォーカスを防ぐ（Tailwind が拾えるようクラス文字列は静的に列挙する）
+ * 見出しの強調部分に置くスキン。全員分の枠を重ねて opacity だけ切り替える（クロスフェード）。
+ * 中のスキン画像は「表示中の人と次の人」だけ描き（一度描いた人は残す）、開いた直後に /api/skin を一斉に出さない。次の人は先に読み込まれるので切り替えで空白が出ない。
+ * 48px で描いて、枠（見出しの文字と同じ 1.1em）に CSS で合わせる。装飾なので読み上げない。
+ * `excludeSlug`（右列に出ている注目の走者）は出さない。リストは絞り込まず、表示する人を
+ * 「index の人。除外対象なら次の除外対象でない人」として導出する（注目の走者が変わっても index がずれない）。
+ * 初期表示（SSR・ハイドレーション）は、除外対象を除いた先頭の人。入れ替えは reduced-motion と非表示タブで止める。
+ * 出せる人が0人なら枠ごと出さず、1人ならタイマーを張らない。
  */
-const FACE_VISIBILITY = [
-  "flex",
-  "flex",
-  "flex",
-  "flex",
-  "hidden @[17rem]:flex", // 272px
-  "hidden @[20.5rem]:flex", // 328px
-  "hidden @[24rem]:flex", // 384px
-  "hidden @[27.5rem]:flex", // 440px
-  "hidden @[31rem]:flex", // 496px
-  "hidden @[34.5rem]:flex", // 552px
-] as const;
+function RotatingHeadingSkins({ faces, excludeSlug }: { faces: HeroFace[]; excludeSlug: string | null }) {
+  const [index, setIndex] = useState(0);
+  const excludeRef = useRef(excludeSlug);
+  excludeRef.current = excludeSlug;
 
-function FaceTile({ face, index }: { face: HeroFace; index: number }) {
-  const locale = useLocale();
-  const name = getLocalizedDisplayName(face, locale);
+  const eligible = faces.filter((f) => f.slug !== excludeSlug).length;
+  const canRotate = eligible >= 2;
+
+  useEffect(() => {
+    if (!canRotate) return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    const start = () => {
+      stop();
+      if (media.matches) return;
+      timer = setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+        setIndex((i) => {
+          // いま表示中の人（除外対象なら次の人）の、さらに次の除外対象でない人へ進める
+          const shown = resolveFaceIndex(faces, i, excludeRef.current);
+          if (shown < 0) return i;
+          const next = resolveFaceIndex(faces, shown + 1, excludeRef.current);
+          return next < 0 ? i : next;
+        });
+      }, FACE_ROTATE_MS);
+    };
+    start();
+    media.addEventListener("change", start);
+    return () => {
+      stop();
+      media.removeEventListener("change", start);
+    };
+  }, [canRotate, faces]);
+
+  const shownIndex = resolveFaceIndex(faces, index, excludeSlug);
+  const nextIndex = shownIndex < 0 ? -1 : resolveFaceIndex(faces, shownIndex + 1, excludeSlug);
+  const shownSlug = shownIndex < 0 ? null : faces[shownIndex].slug;
+  const nextSlug = nextIndex < 0 || nextIndex === shownIndex ? null : faces[nextIndex].slug;
+
+  // 描画済み（読み込み始めた）人。一度描いた人は残し、また回ってきたときに読み込み直さずクロスフェードできるようにする。
+  // 初期（SSR・ハイドレーション）は「表示中＋次」だけで、入れ替え・除外の変化のたびに新しい人を足す
+  const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    setLoaded((prev) => {
+      const add = [shownSlug, nextSlug].filter((s): s is string => s !== null && !prev.has(s));
+      return add.length === 0 ? prev : new Set([...prev, ...add]);
+    });
+  }, [shownSlug, nextSlug]);
+
+  if (shownIndex < 0) return null;
+
   return (
-    <Link
-      to={`/player/${face.slug}`}
-      prefetch="intent"
-      aria-label={name}
-      title={name}
-      className={cn(
-        "size-12 shrink-0 items-center justify-center rounded-lg border border-transparent bg-secondary/50 transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-        FACE_VISIBILITY[index] ?? "hidden",
-      )}
+    <span
+      aria-hidden="true"
+      className="relative mr-1 inline-block size-[1.1em] shrink-0 align-[-0.15em] [&_div]:!size-full [&_img]:!size-full"
     >
-      <MinecraftAvatar uuid={face.uuid} skinUrl={face.customSkinUrl} mcid={face.mcid} size={40} className="rounded" />
-    </Link>
+      {faces.map((f, i) => (
+        <span
+          key={f.slug}
+          className={cn(
+            "absolute inset-0 transition-opacity duration-300 motion-reduce:transition-none",
+            i === shownIndex ? "opacity-100" : "opacity-0",
+          )}
+        >
+          {(loaded.has(f.slug) || f.slug === shownSlug || f.slug === nextSlug) && (
+            <MinecraftAvatar uuid={f.uuid} skinUrl={f.customSkinUrl} mcid={f.mcid} size={48} className="rounded" />
+          )}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** 見出し。{emphasis}（［スキン］＋強調語）をブランド色の下線でまとめ、直後の非空白文字（ja の「から」）と改行させない */
+function HeroHeading({ faces, excludeSlug }: { faces: HeroFace[]; excludeSlug: string | null }) {
+  const t = useT();
+  const parts = t("home.heroTitle", { emphasis: EMPHASIS_MARK }).split(EMPHASIS_MARK);
+  if (parts.length !== 2) return <>{t("home.heroTitle", { emphasis: t("home.heroTitleEmphasis") })}</>;
+  const [before, after] = parts;
+  const tail = after.match(/^\S+/)?.[0] ?? "";
+  return (
+    <>
+      {before}
+      <span className="whitespace-nowrap">
+        <span className="inline-block border-b-[3px] border-brand pb-0.5">
+          {faces.length > 0 && <RotatingHeadingSkins faces={faces} excludeSlug={excludeSlug} />}
+          {t("home.heroTitleEmphasis")}
+        </span>
+        {tail}
+      </span>
+      {after.slice(tail.length)}
+    </>
   );
 }
 
 /**
- * 未ログイン時のホームのヒーロー。左＝見出し・CTA・走者の顔ぶれの帯、右＝注目の走者（枠で包まない）。
+ * 未ログイン時のホームのヒーロー。左＝見出し（強調語の前でスキンが入れ替わる）・CTA、右＝注目の走者（枠で包まない）。
  * 注目の走者を回す処理・理由行・キー部分は FeaturedRunnerCard（ログイン時）と共有している。
  */
 export function GuestHero({
   candidates,
   initial,
   faces,
-  totalPublicProfiles,
 }: {
   candidates: FeaturedRunner[];
   initial: FeaturedRunner | null;
   faces: HeroFace[];
-  totalPublicProfiles: number;
 }) {
   const t = useT();
   const locale = useLocale();
   const { current, loading, announce, handleClick } = useFeaturedRotation(candidates, initial);
   const nextButton = <FeaturedNextButton onClick={handleClick} loading={loading} />;
 
-  // 注目の走者として右に出ている人は帯から除く
-  const shownFaces = faces.filter((f) => f.slug !== current?.slug).slice(0, MAX_FACES);
+  // 同じ配列を渡し続ける（スキンの入れ替えタイマーは faces に依存するので、再描画のたびに作り直すと8秒のカウントが巻き戻る）
+  const headingFaces = useMemo(() => faces.slice(0, MAX_FACES), [faces]);
 
   const name = current ? getLocalizedDisplayName(current, locale) : "";
   const sensitivity =
@@ -99,8 +182,9 @@ export function GuestHero({
 
   return (
     <section aria-labelledby="home-hero-heading" className="rounded-2xl border border-border/70 bg-card p-6 sm:p-8">
-      {/* 左列をやや広く取り、ja の1行目（「RTAをパーソナリティから」）が各段の文字サイズで1行に収まるようにする */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-center lg:gap-10">
+      {/* 左列を広めに取り、ja の1行目（「RTAを［スキン］パーソナリティから」）が lg 以上で1行に収まるようにする。
+          xl 以上は幅に余裕があるので比率を戻し、右列のキーを1段に並べる幅を残す */}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <div className="space-y-3">
             {/* 文言中の改行（ja: 「…から」の後）で区切る。改行の無い英語は text-balance で行長を揃える。
@@ -110,7 +194,7 @@ export function GuestHero({
               id="home-hero-heading"
               className="whitespace-pre-line text-balance text-2xl font-bold leading-tight tracking-tight sm:text-4xl"
             >
-              {t("home.heroTitle")}
+              <HeroHeading faces={headingFaces} excludeSlug={current?.slug ?? null} />
             </h1>
             <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
           </div>
@@ -129,22 +213,6 @@ export function GuestHero({
             </Button>
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">{t("home.ctaLoginNote")}</p>
-
-          {/* 走者の顔ぶれ（1行。いる人数だけ並べ、0人なら帯ごと出さない） */}
-          {shownFaces.length > 0 && (
-            <div className="@container space-y-2 pt-1">
-              <div className="flex gap-2">
-                {shownFaces.map((f, i) => (
-                  <FaceTile key={f.slug} face={f} index={i} />
-                ))}
-              </div>
-              {totalPublicProfiles > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("home.profileCount", { count: totalPublicProfiles.toLocaleString(locale) })}
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         {/* 主役: 注目の走者（枠で包まず、リンクは顔と名前だけ） */}

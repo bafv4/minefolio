@@ -1068,7 +1068,6 @@ export default function HomePage() {
           candidates={spotlight?.candidates ?? []}
           initial={spotlight?.fallback ?? null}
           faces={heroFaces}
-          totalPublicProfiles={totalPublicProfiles}
         />
       )}
 

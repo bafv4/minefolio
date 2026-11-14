@@ -349,7 +349,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   home: {
     title: "Minefolio - Minecraft Speedrunner Portfolio",
-    heroTitle: "Get to know the runners behind the runs.",
+    heroTitle: "Get to know the {emphasis} behind the runs.",
+    heroTitleEmphasis: "runners",
     heroDescription:
       "Minefolio is a profile site built for the Minecraft speedrunning community.",
     ctaStart: "Create profile / Log in",

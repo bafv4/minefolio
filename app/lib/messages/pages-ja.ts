@@ -351,7 +351,8 @@ export const PAGES_JA = {
   },
   home: {
     title: "Minefolio - Minecraft Speedrunner Portfolio",
-    heroTitle: "RTAをパーソナリティから\nみてみよう。",
+    heroTitle: "RTAを{emphasis}から\nみてみよう。",
+    heroTitleEmphasis: "パーソナリティ",
     heroDescription: "Minefolioは、MinecraftのRTAコミュニティに特化したプロフィール作成サイトです。",
     ctaStart: "プロフィールを作る / ログイン",
     ctaBrowse: "走者を探す",
