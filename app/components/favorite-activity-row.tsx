@@ -136,7 +136,7 @@ export function FavoriteActivityRow({
           {avatar}
         </Link>
         <Icon className="pointer-events-none relative h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="pointer-events-none relative min-w-0 flex-1 truncate text-sm">{sentence(item)}</span>
+        <span className="pointer-events-none relative min-w-0 flex-1 text-sm leading-snug max-sm:line-clamp-2 sm:truncate">{sentence(item)}</span>
         <span className="pointer-events-none relative ml-auto shrink-0">{timeEl}</span>
         <PaceTimelineModal
           open={open}
@@ -157,7 +157,7 @@ export function FavoriteActivityRow({
     >
       <span className="relative z-10 shrink-0 rounded-lg bg-card">{avatar}</span>
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-sm">{sentence(item)}</span>
+      <span className="min-w-0 flex-1 text-sm leading-snug max-sm:line-clamp-2 sm:truncate">{sentence(item)}</span>
       {timeEl}
     </Link>
   );

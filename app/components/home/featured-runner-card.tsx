@@ -222,10 +222,23 @@ export function FeaturedRunnerCard({
       className="group relative rounded-2xl border border-border/70 bg-background/80 p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="home-featured-heading" className="flex items-center gap-2 text-sm font-semibold">
-          <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-          {t("home.featuredTitle")}
-        </h2>
+        {wide ? (
+          // ログイン時（ページ幅いっぱい）は他の欄（HomeSection）と同じ見出し: アイコンチップ + h2 text-xl font-bold
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="rounded-xl bg-primary/10 p-2">
+              <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
+            </div>
+            <h2 id="home-featured-heading" className="text-xl font-bold">
+              {t("home.featuredTitle")}
+            </h2>
+          </div>
+        ) : (
+          // ゲストのヒーロー内は小見出しのまま
+          <h2 id="home-featured-heading" className="flex items-center gap-2 text-sm font-semibold">
+            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            {t("home.featuredTitle")}
+          </h2>
+        )}
         {nextButton}
       </div>
 

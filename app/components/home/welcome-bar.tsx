@@ -32,48 +32,50 @@ export function WelcomeBar({
   return (
     <section
       aria-label={greeting}
-      className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 shadow-sm sm:px-5"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 shadow-sm sm:gap-x-4 sm:px-5"
     >
       <Link to={`/player/${slug}`} className="shrink-0" aria-hidden="true" tabIndex={-1}>
         <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} className="rounded-xl" />
       </Link>
-      <div className="min-w-0 flex-1 basis-48">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-base font-semibold">{greeting}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {/* モバイル: 1段目＝アバター・挨拶・設定（右端）、2段目＝ナビ。sm 以上は1行（ナビ → 設定の順） */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="order-3 size-11 shrink-0 sm:order-4 sm:size-9"
+            aria-label={t("home.settingsTitle")}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t("home.settingsTitle")}</TooltipContent>
+      </Tooltip>
+      <div className="order-4 flex w-full items-center gap-x-1 sm:order-3 sm:w-auto sm:gap-x-2">
         <Button asChild className="min-h-11 sm:min-h-9">
           <Link to="/me/edit">
             <Pencil className="mr-1.5 h-4 w-4" />
             {t("home.welcomeEditProfile")}
           </Link>
         </Button>
-        <Button asChild variant="ghost" className="min-h-11 sm:min-h-9">
+        {/* モバイルは2つ目以降をアイコンのみ（44px 角）にして1行に収める。ラベルは sr-only で残す */}
+        <Button asChild variant="ghost" className="min-h-11 max-sm:w-11 max-sm:px-0 sm:min-h-9">
           <Link to={`/player/${slug}`}>
-            <User className="mr-1.5 h-4 w-4" />
-            {t("home.welcomeMyProfile")}
+            <User className="h-4 w-4 sm:mr-1.5" />
+            <span className="sr-only sm:not-sr-only">{t("home.welcomeMyProfile")}</span>
           </Link>
         </Button>
-        <Button asChild variant="ghost" className="min-h-11 sm:min-h-9">
+        <Button asChild variant="ghost" className="min-h-11 max-sm:w-11 max-sm:px-0 sm:min-h-9">
           <Link to="/favorites">
-            <Heart className="mr-1.5 h-4 w-4" />
-            {t("home.welcomeFavorites")}
+            <Heart className="h-4 w-4 sm:mr-1.5" />
+            <span className="sr-only sm:not-sr-only">{t("home.welcomeFavorites")}</span>
           </Link>
         </Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-11 sm:size-9"
-              aria-label={t("home.settingsTitle")}
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings2 />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t("home.settingsTitle")}</TooltipContent>
-        </Tooltip>
       </div>
       <HomeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} order={sectionOrder} />
     </section>
