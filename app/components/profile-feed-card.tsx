@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
-import { Clock3 } from "lucide-react";
+import { Clock3, Heart } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -77,7 +77,25 @@ function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
   );
 }
 
-export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
+/** お気に入り走者の印（塗りつぶしハート）。読み上げ用の文言を sr-only で添える */
+function FavoriteMark({ className }: { className: string }) {
+  const t = useT();
+  return (
+    <>
+      <Heart className={cn("shrink-0 fill-favorite text-favorite", className)} aria-hidden="true" />
+      <span className="sr-only">{t("favorites.favoriteMark")}</span>
+    </>
+  );
+}
+
+export function ProfileFeedCard({
+  player,
+  isFavorite = false,
+}: {
+  player: ProfileFeedCardPlayer;
+  /** true のとき名前行の右端（カードの右側）にハートを出す（/browse でお気に入りが先頭に来る理由の表示） */
+  isFavorite?: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
@@ -96,7 +114,14 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
         {/* min-h-12 keeps header block height == avatar height, so rows stay aligned across cards
             even when optional fields (@mcid / bio) are missing */}
         <div className="flex min-h-12 min-w-0 flex-1 flex-col justify-center">
-          <p className="truncate font-semibold">{displayName}</p>
+          {isFavorite ? (
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="min-w-0 flex-1 truncate font-semibold">{displayName}</p>
+              <FavoriteMark className="h-4 w-4" />
+            </div>
+          ) : (
+            <p className="truncate font-semibold">{displayName}</p>
+          )}
           {player.mcid && (
             <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
               <p className="min-w-0 truncate">@{player.mcid}</p>
@@ -128,7 +153,13 @@ export function ProfileFeedCard({ player }: { player: ProfileFeedCardPlayer }) {
 }
 
 /** Compact list row for players */
-export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer }) {
+export function ProfileFeedListItem({
+  player,
+  isFavorite = false,
+}: {
+  player: ProfileFeedCardPlayer;
+  isFavorite?: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
@@ -156,6 +187,7 @@ export function ProfileFeedListItem({ player }: { player: ProfileFeedCardPlayer 
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
+        {isFavorite && <FavoriteMark className="mr-1 h-3.5 w-3.5" />}
         {/* カードと同じ規則（既定値は出さず、識別に効くタグだけ最大3個） */}
         <FeedCardTags player={player} />
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">

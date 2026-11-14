@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label as RadixLabel } from "@/components/ui/label";
-import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
+import { Search, Users, Heart, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import {
@@ -39,6 +39,7 @@ import {
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useT } from "@/hooks/use-locale";
+import { useFavorites } from "@/hooks/use-favorites";
 import type { Translator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { platformLabel } from "@/lib/platform-label";
@@ -133,6 +134,7 @@ export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate 
 
 export default function BrowsePage() {
   const t = useT();
+  const { favorites, isFavorite } = useFavorites();
   const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, isLoggedIn } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -341,6 +343,14 @@ export default function BrowsePage() {
             { count: totalCount },
           )}
         </p>
+        {/* 並びの優先はログイン中だけに効く。お気に入りが1人以上いるときだけ理由を示す */}
+        {isLoggedIn && favorites.length > 0 && (
+          // 狭い画面で2行に折り返したときもハートは1行目に揃える（items-start + 行高 20px に対する 3px 下げ）
+          <p className="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
+            <Heart className="mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite" aria-hidden="true" />
+            {t("browse.favoritesFirstNote")}
+          </p>
+        )}
       </div>
 
       {/* 検索・フィルタ・ソート */}
@@ -695,7 +705,7 @@ export default function BrowsePage() {
             )}
           >
             {infinite.items.map((player) => (
-              <ProfileFeedCard key={player.slug} player={player} />
+              <ProfileFeedCard key={player.slug} player={player} isFavorite={isFavorite(player.slug)} />
             ))}
           </div>
         ) : (
@@ -704,7 +714,7 @@ export default function BrowsePage() {
             className={cn("divide-y transition-opacity", isNavigating && "opacity-60")}
           >
             {infinite.items.map((player) => (
-              <ProfileFeedListItem key={player.slug} player={player} />
+              <ProfileFeedListItem key={player.slug} player={player} isFavorite={isFavorite(player.slug)} />
             ))}
           </div>
         )
