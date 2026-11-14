@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { Link, useLoaderData, useSearchParams } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -36,6 +36,9 @@ import { History, Activity, ChevronDown, Loader2, Search, X } from "lucide-react
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime", "sort"] as const;
+
+// タイム上限の入力形式（サーバー側 parseTimeParamToMs と同じ m:ss）
+const MAX_TIME_PATTERN = /^\d{1,3}:[0-5]?\d$/;
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -173,12 +176,22 @@ export default function PacesPage() {
   // 並び順（"recent"=新しい順 / "time"=タイム順。URLには "time" のみ載せる）
   const [sort, setSort] = useState(searchParams.get("sort") === "time" ? "time" : "recent");
 
+  // sort 以外のパラメータの前回値（並び順だけの変更では他欄の下書きを巻き戻さないための比較用）
+  const prevNonSortRef = useRef<string | null>(null);
+
   useEffect(() => {
-    setPlayer(searchParams.get("q") ?? "");
-    setSplit(searchParams.get("split") ?? "all");
-    setFrom(searchParams.get("from") ?? "");
-    setTo(searchParams.get("to") ?? "");
-    setMaxTime(searchParams.get("maxTime") ?? "");
+    const nonSort = FILTER_PARAM_KEYS.filter((key) => key !== "sort")
+      .map((key) => searchParams.get(key) ?? "")
+      .join("|");
+    const changed = prevNonSortRef.current !== nonSort;
+    prevNonSortRef.current = nonSort;
+    if (changed) {
+      setPlayer(searchParams.get("q") ?? "");
+      setSplit(searchParams.get("split") ?? "all");
+      setFrom(searchParams.get("from") ?? "");
+      setTo(searchParams.get("to") ?? "");
+      setMaxTime(searchParams.get("maxTime") ?? "");
+    }
     setSort(searchParams.get("sort") === "time" ? "time" : "recent");
   }, [searchParams]);
 
@@ -187,9 +200,46 @@ export default function PacesPage() {
   const activeFilterCount = FILTER_PARAM_KEYS.filter((key) => key !== "sort" && searchParams.get(key)).length;
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
+
+  // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
+  const appliedChips: { key: string; label: string }[] = [];
+  const appliedQ = searchParams.get("q");
+  if (appliedQ) appliedChips.push({ key: "q", label: `${t("paces.filterPlayer")}: ${appliedQ}` });
+  const appliedSplit = searchParams.get("split");
+  if (appliedSplit) appliedChips.push({ key: "split", label: `${t("paces.filterSplit")}: ${appliedSplit}` });
+  const appliedFrom = searchParams.get("from");
+  const appliedTo = searchParams.get("to");
+  if (appliedFrom || appliedTo) {
+    appliedChips.push({
+      key: "period",
+      label: `${t("paces.filterPeriod")}: ${appliedFrom ?? ""}${t("common.rangeSeparator")}${appliedTo ?? ""}`,
+    });
+  }
+  const appliedMaxTime = searchParams.get("maxTime");
+  if (appliedMaxTime) {
+    appliedChips.push({ key: "maxTime", label: `${t("paces.filterMaxTime")}: ${appliedMaxTime}` });
+  }
+  if (searchParams.get("sort") === "time") {
+    appliedChips.push({ key: "sort", label: `${t("paces.filterSort")}: ${t("paces.sortTime")}` });
+  }
+
+  // 並び順は選んだ時点で反映（/browse と同じ即時反映）。他の入力中の下書きは送らず、URL上の適用済み条件に sort だけ足す
+  const handleSortChange = (value: string) => {
+    setSort(value);
+    const params = new URLSearchParams(searchParams);
+    if (value === "time") params.set("sort", "time");
+    else params.delete("sort");
+    setSearchParams(params, { preventScrollReset: true });
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (maxTime.trim() && !MAX_TIME_PATTERN.test(maxTime.trim())) {
+      setMaxTimeInvalid(true);
+      setFiltersOpen(true);
+      return;
+    }
     const params = new URLSearchParams();
     if (player.trim()) params.set("q", player.trim());
     if (split !== "all") params.set("split", split);
@@ -246,6 +296,18 @@ export default function PacesPage() {
           )}
           <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", filtersOpen && "rotate-180")} />
         </button>
+        {!filtersOpen && appliedChips.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-1.5 sm:hidden" aria-label={t("paces.filterToggle")}>
+            {appliedChips.map((chip) => (
+              <li
+                key={chip.key}
+                className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
+              >
+                <span className="truncate">{chip.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <div id="pace-filter-panel" className={cn("mt-3 sm:mt-0 sm:block", filtersOpen ? "block" : "hidden")}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
           <div className="space-y-1.5">
@@ -308,15 +370,27 @@ export default function PacesPage() {
             <Input
               id="pace-filter-max-time"
               value={maxTime}
-              onChange={(e) => setMaxTime(e.target.value)}
+              onChange={(e) => {
+                setMaxTime(e.target.value);
+                setMaxTimeInvalid(false);
+              }}
               placeholder={t("paces.filterMaxTimePlaceholder")}
-              pattern="\d{1,3}:[0-5]?\d"
-              title={t("paces.filterMaxTimePlaceholder")}
+              aria-invalid={maxTimeInvalid || undefined}
+              aria-describedby={maxTimeInvalid ? "pace-filter-max-time-error" : "pace-filter-max-time-hint"}
             />
+            {maxTimeInvalid ? (
+              <p id="pace-filter-max-time-error" role="alert" className="text-xs text-destructive">
+                {t("paces.filterMaxTimeError")}
+              </p>
+            ) : (
+              <p id="pace-filter-max-time-hint" className="text-xs text-muted-foreground">
+                {t("paces.filterMaxTimeHint")}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pace-filter-sort">{t("paces.filterSort")}</Label>
-            <Select value={sort} onValueChange={setSort}>
+            <Select value={sort} onValueChange={handleSortChange}>
               <SelectTrigger id="pace-filter-sort" className="w-full">
                 <SelectValue />
               </SelectTrigger>

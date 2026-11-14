@@ -427,6 +427,8 @@ export const PAGES_JA = {
     filterPeriodTo: "終了日",
     filterMaxTime: "タイム上限（IGT）",
     filterMaxTimePlaceholder: "例: 10:00",
+    filterMaxTimeHint: "分:秒 の形式で入力",
+    filterMaxTimeError: "「分:秒」の形式で入力してください（例: 10:00）",
     filterSort: "並び順",
     sortRecent: "新しい順",
     sortTime: "IGT順（速い順）",

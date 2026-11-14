@@ -568,6 +568,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     filterPeriodTo: "End date",
     filterMaxTime: "Max time (IGT)",
     filterMaxTimePlaceholder: "e.g. 10:00",
+    filterMaxTimeHint: "Format: minutes:seconds",
+    filterMaxTimeError: "Enter the time as minutes:seconds (e.g. 10:00)",
     filterSort: "Sort by",
     sortRecent: "Newest first",
     sortTime: "Fastest IGT",
