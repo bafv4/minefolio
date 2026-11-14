@@ -18,7 +18,7 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
 import { listedRunnerCondition } from "@/lib/users-filter";
-import { eq, desc, and, or, isNotNull, inArray, sql } from "drizzle-orm";
+import { eq, desc, and, or, isNotNull, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
@@ -127,6 +127,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     updatedAt: users.updatedAt,
     shortBio: users.shortBio,
     customSkinUrl: users.customSkinUrl,
+    // カードのタグ用（メインカテゴリ）。playstyles.userId は一意なので leftJoin しても行は増えない
+    mainCategory: playstyles.mainCategory,
   };
 
   // ガイド一覧の select 列
@@ -182,13 +184,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     };
   })();
 
-  const [account, recentlyUpdatedUsers, popularUsersRaw, newGuidesRaw, [profileCounts], spotlight, heroFaces] =
+  const locale = resolveLocale(request);
+  const [account, recentlyUpdatedUsers, popularUsersRaw, guidesWithTranslations, [profileCounts], spotlight, heroFaces] =
     await Promise.all([
     accountPromise,
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
     db
       .select(profileFeedColumns)
       .from(users)
+      .leftJoin(playstyles, eq(playstyles.userId, users.id))
       .where(listedRunnerCondition)
       .orderBy(desc(users.updatedAt))
       .limit(HOME_PROFILE_COUNT),
@@ -198,6 +202,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       .select({ ...profileFeedColumns, pageViews7d: pageViewStats.pageviews })
       .from(pageViewStats)
       .innerJoin(users, eq(pageViewStats.targetId, users.id))
+      .leftJoin(playstyles, eq(playstyles.userId, users.id))
       .where(and(eq(pageViewStats.targetType, "profile"), listedRunnerCondition))
       .orderBy(desc(pageViewStats.pageviews))
       .limit(HOME_PROFILE_COUNT * 3),
@@ -209,7 +214,24 @@ export async function loader({ request }: Route.LoaderArgs) {
       // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない（視聴者ロールの著者は除外しない）
       .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
       .orderBy(desc(guides.updatedAt))
-      .limit(HOME_GUIDE_COUNT * 6),
+      .limit(HOME_GUIDE_COUNT * 6)
+      .then((newGuidesRaw) => {
+        // 同じ著者は1件まで
+        const seenAuthors = new Set<string>();
+        const newGuides = newGuidesRaw
+          .filter((g) => {
+            if (seenAuthors.has(g.authorSlug)) return false;
+            seenAuthors.add(g.authorSlug);
+            return true;
+          })
+          .slice(0, HOME_GUIDE_COUNT);
+        // 自動翻訳（docs/translation.md）。newGuides が決まった時点で、他の取得を待たずに引き始める。
+        // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
+        return getGuideTranslations(db, newGuides.map((g) => g.id), locale).then((guideTranslations) => ({
+          newGuides,
+          guideTranslations,
+        }));
+      }),
     db.select({ total: sql<number>`count(*)` }).from(users).where(listedRunnerCondition),
     // 注目の走者（ゲストはヒーロー右、ログイン時は「プロフィール」欄の上。10分キャッシュ）。失敗してもホーム全体は落とさない
     getHomeSpotlight(db).catch((error) => {
@@ -243,34 +265,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const recentSlugs = new Set(recentlyUpdatedUsers.map((u) => u.slug));
   const popularUsers = popularUsersRaw.filter((u) => !recentSlugs.has(u.slug)).slice(0, HOME_PROFILE_COUNT);
 
-  // 同じ著者は1件まで
-  const seenAuthors = new Set<string>();
-  const newGuides = newGuidesRaw
-    .filter((g) => {
-      if (seenAuthors.has(g.authorSlug)) return false;
-      seenAuthors.add(g.authorSlug);
-      return true;
-    })
-    .slice(0, HOME_GUIDE_COUNT);
-
-  // 自動翻訳（docs/translation.md）。ガイド id をまとめて 1 回で引き、title / summary を差し替える。
-  // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
-  // 表示する人（最近の更新・よく見られている）の分だけ引く
-  const feedUserIds = [...new Set([...recentlyUpdatedUsers, ...popularUsers].map((u) => u.id))];
-  const [guideTranslations, feedPlaystyles] = await Promise.all([
-    getGuideTranslations(db, newGuides.map((g) => g.id), resolveLocale(request)),
-    // カードのタグ用（メインカテゴリ）。全員分を1クエリで取得し N+1 にしない
-    feedUserIds.length === 0
-      ? []
-      : db
-          .select({ userId: playstyles.userId, mainCategory: playstyles.mainCategory })
-          .from(playstyles)
-          .where(inArray(playstyles.userId, feedUserIds)),
-  ]);
-  const mainCategoryById = new Map(feedPlaystyles.map((p) => [p.userId, p.mainCategory]));
-  // id はクライアントに不要なので外し、カード用に mainCategory を付ける
-  const withHighlights = <T extends { id: string }>(list: T[]) =>
-    list.map(({ id, ...rest }) => ({ ...rest, mainCategory: mainCategoryById.get(id) ?? null }));
+  const { newGuides, guideTranslations } = guidesWithTranslations;
+  // id はクライアントに不要なので外し、mainCategory を末尾へ置く
+  const withHighlights = <T extends { id: string; mainCategory: string | null }>(list: T[]) =>
+    list.map(({ id: _id, mainCategory, ...rest }) => ({ ...rest, mainCategory: mainCategory ?? null }));
 
   const popular = withHighlights(popularUsers);
   const recent = withHighlights(recentlyUpdatedUsers);
@@ -839,10 +837,28 @@ export default function HomePage() {
     }
   }, [feed.errors.videos, feed.errors.twitchVods, fetchYouTubeVideos, fetchTwitchVods]);
 
-  // 遅延読み込み（Promise.allで並列化）
+  // 遅延読み込み。ライブ（live-runs 等）は live 欄が非表示でも常に取る（おかえりバーの走行中チップと動画欄の Twitch 一覧が使う）
   useEffect(() => {
-    Promise.all([fetchYouTubeVideos(), fetchTwitchVods(), fetchRecentPaces(), fetchLiveRuns()]);
-  }, [fetchYouTubeVideos, fetchTwitchVods, fetchRecentPaces, fetchLiveRuns]);
+    fetchLiveRuns();
+  }, [fetchLiveRuns]);
+
+  // 動画（YouTube / Twitch VOD）は videos 欄、過去のペースは live 欄が表示されているときだけ取る。
+  // 非表示 → 表示に切り替えた時点で未取得なら取る（取得済みなら再表示でも取り直さない）
+  const videosVisible = !layout.hidden.includes("videos");
+  const liveVisible = !layout.hidden.includes("live");
+  const videosFetched = useRef(false);
+  const pacesFetched = useRef(false);
+  useEffect(() => {
+    if (!videosVisible || videosFetched.current) return;
+    videosFetched.current = true;
+    fetchYouTubeVideos();
+    fetchTwitchVods();
+  }, [videosVisible, fetchYouTubeVideos, fetchTwitchVods]);
+  useEffect(() => {
+    if (!liveVisible || pacesFetched.current) return;
+    pacesFetched.current = true;
+    fetchRecentPaces();
+  }, [liveVisible, fetchRecentPaces]);
 
   // ガイド一覧行を GuideCardGrid 用の型へ変換
   const toGuideItem = useCallback(
