@@ -17,7 +17,6 @@ import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   fetchAllExternalStats,
   checkPaceManPlayer,
-  fetchSpeedrunComStats,
 } from "@/lib/external-stats";
 import { getLocalizedItemName } from "@/components/item-icon";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
@@ -248,6 +247,7 @@ import {
 } from "@/lib/mouse-settings-reasons";
 import { HintTip } from "@/components/hint-tip";
 import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
+import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
 import { ProfileHighlights } from "@/components/profile-highlights";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
@@ -1542,6 +1542,13 @@ export default function PlayerProfilePage() {
             mainCategory={player.playstyle?.mainCategory}
             records={player.categoryRecords}
             config={player.playerConfig}
+            speedruncomUsername={player.speedruncomUsername}
+            searchCraftLevel={player.playstyle?.searchCraft}
+            searchCraftCount={player.searchCrafts.length}
+            gameLanguage={player.playerConfig?.gameLanguage}
+            guideCount={playerGuides.length}
+            hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+            pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             onSelectTab={handleTabChange}
           />
 
@@ -2808,7 +2815,7 @@ function StatsTabContent({
 
       if (player.speedruncomUsername) {
         tasks.push(
-          fetchSpeedrunComStats(player.speedruncomUsername)
+          fetchSpeedrunComStatsCached(player.speedruncomUsername)
             .then((speedruncom) => {
               if (cancelled) return;
               setExternalStats((prev) => ({ ...prev, speedruncom }));
