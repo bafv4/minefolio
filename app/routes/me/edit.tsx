@@ -2,6 +2,7 @@ import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
@@ -66,6 +67,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
@@ -1538,13 +1540,17 @@ export default function EditProfilePage() {
                 <Separator />
 
                 <div className="space-y-3">
-                  <Label>{t("meEdit.poseLabel")}</Label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <Label id="pose-label">{t("meEdit.poseLabel")}</Label>
+                  <RadioGroup
+                    aria-labelledby="pose-label"
+                    value={selectedPose}
+                    onValueChange={(value) => setSelectedPose(value as typeof selectedPose)}
+                    className="grid grid-cols-3 gap-3"
+                  >
                     {(["standing", "walking", "waving"] as const).map((pose) => (
-                      <button
+                      <RadioGroupPrimitive.Item
                         key={pose}
-                        type="button"
-                        onClick={() => setSelectedPose(pose)}
+                        value={pose}
                         className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
                           ? "border-primary bg-primary/5"
                           : "border-muted hover:border-muted-foreground/30"
@@ -1570,9 +1576,9 @@ export default function EditProfilePage() {
                           {pose === "walking" && t("meEdit.poseWalking")}
                           {pose === "waving" && t("meEdit.poseWaving")}
                         </span>
-                      </button>
+                      </RadioGroupPrimitive.Item>
                     ))}
-                  </div>
+                  </RadioGroup>
                 </div>
               </>
             )}
@@ -1581,42 +1587,49 @@ export default function EditProfilePage() {
 
             {/* Skin Model Toggle - 常に表示 */}
             <div className="space-y-2">
-              <Label>{t("meEdit.skinModelLabel")}</Label>
-              <div className="flex rounded-lg border p-1 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: false }))}
+              <Label id="skin-model-label">{t("meEdit.skinModelLabel")}</Label>
+              <RadioGroup
+                aria-labelledby="skin-model-label"
+                value={formValues.slimSkin ? "slim" : "default"}
+                onValueChange={(value) => setFormValues((prev) => ({ ...prev, slimSkin: value === "slim" }))}
+                className="flex gap-0 rounded-lg border p-1 w-fit"
+              >
+                <RadioGroupPrimitive.Item
+                  value="default"
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelDefault")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: true }))}
+                </RadioGroupPrimitive.Item>
+                <RadioGroupPrimitive.Item
+                  value="slim"
                   className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted"
                     }`}
                 >
                   {t("meEdit.skinModelSlim")}
-                </button>
-              </div>
+                </RadioGroupPrimitive.Item>
+              </RadioGroup>
             </div>
 
             <Separator />
 
             {/* Cape Display Toggle - 常に表示（Mojang のマントにも適用されるため） */}
             <div className="space-y-2">
-              <Label>{t("meEdit.capeDisplayLabel")}</Label>
-              <div className="flex rounded-lg border p-1 w-fit">
+              <Label id="cape-display-label">{t("meEdit.capeDisplayLabel")}</Label>
+              <RadioGroup
+                aria-labelledby="cape-display-label"
+                value={formValues.capeDisplay}
+                onValueChange={(value) => setFormValues((prev) => ({ ...prev, capeDisplay: value as typeof prev.capeDisplay }))}
+                className="flex gap-0 rounded-lg border p-1 w-fit"
+              >
                 {CAPE_DISPLAY_OPTIONS.map((option) => (
-                  <button
+                  <RadioGroupPrimitive.Item
                     key={option}
-                    type="button"
-                    onClick={() => setFormValues((prev) => ({ ...prev, capeDisplay: option }))}
+                    value={option}
                     className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.capeDisplay === option
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-muted"
@@ -1625,9 +1638,9 @@ export default function EditProfilePage() {
                     {option === "cape" && t("meEdit.capeDisplayCape")}
                     {option === "elytra" && t("meEdit.capeDisplayElytra")}
                     {option === "hidden" && t("meEdit.capeDisplayHidden")}
-                  </button>
+                  </RadioGroupPrimitive.Item>
                 ))}
-              </div>
+              </RadioGroup>
               <p className="text-xs text-muted-foreground">{t("meEdit.capeDisplayHint")}</p>
             </div>
           </CardContent>
