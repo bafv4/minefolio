@@ -835,6 +835,11 @@ Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` と `capes/<userId
 顔は `app/lib/skin-face.server.ts` が純JS（`pngjs`）で合成する。WebGL / Canvas の無い OGP 生成環境（satori）でも
 アプリ一覧（`MinecraftAvatar`）と同じ見た目になるようにするため。
 
+頭部・帽子の切り出し領域は 64 基準の座標を `width / 64` 倍して求めるため、128x128 の HD スキンでも正しい位置を使う。
+旧形式（64x32）スキンは Minecraft 本体の透明化処理に合わせ、右半分に alpha < 128 の画素が1つも無いときは帽子を描かない
+（帽子領域が不透明な黒で塗られたスキンで顔が真っ黒になるのを防ぐ）。この判定は `app/lib/skin-texture.ts` に集約し、
+クライアントの `avatar-cache.ts` の `composite()` と共有する。
+
 1. `uuid` か `customSkinUrl` があるユーザー … `fetchSkinFaceDataUrl()` が `/api/skin?userId=` を取得し、
    頭の正面 (8,8) + 帽子レイヤー (40,8) をアルファ合成して 180x180 に拡大（失敗時は Steve にフォールバック）
 2. どちらも無い（MCID未登録）ユーザー … `fetchNoMcidFaceDataUrl()` が `/skins/no-mcid-face.svg` を取得し、

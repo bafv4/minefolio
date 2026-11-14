@@ -8,9 +8,14 @@
 // 一覧系ページではプレイヤーが様々なサイズ（28/36/48px 等）で繰り返し表示されるため、
 // スキン画像を共有することでネットワーク取得を大幅に削減できる。
 
+import {
+  headBaseRegion,
+  headOverlayRegion,
+  isLegacySkin,
+  shouldHideLegacyHat,
+} from "./skin-texture";
+
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
-const HEAD_BASE = { x: 8, y: 8, width: 8, height: 8 };
-const HEAD_OVERLAY = { x: 40, y: 8, width: 8, height: 8 };
 
 /**
  * MCID未登録ユーザー向けの顔プレースホルダー（16x16・ラッキーブロック風の「?」ブロック。色は --brand 基調）。
@@ -100,8 +105,42 @@ function loadSkin(options: RenderAvatarOptions): Promise<HTMLImageElement> {
   return promise;
 }
 
+// 旧形式スキンの帽子を描くか判定した結果（画像単位。サイズ違いの再合成で毎回画素を読まないため）
+const hideHatCache = new WeakMap<HTMLImageElement, boolean>();
+
+/**
+ * 旧形式（64x32）スキンで帽子を描かないか。Minecraft 本体の扱い（skin-texture.ts の shouldHideLegacyHat）に合わせる。
+ * 64x64 以上では画素を読まない。作業用 canvas を作れない場合は従来どおり帽子を描く側（false）に倒す。
+ */
+function shouldSkipOverlay(skinImage: HTMLImageElement): boolean {
+  const width = skinImage.naturalWidth;
+  const height = skinImage.naturalHeight;
+  if (!isLegacySkin(width, height)) return false;
+
+  const cached = hideHatCache.get(skinImage);
+  if (cached !== undefined) return cached;
+
+  let hide = false;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(skinImage, 0, 0);
+      hide = shouldHideLegacyHat(ctx.getImageData(0, 0, width, height).data, width, height);
+    }
+  } catch {
+    hide = false;
+  }
+  hideHatCache.set(skinImage, hide);
+  return hide;
+}
+
 /** 読み込み済みスキン画像から指定サイズのアバターを同期的に合成して data URL を返す。 */
 function composite(skinImage: HTMLImageElement, size: number, overlay: boolean): string {
+  const headBase = headBaseRegion(skinImage.naturalWidth);
+  const headOverlay = headOverlayRegion(skinImage.naturalWidth);
   // オーバーレイを少し大きく描画するための設定
   // 角丸でもはみ出ないよう、控えめなスケールに調整
   const overlayScale = 1.0625; // 約6.25%大きく（17/16）
@@ -125,10 +164,10 @@ function composite(skinImage: HTMLImageElement, size: number, overlay: boolean):
   // Draw base head layer (centered)
   outputCtx.drawImage(
     skinImage,
-    HEAD_BASE.x,
-    HEAD_BASE.y,
-    HEAD_BASE.width,
-    HEAD_BASE.height,
+    headBase.x,
+    headBase.y,
+    headBase.w,
+    headBase.h,
     baseOffset,
     baseOffset,
     baseDrawSize,
@@ -136,13 +175,14 @@ function composite(skinImage: HTMLImageElement, size: number, overlay: boolean):
   );
 
   // Draw overlay layer if enabled (slightly larger than base)
-  if (overlay) {
+  // baseDrawSize は overlay オプションで決めたまま、帽子が空と判定された旧形式スキンは描画だけ省く
+  if (overlay && !shouldSkipOverlay(skinImage)) {
     outputCtx.drawImage(
       skinImage,
-      HEAD_OVERLAY.x,
-      HEAD_OVERLAY.y,
-      HEAD_OVERLAY.width,
-      HEAD_OVERLAY.height,
+      headOverlay.x,
+      headOverlay.y,
+      headOverlay.w,
+      headOverlay.h,
       padding,
       padding,
       drawArea,
