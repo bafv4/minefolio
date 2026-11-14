@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
+import { ChevronsRight } from "lucide-react";
 
 interface HorizontalScrollAreaProps {
   children: React.ReactNode;
@@ -51,33 +52,38 @@ export function HorizontalScrollArea({
   const overflowing = edges.left || edges.right;
 
   return (
-    <div className={cn("relative w-full", wrapperClassName)}>
-      <div
-        ref={ref}
-        onScroll={update}
-        className={cn("custom-scrollbar overflow-x-auto pb-2 w-full", className)}
-      >
-        {children}
-      </div>
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent transition-opacity",
-          edges.left ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent transition-opacity",
-          edges.right ? "opacity-100" : "opacity-0",
-        )}
-      />
+    <div className={cn("w-full", wrapperClassName)}>
+      {/* ヒントはスクロール領域の上に置く（下に置くと、縦に長い内容ではヒントに気づく前に
+          はみ出した側を見落とす。モバイルではクッキーバナー等の下端固定 UI にも隠れやすい） */}
       {showHint && overflowing && (
-        <p className="mt-1 text-xs text-muted-foreground md:hidden">
+        <p className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground md:hidden">
           {t("common.scrollHorizontalHint")}
+          <ChevronsRight className="h-3 w-3" aria-hidden />
         </p>
       )}
+      <div className="relative w-full">
+        <div
+          ref={ref}
+          onScroll={update}
+          className={cn("custom-scrollbar overflow-x-auto pb-2 w-full", className)}
+        >
+          {children}
+        </div>
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-card to-transparent transition-opacity",
+            edges.left ? "opacity-100" : "opacity-0",
+          )}
+        />
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-card to-transparent transition-opacity",
+            edges.right ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </div>
     </div>
   );
 }
