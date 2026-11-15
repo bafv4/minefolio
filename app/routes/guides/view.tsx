@@ -580,14 +580,14 @@ export default function GuideViewPage() {
       )}
       {/* Back button + Owner edit button */}
       <div className="mb-6 flex items-center justify-between">
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
           <Link to="/guides">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("guides.pageTitle")}
           </Link>
         </Button>
         {isOwner && (
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" asChild className="h-11 sm:h-8">
             <Link to={`/my-guides/${guide.slug}/edit`}>
               <Pencil className="h-4 w-4 mr-1" />
               {t("guideEditor.edit")}
@@ -641,16 +641,21 @@ export default function GuideViewPage() {
             targetId={guide.id}
             likeCount={guide.likeCount}
             isOwn={isOwner}
-            className="ml-auto"
+            className="ml-auto h-11 sm:h-8"
           />
         </div>
       </div>
 
       {/* Tags（クリックで /guides?tag= の絞り込みへ） */}
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="mb-4 flex flex-wrap gap-x-2 gap-y-3 sm:gap-y-2">
           {tags.map((tag) => (
-            <Badge key={tag} variant="secondary" asChild>
+            <Badge
+              key={tag}
+              variant="secondary"
+              asChild
+              className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] sm:after:hidden"
+            >
               <Link to={`/guides?tag=${encodeURIComponent(tag)}`}>{tag}</Link>
             </Badge>
           ))}
@@ -671,7 +676,7 @@ export default function GuideViewPage() {
         <img
           src={guide.coverImageUrl}
           alt=""
-          className="w-full rounded-xl object-cover aspect-2/1 mb-6"
+          className="mb-6 aspect-2/1 w-full rounded-xl object-cover sm:aspect-auto sm:h-[min(40vh,320px)]"
         />
       )}
 
