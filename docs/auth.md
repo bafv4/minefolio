@@ -60,8 +60,14 @@ identify, email
 
 ### 発生源（returnTo を生成する箇所）
 
-- ヘッダーのログインリンク（`app/components/layout/header.tsx`）: 現在の
-  `location.pathname + location.search` を `sanitizeReturnTo` した値
+- ページ内のログイン導線はすべて `useLoginHref()`（`app/hooks/use-login-href.ts`。中身は純粋関数
+  `buildLoginHref(pathname, search)`＝`app/lib/return-to.ts`）の href を使う。現在の
+  `location.pathname + location.search` を `sanitizeReturnTo` した値を `/login?returnTo=…` に付ける
+  （戻せない場所では素の `/login`）。素の `"/login"` を直書きしない
+  - 使用箇所: ヘッダー（`layout/header.tsx`）・`LikeButton`・テンプレート詳細の「ログインして反映」・
+    `ProfileReactionBar`・Playground の保存案内
+  - 例外: ホームのゲストヒーロー（`home/guest-hero.tsx`）は現在地が `/` で戻す意味が薄いため素の `/login`
+    （ログイン後は自分のプロフィールへ）
 - `getSession()`（`app/lib/session.ts`）が未認証時に `throw redirect("/login")` する際、
   `request.url` の pathname + search から導出（`getCurrentUser` / `getCurrentUserOrOnboarding` も
   内部で `getSession` を使うため同じ挙動になる）

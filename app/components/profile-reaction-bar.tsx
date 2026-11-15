@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ProfileReactionPill } from "@/hooks/use-profile-reactions";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { SmilePlus } from "lucide-react";
 import type { MessageKey } from "@/lib/messages";
 
@@ -53,6 +54,7 @@ export function ProfileReactionBar({
   className,
 }: ProfileReactionBarProps) {
   const t = useT();
+  const loginHref = useLoginHref();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const visiblePills = pills.filter((pill) => pill.count > 0);
@@ -150,7 +152,7 @@ export function ProfileReactionBar({
         </Popover>
       ) : (
         <Button asChild variant="outline" size="sm">
-          <Link to="/login">
+          <Link to={loginHref}>
             <SmilePlus className="mr-2 size-4" aria-hidden />
             {t("profileReactions.loginToReact")}
           </Link>

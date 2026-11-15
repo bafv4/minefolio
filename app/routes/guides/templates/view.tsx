@@ -24,6 +24,7 @@ import {
   MAX_TEMPLATE_CRAFTS,
 } from "@/lib/search-craft-templates";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageSection } from "@/components/page-section";
@@ -322,6 +323,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export default function TemplateViewPage() {
   const t = useT();
+  const loginHref = useLoginHref();
   const locale = useLocale();
   const { template, crafts, remaps, loops, author, myPresets, isOwner, isLoggedIn, appUrl } =
     useLoaderData<typeof loader>();
@@ -670,7 +672,7 @@ export default function TemplateViewPage() {
           </Dialog>
         ) : (
           <Button asChild className="h-11 sm:h-9">
-            <Link to="/login">
+            <Link to={loginHref}>
               <LogIn className="mr-2 h-4 w-4" />
               {t("templates.loginToApply")}
             </Link>

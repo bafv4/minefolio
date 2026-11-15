@@ -90,3 +90,12 @@ export function encodeReturnToForCallback(returnTo: string): string {
   }
   return encoded;
 }
+
+/**
+ * 現在地（pathname + search）を returnTo に付けた `/login` への href を組み立てる。
+ * 戻せない場所（/login・/onboarding・/api/* 等）や不正な値では素の "/login"。
+ */
+export function buildLoginHref(pathname: string, search = ""): string {
+  const returnTo = sanitizeReturnTo(`${pathname}${search}`);
+  return returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login";
+}

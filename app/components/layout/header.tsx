@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
 import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
-import { sanitizeReturnTo } from "@/lib/return-to";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { findActiveNavHref } from "@/lib/nav-active";
 import { authClient } from "@/lib/auth-client";
 import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
@@ -62,8 +62,7 @@ export function Header({ user }: HeaderProps) {
   const userName = user ? getLocalizedDisplayName(user, locale) : "";
 
   // ログイン後、遷移前にいたページ（現在地）へ戻れるように returnTo を付ける
-  const returnTo = sanitizeReturnTo(`${location.pathname}${location.search}`);
-  const loginHref = returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login";
+  const loginHref = useLoginHref();
 
   const handleLogout = useCallback(async () => {
     await authClient.signOut();

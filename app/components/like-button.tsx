@@ -4,6 +4,7 @@ import { ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLike, type LikeTargetType } from "@/hooks/use-likes";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 
 interface LikeButtonProps {
   targetType: LikeTargetType;
@@ -38,6 +39,7 @@ export function LikeButton({
   className,
 }: LikeButtonProps) {
   const t = useT();
+  const loginHref = useLoginHref();
   const { liked, count, isPending, isLoggedIn, toggle } = useLike(targetType, targetId, {
     liked: isLiked,
     count: likeCount,
@@ -104,7 +106,7 @@ export function LikeButton({
   if (!isLoggedIn) {
     return (
       <Button asChild variant="outline" size="sm" className={className}>
-        <Link to="/login">
+        <Link to={loginHref}>
           <ThumbsUp className="mr-2 size-4" aria-hidden />
           {t("likes.loginToLike")}
           <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>

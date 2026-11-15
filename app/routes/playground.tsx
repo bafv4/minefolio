@@ -39,6 +39,7 @@ import {
 import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { resolveVariations } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -462,6 +463,7 @@ function saveDraftToStorage(draft: PlaygroundDraft) {
 
 export default function PlaygroundPage() {
   const t = useT();
+  const loginHref = useLoginHref();
   const { templateData, myPresets, keyboardLayout, isLoggedIn } = useLoaderData<typeof loader>();
   const saveFetcher = useFetcher<typeof action>();
   const prevSaveDataRef = useRef<typeof saveFetcher.data>(undefined);
@@ -949,7 +951,7 @@ export default function PlaygroundPage() {
         ) : (
           <>
             {t("playground.saveHintLoggedOut")}{" "}
-            <Link to="/login" className="text-primary hover:underline">
+            <Link to={loginHref} className="text-primary hover:underline">
               {t("playground.loginLink")}
             </Link>
           </>
