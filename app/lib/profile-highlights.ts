@@ -44,9 +44,13 @@ export function pickHighlightPb<T extends HighlightPbRecord>(
 export interface HighlightSpeedrunComPb {
   place: number;
   run: { id: string; level?: string; values?: Record<string, string>; times: { primary_t: number } };
+  /** speedrun.com の game 資源（`abbreviation`。embed=game.platforms で取得済み） */
+  game?: { data?: { abbreviation?: string } };
   category?: {
     data?: {
       name?: string;
+      /** speedrun.com の category 資源の `miscellaneous`（Co-op 等の「その他」カテゴリ。API 応答には含まれるが外部統計の型には未定義） */
+      miscellaneous?: boolean;
       variables?: { data?: { id: string; values: { values: Record<string, { label: string }> } }[] };
     };
   };
@@ -85,10 +89,59 @@ export function speedrunComPbMatchesMainCategory(pb: HighlightSpeedrunComPb, mai
 }
 
 /**
- * ハイライト用の speedrun.com PB を選ぶ（非表示は除外）。
+ * 公式カテゴリの game（speedrun.com の abbreviation）。Minecraft の Java / Bedrock 本体のリーダーボードのみ。
+ * Category Extensions（mcce / mcbece）・Unofficial（mc_juice / mcbeuce）・Datapack & Modded（mc_dmce）等は別 game なので対象外
+ */
+const OFFICIAL_GAME_ABBREVIATIONS: ReadonlySet<string> = new Set(["mc", "mcbe"]);
+
+/**
+ * 代表 PB に使える「公式カテゴリ」の PB か。
+ * - 別 game の拡張・非公式カテゴリ（上記以外の abbreviation）は false。abbreviation が取れないデータは判定できないので除外しない
+ * - 「その他（miscellaneous）」カテゴリ（Co-op 等）とレベル（IL）は false
+ */
+export function isOfficialSpeedrunComPb(pb: HighlightSpeedrunComPb): boolean {
+  if (pb.run.level) return false;
+  if (pb.category?.data?.miscellaneous) return false;
+  const abbreviation = pb.game?.data?.abbreviation?.toLowerCase();
+  return abbreviation === undefined || OFFICIAL_GAME_ABBREVIATIONS.has(abbreviation);
+}
+
+function visibleSpeedrunComPbs<T extends HighlightSpeedrunComPb>(
+  personalBests: readonly T[],
+  hiddenRunIds: readonly string[],
+): T[] {
+  const hidden = new Set(hiddenRunIds);
+  return personalBests.filter((pb) => !hidden.has(pb.run.id) && pb.run.times.primary_t > 0);
+}
+
+function pickPinnedPb<T extends HighlightSpeedrunComPb>(visible: readonly T[], pinnedRunIds: readonly string[]): T | null {
+  const pinned = new Set(pinnedRunIds);
+  return visible.find((pb) => pinned.has(pb.run.id)) ?? null;
+}
+
+function pickMainCategoryPb<T extends HighlightSpeedrunComPb>(
+  visible: readonly T[],
+  mainCategory: string | null | undefined,
+): T | null {
+  if (!mainCategory) return null;
+  const matched = visible
+    .filter((pb) => speedrunComPbMatchesMainCategory(pb, mainCategory))
+    .sort((a, b) => a.run.times.primary_t - b.run.times.primary_t);
+  return matched[0] ?? null;
+}
+
+function pickOfficialPb<T extends HighlightSpeedrunComPb>(visible: readonly T[]): T | null {
+  const official = visible.filter(isOfficialSpeedrunComPb);
+  if (official.length === 0) return null;
+  return official.reduce((best, pb) => (pb.place < best.place ? pb : best));
+}
+
+/**
+ * speedrun.com 側だけで選ぶ代表 PB（非表示は除外）。
  * 1) ピン留め（speedrun.com カードの表示順＝personalBests の並びの先頭）
  * 2) mainCategory に確実に対応するもののうち最速
- * 3) 順位（place）が最上位（同順位は並びの先頭）
+ * 3) 公式カテゴリ（isOfficialSpeedrunComPb）のうち順位（place）が最上位（同順位は並びの先頭）
+ * 公式カテゴリが無ければ null（非公式・拡張カテゴリだけの PB は代表にしない）
  */
 export function pickHighlightSpeedrunComPb<T extends HighlightSpeedrunComPb>(
   mainCategory: string | null | undefined,
@@ -96,20 +149,94 @@ export function pickHighlightSpeedrunComPb<T extends HighlightSpeedrunComPb>(
   hiddenRunIds: readonly string[],
   pinnedRunIds: readonly string[],
 ): T | null {
-  const hidden = new Set(hiddenRunIds);
-  const pinned = new Set(pinnedRunIds);
-  const visible = personalBests.filter((pb) => !hidden.has(pb.run.id) && pb.run.times.primary_t > 0);
-  if (visible.length === 0) return null;
+  const visible = visibleSpeedrunComPbs(personalBests, hiddenRunIds);
+  return pickPinnedPb(visible, pinnedRunIds) ?? pickMainCategoryPb(visible, mainCategory) ?? pickOfficialPb(visible);
+}
 
-  const pinnedPb = visible.find((pb) => pinned.has(pb.run.id));
-  if (pinnedPb) return pinnedPb;
+/** 表示名の組み立て（speedrunComPbDisplayName）が参照する PB の形（SpeedrunComPersonalBest の部分集合） */
+export interface LabelableSpeedrunComPb extends HighlightSpeedrunComPb {
+  game?: { data?: { abbreviation?: string; names?: { international?: string } } };
+  platformName?: string;
+  versionName?: string;
+}
 
-  if (mainCategory) {
-    const matched = visible
-      .filter((pb) => speedrunComPbMatchesMainCategory(pb, mainCategory))
-      .sort((a, b) => a.run.times.primary_t - b.run.times.primary_t);
-    if (matched[0]) return matched[0];
+/** 版の短い名前。game 名 "Minecraft: Java Edition" → "Java"。game 名が無ければ platformName、それも無ければ空文字 */
+function speedrunComEditionLabel(pb: LabelableSpeedrunComPb): string {
+  const name = pb.game?.data?.names?.international;
+  if (name) {
+    const short = name.replace(/^minecraft\s*:?\s*/i, "").replace(/\s*edition$/i, "").trim();
+    if (short) return short;
   }
+  return pb.platformName?.trim() ?? "";
+}
 
-  return visible.reduce((best, pb) => (pb.place < best.place ? pb : best));
+/**
+ * speedrun.com の PB の表示名（カテゴリ名）。同じカテゴリ名の PB が siblings にほかにあるときだけ、版を添える
+ * （"Java · Any% Glitchless"。Java と Bedrock の両方に Any% Glitchless がある走者の見分け用）。
+ * 版まで同じならさらに versionName を括弧で足す。siblings は表示対象（非表示を除いたもの）を渡す
+ */
+export function speedrunComPbDisplayName<T extends LabelableSpeedrunComPb>(
+  pb: T,
+  siblings: readonly T[],
+  unknownLabel: string,
+): string {
+  const name = pb.category?.data?.name ?? unknownLabel;
+  const same = siblings.filter((o) => o.run.id !== pb.run.id && (o.category?.data?.name ?? unknownLabel) === name);
+  if (same.length === 0) return name;
+  const edition = speedrunComEditionLabel(pb);
+  const base = edition ? `${edition} · ${name}` : name;
+  const sameEdition = same.some((o) => speedrunComEditionLabel(o) === edition);
+  return sameEdition && pb.versionName ? `${base} (${pb.versionName})` : base;
+}
+
+/** MCSR Ranked の自己ベスト判定に使う最小形（MCSRRankedStats の部分集合） */
+export interface HighlightRankedStats {
+  isRegistered: boolean;
+  seasonData?: { bestTimeAllTime?: number; bestTime?: number } | null;
+}
+
+/** Ranked の代表記録（ミリ秒）。全期間のベストを優先し、無ければ今シーズンのベスト。未登録・記録なしは null */
+export function rankedBestTimeMs(ranked: HighlightRankedStats | null | undefined): number | null {
+  if (!ranked?.isRegistered) return null;
+  const time = ranked.seasonData?.bestTimeAllTime ?? ranked.seasonData?.bestTime;
+  return typeof time === "number" && time > 0 ? time : null;
+}
+
+export type RepresentativePb<R extends HighlightPbRecord, S extends HighlightSpeedrunComPb> =
+  | { kind: "speedruncom"; pb: S }
+  | { kind: "ranked"; timeMs: number }
+  | { kind: "custom"; record: R };
+
+/**
+ * 身元帯・活動記録タブの代表 PB を選ぶ（両者はこの関数を共有して食い違わせない）。優先順:
+ * 1) 活動・記録タブでピン留めした speedrun.com の記録
+ * 2) メインカテゴリの記録（speedrun.com で対応するもの。メインカテゴリが ranked なら MCSR Ranked の自己ベスト）
+ * 3) speedrun.com の公式カテゴリの記録（順位が最上位）
+ * 4) 手入力のカスタム記録（メインカテゴリ一致の最速 → 先頭の PB 付き記録）
+ * 非表示にした speedrun.com の記録は候補から外す。どれも無ければ null
+ */
+export function pickRepresentativePb<R extends HighlightPbRecord, S extends HighlightSpeedrunComPb>(args: {
+  mainCategory: string | null | undefined;
+  records: readonly R[];
+  speedrunComPbs: readonly S[];
+  hiddenRunIds: readonly string[];
+  pinnedRunIds: readonly string[];
+  /** MCSR Ranked の代表記録（ms）。メインカテゴリが ranked のときだけ使われる */
+  rankedTimeMs: number | null;
+}): RepresentativePb<R, S> | null {
+  const { mainCategory, records, speedrunComPbs, hiddenRunIds, pinnedRunIds, rankedTimeMs } = args;
+  const visible = visibleSpeedrunComPbs(speedrunComPbs, hiddenRunIds);
+
+  const pinned = pickPinnedPb(visible, pinnedRunIds);
+  if (pinned) return { kind: "speedruncom", pb: pinned };
+
+  if (mainCategory === "ranked" && rankedTimeMs != null) return { kind: "ranked", timeMs: rankedTimeMs };
+  const main = pickMainCategoryPb(visible, mainCategory);
+  if (main) return { kind: "speedruncom", pb: main };
+
+  const official = pickOfficialPb(visible);
+  if (official) return { kind: "speedruncom", pb: official };
+
+  const custom = pickHighlightPb(mainCategory, records, true);
+  return custom ? { kind: "custom", record: custom.record } : null;
 }

@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
 import { useLoaderData, useRouteLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo, lazy, Suspense, Fragment, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense, Fragment, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GuideCardGrid,
@@ -15,10 +15,8 @@ import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
-import {
-  fetchAllExternalStats,
-  checkPaceManPlayer,
-} from "@/lib/external-stats";
+import { fetchAllExternalStats } from "@/lib/external-stats";
+import { fetchPaceManRegistration } from "@/lib/paceman-registration-client";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -81,6 +79,12 @@ import { LinkifiedText } from "@/components/profile/linkified-text";
 const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
 const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
 const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
+
+// 記録タブの外部統計は到着が遅いので、読み込み中の欄に、届いたあとの中身に近い最小の高さを確保する
+// （初期表示のフッターが到着で押し下げられる CLS を抑える。確保は読み込み中だけで、到着後は外れる）。
+// 値は実測の目安（Ranked: 統計＋推移グラフ＋直近5試合、SRC: PB カード最大6件。モバイルは1列で縦に長い）
+const STATS_RANKED_LOADING_CLASS = "min-h-[32rem] md:min-h-[28rem]";
+const STATS_SPEEDRUNCOM_LOADING_CLASS = "min-h-[48rem] md:min-h-[36rem]";
 
 // OGPメタタグ
 export function meta({ loaderData, matches }: Route.MetaArgs) {
@@ -249,7 +253,7 @@ import { HintTip } from "@/components/hint-tip";
 import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
 import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
 import { ProfileHighlights } from "@/components/profile-highlights";
-import { pickHighlightPb, pickHighlightSpeedrunComPb } from "@/lib/profile-highlights";
+import { pickRepresentativePb, rankedBestTimeMs } from "@/lib/profile-highlights";
 import { orderStatsSections, type StatsSectionKey } from "@/lib/profile-stats-order";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
@@ -2921,74 +2925,100 @@ function StatsTabContent({
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
-    ranked: "loading" as "loading" | "done" | "error",
-    paceman: "loading" as "loading" | "done" | "error",
+    // MCID / speedrun.com ユーザー名が無いサービスは取得しない（"null" 等で外部 API を呼ばない）ので最初から "done"
+    ranked: (player.mcid ? "loading" : "done") as "loading" | "done" | "error",
+    paceman: (player.mcid ? "loading" : "done") as "loading" | "done" | "error",
     speedruncom: (player.speedruncomUsername ? "loading" : "done") as "loading" | "done" | "error",
   });
 
-  useEffect(() => {
-    let cancelled = false;
+  // 走者切替・アンマウントで破棄する取得セッション。各サービスの取得は、開始時点のセッションが
+  // まだ有効なときだけ結果を反映する（再試行も同じ仕組みを通る）
+  const sessionRef = useRef({ cancelled: false });
 
-    async function fetchStats() {
-      setLoadState({
-        ranked: "loading",
-        paceman: "loading",
-        speedruncom: player.speedruncomUsername ? "loading" : "done",
-      });
-
-      const tasks: Promise<void>[] = [
-        // mcid が未設定でも従来から無条件に呼び出している（各関数側が未登録相当を返す）。
-        // StatsPlayer.mcid は users テーブルに合わせ string | null だが、呼び出しはその挙動を
-        // 変えないための型上の非nullアサーション
-        fetchMCSRRankedStatsCached(player.mcid!)
-          .then((ranked) => {
-            if (cancelled) return;
-            setExternalStats((prev) => ({ ...prev, ranked }));
-            setLoadState((prev) => ({ ...prev, ranked: "done" }));
-          })
-          .catch((error) => {
-            console.error("Failed to fetch MCSR Ranked stats:", error);
-            if (cancelled) return;
-            setLoadState((prev) => ({ ...prev, ranked: "error" }));
-          }),
-        checkPaceManPlayer(player.mcid!)
-          .then((paceman) => {
-            if (cancelled) return;
-            setExternalStats((prev) => ({ ...prev, paceman }));
-            setLoadState((prev) => ({ ...prev, paceman: "done" }));
-          })
-          .catch((error) => {
-            console.error("Failed to fetch PaceMan status:", error);
-            if (cancelled) return;
-            setLoadState((prev) => ({ ...prev, paceman: "error" }));
-          }),
-      ];
-
-      if (player.speedruncomUsername) {
-        tasks.push(
-          fetchSpeedrunComStatsCached(player.speedruncomUsername)
-            .then((speedruncom) => {
-              if (cancelled) return;
-              setExternalStats((prev) => ({ ...prev, speedruncom }));
-              setLoadState((prev) => ({ ...prev, speedruncom: "done" }));
-            })
-            .catch((error) => {
-              console.error("Failed to fetch speedrun.com stats:", error);
-              if (cancelled) return;
-              setLoadState((prev) => ({ ...prev, speedruncom: "error" }));
-            })
-        );
-      }
-
-      await Promise.all(tasks);
+  // サービスごとの取得。mcid が無い走者は Ranked / PaceMan を取得せず終える
+  // （"null" を名前に外部 API を呼ぶと偽の取得失敗になる。身元帯 profile-highlights も !!mcid で止めている）。
+  // PaceMan の取得関数は差し替えやすいよう単独の関数にしている
+  const loadRanked = useCallback(async () => {
+    if (!player.mcid) return;
+    const session = sessionRef.current;
+    setLoadState((prev) => ({ ...prev, ranked: "loading" }));
+    try {
+      const ranked = await fetchMCSRRankedStatsCached(player.mcid);
+      if (session.cancelled) return;
+      setExternalStats((prev) => ({ ...prev, ranked }));
+      // 取得関数は失敗を throw せず { error } で返す。error があれば取得失敗（再試行カード）、
+      // error なしの未登録・データなしは従来どおり「done」で欄ごと出さない
+      setLoadState((prev) => ({ ...prev, ranked: ranked?.error ? "error" : "done" }));
+    } catch (error) {
+      console.error("Failed to fetch MCSR Ranked stats:", error);
+      if (session.cancelled) return;
+      setLoadState((prev) => ({ ...prev, ranked: "error" }));
     }
+  }, [player.mcid]);
 
-    fetchStats();
+  const loadPaceman = useCallback(async () => {
+    if (!player.mcid) return;
+    const session = sessionRef.current;
+    setLoadState((prev) => ({ ...prev, paceman: "loading" }));
+    try {
+      const paceman = await fetchPaceManRegistration(player.mcid);
+      if (session.cancelled) return;
+      setExternalStats((prev) => ({ ...prev, paceman }));
+      setLoadState((prev) => ({ ...prev, paceman: "done" }));
+    } catch (error) {
+      console.error("Failed to fetch PaceMan status:", error);
+      if (session.cancelled) return;
+      setLoadState((prev) => ({ ...prev, paceman: "error" }));
+    }
+  }, [player.mcid]);
 
+  const loadSpeedruncom = useCallback(async () => {
+    if (!player.speedruncomUsername) return;
+    const session = sessionRef.current;
+    setLoadState((prev) => ({ ...prev, speedruncom: "loading" }));
+    try {
+      const speedruncom = await fetchSpeedrunComStatsCached(player.speedruncomUsername);
+      if (session.cancelled) return;
+      setExternalStats((prev) => ({ ...prev, speedruncom }));
+      setLoadState((prev) => ({ ...prev, speedruncom: speedruncom?.error ? "error" : "done" }));
+    } catch (error) {
+      console.error("Failed to fetch speedrun.com stats:", error);
+      if (session.cancelled) return;
+      setLoadState((prev) => ({ ...prev, speedruncom: "error" }));
+    }
+  }, [player.speedruncomUsername]);
+
+  useEffect(() => {
+    const session = { cancelled: false };
+    sessionRef.current = session;
+    setLoadState({
+      ranked: player.mcid ? "loading" : "done",
+      paceman: player.mcid ? "loading" : "done",
+      speedruncom: player.speedruncomUsername ? "loading" : "done",
+    });
+    void loadRanked();
+    void loadPaceman();
+    void loadSpeedruncom();
     return () => {
-      cancelled = true;
+      session.cancelled = true;
     };
-  }, [player.mcid, player.speedruncomUsername]);
+  }, [loadRanked, loadPaceman, loadSpeedruncom, player.mcid, player.speedruncomUsername]);
+
+  // 「再試行」を押したサービスは、成功して失敗カードが消えたら、その欄の見出しへフォーカスを移す
+  // （押したボタンが消えてフォーカスが BODY に落ちるのを防ぐ。失敗のままならボタンにフォーカスが残る）。
+  // 欄の見出し id は PageSection の `${id}-heading`（player-stats-cards.tsx の stats-ranked / stats-paceman / stats-speedruncom）
+  const retryFocusRef = useRef<Partial<Record<"ranked" | "paceman" | "speedruncom", true>>>({});
+  const withRetryFocus = (service: "ranked" | "paceman" | "speedruncom", load: () => void) => () => {
+    retryFocusRef.current[service] = true;
+    load();
+  };
+  useEffect(() => {
+    for (const service of ["ranked", "paceman", "speedruncom"] as const) {
+      if (!retryFocusRef.current[service] || loadState[service] === "loading") continue;
+      delete retryFocusRef.current[service];
+      if (loadState[service] === "done") document.getElementById(`stats-${service}-heading`)?.focus();
+    }
+  }, [loadState]);
 
   return (
     <StatsContent
@@ -3003,6 +3033,11 @@ function StatsTabContent({
       minefolioEloRank={minefolioEloRank}
       isOwner={isOwner}
       loadState={loadState}
+      onRetry={{
+        ranked: withRetryFocus("ranked", loadRanked),
+        paceman: withRetryFocus("paceman", loadPaceman),
+        speedruncom: withRetryFocus("speedruncom", loadSpeedruncom),
+      }}
       mainCategory={mainCategory}
       visitorEmptyAction={visitorEmptyAction}
     />
@@ -3030,10 +3065,13 @@ function StatsContent({
   minefolioEloRank,
   isOwner,
   loadState,
+  onRetry,
   mainCategory,
   visitorEmptyAction,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
+  /** サービスごとの再取得（取得失敗カードの「再試行」） */
+  onRetry: { ranked: () => void; paceman: () => void; speedruncom: () => void };
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
@@ -3076,12 +3114,24 @@ function StatsContent({
   const hiddenSet = new Set(hiddenSpeedrunRecords);
   const pinnedSet = new Set(pinnedSpeedrunRecords);
 
-  // ハイライト（身元帯）に選ばれた speedrun.com PB は、表示上限に関係なく Speedrun.com 欄へ必ず含める。
-  // 身元帯は手入力の PB があればそちらを出す（speedrun.com は使わない）ので、その場合は指定しない
+  // 代表 PB（身元帯のハイライト）が speedrun.com の記録になったときは、表示上限に関係なく Speedrun.com 欄へ必ず含める。
+  // 選び方は身元帯と同じ pickRepresentativePb（Ranked・カスタム記録が代表になるときは指定しない）。
+  // メインカテゴリが Ranked のときは Ranked の取得が済むまで決まらないので、その間は指定しない
   const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
+  const rankedShown = player.showRankedStats !== false;
   const highlightSrcRunId =
-    !pickHighlightPb(categoryKey, player.categoryRecords, true) && externalStats.speedruncom?.personalBests
-      ? (pickHighlightSpeedrunComPb(categoryKey, externalStats.speedruncom.personalBests, hiddenSpeedrunRecords, pinnedSpeedrunRecords)?.run.id ?? null)
+    externalStats.speedruncom?.personalBests && !(categoryKey === "ranked" && rankedShown && loadState.ranked === "loading")
+      ? (() => {
+          const representative = pickRepresentativePb({
+            mainCategory: categoryKey,
+            records: player.categoryRecords,
+            speedrunComPbs: externalStats.speedruncom.personalBests,
+            hiddenRunIds: hiddenSpeedrunRecords,
+            pinnedRunIds: pinnedSpeedrunRecords,
+            rankedTimeMs: rankedShown ? rankedBestTimeMs(externalStats.ranked) : null,
+          });
+          return representative?.kind === "speedruncom" ? representative.pb.run.id : null;
+        })()
       : null;
 
   const sections: Record<StatsSectionKey, ReactNode> = {
@@ -3093,6 +3143,8 @@ function StatsContent({
             title="MCSR Ranked"
             description={t("loading.rankedStats")}
             state={loadState.ranked}
+            onRetry={onRetry.ranked}
+            loadingClassName={STATS_RANKED_LOADING_CLASS}
           />
         )}
         {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
@@ -3103,12 +3155,14 @@ function StatsContent({
     // PaceMan は欄を 1 つ（「PaceMan」）にまとめる。リンク（クライアント取得）は見出し右、週間統計（loader 取得済み）は中身
     paceman: (
       <>
-        {loadState.paceman !== "done" && (
+        {/* 週間統計があるときは欄を 1 つにし、登録判定の状態は見出し右（PaceManStatsCard 側）で出す */}
+        {!hasWeeklyStats && loadState.paceman !== "done" && (
           <StatsServiceLoadingCard
             framed={false}
             title="PaceMan"
             description={t("loading.pacemanStats")}
             state={loadState.paceman}
+            onRetry={onRetry.paceman}
           />
         )}
         {showPacemanSection &&
@@ -3118,9 +3172,17 @@ function StatsContent({
               netherEnterCount={pacemanStats.netherEnterCount}
               mainPaces={weeklyMainPaces}
               openDetailsMcid={hasPacemanLink ? player.mcid : null}
+              registrationState={loadState.paceman}
+              onRetryRegistration={onRetry.paceman}
             />
           ) : (
-            player.mcid && <PaceManLinkCard framed={false} mcid={player.mcid} />
+            player.mcid && (
+              <PaceManLinkCard
+                framed={false}
+                mcid={player.mcid}
+                weeklyStatsHidden={player.showPacemanStats === false}
+              />
+            )
           ))}
       </>
     ),
@@ -3132,6 +3194,8 @@ function StatsContent({
             title="Speedrun.com"
             description={t("loading.speedruncomStats")}
             state={loadState.speedruncom}
+            onRetry={onRetry.speedruncom}
+            loadingClassName={STATS_SPEEDRUNCOM_LOADING_CLASS}
           />
         )}
         {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (

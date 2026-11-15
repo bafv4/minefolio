@@ -2,59 +2,107 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Gauge, Search, Timer, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { useLocale, useT } from "@/hooks/use-locale";
-import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
-import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
-import type { SpeedrunComPersonalBest } from "@/lib/external-stats";
+import { fetchMCSRRankedStatsCached, subscribeMCSRRankedStats } from "@/lib/ranked-stats-cache";
+import { fetchSpeedrunComStatsCached, subscribeSpeedrunComStats } from "@/lib/speedruncom-stats-cache";
+import type { MCSRRankedStats, SpeedrunComPersonalBest } from "@/lib/external-stats";
 import { calculateCm360, isValidSensitivity, toSensitivityPercent } from "@/lib/mouse-settings";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { hidesSearchCraft, isCategoryKey } from "@/lib/playstyle";
-import { pickHighlightPb, pickHighlightSpeedrunComPb, type HighlightPbRecord } from "@/lib/profile-highlights";
+import {
+  pickRepresentativePb,
+  rankedBestTimeMs,
+  speedrunComPbDisplayName,
+  type HighlightPbRecord,
+} from "@/lib/profile-highlights";
 import { formatTime } from "@/lib/time-utils";
 
-function useRankedElo(mcid: string | null, enabled: boolean) {
-  const [elo, setElo] = useState<number | null | undefined>(enabled && mcid ? undefined : null);
+type RankedHighlight = { elo: number | null; bestMs: number | null; failed: boolean };
+const RANKED_NONE: RankedHighlight = { elo: null, bestMs: null, failed: false };
+
+/**
+ * 記録タブの該当カードへ移る（タブ切替の直後は欄がまだ描かれていない・外部統計の取得待ちなことがあるので、
+ * 現れるまで少し待つ）。スクロール位置は :root の scroll-padding（追従ホットバーの分）が決める。
+ * フォーカスもカードへ移す（タブを切り替えて元のタイルが画面から外れるため、キーボード操作で迷子にしない）
+ */
+function goToStatsCard(id: string) {
+  const startedAt = Date.now();
+  const tick = () => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ block: "start" });
+      el.focus({ preventScroll: true });
+      return;
+    }
+    if (Date.now() - startedAt < 5000) window.setTimeout(tick, 100);
+  };
+  tick();
+}
+
+/** MCSR Ranked の Elo と代表記録（ms）。取得中は undefined、未登録・非表示は両方 null（failed=false）、取得失敗は failed=true */
+function useRankedHighlight(mcid: string | null, enabled: boolean) {
+  const [ranked, setRanked] = useState<RankedHighlight | undefined>(
+    enabled && mcid ? undefined : RANKED_NONE,
+  );
   useEffect(() => {
     if (!enabled || !mcid) {
-      setElo(null);
+      setRanked(RANKED_NONE);
       return;
     }
     let cancelled = false;
-    setElo(undefined);
+    setRanked(undefined);
+    const toHighlight = (r: MCSRRankedStats): RankedHighlight => ({
+      elo: r.isRegistered ? (r.user?.eloRate ?? null) : null,
+      bestMs: rankedBestTimeMs(r),
+      failed: !!r.error,
+    });
+    // 記録タブの「再試行」で取り直した成功結果も受け取る（初回の失敗のまま残さない）
+    const unsubscribe = subscribeMCSRRankedStats(mcid, (r) => {
+      if (!cancelled) setRanked(toHighlight(r));
+    });
     fetchMCSRRankedStatsCached(mcid)
-      .then((r) => (r.isRegistered ? (r.user?.eloRate ?? null) : null))
-      .catch(() => null)
+      .then(toHighlight)
+      .catch((): RankedHighlight => ({ elo: null, bestMs: null, failed: true }))
       .then((value) => {
-        if (!cancelled) setElo(value);
+        if (!cancelled) setRanked(value);
       });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [mcid, enabled]);
-  // undefined = 取得中
-  return elo;
+  return ranked;
 }
 
-/** speedrun.com の PB 一覧（取得中は undefined、失敗・未設定は空配列） */
+/** speedrun.com の PB 一覧（取得中は undefined、未設定・未登録は空配列、取得失敗は failed=true で空配列） */
+type SrcHighlight = { pbs: SpeedrunComPersonalBest[]; failed: boolean };
+const SRC_NONE: SrcHighlight = { pbs: [], failed: false };
+
 function useSpeedrunComPbs(username: string | null, enabled: boolean) {
-  const [pbs, setPbs] = useState<SpeedrunComPersonalBest[] | undefined>(
-    enabled && username ? undefined : [],
+  const [pbs, setPbs] = useState<SrcHighlight | undefined>(
+    enabled && username ? undefined : SRC_NONE,
   );
   useEffect(() => {
     if (!enabled || !username) {
-      setPbs([]);
+      setPbs(SRC_NONE);
       return;
     }
     let cancelled = false;
     setPbs(undefined);
+    // 記録タブの「再試行」で取り直した成功結果も受け取る（初回の失敗のまま残さない）
+    const unsubscribe = subscribeSpeedrunComStats(username, (r) => {
+      if (!cancelled) setPbs({ pbs: r.personalBests, failed: false });
+    });
     fetchSpeedrunComStatsCached(username)
-      .then((r) => (r.error ? [] : r.personalBests))
-      .catch(() => [] as SpeedrunComPersonalBest[])
+      .then((r): SrcHighlight => (r.error ? { pbs: [], failed: true } : { pbs: r.personalBests, failed: false }))
+      .catch((): SrcHighlight => ({ pbs: [], failed: true }))
       .then((value) => {
         if (!cancelled) setPbs(value);
       });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [username, enabled]);
   return pbs;
@@ -64,7 +112,28 @@ function useSpeedrunComPbs(username: string | null, enabled: boolean) {
 const TILE_HEIGHT_CLASS = "h-[58px]";
 
 function TileSkeleton() {
-  return <Skeleton className={cn(TILE_HEIGHT_CLASS, "rounded-xl")} />;
+  return <Skeleton className={cn(TILE_HEIGHT_CLASS, "rounded-xl max-md:w-40 max-md:shrink-0")} />;
+}
+
+/** ラベルが取得前から決まっているタイルの読み込み中表示（ラベルとアイコンは出し、値だけスケルトンにする。SSR でも同じ） */
+function LoadingHighlightTile({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div
+      aria-busy="true"
+      className={cn(
+        TILE_HEIGHT_CLASS,
+        "flex min-w-0 items-center gap-3 rounded-xl max-md:w-40 max-md:shrink-0 border border-border/70 bg-background/80 px-3.5 py-2.5",
+      )}
+    >
+      <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs text-muted-foreground">{label}</span>
+        <Skeleton className="mt-1 h-4 w-16" />
+      </span>
+    </div>
+  );
 }
 
 /** 名前は見えているラベル＋値になる（aria-label で上書きしない） */
@@ -85,7 +154,7 @@ function HighlightTile({
       onClick={onClick}
       className={cn(
         TILE_HEIGHT_CLASS,
-        "flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-background/80 px-3.5 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        "flex min-w-0 items-center gap-3 rounded-xl max-md:shrink-0 border border-border/70 bg-background/80 px-3.5 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
       )}
     >
       <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
@@ -141,15 +210,24 @@ export function ProfileHighlights({
 }: ProfileHighlightsProps) {
   const t = useT();
   const locale = useLocale();
-  const elo = useRankedElo(mcid, showRankedStats && !!mcid);
+  const ranked = useRankedHighlight(mcid, showRankedStats && !!mcid);
+  const elo = ranked === undefined ? undefined : ranked.elo;
 
   const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
-  const pb = pickHighlightPb(categoryKey, records, true);
-  const srcPbs = useSpeedrunComPbs(speedruncomUsername, !pb && !!speedruncomUsername);
-  const srcPbLoading = !pb && !!speedruncomUsername && srcPbs === undefined;
-  const srcPb = pb
+  // 代表 PB の優先順は pickRepresentativePb（ピン留め → メインカテゴリ → 公式カテゴリ → カスタム記録）。
+  // speedrun.com（と、メインカテゴリが Ranked のときは Ranked）が手入力記録より優先されるので、取得が終わるまで決められない
+  const src = useSpeedrunComPbs(speedruncomUsername, !!speedruncomUsername);
+  const pbLoading = (!!speedruncomUsername && src === undefined) || (categoryKey === "ranked" && ranked === undefined);
+  const representative = pbLoading
     ? null
-    : pickHighlightSpeedrunComPb(categoryKey, srcPbs ?? [], hiddenSpeedrunRecords, pinnedSpeedrunRecords);
+    : pickRepresentativePb({
+        mainCategory: categoryKey,
+        records,
+        speedrunComPbs: src?.pbs ?? [],
+        hiddenRunIds: hiddenSpeedrunRecords,
+        pinnedRunIds: pinnedSpeedrunRecords,
+        rankedTimeMs: ranked?.bestMs ?? null,
+      });
   const sensitivityPercent =
     config && isValidSensitivity(config.gameSensitivity)
       ? toSensitivityPercent(config.gameSensitivity)
@@ -173,38 +251,88 @@ export function ProfileHighlights({
       })
     : t("playerProfile.highlightSearchCraftCountOnly", { count: searchCraftCount });
 
+  // 取得に失敗した（error あり）ときは、タイルを消さずに値の位置で失敗を示す（押すと記録タブの再試行カードへ）。
+  // 未登録・データなし（error なし）は従来どおりタイルを出さない。
+  // 代表 PB が見つからず、本来の候補（speedrun.com／メインカテゴリが ranked のときは Ranked）が失敗しているときだけ PB タイルを失敗にする
+  const rankedPbFailed = categoryKey === "ranked" && showRankedStats && !!ranked?.failed;
+  const pbFailed = !pbLoading && !representative && (!!src?.failed || rankedPbFailed);
+  const eloFailed = !!ranked?.failed && elo == null;
   const eloLoading = elo === undefined;
   const hidden =
-    !pb && !srcPb && !srcPbLoading && sensitivityPercent == null && !showSearchCraft && !eloLoading && elo == null;
+    !representative &&
+    !pbLoading &&
+    !pbFailed &&
+    sensitivityPercent == null &&
+    !showSearchCraft &&
+    !eloLoading &&
+    elo == null &&
+    !eloFailed;
   if (hidden) return null;
 
+  const failedValue = <span className="text-sm font-normal text-muted-foreground">{t("playerProfile.highlightFetchFailed")}</span>;
+  // 代表 PB が speedrun.com の記録のとき、同名カテゴリがあれば版を添える（非表示の記録は数えない）。
+  // 押すと記録タブへ移り、そのカードへスクロール・フォーカスする
+  const hiddenSrc = new Set(hiddenSpeedrunRecords);
+  const representativeName =
+    representative?.kind === "custom"
+      ? representative.record.categoryDisplayName
+      : representative?.kind === "ranked"
+        ? "MCSR Ranked"
+        : representative
+          ? speedrunComPbDisplayName(
+              representative.pb,
+              (src?.pbs ?? []).filter((pb) => !hiddenSrc.has(pb.run.id) && pb.run.times.primary_t > 0),
+              t("common.unknown"),
+            )
+          : "";
+  const selectPb = () => {
+    onSelectTab("stats");
+    if (representative?.kind === "speedruncom") goToStatsCard(`stats-src-${representative.pb.run.id}`);
+  };
+
   return (
-    // 静止表示のグリッド（デスクトップ 1 行 4 列、モバイル 2 列）
-    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
-      {pb && (
+    // md 以上は静止表示のグリッド（1 行 4 列）。md 未満は縦を使わないよう 1 行の横スクロールに畳む
+    // （タイルは縮めず横に並べる。身元帯の面は bg-card/70 なのでフェードは既定の card）
+    <HorizontalScrollArea className="pb-1 md:pb-0">
+    <div className="flex gap-2 sm:gap-3 md:grid md:grid-cols-4">
+      {pbLoading ? (
+        <TileSkeleton />
+      ) : representative ? (
         <HighlightTile
           icon={<Timer className="h-4 w-4" />}
-          label={`${pb.record.categoryDisplayName} ${t("playerProfile.pb")}`}
+          label={`${representativeName} ${t("playerProfile.pb")}`}
+          onClick={selectPb}
+        >
+          {/* 手入力・Ranked はミリ秒、speedrun.com は秒（formatTime はミリ秒。player-stats-cards.tsx と同じ） */}
+          <span className="font-mono">
+            {formatTime(
+              representative.kind === "custom"
+                ? (representative.record.personalBest as number)
+                : representative.kind === "ranked"
+                  ? representative.timeMs
+                  : representative.pb.run.times.primary_t * 1000,
+            )}
+          </span>
+        </HighlightTile>
+      ) : pbFailed ? (
+        <HighlightTile
+          icon={<Timer className="h-4 w-4" />}
+          label={`${rankedPbFailed && !src?.failed ? "MCSR Ranked " : ""}${t("playerProfile.pb")}`}
           onClick={() => onSelectTab("stats")}
         >
-          <span className="font-mono">{formatTime(pb.record.personalBest as number)}</span>
+          {failedValue}
         </HighlightTile>
-      )}
-      {!pb &&
-        (srcPbLoading ? (
-          <TileSkeleton />
-        ) : srcPb ? (
-          <HighlightTile
-            icon={<Timer className="h-4 w-4" />}
-            label={`${srcPb.category?.data?.name ?? t("common.unknown")} ${t("playerProfile.pb")}`}
-            onClick={() => onSelectTab("stats")}
-          >
-            {/* speedrun.com は秒、formatTime はミリ秒（player-stats-cards.tsx と同じ） */}
-            <span className="font-mono">{formatTime(srcPb.run.times.primary_t * 1000)}</span>
-          </HighlightTile>
-        ) : null)}
+      ) : null}
       {eloLoading ? (
-        <TileSkeleton />
+        <LoadingHighlightTile icon={<Trophy className="h-4 w-4" />} label={t("playerProfile.highlightElo")} />
+      ) : eloFailed ? (
+        <HighlightTile
+          icon={<Trophy className="h-4 w-4" />}
+          label={t("playerProfile.highlightElo")}
+          onClick={() => onSelectTab("stats")}
+        >
+          {failedValue}
+        </HighlightTile>
       ) : elo != null ? (
         <HighlightTile
           icon={<Trophy className="h-4 w-4" />}
@@ -239,5 +367,6 @@ export function ProfileHighlights({
         </HighlightTile>
       )}
     </div>
+    </HorizontalScrollArea>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/time-utils";
 import { formatRelativeTimeInHours, formatRelativeTimeInMinutes } from "@/lib/relative-time";
@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { EloRateGraph } from "@/components/elo-rate-graph";
-import { YouTubeEmbed } from "@/components/youtube-embed";
+import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
+import { speedrunComPbDisplayName } from "@/lib/profile-highlights";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { PageSection } from "@/components/page-section";
-import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2 } from "lucide-react";
+import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2, RotateCw } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 
@@ -29,13 +30,19 @@ import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 // 箱あり / 箱なしの切り替え
 // ============================================
 // 各カード部品は `framed`（既定 true）を受け取る。true は従来どおりの Card（/player/:slug/stats など）。
-// false は走者画面の記録タブ用の「箱なし・上罫線」で、Card の代わりに PageSection（h2・アイコンなし）で描く。
-// 箱なしのときだけ、中の1件ずつのタイルは rounded-xl、中の小見出しは h3（text-base）にする。
+// false は走者画面の記録タブ用の「箱なし・上罫線」で、Card の代わりに PageSection（h3・アイコンなし）で描く。
+// 箱なしのときだけ、中の1件ずつのタイルは rounded-xl、中の小見出しは h4（text-base。走者画面はタブタイトル h2 ＞ 欄 h3 ＞ 小見出し h4）にする。
 
 /** 箱なしのときの中の1件ずつのタイル（角丸 2 層ルール: ページ直置きの個別アイテムは rounded-xl） */
 const SECTION_TILE_RADIUS = "rounded-xl";
-/** 箱なしのときの欄内の小見出し（h3）の class */
+/** 箱なしのときの欄内の小見出し（h4）の class */
 const SECTION_SUBHEADING_CLASS = "text-base font-semibold";
+
+/** 欄内の小見出し。箱あり（/player/:slug/stats ほか）は従来どおり h3、箱なし（走者画面: タブ h2 ＞ 欄 h3 ＞ 小見出し）は h4 */
+function SubHeading({ framed, children }: { framed: boolean; children: ReactNode }) {
+  const Tag = framed ? "h3" : "h4";
+  return <Tag className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{children}</Tag>;
+}
 
 function StatsFrame({
   framed,
@@ -61,7 +68,7 @@ function StatsFrame({
 }) {
   if (!framed) {
     return (
-      <PageSection id={id} title={title} action={action}>
+      <PageSection id={id} title={title} action={action} headingLevel="h3">
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
         <div className={contentClassName}>{children}</div>
       </PageSection>
@@ -226,14 +233,14 @@ export function MCSRRankedCard({
       {ranked.recentMatches.length > 1 && (
         <EloRateGraph
           matches={ranked.recentMatches}
-          {...(framed ? {} : { headingLevel: "h3" as const, headingClassName: SECTION_SUBHEADING_CLASS, labelChange: true })}
+          {...(framed ? {} : { headingLevel: "h4" as const, headingClassName: SECTION_SUBHEADING_CLASS, labelChange: true })}
         />
       )}
 
       {/* 最近のマッチ */}
       {ranked.recentMatches.length > 0 && (
         <div className="space-y-2">
-          <h3 className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{t("playerStatsCards.recentMatches")}</h3>
+          <SubHeading framed={framed}>{t("playerStatsCards.recentMatches")}</SubHeading>
           <div className="space-y-1">
             {ranked.recentMatches.slice(0, 5).map((match) => (
               <div
@@ -288,7 +295,16 @@ export function MCSRRankedCard({
 // ============================================
 
 /** PaceManに登録済みだが、詳細な週間データはここでは持たない場合のリンクのみカード（profile.tsx専用） */
-export function PaceManLinkCard({ mcid, framed = true }: { mcid: string; framed?: boolean }) {
+export function PaceManLinkCard({
+  mcid,
+  framed = true,
+  weeklyStatsHidden = false,
+}: {
+  mcid: string;
+  framed?: boolean;
+  /** 走者が週間統計を非公開にしている。「ペースはありません」と事実と違うことを書かないよう従来の説明に戻す */
+  weeklyStatsHidden?: boolean;
+}) {
   const t = useT();
   if (!framed) {
     // 箱なし: 見出しは週間統計つきの欄（PaceManStatsCard framed=false）と同じ「PaceMan」。リンクは見出し右
@@ -297,7 +313,7 @@ export function PaceManLinkCard({ mcid, framed = true }: { mcid: string; framed?
         framed={false}
         id="stats-paceman"
         title="PaceMan"
-        description={t("playerStatsCards.pacemanLinkDescription")}
+        description={t(weeklyStatsHidden ? "playerStatsCards.pacemanLinkDescription" : "playerStatsCards.pacemanNoWeeklyData")}
         action={<PaceManHeaderLink mcid={mcid} />}
       >
         {null}
@@ -333,13 +349,63 @@ export function PaceManLinkCard({ mcid, framed = true }: { mcid: string; framed?
 function PaceManHeaderLink({ mcid }: { mcid: string }) {
   const t = useT();
   return (
-    <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto">
+    <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto sm:min-h-8">
       <a href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid)}`} target="_blank" rel="noopener noreferrer">
         <span className="sr-only sm:not-sr-only">{t("playerStatsCards.pacemanOpenDetails")}</span>
         <ExternalLink className="h-3.5 w-3.5 sm:ml-1" aria-hidden="true" />
       </a>
     </Button>
   );
+}
+
+/**
+ * 箱なしの PaceMan 欄の見出し右。登録判定（クライアント取得）の状態でリンク位置を切り替える:
+ * 読み込み中は小さなスピナー、失敗は「再試行」ボタン、成功はリンク（登録済みのときだけ）
+ */
+function PaceManHeaderAction({
+  mcid,
+  state,
+  onRetry,
+}: {
+  mcid: string | null | undefined;
+  state: "loading" | "done" | "error" | undefined;
+  onRetry?: () => void;
+}) {
+  const t = useT();
+  // 一度でも失敗したら、再試行中も同じボタンを DOM に残す（外すと押したボタンが消えてフォーカスが BODY に落ちる）
+  const hadError = useRef(false);
+  if (state === "error") hadError.current = true;
+  if (onRetry && (state === "error" || (state === "loading" && hadError.current))) {
+    const loading = state === "loading";
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-disabled={loading}
+          aria-label={t("common.serviceRetry", { name: "PaceMan" })}
+          onClick={loading ? undefined : onRetry}
+          className={cn("shrink-0 max-md:min-h-11 max-md:px-3", loading && "opacity-50")}
+        >
+          <RotateCw aria-hidden="true" className={cn(loading && "animate-spin")} />
+          {t("common.retry")}
+        </Button>
+        {/* 状態の変化（読み込み中 → 失敗）を読み上げさせる。ボタンと同じ間 DOM に残す */}
+        <span role="status" className="sr-only">
+          {loading ? t("loading.pacemanStats") : t("common.serviceLoadFailed", { name: "PaceMan" })}
+        </span>
+      </>
+    );
+  }
+  if (state === "loading") {
+    return (
+      <span role="status" className="flex size-11 shrink-0 items-center justify-center sm:size-8">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+        <span className="sr-only">{t("loading.pacemanStats")}</span>
+      </span>
+    );
+  }
+  return mcid ? <PaceManHeaderLink mcid={mcid} /> : null;
 }
 
 function PaceRow({ pace }: { pace: GroupedPaceEntry }) {
@@ -400,11 +466,16 @@ export function PaceManStatsCard({
   netherEnterCount,
   mainPaces,
   openDetailsMcid,
+  registrationState,
+  onRetryRegistration,
   framed = true,
 }: {
   netherEnterCount: number;
   mainPaces: GroupedPaceEntry[];
   openDetailsMcid?: string | null;
+  /** 箱なしのみ。PaceMan 登録判定（クライアント取得）の状態。見出し右のリンク位置に反映する（省略時はリンクのみ） */
+  registrationState?: "loading" | "done" | "error";
+  onRetryRegistration?: () => void;
   /** false で箱なし。見出しは「PaceMan」で、openDetailsMcid のリンクは末尾のボタンではなく見出し右に置く */
   framed?: boolean;
 }) {
@@ -417,7 +488,11 @@ export function PaceManStatsCard({
       title={framed ? "PaceMan Stats" : "PaceMan"}
       icon={<Timer className="h-5 w-5" />}
       description={t("playerStatsCards.pacemanStatsDescription")}
-      action={!framed && openDetailsMcid ? <PaceManHeaderLink mcid={openDetailsMcid} /> : undefined}
+      action={
+        framed ? undefined : (
+          <PaceManHeaderAction mcid={openDetailsMcid} state={registrationState} onRetry={onRetryRegistration} />
+        )
+      }
       contentClassName="space-y-4"
     >
       <div className="grid grid-cols-2 gap-4">
@@ -439,7 +514,7 @@ export function PaceManStatsCard({
 
       {mainPaces.length > 0 && (
         <div className="space-y-2">
-          <h3 className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{t("playerStatsCards.mainPacesListTitle")}</h3>
+          <SubHeading framed={framed}>{t("playerStatsCards.mainPacesListTitle")}</SubHeading>
           <div className="space-y-1">
             {mainPaces.map((pace) => (
               <PaceRow key={pace.pacemanRunId} pace={pace} />
@@ -504,18 +579,14 @@ export function SpeedrunComCard({
     .filter((pb) => !hiddenSet.has(pb.run.id))
     // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
     .sort((a, b) => Number(pinnedSet.has(b.run.id)) - Number(pinnedSet.has(a.run.id)));
-  let shownPbs = visiblePbs.slice(0, PB_PREVIEW_LIMIT);
-  if (expandable && expanded) {
-    shownPbs = visiblePbs;
-  } else if (highlightRunId && !shownPbs.some((pb) => pb.run.id === highlightRunId)) {
-    // ハイライトの PB が上限の外なら、末尾の1件と入れ替えて必ず含める（並びは元の順序のまま）
-    const highlighted = visiblePbs.find((pb) => pb.run.id === highlightRunId);
-    if (highlighted) {
-      const keep = new Set(shownPbs.slice(0, PB_PREVIEW_LIMIT - 1));
-      keep.add(highlighted);
-      shownPbs = visiblePbs.filter((pb) => keep.has(pb));
-    }
+  // 代表 PB（身元帯のハイライト）は「ピン留めの次」（ピン留めが無ければ先頭）へ移す。ほかの並びは保つ。
+  // 先頭寄りに置くので、表示上限（6件）の外に押し出されることもない
+  const representative = highlightRunId ? visiblePbs.find((pb) => pb.run.id === highlightRunId) : undefined;
+  if (representative && !pinnedSet.has(representative.run.id)) {
+    visiblePbs.splice(visiblePbs.indexOf(representative), 1);
+    visiblePbs.splice(visiblePbs.filter((pb) => pinnedSet.has(pb.run.id)).length, 0, representative);
   }
+  const shownPbs = expandable && expanded ? visiblePbs : visiblePbs.slice(0, PB_PREVIEW_LIMIT);
   const canExpand = expandable && visiblePbs.length > PB_PREVIEW_LIMIT;
   const tileRadius = framed ? "rounded-lg" : SECTION_TILE_RADIUS;
   return (
@@ -537,24 +608,43 @@ export function SpeedrunComCard({
         {shownPbs
           .map((pb) => {
             const isPinned = pinnedSet.has(pb.run.id);
+            const isRepresentative = pb === representative;
             const videoEmbedUrl = showVideoEmbed ? getSpeedrunComVideoEmbedUrl(pb) : null;
+            // 同名のカテゴリがほかにあるときだけ版を添える（Java / Bedrock の Any% Glitchless など）
+            const displayName = speedrunComPbDisplayName(pb, visiblePbs, t("common.unknown"));
+            const timeText = formatTime(pb.run.times.primary_t * 1000);
+            const videoLabel = `${displayName} ${timeText}`;
             return (
               <div
                 key={pb.run.id}
+                // 身元帯の PB タイルから飛んでくる先（フォーカスはプログラムからだけ移す）
+                id={`stats-src-${pb.run.id}`}
+                tabIndex={-1}
+                // フォーカスを受けたとき中身全体を読み上げさせず、カテゴリ名で名前を付ける
+                role="group"
+                aria-labelledby={`stats-src-${pb.run.id}-name`}
                 className={cn(
-                  "p-3 bg-secondary/50 space-y-1",
+                  "p-3 bg-secondary/50 space-y-1 outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   tileRadius,
-                  isPinned && "md:col-span-2 border border-primary/40",
+                  isPinned && "md:col-span-2",
+                  (isPinned || isRepresentative) && "border border-primary/40",
                 )}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm truncate flex items-center gap-1.5">
                     {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                    {pb.category?.data?.name ?? t("common.unknown")}
+                    <span id={`stats-src-${pb.run.id}-name`} className="truncate">{displayName}</span>
                   </span>
-                  <Badge variant="outline" className="shrink-0">
-                    #{pb.place}
-                  </Badge>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {isRepresentative && (
+                      <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
+                        {t("playerStatsCards.representativeBadge")}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="shrink-0">
+                      #{pb.place}
+                    </Badge>
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
                   {pb.game?.data?.names?.international ?? t("common.unknownGame")}
@@ -565,17 +655,21 @@ export function SpeedrunComCard({
                   </p>
                 )}
                 <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
-                  {formatTime(pb.run.times.primary_t * 1000)}
+                  {timeText}
                 </p>
                 {videoEmbedUrl && (
-                  <YouTubeEmbed embedUrl={videoEmbedUrl} title={pb.category?.data?.name ?? "Speedrun video"} />
+                  <YouTubeClickEmbed
+                    embedUrl={videoEmbedUrl}
+                    title={t("playerStatsCards.videoTitle", { label: videoLabel })}
+                    playLabel={t("playerStatsCards.playVideo", { label: videoLabel })}
+                  />
                 )}
                 {pb.run.weblink && (
                   <a
                     href={pb.run.weblink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                    className="flex min-h-6 items-center gap-1 text-xs text-primary hover:underline"
                   >
                     <ExternalLink className="h-3 w-3" />
                     {t("playerStatsCards.viewRecord")}
@@ -640,7 +734,7 @@ export function PendingSpeedrunRecordsCard({
               href={r.runWeblink}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline flex items-center gap-1"
+              className="flex min-h-6 items-center gap-1 text-xs text-primary hover:underline"
             >
               <ExternalLink className="h-3 w-3" />
               {t("playerStatsCards.viewRecord")}
@@ -653,7 +747,7 @@ export function PendingSpeedrunRecordsCard({
   if (!framed) {
     return (
       <div className="scroll-mt-20" id="pending-speedruncom-records">
-        <PageSection id="stats-pending-speedruncom" title={t("playerStatsCards.pendingRecordsTitle")}>
+        <PageSection id="stats-pending-speedruncom" title={t("playerStatsCards.pendingRecordsTitle")} headingLevel="h3">
           {/* スイッチは見出し右ではなく本文の先頭に置く（モバイルで見出しを押しつぶさないため） */}
           {toggle}
           {show && <p className="text-sm text-muted-foreground">{t("playerStatsCards.pendingRecordsDescription")}</p>}
@@ -696,21 +790,36 @@ export function StatsServiceLoadingCard({
   description,
   state,
   framed = true,
+  onRetry,
+  loadingClassName,
 }: {
   title: string;
   description: string;
   state: "loading" | "done" | "error";
   /** false で箱なし。確定後の欄と同じ見出し（title）の PageSection にして、取得完了で見出しの位置が跳ねないようにする */
   framed?: boolean;
+  /** 渡すと、失敗時（state === "error"）だけ「再試行」ボタンを出す */
+  onRetry?: () => void;
+  /**
+   * 箱なしのときだけ、読み込み中（state === "loading"）の欄に付けるクラス（最小の高さ）。届いたあとの中身に近い高さを
+   * 確保して、初期表示で見えていたフッターなどが外部統計の到着で押し下げられる（CLS）のを抑える。
+   * 到着後（done・error）は外すので、「記録なし」でも大きな空白は残らない
+   */
+  loadingClassName?: string;
 }) {
   const t = useT();
   const isLoading = state === "loading";
   const isError = state === "error";
+  // 一度でも失敗したら、再試行中（loading）も同じボタンを DOM に残して aria-disabled にする。
+  // 読み込み中に外すと、押したボタンが消えてフォーカスが BODY に落ちるため
+  const hadError = useRef(false);
+  if (isError) hadError.current = true;
+  const showRetry = !!onRetry && (isError || (isLoading && hadError.current));
 
   const indicator = isLoading ? (
     <LoadingProgressRing />
   ) : isError ? (
-    <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center">
+    <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center" aria-hidden="true">
       <span className="text-destructive text-sm font-bold">!</span>
     </div>
   ) : (
@@ -720,12 +829,46 @@ export function StatsServiceLoadingCard({
   );
   const message = isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete");
 
+  const retryButton = showRetry ? (
+    <Button
+      variant="outline"
+      size="sm"
+      aria-disabled={isLoading}
+      aria-label={t("common.serviceRetry", { name: title })}
+      onClick={isLoading ? undefined : onRetry}
+      className={cn("max-md:min-h-11 max-md:px-4", isLoading && "opacity-50")}
+    >
+      <RotateCw aria-hidden="true" className={cn(isLoading && "animate-spin")} />
+      {t("common.retry")}
+    </Button>
+  ) : null;
+  // 状態の変化（読み込み中 → 失敗）を読み上げさせる。この要素は状態が変わっても DOM に残す
+  const messageEl = (
+    <p role="status" className="text-sm text-muted-foreground">
+      {/* 失敗は、見た目は今のまま、読み上げだけ「{サービス名} の読み込みに失敗しました」にする（3 つの欄で同文になるため） */}
+      {isError ? (
+        <>
+          <span aria-hidden="true">{message}</span>
+          <span className="sr-only">{t("common.serviceLoadFailed", { name: title })}</span>
+        </>
+      ) : (
+        message
+      )}
+    </p>
+  );
+
   if (!framed) {
     return (
-      <PageSection id={`stats-status-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} title={title}>
-        <div className="flex items-center gap-4">
+      <PageSection
+        id={`stats-status-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+        title={title}
+        headingLevel="h3"
+        className={isLoading ? loadingClassName : undefined}
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {indicator}
-          <p className="text-sm text-muted-foreground">{message}</p>
+          {messageEl}
+          {retryButton}
         </div>
       </PageSection>
     );
@@ -734,12 +877,13 @@ export function StatsServiceLoadingCard({
   return (
     <Card className="py-5">
       <CardContent className="px-5">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {indicator}
           <div>
             <p className="font-medium">{title}</p>
-            <p className="text-sm text-muted-foreground">{message}</p>
+            {messageEl}
           </div>
+          {retryButton}
         </div>
       </CardContent>
     </Card>
