@@ -648,6 +648,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     notFoundHint: "Check that the URL is correct and that the guide has not been unpublished.",
     tabGuides: "Guides",
     tabTemplates: "Search-craft templates",
+    contentTabsLabel: "Guides and templates",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraft avatar",

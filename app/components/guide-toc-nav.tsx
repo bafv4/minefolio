@@ -14,7 +14,6 @@ import {
   SheetContent,
   SheetTrigger,
   SheetTitle,
-  SheetClose,
 } from "@/components/ui/sheet";
 
 /**
@@ -174,6 +173,7 @@ function TocList({
               className={cn(
                 // -ml-px で2px の線が親の1px の縦線に重なる。アクティブだけ brand にする。ホバーは文字色のみ
                 "-ml-px block border-l-2 py-1 pr-2 text-sm leading-snug transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 touch && "flex min-h-11 items-center",
                 isActive
                   ? "border-brand font-medium text-foreground"
@@ -282,6 +282,17 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
         <SheetContent
           side="left"
           className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
+          closeLabel={t("guideToc.close")}
+          // 開いたときは Radix 既定（先頭のフォーカス可能要素＝閉じるボタン）にせず、現在の項目へフォーカスする
+          // （現在の項目が無ければ最初の項目）。閉じるボタンは Tab で届く
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const root = scrollRef.current;
+            const target =
+              root?.querySelector<HTMLElement>('a[aria-current="location"]') ??
+              root?.querySelector<HTMLElement>("a");
+            target?.focus({ preventScroll: true });
+          }}
           onCloseAutoFocus={(e) => {
             if (jumpingRef.current) e.preventDefault();
           }}
@@ -299,8 +310,6 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
               touch
             />
           </div>
-          {/* アクセシビリティ用の隠しクローズ（右上 X は SheetContent 既定） */}
-          <SheetClose className="sr-only">{t("guideToc.close")}</SheetClose>
         </SheetContent>
       </Sheet>
     </div>

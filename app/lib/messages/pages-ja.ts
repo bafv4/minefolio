@@ -2423,6 +2423,7 @@ export const PAGES_JA = {
     notFoundHint: "URL が正しいか、公開が取り下げられていないかを確認してください。",
     tabGuides: "ガイド",
     tabTemplates: "サーチクラフトテンプレート",
+    contentTabsLabel: "ガイドとテンプレート",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraftアバター",

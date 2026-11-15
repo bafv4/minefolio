@@ -63,7 +63,11 @@ export function LikeButton({
           title={isOwn ? t("likes.ownContent") : t("likes.loginToLike")}
         >
           <ThumbsUp className="h-3 w-3" aria-hidden />
-          <span className="tabular-nums">{count}</span>
+          {/* 裸の数字だけだと読み上げで意味が落ちる。見た目の数字は隠し、sr-only の「いいね N 件」を読ませる */}
+          <span className="tabular-nums" aria-hidden>
+            {count}
+          </span>
+          <span className="sr-only">{t("likes.countAria", { count })}</span>
         </span>
       );
     }
