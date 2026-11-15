@@ -32,13 +32,18 @@ function ItemIconSpinner({ size, className }: { size: number; className?: string
   );
 }
 
+/** UI ロケールに対応する mcitems の言語コード（"en" → "en_us"、それ以外は "ja_jp"） */
+export function itemLangForLocale(locale: Locale): "en_us" | "ja_jp" {
+  return locale === "en" ? "en_us" : "ja_jp";
+}
+
 /**
  * アイテム名をアプリの UI ロケール（"en"/"ja"）に合わせて取得する。
  * 英語ロケールは formatItemName の英語表記を優先し、日本語ロケールは和名（getItemNameJa）優先
  * → 無ければ英語にフォールバックする（player/profile.tsx・guide-embeds.tsx で共用）。
  */
 export function getLocalizedItemName(itemId: string, locale: Locale): string {
-  if (locale === "en") return formatItemName(itemId, "en_us");
+  if (locale === "en") return formatItemName(itemId, itemLangForLocale(locale));
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 

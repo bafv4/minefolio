@@ -82,7 +82,7 @@ import {
   getItemsByCategory,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
-import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
+import { ItemIcon, getLocalizedItemName, itemLangForLocale } from "@/components/item-icon";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
@@ -387,8 +387,8 @@ function ItemSlotEditButton({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
-  // mcitems の lang 引数（"en_us" / "ja_jp"）。getLocalizedItemName と同じ判定基準
-  const langCode = locale === "en" ? "en_us" : "ja_jp";
+  // mcitems の lang 引数（"en_us" / "ja_jp"）。getLocalizedItemName と同じ判定（itemLangForLocale）
+  const langCode = itemLangForLocale(locale);
 
   // mcitemsから検索（表示ロケールに追従）
   const filteredItems = search

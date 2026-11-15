@@ -14,6 +14,8 @@ import {
   pickRepresentativePb,
   rankedBestTimeMs,
   speedrunComPbDisplayName,
+  statsSrcCardId,
+  visibleSpeedrunComPbs,
   type HighlightPbRecord,
 } from "@/lib/profile-highlights";
 import { formatTime } from "@/lib/time-utils";
@@ -79,12 +81,10 @@ function useRankedHighlight(mcid: string | null, enabled: boolean) {
 type SrcHighlight = { pbs: SpeedrunComPersonalBest[]; failed: boolean };
 const SRC_NONE: SrcHighlight = { pbs: [], failed: false };
 
-function useSpeedrunComPbs(username: string | null, enabled: boolean) {
-  const [pbs, setPbs] = useState<SrcHighlight | undefined>(
-    enabled && username ? undefined : SRC_NONE,
-  );
+function useSpeedrunComPbs(username: string | null) {
+  const [pbs, setPbs] = useState<SrcHighlight | undefined>(username ? undefined : SRC_NONE);
   useEffect(() => {
-    if (!enabled || !username) {
+    if (!username) {
       setPbs(SRC_NONE);
       return;
     }
@@ -104,12 +104,15 @@ function useSpeedrunComPbs(username: string | null, enabled: boolean) {
       cancelled = true;
       unsubscribe();
     };
-  }, [username, enabled]);
+  }, [username]);
   return pbs;
 }
 
 /** 高さを固定してスケルトンと本体を揃える（読み込み完了で下のホットバーが跳ねない） */
 const TILE_HEIGHT_CLASS = "h-[58px]";
+/** タイル（読み込み中・本体）の外枠。md 未満で縮めない指定（max-md:shrink-0 / w-40）は各側に足す */
+const TILE_SHELL_CLASS =
+  "flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-background/80 px-3.5 py-2.5";
 
 function TileSkeleton() {
   return <Skeleton className={cn(TILE_HEIGHT_CLASS, "rounded-xl max-md:w-40 max-md:shrink-0")} />;
@@ -120,10 +123,7 @@ function LoadingHighlightTile({ icon, label }: { icon: ReactNode; label: string 
   return (
     <div
       aria-busy="true"
-      className={cn(
-        TILE_HEIGHT_CLASS,
-        "flex min-w-0 items-center gap-3 rounded-xl max-md:w-40 max-md:shrink-0 border border-border/70 bg-background/80 px-3.5 py-2.5",
-      )}
+      className={cn(TILE_HEIGHT_CLASS, TILE_SHELL_CLASS, "max-md:w-40 max-md:shrink-0")}
     >
       <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
         {icon}
@@ -154,7 +154,8 @@ function HighlightTile({
       onClick={onClick}
       className={cn(
         TILE_HEIGHT_CLASS,
-        "flex min-w-0 items-center gap-3 rounded-xl max-md:shrink-0 border border-border/70 bg-background/80 px-3.5 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        TILE_SHELL_CLASS,
+        "max-md:shrink-0 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
       )}
     >
       <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
@@ -211,12 +212,12 @@ export function ProfileHighlights({
   const t = useT();
   const locale = useLocale();
   const ranked = useRankedHighlight(mcid, showRankedStats && !!mcid);
-  const elo = ranked === undefined ? undefined : ranked.elo;
+  const elo = ranked?.elo;
 
   const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
   // 代表 PB の優先順は pickRepresentativePb（ピン留め → メインカテゴリ → 公式カテゴリ → カスタム記録）。
   // speedrun.com（と、メインカテゴリが Ranked のときは Ranked）が手入力記録より優先されるので、取得が終わるまで決められない
-  const src = useSpeedrunComPbs(speedruncomUsername, !!speedruncomUsername);
+  const src = useSpeedrunComPbs(speedruncomUsername);
   const pbLoading = (!!speedruncomUsername && src === undefined) || (categoryKey === "ranked" && ranked === undefined);
   const representative = pbLoading
     ? null
@@ -272,7 +273,6 @@ export function ProfileHighlights({
   const failedValue = <span className="text-sm font-normal text-muted-foreground">{t("playerProfile.highlightFetchFailed")}</span>;
   // 代表 PB が speedrun.com の記録のとき、同名カテゴリがあれば版を添える（非表示の記録は数えない）。
   // 押すと記録タブへ移り、そのカードへスクロール・フォーカスする
-  const hiddenSrc = new Set(hiddenSpeedrunRecords);
   const representativeName =
     representative?.kind === "custom"
       ? representative.record.categoryDisplayName
@@ -281,13 +281,13 @@ export function ProfileHighlights({
         : representative
           ? speedrunComPbDisplayName(
               representative.pb,
-              (src?.pbs ?? []).filter((pb) => !hiddenSrc.has(pb.run.id) && pb.run.times.primary_t > 0),
+              visibleSpeedrunComPbs(src?.pbs ?? [], hiddenSpeedrunRecords),
               t("common.unknown"),
             )
           : "";
   const selectPb = () => {
     onSelectTab("stats");
-    if (representative?.kind === "speedruncom") goToStatsCard(`stats-src-${representative.pb.run.id}`);
+    if (representative?.kind === "speedruncom") goToStatsCard(statsSrcCardId(representative.pb.run.id));
   };
 
   return (

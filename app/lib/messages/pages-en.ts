@@ -873,7 +873,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     presetViewing: "Viewing preset",
     presetLoading: "Loading preset…",
     edit: "Edit",
-    compare: "Compare",
     emptySuggestTabs: "Other info on this runner",
     exploreTitle: "Compare with other runners",
     exploreCompare: "Compare / find similar runners",

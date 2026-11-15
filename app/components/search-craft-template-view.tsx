@@ -238,7 +238,7 @@ export function SearchCraftGroupedList({
    * （閉じているグループは追従せず自然に流れる）。既定 false
    */
   stickyHeaders?: boolean;
-  /** stickyHeaders の貼り付き位置（Tailwind の top-* クラス。固定ヘッダーの下に合わせる。例: "top-[64px] md:top-[112px]"） */
+  /** stickyHeaders の貼り付き位置（Tailwind の top-* クラス。固定ヘッダーの下に合わせる。例: 走者画面は "top-[64px] md:top-[120px]"） */
   stickyTopClassName?: string;
   /**
    * false にすると各タイミンググループを Card ではなく「h4 小見出し＋中身」の箱なしで描く

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   pickHighlightPb,
-  pickHighlightSpeedrunComPb,
   pickRepresentativePb,
   rankedBestTimeMs,
   isOfficialSpeedrunComPb,
@@ -51,7 +50,24 @@ describe("speedrunComPbMatchesMainCategory", () => {
   });
 });
 
-describe("pickHighlightSpeedrunComPb", () => {
+describe("pickRepresentativePb（speedrun.com 側の選択）", () => {
+  // 手入力記録・Ranked は無い状態で、speedrun.com の PB だけを選ばせる
+  const pickHighlightSpeedrunComPb = (
+    main: string | null,
+    pbs: HighlightSpeedrunComPb[],
+    hidden: string[],
+    pinned: string[],
+  ) => {
+    const r = pickRepresentativePb({
+      mainCategory: main,
+      records: [],
+      speedrunComPbs: pbs,
+      hiddenRunIds: hidden,
+      pinnedRunIds: pinned,
+      rankedTimeMs: null,
+    });
+    return r?.kind === "speedruncom" ? r.pb : null;
+  };
   const rsg = pb("rsg", 20, 800, "Any% Glitchless", "Random Seed");
   const aa = pb("aa", 3, 5000, "All Advancements");
   const ssg = pb("ssg", 9, 700, "Any% Glitchless", "Set Seed");

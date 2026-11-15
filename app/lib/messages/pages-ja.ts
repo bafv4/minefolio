@@ -848,7 +848,6 @@ export const PAGES_JA = {
     presetViewing: "プリセット表示中",
     presetLoading: "プリセットを読み込み中...",
     edit: "編集",
-    compare: "比較",
     emptySuggestTabs: "この走者のほかの情報",
     exploreTitle: "ほかの走者と比べる",
     exploreCompare: "比較・似た走者を探す",

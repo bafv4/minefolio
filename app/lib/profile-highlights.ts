@@ -40,12 +40,12 @@ export function pickHighlightPb<T extends HighlightPbRecord>(
 // speedrun.com の PB（手入力記録に PB が無いときのフォールバック）
 // ============================================
 
-/** pickHighlightSpeedrunComPb が参照する speedrun.com PB の最小形（SpeedrunComPersonalBest の部分集合） */
+/** pickRepresentativePb が参照する speedrun.com PB の最小形（SpeedrunComPersonalBest の部分集合） */
 export interface HighlightSpeedrunComPb {
   place: number;
   run: { id: string; level?: string; values?: Record<string, string>; times: { primary_t: number } };
-  /** speedrun.com の game 資源（`abbreviation`。embed=game.platforms で取得済み） */
-  game?: { data?: { abbreviation?: string } };
+  /** speedrun.com の game 資源（`abbreviation`。embed=game.platforms で取得済み。`names` は表示名用） */
+  game?: { data?: { abbreviation?: string; names?: { international?: string } } };
   category?: {
     data?: {
       name?: string;
@@ -106,7 +106,8 @@ export function isOfficialSpeedrunComPb(pb: HighlightSpeedrunComPb): boolean {
   return abbreviation === undefined || OFFICIAL_GAME_ABBREVIATIONS.has(abbreviation);
 }
 
-function visibleSpeedrunComPbs<T extends HighlightSpeedrunComPb>(
+/** 表示対象の PB（非表示・記録時間 0 以下を除く）。同名カテゴリの判定（speedrunComPbDisplayName の siblings）にもこれを使う */
+export function visibleSpeedrunComPbs<T extends HighlightSpeedrunComPb>(
   personalBests: readonly T[],
   hiddenRunIds: readonly string[],
 ): T[] {
@@ -136,26 +137,13 @@ function pickOfficialPb<T extends HighlightSpeedrunComPb>(visible: readonly T[])
   return official.reduce((best, pb) => (pb.place < best.place ? pb : best));
 }
 
-/**
- * speedrun.com 側だけで選ぶ代表 PB（非表示は除外）。
- * 1) ピン留め（speedrun.com カードの表示順＝personalBests の並びの先頭）
- * 2) mainCategory に確実に対応するもののうち最速
- * 3) 公式カテゴリ（isOfficialSpeedrunComPb）のうち順位（place）が最上位（同順位は並びの先頭）
- * 公式カテゴリが無ければ null（非公式・拡張カテゴリだけの PB は代表にしない）
- */
-export function pickHighlightSpeedrunComPb<T extends HighlightSpeedrunComPb>(
-  mainCategory: string | null | undefined,
-  personalBests: readonly T[],
-  hiddenRunIds: readonly string[],
-  pinnedRunIds: readonly string[],
-): T | null {
-  const visible = visibleSpeedrunComPbs(personalBests, hiddenRunIds);
-  return pickPinnedPb(visible, pinnedRunIds) ?? pickMainCategoryPb(visible, mainCategory) ?? pickOfficialPb(visible);
+/** 記録タブの speedrun.com カードの DOM id（身元帯の代表 PB タイルからのスクロール先） */
+export function statsSrcCardId(runId: string): string {
+  return `stats-src-${runId}`;
 }
 
 /** 表示名の組み立て（speedrunComPbDisplayName）が参照する PB の形（SpeedrunComPersonalBest の部分集合） */
 export interface LabelableSpeedrunComPb extends HighlightSpeedrunComPb {
-  game?: { data?: { abbreviation?: string; names?: { international?: string } } };
   platformName?: string;
   versionName?: string;
 }

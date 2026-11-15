@@ -1,5 +1,9 @@
 import { cn } from "@/lib/utils";
 
+/** YouTube 埋め込み iframe の `allow`（押してから読み込む埋め込み youtube-click-embed.tsx と共有） */
+export const YOUTUBE_IFRAME_ALLOW =
+  "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+
 /**
  * aspect-video の YouTube 埋め込み iframe。
  * iframe の属性（allow / loading 等）をここに集約し、埋め込み面ごとのコピペを防ぐ。
@@ -22,7 +26,7 @@ export function YouTubeEmbed({
         src={embedUrl}
         title={title}
         loading="lazy"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allow={YOUTUBE_IFRAME_ALLOW}
         allowFullScreen
       />
     </div>

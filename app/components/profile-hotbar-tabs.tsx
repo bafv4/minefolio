@@ -74,15 +74,14 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
 
   // 貼り付き中に別タブを選んだら、新しいタブの先頭がコンパクトバーの直下に見える位置へ戻す
   // （タブ切替は preventScrollReset でスクロール位置を保つため、深くスクロールしたままだと新タブの先頭が画面の上に外れる）
-  // クリック（Root の onValueChange 経由）・数字キー・戻る/進むのどれでも activeValue の変化で一本化して処理する
-  const stuckRef = React.useRef(stuck);
-  stuckRef.current = stuck;
+  // クリック（Root の onValueChange 経由）・数字キー・戻る/進むのどれでも activeValue の変化で一本化して処理する。
+  // 番兵がこの位置より上にあれば、貼り付き（ヘッダーの裏へ出た状態）に必ずなっているので、貼り付き判定は別に持たない
   const prevActiveRef = React.useRef(activeValue);
   React.useEffect(() => {
     if (prevActiveRef.current === activeValue) return;
     prevActiveRef.current = activeValue;
     const el = sentinelRef.current;
-    if (!stuckRef.current || !el || !window.matchMedia("(min-width: 768px)").matches) return;
+    if (!el || !window.matchMedia("(min-width: 768px)").matches) return;
     const top = el.getBoundingClientRect().top;
     if (top < SCROLL_RESTORE_SENTINEL_TOP_PX) window.scrollBy({ top: top - SCROLL_RESTORE_SENTINEL_TOP_PX });
   }, [activeValue]);

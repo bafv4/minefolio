@@ -3,6 +3,7 @@ import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { useT } from "@/hooks/use-locale";
+import { YOUTUBE_IFRAME_ALLOW } from "@/components/youtube-embed";
 
 /**
  * 押してから読み込む YouTube 埋め込み。最初はサムネイルと再生ボタンだけを出し、押したら
@@ -45,7 +46,7 @@ export function YouTubeClickEmbed({
           className="h-full w-full"
           src={`${embedUrl}${embedUrl.includes("?") ? "&" : "?"}autoplay=1`}
           title={title}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow={YOUTUBE_IFRAME_ALLOW}
           allowFullScreen
         />
       ) : (

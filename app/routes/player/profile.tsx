@@ -38,6 +38,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName, hasItemNameDictionary } from "@/lib/game-languages";
+import { itemLangForLocale } from "@/components/item-icon";
 import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
 import { decodePresetConfig, parseFingerAssignments } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
@@ -1122,7 +1123,7 @@ export default function PlayerProfilePage() {
   // 現在のタブ名（タブパネルのアクセシブルネーム用）。ホットバーのトリガー名は「未登録」が付くことがあるため、パネルには素のタブ名を明示する
   const tabLabelOf = (value: string) => tabItems.find((i) => i.value === value)?.label ?? "";
   // パネルの名前はタブタイトル（h2）を参照する
-  const panelA11yProps = (value: string) => ({ "aria-labelledby": `profile-tab-title-${value}`, "aria-label": undefined });
+  const panelA11yProps = (value: string) => ({ "aria-labelledby": `profile-tab-title-${value}` });
 
   // ログイン中の自分の slug（共通レイアウトのローダーが既に返している。追加の取得なし）。未ログイン・未オンボーディングは null
   const viewerSlug = useRouteLoaderData<typeof layoutLoader>("routes/_layout")?.user?.slug ?? null;
@@ -1220,7 +1221,7 @@ export default function PlayerProfilePage() {
 
   // プリセット選択（箱にせず、タブパネルの一番上・右寄せに1行で置く小さなセレクト。
   // キー配置・デバイス・アイテム・サーチクラフトで同じ位置、空状態のタブでも同じ）。表示条件は showPresetSelector
-  // md 以上はホットバーの行の右端（ProfileHotbarTabs の trailing）、md 未満はパネル上端の右に1行（下端ドックには入れない）。
+  // lg 以上はホットバーの行の右端（ProfileHotbarTabs の trailing）、lg 未満はパネル上端の右に1行（下端ドックには入れない）。
   // 同じ部品を2か所に描き、表示側を CSS（max-lg:hidden / lg:hidden）で切り替える
   const presetSelectorNode = showPresetSelector ? (
     <div className="flex min-w-0 items-center justify-end gap-2">
@@ -1256,7 +1257,7 @@ export default function PlayerProfilePage() {
   useEffect(() => {
     setSearchCraftViewerLang(false);
   }, [player.id]);
-  const viewerItemLang = locale === "en" ? "en_us" : "ja_jp";
+  const viewerItemLang = itemLangForLocale(locale);
   const runnerItemLang = player.playerConfig?.gameLanguage || "ja_jp";
   const canToggleSearchCraftLang = runnerItemLang !== viewerItemLang;
 
@@ -1418,7 +1419,7 @@ export default function PlayerProfilePage() {
 
         {/* Profile Tab */}
         <TabsContent value="profile" {...panelA11yProps("profile")} className={PANEL_CLASS}>
-          <ProfileTabTitle value="profile" label={tabLabelOf("profile")} trailing={presetSelector} />
+          <ProfileTabTitle value="profile" label={tabLabelOf("profile")} />
           {/* Header: Skin + Basic Info（箱にせず欄の先頭にそのまま置く） */}
           <div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
@@ -1881,20 +1882,18 @@ export default function PlayerProfilePage() {
               </PageSection>
             </>
           ) : (
-            <>
-              <EmptyState
-                icon={<Keyboard className="h-12 w-12" />}
-                title={t("playerProfile.noKeybindingsTitle")}
-                description={t("playerProfile.noKeybindings")}
-                action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
-              />
-            </>
+            <EmptyState
+              icon={<Keyboard className="h-12 w-12" />}
+              title={t("playerProfile.noKeybindingsTitle")}
+              description={t("playerProfile.noKeybindings")}
+              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
+            />
           )}
         </TabsContent>
 
         {/* Stats Tab */}
         <TabsContent value="stats" {...panelA11yProps("stats")} className={PANEL_CLASS}>
-          <ProfileTabTitle value="stats" label={tabLabelOf("stats")} trailing={presetSelector} />
+          <ProfileTabTitle value="stats" label={tabLabelOf("stats")} />
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1912,7 +1911,7 @@ export default function PlayerProfilePage() {
 
         {/* Playstyle Tab */}
         <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className={PANEL_CLASS}>
-          <ProfileTabTitle value="playstyle" label={tabLabelOf("playstyle")} trailing={presetSelector} />
+          <ProfileTabTitle value="playstyle" label={tabLabelOf("playstyle")} />
           {hasPlaystyleData ? (
             <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 lg:grid-cols-2">
               {/* プレイ内容 */}
@@ -1985,14 +1984,12 @@ export default function PlayerProfilePage() {
               ))}
             </div>
           ) : (
-            <>
-              <EmptyState
-                icon={<Package className="h-12 w-12" />}
-                title={t("playerProfile.noItemLayoutsTitle")}
-                description={t("playerProfile.noItemLayouts")}
-                action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
-              />
-            </>
+            <EmptyState
+              icon={<Package className="h-12 w-12" />}
+              title={t("playerProfile.noItemLayoutsTitle")}
+              description={t("playerProfile.noItemLayouts")}
+              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
+            />
           )}
         </TabsContent>
 
@@ -2031,7 +2028,7 @@ export default function PlayerProfilePage() {
           {hasSearchCraftData ? (
             // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする（見出しの並びを h2 → h3 → h4 にそろえる）。
             // グループの名前もこの h3 を参照する。サーチクラフトのグループ名は h4
-            <div id="profile-searchcraft" role="group" aria-labelledby="profile-searchcraft-heading" className="scroll-mt-20 space-y-4">
+            <div id="profile-searchcraft" role="group" aria-labelledby="profile-searchcraft-heading" className="space-y-4">
               <h3 id="profile-searchcraft-heading" className="sr-only">{t("playerProfile.searchCraftListHeading")}</h3>
               {/* ゲーム言語・件数・凡例（箱にせず欄の先頭に置く） */}
               <div className="space-y-2.5">
@@ -2074,7 +2071,7 @@ export default function PlayerProfilePage() {
                 framed={false}
                 collapsible
                 stickyHeaders
-                // ヘッダー（md 未満）・ホットバー（md 以上、64+49=113 が下端）の下に 1px もぐらせて貼り付く。
+                // ヘッダー（md 未満）・ホットバー（md 以上、64+57=121 が下端）の下に 1px もぐらせて貼り付く。
                 // ちょうど接すると表示倍率 125% 等で境目が小数の画素位置になり、下のコンテンツが透けるため
                 stickyTopClassName="top-[64px] md:top-[120px]"
                 crafts={parsedSearchCrafts}
@@ -2088,14 +2085,12 @@ export default function PlayerProfilePage() {
               />
             </div>
           ) : (
-            <>
-              <EmptyState
-                icon={<Search className="h-12 w-12" />}
-                title={t("playerProfile.searchCraftNoneTitle")}
-                description={t("playerProfile.noSearchCraft")}
-                action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
-              />
-            </>
+            <EmptyState
+              icon={<Search className="h-12 w-12" />}
+              title={t("playerProfile.searchCraftNoneTitle")}
+              description={t("playerProfile.noSearchCraft")}
+              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
+            />
           )}
         </TabsContent>
 
@@ -2281,14 +2276,12 @@ export default function PlayerProfilePage() {
               )}
             </>
           ) : (
-            <>
-              <EmptyState
-                icon={<Mouse className="h-12 w-12" />}
-                title={t("playerProfile.noDevicesTitle")}
-                description={t("playerProfile.noDevices")}
-                action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
-              />
-            </>
+            <EmptyState
+              icon={<Mouse className="h-12 w-12" />}
+              title={t("playerProfile.noDevicesTitle")}
+              description={t("playerProfile.noDevices")}
+              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
+            />
           )}
         </TabsContent>
 
@@ -2297,18 +2290,11 @@ export default function PlayerProfilePage() {
           <ProfileTabTitle
             value="guides"
             label={tabLabelOf("guides")}
-            trailing={
-              hasGuidesData || presetSelector ? (
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {hasGuidesData && <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />}
-                  {presetSelector}
-                </div>
-              ) : null
-            }
+            trailing={hasGuidesData ? <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} /> : null}
           />
           {hasGuidesData ? (
             // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする。グループの名前もこの h3 を参照し、カードのタイトルは h4
-            <div id="profile-guides" role="group" aria-labelledby="profile-guides-heading" className="scroll-mt-20">
+            <div id="profile-guides" role="group" aria-labelledby="profile-guides-heading">
               <h3 id="profile-guides-heading" className="sr-only">{t("playerProfile.guidesListHeading")}</h3>
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
@@ -2919,6 +2905,31 @@ type StatsPlayer = {
   categoryRecords: RecordCardRecord[];
 };
 
+type StatsService = "ranked" | "paceman" | "speedruncom";
+type StatsLoadState = Record<StatsService, "loading" | "done" | "error">;
+const STATS_SERVICE_KEYS: readonly StatsService[] = ["ranked", "paceman", "speedruncom"];
+const PACEMAN_REGISTERED = { isRegistered: true } as const;
+
+// サービスごとの取得キー（無ければ取得しない）と取得関数。PaceMan の取得関数は差し替えやすいよう単独の関数にしている。
+// force は再試行用（キャッシュを迂回する。キャッシュの無い PaceMan では無視）
+const STATS_SERVICES: Record<
+  StatsService,
+  { key: (player: StatsPlayer) => string | null; fetch: (id: string, force: boolean) => Promise<unknown> }
+> = {
+  ranked: { key: (p) => p.mcid, fetch: (id, force) => fetchMCSRRankedStatsCached(id, { force }) },
+  paceman: { key: (p) => p.mcid, fetch: (id) => fetchPaceManRegistration(id) },
+  speedruncom: { key: (p) => p.speedruncomUsername, fetch: (id, force) => fetchSpeedrunComStatsCached(id, { force }) },
+};
+
+/** MCID / speedrun.com ユーザー名が無いサービス（と、登録済みが自明な PaceMan）は取得しないので最初から "done" */
+function initialLoadState(player: StatsPlayer, pacemanRegisteredKnown: boolean): StatsLoadState {
+  return {
+    ranked: STATS_SERVICES.ranked.key(player) ? "loading" : "done",
+    paceman: STATS_SERVICES.paceman.key(player) && !pacemanRegisteredKnown ? "loading" : "done",
+    speedruncom: STATS_SERVICES.speedruncom.key(player) ? "loading" : "done",
+  };
+}
+
 // Stats タブのコンテナ（クライアント側でデータ取得）
 function StatsTabContent({
   player,
@@ -2946,97 +2957,65 @@ function StatsTabContent({
   /** 空のときに訪問者へ出す案内（他の中身あるタブへのボタン） */
   visitorEmptyAction?: ReactNode;
 }) {
-  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
-  const [loadState, setLoadState] = useState({
-    // MCID / speedrun.com ユーザー名が無いサービスは取得しない（"null" 等で外部 API を呼ばない）ので最初から "done"
-    ranked: (player.mcid ? "loading" : "done") as "loading" | "done" | "error",
-    paceman: (player.mcid ? "loading" : "done") as "loading" | "done" | "error",
-    speedruncom: (player.speedruncomUsername ? "loading" : "done") as "loading" | "done" | "error",
-  });
+  // loader 由来の週間統計があれば PaceMan 登録済みは自明なので、登録確認の取得は行わず最初から取得済みとして扱う
+  const pacemanRegisteredKnown = hasWeeklyPacemanStats(pacemanStats, player);
+  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>(
+    pacemanRegisteredKnown ? { paceman: PACEMAN_REGISTERED } : {},
+  );
+  const [loadState, setLoadState] = useState(() => initialLoadState(player, pacemanRegisteredKnown));
 
   // 走者切替・アンマウントで破棄する取得セッション。各サービスの取得は、開始時点のセッションが
   // まだ有効なときだけ結果を反映する（再試行も同じ仕組みを通る）
   const sessionRef = useRef({ cancelled: false });
 
-  // サービスごとの取得。mcid が無い走者は Ranked / PaceMan を取得せず終える
-  // （"null" を名前に外部 API を呼ぶと偽の取得失敗になる。身元帯 profile-highlights も !!mcid で止めている）。
-  // PaceMan の取得関数は差し替えやすいよう単独の関数にしている
-  const loadRanked = useCallback(async () => {
-    if (!player.mcid) return;
-    const session = sessionRef.current;
-    setLoadState((prev) => ({ ...prev, ranked: "loading" }));
-    try {
-      const ranked = await fetchMCSRRankedStatsCached(player.mcid);
-      if (session.cancelled) return;
-      setExternalStats((prev) => ({ ...prev, ranked }));
-      // 取得関数は失敗を throw せず { error } で返す。error があれば取得失敗（再試行カード）、
-      // error なしの未登録・データなしは従来どおり「done」で欄ごと出さない
-      setLoadState((prev) => ({ ...prev, ranked: ranked?.error ? "error" : "done" }));
-    } catch (error) {
-      console.error("Failed to fetch MCSR Ranked stats:", error);
-      if (session.cancelled) return;
-      setLoadState((prev) => ({ ...prev, ranked: "error" }));
-    }
-  }, [player.mcid]);
-
-  const loadPaceman = useCallback(async () => {
-    if (!player.mcid) return;
-    const session = sessionRef.current;
-    setLoadState((prev) => ({ ...prev, paceman: "loading" }));
-    try {
-      const paceman = await fetchPaceManRegistration(player.mcid);
-      if (session.cancelled) return;
-      setExternalStats((prev) => ({ ...prev, paceman }));
-      setLoadState((prev) => ({ ...prev, paceman: "done" }));
-    } catch (error) {
-      console.error("Failed to fetch PaceMan status:", error);
-      if (session.cancelled) return;
-      setLoadState((prev) => ({ ...prev, paceman: "error" }));
-    }
-  }, [player.mcid]);
-
-  const loadSpeedruncom = useCallback(async () => {
-    if (!player.speedruncomUsername) return;
-    const session = sessionRef.current;
-    setLoadState((prev) => ({ ...prev, speedruncom: "loading" }));
-    try {
-      const speedruncom = await fetchSpeedrunComStatsCached(player.speedruncomUsername);
-      if (session.cancelled) return;
-      setExternalStats((prev) => ({ ...prev, speedruncom }));
-      setLoadState((prev) => ({ ...prev, speedruncom: speedruncom?.error ? "error" : "done" }));
-    } catch (error) {
-      console.error("Failed to fetch speedrun.com stats:", error);
-      if (session.cancelled) return;
-      setLoadState((prev) => ({ ...prev, speedruncom: "error" }));
-    }
-  }, [player.speedruncomUsername]);
+  // サービスごとの取得（失敗は結果の `error` か reject）。取得キーが無い走者（mcid / speedrun.com ユーザー名なし）は
+  // 取得せず終える（"null" を名前に外部 API を呼ぶと偽の取得失敗になる。身元帯 profile-highlights も止めている）。
+  // 取得関数は失敗を throw せず { error } で返す。error があれば取得失敗（再試行カード）、
+  // error なしの未登録・データなしは従来どおり「done」で欄ごと出さない。force は再試行用でキャッシュを迂回する
+  const load = useCallback(
+    async (service: StatsService, force = false) => {
+      const target = STATS_SERVICES[service];
+      const id = target.key(player);
+      if (!id) return;
+      const session = sessionRef.current;
+      setLoadState((prev) => ({ ...prev, [service]: "loading" }));
+      try {
+        const result = await target.fetch(id, force);
+        if (session.cancelled) return;
+        setExternalStats((prev) => ({ ...prev, [service]: result }));
+        setLoadState((prev) => ({ ...prev, [service]: (result as { error?: unknown } | undefined)?.error ? "error" : "done" }));
+      } catch (error) {
+        console.error(`Failed to fetch ${service} stats:`, error);
+        if (session.cancelled) return;
+        setLoadState((prev) => ({ ...prev, [service]: "error" }));
+      }
+    },
+    [player.mcid, player.speedruncomUsername], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => {
     const session = { cancelled: false };
     sessionRef.current = session;
-    setLoadState({
-      ranked: player.mcid ? "loading" : "done",
-      paceman: player.mcid ? "loading" : "done",
-      speedruncom: player.speedruncomUsername ? "loading" : "done",
-    });
-    void loadRanked();
-    void loadPaceman();
-    void loadSpeedruncom();
+    setLoadState(initialLoadState(player, pacemanRegisteredKnown));
+    void load("ranked");
+    if (pacemanRegisteredKnown) setExternalStats((prev) => (prev.paceman === PACEMAN_REGISTERED ? prev : { ...prev, paceman: PACEMAN_REGISTERED }));
+    else void load("paceman");
+    void load("speedruncom");
     return () => {
       session.cancelled = true;
     };
-  }, [loadRanked, loadPaceman, loadSpeedruncom, player.mcid, player.speedruncomUsername]);
+  }, [load, pacemanRegisteredKnown, player.mcid, player.speedruncomUsername]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 「再試行」を押したサービスは、成功して失敗カードが消えたら、その欄の見出しへフォーカスを移す
   // （押したボタンが消えてフォーカスが BODY に落ちるのを防ぐ。失敗のままならボタンにフォーカスが残る）。
   // 欄の見出し id は PageSection の `${id}-heading`（player-stats-cards.tsx の stats-ranked / stats-paceman / stats-speedruncom）
-  const retryFocusRef = useRef<Partial<Record<"ranked" | "paceman" | "speedruncom", true>>>({});
-  const withRetryFocus = (service: "ranked" | "paceman" | "speedruncom", load: () => void) => () => {
+  const retryFocusRef = useRef<Partial<Record<StatsService, true>>>({});
+  const retry = (service: StatsService) => {
     retryFocusRef.current[service] = true;
-    load();
+    void load(service, true);
   };
   useEffect(() => {
-    for (const service of ["ranked", "paceman", "speedruncom"] as const) {
+    for (const service of STATS_SERVICE_KEYS) {
       if (!retryFocusRef.current[service] || loadState[service] === "loading") continue;
       delete retryFocusRef.current[service];
       if (loadState[service] === "done") document.getElementById(`stats-${service}-heading`)?.focus();
@@ -3056,11 +3035,7 @@ function StatsTabContent({
       minefolioEloRank={minefolioEloRank}
       isOwner={isOwner}
       loadState={loadState}
-      onRetry={{
-        ranked: withRetryFocus("ranked", loadRanked),
-        paceman: withRetryFocus("paceman", loadPaceman),
-        speedruncom: withRetryFocus("speedruncom", loadSpeedruncom),
-      }}
+      onRetry={retry}
       mainCategory={mainCategory}
       visitorEmptyAction={visitorEmptyAction}
     />
@@ -3073,6 +3048,18 @@ function filterWeeklyMainPaces(mainPaces: GroupedPaceEntry[]): GroupedPaceEntry[
     const date = pace?.date ? new Date(pace.date).getTime() : NaN;
     return Number.isFinite(date) && date >= oneWeekAgo;
   });
+}
+
+/** PaceMan の週間統計欄を出せる（表示設定がオンで、件数がある）か。あれば PaceMan 登録済みは自明 */
+function hasWeeklyPacemanStats(
+  pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null,
+  player: StatsPlayer,
+): boolean {
+  return (
+    !!pacemanStats &&
+    player.showPacemanStats !== false &&
+    (pacemanStats.netherEnterCount > 0 || filterWeeklyMainPaces(pacemanStats.mainPaces).length > 0)
+  );
 }
 
 // Stats タブのコンテンツ
@@ -3094,7 +3081,7 @@ function StatsContent({
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   /** サービスごとの再取得（取得失敗カードの「再試行」） */
-  onRetry: { ranked: () => void; paceman: () => void; speedruncom: () => void };
+  onRetry: (service: StatsService) => void;
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
@@ -3105,11 +3092,7 @@ function StatsContent({
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
   visitorEmptyAction?: ReactNode;
-  loadState: {
-    ranked: "loading" | "done" | "error";
-    paceman: "loading" | "done" | "error";
-    speedruncom: "loading" | "done" | "error";
-  };
+  loadState: StatsLoadState;
   /** 本人のメインカテゴリ（playstyle.mainCategory）。欄の並びとハイライト PB の選択に使う */
   mainCategory: string | null | undefined;
 }) {
@@ -3123,8 +3106,7 @@ function StatsContent({
     document.getElementById("pending-speedruncom-records")?.scrollIntoView({ block: "start" });
   }, [externalDone]); // eslint-disable-line react-hooks/exhaustive-deps
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
-  const hasWeeklyStats =
-    !!pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0);
+  const hasWeeklyStats = hasWeeklyPacemanStats(pacemanStats, player);
   const hasPacemanLink = !!externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && !!player.mcid;
   const showPacemanSection = hasWeeklyStats || hasPacemanLink;
   const allExternalResolved = loadState.ranked !== "loading"
@@ -3142,20 +3124,18 @@ function StatsContent({
   // メインカテゴリが Ranked のときは Ranked の取得が済むまで決まらないので、その間は指定しない
   const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
   const rankedShown = player.showRankedStats !== false;
-  const highlightSrcRunId =
+  const representativePb =
     externalStats.speedruncom?.personalBests && !(categoryKey === "ranked" && rankedShown && loadState.ranked === "loading")
-      ? (() => {
-          const representative = pickRepresentativePb({
-            mainCategory: categoryKey,
-            records: player.categoryRecords,
-            speedrunComPbs: externalStats.speedruncom.personalBests,
-            hiddenRunIds: hiddenSpeedrunRecords,
-            pinnedRunIds: pinnedSpeedrunRecords,
-            rankedTimeMs: rankedShown ? rankedBestTimeMs(externalStats.ranked) : null,
-          });
-          return representative?.kind === "speedruncom" ? representative.pb.run.id : null;
-        })()
+      ? pickRepresentativePb({
+          mainCategory: categoryKey,
+          records: player.categoryRecords,
+          speedrunComPbs: externalStats.speedruncom.personalBests,
+          hiddenRunIds: hiddenSpeedrunRecords,
+          pinnedRunIds: pinnedSpeedrunRecords,
+          rankedTimeMs: rankedShown ? rankedBestTimeMs(externalStats.ranked) : null,
+        })
       : null;
+  const highlightSrcRunId = representativePb?.kind === "speedruncom" ? representativePb.pb.run.id : null;
 
   const sections: Record<StatsSectionKey, ReactNode> = {
     ranked: (
@@ -3166,7 +3146,7 @@ function StatsContent({
             title="MCSR Ranked"
             description={t("loading.rankedStats")}
             state={loadState.ranked}
-            onRetry={onRetry.ranked}
+            onRetry={() => onRetry("ranked")}
             loadingClassName={STATS_RANKED_LOADING_CLASS}
           />
         )}
@@ -3185,7 +3165,7 @@ function StatsContent({
             title="PaceMan"
             description={t("loading.pacemanStats")}
             state={loadState.paceman}
-            onRetry={onRetry.paceman}
+            onRetry={() => onRetry("paceman")}
           />
         )}
         {showPacemanSection &&
@@ -3196,7 +3176,7 @@ function StatsContent({
               mainPaces={weeklyMainPaces}
               openDetailsMcid={hasPacemanLink ? player.mcid : null}
               registrationState={loadState.paceman}
-              onRetryRegistration={onRetry.paceman}
+              onRetryRegistration={() => onRetry("paceman")}
             />
           ) : (
             player.mcid && (
@@ -3217,7 +3197,7 @@ function StatsContent({
             title="Speedrun.com"
             description={t("loading.speedruncomStats")}
             state={loadState.speedruncom}
-            onRetry={onRetry.speedruncom}
+            onRetry={() => onRetry("speedruncom")}
             loadingClassName={STATS_SPEEDRUNCOM_LOADING_CLASS}
           />
         )}

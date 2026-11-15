@@ -21,8 +21,7 @@ export function SectionHeaderLink({ to, label, prefetch }: { to: string; label: 
  * ページ内の欄の共通枠（ホーム・走者画面などで共有）。`section` + `aria-labelledby`（h2）でランドマークにし、
  * 見出しにはアイコン（任意）・件数（badge）・「すべて見る」（viewAllTo）だけを置く（eyebrow は使わない）。
  * 箱なし（上罫線 `border-foreground/15` のみ）の1種類。アイコンは呼び出し側の色のまま見出しの左に置く。
- * 見出し行は既定で折り返さない（モバイルで右のリンクがアイコンのみになるのもそのため）。
- * 右に幅のある操作（セレクト等）を置く欄は `wrapHeader` で、見出しを切り詰めずに操作を次の行（右寄せ）へ回す。
+ * 見出し行は折り返さない（モバイルで右のリンクがアイコンのみになるのもそのため）。
  */
 export function PageSection({
   id,
@@ -31,7 +30,6 @@ export function PageSection({
   badge,
   viewAllTo,
   action,
-  wrapHeader = false,
   headingLevel = "h2",
   first = false,
   className,
@@ -46,8 +44,6 @@ export function PageSection({
   badge?: ReactNode;
   viewAllTo?: string;
   action?: ReactNode;
-  /** 見出し行の折り返しを許す（幅が足りないとき、右の操作を次の行の右端へ送る） */
-  wrapHeader?: boolean;
   /** 見出しのタグ。既定 h2（ホーム）。走者画面はタブタイトルが h2 なので "h3" を渡す（h3 は text-lg、h2 は text-xl） */
   headingLevel?: "h2" | "h3";
   /** true で上罫線と上余白を外す（タイトル直下の最初の欄用） */
@@ -63,9 +59,9 @@ export function PageSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn("scroll-mt-20 space-y-4", first ? "" : "border-t border-foreground/15 pt-6", className)}
+      className={cn("scroll-mt-20 space-y-4", !first && "border-t border-foreground/15 pt-6", className)}
     >
-      <div className={cn("flex items-center gap-x-2 sm:gap-x-3", wrapHeader ? "flex-wrap gap-y-2" : "flex-nowrap")}>
+      <div className={cn("flex items-center gap-x-2 sm:gap-x-3", "flex-nowrap")}>
         {icon && <div className="shrink-0">{icon}</div>}
         {/* 見出しは本文との段差（1.25倍以上）を保つため text-xl のまま。モバイルは隙間を詰めて、
             アイコン＋見出し＋件数＋右のアイコンリンクを1行に収める（収まらない言語では truncate）。

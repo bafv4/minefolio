@@ -188,4 +188,5 @@
 ページが `[data-bottom-dock]` を持つ要素（現在はプロフィールのホットバー）を描くと、`app/app.css` の `:root:has([data-bottom-dock])` が **md 未満で** `--bottom-dock-height`（`4.75rem + env(safe-area-inset-bottom)`）を解決し、body に同じ高さの `padding-bottom` を付けて末尾がドックに隠れないようにする。ドックの無いページ・md 以上では `0px`。
 
 - 下端に固定する他の UI（クッキーバナー `cookie-consent.tsx`・トップへ戻る `back-to-top-button.tsx` など）は、`bottom-[calc(<元の値>+var(--bottom-dock-height,0px))]` のようにドックの高さぶんずらす。フォールバック `0px` を必ず付ける
+- `:root` の `--bottom-fixed-inset`（`--bottom-dock-height` ＋ Cookie バナーの `--cookie-banner-offset` の合算。body の `padding-bottom` と `scroll-padding-bottom` が読む）を、下端インセットの合算として参照してよい。
 - 新しく下端固定の UI を足すときも同じ。ドックを持つページを足すときは、コンテナに `data-bottom-dock` を付け、高さは `--bottom-dock-height` を参照する

@@ -233,7 +233,7 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 
 **レスポンス:** `{ "isRegistered": boolean }`。上流の取得失敗（404 以外の非2xx・通信エラー・タイムアウト）は **502**（`{ "error": ... }`、`no-store`）で、未登録とは区別される
 
-- **キャッシュ**: 200 は CDN `s-maxage=10800, stale-while-revalidate=86400`。400/502 は `no-store`
+- **キャッシュ**: 200 は `max-age=300`（ブラウザ）＋ CDN `s-maxage=10800, stale-while-revalidate=86400`。400/502 は `no-store`
 - クライアントからは `fetchPaceManRegistration(mcid)`（`app/lib/paceman-registration-client.ts`、失敗時は例外）
 
 **関連ファイル:** `app/routes/api/paceman-registration.ts`, `app/lib/external-stats.ts`（`checkPaceManPlayer`）

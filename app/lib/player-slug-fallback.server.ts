@@ -16,14 +16,13 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./db";
 import { getCached, setCached, CacheTTL } from "./cache";
-import { fetchUuidFromMcid, MojangError } from "./mojang";
+import { fetchUuidFromMcid, MCID_SHAPE, MojangError } from "./mojang";
 import { users } from "./schema";
 import { resolveSlugFromHistory } from "./slug-history.server";
 import { publiclyReferencableCondition } from "./users-filter";
 
-// MCIDとして解釈可能な形状（Mojangの命名規則: 3〜16文字の英数字とアンダースコア）。
-// `@discordId` 形式の自動生成slugやランダムパスでの無差別アクセスを、Mojang API呼び出し前に弾く。
-const MCID_SHAPE = /^[A-Za-z0-9_]{3,16}$/;
+// MCID_SHAPE（mojang.ts）で、`@discordId` 形式の自動生成slugやランダムパスでの無差別アクセスを、
+// Mojang API呼び出し前に弾く。
 
 // Mojang APIへの問い合わせタイムアウト（404表示までの遅延を抑えるため既定より短くする）
 const FALLBACK_TIMEOUT_MS = 3000;

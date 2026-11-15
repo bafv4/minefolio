@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { EloRateGraph } from "@/components/elo-rate-graph";
 import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
-import { speedrunComPbDisplayName } from "@/lib/profile-highlights";
+import { speedrunComPbDisplayName, statsSrcCardId, visibleSpeedrunComPbs } from "@/lib/profile-highlights";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { PageSection } from "@/components/page-section";
 import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2, RotateCw } from "lucide-react";
@@ -359,6 +359,46 @@ function PaceManHeaderLink({ mcid }: { mcid: string }) {
 }
 
 /**
+ * 取得失敗後の「再試行」ボタンを出すか。一度でも失敗したら、再試行中（loading）も同じボタンを DOM に残す
+ * （外すと、押したボタンが消えてフォーカスが BODY に落ちる）
+ */
+function useShowServiceRetry(state: "loading" | "done" | "error" | undefined, hasRetry: boolean): boolean {
+  const hadError = useRef(false);
+  if (state === "error") hadError.current = true;
+  return hasRetry && (state === "error" || (state === "loading" && hadError.current));
+}
+
+/** サービス別の「再試行」ボタン。再試行中（loading）は aria-disabled で押せなくし、アイコンを回す */
+function ServiceRetryButton({
+  name,
+  loading,
+  onRetry,
+  variant,
+  className,
+}: {
+  name: string;
+  loading: boolean;
+  onRetry: () => void;
+  variant: "ghost" | "outline";
+  className?: string;
+}) {
+  const t = useT();
+  return (
+    <Button
+      variant={variant}
+      size="sm"
+      aria-disabled={loading}
+      aria-label={t("common.serviceRetry", { name })}
+      onClick={loading ? undefined : onRetry}
+      className={cn(className, loading && "opacity-50")}
+    >
+      <RotateCw aria-hidden="true" className={cn(loading && "animate-spin")} />
+      {t("common.retry")}
+    </Button>
+  );
+}
+
+/**
  * 箱なしの PaceMan 欄の見出し右。登録判定（クライアント取得）の状態でリンク位置を切り替える:
  * 読み込み中は小さなスピナー、失敗は「再試行」ボタン、成功はリンク（登録済みのときだけ）
  */
@@ -372,24 +412,18 @@ function PaceManHeaderAction({
   onRetry?: () => void;
 }) {
   const t = useT();
-  // 一度でも失敗したら、再試行中も同じボタンを DOM に残す（外すと押したボタンが消えてフォーカスが BODY に落ちる）
-  const hadError = useRef(false);
-  if (state === "error") hadError.current = true;
-  if (onRetry && (state === "error" || (state === "loading" && hadError.current))) {
+  const showRetry = useShowServiceRetry(state, !!onRetry);
+  if (onRetry && showRetry) {
     const loading = state === "loading";
     return (
       <>
-        <Button
+        <ServiceRetryButton
+          name="PaceMan"
+          loading={loading}
+          onRetry={onRetry}
           variant="ghost"
-          size="sm"
-          aria-disabled={loading}
-          aria-label={t("common.serviceRetry", { name: "PaceMan" })}
-          onClick={loading ? undefined : onRetry}
-          className={cn("shrink-0 max-md:min-h-11 max-md:px-3", loading && "opacity-50")}
-        >
-          <RotateCw aria-hidden="true" className={cn(loading && "animate-spin")} />
-          {t("common.retry")}
-        </Button>
+          className="shrink-0 max-md:min-h-11 max-md:px-3"
+        />
         {/* 状態の変化（読み込み中 → 失敗）を読み上げさせる。ボタンと同じ間 DOM に残す */}
         <span role="status" className="sr-only">
           {loading ? t("loading.pacemanStats") : t("common.serviceLoadFailed", { name: "PaceMan" })}
@@ -586,6 +620,8 @@ export function SpeedrunComCard({
     visiblePbs.splice(visiblePbs.indexOf(representative), 1);
     visiblePbs.splice(visiblePbs.filter((pb) => pinnedSet.has(pb.run.id)).length, 0, representative);
   }
+  // 同名カテゴリの判定は身元帯と同じ表示対象（非表示・記録時間 0 以下を除く）で行う
+  const nameSiblings = visibleSpeedrunComPbs(speedruncom.personalBests, [...hiddenSet]);
   const shownPbs = expandable && expanded ? visiblePbs : visiblePbs.slice(0, PB_PREVIEW_LIMIT);
   const canExpand = expandable && visiblePbs.length > PB_PREVIEW_LIMIT;
   const tileRadius = framed ? "rounded-lg" : SECTION_TILE_RADIUS;
@@ -611,18 +647,18 @@ export function SpeedrunComCard({
             const isRepresentative = pb === representative;
             const videoEmbedUrl = showVideoEmbed ? getSpeedrunComVideoEmbedUrl(pb) : null;
             // 同名のカテゴリがほかにあるときだけ版を添える（Java / Bedrock の Any% Glitchless など）
-            const displayName = speedrunComPbDisplayName(pb, visiblePbs, t("common.unknown"));
+            const displayName = speedrunComPbDisplayName(pb, nameSiblings, t("common.unknown"));
             const timeText = formatTime(pb.run.times.primary_t * 1000);
             const videoLabel = `${displayName} ${timeText}`;
             return (
               <div
                 key={pb.run.id}
                 // 身元帯の PB タイルから飛んでくる先（フォーカスはプログラムからだけ移す）
-                id={`stats-src-${pb.run.id}`}
+                id={statsSrcCardId(pb.run.id)}
                 tabIndex={-1}
                 // フォーカスを受けたとき中身全体を読み上げさせず、カテゴリ名で名前を付ける
                 role="group"
-                aria-labelledby={`stats-src-${pb.run.id}-name`}
+                aria-labelledby={`${statsSrcCardId(pb.run.id)}-name`}
                 className={cn(
                   "p-3 bg-secondary/50 space-y-1 outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   tileRadius,
@@ -633,7 +669,7 @@ export function SpeedrunComCard({
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm truncate flex items-center gap-1.5">
                     {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                    <span id={`stats-src-${pb.run.id}-name`} className="truncate">{displayName}</span>
+                    <span id={`${statsSrcCardId(pb.run.id)}-name`} className="truncate">{displayName}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     {isRepresentative && (
@@ -810,11 +846,7 @@ export function StatsServiceLoadingCard({
   const t = useT();
   const isLoading = state === "loading";
   const isError = state === "error";
-  // 一度でも失敗したら、再試行中（loading）も同じボタンを DOM に残して aria-disabled にする。
-  // 読み込み中に外すと、押したボタンが消えてフォーカスが BODY に落ちるため
-  const hadError = useRef(false);
-  if (isError) hadError.current = true;
-  const showRetry = !!onRetry && (isError || (isLoading && hadError.current));
+  const showRetry = useShowServiceRetry(state, !!onRetry);
 
   const indicator = isLoading ? (
     <LoadingProgressRing />
@@ -829,18 +861,8 @@ export function StatsServiceLoadingCard({
   );
   const message = isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete");
 
-  const retryButton = showRetry ? (
-    <Button
-      variant="outline"
-      size="sm"
-      aria-disabled={isLoading}
-      aria-label={t("common.serviceRetry", { name: title })}
-      onClick={isLoading ? undefined : onRetry}
-      className={cn("max-md:min-h-11 max-md:px-4", isLoading && "opacity-50")}
-    >
-      <RotateCw aria-hidden="true" className={cn(isLoading && "animate-spin")} />
-      {t("common.retry")}
-    </Button>
+  const retryButton = showRetry && onRetry ? (
+    <ServiceRetryButton name={title} loading={isLoading} onRetry={onRetry} variant="outline" className="max-md:min-h-11 max-md:px-4" />
   ) : null;
   // 状態の変化（読み込み中 → 失敗）を読み上げさせる。この要素は状態が変わっても DOM に残す
   const messageEl = (
