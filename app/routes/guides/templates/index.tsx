@@ -169,7 +169,7 @@ export default function TemplatesIndexPage() {
   const locale = useLocale();
   const { templates, q, lang, sort } = useLoaderData<typeof loader>();
   const [langValue, setLangValue] = useState(lang || "__all");
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const hasFilters = !!q || !!lang;
   // タブ切替（→ /guides）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
@@ -189,6 +189,19 @@ export default function TemplatesIndexPage() {
     );
   };
 
+  // 言語は選んだ時点で絞り込む（並び替えと同じ形。q と sort は保ち、「すべての言語」は lang を外す）
+  const handleLangChange = (value: string) => {
+    setLangValue(value);
+    setSearchParams(
+      (prev) => {
+        if (!value || value === "__all") prev.delete("lang");
+        else prev.set("lang", value);
+        return prev;
+      },
+      { preventScrollReset: true },
+    );
+  };
+
   // 戻る/進むナビゲーション時にローダーの値へ同期する
   useEffect(() => {
     setLangValue(lang || "__all");
@@ -198,6 +211,28 @@ export default function TemplatesIndexPage() {
     { value: "__all", label: t("templates.allLanguages") },
     ...gameLanguageOptions(t, locale),
   ];
+
+  // 件数の文言（ガイド一覧と同じ形）。絞り込み中は「n 件（検索: …、言語: …）」
+  const activeFilters = [
+    q ? t("templates.resultFilterQuery", { q }) : "",
+    lang ? t("templates.resultFilterLanguage", { language: getGameLanguageName(t, locale, lang) }) : "",
+  ].filter(Boolean);
+  const resultCountText =
+    activeFilters.length > 0
+      ? t("templates.resultCountFiltered", {
+          count: templates.length,
+          filters: activeFilters.join(t("templates.resultFilterSeparator")),
+        })
+      : t("templates.resultCount", { count: templates.length });
+
+  // 絞り込み（検索語・言語）だけを外す。並び順は保つ
+  const clearFiltersHref = (() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("q");
+    params.delete("lang");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  })();
 
   return (
     <div className="space-y-6">
@@ -249,7 +284,7 @@ export default function TemplatesIndexPage() {
             <Combobox
               options={languageOptions}
               value={langValue}
-              onValueChange={setLangValue}
+              onValueChange={handleLangChange}
               placeholder={t("templates.allLanguages")}
               searchPlaceholder={t("meDevices.search")}
               emptyText={t("meDevices.notFound")}
@@ -265,14 +300,30 @@ export default function TemplatesIndexPage() {
           </Button>
         </Form>
 
-        <div className="flex items-center justify-end">
-          <ContentSortSelect
-            value={sort}
-            onChange={handleSortChange}
-            options={TEMPLATE_SORTS}
-            newestLabel={t("contentSort.newest")}
-            descriptions={{ likes: t("contentSort.likesDesc") }}
-          />
+        {/* 件数（左）と並び替え（右）。aria-live は件数だけ。絞り込み中は解除の導線を件数の隣に出す */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3">
+            <p aria-live="polite" className="min-w-0 text-sm text-muted-foreground">
+              {resultCountText}
+            </p>
+            {hasFilters && (
+              <Button asChild variant="link" size="sm" className="h-11 px-0 sm:h-8">
+                <Link to={clearFiltersHref} preventScrollReset>
+                  {t("templates.resetFilters")}
+                </Link>
+              </Button>
+            )}
+          </div>
+          {/* 件数の行が長くて折り返したときも、並び替えは右端に置く（ガイド一覧と同じ） */}
+          <div className="ml-auto shrink-0">
+            <ContentSortSelect
+              value={sort}
+              onChange={handleSortChange}
+              options={TEMPLATE_SORTS}
+              newestLabel={t("contentSort.newest")}
+              descriptions={{ likes: t("contentSort.likesDesc") }}
+            />
+          </div>
         </div>
       </div>
 
@@ -303,14 +354,21 @@ export default function TemplatesIndexPage() {
                 aria-label={template.title}
               />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  {/* ゲーム内言語（最重要メタ情報として目立たせる）。狭い画面はタイトルの前置きとして1行目に出し、
+                      sm 以上は右端。両方を描いて CSS で出し分ける（非表示側は読み上げにも出ない） */}
+                  {template.gameLanguage && (
+                    <span className="mb-0.5 flex items-center gap-1.5 text-xs font-medium sm:hidden">
+                      <Languages className="h-3 w-3 text-primary" aria-hidden />
+                      {getGameLanguageName(t, locale, template.gameLanguage)}
+                    </span>
+                  )}
+                  <h2 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-2 sm:line-clamp-1">
                     {template.title}
                   </h2>
-                  {/* ゲーム内言語（最重要メタ情報として目立たせる） */}
                   {template.gameLanguage && (
-                    <span className="flex items-center gap-1.5 text-sm font-medium shrink-0">
-                      <Languages className="h-4 w-4 text-primary" />
+                    <span className="hidden shrink-0 items-center gap-1.5 text-sm font-medium sm:flex">
+                      <Languages className="h-4 w-4 text-primary" aria-hidden />
                       {getGameLanguageName(t, locale, template.gameLanguage)}
                     </span>
                   )}
@@ -342,8 +400,9 @@ export default function TemplatesIndexPage() {
                     </span>
                   )}
                   <span className="flex items-center gap-1">
-                    <Download className="h-3 w-3" />
-                    {template.applyCount}
+                    <Download className="h-3 w-3" aria-hidden />
+                    <span aria-hidden>{template.applyCount}</span>
+                    <span className="sr-only">{t("templates.applyCount", { count: template.applyCount })}</span>
                   </span>
                   <LikeButton
                     variant="compact"
@@ -371,8 +430,8 @@ export default function TemplatesIndexPage() {
           title={t("templates.noResultsTitle")}
           description={t("templates.noResultsDescription")}
           action={
-            <Button asChild variant="link" size="sm" className="mt-2">
-              <Link to="/guides/templates">{t("templates.resetFilters")}</Link>
+            <Button asChild variant="outline" className="mt-2 min-h-11 sm:min-h-9">
+              <Link to={clearFiltersHref}>{t("templates.resetFilters")}</Link>
             </Button>
           }
         />
