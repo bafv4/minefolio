@@ -67,7 +67,7 @@ import {
   getViewerProfileReactions,
 } from "@/lib/profile-reactions.server";
 import type { ProfileReactionCount } from "@/lib/profile-reactions";
-import { YouTubeEmbed } from "@/components/youtube-embed";
+import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
@@ -2857,6 +2857,7 @@ type DisplayVideo = {
  * iframe に渡さず外部リンクとして表示する（X-Frame-Options ブロックの防止）。
  */
 function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "small" }) {
+  const t = useT();
   const embedUrl = getYouTubeEmbedUrl(video.url);
   const containerClass = size === "large" ? "max-w-2xl" : "";
 
@@ -2884,7 +2885,12 @@ function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "sma
           {video.title && <span className="text-sm font-medium truncate">{video.title}</span>}
         </div>
       )}
-      <YouTubeEmbed embedUrl={embedUrl} title={video.title || "Video"} />
+      {/* 押してから読み込む（記録タブの SRC 動画と同じ YouTubeClickEmbed）。名前は動画のタイトル（無ければ URL）で一意にする */}
+      <YouTubeClickEmbed
+        embedUrl={embedUrl}
+        title={t("playerStatsCards.videoTitle", { label: video.title || video.url })}
+        playLabel={t("playerStatsCards.playVideo", { label: video.title || video.url })}
+      />
     </div>
   );
 }
