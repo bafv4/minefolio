@@ -100,7 +100,7 @@
 | リンク | URL設定 |
 | 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更、**横方向の配置**（未設定 / 左 / 中央 / 右）、**トリミング**、**代替テキスト（alt）**に対応 |
 | GIF（動画から変換） | 短い動画をブラウザ内で GIF に変換して挿入（下記） |
-| YouTube埋め込み | YouTube動画のiframe埋め込み |
+| YouTube埋め込み | YouTube動画の埋め込み（保存は TipTap の iframe。公開表示で本文の直下の動画は押してから読み込む。下記「公開表示の本文」） |
 | サーチクラフトテンプレート埋め込み | 公開済みテンプレート（`search_craft_templates`）を ID で参照して差し込む（下記） |
 | テーブル | リサイズ可能（列幅ドラッグ変更） |
 | ハイライト | 色付きハイライト |
@@ -246,8 +246,26 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 ### スタイリング
 
-- `.guide-content.prose` CSSクラスを適用
+- `.guide-content.prose` CSSクラスを適用（エディタ本体も同じクラスを持つので、レイヤー外の `.guide-content.prose` 規則は公開表示とエディタの両方に効く）
 - Tailwind CSS の `prose` クラスベースのタイポグラフィスタイリング
+- **ブロックの面と角丸**（`.claude/rules/ui.md` 6 章に合わせる）: 本文直下のブロック（コールアウト・トグル・コード・表の器・画像・ガイドリンクカード・YouTube）の角丸は `rounded-xl`（`--guide-radius`）。コールアウト・トグル・表のセルの中では 1 段ずつ下げる（`rounded-lg` → `rounded-md`）。インラインの code は `rounded` のまま。ブロックの外枠は `border/70`、表の行の区切りは `/60`、水平線は欄の区切りと同じ `foreground/15`
+- **コールアウト**: 面は意味色 `/10`、枠 `/40`（tip→success / info→info / warning→warning / danger→destructive）。アイコンは挿入メニュー（`desktop-toolbar.tsx`）と同じ lucide の Lightbulb / Info / TriangleAlert / Siren を CSS の mask で意味色に塗る（公開表示は `.callout::before`、エディタは NodeView の `.callout-icon`。同じ規則）。アイコンは装飾で、種類は公開表示の `role="note"` ＋種類名の `aria-label`（`guideEditor.callout.*`）で読み上げる。種類はクリックで切り替えない（従来どおり）
+- **トグル**: 印は目次の節の開閉と同じ右向きシェブロン（muted 色、開くと 90° 回す。`prefers-reduced-motion` では回転のトランジションなし）。`summary` は枠の左右いっぱい・高さ 44px で押せる
+- **ガイドリンクカード**: 本文の中の埋め込み（キー配置・サーチクラフト・テンプレート）と同じ `bg-card`・枠 `/70`。ホバーは枠 `primary/40`＋影で、浮かせない
+- **背景色（ハイライト・表のセル色）の暗いテーマ**: 保存データはライトの淡い色（`GUIDE_BG_COLORS` ＋旧 `#FEF08A`）のままで、dark / ultra-dark では前景色の文字が約 1.1:1 になる。`app/app.css` の「Guide background palette」が `.guide-content` 配下の inline style を色の部分一致（hex〔大文字小文字を問わない〕・`rgb(r, g, b)`・`rgb(r,g,b)`）で捕まえ、テーマ別のトークン `--guide-bg-*` へ `!important` で置き換える。ライトのトークンは保存色と同じ hex（見た目は変わらない）、dark は同じ色相の oklch L 0.30、ultra-dark は L 0.27（前景色に対して 12.8〜14.7:1）。単一情報源は `app/lib/guide-colors.ts` の `GUIDE_BG_COLOR_TOKENS`（オレンジと黄は同じ色なので 1 つ）。エディタのカラーピッカーの見本も `guideBgColorVar()` でトークンを使い、適用後の見た目と揃える。`lib/__tests__/guide-colors.test.ts` が CSS のセレクタとトークン定義の漏れを検出する。文字色パレットは置き換えない
+
+### 公開表示の本文（`/guides/:author/:slug`）
+
+サニタイズ・表の正規化・目次・見出し降格の後に、loader が `app/lib/guide-view-html.ts` の変換を掛ける（サニタイザの許可属性に無い属性を足すため、サニタイズの後段で行う。保存データ・エディタは変えない）。
+
+- **コールアウト**: `annotateGuideCallouts` が `role="note"` と種類名の `aria-label` を付ける
+- **YouTube**: `titleGuideYouTubeIframes` が iframe に番号付きの `title`（`guideView.youtubeTitle`「YouTube 動画 {n}」。番号は本文中の出現順）と `loading="lazy"` を付ける。`splitContentAtEmbeds`（`guide-embeds.tsx`）は**本文の直下（要素の深さ 0）**の動画だけを `youtube` セグメントに分け、`YouTubeClickEmbed`（押してから youtube-nocookie.com の iframe を読み込む。サムネイルは i.ytimg.com）で描く。再生ボタンの名前は `guideView.youtubePlay`「YouTube 動画 {n} を再生」。埋め込み URL は iframe の src から `getYouTubeEmbedUrl()` で作り直し、`start` だけ引き継ぐ。src が無い（許可外ホストでサニタイズが除去した）直下の動画は描かない。再生リスト（TipTap の `/embed/videoseries?list=…`・`list` 付き）は動画 1 本の URL に直すと再生リストが失われるので、直下でも iframe のまま残す。コールアウト・トグル・段組の中の動画は、そこで切ると開閉タグが別の断片に分かれて構造が壊れるため、iframe のまま残す（従来どおり表示時に読み込む）
+- **コードブロックのコピーボタン**（`useCodeCopyButtons`）: 見た目 28px、押せる範囲は `::after` で 44px。タッチ端末（`hover: none`）では常に表示し、コードの 1 行目が隠れないよう `pre` の右に余白を取る。成功すると名前を「コピーしました」（`guideView.copied`）に替え、`role="status"` の sr-only 領域でも読み上げる。原文/訳文の切替で本文が差し替わっても差し込み直す（`html` を依存に持つ）
+- **表**（`useGuideTableScroll`）: 表の実幅と器（`.table-scroll-wrapper`）の幅を ResizeObserver で比べる（`isGuideTableOverflowing`、`app/lib/guide-tables.ts`。1px までの差は収まっている扱い）
+  - はみ出している表は横スクロールのまま、器に `tabindex="0"`・`role="region"`・`aria-label`（`guideView.tableScrollRegion`「表（横にスクロールできます）」）を付け、キーボードで横スクロールできるようにする（フォーカスリングあり）
+  - 収まっている表は器に `data-fits` を付けて `overflow: clip`（スクロール容器にしない）にし、**最初の行が全部 `th` なら見出し行をページに貼り付ける**（`position: sticky`。位置はサイトヘッダー 64px ＋ xl 未満の目次バーの実測の高さ〔`--guide-toc-bar-height`。目次バーに `data-guide-toc-bar`〕、重なりは目次バーの `z-30` より下。見出しセルの面は不透明）。`overflow: auto` の器の中では sticky がページに効かないための切り替え。はみ出す表の見出しは貼り付かない
+  - JS 前（SSR）は従来どおり横スクロールの器（`data-fits` なし）。エディタ内の表には適用しない
+- **フォーカス**: 本文のリンクとトグルの `summary` に `:focus-visible` のリング（`--ring`、2px。リンクは外側 2px、summary は枠の内側）
 - **本文の行長制限は設けない**: 本文（段落・見出し・リスト・引用・コールアウト・トグル）はコンテナ幅（`article` 側の `max-w-5xl`）いっぱいの左寄せで表示する。一度 `max-width: 65ch`（のち 36rem 固定カラム＋中央寄せ）の行長制限を導入したが、改修前の全幅レイアウトの方がよいというユーザー判断で撤廃済み（`app/app.css` の Guide content セクションに再導入しない旨の注記あり）。なお ch 単位の制限は各要素のフォントサイズ基準のため見出しと段落で左端が階段状にずれる問題もあった
 
 ---

@@ -68,6 +68,8 @@
   `--youtube` / `--twitch` / `--gold` / `--bronze`
 - ブランド色（`--youtube` / `--twitch`）はダークで明るいので、白文字を載せる面に使わない。サムネイル上は `bg-black/70 text-white` のピルにして、ブランド色はアイコンに置く
 - inline style で色を書くときもトークンをそのまま参照する（`var(--muted)`）。oklch 定義なので `hsl(var(--token))` で包まない（無効な色になる）
+- 例外（ガイド本文）: 作者が付けた背景色（ハイライト・表のセル色）は保存データの inline style なので、`app/app.css` の「Guide background palette」が属性セレクタ＋`!important` でテーマ別の `--guide-bg-*` に置き換える。light の値だけは保存色と同じ hex で持つ（oklch に換算すると見た目がずれる）。パレットの単一情報源は `app/lib/guide-colors.ts`
+- 例外（ガイド本文）: コールアウトのアイコンは lucide の線画を CSS の mask で描き、意味色（`--success` / `--info` / `--warning` / `--destructive`）で塗る（本文は innerHTML で描くので React の部品を置けない）。details の印も同じ方法の ChevronRight
 
 ## 4. ページの骨格と欄
 
