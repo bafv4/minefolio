@@ -126,6 +126,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
         authorDisplayName: users.displayName,
         authorDisplayNameAlphabet: users.displayNameAlphabet,
         authorMcid: users.mcid,
+        // 著者の顔（カード・リストの著者名の左）。同じ JOIN で取れるので追加クエリは無い
+        authorUuid: users.uuid,
+        authorCustomSkinUrl: users.customSkinUrl,
       })
       .from(guides)
       .innerJoin(users, eq(guides.authorId, users.id))
@@ -225,7 +228,7 @@ export default function GuidesIndexPage() {
   // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   // 型注釈にする（as キャストだと likeCount 等の取得漏れを型検査が見逃す）
   const guideItems: GuideItemWithAuthorSlug[] = allGuides.map(
-    ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid }) => ({
+    ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid, authorUuid, authorCustomSkinUrl }) => ({
       ...guide,
       likeCount: Number(likeCount),
       // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）
@@ -236,6 +239,7 @@ export default function GuidesIndexPage() {
           { displayName: authorDisplayName, displayNameAlphabet: authorDisplayNameAlphabet },
           locale,
         ) || authorMcid || authorSlug,
+      authorAvatar: { uuid: authorUuid, skinUrl: authorCustomSkinUrl },
       _authorSlug: authorSlug,
     }),
   );

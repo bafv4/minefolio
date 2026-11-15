@@ -27,6 +27,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { useLoginHref } from "@/hooks/use-login-href";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageSection } from "@/components/page-section";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -150,6 +151,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           displayName: true,
           displayNameAlphabet: true,
           mcid: true,
+          uuid: true,
+          customSkinUrl: true,
           discordId: true,
           profileVisibility: true,
         },
@@ -198,6 +201,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     loops: parseTemplateLoops(template.loopsData, crafts.length),
     author: {
       slug: template.user.slug,
+      uuid: template.user.uuid,
+      skinUrl: template.user.customSkinUrl,
       name: getLocalizedDisplayName(template.user, resolveLocale(request)),
     },
     myPresets,
@@ -462,12 +467,22 @@ export default function TemplateViewPage() {
             </Badge>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t("templates.byAuthorPrefix")}{" "}
-          <Link to={`/player/${author.slug}`} className="text-primary hover:underline">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <span>{t("templates.byAuthorPrefix")}</span>
+          <Link
+            to={`/player/${author.slug}`}
+            className="inline-flex items-center gap-1.5 text-primary hover:underline"
+          >
+            <MinecraftAvatar
+              uuid={author.uuid}
+              skinUrl={author.skinUrl}
+              size={20}
+              alt=""
+              className="shrink-0 rounded-md"
+            />
             {author.name}
           </Link>
-          <span className="mx-2">·</span>
+          <span aria-hidden>·</span>
           {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
           <span suppressHydrationWarning>
             {formatDistanceToNow(new Date(template.createdAt), {

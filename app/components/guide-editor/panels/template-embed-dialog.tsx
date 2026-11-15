@@ -13,6 +13,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { parseTemplateIdInput } from "@/lib/guide-embed-attrs";
 import type { TemplateEmbedMeta } from "../lib/template-embed-meta";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Search, Loader2, LayoutTemplate } from "lucide-react";
 
 interface TemplateEmbedDialogProps {
@@ -107,7 +108,18 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert }: TemplateEm
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium break-words">{template.title}</span>
                   <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                    <span>{template.isOwn ? t("guideEditor.embedTemplateMine") : template.authorName}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <MinecraftAvatar
+                        uuid={template.authorUuid}
+                        skinUrl={template.authorSkinUrl}
+                        size={20}
+                        alt=""
+                        className="shrink-0 rounded-md"
+                      />
+                      <span className="truncate">
+                        {template.isOwn ? t("guideEditor.embedTemplateMine") : template.authorName}
+                      </span>
+                    </span>
                     {template.gameLanguage && (
                       <span>{getGameLanguageName(t, locale, template.gameLanguage)}</span>
                     )}

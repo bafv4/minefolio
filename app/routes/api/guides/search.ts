@@ -30,6 +30,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
+      authorUuid: users.uuid,
+      authorCustomSkinUrl: users.customSkinUrl,
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
@@ -57,6 +59,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           { displayName: r.authorDisplayName, displayNameAlphabet: r.authorDisplayNameAlphabet },
           locale,
         ) || r.authorMcid || r.authorSlug,
+      authorUuid: r.authorUuid,
+      authorSkinUrl: r.authorCustomSkinUrl,
       url: `/guides/${r.authorSlug}/${r.slug}`,
     })),
   });

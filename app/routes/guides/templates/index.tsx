@@ -18,6 +18,7 @@ import {
   type ContentSort,
 } from "@/components/content-sort-select";
 import { LikeButton } from "@/components/like-button";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -117,6 +118,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
+      // 著者の顔（行の著者名の左）。同じ JOIN で取れるので追加クエリは無い
+      authorUuid: users.uuid,
+      authorCustomSkinUrl: users.customSkinUrl,
     })
     .from(searchCraftTemplates)
     .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
@@ -138,6 +142,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     isOwn: !!viewer && row.ownerId === viewer.id,
     createdAt: row.createdAt.toISOString(),
     authorSlug: row.authorSlug,
+    authorUuid: row.authorUuid,
+    authorSkinUrl: row.authorCustomSkinUrl,
     authorName:
       pickDisplayName(
         { displayName: row.authorDisplayName, displayNameAlphabet: row.authorDisplayNameAlphabet },
@@ -315,7 +321,16 @@ export default function TemplatesIndexPage() {
                   </p>
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
-                  <span>{t("templates.byAuthor", { name: template.authorName })}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <MinecraftAvatar
+                      uuid={template.authorUuid}
+                      skinUrl={template.authorSkinUrl}
+                      size={20}
+                      alt=""
+                      className="shrink-0 rounded-md"
+                    />
+                    <span className="truncate">{t("templates.byAuthorPrefix")} {template.authorName}</span>
+                  </span>
                   <span className="flex items-center gap-1">
                     <Search className="h-3 w-3" />
                     {t("templates.craftCount", { count: template.craftCount })}

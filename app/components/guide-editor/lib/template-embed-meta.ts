@@ -8,6 +8,8 @@ export interface TemplateEmbedMeta {
   gameLanguage: string | null;
   craftCount: number;
   authorName: string;
+  authorUuid: string | null;
+  authorSkinUrl: string | null;
   isPublished: boolean;
   isOwn: boolean;
 }

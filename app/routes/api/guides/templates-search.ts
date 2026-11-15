@@ -73,6 +73,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
+      authorUuid: users.uuid,
+      authorCustomSkinUrl: users.customSkinUrl,
     })
     .from(searchCraftTemplates)
     .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
@@ -94,6 +96,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       craftCount: Number(r.craftCount) || 0,
       isPublished: r.isPublished,
       isOwn: !!viewer && r.ownerId === viewer.id,
+      authorUuid: r.authorUuid,
+      authorSkinUrl: r.authorCustomSkinUrl,
       authorName:
         pickDisplayName(
           { displayName: r.authorDisplayName, displayNameAlphabet: r.authorDisplayNameAlphabet },

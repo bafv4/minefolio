@@ -23,6 +23,7 @@ import {
 } from "@/components/search-craft-template-view";
 import { KeyLabelText } from "@/components/shift-mark";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
@@ -764,6 +765,8 @@ export type EmbedTemplateData = {
   loopsData: string | null;
   authorSlug: string;
   authorName: string;
+  authorUuid: string | null;
+  authorSkinUrl: string | null;
 };
 
 /** 見つからない・非公開・削除済み・ID 不正のときの短い表示（本文の流れは壊さない） */
@@ -802,7 +805,17 @@ export function SearchCraftTemplateEmbedView({
             <span className="font-medium break-words">{template.title}</span>
             <span className="text-muted-foreground">
               {" — "}
-              <Link to={`/player/${template.authorSlug}`} className="hover:underline">
+              <Link
+                to={`/player/${template.authorSlug}`}
+                className="inline-flex items-center gap-1.5 align-middle hover:underline"
+              >
+                <MinecraftAvatar
+                  uuid={template.authorUuid}
+                  skinUrl={template.authorSkinUrl}
+                  size={20}
+                  alt=""
+                  className="shrink-0 rounded-md"
+                />
                 {template.authorName}
               </Link>
             </span>

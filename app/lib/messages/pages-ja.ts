@@ -2501,7 +2501,6 @@ export const PAGES_JA = {
     pageDesc: "プレイヤーが公開しているサーチクラフト設定のテンプレート集。自分の設定に反映したり、Playgroundで試したりできます。",
     metaDescription: "{name}さんが公開しているサーチクラフトテンプレート",
     openPlayground: "Playgroundで試す",
-    byAuthor: "by {name}",
     byAuthorPrefix: "作成者:",
     craftCount: "サーチクラフト {count}件",
     remapCount: "リマップ {count}件",

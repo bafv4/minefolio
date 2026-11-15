@@ -151,6 +151,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     authorDisplayName: users.displayName,
     authorDisplayNameAlphabet: users.displayNameAlphabet,
     authorMcid: users.mcid,
+    // 著者の顔（GuideCardGrid の著者名の左）。同じ users との JOIN で取れるので追加クエリは無い
+    authorUuid: users.uuid,
+    authorCustomSkinUrl: users.customSkinUrl,
   };
 
   // セッション確認（→登録ユーザー判定）。他の取得と並列に走らせる
@@ -866,6 +869,7 @@ export default function HomePage() {
           { displayName: g.authorDisplayName, displayNameAlphabet: g.authorDisplayNameAlphabet },
           locale,
         ) || g.authorMcid || g.authorSlug,
+      authorAvatar: { uuid: g.authorUuid, skinUrl: g.authorCustomSkinUrl },
       _authorSlug: g.authorSlug,
     }),
     [locale],

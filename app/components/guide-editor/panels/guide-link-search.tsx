@@ -9,12 +9,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Search, Loader2, FileText } from "lucide-react";
 
 export interface GuideSearchResult {
   url: string;
   title: string;
   authorName: string;
+  authorUuid?: string | null;
+  authorSkinUrl?: string | null;
   coverImageUrl: string | null;
 }
 
@@ -115,7 +118,16 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
                 <span className="min-w-0">
                   <span className="block text-sm font-medium truncate">{guide.title}</span>
                   {guide.authorName && (
-                    <span className="block text-xs text-muted-foreground truncate">{guide.authorName}</span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MinecraftAvatar
+                        uuid={guide.authorUuid}
+                        skinUrl={guide.authorSkinUrl}
+                        size={20}
+                        alt=""
+                        className="shrink-0 rounded-md"
+                      />
+                      <span className="truncate">{guide.authorName}</span>
+                    </span>
                   )}
                 </span>
               </button>

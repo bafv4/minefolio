@@ -118,6 +118,8 @@ async function resolveEmbedTemplates(
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
+      authorUuid: users.uuid,
+      authorCustomSkinUrl: users.customSkinUrl,
     })
     .from(searchCraftTemplates)
     .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
@@ -137,6 +139,8 @@ async function resolveEmbedTemplates(
       remapsData: row.remapsData,
       loopsData: row.loopsData,
       authorSlug: row.authorSlug,
+      authorUuid: row.authorUuid,
+      authorSkinUrl: row.authorCustomSkinUrl,
       authorName: getLocalizedDisplayName(
         {
           displayName: row.authorDisplayName,

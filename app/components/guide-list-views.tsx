@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eye, FileText, Languages, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
@@ -28,6 +29,11 @@ export type GuideItem = {
   updatedAt: string | Date;
   /** Per-guide author display name (for multi-author listings) */
   authorName?: string;
+  /**
+   * 著者の顔（MinecraftAvatar に渡すスキン情報）。渡した一覧だけが著者名の左にアバターを出す。
+   * 未指定の呼び出し元（走者画面のガイドタブなど著者が全部同じ一覧）は従来どおり文字だけ
+   */
+  authorAvatar?: { uuid: string | null; skinUrl: string | null };
   /** プロフィールのガイドタブでのピン留め（カード表示で先頭・拡大） */
   isPinned?: boolean;
   /** 閲覧者自身のガイドか（自分のガイドにはいいねできない） */
@@ -51,6 +57,25 @@ function AutoTranslatedMark() {
       </TooltipTrigger>
       <TooltipContent>{t("guides.autoTranslatedMark")}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** 著者名（任意で左に 20px の顔）。名前が隣にあるので顔は alt=""、20px は rounded-md（ui.md 6 章） */
+function GuideAuthorMeta({ guide, className }: { guide: GuideItem; className?: string }) {
+  if (!guide.authorName) return null;
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
+      {guide.authorAvatar && (
+        <MinecraftAvatar
+          uuid={guide.authorAvatar.uuid}
+          skinUrl={guide.authorAvatar.skinUrl}
+          size={20}
+          alt=""
+          className="shrink-0 rounded-md"
+        />
+      )}
+      <span className="truncate">{guide.authorName}</span>
+    </span>
   );
 }
 
@@ -194,9 +219,7 @@ export function GuideCardGrid({
                 {/* 狭幅（グリッドが詰まった時）でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。
                     時刻は ml-auto shrink-0 で折り返し後も行内右端に揃える */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                  {guide.authorName && (
-                    <span className="min-w-0 truncate">{guide.authorName}</span>
-                  )}
+                  <GuideAuthorMeta guide={guide} />
                   {guide.autoTranslated && <AutoTranslatedMark />}
                   {/* "replace" モードでは pageViews7d がある間だけ累計View数を隠し、7日間PVに差し替える
                       （ホームの「よく読まれているガイド」専用。/guides の人気順は "additional" のまま両方出す） */}
@@ -293,7 +316,7 @@ export function GuideListView({
                 </div>
               )}
               <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                {guide.authorName && <span className="truncate">{guide.authorName}</span>}
+                <GuideAuthorMeta guide={guide} />
                 {guide.autoTranslated && <AutoTranslatedMark />}
                 <ViewCountMeta count={guide.viewCount} />
                 {guide.pageViews7d !== undefined && (
