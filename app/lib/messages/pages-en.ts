@@ -348,6 +348,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     discard: "Discard",
     saveBar: "Save bar",
     pageViews7d: "Views in the last {days} days",
+    pageViews7dShort: "{days}d",
     runner: "Runner",
     viewer: "Viewer",
     on: "On",

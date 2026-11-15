@@ -15,7 +15,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
-import { parseGuideTags } from "@/lib/guide-tags";
+import { parseGuideTags, rankGuideTags } from "@/lib/guide-tags";
 import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { cn } from "@/lib/utils";
@@ -162,10 +162,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       tagCounts[t] = (tagCounts[t] || 0) + 1;
     });
   });
-  const allTags = Object.entries(tagCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .map(([name]) => name);
+  // 並び替え（新着・人気）に依存しない順（件数 → 名前）
+  const allTags = rankGuideTags(tagCounts, locale);
 
   // 自動翻訳（docs/translation.md）。表示対象の訳文をまとめて 1 回で引き、title / summary を差し替える。
   // 検索・タグ絞り込みは原文で行う。機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）

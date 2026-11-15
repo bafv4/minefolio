@@ -351,6 +351,7 @@ export const PAGES_JA = {
     saveBar: "保存バー",
     /** カードに出す直近{days}日のページビュー数の説明（ガイド・プロフィールの人気順カードで共用） */
     pageViews7d: "直近{days}日の閲覧数",
+    pageViews7dShort: "{days}日",
     runner: "走者",
     viewer: "視聴者",
     on: "ON",
