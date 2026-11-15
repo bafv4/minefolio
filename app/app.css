@@ -338,7 +338,7 @@ body {
     /* 下端固定ドック（[data-bottom-dock]）と、表示中の Cookie 同意バナー（--cookie-banner-offset）の
        高さぶん末尾を空ける。末尾（フッターのリンク）までスクロールしきってもバナーの裏に隠れないようにするため
        （scroll-padding だけでは最下部でそれ以上スクロールできない）。どちらも無ければ 0px */
-    padding-bottom: var(--bottom-dock-height);
+    padding-bottom: calc(var(--bottom-dock-height) + var(--cookie-banner-offset, 0px));
   }
 
   /* 下端ドック（モバイルのみ）。変数は下方向にしか継承されないため :root で解決する。
@@ -352,12 +352,19 @@ body {
     }
   }
 
+  /* 下端に固定される UI（下端ドック・Cookie 同意バナー）の裏にフォーカス・アンカー移動の着地点が
+     隠れないよう、scroll-padding-bottom を全ページで確保する（WCAG 2.4.11）。
+     --cookie-banner-offset は cookie-consent.tsx がバナー表示中だけ（高さ + 余白 16px）root に設定する
+     （閉じると除去され 0px）。ドックはバナーの下に積まれるので両者を足す。どちらも無ければ 0px */
+  :root {
+    scroll-padding-bottom: calc(var(--bottom-dock-height, 0px) + var(--cookie-banner-offset, 0px));
+  }
+
   /* 走者画面（追従するホットバーの番兵 [data-stuck] を持つページ）では、フォーカス移動・アンカー移動の
      着地点が固定 UI の下に隠れないよう scroll-padding-top を取る（WCAG 2.4.11）。
-     上はサイトヘッダー（65px）＋ md 以上の貼り付いたコンパクトなホットバー（57px）＋余白、下は md 未満の下端ドック */
+     上はサイトヘッダー（65px）＋ md 以上の貼り付いたコンパクトなホットバー（57px）＋余白 */
   :root:has([data-stuck]) {
     scroll-padding-top: 4.5rem;
-    scroll-padding-bottom: var(--bottom-dock-height);
   }
   @media (width >= 48rem) {
     :root:has([data-stuck]) {
