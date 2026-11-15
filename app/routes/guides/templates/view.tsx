@@ -467,7 +467,8 @@ export default function TemplateViewPage() {
             </Badge>
           )}
         </div>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        {/* MinecraftAvatar は div を描くので、p ではなく div で包む（p の中に div は置けずハイドレーションが壊れる） */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <span>{t("templates.byAuthorPrefix")}</span>
           <Link
             to={`/player/${author.slug}`}
@@ -490,7 +491,7 @@ export default function TemplateViewPage() {
               locale: dateFnsLocale(locale),
             })}
           </span>
-        </p>
+        </div>
         {template.description && (
           <p className="text-sm whitespace-pre-wrap">{template.description}</p>
         )}
