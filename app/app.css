@@ -806,35 +806,16 @@ body {
     border: 1px solid color-mix(in oklch, var(--destructive) 40%, transparent);
   }
 
-  /* Toggle list — editor only (view styles are outside layer) */
-  .ProseMirror details {
-    border: 1px solid var(--border);
-    border-radius: 0.5em;
-    padding: 0.5em 0.75em;
-    margin: 0.5em 0;
-  }
-
+  /* Toggle list — editor only。枠・角丸・印（シェブロン）・summary の高さは公開ビューと共通の
+     レイヤー外の .guide-content.prose details 規則が描く（エディタ本体も .guide-content.prose を持つ）。
+     ここはエディタだけの summary 内の入力欄 */
   .ProseMirror details summary {
-    cursor: pointer;
-    font-weight: 600;
     user-select: none;
   }
 
-  .ProseMirror details summary::marker {
-    content: "▶ ";
-    font-size: 0.75em;
-  }
-
-  .ProseMirror details[open] summary::marker {
-    content: "▼ ";
-    font-size: 0.75em;
-  }
-
-  .ProseMirror details > :not(summary) {
-    margin-top: 0.5em;
-  }
-
   .ProseMirror .toggle-summary-input {
+    flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
@@ -1383,33 +1364,70 @@ body {
   padding: 0.05em 0.15em;
 }
 
-/* Toggle list (details/summary) */
+/* Toggle list (details/summary)。公開ビューとエディタ（.guide-content.prose を持つ）で共通。
+   印は目次の節の開閉（guide-toc-nav.tsx）と同じ右向きシェブロン（lucide ChevronRight）を muted 色で描き、
+   開くと 90° 回す。summary は枠の左右いっぱいに広げ、押せる高さは 44px（ui.md 9 章。閉じたときの
+   高さは旧来の見た目とほぼ同じ） */
 .guide-content.prose details {
-  border: 1px solid var(--border);
-  border-radius: 0.5em;
-  padding: 0.5em 0.75em;
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  border-radius: var(--guide-radius);
+  padding: 0 0.75em;
   margin: 0.5em 0;
 }
 
-.guide-content.prose details summary {
+.guide-content.prose details[open] {
+  padding-bottom: 0.5em;
+}
+
+.guide-content.prose details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375em;
+  min-height: 2.75rem;
+  margin: 0 -0.75em;
+  padding: 0.25em 0.75em;
+  border-radius: calc(var(--guide-radius) - 1px);
+  list-style: none;
   cursor: pointer;
   font-weight: 600;
   user-select: none;
-  margin-bottom: 0;
 }
 
-.guide-content.prose details summary::marker {
-  content: "▶ ";
-  font-size: 0.75em;
+.guide-content.prose details > summary::-webkit-details-marker {
+  display: none;
 }
 
-.guide-content.prose details[open] summary::marker {
-  content: "▼ ";
-  font-size: 0.75em;
+.guide-content.prose details > summary::marker {
+  content: "";
+}
+
+.guide-content.prose details > summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  background-color: var(--muted-foreground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.guide-content.prose details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-content.prose details > summary::before {
+    transition: none;
+  }
 }
 
 .guide-content.prose details > :not(summary) {
-  margin-top: 0.5em;
+  margin-top: 0;
+}
+
+.guide-content.prose details > :not(summary) > :first-child {
+  margin-top: 0;
 }
 
 /* Guide link card in view */
