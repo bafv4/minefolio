@@ -965,6 +965,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     timingUnspecified: "Unspecified",
     searchCraftExpandAll: "Expand all",
     searchCraftItemNamesIn: "Show item names in {language}",
+    searchCraftNoItemDictionary: "Item names are shown in English because item-name data isn't available for this language.",
     searchCraftViewerLangName: "English",
     searchCraftCollapseAll: "Collapse all",
     searchCraftCount: "{count} total",

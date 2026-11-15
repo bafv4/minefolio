@@ -37,7 +37,7 @@ import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
-import { getGameLanguageName } from "@/lib/game-languages";
+import { getGameLanguageName, hasItemNameDictionary } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
 import { decodePresetConfig, parseFingerAssignments } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
@@ -216,6 +216,7 @@ import {
   Loader2,
   BookOpen,
   Maximize2,
+  Info,
   Languages,
   Pin,
   Gamepad2,
@@ -2036,10 +2037,12 @@ export default function PlayerProfilePage() {
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                   {player.playerConfig?.gameLanguage && (
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Languages className="h-4 w-4" />
+                    // 長い言語名（Norsk Bokmål（ノルウェー語（ブークモール））等）が 320px でページを横に押し広げないよう、
+                    // 行は折り返し可・バッジは whitespace-normal で折り返せるようにする
+                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-muted-foreground">
+                      <Languages className="h-4 w-4 shrink-0" />
                       <span>{t("playerProfile.gameLanguage")}:</span>
-                      <Badge variant="secondary">
+                      <Badge variant="secondary" className="max-w-full whitespace-normal text-left">
                         {getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                       </Badge>
                     </div>
@@ -2053,6 +2056,15 @@ export default function PlayerProfilePage() {
                     </Badge>
                   )}
                 </div>
+                {player.playerConfig?.gameLanguage &&
+                  !searchCraftViewerLang &&
+                  !hasItemNameDictionary(player.playerConfig.gameLanguage) && (
+                    // 辞書が無い言語は英語表示になる。走者の言語で表示中（スイッチ OFF）のときだけ理由を添える
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                      <span className="min-w-0">{t("playerProfile.searchCraftNoItemDictionary")}</span>
+                    </p>
+                  )}
                 <KeyBadgeLegend
                   showFingers={Object.keys(userFingerAssignments).length > 0}
                   showCraftMarker={player.searchCraftLoops.length > 0}

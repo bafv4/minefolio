@@ -947,6 +947,7 @@ export const PAGES_JA = {
     timingUnspecified: "指定なし",
     searchCraftExpandAll: "すべて開く",
     searchCraftItemNamesIn: "アイテム名を{language}で表示",
+    searchCraftNoItemDictionary: "この言語のアイテム名データが無いため、アイテム名は英語で表示しています",
     searchCraftViewerLangName: "日本語",
     searchCraftCollapseAll: "すべて閉じる",
     searchCraftCount: "全{count}件",
