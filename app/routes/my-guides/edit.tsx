@@ -131,7 +131,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return { success: true, mode: "discard", slug: guide.slug };
   }
 
-  // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
+  // "draft" = 下書き保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
   // _action は allowlist で判定する（discard は上で処理済み）。未知・欠落値は
   // publish に倒さず拒否する — 誤って publish 扱いすると公開版を意図せず
   // 上書きしてしまうため（クライアント側の _action typo・送信漏れ対策）。
@@ -140,7 +140,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
   const saveMode = action;
 
-  // 自動翻訳の許可（ライブ列。仮保存・保存のどちらでも反映する）。未送信なら上書きしない。
+  // 自動翻訳の許可（ライブ列。下書き保存・保存のどちらでも反映する）。未送信なら上書きしない。
   // "true" / "false" 以外は拒否する（不正値を黙って false 扱いにして翻訳を消さない）
   const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
   const allowAutoTranslation =
@@ -224,8 +224,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (saveMode === "draft") {
-    // 仮保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
-    // スラッグはライブ列なので仮保存でも反映する。
+    // 下書き保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
+    // スラッグはライブ列なので下書き保存でも反映する。
     await db
       .update(guides)
       .set({
@@ -265,7 +265,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // 自動翻訳（docs/translation.md）。オフなら既存の訳文を確実に消す（機能無効でも消す）。
   // オンのときは、公開版を更新する保存、またはオフ→オンに戻した保存で翻訳を依頼する
-  // （仮保存はドラフト列だけを書き換えるので、許可を戻したとき以外は翻訳しない）。
+  // （下書き保存はドラフト列だけを書き換えるので、許可を戻したとき以外は翻訳しない）。
   // 翻訳はレスポンス後に走り、失敗しても保存結果には影響しない
   const effectiveAllow = allowAutoTranslation ?? guide.allowAutoTranslation;
   if (!effectiveAllow) {

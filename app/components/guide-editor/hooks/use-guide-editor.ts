@@ -46,6 +46,8 @@ export function useGuideEditor({
         spellcheck: "false",
         autocorrect: "off",
         autocapitalize: "off",
+        // contenteditable（role=textbox）のアクセシブルネーム
+        "aria-label": t("guideEditor.ui.editorAriaLabel"),
       },
       // 外部リッチテキストのペーストでは、コピー元の算出スタイル
       // （閲覧テーマの文字色 = rgb(...) や Word/Docs の #000000、font-size: 14px 等）が

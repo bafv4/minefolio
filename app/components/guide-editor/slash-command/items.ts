@@ -124,6 +124,8 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
   },
   {
     titleKey: "guideEditor.slash.table",
+    // サーチ文字列を表に並べると本文フォントになるため、等幅・コピー付きの埋め込みを案内する
+    descriptionKey: "guideEditor.ui.tableSearchStrHint",
     keywords: ["table", "ひょう", "表", "テーブル"],
     icon: Table2,
     groupKey: GROUP.advanced,
@@ -214,8 +216,13 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
 
 /** 定義を表示用（文言解決済み）に変換する */
 function resolveItem(def: SlashItemDef, t: Translator): SlashItem {
-  const { titleKey, groupKey, ...rest } = def;
-  return { ...rest, title: t(titleKey), group: t(groupKey) };
+  const { titleKey, groupKey, descriptionKey, ...rest } = def;
+  return {
+    ...rest,
+    title: t(titleKey),
+    group: t(groupKey),
+    ...(descriptionKey ? { description: t(descriptionKey) } : {}),
+  };
 }
 
 /** クエリで項目を絞り込む（タイトル + キーワードの部分一致、大小無視） */

@@ -345,7 +345,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // 著者本人なら ?draft=1 でドラフト（仮保存）内容をプレビューできる
+  // 著者本人なら ?draft=1 でドラフト（下書き保存）内容をプレビューできる
   const wantDraft = url.searchParams.get("draft") === "1";
   const isOwner = currentUser?.id === author.id;
 

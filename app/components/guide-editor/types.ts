@@ -80,6 +80,8 @@ export interface SlashItem {
   icon: ComponentType<{ className?: string }>;
   /** グループ見出し（基本ブロック / 埋め込み 等） */
   group: string;
+  /** 項目名の下に出す短い補足（任意。例: 表 → サーチ文字列は埋め込みを勧める） */
+  description?: string;
   /**
    * 実行ハンドラ。スラッシュ範囲は呼び出し側で削除済み。
    * 即時挿入は editor を、ダイアログ起動は ctx を使う。
@@ -88,7 +90,8 @@ export interface SlashItem {
 }
 
 /** スラッシュコマンドの項目定義（文言は翻訳キーのまま持つ） */
-export interface SlashItemDef extends Omit<SlashItem, "title" | "group"> {
+export interface SlashItemDef extends Omit<SlashItem, "title" | "group" | "description"> {
   titleKey: MessageKey;
   groupKey: MessageKey;
+  descriptionKey?: MessageKey;
 }

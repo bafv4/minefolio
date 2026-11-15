@@ -62,7 +62,7 @@ export function EmbedDialog({ kind, onOpenChange, onInsert }: EmbedDialogProps) 
                   submit();
                 }
               }}
-              placeholder="mcid or slug"
+              placeholder={t("guideEditor.embedUserSlugPlaceholder")}
               className="h-8"
               autoFocus
             />

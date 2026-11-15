@@ -17,11 +17,11 @@
 | slug | string | URLスラッグ。作成時にユーザーが必ず入力し（自動生成しない）、以降は編集画面の設定モーダルの「URL」欄で変更できる。ライブ列（ドラフト対象外）。許可文字は `a-z` / `0-9` / `_` / `-`（`app/lib/guide-slug.ts` の `normalizeSlug()` で正規化。入力欄では `softNormalizeSlug()`） |
 | title | string | タイトル。最大**200文字**（作成時 `new.tsx` ・編集時 `edit.tsx` の両方で検証。draft保存でも同じ上限を適用する） |
 | summary | string | 概要・要約。最大**500文字**（`edit.tsx` で検証。作成時 `new.tsx` には入力欄が無く、後から編集で追加する） |
-| content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。仮保存（draft）には上限を適用しない |
+| content | text (HTML) | 本文（TipTapエディタが生成するHTML）。**公開（publish）時のみ**最大50万文字の上限あり（`app/routes/my-guides/edit.tsx` の `MAX_PUBLISHED_CONTENT_LENGTH`、多層防御目的）。下書き保存（draft）には上限を適用しない |
 | coverImageUrl | string | カバー画像URL（Vercel Blob） |
 | isPublished | boolean | 公開状態 |
 | tags | JSON配列 | タグ一覧。読み出し側は `app/lib/guide-tags.ts` の `parseGuideTags()` で防御的にパースする（不正なJSONが1行混入していても、その行だけ空配列に落ちて一覧・詳細全体が500にならない） |
-| draftTitle / draftSummary / draftContent / draftCoverImageUrl / draftTags | nullable | 仮保存（ドラフト）用。公開版と独立して編集中の内容を保持 |
+| draftTitle / draftSummary / draftContent / draftCoverImageUrl / draftTags | nullable | 下書き保存（ドラフト）用。公開版と独立して編集中の内容を保持 |
 | draftUpdatedAt | timestamp (nullable) | ドラフト保存日時。非 null = 未コミットのドラフトあり |
 | viewCount | integer | 閲覧数 |
 | createdAt | timestamp | 作成日時 |
@@ -29,10 +29,10 @@
 | allowAutoTranslation | boolean | 自動翻訳を許可するか（既定 true）。ライブ列（ドラフト対象外・ロールバック対象外）。編集画面の設定モーダルのスイッチで切り替える（下記「自動翻訳」） |
 | isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭・拡大表示）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
 
-#### 保存モデル（仮保存 / 保存）
+#### 保存モデル（下書き保存 / 保存）
 
-- **仮保存（draft）**: ドラフト列 (`draft*`) のみ更新。公開版 (`content` 等) と `isPublished` は変更しない。公開中の表示は変わらない。
-- **保存（publish）**: 公開版を書き換え、`isPublished` を反映し、ドラフト列を `null` にクリア（コミット）。`updatedAt` を更新。
+- **下書き保存（draft）**: ドラフト列 (`draft*`) のみ更新。公開版 (`content` 等) と `isPublished` は変更しない。公開中の表示は変わらない（設定モーダルで公開スイッチを変えていても、下書き保存では公開状態は変わらない）。
+- **保存（publish）**: 公開版を書き換え、`isPublished` を反映し、ドラフト列を `null` にクリア（コミット）。`updatedAt` を更新。エディタのボタンの文言は公開状態で変わる（下記「保存ボタンと公開状態」）。
 - **公開版に戻す（discard / ロールバック）**: ドラフト列を `null` に戻し、編集中の内容を公開版へ復元する。
 - 不変条件: **ドラフト列が `null` = ドラフトと公開版が同じ**。読み込み時、未コミットのドラフト (`draftUpdatedAt != null`) があればそれを優先し、無ければ公開版を読み込む。
 - 自動保存は廃止。`_action` = `draft` / `publish` / `discard` を FormData で送信して区別する。
@@ -53,9 +53,24 @@
 - **TipTap 3.x** ベースのリッチテキストエディタ
 - v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
 - 操作モデルは複数の導線を併用:
-  - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: Undo/Redo・保存状態・仮保存/保存・設定・プレビュー。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。
-  - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・**URL（スラッグ）**・タグ・公開設定を集約（ツールバーの「設定」から開く）。「URL」欄は入力を正規化しつつ `/guides/{authorSlug}/{slug}` のプレビューを表示する。
-  - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）
+  - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: Undo/Redo・保存状態・公開状態のピル・下書き保存/保存（公開）・設定・プレビュー。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。タブは `role=tablist/tab`（roving tabindex。左右の矢印・Home/End でフォーカスと選択を移す）、2 段目のタブごとのツール群が `role=tabpanel`（`aria-labelledby` で選択中のタブと結ぶ。Undo/Redo と保存状態はタブに依らないので外）。
+  - **保存ボタンと公開状態**（`hooks/use-guide-save.ts` の `getPublishAction` / `PUBLISH_ACTION_MESSAGES`）: 公開状態は右端の保存（publish）でだけ書き換わるので、「保存済みの `isPublished`（loader の公開版スナップショット。保存のたびの再検証で更新）」と「設定モーダルの公開スイッチ」の組で決める。
+
+    | 保存済み | スイッチ | ボタン | ツールチップ | ピル |
+    |---|---|---|---|---|
+    | 非公開 | オン | 公開 | 保存して、読者に公開します | 非公開（公開は未保存） |
+    | 公開中 | オン | 更新を公開 | 公開中のガイドを、今の内容に更新します | 公開中 |
+    | 公開中 | オフ | 保存 | 保存して、公開を取り下げます | 公開中（非公開は未保存） |
+    | 非公開 | オフ | 保存 | 非公開のまま保存します | 非公開 |
+
+    「下書き保存」のツールチップは「公開版は変えずに、下書きとして保存します」と `Ctrl S`。ピルは ui.md 6 章の丸ピルで、スイッチが保存済みと違うときは警告色。下書きの通知（`guideEditor.ui.draftBanner`）はそのときのボタン名を差し込む
+  - **Ctrl/⌘+S** で下書き保存（`index.tsx` の window の keydown。ブラウザの「ページを保存」は `preventDefault` で止める。Ctrl+Shift+S は打ち消し線なので対象外。保存中・未保存の変更が無いとき・設定モーダルが開いている間は保存しない。設定モーダルは「適用」前の値を持つため）
+  - **プレビュー**は `?draft=1` で下書き保存した内容（無ければ公開版）を新しいタブで開く。未保存の変更があるときはツールチップで「未保存の変更は含まれません」と伝える
+  - **本文の上のタイトルと概要**: 公開ビューと同じ大きさで表示する（読み取り専用。`h1` の中のボタンで、押すと設定モーダルが開く。押せる範囲は概要まで広げる）。設定モーダルで「適用」した未保存の値もここに出る。タイトルが空なら「タイトルが未設定です（押して設定）」
+  - エディタ本文（contenteditable）は `aria-label`「本文」（`guideEditor.ui.editorAriaLabel`、`hooks/use-guide-editor.ts`）
+  - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・**URL（スラッグ）**・タグ・公開設定を集約（ツールバーの「設定」から開く）。「URL」欄は入力を正規化しつつ `/guides/{authorSlug}/{slug}` のプレビューを表示する。「適用」でエディタの状態へ入れる（保存はしない）。公開スイッチは見えるラベル「公開する」が名前で、オン/オフは `role=switch` の状態で伝える。タグ入力は Enter かカンマで追加・空欄で Backspace を押すと最後のタグを削除（入力欄の下に案内。IME の変換確定の Enter では追加しない）
+  - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）。フォーカスはエディタに残したまま、メニューが開いている間はエディタ本体に `aria-expanded` / `aria-controls`（listbox の id）/ `aria-activedescendant`（選択中の option）を付ける（`renderer.ts`）。メニューは `role=listbox` ＞ グループごとの `role=group` ＞ `role=option`（`aria-selected`）。項目は任意の補足（`descriptionKey`）を持てる
+  - **表の挿入口の補足**: スラッシュコマンドの「表」の補足と、挿入タブの表ボタンのツールチップで「サーチ文字列を載せるなら、サーチクラフト（テンプレート）の埋め込みで等幅・コピー付きで表示できる」と案内する（`guideEditor.ui.tableSearchStrHint`）。表の中のサーチ文字列用の書式は作らない
   - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）
   - **ブロックハンドル**でブロック種別変更 / 削除 — `toolbar/block-handle.tsx`。デスクトップではテーブル上に表示せず行・列ハンドルへ委譲（タッチはテーブル行列操作メニューを含む従来動作）
   - **テーブル行・列ハンドル**（Notion 風、デスクトップのみ）— `toolbar/table-handles.tsx`。ホバー中の行の左端 / 列の上端にピル型ハンドルを表示。クリックで行・列全体を CellSelection で選択（`.selectedCell` ハイライト）し、メニューから行・列の追加・削除、スタイル一括適用（背景色 / 文字色 / 文字揃え）、テーブル削除ができる
@@ -387,7 +402,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - **独立レイアウト**: `me/_layout` のサイドバーに依存しないフルスクリーン編集画面
 - タイトル/本文/サマリー/タグ inputs はブラウザ標準の綴りバリデーション（`spellcheck`）を無効化
 - スティッキーヘッダーとツールバーは背景透明（`backdrop-blur-sm` のみ）
-- **URL（スラッグ）の編集**: 設定モーダルの「URL」欄で変更できる。仮保存・保存いずれの保存でも即反映される（`slug` はライブ列）。
+- **URL（スラッグ）の編集**: 設定モーダルの「URL」欄で変更できる。下書き保存・保存いずれの保存でも即反映される（`slug` はライブ列）。
   - 保存時、`normalizeSlug()` で正規化した値が現在と異なれば、同一著者内での重複を確認する。重複時は `meGuides.errorSlugTaken` を返し、その保存自体を中止（トースト表示、他フィールドも保存されない）。正規化結果が空なら `meGuides.errorSlugRequired`。
   - スラッグ変更に成功すると、action は新しい `slug` を返し、クライアントは `/my-guides/{新slug}/edit` へ `navigate(replace)` する（同一ルートのためエディタは再マウントされず、編集中の本文・状態は保持される）。
   - 旧スラッグからのリダイレクトは行わない（旧URLは404になる）。
@@ -396,11 +411,11 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 ### 自動翻訳の許可と翻訳フック（編集 action）
 
 - 設定モーダルの「自動翻訳を許可する」スイッチ（既定オン、`guides.allowAutoTranslation`）。説明文で、翻訳に外部サービス（Anthropic）を使うこと・オフにすると既存の翻訳も削除されることを伝える
-- 自動翻訳の機能が無効（`ANTHROPIC_API_KEY` 未設定）のときはこのスイッチを表示しない。loader が `translationEnabled`（`isTranslationEnabled()` の真偽値）をエディタへ渡し、無効時は仮保存・保存とも `allowAutoTranslation` を送らない（サーバーは保存済みの値のまま残す）
-- フォームは `allowAutoTranslation`（`"true"` / `"false"`）を仮保存・保存のどちらでも送る。サーバーは `"true"` / `"false"` 以外を拒否し（`errorInvalidAction`）、未送信なら列を上書きしない。ライブ列なので仮保存でも反映する（スラッグと同じ）
+- 自動翻訳の機能が無効（`ANTHROPIC_API_KEY` 未設定）のときはこのスイッチを表示しない。loader が `translationEnabled`（`isTranslationEnabled()` の真偽値）をエディタへ渡し、無効時は下書き保存・保存とも `allowAutoTranslation` を送らない（サーバーは保存済みの値のまま残す）
+- フォームは `allowAutoTranslation`（`"true"` / `"false"`）を下書き保存・保存のどちらでも送る。サーバーは `"true"` / `"false"` 以外を拒否し（`errorInvalidAction`）、未送信なら列を上書きしない。ライブ列なので下書き保存でも反映する（スラッグと同じ）
 - 保存成功後の分岐（有効値 = 送信値 ?? 現在値）:
   - **false** → `removeGuideTranslations()` を await（機能無効でも消す）。翻訳は依頼しない
-  - **true** かつ（保存〔publish〕、またはオフ→オンに戻した保存）→ `scheduleGuideTranslation()`（`waitUntil`。レスポンス後に走り、失敗しても保存結果に影響しない）。公開版を書き換えない**仮保存では、許可を戻したとき以外は翻訳しない**（ドラフトは翻訳対象外）
+  - **true** かつ（保存〔publish〕、またはオフ→オンに戻した保存）→ `scheduleGuideTranslation()`（`waitUntil`。レスポンス後に走り、失敗しても保存結果に影響しない）。公開版を書き換えない**下書き保存では、許可を戻したとき以外は翻訳しない**（ドラフトは翻訳対象外）
 - `/my-guides/new` は非公開で作成するため翻訳しない。公開版の更新は `/my-guides/:guideSlug/edit` の publish のみ
 
 ### 公開ガイド表示時の編集導線

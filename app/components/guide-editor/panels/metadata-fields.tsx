@@ -186,7 +186,10 @@ export function MetadataFields({
               type="text"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
+              aria-describedby="guide-tag-hint"
               onKeyDown={(e) => {
+                // IME の変換確定の Enter ではタグにしない（Firefox は変換中も key が "Enter" になる）
+                if (e.nativeEvent.isComposing) return;
                 if (e.key === "Enter" || e.key === ",") {
                   e.preventDefault();
                   addTag();
@@ -200,6 +203,9 @@ export function MetadataFields({
             />
           )}
         </div>
+        <p id="guide-tag-hint" className="text-xs text-muted-foreground">
+          {t("guideEditor.ui.tagHint", { max: MAX_TAGS })}
+        </p>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 // デスクトップ常設ツールバー（タブ式リボン）。ヘッダー直下に fixed 固定。
-// 常時表示: Undo/Redo・保存状態・仮保存/保存・設定。タブ: ホーム / 挿入 / テーブル。
-import { useState, useEffect, useRef } from "react";
+// 常時表示: Undo/Redo・保存状態・公開状態・下書き保存/保存（公開）・設定。タブ: ホーム / 挿入 / テーブル。
+import { useState, useEffect, useRef, type KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
@@ -52,6 +52,8 @@ import {
   PanelLeft,
   AlignHorizontalDistributeCenter,
   LayoutTemplate,
+  Globe,
+  Lock,
 } from "lucide-react";
 import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
@@ -80,7 +82,11 @@ import {
   type CalloutType,
 } from "../lib/block-commands";
 import { EDITOR_Z } from "../constants";
-import type { SaveMode } from "../hooks/use-guide-save";
+import {
+  getPublishAction,
+  PUBLISH_ACTION_MESSAGES,
+  type SaveMode,
+} from "../hooks/use-guide-save";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 
@@ -91,6 +97,10 @@ interface DesktopToolbarProps {
   isDirty: boolean;
   saving: boolean;
   lastSaved: { mode: SaveMode; at: Date } | null;
+  /** いま読者に公開されているか（保存済みの isPublished） */
+  livePublished: boolean;
+  /** 公開の設定（設定モーダルのスイッチ。未保存の変更を含む） */
+  publishSetting: boolean;
   onSaveDraft: () => void;
   onSavePublish: () => void;
   onOpenSettings: () => void;
@@ -124,6 +134,13 @@ const CALLOUT_TYPES: { type: CalloutType; labelKey: MessageKey; icon: LucideIcon
   { type: "warning", labelKey: "guideEditor.callout.warning", icon: TriangleAlert },
   { type: "danger", labelKey: "guideEditor.callout.danger", icon: Siren },
 ];
+
+/** タブと 2 段目のツール群（tabpanel）を結ぶ id */
+const tabId = (key: TabKey) => `guide-toolbar-tab-${key}`;
+const TAB_PANEL_ID = "guide-toolbar-tabpanel";
+
+/** 下書き保存のショートカット（index.tsx のキー監視と揃える。表記は他のツールの "Ctrl B" 等と同じ流儀） */
+const SAVE_DRAFT_SHORTCUT = "Ctrl S";
 
 const TABS: { key: TabKey; labelKey: MessageKey }[] = [
   { key: "home", labelKey: "guideEditor.toolbar.tabHome" },
@@ -181,11 +198,46 @@ function SaveIndicator({
   );
 }
 
+/** 公開状態のピル（ui.md 6 章「丸ピル」）。公開の設定が保存済みの状態と違うときは「未保存」を添えて警告色にする */
+function PublishStatusPill({ livePublished, publishSetting }: { livePublished: boolean; publishSetting: boolean }) {
+  const t = useT();
+  const action = getPublishAction(livePublished, publishSetting);
+  const pending = livePublished !== publishSetting;
+  const Icon = livePublished ? Globe : Lock;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border bg-background/75 px-2.5 py-1 text-xs",
+        pending ? "border-warning/40 text-warning" : "border-border/70 text-muted-foreground",
+      )}
+    >
+      <Icon className="h-3 w-3" aria-hidden />
+      {t(PUBLISH_ACTION_MESSAGES[action].status)}
+    </span>
+  );
+}
+
+/** ツールチップの本文（説明＋任意のショートカット）。ToolbarButton の表示と同じ kbd の見た目 */
+function HintTooltipContent({ hint, shortcut }: { hint: string; shortcut?: string }) {
+  return (
+    <TooltipContent side="bottom" showArrow={false} className="z-[65] flex max-w-72 items-center gap-2">
+      <span>{hint}</span>
+      {shortcut && (
+        <kbd className="shrink-0 rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          {shortcut}
+        </kbd>
+      )}
+    </TooltipContent>
+  );
+}
+
 export function DesktopToolbar({
   editor,
   isDirty,
   saving,
   lastSaved,
+  livePublished,
+  publishSetting,
   onSaveDraft,
   onSavePublish,
   onOpenSettings,
@@ -211,6 +263,26 @@ export function DesktopToolbar({
     if (tab === "table" && !inTable) setTab("home");
   }, [tab, inTable]);
   const visibleTabs = inTable ? TABS : TABS.filter((tt) => tt.key !== "table");
+
+  // タブは roving tabindex（選択中だけ Tab で止まる）。左右の矢印・Home/End でフォーカスと選択を移す
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
+  const handleTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const keys = visibleTabs.map((tt) => tt.key);
+    const current = keys.indexOf(tab);
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = (current + 1) % keys.length;
+    else if (e.key === "ArrowLeft") next = (current - 1 + keys.length) % keys.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = keys.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    const nextKey = keys[next];
+    setTab(nextKey);
+    tabRefs.current[nextKey]?.focus();
+  };
+
+  const publishAction = getPublishAction(livePublished, publishSetting);
+  const publishMessages = PUBLISH_ACTION_MESSAGES[publishAction];
 
   // fixed 化に伴うスペーサー高さ計測
   const barRef = useRef<HTMLDivElement>(null);
@@ -247,13 +319,24 @@ export function DesktopToolbar({
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
           {/* 1段目: タブ + メタ操作 */}
           <div className="flex items-center gap-1 pt-1.5">
-            <div className="flex items-center gap-0.5" role="tablist" aria-label={t("guideEditor.toolbar.ariaTabs")}>
+            <div
+              className="flex items-center gap-0.5"
+              role="tablist"
+              aria-label={t("guideEditor.toolbar.ariaTabs")}
+              onKeyDown={handleTabKeyDown}
+            >
               {visibleTabs.map(({ key, labelKey }) => (
                 <button
                   key={key}
+                  ref={(el) => {
+                    tabRefs.current[key] = el;
+                  }}
+                  id={tabId(key)}
                   type="button"
                   role="tab"
                   aria-selected={tab === key}
+                  aria-controls={TAB_PANEL_ID}
+                  tabIndex={tab === key ? 0 : -1}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setTab(key)}
                   className={cn(
@@ -270,7 +353,7 @@ export function DesktopToolbar({
               ))}
             </div>
 
-            {/* 右側: 設定 / プレビュー | 仮保存 / 保存 */}
+            {/* 右側: 設定 / プレビュー | 公開状態 / 下書き保存 / 保存（公開） */}
             <div className="ml-auto flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -290,17 +373,38 @@ export function DesktopToolbar({
                     </Link>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" showArrow={false}>{t("guideEditor.preview")}</TooltipContent>
+                {/* プレビューは下書き保存した内容を開く。未保存の変更があるときはそれが含まれないことを伝える */}
+                <HintTooltipContent
+                  hint={t(isDirty ? "guideEditor.toolbar.previewUnsavedHint" : "guideEditor.toolbar.previewHint")}
+                />
               </Tooltip>
               <ToolbarSeparator />
-              <Button type="button" variant="outline" size="sm" onClick={onSaveDraft} disabled={saving}>
-                <FileEdit className="h-4 w-4" />
-                <span className="hidden md:inline">{t("guideEditor.toolbar.saveDraft")}</span>
-              </Button>
-              <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
-                <Save className="h-4 w-4" />
-                <span className="hidden md:inline">{t("guideEditor.save")}</span>
-              </Button>
+              <PublishStatusPill livePublished={livePublished} publishSetting={publishSetting} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onSaveDraft}
+                    disabled={saving}
+                    aria-keyshortcuts="Control+S Meta+S"
+                  >
+                    <FileEdit className="h-4 w-4" />
+                    <span className="hidden md:inline">{t("guideEditor.toolbar.saveDraft")}</span>
+                  </Button>
+                </TooltipTrigger>
+                <HintTooltipContent hint={t("guideEditor.toolbar.saveDraftHint")} shortcut={SAVE_DRAFT_SHORTCUT} />
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="default" size="sm" onClick={onSavePublish} disabled={saving}>
+                    <Save className="h-4 w-4" />
+                    <span className="hidden md:inline">{t(publishMessages.label)}</span>
+                  </Button>
+                </TooltipTrigger>
+                <HintTooltipContent hint={t(publishMessages.hint)} />
+              </Tooltip>
             </div>
           </div>
 
@@ -314,6 +418,13 @@ export function DesktopToolbar({
             </ToolbarButton>
             <ToolbarSeparator />
 
+            {/* アクティブなタブのツール群（Undo/Redo と保存状態はタブに依らないので外に置く） */}
+            <div
+              id={TAB_PANEL_ID}
+              role="tabpanel"
+              aria-labelledby={tabId(tab)}
+              className="flex flex-wrap items-center gap-0.5"
+            >
             {tab === "home" && (
               <>
                 <DropdownMenu>
@@ -387,7 +498,11 @@ export function DesktopToolbar({
                   <YoutubeIcon className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
-                <ToolbarButton label={t("guideEditor.table")} onClick={() => insertTable(editor)}>
+                <ToolbarButton
+                  label={t("guideEditor.table")}
+                  description={t("guideEditor.ui.tableSearchStrHint")}
+                  onClick={() => insertTable(editor)}
+                >
                   <Table2 className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.horizontalRule")} onClick={() => insertHorizontalRule(editor)}>
@@ -491,6 +606,7 @@ export function DesktopToolbar({
                 </ToolbarButton>
               </>
             )}
+            </div>
 
             {/* 保存状態はツール行の右端に表示 */}
             <div className="ml-auto pl-2">

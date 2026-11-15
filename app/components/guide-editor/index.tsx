@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
 import { EditorContent } from "@tiptap/react";
 import { toast } from "sonner";
-import { ArrowLeft, Undo2 } from "lucide-react";
+import { ArrowLeft, Pencil, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/hooks/use-locale";
@@ -17,7 +17,7 @@ import { cropAnimatedGifFromUrl } from "./lib/gif-crop";
 import { GifTooLargeError } from "./lib/gif-encode";
 import type { CropRect } from "./lib/image-crop";
 import { useGuideEditor } from "./hooks/use-guide-editor";
-import { useGuideSave } from "./hooks/use-guide-save";
+import { useGuideSave, getPublishAction, PUBLISH_ACTION_MESSAGES } from "./hooks/use-guide-save";
 import {
   useImageUpload,
   buildInlineImagePath,
@@ -76,7 +76,7 @@ export function GuideEditor({
   const [slug, setSlug] = useState(guideSlug);
   // 未保存変更フラグ。同値 setState は React がバイパスするため毎キー再レンダリングしない。
   const [dirty, setDirty] = useState(false);
-  // DB にコミット済みドラフトが存在するか（仮保存で true、保存/破棄で false）。
+  // DB にコミット済みドラフトが存在するか（下書き保存で true、保存/破棄で false）。
   const [draftActive, setDraftActive] = useState(initialHasDraft);
 
   // ── ダイアログ状態 ──────────────────────────
@@ -181,6 +181,29 @@ export function GuideEditor({
 
   // 未保存離脱警告
   const blocker = useUnsavedWarning(dirty);
+
+  // 公開状態。保存済みの値は loader の公開版スナップショット（保存のたびに再検証で更新される）を正とする。
+  // 下書き保存は isPublished を変えないので、保存ボタンの文言とピルはこの値と設定の組で決める
+  const livePublished = publishedSnapshot.isPublished;
+  const publishAction = getPublishAction(livePublished, isPublished);
+
+  // Ctrl/⌘+S で下書き保存（ブラウザの「ページを保存」は止める）。Ctrl+Shift+S は打ち消し線なので除く。
+  // 保存しないとき: 保存中・未保存の変更が無いとき（押すたびに中身の同じ下書きを作らない）・設定モーダルが
+  // 開いているとき（モーダルは「適用」前の値を持つため、保存すると表示と食い違う）
+  const shortcutStateRef = useRef({ save, saving, dirty, settingsOpen });
+  shortcutStateRef.current = { save, saving, dirty, settingsOpen };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.key.toLowerCase() !== "s" || e.isComposing) return;
+      e.preventDefault();
+      const state = shortcutStateRef.current;
+      if (e.repeat || state.saving || !state.dirty || state.settingsOpen) return;
+      state.save("draft");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // ── ハンドラ ──────────────────────────────
   // リンク挿入はダイアログ（panels/link-dialog.tsx）で URL / テキストを受け取る。
@@ -318,7 +341,7 @@ export function GuideEditor({
     if (editor) editor.commands.setYoutubeVideo({ src: url });
   };
 
-  // プレビューはドラフト（仮保存）内容を表示（著者本人のみ。未保存ドラフトが無ければ公開版）
+  // プレビューは下書き保存した内容を表示（著者本人のみ。下書きが無ければ公開版）。未保存の変更は含まれない
   const previewUrl = `/guides/${authorSlug}/${guideSlug}?draft=1`;
 
   return (
@@ -329,6 +352,8 @@ export function GuideEditor({
           isDirty={dirty}
           saving={saving}
           lastSaved={lastSaved}
+          livePublished={livePublished}
+          publishSetting={isPublished}
           onSaveDraft={() => save("draft")}
           onSavePublish={() => save("publish")}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -352,13 +377,12 @@ export function GuideEditor({
               {t("guideEditor.back")}
             </Link>
           </Button>
-          {/* タイトルは設定モーダルで編集。本文上には現在のタイトルを見出しとして表示 */}
         </div>
 
         {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
         {draftActive && (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            <span>{t("guideEditor.ui.draftBanner")}</span>
+            <span>{t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })}</span>
             <Button
               type="button"
               variant="outline"
@@ -372,6 +396,29 @@ export function GuideEditor({
             </Button>
           </div>
         )}
+
+        {/* タイトルと概要（読み取り専用の表示。編集は設定モーダル。押すとモーダルが開く）。
+            「適用」した未保存の値もここに出る。見た目は公開ビュー（guides/view.tsx）のタイトル・概要に合わせる。
+            押せる範囲は概要まで広げる（タイトルのボタンの after で全面を覆う。ui.md 9 章「オーバーレイリンク」） */}
+        <div className="group relative mt-4 -mx-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/50 focus-within:bg-muted/50">
+          <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="w-full pr-6 text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+            >
+              {title.trim() ? title : <span className="text-muted-foreground">{t("guideEditor.ui.titleEmpty")}</span>}
+              <span className="sr-only"> {t("guideEditor.ui.editInSettings")}</span>
+            </button>
+          </h1>
+          {summary.trim() && (
+            <p className="mt-3 text-lg text-muted-foreground leading-relaxed">{summary}</p>
+          )}
+          <Pencil
+            aria-hidden
+            className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          />
+        </div>
 
         <div className="py-3 min-h-100">
           <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">

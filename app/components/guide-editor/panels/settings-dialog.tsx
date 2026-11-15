@@ -1,6 +1,6 @@
 // ガイド設定モーダル（タイトル / 概要 / カバー画像 / タグ / 公開設定）。
-// モーダル内はローカル State を持ち、「反映」で親 State へコミット、「キャンセル」で破棄する。
-// ※ 反映は保存・仮保存ではなく、あくまで全体 State への反映のみ。
+// モーダル内はローカル State を持ち、「適用」で親 State へコミット、「キャンセル」で破棄する。
+// ※ 適用は保存（下書き保存・公開）ではなく、あくまで全体 State への反映のみ。
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -41,7 +41,7 @@ interface SettingsDialogProps {
   uploadCover: (file: File) => Promise<string | null>;
   isUploadingCover: boolean;
   uploadError: string | null;
-  /** 反映: モーダル内 State を親 State へコミット（保存はしない） */
+  /** 適用: モーダル内 State を親 State へコミット（保存はしない） */
   onApply: (values: GuideSettingsValues) => void;
 }
 
@@ -137,11 +137,11 @@ export function SettingsDialog({
           <p className="text-xs text-muted-foreground">{t("guideEditor.slugHint")}</p>
         </div>
 
-        {/* 公開設定（トグル） */}
-        <div className="flex items-center justify-between rounded-lg border p-3 mt-1">
+        {/* 公開設定（トグル）。名前は見えるラベル「公開する」（Label htmlFor）で、オン/オフは role=switch の状態で伝える */}
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3 mt-1">
           <div className="space-y-0.5">
-            <Label htmlFor="guide-publish-toggle">{t("guideEditor.published")}</Label>
-            <p className="text-xs text-muted-foreground">
+            <Label htmlFor="guide-publish-toggle">{t("guideEditor.ui.publishLabel")}</Label>
+            <p id="guide-publish-toggle-desc" className="text-xs text-muted-foreground">
               {isPublished
                 ? t("guideEditor.ui.publishOn")
                 : t("guideEditor.ui.publishOff")}
@@ -151,7 +151,7 @@ export function SettingsDialog({
             id="guide-publish-toggle"
             checked={isPublished}
             onCheckedChange={setIsPublished}
-            aria-label={t("guideEditor.published")}
+            aria-describedby="guide-publish-toggle-desc"
           />
         </div>
 

@@ -14,6 +14,8 @@ interface ToolbarButtonProps {
   label: string;
   /** ツールチップに表示するキーボードショートカット（例: "Ctrl B"） */
   shortcut?: string;
+  /** ツールチップだけに出す補足（アクセシブル名には含めない。例: 表の挿入でサーチ文字列は埋め込みを勧める） */
+  description?: string;
   children: ReactNode;
   /** 小サイズ（h-7） */
   sm?: boolean;
@@ -27,6 +29,7 @@ export function ToolbarButton({
   disabled,
   label,
   shortcut,
+  description,
   children,
   sm,
   showLabel,
@@ -66,13 +69,20 @@ export function ToolbarButton({
           )}
         </Toggle>
       </TooltipTrigger>
-      <TooltipContent side="bottom" showArrow={false} className="z-[65] flex items-center gap-2">
-        <span>{label}</span>
-        {shortcut && (
-          <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {shortcut}
-          </kbd>
-        )}
+      <TooltipContent
+        side="bottom"
+        showArrow={false}
+        className={cn("z-[65]", description ? "max-w-72 space-y-0.5" : "flex items-center gap-2")}
+      >
+        <span className={cn(description ? "flex items-center gap-2 font-medium" : "contents")}>
+          <span>{label}</span>
+          {shortcut && (
+            <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {shortcut}
+            </kbd>
+          )}
+        </span>
+        {description && <span className="block text-muted-foreground">{description}</span>}
       </TooltipContent>
     </Tooltip>
   );

@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { SuggestionOptions } from "@tiptap/suggestion";
 import type { SlashItem } from "../types";
 import type { Translator } from "@/lib/messages";
-import { SlashMenu } from "./slash-menu";
+import { SlashMenu, SLASH_MENU_ID, slashOptionId } from "./slash-menu";
 import { EDITOR_Z } from "../constants";
 
 type SlashRender = NonNullable<SuggestionOptions<SlashItem>["render"]>;
@@ -19,8 +19,29 @@ export function createSlashRenderer(getT: () => Translator): SlashRender {
     let dismissed = false;
     let items: SlashItem[] = [];
     let command: ((item: SlashItem) => void) | null = null;
+    // フォーカスを持つエディタ本体（contenteditable）。メニューが開いている間だけ combobox 相当の
+    // aria-expanded / aria-controls / aria-activedescendant を付け、選択中の項目を読み上げさせる
+    let editorDom: HTMLElement | null = null;
+
+    const syncEditorAria = () => {
+      if (!editorDom) return;
+      const open = !!root && !dismissed;
+      if (open) {
+        editorDom.setAttribute("aria-expanded", "true");
+        editorDom.setAttribute("aria-controls", SLASH_MENU_ID);
+      } else {
+        editorDom.removeAttribute("aria-expanded");
+        editorDom.removeAttribute("aria-controls");
+      }
+      if (open && items.length > 0) {
+        editorDom.setAttribute("aria-activedescendant", slashOptionId(selectedIndex));
+      } else {
+        editorDom.removeAttribute("aria-activedescendant");
+      }
+    };
 
     const render = () => {
+      syncEditorAria();
       if (!root) return;
       if (dismissed) {
         root.render(null);
@@ -51,6 +72,7 @@ export function createSlashRenderer(getT: () => Translator): SlashRender {
         dismissed = false;
         items = props.items;
         command = (item) => props.command(item);
+        editorDom = props.editor.view.dom as HTMLElement;
         container = document.createElement("div");
         container.style.position = "fixed";
         container.style.zIndex = String(EDITOR_Z.slash);
@@ -97,6 +119,8 @@ export function createSlashRenderer(getT: () => Translator): SlashRender {
         container?.remove();
         root = null;
         container = null;
+        syncEditorAria();
+        editorDom = null;
       },
     };
   };
