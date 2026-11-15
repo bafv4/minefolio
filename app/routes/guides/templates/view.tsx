@@ -30,6 +30,8 @@ import { PageSection } from "@/components/page-section";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { itemLangForLocale } from "@/components/item-icon";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -334,6 +336,12 @@ export default function TemplateViewPage() {
   const [keyboardLayout, setKeyboardLayout] = useState<KeyboardLayoutOption>("US");
   // リマップの鍵盤は md 未満でだけ開閉する（md 以上は常に表示）。既定は閉じる
   const [remapOpen, setRemapOpen] = useState(false);
+  // アイテム名を閲覧者の言語で表示するトグル（走者画面のサーチクラフトタブと同じ。保存しない）。
+  // 既定はテンプレートのゲーム言語（未設定は日本語）のまま。サーチ文字列・キー列は言語に依らず不変。
+  // テンプレートの言語が閲覧者の言語と同じときはトグル自体を出さない
+  const [itemNamesViewerLang, setItemNamesViewerLang] = useState(false);
+  const viewerItemLang = itemLangForLocale(locale);
+  const canToggleItemLang = (template.gameLanguage || "ja_jp") !== viewerItemLang;
 
   const isSubmitting = fetcher.state === "submitting";
   const selectedTargetPreset = myPresets.find((p) => p.id === targetPresetId);
@@ -342,6 +350,7 @@ export default function TemplateViewPage() {
   useEffect(() => {
     setApplyRemaps(remaps.length > 0);
     setNewPresetName(template.title);
+    setItemNamesViewerLang(false);
   }, [template.id, template.title, remaps.length]);
 
   useEffect(() => {
@@ -727,11 +736,22 @@ export default function TemplateViewPage() {
           ) : undefined
         }
       >
+        {canToggleItemLang && (
+          // スイッチ＋ラベル（label で結ぶ。モバイルは押せる範囲 44px、sm 以上は 32px）
+          <label className="flex min-h-11 max-w-full cursor-pointer items-center gap-2 text-sm sm:min-h-8">
+            <Switch checked={itemNamesViewerLang} onCheckedChange={setItemNamesViewerLang} />
+            <span className="min-w-0">
+              {t("playerProfile.searchCraftItemNamesIn", {
+                language: t("playerProfile.searchCraftViewerLangName"),
+              })}
+            </span>
+          </label>
+        )}
         <KeyBadgeLegend showCraftMarker={loops.length > 0} />
         <SearchCraftGroupedList
           crafts={parsedSearchCrafts}
           remaps={remaps}
-          gameLanguage={template.gameLanguage}
+          gameLanguage={itemNamesViewerLang ? viewerItemLang : template.gameLanguage}
           keyboardLayout={keyboardLayout}
           extraTimings={searchCraftLoopTimings}
           renderGroupExtra={renderSearchCraftLoopExtra}
