@@ -35,8 +35,8 @@ describe("normalizeHomeLayout", () => {
       "videos",
       "live",
       "favoriteActivity",
-      "guides",
       "featured",
+      "guides",
       "profiles",
     ]);
     expect(normalizeHomeLayout([]).order).toEqual(def);
@@ -44,7 +44,7 @@ describe("normalizeHomeLayout", () => {
 
   it("新形式の order / hidden を読む", () => {
     const layout = normalizeHomeLayout('{"order":["live","videos"],"hidden":["videos","bogus","videos",3]}');
-    expect(layout.order).toEqual(["live", "videos", "favoriteActivity", "guides", "featured", "profiles"]);
+    expect(layout.order).toEqual(["live", "videos", "favoriteActivity", "featured", "guides", "profiles"]);
     expect(layout.hidden).toEqual(["videos"]);
   });
 

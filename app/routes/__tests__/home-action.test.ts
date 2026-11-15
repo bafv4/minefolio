@@ -76,7 +76,7 @@ describe("action - saveHomeSectionOrder", () => {
     expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
     const row = (await storedOrder(user.id))!;
     expect(JSON.parse(row.homeSectionOrder!)).toEqual({
-      order: ["profiles", "live", "favoriteActivity", "videos", "guides", "featured"],
+      order: ["profiles", "live", "favoriteActivity", "featured", "videos", "guides"],
       hidden: [],
     });
     expect(row.updatedAt.getTime()).toBe(before.getTime());
@@ -86,7 +86,7 @@ describe("action - saveHomeSectionOrder", () => {
     const user = await seedUser(db, { discordId: "d1", homeSectionOrder: '["live"]' });
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
 
-    const res = await save(["favoriteActivity", "live", "videos", "guides", "featured", "profiles"]);
+    const res = await save(["favoriteActivity", "live", "featured", "videos", "guides", "profiles"]);
 
     expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
     expect((await storedOrder(user.id))?.homeSectionOrder).toBeNull();
@@ -96,11 +96,11 @@ describe("action - saveHomeSectionOrder", () => {
     const user = await seedUser(db, { discordId: "d1" });
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
 
-    const res = await save(["favoriteActivity", "live", "videos", "guides", "featured", "profiles"], ["videos", "bogus", "videos"]);
+    const res = await save(["favoriteActivity", "live", "featured", "videos", "guides", "profiles"], ["videos", "bogus", "videos"]);
 
     expect(res).toEqual({ success: true, action: "saveHomeSectionOrder" });
     expect(JSON.parse((await storedOrder(user.id))!.homeSectionOrder!)).toEqual({
-      order: ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
+      order: ["favoriteActivity", "live", "featured", "videos", "guides", "profiles"],
       hidden: ["videos"],
     });
   });
@@ -109,7 +109,7 @@ describe("action - saveHomeSectionOrder", () => {
     const user = await seedUser(db, { discordId: "d1", homeSectionOrder: '["profiles","live"]' });
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
 
-    await save(["favoriteActivity", "live", "videos", "guides", "featured", "profiles"], []);
+    await save(["favoriteActivity", "live", "featured", "videos", "guides", "profiles"], []);
 
     expect((await storedOrder(user.id))?.homeSectionOrder).toBeNull();
   });
@@ -120,8 +120,8 @@ describe("action - saveHomeSectionOrder", () => {
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "d1" } });
 
     const res = (await save(
-      ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
-      ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"],
+      ["favoriteActivity", "live", "featured", "videos", "guides", "profiles"],
+      ["favoriteActivity", "live", "featured", "videos", "guides", "profiles"],
     )) as { init: { status: number }; data: { error: string } };
 
     expect(res.init.status).toBe(400);

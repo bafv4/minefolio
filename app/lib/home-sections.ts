@@ -1,7 +1,7 @@
 // ホーム（ログイン時）の欄の並び順・表示。users.homeSectionOrder（JSON。`{"order":[...],"hidden":[...]}`、旧形式は並びのみの配列、null = 既定）で保存する。
 // クライアントからも使うため .server ではない。
 
-export const HOME_SECTION_IDS = ["favoriteActivity", "live", "videos", "guides", "featured", "profiles"] as const;
+export const HOME_SECTION_IDS = ["favoriteActivity", "live", "featured", "videos", "guides", "profiles"] as const;
 
 export type HomeSectionId = (typeof HOME_SECTION_IDS)[number];
 
