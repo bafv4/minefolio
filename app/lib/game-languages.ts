@@ -152,7 +152,7 @@ function nativeName(t: Translator, def: GameLanguageDef): string {
 
 /** 外側の括弧に入れる和名の中の括弧を「・」に置き換え、入れ子にならないようにする（例: "ノルウェー語（ブークモール）" → "ノルウェー語・ブークモール"） */
 export function flattenParenthetical(text: string): string {
-  return text.replace(/s*[（(]([^（）()]*)[）)]/g, "・$1");
+  return text.replace(/\s*[（(]([^（）()]*)[）)]/g, "・$1");
 }
 
 // 併記する和名は日本語UIでのみ意味があるため、英語では自称表記だけを出す

@@ -9,6 +9,10 @@ describe("flattenParenthetical", () => {
     expect(flattenParenthetical("ノルウェー語（ブークモール）")).toBe("ノルウェー語・ブークモール");
     expect(flattenParenthetical("中国語（繁体字・台湾）")).toBe("中国語・繁体字・台湾");
   });
+  it("括弧の直前の文字は消さない（前の空白だけ詰める）", () => {
+    expect(flattenParenthetical("Bokmals（x）")).toBe("Bokmals・x");
+    expect(flattenParenthetical("English (UK)")).toBe("English・UK");
+  });
   it("括弧を含まない名前は変わらない", () => {
     expect(flattenParenthetical("スペイン語")).toBe("スペイン語");
   });
