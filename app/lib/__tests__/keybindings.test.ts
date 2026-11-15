@@ -167,3 +167,26 @@ describe("getKeyLabel", () => {
     expect(getKeyLabel(t, "NumpadEnter")).toBe("Num Enter");
   });
 });
+
+describe("Windows 仮想キーコード（16進表記）", () => {
+  it("マウスボタンの VK を正規コードに解決する", () => {
+    expect(normalizeKeyCode("0x01")).toBe("Mouse0");
+    expect(normalizeKeyCode("0x02")).toBe("Mouse1");
+    expect(normalizeKeyCode("0x04")).toBe("Mouse2");
+    expect(normalizeKeyCode("0x05")).toBe("Mouse4");
+    expect(normalizeKeyCode("0x06")).toBe("Mouse3");
+    expect(normalizeKeyCode("0X06")).toBe("Mouse3");
+  });
+
+  it("0x05 / 0x06 はサイドボタンのラベルで表示される", () => {
+    const t = createTranslator("ja");
+    expect(getKeyLabel(t, "0x05")).toBe(getKeyLabel(t, "Mouse4"));
+    expect(getKeyLabel(t, "0x06")).toBe(getKeyLabel(t, "Mouse3"));
+    expect(keysEqual("0x06", "Mouse3")).toBe(true);
+  });
+
+  it("未対応の16進コードは生の値ではなく「不明なキー」と表示する", () => {
+    expect(getKeyLabel(createTranslator("ja"), "0x07")).toBe("不明なキー（0x07）");
+    expect(getKeyLabel(createTranslator("en"), "0x07")).toBe("Unknown key (0x07)");
+  });
+});

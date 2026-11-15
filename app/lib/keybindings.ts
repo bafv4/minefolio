@@ -312,6 +312,19 @@ const NORMALIZE_SPECIAL_KEYS: Record<string, string> = {
 };
 
 /**
+ * Windows 仮想キーコード（16進表記）のうちマウスボタンのもの → 正規コード。
+ * VK_LBUTTON=0x01 / VK_RBUTTON=0x02 / VK_MBUTTON=0x04 / VK_XBUTTON1=0x05（戻る）/ VK_XBUTTON2=0x06（進む）。
+ * 戻る→Mouse4(サイド2)・進む→Mouse3(サイド1) は key-capture-button.tsx のサイドボタン対応に合わせる。
+ */
+const WINDOWS_VK_MOUSE_KEYS: Record<string, string> = {
+  "0x01": "Mouse0",
+  "0x02": "Mouse1",
+  "0x04": "Mouse2",
+  "0x05": "Mouse4",
+  "0x06": "Mouse3",
+};
+
+/**
  * 様々な形式のキーコードをJavaScript KeyboardEvent.code形式（PascalCase）に正規化
  *
  * 対応形式:
@@ -419,6 +432,10 @@ export function normalizeKeyCode(keyCode: string): string {
     return `F${fKeyMatch[1]}`;
   }
 
+  // Windows 仮想キーコードの16進表記（MCSRer Hotkeys 等の取り込み元に残るもの）
+  const vk = WINDOWS_VK_MOUSE_KEYS[lowerKeyCode];
+  if (vk) return vk;
+
   // 5. すでにPascalCase形式の場合はそのまま返す
   return keyCode;
 }
@@ -516,6 +533,11 @@ export function getKeyLabel(
   // NumpadX形式の場合（例: Numpad1 → Num1）
   if (normalized.startsWith("Numpad")) {
     return "Num" + normalized.slice(6);
+  }
+
+  // 未解決の16進表記（Windows 仮想キーコード等）は生のまま出さず、意味の分かる名称にする
+  if (/^0x[0-9a-f]+$/i.test(normalized)) {
+    return t("keyLabels.unknownKey", { code: normalized.toLowerCase() });
   }
 
   // その他は正規化後の値を返す

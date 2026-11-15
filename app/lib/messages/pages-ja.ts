@@ -140,6 +140,8 @@ export const PAGES_JA = {
     mouseMiddleShort: "中",
     mouseSide1Short: "サイド1",
     mouseSide2Short: "サイド2",
+    /** 対応表にない16進のキーコード（Windows 仮想キーコード等） */
+    unknownKey: "不明なキー（{code}）",
   },
 
   /** バーチャルキーボード / マウスの補助表示（aria-label・ツールチップ） */

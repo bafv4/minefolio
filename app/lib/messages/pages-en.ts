@@ -140,6 +140,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     mouseMiddleShort: "M",
     mouseSide1Short: "Side 1",
     mouseSide2Short: "Side 2",
+    /** 対応表にない16進のキーコード（Windows 仮想キーコード等） */
+    unknownKey: "Unknown key ({code})",
   },
   keyboardView: {
     ariaKeyNoun: "key",
