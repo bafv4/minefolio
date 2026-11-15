@@ -4,6 +4,7 @@ import { HelpCircle, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 
@@ -43,6 +44,28 @@ function getCachedImage(key: string): string | undefined {
   imageCache.delete(key);
   imageCache.set(key, value);
   return value;
+}
+
+/**
+ * canvas がほぼ透明（描画失敗）かを粗いグリッドで判定する。
+ * 16x16 に縮小して alpha を見る。getImageData が例外（tainted 等）なら検査を諦め false（今の表示のまま）。
+ */
+function isCanvasTransparent(canvas: HTMLCanvasElement): boolean {
+  try {
+    const probe = document.createElement("canvas");
+    probe.width = 16;
+    probe.height = 16;
+    const ctx = probe.getContext("2d");
+    if (!ctx || canvas.width === 0 || canvas.height === 0) return false;
+    ctx.drawImage(canvas, 0, 0, 16, 16);
+    const data = ctx.getImageData(0, 0, 16, 16).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 8) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function setCachedImage(key: string, value: string): void {
@@ -213,6 +236,8 @@ const MinecraftFullBodyComponent = ({
   const [isLoading, setIsLoading] = useState(true);
   const [imageEntry, setImageEntry] = useState<{ requestKey: string; src: string } | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
+  // 静止画が透明（描画失敗）だったリクエストのキー。一致している間は 2D アバターを表示する
+  const [failedRequestKey, setFailedRequestKey] = useState<string | null>(null);
 
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
@@ -367,6 +392,15 @@ const MinecraftFullBodyComponent = ({
 
           viewer.render();
 
+          // 描画に失敗して透明になった静止画は、キャッシュも表示もせず 2D アバターへ切り替える
+          if (isCanvasTransparent(canvas)) {
+            setFailedRequestKey(requestKey);
+            viewer.dispose();
+            if (viewerRef.current === viewer) viewerRef.current = null;
+            setIsLoading(false);
+            return;
+          }
+
           const dataUrl = canvas.toDataURL("image/png");
 
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim, capeKey);
@@ -468,7 +502,20 @@ const MinecraftFullBodyComponent = ({
   if (effectiveAsImage) {
     return (
       <div style={{ position: "relative", width, height }}>
-        {imageSrc ? (
+        {failedRequestKey === requestKey ? (
+          <div
+            className="flex items-center justify-center"
+            style={{ position: "absolute", top: 0, left: 0, width, height }}
+          >
+            <MinecraftAvatar
+              uuid={uuid}
+              skinUrl={skinUrl}
+              mcid={mcid}
+              size={Math.min(width, height)}
+              className={className}
+            />
+          </div>
+        ) : imageSrc ? (
           <img
             src={imageSrc}
             alt={avatarLabel}
