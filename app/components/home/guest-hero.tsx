@@ -177,13 +177,13 @@ export function GuestHero({
             <p className="max-w-xl text-base text-muted-foreground sm:text-lg">{t("home.heroDescription")}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button asChild size="lg" className="w-full sm:w-auto">
+            <Button asChild size="lg" className="min-h-11 w-full sm:min-h-10 sm:w-auto">
               <Link to="/login">
                 {t("home.ctaStart")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+            <Button asChild size="lg" variant="outline" className="min-h-11 w-full sm:min-h-10 sm:w-auto">
               <Link to="/browse">
                 <Search className="mr-2 h-4 w-4" />
                 {t("home.ctaBrowse")}
@@ -228,13 +228,14 @@ export function GuestHero({
                   />
                 </Link>
                 <div className="min-w-0 flex-1 space-y-2">
-                  <p className="truncate text-xl font-bold leading-snug">
+                  {/* モバイルは当たり判定 44px 以上（min-h-11）。増えた高さぶん負マージンで相殺し、見た目の間隔は変えない */}
+                  <p className="text-xl font-bold leading-snug max-sm:-my-2">
                     <Link
                       to={`/player/${current.slug}`}
                       prefetch="intent"
-                      className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="inline-flex max-w-full items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:min-h-11"
                     >
-                      {name}
+                      <span className="truncate">{name}</span>
                     </Link>
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
