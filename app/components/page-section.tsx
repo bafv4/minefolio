@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 
-/** 見出し右のリンク。sm 未満はアイコンのみ（44px 角・ラベルは sr-only）、sm 以上は文字＋アイコン */
+/** 見出し右のリンク。sm 未満はアイコンのみ（44px 角・ラベルは sr-only）、sm 以上は文字＋アイコン（size-auto で高さが文字分の 20px に縮むため min-h-8 で 32px を保つ） */
 export function SectionHeaderLink({ to, label, prefetch }: { to: string; label: string; prefetch?: "intent" }) {
   return (
     <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto sm:min-h-8">
