@@ -705,6 +705,12 @@ body {
     margin-bottom: 0;
   }
 
+  /* 目次から移ったときにフォーカスを受ける見出し（guide-toc-nav.tsx）。本文の見た目を崩さないようリングは出さない */
+  /* 公開表示は見出しを降格するので h4 まで出うる（guide-heading-demote.ts） */
+  .guide-content :is(h1, h2, h3, h4)[tabindex="-1"]:focus {
+    outline: none;
+  }
+
   /* View page: add icon via ::before (editor uses NodeView instead)
      疑似要素も grid アイテムとして1列目・1行目に固定する */
   .guide-content .callout::before {

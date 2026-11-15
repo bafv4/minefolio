@@ -17,12 +17,21 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 
-/** 見出しへスムーズスクロールする（履歴にハッシュを残す） */
+/**
+ * 見出しへスクロールし、フォーカスも移す（履歴にハッシュを残す）。
+ * フォーカスを移さないと、次の Tab が選んだ節ではなく元の位置（目次バーなど）から進んでしまう。
+ * 「動きを減らす」設定ならスムーズスクロールにしない。
+ */
 function jumpToHeading(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   history.replaceState(null, "", `#${id}`);
+  // 見出しは本来フォーカス不可。tabindex="-1" を実行時に付ける（SSR の本文 HTML は変えない。
+  // 見た目のリングは app.css で消している）
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.focus({ preventScroll: true });
 }
 
 /**
@@ -228,16 +237,22 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   const [open, setOpen] = useState(false);
   const activeId = useActiveHeading(items);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // ドロワーから選んで閉じる間は true。閉じたあとの Radix のフォーカス復帰（トリガーへ）を止め、見出しへ移す
+  const jumpingRef = useRef(false);
   useFollowActiveHeading(scrollRef, activeId);
   const activeItem = items.find((i) => i.id === activeId);
   if (items.length < 2) return null;
 
   const handleNavigate = (id: string) => {
+    jumpingRef.current = true;
     setOpen(false);
     // ドロワーが開いている間は Radix が body のスクロールをロックするため、
     // 開いたまま scrollIntoView しても効かない。閉じアニメーション
     // （duration-300）でロックが解除された後にスクロールする。
-    window.setTimeout(() => jumpToHeading(id), 320);
+    window.setTimeout(() => {
+      jumpToHeading(id);
+      jumpingRef.current = false;
+    }, 320);
   };
 
   return (
@@ -267,6 +282,9 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
         <SheetContent
           side="left"
           className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
+          onCloseAutoFocus={(e) => {
+            if (jumpingRef.current) e.preventDefault();
+          }}
         >
           <SheetTitle className="flex items-center gap-2 border-b border-border px-5 py-4 text-sm font-semibold">
             <List className="h-4 w-4 text-muted-foreground" />
