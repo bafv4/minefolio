@@ -143,6 +143,7 @@
 - 編集中表示（`node-views/template-embed-node-view.tsx`）は ID しか持たないため、タイトル・言語を `lib/template-embed-meta.ts`（モジュール内キャッシュ。挿入時は選択結果で先に埋める）で軽く取得する。取れなければ ID を表示する
 - サニタイズ: `data-sctemplate-embed` / `data-template-id` を許可。ID は cuid2 形式（`isValidTemplateId`、`lib/guide-embed-attrs.ts`）で検証し、形式外は属性ごと除去する
 - 公開表示: `guides/view.tsx` の loader が本文から ID を集め（`extractTemplateEmbedIds`）、`inArray` の1クエリで「公開済み・作者が `private` でない」ものだけ作者名つきで取得する（テンプレート詳細ページの閲覧規則と同じ。N+1 なし）。`splitContentAtEmbeds` が `sctemplate-embed` セグメントを返し、`SearchCraftTemplateEmbedView`（`guide-embeds.tsx`）が描く。見出し行はテンプレート名・作者・ゲーム内言語・「テンプレートを見る」、その下にサーチクラフト一覧（繋ぎ方 Loop があれば併せて）。描画本体は `SearchCraftEmbedBody` で、ユーザー参照のサーチクラフト埋め込みと共用する
+- 一覧の見た目（ユーザー参照のサーチクラフト埋め込みも同じ）: テンプレート詳細・走者画面と同じ `SearchCraftGroupedList`（`framed={false}`）の高密度の行（アイテム・等幅のサーチ文字列＋コピー・キーバッジ・キー入力順）と `KeyBadgeLegend`。繋ぎ方（Loop）は `makeLoopGroupExtra` でタイミンググループの中に出す。面は埋め込みの外枠 1 枚だけ。タイミングのグループが 2 つ以上なら開閉でき（`collapsible`）、最初のグループだけ開いた状態で始まる。1 つだけなら開閉は出さない。破損しうる生 JSON（プリセットスナップショット・テンプレート）は、渡す前に `normalizeEmbedCrafts`・`coerceStringArray`・`toSafeLoopSteps`（transition の検証）と `resolveCraftTiming`（enum 外の timing は「その他」）で直す。キー入力順の鍵盤は、ユーザー参照ならその走者（プリセット指定時はそのプリセット）のレイアウト、テンプレートは US
 - リマップの鍵盤は出さない（本文の流れを切るため）。リマップが含まれるときは「リマップあり」と示し、入力キーの表示にはリマップを反映する。詳細ページで鍵盤を確認できる
 - 見つからない・未公開・削除済み・ID 不正のときは「このテンプレートは表示できません」の短い表示（下書きプレビューで作者本人が見る場合も同じ）
 - 自動翻訳: 埋め込み div は翻訳対象外（`guide-translate-html.server.ts` の `EMBED_ATTRS`）で、訳文でも同じ経路で描かれる
@@ -248,6 +249,8 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - `.guide-content.prose` CSSクラスを適用（エディタ本体も同じクラスを持つので、レイヤー外の `.guide-content.prose` 規則は公開表示とエディタの両方に効く）
 - Tailwind CSS の `prose` クラスベースのタイポグラフィスタイリング
+- **長い語の折り返し**: 本文の段落・リスト項目・リンク・表のセルは `overflow-wrap: anywhere`（`app/app.css`）。参考文献の生 URL などが狭い画面でページ幅をはみ出させない。表の列が潰れない幅は従来どおり `normalizeGuideTables()` の表の `min-width` が決める
+- **埋め込みには本文の上書きを当てない**: 本文の段落・h4〜h6・インライン code・画像の上書き（`app/app.css`、レイヤー外）は `:not(:where(.not-prose *))` で、本文に差し込む React の埋め込み（`.not-prose`: サーチクラフト・キー配置・テンプレート・YouTube）の中を除く。レイヤー外の規則は Tailwind のクラスに勝つので、当たると共有部品の見た目がテンプレート詳細ページとずれる（アイテムアイコンの img に上下の余白が付く等）
 - **ブロックの面と角丸**（`.claude/rules/ui.md` 6 章に合わせる）: 本文直下のブロック（コールアウト・トグル・コード・表の器・画像・ガイドリンクカード・YouTube）の角丸は `rounded-xl`（`--guide-radius`）。コールアウト・トグル・表のセルの中では 1 段ずつ下げる（`rounded-lg` → `rounded-md`）。インラインの code は `rounded` のまま。ブロックの外枠は `border/70`、表の行の区切りは `/60`、水平線は欄の区切りと同じ `foreground/15`
 - **コールアウト**: 面は意味色 `/10`、枠 `/40`（tip→success / info→info / warning→warning / danger→destructive）。アイコンは挿入メニュー（`desktop-toolbar.tsx`）と同じ lucide の Lightbulb / Info / TriangleAlert / Siren を CSS の mask で意味色に塗る（公開表示は `.callout::before`、エディタは NodeView の `.callout-icon`。同じ規則）。アイコンは装飾で、種類は公開表示の `role="note"` ＋種類名の `aria-label`（`guideEditor.callout.*`）で読み上げる。種類はクリックで切り替えない（従来どおり）
 - **トグル**: 印は目次の節の開閉と同じ右向きシェブロン（muted 色、開くと 90° 回す。`prefers-reduced-motion` では回転のトランジションなし）。`summary` は枠の左右いっぱい・高さ 44px で押せる

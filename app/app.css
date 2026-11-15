@@ -1042,7 +1042,21 @@ body {
    試したが、改修前の「コンテナ幅いっぱいの左寄せ」の方がよいというユーザー判断で撤廃した
    （ch 単位はフォントサイズ依存で左端が階段状にずれる問題もあった）。再導入しないこと。 */
 
-.guide-content.prose :where(p) {
+/* 長い URL・英数字の連続（参考文献の生 URL 等）で本文がページ幅をはみ出さないよう、行に収まらない語だけ
+   どこでも折り返す。break-word と違い min-content にも効くので、幅を中身で決める祖先（flex / grid）を押し広げない。
+   表のセルにも当てる: 列が潰れない幅は normalizeGuideTables()（app/lib/guide-tables.ts）の表の min-width が
+   決めるので、長い語の列だけが表をはみ出させず折り返すようになる（日本語の文は元から 1 文字ずつ折り返せる）。
+   pre は white-space: pre のまま横スクロール */
+.guide-content.prose :where(p, li, a, td, th) {
+  overflow-wrap: anywhere;
+}
+
+/* 本文の要素への上書き（段落・小見出し・インライン code・画像）は、本文に差し込む React の埋め込み
+   （.not-prose: サーチクラフト・キー配置・テンプレート・YouTube）の中には当てない。Tailwind Typography 自身の
+   :not(:where(.not-prose *)) と同じ除外で、:where なので詳細度は変わらない。これらの規則はレイヤー外なので、
+   当たると埋め込みの部品（SearchCraftGroupedList 等）の Tailwind クラス（mb-2・rounded 等）に勝ってしまい、
+   テンプレート詳細ページと同じ部品でも見た目がずれる（アイテムアイコンの img に上下の余白が付く等） */
+.guide-content.prose :where(p):not(:where(.not-prose *)) {
   /* 段落の切れ目が行間と見分けられる量（行間 1.8 のとき 1 行の約半分） */
   margin-top: 0.8em;
   margin-bottom: 0.8em;
@@ -1084,7 +1098,7 @@ body {
   line-height: 1.35;
 }
 
-.guide-content.prose :where(h4, h5, h6) {
+.guide-content.prose :where(h4, h5, h6):not(:where(.not-prose *)) {
   font-size: 1em;
   font-weight: 600;
   margin-top: 1em;
@@ -1170,7 +1184,7 @@ body {
   margin: 0;
 }
 
-.guide-content.prose :where(code):not(pre code) {
+.guide-content.prose :where(code):not(pre code):not(:where(.not-prose *)) {
   background: var(--muted);
   color: var(--foreground);
   padding: 0.15em 0.4em;
@@ -1251,7 +1265,7 @@ body {
   color: var(--foreground);
 }
 
-.guide-content.prose :where(img) {
+.guide-content.prose :where(img):not(:where(.not-prose *)) {
   border-radius: var(--guide-radius);
   margin-top: 0.75em;
   margin-bottom: 0.75em;

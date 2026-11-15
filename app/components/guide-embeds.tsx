@@ -1,37 +1,37 @@
 import { Link } from "react-router";
-import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
-import { normalizeKeyRemapType, getActualKeyInfos, toUiRemaps } from "@/lib/remap-utils";
+import { itemLangForLocale } from "@/components/item-icon";
+import { normalizeKeyRemapType, toUiRemaps } from "@/lib/remap-utils";
 import { coerceStringArray, parseFingerAssignments, safeParseArray } from "@/lib/preset-read";
 import type { PresetSearchCraftLoopData, PresetLoopStepData } from "@/lib/preset-utils";
 import {
-  resolveLoopSteps,
   isValidLoopTransitionValue,
   normalizeVariationIndex,
   type LoopStepData,
   type LoopTransition,
-  type LoopKeyOp,
-  type ResolvedLoop,
-  type ResolvedLoopStep,
 } from "@/lib/search-craft-loops";
 import { resolveVariations, type SearchCraftVariation } from "@/lib/search-craft-variations";
 import { VirtualKeyboard, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
-  SearchStringText,
-  ShiftKeyGroup,
-  TIMING_META,
-  timingLabelById,
+  KeyBadgeLegend,
+  SearchCraftGroupedList,
+  type SearchCraftRowData,
 } from "@/components/search-craft-template-view";
-import { KeyLabelText } from "@/components/shift-mark";
+import {
+  groupLoopsByTiming,
+  makeLoopGroupExtra,
+  type LoopCraftInfo,
+  type SearchCraftLoopRowData,
+} from "@/components/search-craft-loop-view";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
 import { GUIDE_YOUTUBE_BLOCK_SOURCE, htmlDepthDelta, parseGuideYouTubeEmbedUrl } from "@/lib/guide-view-html";
-import { parseTemplateRemaps } from "@/lib/search-craft-templates";
+import { parseTemplateRemaps, resolveCraftTiming } from "@/lib/search-craft-templates";
 import { getGameLanguageName } from "@/lib/game-languages";
 import type { UiRemapInfo } from "@/lib/remap-utils";
-import { ArrowRight } from "lucide-react";
+import type { KeyboardLayout } from "@/lib/keybindings";
 
 // ========================================
 // 共通型
@@ -350,24 +350,9 @@ export function KeybindEmbedView({
 // サーチクラフト表示コンポーネント
 // ========================================
 
-// アイテム名のロケールフォールバックは共通ヘルパーを使用（app/components/item-icon.tsx の getLocalizedItemName）
-
-// タイミングの表示順・ラベルは共通定義 TIMING_META（全6種）から導出する
-// （独自定義だと新タイミング追加時に該当クラフトが黙って非表示になる）
-const TIMING_ORDER = TIMING_META.map((m) => m.id);
-
-// ========================================
-// Loop（繋ぎ方）表示 — 軽量レンダラ
-// ========================================
-// search-craft-loop-view.tsx（KeyBadge / ActualKeyBadges を使うリマップ対応の共有コンポーネント）は
-// 意図的に import しない。ここでは resolveLoopSteps の導出結果だけを、既存の素の kbd スタイルで描画する。
-
-type EmbedLoopRow = {
-  id: string;
-  timing: string | null;
-  comment: string | null;
-  resolved: ResolvedLoop;
-};
+// 一覧はテンプレート詳細・走者画面と同じ SearchCraftGroupedList（高密度の行: アイテム／等幅のサーチ文字列＋コピー／
+// キーバッジ）で描く。繋ぎ方（Loop）も同じ makeLoopGroupExtra でタイミンググループの中に入れる。
+// ここで持つのは、壊れうる生 JSON（プリセットスナップショット・テンプレート）を共有部品へ渡せる形に直す処理だけ。
 
 /**
  * 破損データ由来の transition 値を安全な形へ矯正する。
@@ -389,22 +374,6 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
     transition: i === 0 ? null : toSafeLoopTransition(step.transition),
     variationIndex: normalizeVariationIndex(step.variationIndex),
   }));
-}
-
-/**
- * 参照切れ・導出失敗を示す「?」kbd（Loop 表示内の3箇所で共用。軽量レンダラ方針のため
- * search-craft-loop-view.tsx の InvalidSegmentBadge とは別の簡易版を持つ）。
- * dashed=true でクラフト実行マーカー用の破線ボーダー版にする。
- */
-function InvalidKbd({ title, dashed }: { title: string; dashed?: boolean }) {
-  return (
-    <kbd
-      className={`px-1.5 py-0.5 rounded border${dashed ? " border-dashed" : ""} border-destructive/50 bg-destructive/10 text-destructive font-mono text-xs`}
-      title={title}
-    >
-      ?
-    </kbd>
-  );
 }
 
 /** 生の craftsData 配列（破損・旧データがありうる）をバリエーション正準の形へ正規化する */
@@ -431,10 +400,13 @@ function normalizeEmbedCrafts(rawCrafts: unknown[]) {
 type NormalizedEmbedCraft = ReturnType<typeof normalizeEmbedCrafts>[number];
 
 /**
- * サーチクラフト一覧 + Loop の描画本体（カードの p-4 内）。
+ * サーチクラフト一覧 + Loop の描画本体（埋め込みの外枠の中）。
  * ユーザー埋め込み（SearchCraftEmbedView）とテンプレート埋め込み（SearchCraftTemplateEmbedView）が共用する。
  * presetMode=true は「スナップショット由来」（Loop の craft 参照は sequence で突合し、Loop は rawLoopsData の生JSON）、
  * false は「ライブ」（craft 参照は id、Loop は liveLoops）。
+ *
+ * 面は埋め込みの外枠1枚だけ（グループはカードにせず見出し＋行）。タイミングのグループが2つ以上なら開閉でき、
+ * 最初のグループだけ開いた状態で始める（SearchCraftGroupedList の collapsible）。1つだけなら常に開く。
  */
 function SearchCraftEmbedBody({
   crafts,
@@ -442,30 +414,42 @@ function SearchCraftEmbedBody({
   presetMode,
   rawLoopsData,
   liveLoops,
+  keyboardLayout,
 }: {
   crafts: NormalizedEmbedCraft[];
   remaps: UiRemapInfo[];
   presetMode: boolean;
   rawLoopsData: string | null;
   liveLoops: EmbedUserData["searchCraftLoops"];
+  /** キー入力順ダイアログの鍵盤のレイアウト（未指定なら US） */
+  keyboardLayout?: KeyboardLayout;
 }) {
-  const t = useT();
   const locale = useLocale();
 
-  const hasAnyTiming = crafts.some((c) => c.timing);
+  // 一覧の行データ。craft.items は JSON 文字列（ライブ/スナップショット由来）で、破損・非配列だと
+  // 描画で落ちるため coerceStringArray で常に string[] に矯正する（不正値は空クラフト表示）。
+  // 行の key は配列位置で振る（スナップショットの id は欠落・重複がありうる）
+  const rows: SearchCraftRowData[] = crafts.map((c, idx) => ({
+    id: `embed-craft-${idx}`,
+    sequence: c.sequence,
+    items: coerceStringArray(c.items),
+    comment: c.comment,
+    timing: c.timing,
+    variations: c.variations,
+  }));
 
   // Loop（繋ぎ方）の craft 参照解決キー。presetMode 時は同スナップショット内の
   // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
   // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
-  const craftLookup = new Map<string, { items: string; variations: SearchCraftVariation[] }>(
-    crafts.map((c) => [
-      presetMode ? String(c.sequence) : c.id,
-      { items: c.items, variations: c.variations },
-    ]),
-  );
-  const getCraft = (craftId: string) => craftLookup.get(craftId);
+  const loopCrafts: LoopCraftInfo[] = crafts.map((c) => ({
+    id: presetMode ? String(c.sequence) : c.id,
+    items: coerceStringArray(c.items),
+    variations: c.variations,
+  }));
 
-  const loops: EmbedLoopRow[] = presetMode
+  // timing は resolveCraftTiming で一覧と同じ表示用の値に寄せる（enum 外の値は "other"。
+  // 生のままだと一覧のグループに入らず Loop が表示から漏れる）
+  const loops: SearchCraftLoopRowData[] = presetMode
     ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
         const rawSteps = loop && Array.isArray(loop.steps) ? loop.steps : [];
         const steps: LoopStepData[] = rawSteps.map((rawStep) => {
@@ -477,247 +461,52 @@ function SearchCraftEmbedBody({
             variationIndex: normalizeVariationIndex(step?.variationIndex),
           };
         });
+        const isObj = loop && typeof loop === "object";
         return {
           id: `preset-loop-embed-${idx}`,
-          timing: (loop && typeof loop === "object" ? (loop.timing ?? null) : null),
-          comment: (loop && typeof loop === "object" ? (loop.comment ?? null) : null),
-          resolved: resolveLoopSteps(toSafeLoopSteps(steps), getCraft),
+          timing: resolveCraftTiming(isObj && typeof loop.timing === "string" ? loop.timing : null),
+          comment: isObj && typeof loop.comment === "string" ? loop.comment : null,
+          steps: toSafeLoopSteps(steps),
         };
       })
     : liveLoops.map((loop) => ({
         id: loop.id,
-        timing: loop.timing,
+        timing: resolveCraftTiming(loop.timing),
         comment: loop.comment,
-        resolved: resolveLoopSteps(toSafeLoopSteps(loop.steps), getCraft),
+        steps: toSafeLoopSteps(loop.steps),
       }));
 
-  const renderCraft = (craft: typeof crafts[0]) => {
-    // craft.items は JSON 文字列（ライブ/プリセットスナップショット由来）だが、破損・非配列だと
-    // .map で SSR が落ちる。coerceStringArray で常に string[] に矯正する（不正値は空クラフト表示）。
-    const items = coerceStringArray(craft.items);
+  const loopTimings = Array.from(groupLoopsByTiming(loops).keys());
+  const renderLoopExtra = makeLoopGroupExtra({
+    loops,
+    crafts: loopCrafts,
+    remaps,
+    keyboardLayout,
+  });
 
-    return (
-      <div key={craft.id} className="rounded-lg bg-muted/30 px-4 py-3">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {items.map((itemId: string, idx: number) => (
-              <div key={idx} className="flex items-center gap-2 bg-secondary/50 rounded px-3 py-1.5">
-                <ItemIcon itemId={itemId} size={28} />
-                <span className="text-base">{getLocalizedItemName(itemId, locale)}</span>
-              </div>
-            ))}
-          </div>
-          {/* バリエーションごとに縦積み表示（1エントリに複数サーチ文字列を登録できる） */}
-          {craft.variations.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {craft.variations.map((variation, idx) =>
-                variation.str ? (
-                  <div key={idx} className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-muted-foreground shrink-0">{t("playerProfile.searchLabel")}</span>
-                      <code className="bg-secondary/50 px-2 py-0.5 rounded font-mono break-all whitespace-pre-wrap">
-                        <SearchStringText value={variation.str} />
-                      </code>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground shrink-0 mt-0.5">{t("playerProfile.inputKeysLabel")}</span>
-                      {(() => {
-                        const keyKbds = getActualKeyInfos(t, variation.str, remaps, {
-                          shiftHeld: variation.withShift,
-                        }).map((info, i) => (
-                          <kbd key={i} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-                            <KeyLabelText label={info.displayLabel} />
-                          </kbd>
-                        ));
-                        return variation.withShift ? (
-                          <ShiftKeyGroup>{keyKbds}</ShiftKeyGroup>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-1">{keyKbds}</div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ) : null,
-              )}
-            </div>
-          )}
-          {craft.comment && <p className="text-sm text-muted-foreground">{craft.comment}</p>}
-        </div>
-      </div>
-    );
-  };
-
-  const renderGrouped = () => {
-    const grouped = new Map<string | null, typeof crafts>();
-    for (const craft of crafts) {
-      const key = craft.timing;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(craft);
-    }
-    const sortedKeys: (string | null)[] = [];
-    for (const timing of TIMING_ORDER) {
-      if (grouped.has(timing)) sortedKeys.push(timing);
-    }
-    if (grouped.has(null)) sortedKeys.push(null);
-
-    return (
-      <div className="space-y-4">
-        {sortedKeys.map((timing) => (
-          <div key={timing ?? "__none"} className="space-y-2">
-            <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
-              {timing ? timingLabelById(t, timing) : t("playerProfile.timingUnspecified")}
-            </h4>
-            <div className="space-y-3">{grouped.get(timing)!.map(renderCraft)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Loop（繋ぎ方）の1操作を kbd で描画する。BS は連続回数を「BS ×n」で1個にまとめる
-  // （n個並べない — モバイル幅対策。search-craft-loop-view.tsx と同じ方針）
-  const renderLoopOp = (op: LoopKeyOp, key: number) => {
-    switch (op.kind) {
-      case "backspace":
-        return (
-          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            BS{op.count > 1 ? ` ×${op.count}` : ""}
-          </kbd>
-        );
-      case "arrowLeft":
-        return (
-          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            ←{op.count > 1 ? ` ×${op.count}` : ""}
-          </kbd>
-        );
-      case "selectAll":
-        return (
-          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            <KeyLabelText label="⇧Home" />
-          </kbd>
-        );
-      case "home":
-        return (
-          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            Home
-          </kbd>
-        );
-      case "type":
-        return (
-          <kbd key={key} className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-            <SearchStringText value={op.text} />
-          </kbd>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // 先頭ステップ（idx===0）で最初に打つ文字列。先頭は遷移(derived)を持たないため、
-  // resolveLoopSteps が variationIndex を織り込んで解決済みの step.searchStr を直接使い、
-  // type セグメント（renderLoopOp）と同じ流儀（kbd + SearchStringText でスペース␣表示）で
-  // 描画する。search-craft-loop-view.tsx の LoopKeySequence（idx===0 で ActualKeyBadges）と
-  // 対称になるようにする。craft 未解決（参照切れ）・searchStr が空の場合は既存の invalid 表現に倒す
-  const renderLoopFirstStepKeys = (step: ResolvedLoopStep) => {
-    if (!step.searchStr) {
-      return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
-    }
-    const keysKbd = (
-      <kbd className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-mono text-xs">
-        <SearchStringText value={step.searchStr} />
-      </kbd>
-    );
-    return step.withShift ? <ShiftKeyGroup>{keysKbd}</ShiftKeyGroup> : keysKbd;
-  };
-
-  // ステップ間の遷移（先頭以外）。参照切れ・導出失敗（無効な遷移）は「?」kbd に留める。
-  // type op（打鍵セグメント）だけを、遷移先ステップ（=このステップ自身）の withShift に応じて
-  // ShiftKeyGroup で囲む（制御キー op・クラフト実行マーカーは対象外）
-  const renderLoopStepOps = (step: ResolvedLoopStep) => {
-    if (!step.derived || !step.derived.valid) {
-      return <InvalidKbd title={t("playerProfile.loopInvalidTransition")} />;
-    }
-    return (
-      <span className="flex flex-wrap items-center gap-1">
-        {step.derived.ops.map((op, i) =>
-          op.kind === "type" && step.withShift ? (
-            <ShiftKeyGroup key={i}>{renderLoopOp(op, i)}</ShiftKeyGroup>
-          ) : (
-            renderLoopOp(op, i)
-          ),
-        )}
-      </span>
-    );
-  };
-
-  // クラフト実行マーカー。ItemIcon＋→ のインライン表現（SearchCraftGroupedList 等の
-  // Hammer/Tooltip 付きチップは使わない — 軽量レンダラ方針）
-  const renderLoopCraftMarker = (craftId: string, key: number) => {
-    const craft = craftLookup.get(craftId);
-    if (!craft) {
-      return <InvalidKbd key={key} dashed title={t("playerProfile.loopInvalidTransition")} />;
-    }
-    const items = coerceStringArray(craft.items);
-    // 同じサーチ文字列で複数アイテムが出せるクラフトは、最初の1件だけでなく全アイテムの
-    // アイコンを並べる。title（native attribute。この軽量レンダラは Tooltip を使わない）も
-    // 複数件のときだけ内訳を添える
-    const title =
-      items.length > 1
-        ? `${t("playerProfile.loopCraftMarker")}（${items.map((id) => getLocalizedItemName(id, locale)).join(" / ")}）`
-        : t("playerProfile.loopCraftMarker");
-    return (
-      <span
-        key={key}
-        className="inline-flex items-center gap-1 rounded bg-secondary/50 px-1.5 py-0.5"
-        title={title}
-      >
-        {items.length > 0 ? (
-          items.map((itemId, i) => <ItemIcon key={i} itemId={itemId} size={20} />)
-        ) : (
-          <span className="text-xs text-muted-foreground">?</span>
-        )}
-        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-      </span>
-    );
-  };
-
-  const renderLoop = (loop: EmbedLoopRow) => {
-    const { resolved } = loop;
-    return (
-      <div key={loop.id} className="rounded-lg bg-muted/30 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
-          <span>{t("playerProfile.loopStepCount", { count: resolved.steps.length })}</span>
-          {loop.timing && <span>{timingLabelById(t, loop.timing)}</span>}
-          {!resolved.valid && (
-            <span className="text-destructive">{t("playerProfile.loopInvalidTransition")}</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {resolved.steps.map((step, idx) => (
-            <span key={idx} className="flex flex-wrap items-center gap-1.5">
-              {idx === 0 ? renderLoopFirstStepKeys(step) : renderLoopStepOps(step)}
-              {renderLoopCraftMarker(step.craftId, idx)}
-            </span>
-          ))}
-        </div>
-        {loop.comment && <p className="mt-2 text-sm text-muted-foreground">{loop.comment}</p>}
-      </div>
-    );
-  };
+  // グループの数（SearchCraftGroupedList と同じ数え方: クラフトの表示用タイミング ∪ Loop のタイミング）。
+  // 2つ以上のときだけ開閉にする（1つだけなら閉じる意味がない）
+  const groupKeys = new Set<string | null>([
+    ...rows.map((c) => resolveCraftTiming(c.timing)),
+    ...loopTimings,
+  ]);
+  const hasAnyTiming = [...groupKeys].some((k) => k !== null);
+  const collapsible = hasAnyTiming && groupKeys.size > 1;
 
   return (
-    <div className="p-4">
-      {hasAnyTiming ? renderGrouped() : (
-        <div className="space-y-3">{crafts.map(renderCraft)}</div>
-      )}
-      {loops.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
-            {t("playerProfile.loopSectionTitle")}
-          </h4>
-          <div className="space-y-3">{loops.map(renderLoop)}</div>
-        </div>
-      )}
+    <div className="space-y-3 p-4">
+      <KeyBadgeLegend showCraftMarker={loops.length > 0} />
+      <SearchCraftGroupedList
+        framed={false}
+        collapsible={collapsible}
+        crafts={rows}
+        remaps={remaps}
+        // アイテム名は閲覧者の UI ロケールで出す（docs/guides.md「サーチクラフトテンプレート埋め込み」）
+        gameLanguage={itemLangForLocale(locale)}
+        keyboardLayout={keyboardLayout}
+        extraTimings={loopTimings}
+        renderGroupExtra={renderLoopExtra}
+      />
     </div>
   );
 }
@@ -741,6 +530,8 @@ export function SearchCraftEmbedView({
   // ありうる）ため unknown[] で受け、後段で必ず resolveVariations() を通す。無指定時は
   // userData.searchCrafts（loader 側で resolveVariations() 済み）をそのまま使う。
   let rawCrafts: unknown[] = userData.searchCrafts;
+  // キー入力順ダイアログの鍵盤のレイアウト（キー配置の埋め込みと同じく、プリセット指定時はその設定を優先）
+  let layout = userData.playerConfig?.keyboardLayout ?? null;
 
   if (presetName) {
     const preset = userData.presets.find((p) => p.name === presetName);
@@ -750,8 +541,13 @@ export function SearchCraftEmbedView({
     if (preset?.remapsData) {
       remapsRaw = JSON.parse(preset.remapsData);
     }
+    if (preset?.playerConfigData) {
+      const config = JSON.parse(preset.playerConfigData);
+      if (typeof config?.keyboardLayout === "string") layout = config.keyboardLayout;
+    }
     rawLoopsData = preset?.searchCraftLoopsData ?? null;
   }
+  const keyboardLayout = (layout || "US") as KeyboardLayout;
 
   const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
   const crafts = normalizeEmbedCrafts(rawCrafts);
@@ -783,6 +579,7 @@ export function SearchCraftEmbedView({
           presetMode={!!presetName}
           rawLoopsData={rawLoopsData}
           liveLoops={userData.searchCraftLoops}
+          keyboardLayout={keyboardLayout}
         />
       </div>
     </div>
