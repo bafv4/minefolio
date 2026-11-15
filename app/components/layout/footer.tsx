@@ -63,7 +63,6 @@ export function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-foreground transition-colors flex items-center gap-1"
-              aria-label="Ofuse"
             >
               <Heart className="h-3 w-3" />
               <span>{t("nav.donate")}</span>

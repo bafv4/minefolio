@@ -446,6 +446,7 @@ export const PAGES_JA = {
     recentPacesTitle: "最近のペース（PaceMan）",
     liveStreaming: "配信中",
     liveWatchTwitch: "Twitch で見る",
+    liveWatchOf: "（{name} の配信）",
     liveFavoritesFirstNote: "お気に入りの走者にはハートマークが付き、先頭に表示されます",
     liveFinished: "完走",
     liveRunReset: "リセット",

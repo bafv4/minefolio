@@ -96,7 +96,8 @@ function ElapsedShort({ ms }: { ms: number }) {
   );
 }
 
-function WatchLink({ href, label }: { href: string; label: string }) {
+function WatchLink({ href, label, name }: { href: string; label: string; name?: string }) {
+  const t = useT();
   return (
     <a
       href={href}
@@ -106,6 +107,7 @@ function WatchLink({ href, label }: { href: string; label: string }) {
     >
       <Twitch className="h-3.5 w-3.5" />
       {label}
+      {name && <span className="sr-only">{t("home.liveWatchOf", { name })}</span>}
       <ExternalLink className="h-3 w-3" aria-hidden="true" />
     </a>
   );
@@ -271,7 +273,7 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
           )
         }
       />
-      <LinkRow>{twitchUrl && <WatchLink href={twitchUrl} label={t("home.liveWatchTwitch")} />}</LinkRow>
+      <LinkRow>{twitchUrl && <WatchLink href={twitchUrl} label={t("home.liveWatchTwitch")} name={name} />}</LinkRow>
     </li>
   );
 }
@@ -398,7 +400,7 @@ function RankedMatchCard({
           </div>
         }
       />
-      <LinkRow>{liveUrl && <WatchLink href={liveUrl} label={t("home.liveWatchTwitch")} />}</LinkRow>
+      <LinkRow>{liveUrl && <WatchLink href={liveUrl} label={t("home.liveWatchTwitch")} name={name} />}</LinkRow>
     </li>
   );
 }
@@ -452,7 +454,7 @@ function TwitchLiveCard({
         </p>
       </div>
       <LinkRow>
-        <WatchLink href={href} label={t("home.liveWatchTwitch")} />
+        <WatchLink href={href} label={t("home.liveWatchTwitch")} name={name} />
       </LinkRow>
     </li>
   );
