@@ -936,7 +936,8 @@ body {
 
 .guide-content.prose {
   font-size: 1rem;
-  line-height: 1.65;
+  /* 長文を読む前提の行間（本文フォントはディセンダーが深いので 1.8 で詰まって見えない） */
+  line-height: 1.8;
   /* Tailwind Typography の配色をテーマトークンへ割り当てる（prose-invert / dark: は使わない。
      3 テーマ（light / dark / ultra-dark）はトークン側で吸収する） */
   --tw-prose-body: var(--foreground);
@@ -964,8 +965,9 @@ body {
    （ch 単位はフォントサイズ依存で左端が階段状にずれる問題もあった）。再導入しないこと。 */
 
 .guide-content.prose :where(p) {
-  margin-top: 0.4em;
-  margin-bottom: 0.4em;
+  /* 段落の切れ目が行間と見分けられる量（行間 1.8 のとき 1 行の約半分） */
+  margin-top: 0.8em;
+  margin-bottom: 0.8em;
 }
 
 /* typographyプラグインの既定は strong に固定色を当てるため、文字色マークと
@@ -994,8 +996,11 @@ body {
   }
 }
 
+/* 本文見出しの大きさ: 1.6em / 1.35em / 1.15em / 1em。記事タイトル（h1、sm 以上 36px）との比を
+   1.4 以上にして、本文の最上位の見出しがタイトルと張り合わないようにする。エディタ（h1〜）と
+   公開表示（data-guide-level）は同じ値に保つ */
 .guide-content.prose :where(h1) {
-  font-size: 1.875em;
+  font-size: 1.6em;
   font-weight: 700;
   margin-top: 2em;
   margin-bottom: 0.3em;
@@ -1003,7 +1008,7 @@ body {
 }
 
 .guide-content.prose :where(h2) {
-  font-size: 1.5em;
+  font-size: 1.35em;
   font-weight: 700;
   margin-top: 1.5em;
   margin-bottom: 0.25em;
@@ -1029,7 +1034,7 @@ body {
    降格量は記事ごとに可変: guide-heading-demote.ts）。見た目は降格後のタグではなく、
    降格時に付与する元レベル data-guide-level に対応付けて、エディタで選んだレベルの見た目を保つ。 */
 .guide-content-demoted.guide-content.prose :where([data-guide-level="1"]) {
-  font-size: 1.875em;
+  font-size: 1.6em;
   font-weight: 700;
   margin-top: 2em;
   margin-bottom: 0.3em;
@@ -1037,7 +1042,7 @@ body {
 }
 
 .guide-content-demoted.guide-content.prose :where([data-guide-level="2"]) {
-  font-size: 1.5em;
+  font-size: 1.35em;
   font-weight: 700;
   margin-top: 1.5em;
   margin-bottom: 0.25em;
