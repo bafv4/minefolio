@@ -250,11 +250,14 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
   - 人気順のページビューは Vercel Web Analytics を cron で集計した `page_view_stats` を参照し、未集計時はいいね数順へ自然に落ちる。人気順を選んでいる間は、各カードに累計閲覧数の隣に直近7日PV（`TrendingUp` アイコン）を根拠数値として表示する。`page_view_stats` がまだ1件も無い（cron 未稼働・集計前）環境では、一覧上部に「閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています」の注記（`guides.popularPending`）を出す
   - ツールバー（検索フォーム＋並び替え＋表示切替）は狭い画面では縦積みになる（`flex-col sm:flex-row`）。1行のままだと検索入力が潰れるため、テンプレート一覧と同じレイアウトに揃えている
 - **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
-  - カード全体のクリックは**オーバーレイのリンク**（`absolute inset-0`）が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない
+  - カード全体のクリックは**オーバーレイのリンク**が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない。リンクは**タイトル見出しの中のリンクの `::after`** をカード外枠（`group relative`）いっぱいに広げて敷く（読み上げがタイトル1回になる。サムネイルの `alt=""`・Pin は `aria-hidden`）。`line-clamp` は flex の見出しではなく内側の span に付ける
+  - カードのタイトルの見出しレベルは `titleLevel`（既定 h3）。`/guides`・`/guides/:authorSlug` は h1 の直下なので h2 を渡す
+- **タグの絞り込み**: タグのピルは `Badge asChild` の `Link`（`?tag=`。検索語・並び順は保ち、tag だけ入れ替える／外す）。選択中は `aria-current="true"`。モバイルは `::after` で押せる範囲を 44px に広げる（見た目は変えない）。検索語・タグで0件のときは EmptyState の action から絞り込み（検索語＋タグ。並び順は保つ）を解除できる
 
 ### /guides/:authorSlug — 著者別ガイド一覧
 
 - 特定著者のガイドのみをフィルタ表示
+- 著者名が h1（プロフィールへのリンク）。カードのタイトルは h2
 
 ### /guides/:authorSlug/:guideSlug — ガイド閲覧
 
@@ -285,6 +288,10 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - 対象: `/guides`（検索・タグ絞り込みは原文で行う）・`/guides/:authorSlug`・`/player/:slug` のガイドタブ
 - ホーム（`/`）のガイドセクションも `GuideItem.autoTranslated` を受け取れる。ローダー側で同じ差し替えが必要（rankings-worker 担当）
+
+### 404（ガイド記事・著者・テンプレート詳細）
+
+`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`・`/guides/templates/:templateId` は、自ルートに `ErrorBoundary`（`app/components/guide-route-not-found.tsx` の `GuideRouteNotFound`）を持つ。404 のときだけ「見つかりません＋一覧へ戻る」を出し、それ以外のエラーは root へ投げ直す。ルート自身が境界になることで、その route の `meta`（「見つかりません - Minefolio」系のタイトル）が使われる。サイト全体の 404（`app/root.tsx`）は別。
 
 ### 著者slugの解決（`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug` 共通）
 

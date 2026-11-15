@@ -50,6 +50,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ShareButton } from "@/components/share-button";
+import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { LikeButton } from "@/components/like-button";
 import { getTemplateLikeCount } from "@/lib/likes.server";
 import {
@@ -86,7 +87,7 @@ const LAYOUT_OPTIONS: KeyboardLayoutOption[] = ["US", "JIS", "US_TKL", "JIS_TKL"
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
   if (!loaderData) {
-    return [{ title: t("templates.title") }];
+    return [{ title: t("templates.notFoundTitle") }];
   }
   const title = `${loaderData.template.title} - ${t("templates.pageTitle")} | Minefolio`;
   const description =
@@ -760,5 +761,17 @@ export default function TemplateViewPage() {
         />
       </section>
     </div>
+  );
+}
+
+export function ErrorBoundary() {
+  const t = useT();
+  return (
+    <GuideRouteNotFound
+      title={t("templates.notFound")}
+      description={t("templates.notFoundHint")}
+      backTo="/guides/templates"
+      backLabel={t("templates.backToList")}
+    />
   );
 }

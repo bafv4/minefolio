@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { EmptyState } from "@/components/empty-state";
+import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
@@ -172,12 +173,14 @@ export default function UserGuidesPage() {
             className="rounded-full shrink-0"
           />
           <div>
-            <Link
-              to={`/player/${author.slug}`}
-              className="text-2xl font-bold hover:text-primary transition-colors"
-            >
-              {authorName}
-            </Link>
+            <h1 className="text-2xl font-bold">
+              <Link
+                to={`/player/${author.slug}`}
+                className="hover:text-primary transition-colors"
+              >
+                {authorName}
+              </Link>
+            </h1>
             {author.mcid && (
               <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}
@@ -223,10 +226,22 @@ export default function UserGuidesPage() {
           description={t("guides.noPublishedGuides")}
         />
       ) : viewMode === "card" ? (
-        <GuideCardGrid guides={authorGuides} linkFn={linkFn} />
+        <GuideCardGrid guides={authorGuides} linkFn={linkFn} titleLevel="h2" />
       ) : (
-        <GuideListView guides={authorGuides} linkFn={linkFn} />
+        <GuideListView guides={authorGuides} linkFn={linkFn} titleLevel="h2" />
       )}
     </div>
+  );
+}
+
+export function ErrorBoundary() {
+  const t = useT();
+  return (
+    <GuideRouteNotFound
+      title={t("guides.userNotFound")}
+      description={t("guides.notFoundHint")}
+      backTo="/guides"
+      backLabel={t("guides.guideList")}
+    />
   );
 }

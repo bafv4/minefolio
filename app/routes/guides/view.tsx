@@ -24,6 +24,7 @@ import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
+import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Badge } from "@/components/ui/badge";
@@ -716,5 +717,17 @@ function GuideContent({
         return <SearchCraftEmbedView key={i} userData={userData} presetName={seg.presetName} />;
       })}
     </div>
+  );
+}
+
+export function ErrorBoundary() {
+  const t = useT();
+  return (
+    <GuideRouteNotFound
+      title={t("guides.notFoundGuide")}
+      description={t("guides.notFoundHint")}
+      backTo="/guides"
+      backLabel={t("guides.guideList")}
+    />
   );
 }

@@ -54,6 +54,15 @@ function AutoTranslatedMark() {
   );
 }
 
+/**
+ * タイトルのリンクをカード全体へ広げるクラス（ui.md 9 章「オーバーレイリンク」の after 方式）。
+ * 外枠が `group relative` で、::after がその外枠いっぱいに広がる。フォーカスリングは ::after に出す
+ */
+const OVERLAY_LINK_BASE =
+  "outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring";
+const OVERLAY_LINK_CLASS_CARD = `${OVERLAY_LINK_BASE} after:rounded-xl`;
+const OVERLAY_LINK_CLASS_LIST = `${OVERLAY_LINK_BASE} after:rounded`;
+
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
 
@@ -69,8 +78,8 @@ export function GuideCardGrid({
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
-  /** カードタイトルの見出しレベル。既定 h3。欄見出し（h3）の下に置く面（走者画面のガイドタブ）は h4 */
-  titleLevel?: "h3" | "h4";
+  /** カードタイトルの見出しレベル。既定 h3。h1 直下の一覧ページ（/guides）は h2、欄見出し（h3）の下に置く面（走者画面のガイドタブ）は h4 */
+  titleLevel?: "h2" | "h3" | "h4";
   /**
    * カードの面。"default"（既定）はサイト共通の `bg-background/80`、"card" は不透明の `bg-card`
    * （ホームのように箱なしのセクションでページ背景に直接置くとき。dark 系で背景と同化しないように）
@@ -104,12 +113,6 @@ export function GuideCardGrid({
               guide.isPinned && "sm:col-span-2",
             )}
           >
-            <Link
-              to={linkFn(guide)}
-              prefetch="intent"
-              className="absolute inset-0 z-0 rounded-xl"
-              aria-label={guide.title}
-            />
             <div
               className={cn(
                 "flex h-full flex-col overflow-hidden rounded-xl border border-border/70 transition-all group-hover:border-primary/40 group-hover:shadow-md",
@@ -120,7 +123,7 @@ export function GuideCardGrid({
               {guide.coverImageUrl ? (
                 <img
                   src={guide.coverImageUrl}
-                  alt={guide.title}
+                  alt=""
                   className={cn("w-full object-cover", guide.isPinned ? "h-48" : "h-36")}
                 />
               ) : (
@@ -136,9 +139,21 @@ export function GuideCardGrid({
               <div className="flex flex-1 flex-col p-4">
                 {/* leading-none（16px）だと Zen Kaku Gothic New のディセンダー（g/y/p）が line-clamp の
                     overflow:hidden で約2px切れるため leading-snug（22px）。Pin は1行目の中央に揃える */}
-                <TitleHeading className="flex items-start gap-1.5 text-base font-semibold leading-snug line-clamp-2 transition-colors group-hover:text-primary">
-                  {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-[3px]" />}
-                  {guide.title}
+                {/* オーバーレイはタイトルのリンクの ::after で敷く（読み上げがタイトル1回になる）。
+                    line-clamp は flex 要素では効かないため、内側のブロック（span）に付ける */}
+                <TitleHeading className="flex items-start gap-1.5 text-base font-semibold leading-snug transition-colors group-hover:text-primary">
+                  {guide.isPinned && (
+                    <Pin className="h-4 w-4 text-primary shrink-0 mt-[3px]" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1 line-clamp-2">
+                    <Link
+                      to={linkFn(guide)}
+                      prefetch="intent"
+                      className={OVERLAY_LINK_CLASS_CARD}
+                    >
+                      {guide.title}
+                    </Link>
+                  </span>
                 </TitleHeading>
                 {guide.summary && (
                   <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
@@ -208,7 +223,7 @@ export function GuideListView({
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
-  titleLevel?: "h3" | "h4";
+  titleLevel?: "h2" | "h3" | "h4";
 }) {
   const locale = useLocale();
   return (
@@ -221,16 +236,10 @@ export function GuideListView({
             key={guide.id}
             className="group relative flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors"
           >
-            <Link
-              to={linkFn(guide)}
-              prefetch="intent"
-              className="absolute inset-0 z-0 rounded"
-              aria-label={guide.title}
-            />
             {guide.coverImageUrl ? (
               <img
                 src={guide.coverImageUrl}
-                alt={guide.title}
+                alt=""
                 className="w-20 h-14 object-cover rounded-md shrink-0"
               />
             ) : (
@@ -239,9 +248,17 @@ export function GuideListView({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <TitleHeading className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1 flex items-center gap-1.5">
-                {guide.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                {guide.title}
+              <TitleHeading className="flex items-center gap-1.5 text-sm font-medium transition-colors group-hover:text-primary">
+                {guide.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />}
+                <span className="min-w-0 flex-1 line-clamp-1">
+                  <Link
+                    to={linkFn(guide)}
+                    prefetch="intent"
+                    className={OVERLAY_LINK_CLASS_LIST}
+                  >
+                    {guide.title}
+                  </Link>
+                </span>
               </TitleHeading>
               {guide.summary && (
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">

@@ -1,5 +1,12 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, useSearchParams, useNavigation, Form, type LoaderFunctionArgs } from "react-router";
+import {
+  useLoaderData,
+  useSearchParams,
+  useNavigation,
+  Form,
+  Link,
+  type LoaderFunctionArgs,
+} from "react-router";
 import { useState } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -193,7 +200,7 @@ export default function GuidesIndexPage() {
     hasPageViewData,
     viewerId,
   } = useLoaderData<typeof loader>();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
   const { isTabSwitching } = useTabNavigation();
@@ -223,6 +230,24 @@ export default function GuidesIndexPage() {
     const item = guide as GuideItemWithAuthorSlug;
     return `/guides/${item._authorSlug}/${guide.slug}`;
   };
+
+  // タグの絞り込みリンク。ほかのクエリ（検索語・並び順）は保ち、tag だけ入れ替える／外す
+  const tagHref = (value: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (value) params.set("tag", value);
+    else params.delete("tag");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  };
+
+  // 絞り込み（検索語・タグ）だけを外す。並び順は保つ
+  const clearFiltersHref = (() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("tag");
+    params.delete("q");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  })();
 
   const handleSortChange = (value: ContentSort) => {
     setSearchParams(
@@ -290,35 +315,29 @@ export default function GuidesIndexPage() {
           </div>
         </div>
         {allTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <Badge
-              variant={!tag ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() =>
-                setSearchParams((prev) => {
-                  prev.delete("tag");
-                  return prev;
-                })
-              }
-            >
-              {t("guides.tagAll")}
-            </Badge>
-            {allTags.map((t) => (
-              <Badge
-                key={t}
-                variant={tag === t ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() =>
-                  setSearchParams((prev) => {
-                    prev.set("tag", t);
-                    return prev;
-                  })
-                }
-              >
-                {t}
-              </Badge>
-            ))}
-          </div>
+          // モバイルは押せる範囲を 44px（::after で上下に広げる。見た目は 22px のピルのまま）、
+          // sm 以上は広げない。行間を広げて、隣の行の押せる範囲と重なりすぎないようにする
+          <nav aria-label={t("guides.tagFilterLabel")} className="flex flex-wrap gap-x-2 gap-y-3 sm:gap-y-2">
+            {[null, ...allTags].map((name) => {
+              const selected = name === null ? !tag : tag === name;
+              return (
+                <Badge
+                  key={name ?? "__all"}
+                  asChild
+                  variant={selected ? "default" : "outline"}
+                  className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] sm:after:hidden"
+                >
+                  <Link
+                    to={tagHref(name)}
+                    preventScrollReset
+                    aria-current={selected ? "true" : undefined}
+                  >
+                    {name ?? t("guides.tagAll")}
+                  </Link>
+                </Badge>
+              );
+            })}
+          </nav>
         )}
       </div>
 
@@ -358,12 +377,19 @@ export default function GuidesIndexPage() {
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
           title={t("guides.noGuidesTitle")}
-          description={t("guides.noGuides")}
+          description={tag || q ? t("guides.noMatchDesc") : t("guides.noGuides")}
+          action={
+            tag || q ? (
+              <Button asChild variant="outline">
+                <Link to={clearFiltersHref}>{t("guides.clearFilters")}</Link>
+              </Button>
+            ) : undefined
+          }
         />
       ) : viewMode === "card" ? (
-        <GuideCardGrid guides={guideItems} linkFn={linkFn} />
+        <GuideCardGrid guides={guideItems} linkFn={linkFn} titleLevel="h2" />
       ) : (
-        <GuideListView guides={guideItems} linkFn={linkFn} />
+        <GuideListView guides={guideItems} linkFn={linkFn} titleLevel="h2" />
       )}
       </>
       )}
