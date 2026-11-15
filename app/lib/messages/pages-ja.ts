@@ -2404,7 +2404,7 @@ export const PAGES_JA = {
     guideList: "ガイド一覧",
     userGuidesTitle: "{name}のガイド",
     userGuidesDescription: "{name}が公開しているガイド一覧",
-    userNotFound: "ユーザーが見つかりません",
+    userNotFound: "走者が見つかりません",
     noPublishedGuidesTitle: "ガイドがありません",
     noPublishedGuides: "まだガイドが公開されていません。",
     title: "ガイド一覧 - Minefolio",
@@ -2432,7 +2432,8 @@ export const PAGES_JA = {
     resultFilterTag: "タグ: {tag}",
     resultFilterSeparator: "、",
     loadMore: "もっと見る（残り {count} 件）",
-    authorGuidesLink: "この走者のガイド",
+    findRunner: "走者を探す",
+    viewProfile: "プロフィールを見る",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraftアバター",

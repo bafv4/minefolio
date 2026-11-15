@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { EmptyState } from "@/components/empty-state";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
+import { SectionHeaderLink } from "@/components/page-section";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import { ViewToggle } from "@/components/view-toggle";
 import type { GuideItem } from "@/components/guide-list-views";
@@ -153,7 +154,7 @@ export default function UserGuidesPage() {
   return (
     <div className="space-y-6">
       {/* Back */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
+      <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
         <Link to="/guides">
           <ArrowLeft className="h-4 w-4 mr-1" />
           {t("guides.guideList")}
@@ -161,23 +162,18 @@ export default function UserGuidesPage() {
       </Button>
 
       {/* Author header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* 名前が長く右の操作と並ばない幅では、操作を次の行の右端へ回す（名前を細い列で折り返させない） */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex min-w-0 items-center gap-4">
           <MinecraftAvatar
             uuid={author.uuid ?? undefined}
             skinUrl={author.customSkinUrl}
-            size={48}
-            className="rounded-full shrink-0"
+            size={44}
+            alt=""
+            className="shrink-0 rounded-xl"
           />
-          <div>
-            <h1 className="text-2xl font-bold">
-              <Link
-                to={`/player/${author.slug}`}
-                className="hover:text-primary transition-colors"
-              >
-                {authorName}
-              </Link>
-            </h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold break-words">{authorName}</h1>
             {author.mcid && (
               <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}
@@ -186,7 +182,10 @@ export default function UserGuidesPage() {
             </p>
           </div>
         </div>
-        <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <SectionHeaderLink to={`/player/${author.slug}`} label={t("guides.viewProfile")} />
+          <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+        </div>
       </div>
 
       {/* Guide list */}
@@ -243,6 +242,7 @@ export function ErrorBoundary() {
       description={t("guides.notFoundHint")}
       backTo="/guides"
       backLabel={t("guides.guideList")}
+      showFindRunner
     />
   );
 }

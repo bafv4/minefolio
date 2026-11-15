@@ -630,7 +630,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     guideList: "All guides",
     userGuidesTitle: "Guides by {name}",
     userGuidesDescription: "Guides published by {name}",
-    userNotFound: "User not found",
+    userNotFound: "Runner not found",
     noPublishedGuidesTitle: "No guides yet",
     noPublishedGuides: "No guides have been published yet.",
     title: "Guides - Minefolio",
@@ -657,7 +657,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     resultFilterTag: "tag: {tag}",
     resultFilterSeparator: ", ",
     loadMore: "Show more ({count} left)",
-    authorGuidesLink: "This runner's guides",
+    findRunner: "Find runners",
+    viewProfile: "View profile",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraft avatar",

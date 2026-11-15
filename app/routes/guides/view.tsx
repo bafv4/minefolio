@@ -385,7 +385,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (!guide) {
     // 著者は実在し本人以外にも見える（private はここへ来ない）ので、404 の画面から著者のガイド一覧へ案内できるよう slug を載せる
-    throw data({ authorSlug: author.slug }, { status: 404 });
+    // 表示名も載せ、補助リンクを「{名前}のガイド」にできるようにする（選び方は他の著者表示と同じ getLocalizedDisplayName）
+    throw data(
+      { authorSlug: author.slug, authorName: getLocalizedDisplayName(author, resolveLocale(request)) },
+      { status: 404 },
+    );
   }
 
   // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
@@ -813,15 +817,17 @@ function GuideContent({
 export function ErrorBoundary() {
   const t = useT();
   const error = useRouteError();
-  // 著者が実在するとき（loader が 404 の data に slug を載せる）は、その走者のガイド一覧へも案内する
-  const authorSlug =
+  // 著者が実在するとき（loader が 404 の data に slug と表示名を載せる）は、その走者のガイド一覧へも案内する
+  const authorData =
     isRouteErrorResponse(error) &&
     error.status === 404 &&
     typeof error.data === "object" &&
     error.data !== null &&
     typeof (error.data as { authorSlug?: unknown }).authorSlug === "string"
-      ? (error.data as { authorSlug: string }).authorSlug
+      ? (error.data as { authorSlug: string; authorName?: unknown })
       : null;
+  const authorSlug = authorData?.authorSlug ?? null;
+  const authorName = typeof authorData?.authorName === "string" ? authorData.authorName : authorSlug;
   return (
     <GuideRouteNotFound
       title={t("guides.notFoundGuide")}
@@ -829,7 +835,8 @@ export function ErrorBoundary() {
       backTo="/guides"
       backLabel={t("guides.guideList")}
       secondaryTo={authorSlug ? `/guides/${encodeURIComponent(authorSlug)}` : undefined}
-      secondaryLabel={authorSlug ? t("guides.authorGuidesLink") : undefined}
+      secondaryLabel={authorSlug ? t("guides.userGuidesTitle", { name: authorName ?? "" }) : undefined}
+      showFindRunner={!authorSlug}
     />
   );
 }
