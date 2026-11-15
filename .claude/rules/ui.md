@@ -220,6 +220,8 @@
 - `StageBar`: 現在区間と人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`
 - ホームのライブの区間分布の帯は、人が居なくても7段を描く（0人の段は `bg-muted`・人数なし）
 - 終わったカード（ライブ欄で少しの間残す物）の進行バーは、現在区間も `bg-brand/40`（`StageBar muted`）
+- **完走は金色**: 完走したランは Finish の段を `bg-gold`（「完走」の文字と同じ `--gold`）にする（`StageBar finished`）。完走は事実なので、終わったカードでも金色は保つ。
+  見ているあいだに完走した瞬間は、区間到達の色の合図も金色で少し長く出す。金色は完走だけに使い、ほかの強調に流用しない
 
 ### 時間・数値
 - 時間は `font-mono tabular-nums`。整形は既存の関数を使い、その場で整形しない: 記録・走者画面は `formatTime`（`app/lib/time-utils.ts`）、ホームのライブ・配信は `formatClock` / `formatClockSeconds`（`app/lib/home-format.ts`）、相対時刻は `app/lib/relative-time.ts`
@@ -331,6 +333,7 @@
 - `ui/tabs.tsx` は変えない。Radix の `TabsPrimitive.List` / `Trigger` を直接使い、消費側の Root は `ui/tabs` の `<Tabs>` に `activationMode="manual"`（矢印はフォーカス移動のみ、Enter/Space で切替）を付ける。タブ切替は履歴に積むので、矢印で動くたびに履歴が増えないようにするため
 - 選択中の見た目は **`aria-selected:` で判定する**（`data-[state=active]` は使わない）。ツールチップ付きのスロットは `TooltipTrigger asChild` が `data-state` を `closed` / `delayed-open` で上書きするため、`data-[state=active]` が効かない
 - 数字キー 1〜9 のショートカットは tablist にフォーカスがあるときだけ効かせ、修飾キー併用は無視する（ページ全体のキー監視はしない。WCAG 2.1.4）。キーとタブの対応は純粋関数 `hotbarTabForKey`（`app/lib/profile-hotbar.ts`）
+  - キーボードでホットバーにフォーカスがある間だけ（`:focus-visible`、md 以上。貼り付いたコンパクトな帯では出さない）、スロットの角に番号を出して数字キーで切り替えられることを知らせる。番号は `aria-hidden`（意味は `aria-keyshortcuts` とツールチップが担う）。マウス操作では出さない
 - アクセシブルネームは見えている短いラベルを含める（label in name、WCAG 2.5.3）。空スロットは破線で描き、押せる状態のまま、名前に「、未登録」を付ける
 - md 未満は画面下端に固定する（10 章「下端の固定 UI」）。md 以上はヘッダーの下に貼り付き、貼り付いている間は小さな帯になる
 

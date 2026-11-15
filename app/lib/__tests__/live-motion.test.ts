@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLiveFlip, reachedStages, type LivePoint } from "../live-motion";
+import { computeLiveFlip, reachedFinish, reachedStages, type LivePoint } from "../live-motion";
 
 const map = (o: Record<string, LivePoint>) => new Map(Object.entries(o));
 
@@ -15,6 +15,20 @@ describe("reachedStages", () => {
   });
   it("総数を超えない", () => {
     expect(reachedStages(6, 9, 7)).toEqual([7]);
+  });
+});
+
+describe("reachedFinish", () => {
+  const st = (stage: number, finished = false) => ({ stage, finished });
+  it("最後の段へ増えたとき・finished が false→true になったとき真", () => {
+    expect(reachedFinish(st(6), st(7), 7)).toBe(true);
+    expect(reachedFinish(st(7), st(7, true), 7)).toBe(true);
+    expect(reachedFinish(st(6), st(6, true), 7)).toBe(true);
+  });
+  it("初めから完走済み・途中の段・戻りでは偽", () => {
+    expect(reachedFinish(st(7, true), st(7, true), 7)).toBe(false);
+    expect(reachedFinish(st(4), st(5), 7)).toBe(false);
+    expect(reachedFinish(st(7), st(7), 7)).toBe(false);
   });
 });
 

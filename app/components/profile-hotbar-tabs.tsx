@@ -136,7 +136,7 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
       <TabsPrimitive.List
         aria-label={t("playerProfile.hotbarAriaLabel")}
         onKeyDown={handleKeyDown}
-        className="flex items-center gap-0.5 px-1 pt-1 md:w-fit md:shrink-0 md:gap-1.5 md:p-0 md:group-data-[stuck=true]/bar:gap-1"
+        className="group/list flex items-center gap-0.5 px-1 pt-1 md:w-fit md:shrink-0 md:gap-1.5 md:p-0 md:group-data-[stuck=true]/bar:gap-1"
       >
         {items.map((item, index) => {
           const Icon = item.icon;
@@ -161,7 +161,7 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
               aria-label={name}
               aria-keyshortcuts={shortcutKey}
               className={cn(
-                "group flex min-w-9 flex-1 flex-col items-center justify-center gap-1 rounded-lg border-2 text-muted-foreground transition-colors outline-none",
+                "group relative flex min-w-9 flex-1 flex-col items-center justify-center gap-1 rounded-lg border-2 text-muted-foreground transition-colors outline-none",
                 "h-11 md:size-[4.5rem] md:flex-none",
                 // 貼り付き中はコンパクト（横長の低いスロット。アイコン＋短いラベルを横並び）。
                 // lg 未満（768〜1023px）は8個がバー幅に収まるよう左右の余白を詰める
@@ -179,6 +179,17 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
                 item.empty && "aria-selected:border-solid",
               )}
             >
+              {/* 数字キーの発見用の番号。キーボードでバーにフォーカスがある間だけ md 以上で出す（マウス操作では出ない）。
+                  absolute なのでアイコン・ラベルの位置は動かない。貼り付き中のコンパクトスロットは左端にアイコンがあり重なるため出さない。
+                  意味は aria-keyshortcuts とツールチップが担うので読み上げない */}
+              {shortcutKey && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1 top-0.5 hidden font-mono text-[10px] leading-none tabular-nums text-muted-foreground opacity-0 transition-opacity duration-150 group-aria-selected:text-foreground group-has-[:focus-visible]/list:opacity-100 md:block md:group-data-[stuck=true]/bar:hidden"
+                >
+                  {shortcutKey}
+                </span>
+              )}
               <Icon
                 aria-hidden="true"
                 className={cn("size-5 shrink-0", item.empty && "opacity-70 group-aria-selected:opacity-100")}

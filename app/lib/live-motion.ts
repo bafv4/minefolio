@@ -14,6 +14,19 @@ export function reachedStages(prev: number, next: number, total: number): number
   return out;
 }
 
+/**
+ * 今回の更新で「完走に到達した」か。最後の段（Finish）へ増えたとき、または finished が false→true になったとき。
+ * PaceMan のランは credits が Finish（最後の段）に対応する（isFinishedRun と liveSortKey の深さは一致する）ので
+ * 通常は両方が同時に成り立つが、どちらか一方だけ先に変わる更新でも取りこぼさないよう OR にしている
+ */
+export function reachedFinish(
+  prev: { stage: number; finished: boolean },
+  next: { stage: number; finished: boolean },
+  total: number,
+): boolean {
+  return (next.stage >= total && prev.stage < total) || (next.finished && !prev.finished);
+}
+
 export interface LiveFlipResult {
   /** 前回と位置がずれたカード（dx/dy は「前回 − 今回」。transform の開始値にそのまま使う） */
   moves: { id: string; dx: number; dy: number }[];

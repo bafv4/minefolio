@@ -221,7 +221,9 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
   // 進行バーの段は並び順と同じ深さ（構造物は種類ではなく着いた順で 1つ目=2・2つ目=3。
   // Fortress → Bastion と進んだランが Bastion に着いてバーが戻らないように）
   const stage = liveSortKey({ kind: "pace", run })?.depth ?? 0;
-  const pulseRef = useStageReachPulse<HTMLDivElement>(stage, ended);
+  // 完走の判定は isFinishedRun（credits）。liveSortKey の深さでも credits は最後の段になるので、帯・合図とも同じ事実を見る
+  const finished = isFinishedRun(run);
+  const pulseRef = useStageReachPulse<HTMLDivElement>(stage, ended, finished);
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname;
   // ベスト比は 2つ目の構造物（Second Structure）以降だけ（構造物は到達順で数える）
   // （2つ目の構造物は種類別のベストではなく、2つ目の構造物どうしのベストと比べる）
@@ -230,7 +232,6 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
   const diff = latest && best != null ? latest.igt - best : null;
   // 完走（credits あり）は一覧に残っている間から「完走」。credits の無いまま消えたものは「リセット」
   // （PaceMan のライブ一覧から credits 無しで消えるのは実際上ほぼリセットのため、その名前で出す）
-  const finished = isFinishedRun(run);
   // 経過時間（RTA）は Ranked のカードと同じく区間名の右に小さく添える。完走・終了したランは
   // lastUpdated からの経過がランの時間ではなくなるので出さない
   const elapsedMs = !ended && !finished ? paceElapsedRtaMs(run, Date.now()) : null;
@@ -257,7 +258,7 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
       />
       <StateBand className="gap-1.5">
         <PaceManSourceLine gameVersion={run.gameVersion} status={status} />
-        <StageBar stage={stage} muted={ended} />
+        <StageBar stage={stage} muted={ended} finished={finished} />
       </StateBand>
       <TimeBlock
         labelRef={pulseRef}
@@ -371,7 +372,7 @@ function RankedMatchCard({
           )}
         </div>
         {/* 完走で勝った（大きな数字が完走タイム）ときは、バーも Finish まで埋めて数字と食い違わないようにする */}
-        <StageBar stage={stage} muted={ended} />
+        <StageBar stage={stage} muted={ended} finished={finishTimeMs != null} />
       </StateBand>
       {/* 大きな数字は PaceMan のカードと同じく「最新区間に着いたタイム」に揃える（横に並ぶカードを同じ物差しで比べられるように）。
           試合の経過時間は右肩に小さく添える。まだ区間に着いていないときだけ経過時間を大きく出す */}

@@ -1,33 +1,43 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
-import { computeLiveFlip, LIVE_EASE, prefersReducedMotion, type LivePoint } from "@/lib/live-motion";
+import { LIVE_STAGES } from "@/lib/home-live";
+import { computeLiveFlip, LIVE_EASE, prefersReducedMotion, reachedFinish, type LivePoint } from "@/lib/live-motion";
 
 const PULSE_MS = 1200;
+const FINISH_PULSE_MS = 2000;
 const FLIP_MS = 300;
 const ENTER_MS = 200;
 
 /**
  * 区間に到達した瞬間に、付けた要素へ brand の淡い面を出して約1.2秒で消す（色の変化だけ・移動なし）。
+ * 完走に到達した更新（最後の段へ増えた／finished が false→true）だけは、`--gold` で約2秒にする。
  * 意味を持つ状態変化なので reduced-motion でも出す。マウント時（初回表示・ハイドレーション）は出さない。
  * Web Animations API で動かすので、再レンダーでクラスが外れて途中で切れることはない
  */
-export function useStageReachPulse<T extends HTMLElement>(stage: number, disabled?: boolean): RefObject<T | null> {
+export function useStageReachPulse<T extends HTMLElement>(
+  stage: number,
+  disabled?: boolean,
+  finished?: boolean,
+): RefObject<T | null> {
   const ref = useRef<T | null>(null);
-  const prev = useRef(stage);
+  const prev = useRef({ stage, finished: !!finished });
   const anim = useRef<Animation | null>(null);
   useEffect(() => {
     const before = prev.current;
-    prev.current = stage;
+    const next = { stage, finished: !!finished };
+    prev.current = next;
     const el = ref.current;
-    if (disabled || !el || stage <= before || typeof el.animate !== "function") return;
+    if (disabled || !el || typeof el.animate !== "function") return;
+    const finish = reachedFinish(before, next, LIVE_STAGES.length);
+    if (!finish && stage <= before.stage) return;
     // keyframes 内の var() は解決しないブラウザがあるため、計算済みのトークン値を埋め込む（テーマ切替にも追従する）
-    const brand = getComputedStyle(el).getPropertyValue("--brand").trim();
-    if (!brand) return;
+    const color = getComputedStyle(el).getPropertyValue(finish ? "--gold" : "--brand").trim();
+    if (!color) return;
     anim.current?.cancel();
     anim.current = el.animate(
-      [{ backgroundColor: `color-mix(in oklab, ${brand} 15%, transparent)` }, { backgroundColor: "transparent" }],
-      { duration: PULSE_MS, easing: "ease-out" },
+      [{ backgroundColor: `color-mix(in oklab, ${color} 15%, transparent)` }, { backgroundColor: "transparent" }],
+      { duration: finish ? FINISH_PULSE_MS : PULSE_MS, easing: "ease-out" },
     );
-  }, [stage, disabled]);
+  }, [stage, disabled, finished]);
   useEffect(() => () => anim.current?.cancel(), []);
   return ref;
 }
