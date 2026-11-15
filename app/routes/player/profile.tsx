@@ -36,7 +36,6 @@ import { format, formatDistanceToNow } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
@@ -76,9 +75,12 @@ import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { AutoTranslateNotice } from "@/components/auto-translate-notice";
 import { LinkifiedText } from "@/components/profile/linkified-text";
 
-const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
-const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
-const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
+// スキン静止画の表示寸法は CSS で出し分ける（sm 未満 206×240 / sm 以上 240×280。どちらも縦横比 0.857）。
+// useMediaQuery で決めると SSR はデスクトップ寸法で描かれ、モバイルでハイドレーション後に変わって跳ねる（CLS）。
+// モバイルは縦を使いすぎない（スキンの下の最初の情報が下端ドックより上に入る）高さに抑える。
+// 描画解像度は 320×380 に固定し、表示は MinecraftFullBody の fluid で箱に収める（縮小表示）
+const SKIN_VIEW_RENDER_SIZE = { width: 320, height: 380 } as const;
+const SKIN_VIEW_BOX_CLASS = "h-[240px] w-[206px] sm:h-[280px] sm:w-[240px]";
 
 // 記録タブの外部統計は到着が遅いので、読み込み中の欄に、届いたあとの中身に近い最小の高さを確保する
 // （初期表示のフッターが到着で押し下げられる CLS を抑える。確保は読み込み中だけで、到着後は外れる）。
@@ -883,10 +885,6 @@ export default function PlayerProfilePage() {
 
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
 
-  // スキン3Dビューワのサイズ（モバイルでは大きめに）
-  const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
-  const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
-
   // プレイスタイル: JSON列のパース・表示条件の判定（編集UI/me/playstyleと共有のヘルパーを使用）
   const playstyleVersions = useMemo(
     () => parsePlaystyleVersions(player.playstyle?.versions),
@@ -1553,12 +1551,15 @@ export default function PlayerProfilePage() {
                             className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                            <MinecraftFullBody
-                              {...skinProps}
-                              width={skinViewSize.width}
-                              height={skinViewSize.height}
-                              asImage
-                            />
+                            <div className={SKIN_VIEW_BOX_CLASS}>
+                              <MinecraftFullBody
+                                {...skinProps}
+                                width={SKIN_VIEW_RENDER_SIZE.width}
+                                height={SKIN_VIEW_RENDER_SIZE.height}
+                                asImage
+                                fluid
+                              />
+                            </div>
                             <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
                               <Maximize2
                                 className="h-8 w-8 text-foreground drop-shadow"
@@ -1591,18 +1592,20 @@ export default function PlayerProfilePage() {
                 })() : (
                   <div className="order-1 flex justify-center sm:order-first sm:justify-start shrink-0">
                     <div className="flex flex-col items-center gap-2">
-                      <MinecraftFullBody
-                        pose={(player.profilePose as PoseName) ?? "waving"}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        width={skinViewSize.width}
-                        height={skinViewSize.height}
-                        asImage
-                      />
+                      <div className={SKIN_VIEW_BOX_CLASS}>
+                        <MinecraftFullBody
+                          pose={(player.profilePose as PoseName) ?? "waving"}
+                          angle={-35}
+                          elevation={5}
+                          zoom={0.9}
+                          width={SKIN_VIEW_RENDER_SIZE.width}
+                          height={SKIN_VIEW_RENDER_SIZE.height}
+                          asImage
+                          fluid
+                        />
+                      </div>
                       <p
-                        className="max-w-full text-center text-xs text-muted-foreground"
-                        style={{ width: skinViewSize.width }}
+                        className="w-[206px] max-w-full text-center text-xs text-muted-foreground sm:w-[240px]"
                       >
                         {t("playerProfile.noMcidNote")}
                       </p>

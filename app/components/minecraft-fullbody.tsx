@@ -126,6 +126,12 @@ interface MinecraftFullBodyProps {
   rotate?: boolean;
   /** trueの場合、レンダリング後に静止画像として出力（操作不可） */
   asImage?: boolean;
+  /**
+   * asImage のみ有効。表示サイズを width/height ではなく親要素（サイズは CSS で与える）に合わせる。
+   * width/height は描画解像度だけを決め、表示は親に収まるよう縮小する（object-contain）。
+   * SSR とハイドレーション後で表示サイズが変わる（useMediaQuery 由来の寸法差）ことによるレイアウトの跳ねを避けるために使う
+   */
+  fluid?: boolean;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
   /** マント画像のURL。省略時はマント無し。読み込みに失敗（404 等）した場合もマント無しで表示する */
@@ -212,6 +218,7 @@ const MinecraftFullBodyComponent = ({
   run = false,
   rotate = false,
   asImage = false,
+  fluid = false,
   slim = false,
   capeUrl,
   backEquipment = "cape",
@@ -463,6 +470,11 @@ const MinecraftFullBodyComponent = ({
     viewer.render();
   }, []);
 
+  // fluid（静止画のみ）は表示サイズを親に任せる。それ以外は従来どおり width/height の実寸
+  const fluidSize = effectiveAsImage && fluid;
+  const boxWidth = fluidSize ? "100%" : width;
+  const boxHeight = fluidSize ? "100%" : height;
+
   // スケルトン表示（ローディング中）
   const skeleton = (
     <div
@@ -470,8 +482,8 @@ const MinecraftFullBodyComponent = ({
         position: "absolute",
         top: 0,
         left: 0,
-        width,
-        height,
+        width: boxWidth,
+        height: boxHeight,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -479,8 +491,8 @@ const MinecraftFullBodyComponent = ({
     >
       <div
         style={{
-          width: width * 0.3,
-          height: height * 0.7,
+          width: fluidSize ? "30%" : width * 0.3,
+          height: fluidSize ? "70%" : height * 0.7,
           backgroundColor: "var(--muted)",
           borderRadius: 8,
           animation: "pulse 1.5s ease-in-out infinite",
@@ -501,11 +513,13 @@ const MinecraftFullBodyComponent = ({
   //   静止画が残留し続けるバグになる）
   if (effectiveAsImage) {
     return (
-      <div style={{ position: "relative", width, height }}>
+      // overflow: hidden … 描画用の隠しキャンバスは描画解像度（width/height）の実寸で置かれるため、
+      // fluid で箱を小さくしたとき箱の外へはみ出してページ幅を広げないよう切る
+      <div style={{ position: "relative", width: boxWidth, height: boxHeight, overflow: "hidden" }}>
         {failedRequestKey === requestKey ? (
           <div
             className="flex items-center justify-center"
-            style={{ position: "absolute", top: 0, left: 0, width, height }}
+            style={{ position: "absolute", top: 0, left: 0, width: boxWidth, height: boxHeight }}
           >
             <MinecraftAvatar
               uuid={uuid}
@@ -523,8 +537,9 @@ const MinecraftFullBodyComponent = ({
             height={height}
             className={className}
             style={{
-              width,
-              height,
+              width: boxWidth,
+              height: boxHeight,
+              objectFit: fluidSize ? "contain" : undefined,
               imageRendering: "auto",
             }}
           />
