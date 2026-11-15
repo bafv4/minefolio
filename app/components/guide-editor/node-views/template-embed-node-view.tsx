@@ -1,9 +1,11 @@
 // サーチクラフトテンプレート埋め込みの編集中表示。ID だけ保存されているため、
 // タイトル・言語・件数は軽く取得して出す。読み込み中・見つからない（未公開の他人のもの・削除済み・ID 不正）も
-// それと分かる表示にする（キー配置 / サーチクラフト埋め込みの embed-node-view.tsx と同じ 3 状態）。
+// それと分かる表示にする（リマップ / サーチクラフト埋め込みの embed-node-view.tsx と同じ 3 状態）。
+// 右上の「変更」で選択ダイアログを開き、選んだテンプレートの ID に updateAttributes で書き換える。
 import { useEffect, useState } from "react";
+import type { Editor } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
-import { AlertTriangle, LayoutTemplate, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, LayoutTemplate, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -13,13 +15,18 @@ import {
   getCachedTemplateEmbedMeta,
   type TemplateEmbedMeta,
 } from "../lib/template-embed-meta";
+import { getEmbedEditContext } from "../lib/embed-edit-context";
+import { EmbedNodeActions, EMBED_NODE_CARD_CLASS } from "./embed-node-actions";
 
 interface Props {
   node: { attrs: Record<string, string> };
+  editor: Editor;
+  selected: boolean;
   deleteNode: () => void;
+  updateAttributes: (attrs: Record<string, unknown>) => void;
 }
 
-export function SearchCraftTemplateEmbedNodeView({ node, deleteNode }: Props) {
+export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, deleteNode, updateAttributes }: Props) {
   const t = useT();
   const locale = useLocale();
   const templateId = node.attrs.templateId;
@@ -44,10 +51,10 @@ export function SearchCraftTemplateEmbedNodeView({ node, deleteNode }: Props) {
   return (
     <NodeViewWrapper>
       <div
-        className={cn("relative group my-2 rounded-lg border bg-card p-4", meta === null && "border-dashed border-destructive/50")}
+        className={cn(EMBED_NODE_CARD_CLASS, meta === null && "border-dashed border-destructive/50")}
         contentEditable={false}
       >
-        <div className="flex items-start gap-2 pr-8">
+        <div className="flex items-start gap-2 pr-28">
           <LayoutTemplate className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="text-xs font-medium text-muted-foreground">{t("guideEditor.embedTemplateLabel")}</p>
@@ -85,14 +92,15 @@ export function SearchCraftTemplateEmbedNodeView({ node, deleteNode }: Props) {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          aria-label={t("guideEditor.embedTemplateRemove")}
-          onMouseDown={(e) => { e.preventDefault(); deleteNode(); }}
-          className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <EmbedNodeActions
+          selected={selected}
+          label={t("guideEditor.embedTemplateLabel")}
+          // 宿主の注入は NodeView の初回描画より後になることがあるので、押したときに取り出す
+          onEdit={() =>
+            getEmbedEditContext(editor)?.editTemplateEmbed((nextId) => updateAttributes({ templateId: nextId }))
+          }
+          onDelete={deleteNode}
+        />
       </div>
     </NodeViewWrapper>
   );

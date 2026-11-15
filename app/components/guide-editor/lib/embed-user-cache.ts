@@ -1,4 +1,4 @@
-// キー配置 / サーチクラフト埋め込み（data-user-slug だけを持つ）の走者データを、エディタの中で引く軽いキャッシュ。
+// リマップ / サーチクラフト埋め込み（data-user-slug だけを持つ）の走者データを、エディタの中で引く軽いキャッシュ。
 // 公開ページと同じ規則で解決する API（/api/guides/embed-resolve）を使う。NodeView は再マウントが多いため、
 // モジュール内で保持し、同じ走者への同時の問い合わせは1つにまとめる。
 import { useEffect, useState } from "react";

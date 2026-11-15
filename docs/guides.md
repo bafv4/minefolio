@@ -57,7 +57,7 @@
 - v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
 - 操作モデルは複数の導線を併用:
   - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: 1段目の右に設定・プレビュー・保存状態・公開状態のピル・下書き保存/保存（公開）、2段目の左に Undo/Redo。保存状態は保存ボタンの隣（1段目）に置き、未保存のときは見た目は短い「未保存」、読み上げは「未保存の変更があります」（`unsavedShort` ＋ sr-only の `unsavedChanges`）。挿入タブの文字付きの埋め込みで2段目の幅を使うため、デスクトップの幅（`max-w-5xl`）で1段ずつに収まるようにした（1280px で ja / en とも、テーブルタブ・「公開中（非公開は未保存）」・下書き保存済みの最も長い状態を実測。挿入タブのコールアウトは文字を出さずアイコン＋シェブロン。設定ボタンの見える文字は「設定」で名前は「ガイド設定」）。それでも足りないときは1段目の操作の塊ごと次の行へ回す（`flex-wrap`。はみ出して切れないように）。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。ツールバーの面は不透明（`bg-background`。半透明だと下を流れる本文と重なる）。ブロック種別のボタンの名前は見えている種別名で始める（「見出し 2（ブロックの種別）」、`guideEditor.toolbar.ariaBlockTypeNamed`。label in name）。
-    挿入タブの末尾の Minefolio 固有の埋め込み（ガイドリンク・キー配置・サーチクラフト・テンプレート）は、区切りのあとに文字付きのボタンのグループ（`role=group`、名前「Minefolio の埋め込み」）で並べる（アイコン＋短い文字〔`guideEditor.toolbar.embedShort*`〕、説明はツールチップ）。語は `/` メニューと同じタブは `role=tablist/tab`（roving tabindex。左右の矢印・Home/End でフォーカスと選択を移す）、2 段目のタブごとのツール群が `role=tabpanel`（`aria-labelledby` で選択中のタブと結ぶ。Undo/Redo はタブに依らないので外）。
+    挿入タブの末尾の Minefolio 固有の埋め込み（ガイドリンク・リマップ・サーチクラフト・テンプレート）は、区切りのあとに文字付きのボタンのグループ（`role=group`、名前「Minefolio の埋め込み」）で並べる（アイコン＋短い文字〔`guideEditor.toolbar.embedShort*`〕、説明はツールチップ）。語は `/` メニューと同じタブは `role=tablist/tab`（roving tabindex。左右の矢印・Home/End でフォーカスと選択を移す）、2 段目のタブごとのツール群が `role=tabpanel`（`aria-labelledby` で選択中のタブと結ぶ。Undo/Redo はタブに依らないので外）。
   - **保存ボタンと公開状態**（`hooks/use-guide-save.ts` の `getPublishAction` / `PUBLISH_ACTION_MESSAGES`）: 公開状態は保存（publish）でだけ書き換わるので、「保存済みの `isPublished`（loader の公開版スナップショット。保存のたびの再検証で更新）」と「設定モーダルの公開スイッチ」の組で決める。
 
     | 保存済み | スイッチ | ボタン | ツールチップ | ピル |
@@ -74,7 +74,7 @@
   - エディタ本文（contenteditable）は `aria-label`「本文」（`guideEditor.ui.editorAriaLabel`、`hooks/use-guide-editor.ts`）
   - **設定モーダル** — `panels/settings-dialog.tsx`。タイトル・概要・カバー画像・**URL（スラッグ）**・タグ・公開設定を集約（ツールバーの「設定」から開く）。「URL」欄は入力を正規化しつつ `/guides/{authorSlug}/{slug}` のプレビューを表示する。「適用」でエディタの状態へ入れる（保存はしない）。値が実際に変わったときだけ未保存にする（`isSettingsChanged`。開いて「適用」しただけでは未保存にしない）。公開スイッチは見えるラベル「公開する」が名前で、オン/オフは `role=switch` の状態で伝える。オンの色は brand（`data-[state=checked]:bg-brand`。基底の Switch は primary のまま）。
     説明文（`settingsDesc` / `settingsDescSingle`・スイッチの下の `publishOnLive` / `publishOnNew` / `publishOffLive` / `publishOffNew`）は、ボタンを位置（「右端の」）で指さず、いまのボタンの文言（モーダルのスイッチの値で決まる保存ボタン名と「下書き保存」）を差し込んで指す。公開版が無いガイドでは下書き保存の話と「公開中のガイドは…」を出さない。カバー画像の欄のボタンは「カバー画像を追加」（欄名と同じ語）タグ入力は Enter かカンマで追加・空欄で Backspace を押すと最後のタグを削除（入力欄の下に案内。IME の変換確定の Enter では追加しない）
-  - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）。フォーカスはエディタに残したまま、エディタ本体（`role=textbox`）に `aria-haspopup="listbox"` を常に付け（`hooks/use-guide-editor.ts`）、メニューが開いている間だけ `aria-controls`（listbox の id）/ `aria-activedescendant`（選択中の option）を付ける（`renderer.ts`）。開閉はこの2つの有無で伝える（`aria-expanded` は textbox では無効な属性なので付けない）。埋め込みの項目名は「キー配置の埋め込み」「サーチクラフトの埋め込み」「サーチクラフトテンプレートの埋め込み」（キーワードに「キー配置」「controls」も入れた）。メニューは `role=listbox` ＞ グループごとの `role=group` ＞ `role=option`（`aria-selected`）。項目は任意の補足（`descriptionKey`）を持てる
+  - **スラッシュコマンド**（`/` 入力）でブロック挿入 — `slash-command/`（@tiptap/suggestion + ポータル描画）。フォーカスはエディタに残したまま、エディタ本体（`role=textbox`）に `aria-haspopup="listbox"` を常に付け（`hooks/use-guide-editor.ts`）、メニューが開いている間だけ `aria-controls`（listbox の id）/ `aria-activedescendant`（選択中の option）を付ける（`renderer.ts`）。開閉はこの2つの有無で伝える（`aria-expanded` は textbox では無効な属性なので付けない）。埋め込みの項目名は「リマップの埋め込み」「サーチクラフトの埋め込み」「サーチクラフトテンプレートの埋め込み」（呼び名は記事の見出し「— リマップ」と同じ語にそろえた。キーワードには旧名の「キー配置」と「keyboard」「controls」も残し、検索で見つかるようにする）。メニューは `role=listbox` ＞ グループごとの `role=group` ＞ `role=option`（`aria-selected`）。項目は任意の補足（`descriptionKey`）を持てる
   - **表の挿入口の補足**: スラッシュコマンドの「表」の補足と、挿入タブの表ボタンのツールチップで「サーチ文字列を載せるなら、サーチクラフト（テンプレート）の埋め込みで等幅・コピー付きで表示できる」と案内する（`guideEditor.ui.tableSearchStrHint`）。表の中のサーチ文字列用の書式は作らない
   - **バブルメニュー**で選択範囲のインライン整形 — `toolbar/bubble-menu.tsx`（@tiptap/extension-bubble-menu）。ノード選択（`NodeSelection`。画像・埋め込み・動画・区切り線などの atom）では出さない
   - **ブロックハンドル**でブロック種別変更 / 削除 — `toolbar/block-handle.tsx`。デスクトップではテーブル上に表示せず行・列ハンドルへ委譲（タッチはテーブル行列操作メニューを含む従来動作）
@@ -155,13 +155,16 @@
 - **列幅スナップ**（`extensions/column-snap.ts`）: 列幅のドラッグ確定時、新しい幅が同じテーブルの既存列幅と ±8px 以内なら、その幅にぴったり揃える。ドラッグ確定 tr のみ対象（列境界ホバー中やドラッグ中の無関係な doc 変更・undo 等では発火しない。plugin state の dragging 判定 + 旧新の列幅比較で担保）
 - **公開ページの表示**: エディタは列幅未指定の列を 25px 換算で表の `min-width` に算入するため、そのままでは狭い画面で未指定列が潰れる。公開ページでは `normalizeGuideTables()`（`app/lib/guide-tables.ts`）が表の `min-width` を「固定列合計 + 未指定列 × 160px」に再計算し、収まらない分は `.table-scroll-wrapper` の横スクロールで表示する。全列をドラッグ指定した表（`style="width: ..."`）は作者の指定幅をそのまま尊重する
 
-### キー配置 / サーチクラフト埋め込み
+### リマップ / サーチクラフト埋め込み
+
+呼び名はエディタ（ツールバー・`/` メニュー・ダイアログ・ノードビュー）も記事の見出し（「走者名 — リマップ」）も「リマップ」にそろえる（以前のエディタは「キー配置」で、記事と食い違っていた）。ノード名・属性・保存 HTML（`keybindEmbed` / `data-keybind-embed`）は互換のため変えていない。
 
 - TipTap ノード `keybindEmbed` / `searchCraftEmbed`（atom・block）。属性は `userSlug` と `presetName`（任意）。保存 HTML は `<div data-keybind-embed data-user-slug="…" [data-preset-name="…"]>`（サーチクラフトは `data-searchcraft-embed`）。属性の形は変えていない（保存済みのガイドと互換）
-- **挿入ダイアログ**（`panels/embed-dialog.tsx`）: 走者は combobox（Popover＋Command。`shouldFilter={false}`）で選ぶ。既定はログイン中の作者自身。入力すると自サイトの走者検索 `/api/browse?q=`（公開プロフィールの走者を MCID・表示名で探す。限定公開・非公開は候補に出ない）で候補を出す。プリセットは選んだ走者のプリセット一覧からの Select（「既定（プロフィールに表示中の設定）」は番兵値で持ち、挿入時は属性なし。名前の重複は先勝ちで1つ）。選んだ組み合わせは下の「記事に表示される内容」に要約（下記）を出し、走者が解決できない（存在しない・非公開）ときは「見つかりません」を出して「挿入」を押せなくする。保存する `userSlug` は解決した走者の slug
+- **挿入ダイアログ**（`panels/embed-dialog.tsx`）: 走者は combobox（Popover＋Command。`shouldFilter={false}`）で選ぶ。既定はログイン中の作者自身。入力すると自サイトの走者検索 `/api/browse?q=`（公開プロフィールの走者を MCID・表示名で探す。限定公開・非公開は候補に出ない）で候補を出す。プリセットは選んだ走者のプリセット一覧からの Select（「既定（プロフィールに表示中の設定）」は番兵値で持ち、挿入時は属性なし。名前の重複は先勝ちで1つ）。選んだ組み合わせは下の「記事に表示される内容」に要約（下記）を出し、走者が解決できない（存在しない・非公開）ときは「見つかりません」を出して「挿入」を押せなくする。解決できたが中身が 0 件（リマップなし・サーチクラフト未登録。`isEmbedEmpty`）のときは、要約に warning 色で「記事には「〜が設定されていません」とだけ表示されます（走者が後から設定すれば表示されます）」を出し、ボタンを「このまま挿入」にする（走者が後から設定することがあるので無効にはしない。引用する文は記事と同じ `playerProfile.noRemaps` / `noSearchCraft`）。保存する `userSlug` は解決した走者の slug
 - **解決は公開ページと同じ規則**: `resolveEmbedUsers`（`app/lib/guide-embed-users.server.ts`。slug → 未一致分は MCID、`publiclyReferencableCondition`＝非公開は除く、既定の表示はメインのプリセットかライブ）を、公開ページの loader（`guides/view.tsx`）とエディタ用の `GET /api/guides/embed-resolve?user=`（全プリセットを返す。プリセットの一覧と中身は走者画面でも `?preset=` で選んで見られる公開情報。ただし要約に使う項目〔名前・リマップ・サーチクラフト・キーボードの配列〕だけに絞り、キー配置の行・Loop・指の割り当て・プレイヤー設定のほかの項目は空にして送る）が共用する。どのデータを出すか（プリセット名の指定・見つからないプリセット名は既定の表示に戻る・Trigger 種別のリマップは除く・壊れた JSON は既定に戻る）は `app/lib/guide-embed-data.ts`（`selectKeybindEmbedSource` / `selectSearchCraftEmbedSource`）にあり、公開ページの描画（`guide-embeds.tsx`）とエディタの要約が同じ関数を使う。規則が分かれると「エディタでは見つかるのに記事では出ない」が起きるため
-- **ノードビュー**（`node-views/embed-node-view.tsx`）: 種別名（「キー配置」「サーチクラフト」）の下に、解決した表示名・`@MCID`・プリセット名（無ければ「既定の設定」）と中身の要約を出す（`panels/embed-summary.tsx`、ダイアログのプレビューと共用）。要約はサーチクラフトが「OW 29・Bastion 3（計 32 件）」のようなグループごとの件数（一覧と同じ順。`summarizeSearchCraftEmbed`）、キー配置が「リマップ {n} 件」（`summarizeKeybindEmbed`）。0 件なら「登録されていません」。読み込み中（スピナー）・通信の失敗・見つからない（破線の枠と destructive 色の文）を出し分け、プリセット名が見つからないときは「記事には既定の設定が表示されます」と警告色で添える。取得は `lib/embed-user-cache.ts`（モジュール内キャッシュ。同じ走者への同時の問い合わせは1つにまとめる。ダイアログでは取り直す）
+- **ノードビュー**（`node-views/embed-node-view.tsx`）: 種別名（「リマップ」「サーチクラフト」）の下に、解決した表示名・`@MCID`・プリセット名（無ければ「既定の設定」）と中身の要約を出す（`panels/embed-summary.tsx`、ダイアログのプレビューと共用）。要約はサーチクラフトが「OW 29・Bastion 3（計 32 件）」のようなグループごとの件数（一覧と同じ順。`summarizeSearchCraftEmbed`）、リマップが「リマップ {n} 件」（`summarizeKeybindEmbed`）。0 件ならダイアログと同じ warning 色の「記事には「…」とだけ表示されます」。読み込み中（スピナー）・通信の失敗・見つからない（破線の枠と destructive 色の文）を出し分け、プリセット名が見つからないときは「記事には既定の設定が表示されます」と警告色で添える。取得は `lib/embed-user-cache.ts`（モジュール内キャッシュ。同じ走者への同時の問い合わせは1つにまとめる。ダイアログでは取り直す）
 - テンプレート埋め込みのノードビューも同じ 3 状態（読み込み中・見つからない・タイトル／言語／作者／クラフト数）にした（以前は読み込み中も見つからないときも ID を出していた）。ガイドリンクはタイトル等を属性に持つので対象外
+- **挿入済みの埋め込みの変更と削除**（3 種とも。`node-views/embed-node-actions.tsx`）: 右上に「変更」と削除（ゴミ箱、名前は「{種別}の埋め込みを削除」）のボタン。ノードを選択しているとき・ホバーしているとき・中にフォーカスがあるとき（`group-focus-within`）に見える。どちらも処理は `onClick`（`onMouseDown` は `preventDefault` だけでエディタのフォーカスと選択を奪わない）なので Enter / Space でも押せ、Tab でも届く。「変更」は保存済みの属性（走者・プリセット／テンプレート ID）を初期値にしてダイアログを開き（見出しは「…の埋め込みを変更」、ボタンは「適用」／0 件なら「このまま適用」）、確定するとそのノードを `updateAttributes` で書き換える（挿入はしない）。保存済みのプリセット名が今の一覧に無いときは「{名前}（見つかりません）」として選択肢に残す（空欄にしない。要約が既定の設定が出ることを警告する）。宿主（`index.tsx`）のダイアログへの橋渡しは `lib/embed-edit-context.ts`（editor ごとの WeakMap。拡張の定義と保存 HTML には触れない）。トリガーを持たないダイアログなので、変更から開いたときは閉じたあとフォーカスを開く前の要素（「変更」ボタン）へ戻す（`lib/dialog-return-focus.ts`。Radix の既定はトリガーが無いと body に落ちる）
 
 ### サーチクラフトテンプレート埋め込み
 
@@ -171,7 +174,11 @@
 - 編集中表示（`node-views/template-embed-node-view.tsx`）は ID しか持たないため、タイトル・言語・作者・クラフト数を `lib/template-embed-meta.ts`（モジュール内キャッシュ。挿入時は選択結果で先に埋める）で軽く取得する。読み込み中は「読み込み中…」、取れなければ「テンプレートが見つかりません」（破線の枠）
 - サニタイズ: `data-sctemplate-embed` / `data-template-id` を許可。ID は cuid2 形式（`isValidTemplateId`、`lib/guide-embed-attrs.ts`）で検証し、形式外は属性ごと除去する
 - 公開表示: `guides/view.tsx` の loader が本文から ID を集め（`extractTemplateEmbedIds`）、`inArray` の1クエリで「公開済み・作者が `private` でない」ものだけ作者名つきで取得する（テンプレート詳細ページの閲覧規則と同じ。N+1 なし）。`splitContentAtEmbeds` が `sctemplate-embed` セグメントを返し、`SearchCraftTemplateEmbedView`（`guide-embeds.tsx`）が描く。見出し行はテンプレート名・作者・ゲーム内言語・「テンプレートを見る」、その下にサーチクラフト一覧（繋ぎ方 Loop があれば併せて）。描画本体は `SearchCraftEmbedBody` で、ユーザー参照のサーチクラフト埋め込みと共用する
-- 一覧の見た目（ユーザー参照のサーチクラフト埋め込みも同じ）: テンプレート詳細・走者画面と同じ `SearchCraftGroupedList`（`framed={false}`）の高密度の行（アイテム・等幅のサーチ文字列＋コピー・キーバッジ・キー入力順）と `KeyBadgeLegend`。繋ぎ方（Loop）は `makeLoopGroupExtra` でタイミンググループの中に出す。面は埋め込みの外枠 1 枚だけ。タイミングのグループが 2 つ以上なら開閉でき（`collapsible`。数え方は `countSearchCraftGroups`）、最初のグループのクラフトが 10 件以下（`SEARCH_CRAFT_OPEN_FIRST_MAX`、`openFirstMaxCount`）ならそれだけ開いて、多ければ全部閉じて始まる（件数は先頭のグループのクラフトの数。Loop は数えない）。1 つだけなら開閉は出さない。テンプレート詳細も同じ開閉と枠（下記）。「すべて開く／すべて閉じる」はモバイルで押せる範囲 44px（負のマージンで見た目の行の高さは変えない）。lg 未満の行は「サーチ文字列」と「入力キー」を1段に並べ、入りきらないときだけ入力キーを次の段へ折り返す（`SearchCraftGroupedList` の既定。走者画面・テンプレート詳細・記事の全部で同じ。lg 以上は従来の3列）。破損しうる生 JSON（プリセットスナップショット・テンプレート）は、渡す前に `normalizeEmbedCrafts`・`coerceStringArray`・`toSafeLoopSteps`（transition の検証）と `resolveCraftTiming`（enum 外の timing は「その他」）で直す。キー入力順の鍵盤は、ユーザー参照ならその走者（プリセット指定時はそのプリセット）のレイアウト、テンプレートは US
+- 一覧の見た目（ユーザー参照のサーチクラフト埋め込みも同じ）: テンプレート詳細・走者画面と同じ `SearchCraftGroupedList`（`framed={false}`）の高密度の行（アイテム・等幅のサーチ文字列＋コピー・キーバッジ・キー入力順）と `KeyBadgeLegend`。繋ぎ方（Loop）は `makeLoopGroupExtra` でタイミンググループの中に出す。面は埋め込みの外枠 1 枚だけ。タイミングのグループが 2 つ以上なら開閉でき（`collapsible`。数え方は `countSearchCraftGroups`）、**lg 以上では全グループを開いて始め**（`openAllFromLg`）、lg 未満では最初のグループのクラフトが 10 件以下（`SEARCH_CRAFT_OPEN_FIRST_MAX`、`openFirstMaxCount`）ならそれだけ開いて、多ければ全部閉じて始まる（件数は先頭のグループのクラフトの数。Loop は数えない）。1 つだけなら開閉は出さない。テンプレート詳細も同じ開閉と枠（下記）。
+  - 幅による初期状態は SSR とハイドレーションでずれないよう CSS で出し分ける（lg 未満だけ閉じるグループの本体に `max-lg:hidden`、シェブロンは `lg:rotate-180`、「すべて開く／閉じる」は両方の文言を描いて出し分け）。この間は見た目が幅で変わるので、見出しボタンに `aria-expanded` を付けない。マウント後に `matchMedia("(min-width: 64rem)")` を読んで開閉の状態を確定し、`aria-expanded` と `hidden` 属性を見た目にそろえる（見た目は変わらない）。開閉を一度でも操作したら以後は操作の結果に従い、それまでは幅の変化にも追従する（操作の時点の実効の状態から反転するので、lg で 1 つ閉じても他は開いたまま）
+  - 閉じたグループの本体も DOM に残す（`keepClosedMounted`）。属性は `hidden="until-found"` で、ページ内検索（Ctrl+F）やテキストフラグメントで中身が見つかるとブラウザが開き、`beforematch` で開閉の状態も開にそろえる。React 19.3 は `hidden` を真偽属性として `hidden=""` で出す（`"until-found"` を値として出せず、`onBeforeMatch` も無い）ため、属性値は `useLayoutEffect` で書き換え、`beforematch` は `addEventListener` で受ける。SSR の HTML にもサーチ文字列が入り、`aria-controls` の先が常にある。非対応のブラウザでは通常の hidden として隠れる（Firefox 160・Edge 157 は対応を確認）
+  - 走者画面（`profile.tsx`）はこの 2 つの props を渡さないので従来どおり（先頭のグループだけ開く・閉じた本体は描かない）
+  - グループの開閉の見出しボタンは、モバイルで押せる範囲 44px（`-my-1.5 py-2.5`、sm 以上は従来の 32px。共有部品の全画面で同じ。見出しを `flow-root` にして負のマージンを閉じ込めるので、見出し・走者画面の貼り付き枠の高さは 32px のまま〔375px で実測。閉じ込めないとマージンが見出しの外へ抜けて 44px に伸びる〕）。「すべて開く／すべて閉じる」もモバイルで押せる範囲 44px（負のマージンで見た目の行の高さは変えない）。lg 未満の行は「サーチ文字列」と「入力キー」を1段に並べ、入りきらないときだけ入力キーを次の段へ折り返す（`SearchCraftGroupedList` の既定。走者画面・テンプレート詳細・記事の全部で同じ。lg 以上は従来の3列）。破損しうる生 JSON（プリセットスナップショット・テンプレート）は、渡す前に `normalizeEmbedCrafts`・`coerceStringArray`・`toSafeLoopSteps`（transition の検証）と `resolveCraftTiming`（enum 外の timing は「その他」）で直す。キー入力順の鍵盤は、ユーザー参照ならその走者（プリセット指定時はそのプリセット）のレイアウト、テンプレートは US
 - リマップの鍵盤は出さない（本文の流れを切るため）。リマップが含まれるときは「リマップあり」と示し、入力キーの表示にはリマップを反映する。詳細ページで鍵盤を確認できる
 - 見つからない・未公開・削除済み・ID 不正のときは「このテンプレートは表示できません」の短い表示（下書きプレビューで作者本人が見る場合も同じ）
 - 自動翻訳: 埋め込み div は翻訳対象外（`guide-translate-html.server.ts` の `EMBED_ATTRS`）で、訳文でも同じ経路で描かれる
@@ -181,7 +188,7 @@
 
 - 画像ツールバー（ホバー / タッチで選択）の字幕アイコンから Popover で入力・編集する。入力は即時に node の `alt` 属性へ反映され、空なら装飾画像（`alt=""`）扱い。挿入直後の alt は空（以前はファイル名を自動で入れていた）
 - alt は `guide-sanitize.server.ts` の許可属性（`img`）・`guide-translate-html.server.ts`（翻訳対象）を通って落ちない
-- キー配置の埋め込み（`app/components/guide-embeds.tsx`）は横長になるため `HorizontalScrollArea` で包み、実際にはみ出しているときは**どの幅でも**「横にスクロールできます」のヒントを出す（`hintAtAllWidths`。鍵盤は約 1,150px で、デスクトップの本文幅より広いことがある。共有部品の既定は md 未満のみのまま。縮小表示はしない）（詳細は [`docs/keybindings.md`](./keybindings.md)）。ヘッダーの「プロフィールを見る」リンクは、文字サイズ・ヘッダー高さを変えずに padding＋負マージンで当たり判定を約40pxへ広げている
+- リマップの埋め込み（`app/components/guide-embeds.tsx`）は横長になるため `HorizontalScrollArea` で包み、実際にはみ出しているときは**どの幅でも**「横にスクロールできます」のヒントを出す（`hintAtAllWidths`。鍵盤は約 1,150px で、デスクトップの本文幅より広いことがある。共有部品の既定は md 未満のみのまま。縮小表示はしない）（詳細は [`docs/keybindings.md`](./keybindings.md)）。ヘッダーの「プロフィールを見る」リンクは、文字サイズ・ヘッダー高さを変えずに padding＋負マージンで当たり判定を約40pxへ広げている。リマップ／サーチクラフト埋め込みのヘッダー（`UserEmbedHeader`）は、375px でも語の途中で折れないよう、種別（「— リマップ」）と右のリンクを `shrink-0 whitespace-nowrap` にし、長い走者名・プリセット名だけを省略（truncate）する。テンプレート埋め込みのヘッダーの「テンプレートを見る」も折り返さない
 - 旧エディタが入れていた固定値 `alt="image"` は、公開表示時に `lib/guide-image-alt.ts` の `blankGenericImageAlt()` で `alt=""` に変換する（保存データは書き換えない。`/guides/:author/:slug` の loader で見出し降格と同じ段階に適用。`lib/__tests__/guide-image-alt.test.ts`）
 
 ### 画像アップロード
@@ -348,7 +355,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - **目次**（`app/components/guide-toc-nav.tsx`。xl（1280px）以上は本文左の sticky サイドバー、未満はバー＋ドロワー）: 箱を作らず、見出し「目次」（`text-sm font-semibold`）と左の細い縦線のリスト（アクティブ項目だけ線が `border-brand`）。サイドバーの置き場所は、2xl（1536px）以上は本文（`max-w-5xl` 中央寄せ）の左ガター（`w-56`）、xl〜2xl 未満はガターが狭いので本文を右へ寄せ（`xl:max-w-[74rem] xl:pl-60`、本文の幅は約 912px で 2xl の 960px と大差ない）、その左の余白（`w-52`）に置く（`guides/view.tsx`）。本文の行の長さは制限しない（全幅・左寄せ）。**折りたたみ**: 項目の最小 level の項目だけを常に出し、それより下の階層は節（最上位項目から次の最上位項目の手前まで）が開いているときだけ出す。既定では「いま読んでいる節」だけが開く（`visibleTocItems`、`app/lib/guide-toc.ts`）。
   - **手動の開閉**: 最上位の各項目に、配下を開閉するシェブロンのボタン（`aria-expanded`・`aria-controls`・`aria-label` は `guideToc.sectionToggle`。配下が無い項目には出さない）。利用者が手で開閉した節はその操作を既定より優先する（`visibleTocItems` の `overrides`）。畳んでいる間も配下の `<ul>` は `hidden` で残す（`aria-controls` の参照先）。状態は保存せず、記事を移ると初期値に戻る（`GuideTocSidebar` / `GuideTocMobile` に `key={guide.id}`）。ボタンはサイドバー 28px、ドロワー 44px。開閉ボタンのシェブロンの回転は `motion-reduce:transition-none`、そのほかの開閉に動きは付けない
   - **現在地の判定**（`useActiveHeading`）: 見出しの上端が「貼り付く UI の下端（`:root` の `scroll-padding-top`。xl 未満は目次バーのぶん深い）＋8px」を最後に超えたものを現在地にする（以前は固定の 96px で、xl 未満では目次から移った見出しがしきい値より下に着地して現在地にならなかった）。末尾まで来たら最後の見出しを現在地にする: ページの最下部（スクロール位置は切り上げ）か、本文（`.guide-content`）の終わりが画面に入り最後の見出しも画面内にあるとき（記事の下に「他のガイド」やフッターが続くと、ページの最下部より先に本文を読み終えるため）
-  - **xl 未満の目次バー**: 面は不透明（`bg-background`）。モバイルはレイアウトの左右の余白まで覆う（`-mx-4`。ui.md 10 章）
+  - **xl 未満の目次バー**: 面は不透明（`bg-background`）。モバイルはレイアウトの左右の余白まで覆う（`-mx-4`。ui.md 10 章）。バーの直前の 1px の番兵を IntersectionObserver で見て、ヘッダーの直下に貼り付いている間はバーに `data-toc-stuck="true"` を付け、`app/app.css` がその間サイトヘッダーを不透明にする（半透明のヘッダーの下に不透明なバーがあると食い違うため。走者画面の `data-stuck` とは属性を分ける。あちらは `--sticky-bar-inset` も変える）
   - **現在地の見せ方**: アクティブ見出しが畳まれた節の中にあるときは、その節の最上位項目を現在地として強調し（`aria-current="location"`、`tocDisplayedActiveId`）、目次の追従スクロールもその項目を見る
   - **すべて開く／すべて閉じる**: 配下を持つ節が1つでもあるときだけ出す。節ごとの開閉（overrides）を `tocAllSectionOverrides`（`guide-toc.ts`）でまとめて置き換える（「すべて閉じる」は読んでいる節も畳み、現在地は親の項目で示す）。サイドバーは見出し行のアイコンボタン（28px・Tooltip）、ドロワーは一覧の上の文字ボタン（高さ 44px）。overrides は `useTocOverrides` で `GuideTocSidebar` / `GuideTocMobile` が持ち、`TocList` と共有する
   - **ドロワーにも節ごとの開閉を入れた**: 30 項目の記事で、読んでいる節以外は畳まれて一覧が短くなり、別の節の下位見出しへ行きたいときも 44px のボタン1回で開けるため
@@ -379,7 +386,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 ### /guides/templates/:templateId — テンプレート詳細のモバイル構成
 
-本題のサーチクラフトの節を先に置き、リマップ（鍵盤）の節は後ろに置く。サーチクラフトの一覧は記事内の埋め込みと同じ開閉と枠（`framed={false}`・グループ見出しは h3・グループが 2 つ以上なら開閉・先頭のグループが 10 件以下ならそれだけ開いて始める）。リマップの鍵盤は md 未満で既定「閉」の開閉（`aria-expanded`）で、md 以上は常に表示。ページ先頭に、フォーカス時だけ見えるスキップリンク「サーチクラフトへ移動」を置く。
+本題のサーチクラフトの節を先に置き、リマップ（鍵盤）の節は後ろに置く。サーチクラフトの一覧は記事内の埋め込みと同じ開閉と枠（`framed={false}`・グループ見出しは h3・グループが 2 つ以上なら開閉・lg 以上は全部開いて、lg 未満は先頭のグループが 10 件以下ならそれだけ開いて始める・閉じた本体も `hidden="until-found"` で残す）。見出しの隣の「Loop n件」のピルは `HintTip` で何を数えているか（繋ぎ方の数。各タイミングのグループの中に出る）を説明する（名前は見えている文字から始まる説明文）。リマップの鍵盤は md 未満で既定「閉」の開閉（`aria-expanded`）で、md 以上は常に表示。ページ先頭に、フォーカス時だけ見えるスキップリンク「サーチクラフトへ移動」を置く。
 
 アイテム名は既定でテンプレートのゲーム言語（未設定は日本語）のまま表示する。サーチクラフトの節の先頭（凡例の上）に、走者画面のサーチクラフトタブと同じ「アイテム名を{言語}で表示」のスイッチ（`playerProfile.searchCraftItemNamesIn`、モバイルは 44px）があり、オンにすると `SearchCraftGroupedList` の `gameLanguage` に `itemLangForLocale(locale)` を渡す。テンプレートの言語が閲覧者の言語と同じときはスイッチを出さない。状態は保存せず、別のテンプレートへ移るとオフに戻る。ガイド本文の埋め込み（`guide-embeds.tsx`）にはない。
 
@@ -416,7 +423,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - 既存ガイドの編集画面（`(authorId, slug)` で本人のガイドを特定）
 - **独立レイアウト**: `me/_layout` のサイドバーに依存しないフルスクリーン編集画面
 - タイトル/本文/サマリー/タグ inputs はブラウザ標準の綴りバリデーション（`spellcheck`）を無効化
-- ツールバーの面は不透明（`bg-background`）
+- ツールバーの面は不透明（`bg-background`）。エディタではサイトヘッダーも不透明にする（`:root:has([data-editor-toolbar]) header.sticky`、`app/app.css`。ヘッダーだけ半透明だと、その下の不透明なツールバーと食い違うため）
 - **URL（スラッグ）の編集**: 設定モーダルの「URL」欄で変更できる。下書き保存・保存いずれの保存でも即反映される（`slug` はライブ列）。
   - 保存時、`normalizeSlug()` で正規化した値が現在と異なれば、同一著者内での重複を確認する。重複時は `meGuides.errorSlugTaken` を返し、その保存自体を中止（トースト表示、他フィールドも保存されない）。正規化結果が空なら `meGuides.errorSlugRequired`。
   - スラッグ変更に成功すると、action は新しい `slug` を返し、クライアントは `/my-guides/{新slug}/edit` へ `navigate(replace)` する（同一ルートのためエディタは再マウントされず、編集中の本文・状態は保持される）。
@@ -444,7 +451,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 | /api/me/guides/upload-image | POST | 画像アップロード（Vercel Blob保存） |
 | /api/guides/search | GET | ガイド検索 |
 | /api/guides/templates-search | GET | サーチクラフトテンプレート検索（ガイドエディタの埋め込み用） |
-| /api/guides/embed-resolve | GET | キー配置 / サーチクラフト埋め込みの走者の解決（`?user=` slug か MCID。公開ページと同じ規則。`{ user: EmbedUserData \| null }`〔要約に使う項目だけ〕、`Cache-Control: private, no-store`） |
+| /api/guides/embed-resolve | GET | リマップ / サーチクラフト埋め込みの走者の解決（`?user=` slug か MCID。公開ページと同じ規則。`{ user: EmbedUserData \| null }`〔要約に使う項目だけ〕、`Cache-Control: private, no-store`） |
 
 ---
 
@@ -487,6 +494,6 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 - `app/routes/api/me/guides/upload-image.ts` — 画像アップロードAPI
 - `app/routes/api/guides/search.ts` — ガイド検索API
 - `app/routes/api/guides/templates-search.ts` — サーチクラフトテンプレート検索API（埋め込み用）
-- `app/routes/api/guides/embed-resolve.ts` — キー配置 / サーチクラフト埋め込みの走者の解決API（エディタ用）
+- `app/routes/api/guides/embed-resolve.ts` — リマップ / サーチクラフト埋め込みの走者の解決API（エディタ用）
 - `app/lib/guide-embed-users.server.ts` — 埋め込みの走者の解決（公開ページと上の API で共用）
 - `app/lib/guide-embed-data.ts` — 埋め込みが出すデータの選び方と、エディタ用の要約

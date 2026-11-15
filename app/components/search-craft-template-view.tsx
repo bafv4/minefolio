@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ShiftMark } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
 import { hasItemNameDictionary } from "@/lib/game-languages";
@@ -221,7 +222,8 @@ export function KeyBadgeLegend({
 
 /**
  * 開閉できる一覧（collapsible）で、先頭のグループを開いて始める件数の上限（記事の埋め込み・テンプレート詳細）。
- * 先頭のグループのクラフトがこれより多ければ、全部閉じて始める（長い一覧でページが縦に伸びすぎないように）
+ * 先頭のグループのクラフトがこれより多ければ、全部閉じて始める（長い一覧でページが縦に伸びすぎないように）。
+ * 記事の埋め込み・テンプレート詳細は lg 以上では全部開く（openAllFromLg）ので、この規則が効くのは lg 未満だけ
  */
 export const SEARCH_CRAFT_OPEN_FIRST_MAX = 10;
 
@@ -268,6 +270,8 @@ export function SearchCraftGroupedList({
   stickyTopClassName,
   groupHeadingLevel = "h4",
   openFirstMaxCount,
+  openAllFromLg = false,
+  keepClosedMounted = false,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
@@ -297,6 +301,18 @@ export function SearchCraftGroupedList({
    * （多ければ全部閉じて始める）。未指定なら従来どおり常に先頭を開く（走者画面）
    */
   openFirstMaxCount?: number;
+  /**
+   * collapsible のとき、lg 以上では全グループを開いて始める（lg 未満は上の規則のまま）。
+   * 初期表示（SSR・ハイドレーション）は CSS の lg: で出し分け、マウント後に幅を読んで aria-expanded などをそろえる。
+   * 開閉を一度でも操作したら、以後は操作の結果に従う（それまでは幅の変化にも追従する）。既定 false（走者画面）
+   */
+  openAllFromLg?: boolean;
+  /**
+   * collapsible のとき、閉じたグループの本体も DOM に残す（`hidden="until-found"`。ページ内検索で見つかったら開く。
+   * 非対応のブラウザでは通常の hidden として隠れる）。SSR の HTML にも中身が入り、aria-controls の先が常にある。
+   * 既定 false＝閉じた本体は描かない（走者画面）
+   */
+  keepClosedMounted?: boolean;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
@@ -351,20 +367,40 @@ export function SearchCraftGroupedList({
     }))
     .filter((g) => g.crafts.length > 0 || Boolean(g.extra));
 
-  // 開閉状態（collapsible のときだけ使う）。先頭のグループだけ開いた状態で始める
+  // 開閉状態（collapsible のときだけ使う）。lg 未満（と openAllFromLg なしの全幅）の既定は先頭のグループだけ開く
   // （openFirstMaxCount があれば、先頭のグループの件数がそれ以下のときだけ）
-  const [openKeys, setOpenKeys] = useState<Set<string>>(() => {
+  const narrowDefaultKeys = (() => {
     const first = groups[0];
-    if (!first) return new Set();
-    if (openFirstMaxCount !== undefined && first.crafts.length > openFirstMaxCount) return new Set();
+    if (!first) return new Set<string>();
+    if (openFirstMaxCount !== undefined && first.crafts.length > openFirstMaxCount) return new Set<string>();
     return new Set([first.groupKey]);
-  });
-  const toggleGroup = (groupKey: string) =>
-    setOpenKeys((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(groupKey)) next.add(groupKey);
-      return next;
-    });
+  })();
+  const allKeys = () => new Set(groups.map((g) => g.groupKey));
+  // 利用者が開閉を操作した後の状態。null の間は既定（openAllFromLg なら幅で決まる）に従う
+  const [userOpenKeys, setUserOpenKeys] = useState<Set<string> | null>(null);
+  // openAllFromLg の幅の判定。SSR とハイドレーションの描画では幅を使わず（null）、CSS の lg: で出し分ける。
+  // マウント後は matchMedia の値で aria-expanded・hidden 属性まで確定させる（見た目は変わらない）
+  const isLgViewport = useMediaQuery("(min-width: 64rem)");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const wide: boolean | null = !openAllFromLg ? false : mounted ? isLgViewport : null;
+  /** 今の実効の開閉状態（wide が null のときは lg 未満の既定。描画側は cssOpenAtLg で lg 以上を開いて見せる） */
+  const effectiveOpenKeys = (): Set<string> =>
+    userOpenKeys ?? (wide ? allKeys() : narrowDefaultKeys);
+  const openKeys = effectiveOpenKeys();
+  // 幅が未確定（SSR・ハイドレーション）で、未操作のときだけ、lg 以上の「全部開く」を CSS に任せる
+  const cssOpenAtLg = openAllFromLg && wide === null && userOpenKeys === null;
+  const toggleGroup = (groupKey: string) => {
+    const next = new Set(effectiveOpenKeys());
+    if (!next.delete(groupKey)) next.add(groupKey);
+    setUserOpenKeys(next);
+  };
+  // ページ内検索で閉じた本体の中身が見つかったとき（beforematch）。そのグループを開いた状態にそろえる
+  const revealGroup = (groupKey: string) => {
+    const current = effectiveOpenKeys();
+    if (current.has(groupKey)) return;
+    setUserOpenKeys(new Set([...current, groupKey]));
+  };
 
   if (!hasAnyTiming) {
     return (
@@ -381,6 +417,8 @@ export function SearchCraftGroupedList({
   }
 
   const allOpen = groups.length > 0 && groups.every((g) => openKeys.has(g.groupKey));
+  const expandAllLabel = (open: boolean) =>
+    open ? t("playerProfile.searchCraftCollapseAll") : t("playerProfile.searchCraftExpandAll");
 
   return (
     <div className={framed ? "space-y-4" : "space-y-5"}>
@@ -392,9 +430,17 @@ export function SearchCraftGroupedList({
             size="sm"
             // モバイルは押せる範囲を 44px に（見た目の行の高さは負のマージンで変えない。ui.md 9 章）
             className="-my-2 h-11 text-xs text-muted-foreground sm:my-0 sm:h-7"
-            onClick={() => setOpenKeys(allOpen ? new Set() : new Set(groups.map((g) => g.groupKey)))}
+            onClick={() => setUserOpenKeys(allOpen ? new Set() : allKeys())}
           >
-            {allOpen ? t("playerProfile.searchCraftCollapseAll") : t("playerProfile.searchCraftExpandAll")}
+            {cssOpenAtLg ? (
+              // 幅が未確定の間は、lg 以上（全部開いている）の文言を CSS で出し分ける
+              <>
+                <span className="lg:hidden">{expandAllLabel(allOpen)}</span>
+                <span className="hidden lg:inline">{expandAllLabel(true)}</span>
+              </>
+            ) : (
+              expandAllLabel(allOpen)
+            )}
           </Button>
         </div>
       )}
@@ -414,7 +460,10 @@ export function SearchCraftGroupedList({
           stickyTopClassName={stickyTopClassName}
           headingLevel={groupHeadingLevel}
           open={openKeys.has(g.groupKey)}
+          openAtLg={cssOpenAtLg}
+          keepClosedMounted={keepClosedMounted}
           onToggle={() => toggleGroup(g.groupKey)}
+          onReveal={() => revealGroup(g.groupKey)}
           extra={g.extra}
         />
       ))}
@@ -438,7 +487,10 @@ function SearchCraftGroupCard({
   stickyTopClassName,
   headingLevel = "h4",
   open = true,
+  openAtLg = false,
+  keepClosedMounted = false,
   onToggle,
+  onReveal,
 }: {
   headingLevel?: "h3" | "h4";
   title?: string;
@@ -457,18 +509,49 @@ function SearchCraftGroupCard({
   stickyHeader?: boolean;
   stickyTopClassName?: string;
   open?: boolean;
+  /**
+   * 幅が未確定（SSR・ハイドレーション）の間、lg 以上では open に関わらず開いて見せる（CSS の lg: で出し分け）。
+   * この間は aria-expanded を付けない（幅で見た目が変わるため、どちらの値でも食い違う）
+   */
+  openAtLg?: boolean;
+  /** 閉じた本体も hidden="until-found" で DOM に残す（ページ内検索で見つかったら onReveal） */
+  keepClosedMounted?: boolean;
   onToggle?: () => void;
+  onReveal?: () => void;
 }) {
   const t = useT();
   const bodyId = useId();
+  const bodyRef = useRef<HTMLDivElement>(null);
   // タイミング未設定のみの1枚カード（title未設定）は crafts=[] でも従来どおり行リストの枠を出す。
   // タイミング別グループカード（title あり）は、extraTimings 由来で crafts=0件のことがあるため、
   // その場合は行リスト（列ヘッダー含む）を省略し extra だけを描画する。
   const showList = title === undefined || crafts.length > 0;
   const isCollapsible = collapsible && title !== undefined;
   const bodyVisible = !isCollapsible || open;
+  // 閉じていても本体を DOM に残すか。lg 以上だけ開いて見せる間（openAtLg）も、閉じた側の本体は CSS で隠して残す
+  const cssOpenAtLg = isCollapsible && openAtLg && !open;
+  const mountBody = bodyVisible || (isCollapsible && (keepClosedMounted || cssOpenAtLg));
+  // hidden 属性で隠すのは、幅に関わらず閉じているときだけ（lg 以上で開いて見せる間は max-lg:hidden のクラスで隠す）
+  const hiddenClosed = isCollapsible && !open && !cssOpenAtLg;
   // 見出し行を貼り付けるときは、列見出しも同じ貼り付き枠に入れる（別々の top 指定をしなくて済む）
   const stickyActive = stickyHeader && !framed && isCollapsible && open;
+
+  // 閉じた本体は hidden="until-found" にする（ページ内検索で見つかると、ブラウザが hidden を外して beforematch を送る）。
+  // React 19 は hidden を真偽属性として hidden="" で出すため、属性値はここで書き換える（SSR は hidden="" のまま）。
+  // until-found に非対応のブラウザでは、この値も通常の hidden（非表示）として扱われる
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (el && hiddenClosed) el.setAttribute("hidden", "until-found");
+  }, [hiddenClosed]);
+  const onRevealRef = useRef(onReveal);
+  onRevealRef.current = onReveal;
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || !mountBody) return;
+    const handle = () => onRevealRef.current?.();
+    el.addEventListener("beforematch", handle);
+    return () => el.removeEventListener("beforematch", handle);
+  }, [mountBody]);
 
   // 列ヘッダー（デスクトップのみ）
   const columnHeader = (
@@ -525,19 +608,34 @@ function SearchCraftGroupCard({
   if (!framed) {
     const Heading = headingLevel;
     const heading = title && (
-          <Heading className={cn("text-base font-semibold", showList && bodyVisible && !stickyActive && "mb-2")}>
+          <Heading
+            className={cn(
+              "text-base font-semibold",
+              // 開閉ボタンの負のマージン（押せる範囲 44px）が見出しの外へ相殺して抜けないよう、見出しで閉じ込める
+              // （抜けると見出し・貼り付き枠の高さが 44px に伸びる。ボタンは見出しの上下に 6px はみ出して重なる）
+              isCollapsible && "flow-root",
+              showList && bodyVisible && !stickyActive && "mb-2",
+              showList && cssOpenAtLg && "lg:mb-2",
+            )}
+          >
             {isCollapsible ? (
               <button
                 type="button"
-                aria-expanded={open}
-                aria-controls={bodyId}
+                aria-expanded={cssOpenAtLg ? undefined : open}
+                aria-controls={mountBody ? bodyId : undefined}
                 onClick={onToggle}
-                className="-mx-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                // モバイルは押せる範囲を 44px に（行の高さは負のマージンで変えない。見出しの flow-root で閉じ込める。ui.md 9 章）。
+                // sm 以上は従来の 32px
+                className="-mx-1 -my-1.5 flex w-full items-center gap-2 rounded px-1 py-2.5 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:my-0 sm:py-1"
               >
                 {titleContent}
                 <ChevronDown
                   aria-hidden
-                  className={cn("ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+                  className={cn(
+                    "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                    open && "rotate-180",
+                    cssOpenAtLg && "lg:rotate-180",
+                  )}
                 />
               </button>
             ) : (
@@ -557,7 +655,11 @@ function SearchCraftGroupCard({
         ) : (
           heading
         )}
-        {bodyVisible && <div id={bodyId}>{body}</div>}
+        {mountBody && (
+          <div ref={bodyRef} id={bodyId} hidden={hiddenClosed} className={cn(cssOpenAtLg && "max-lg:hidden")}>
+            {body}
+          </div>
+        )}
       </section>
     );
   }
@@ -570,15 +672,19 @@ function SearchCraftGroupCard({
             {isCollapsible ? (
               <button
                 type="button"
-                aria-expanded={open}
-                aria-controls={bodyId}
+                aria-expanded={cssOpenAtLg ? undefined : open}
+                aria-controls={mountBody ? bodyId : undefined}
                 onClick={onToggle}
                 className="flex w-full items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {titleContent}
                 <ChevronDown
                   aria-hidden
-                  className={cn("ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+                  className={cn(
+                    "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                    open && "rotate-180",
+                    cssOpenAtLg && "lg:rotate-180",
+                  )}
                 />
               </button>
             ) : (
@@ -587,8 +693,13 @@ function SearchCraftGroupCard({
           </CardTitle>
         </CardHeader>
       )}
-      {bodyVisible && (
-        <CardContent id={bodyId} className="px-5">
+      {mountBody && (
+        <CardContent
+          ref={bodyRef}
+          id={bodyId}
+          hidden={hiddenClosed}
+          className={cn("px-5", cssOpenAtLg && "max-lg:hidden")}
+        >
           {body}
         </CardContent>
       )}

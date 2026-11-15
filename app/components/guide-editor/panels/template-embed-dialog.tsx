@@ -13,6 +13,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { parseTemplateIdInput } from "@/lib/guide-embed-attrs";
 import type { TemplateEmbedMeta } from "../lib/template-embed-meta";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Search, Loader2, LayoutTemplate } from "lucide-react";
 
@@ -20,11 +21,13 @@ interface TemplateEmbedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInsert: (template: TemplateEmbedMeta) => void;
+  /** 挿入済みの埋め込みの「変更」から開いたか（見出しを「変更」にする。選ぶとそのノードを書き換える） */
+  editing?: boolean;
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-export function TemplateEmbedDialog({ open, onOpenChange, onInsert }: TemplateEmbedDialogProps) {
+export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = false }: TemplateEmbedDialogProps) {
   const t = useT();
   const locale = useLocale();
   const [query, setQuery] = useState("");
@@ -64,6 +67,9 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert }: TemplateEm
     return () => clearTimeout(timer.current);
   }, [query, open]);
 
+  // 「変更」から開いたときは、閉じたあとフォーカスをそのボタンへ戻す
+  const returnFocus = useDialogReturnFocus(editing);
+
   const select = (template: TemplateEmbedMeta) => {
     onInsert(template);
     onOpenChange(false);
@@ -71,9 +77,11 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert }: TemplateEm
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
-          <DialogTitle>{t("guideEditor.embedTemplateTitle")}</DialogTitle>
+          <DialogTitle>
+            {editing ? t("guideEditor.embedTemplateEditTitle") : t("guideEditor.embedTemplateTitle")}
+          </DialogTitle>
         </DialogHeader>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

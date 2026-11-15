@@ -200,6 +200,42 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
 // リマップ表示コンポーネント
 // ========================================
 
+/**
+ * リマップ / サーチクラフト埋め込みのヘッダー（「走者名（プリセット）— 種別」と「プロフィールを見る」）。
+ * 狭い幅で語の途中で折れないよう、種別とリンクは折り返さず（shrink-0 whitespace-nowrap）、長い名前だけ省略する
+ */
+function UserEmbedHeader({
+  displayName,
+  presetName,
+  label,
+  userSlug,
+}: {
+  displayName: string;
+  presetName: string | null;
+  label: string;
+  userSlug: string;
+}) {
+  const t = useT();
+  return (
+    <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+      <p className="flex min-w-0 items-center text-sm font-medium">
+        <span className="min-w-0 truncate">
+          {displayName}
+          {presetName && <span className="ml-2 text-muted-foreground">({presetName})</span>}
+        </span>
+        <span className="ml-1 shrink-0 whitespace-nowrap">— {label}</span>
+      </p>
+      {/* 文字サイズは据え置きで、padding＋負マージンによりヘッダー高さを変えずに当たり判定だけ約40pxへ広げる */}
+      <Link
+        to={`/player/${userSlug}`}
+        className="-mx-2 -my-3 inline-flex shrink-0 items-center whitespace-nowrap px-2 py-3 text-xs text-primary hover:underline"
+      >
+        {t("playerProfile.viewProfile")}
+      </Link>
+    </div>
+  );
+}
+
 export function KeybindEmbedView({
   userData,
   presetName,
@@ -239,20 +275,12 @@ export function KeybindEmbedView({
   return (
     <div className="my-4 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
-        <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
-          <span className="text-sm font-medium">
-            {displayName}
-            {presetName && <span className="text-muted-foreground ml-2">({presetName})</span>}
-            {" — "}{t("playerProfile.remapTab")}
-          </span>
-          {/* 文字サイズは据え置きで、padding＋負マージンによりヘッダー高さを変えずに当たり判定だけ約40pxへ広げる */}
-          <Link
-            to={`/player/${userData.slug}`}
-            className="-mx-2 -my-3 inline-flex items-center px-2 py-3 text-xs text-primary hover:underline"
-          >
-            {t("playerProfile.viewProfile")}
-          </Link>
-        </div>
+        <UserEmbedHeader
+          displayName={displayName}
+          presetName={presetName}
+          label={t("playerProfile.remapTab")}
+          userSlug={userData.slug}
+        />
         {/* フェード・ヒントは bg-card 想定で、この埋め込みカードの背景（bg-card）と一致。ヒントは左右余白に揃える。
             鍵盤（約 1,150px）は記事の本文幅より広いことがあるので、はみ出しているときはデスクトップでも案内を出す */}
         <HorizontalScrollArea
@@ -317,8 +345,10 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
  * false は「ライブ」（craft 参照は id、Loop は liveLoops）。
  *
  * 面は埋め込みの外枠1枚だけ（グループはカードにせず見出し＋行）。タイミングのグループが2つ以上なら開閉でき、
- * 最初のグループのクラフトが SEARCH_CRAFT_OPEN_FIRST_MAX 件以下ならそれだけ開いて、多ければ全部閉じて始める
- * （SearchCraftGroupedList の collapsible / openFirstMaxCount。テンプレート詳細と同じ）。1つだけなら常に開く。
+ * lg 以上は全部開いて始める。lg 未満は、最初のグループのクラフトが SEARCH_CRAFT_OPEN_FIRST_MAX 件以下ならそれだけ開いて、
+ * 多ければ全部閉じて始める。閉じた本体も hidden="until-found" で DOM に残す（ページ内検索で見つかる）
+ * （SearchCraftGroupedList の collapsible / openFirstMaxCount / openAllFromLg / keepClosedMounted。テンプレート詳細と同じ）。
+ * 1つだけなら常に開く。
  */
 function SearchCraftEmbedBody({
   crafts,
@@ -406,8 +436,10 @@ function SearchCraftEmbedBody({
       <SearchCraftGroupedList
         framed={false}
         collapsible={collapsible}
-        // 先頭のグループが長いときは全部閉じて始める（テンプレート詳細と同じ）
+        // lg 未満は、先頭のグループが長いときは全部閉じて始める。lg 以上は全部開く（テンプレート詳細と同じ）
         openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
+        openAllFromLg
+        keepClosedMounted
         crafts={rows}
         remaps={remaps}
         // アイテム名は閲覧者の UI ロケールで出す（docs/guides.md「サーチクラフトテンプレート埋め込み」）
@@ -450,16 +482,12 @@ export function SearchCraftEmbedView({
   return (
     <div className="my-4 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
-        <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
-          <span className="text-sm font-medium">
-            {displayName}
-            {presetName && <span className="text-muted-foreground ml-2">({presetName})</span>}
-            {" — "}{t("playerProfile.searchCraftTab")}
-          </span>
-          <Link to={`/player/${userData.slug}`} className="text-xs text-primary hover:underline">
-            {t("playerProfile.viewProfile")}
-          </Link>
-        </div>
+        <UserEmbedHeader
+          displayName={displayName}
+          presetName={presetName}
+          label={t("playerProfile.searchCraftTab")}
+          userSlug={userData.slug}
+        />
         <SearchCraftEmbedBody
           crafts={crafts}
           remaps={remaps}
@@ -551,7 +579,7 @@ export function SearchCraftTemplateEmbedView({
           </div>
           <Link
             to={href}
-            className="-mx-2 -my-3 inline-flex items-center px-2 py-3 text-xs text-primary hover:underline"
+            className="-mx-2 -my-3 inline-flex shrink-0 items-center whitespace-nowrap px-2 py-3 text-xs text-primary hover:underline"
           >
             {t("guideView.embedTemplateView")}
           </Link>

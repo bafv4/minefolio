@@ -70,6 +70,22 @@ export interface GuideMediaContext {
   cropImage: (src: string, rect: CropRect) => Promise<string | null>;
 }
 
+/**
+ * 埋め込み NodeView の「変更」が必要とする宿主（index.tsx）側のダイアログ操作。
+ * NodeView には props を直接渡せないため、lib/embed-edit-context.ts の WeakMap（editor ごと）で注入する。
+ * apply はダイアログで確定したときだけ呼ばれ、NodeView 側が updateAttributes で書き換える（挿入はしない）
+ */
+export interface GuideEmbedEditContext {
+  /** リマップ / サーチクラフト埋め込みのダイアログを、保存済みの属性を初期値にして開く */
+  editEmbed: (
+    kind: "keybind" | "searchcraft",
+    initial: { userSlug: string; presetName: string | null },
+    apply: (userSlug: string, presetName: string | null) => void,
+  ) => void;
+  /** テンプレート埋め込みの選択ダイアログを開く。選んだテンプレートの ID を apply に渡す */
+  editTemplateEmbed: (apply: (templateId: string) => void) => void;
+}
+
 /** スラッシュコマンドの 1 項目 */
 export interface SlashItem {
   /** 表示名 */

@@ -150,7 +150,7 @@ const SAVE_ARIA_KEYSHORTCUTS = "Control+S Meta+S";
 
 /**
  * 挿入タブの Minefolio 固有の埋め込み（短い文字＋ツールチップの説明）。
- * 語は / メニュー（slash-command/items.ts）と同じ「ガイドリンク」「キー配置」「サーチクラフト」「テンプレート」
+ * 語は / メニュー（slash-command/items.ts）と同じ「ガイドリンク」「リマップ」「サーチクラフト」「テンプレート」
  */
 const EMBED_TOOLS: {
   key: "guideLink" | "keybind" | "searchcraft" | "template";

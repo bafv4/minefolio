@@ -2201,7 +2201,7 @@ export const PAGES_JA = {
       youtube: "YouTube",
       link: "リンク",
       guideLink: "ガイドリンク",
-      keybindEmbed: "キー配置の埋め込み",
+      keybindEmbed: "リマップの埋め込み",
       searchCraftEmbed: "サーチクラフトの埋め込み",
       searchCraftTemplateEmbed: "サーチクラフトテンプレートの埋め込み",
     },
@@ -2266,7 +2266,7 @@ export const PAGES_JA = {
       /** 挿入タブの Minefolio 固有の埋め込み（グループ名と短い文字。説明はツールチップ） */
       embedGroup: "Minefolio の埋め込み",
       embedShortGuideLink: "ガイドリンク",
-      embedShortKeybind: "キー配置",
+      embedShortKeybind: "リマップ",
       embedShortSearchCraft: "サーチクラフト",
       embedShortTemplate: "テンプレート",
     },
@@ -2410,9 +2410,9 @@ export const PAGES_JA = {
     link: "リンク",
     image: "画像をアップロード",
     titlePlaceholder: "タイトルを入力...",
-    embedKeybind: "キー配置の埋め込み",
+    embedKeybind: "リマップの埋め込み",
     embedSearchCraft: "サーチクラフトの埋め込み",
-    /** キー配置 / サーチクラフト埋め込みの挿入ダイアログ */
+    /** リマップ / サーチクラフト埋め込みの挿入・変更ダイアログ */
     embedDialogDesc: "走者とプリセットを選びます。記事には、読者が開いたときのその走者の設定が表示されます。",
     embedRunnerLabel: "走者",
     embedRunnerPlaceholder: "走者を選ぶ",
@@ -2434,15 +2434,27 @@ export const PAGES_JA = {
     embedPresetMissing: "プリセット「{preset}」が見つかりません。記事には既定の設定が表示されます",
     /** 中身の要約。{groups} は「OW 29・Bastion 3」のようなグループごとの件数 */
     embedSummarySearchCraft: "{groups}（計 {count} 件）",
-    embedSummaryNoSearchCraft: "サーチクラフトが登録されていません",
     embedSummaryRemaps: "リマップ {count} 件",
-    embedSummaryNoRemaps: "リマップが設定されていません",
+    /** 中身が 0 件のとき。{text} は記事に出る文（playerProfile.noRemaps / noSearchCraft） */
+    embedSummaryEmptyWarning: "記事には「{text}」とだけ表示されます（走者が後から設定すれば表示されます）",
+    /** 保存済みのプリセット名が今の一覧に無いとき、プリセットの選択肢に残す項目 */
+    embedPresetMissingOption: "{preset}（見つかりません）",
     embedTemplateMissing: "テンプレートが見つかりません（未公開・削除済みのものは記事に表示できません）",
     embedInsert: "挿入",
+    embedInsertAnyway: "このまま挿入",
+    /** 挿入済みの埋め込みの「変更」 */
+    embedEdit: "変更",
+    embedApply: "適用",
+    embedApplyAnyway: "このまま適用",
+    embedKeybindEditTitle: "リマップの埋め込みを変更",
+    embedSearchCraftEditTitle: "サーチクラフトの埋め込みを変更",
+    embedTemplateEditTitle: "テンプレートの埋め込みを変更",
+    /** {label} は埋め込みの種別名（リマップ・サーチクラフト・テンプレート） */
+    embedRemoveNamed: "{label}の埋め込みを削除",
     embedCancel: "キャンセル",
-    embedKeybindTitle: "キー配置を埋め込む",
+    embedKeybindTitle: "リマップを埋め込む",
     embedSearchCraftTitle: "サーチクラフトを埋め込む",
-    embedKeybindLabel: "キー配置",
+    embedKeybindLabel: "リマップ",
     embedSearchCraftLabel: "サーチクラフト",
     embedTemplate: "サーチクラフトテンプレートの埋め込み",
     embedTemplateTitle: "サーチクラフトテンプレートを埋め込む",
@@ -2453,7 +2465,6 @@ export const PAGES_JA = {
     embedTemplateCraftCount: "クラフト {count} 件",
     embedTemplateUnpublishedNote: "非公開です。公開すると記事に表示されます",
     embedTemplateUnpublishedBadge: "非公開",
-    embedTemplateRemove: "埋め込みを削除",
     // 画像のトリミング
     cropTitle: "画像をトリミング",
     cropDesc: "枠をドラッグして切り出す範囲を決めます。適用すると新しい画像として保存されます。",
@@ -2646,6 +2657,8 @@ export const PAGES_JA = {
     keyboardLayoutLabel: "キーボード配列",
     craftSection: "サーチクラフト",
     loopCount: "Loop {count}件",
+    /** テンプレート詳細の見出しの隣の「Loop n件」の説明（ツールチップと読み上げ。先頭は見えている文字と同じ） */
+    loopCountHint: "Loop {count}件: 複数のクラフトを続けて打つ繋ぎ方の数です。各タイミングのグループの中に表示されます",
     cancel: "キャンセル",
   },
   playground: {

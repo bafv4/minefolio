@@ -488,6 +488,17 @@ body {
     background-color: var(--background);
   }
 }
+/* ガイド記事の目次バー（xl 未満、guide-toc-nav.tsx）がヘッダーの直下に貼り付いている間と、
+   ガイドエディタ（ヘッダーの下に不透明なツールバーが常にある）では、同じ理由でサイトヘッダーを不透明にする。
+   目次バーの貼り付きは data-toc-stuck（走者画面の data-stuck とは分ける。あちらは --sticky-bar-inset も変える） */
+@media (width < 80rem) {
+  :root:has([data-guide-toc-bar][data-toc-stuck="true"]) header.sticky {
+    background-color: var(--background);
+  }
+}
+:root:has([data-editor-toolbar]) header.sticky {
+  background-color: var(--background);
+}
 
 @layer components {
 

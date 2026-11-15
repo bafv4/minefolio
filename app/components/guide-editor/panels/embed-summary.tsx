@@ -1,4 +1,4 @@
-// キー配置 / サーチクラフト埋め込みの「何が出るか」の要約。挿入ダイアログのプレビューとノードビューが共用する。
+// リマップ / サーチクラフト埋め込みの「何が出るか」の要約。挿入ダイアログのプレビューとノードビューが共用する。
 // 解決は公開ページと同じ規則（/api/guides/embed-resolve → lib/guide-embed-data.ts の選び方）なので、
 // ここで「見つかりません」なら記事でも出ない。
 import { AlertTriangle, Loader2 } from "lucide-react";
@@ -8,6 +8,7 @@ import {
   findEmbedPreset,
   summarizeKeybindEmbed,
   summarizeSearchCraftEmbed,
+  type EmbedUserData,
 } from "@/lib/guide-embed-data";
 import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { Translator } from "@/lib/messages";
@@ -41,6 +42,29 @@ function timingShortLabel(t: Translator, timing: SearchCraftTiming | null): stri
 /** 解決できたか（挿入ダイアログの「挿入」を押せるか） */
 export function isEmbedResolved(state: EmbedUserState): boolean {
   return state.status === "found";
+}
+
+/** 見つからないプリセット名は、公開ページと同じく既定の設定で数える */
+function effectivePresetName(user: EmbedUserData, presetName: string | null): string | null {
+  return presetName && findEmbedPreset(user, presetName) ? presetName : null;
+}
+
+/**
+ * 解決できたが中身が 0 件か（リマップなし・サーチクラフト未登録）。記事には「〜が設定されていません」とだけ出る。
+ * 挿入は止めない（走者が後から設定すれば記事にも出る）。ダイアログのボタンの文言（「このまま挿入」）にも使う
+ */
+export function isEmbedEmpty(kind: EmbedKind, state: EmbedUserState, presetName: string | null): boolean {
+  if (state.status !== "found") return false;
+  const preset = effectivePresetName(state.user, presetName);
+  return kind === "searchcraft"
+    ? summarizeSearchCraftEmbed(state.user, preset).total === 0
+    : summarizeKeybindEmbed(state.user, preset).remapCount === 0;
+}
+
+/** 記事が 0 件のときに出す文（guide-embeds.tsx と同じキー）から、引用に使うため末尾の句点を落とす */
+function articleEmptyText(t: Translator, kind: EmbedKind): string {
+  const text = kind === "searchcraft" ? t("playerProfile.noSearchCraft") : t("playerProfile.noRemaps");
+  return text.replace(/[。.]$/, "");
 }
 
 /**
@@ -96,24 +120,22 @@ export function EmbedSummary({
   const name = getLocalizedDisplayName(user, locale);
   const presetMissing = !!presetName && !findEmbedPreset(user, presetName);
   // 見つからないプリセット名は、公開ページと同じく既定の設定で数える
-  const effectivePreset = presetMissing ? null : presetName;
+  const effectivePreset = effectivePresetName(user, presetName);
 
-  let summary: string;
+  // 0 件なら summary は null（代わりに、記事に出る文を warning で添える）
+  let summary: string | null;
   if (kind === "searchcraft") {
     const s = summarizeSearchCraftEmbed(user, effectivePreset);
     summary =
       s.total === 0
-        ? t("guideEditor.embedSummaryNoSearchCraft")
+        ? null
         : t("guideEditor.embedSummarySearchCraft", {
             groups: s.groups.map((g) => `${timingShortLabel(t, g.timing)} ${g.count}`).join("・"),
             count: s.total,
           });
   } else {
     const s = summarizeKeybindEmbed(user, effectivePreset);
-    summary =
-      s.remapCount === 0
-        ? t("guideEditor.embedSummaryNoRemaps")
-        : t("guideEditor.embedSummaryRemaps", { count: s.remapCount });
+    summary = s.remapCount === 0 ? null : t("guideEditor.embedSummaryRemaps", { count: s.remapCount });
   }
 
   return (
@@ -128,7 +150,16 @@ export function EmbedSummary({
           {presetName && !presetMissing ? presetName : t("guideEditor.embedPresetDefaultShort")}
         </span>
       </p>
-      <p className="text-xs text-muted-foreground">{summary}</p>
+      {summary !== null ? (
+        <p className="text-xs text-muted-foreground">{summary}</p>
+      ) : (
+        <p className="flex items-start gap-1.5 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">
+            {t("guideEditor.embedSummaryEmptyWarning", { text: articleEmptyText(t, kind) })}
+          </span>
+        </p>
+      )}
       {presetMissing && (
         <p className="flex items-start gap-1.5 text-xs text-warning">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />

@@ -1,7 +1,8 @@
-// キー配置 / サーチクラフト埋め込みの挿入ダイアログ。
+// リマップ / サーチクラフト埋め込みの挿入・変更ダイアログ。
 // 走者は自サイトの走者検索（/api/browse）の候補から選び、既定はログイン中の作者自身。プリセットは選んだ走者の
 // プリセット一覧から選ぶ。選んだ組み合わせは公開ページと同じ規則で解決して要約を見せ、解決できなければ挿入できない。
 // 保存する属性は従来どおり data-user-slug（解決した slug）と data-preset-name（既定なら無し）だけ。
+// 挿入済みの埋め込みの「変更」（NodeView）からは、保存済みの属性を初期値にして開く（initial）。
 import { useState, useEffect, useRef, useId } from "react";
 import {
   Dialog,
@@ -34,7 +35,8 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { listEmbedPresetNames } from "@/lib/guide-embed-data";
 import { useEmbedUser } from "../lib/embed-user-cache";
-import { EmbedSummary, isEmbedResolved, type EmbedKind } from "./embed-summary";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
+import { EmbedSummary, isEmbedEmpty, isEmbedResolved, type EmbedKind } from "./embed-summary";
 import { ChevronsUpDown, Loader2 } from "lucide-react";
 
 export type { EmbedKind };
@@ -46,6 +48,11 @@ interface EmbedDialogProps {
   onInsert: (kind: EmbedKind, slug: string, preset: string) => void;
   /** 既定の走者（ログイン中の作者自身の slug） */
   defaultUserSlug: string;
+  /**
+   * 挿入済みの埋め込みの「変更」から開いたときの初期値（保存済みの属性）。null なら挿入（既定は作者自身・既定の設定）。
+   * 確定すると onInsert が呼ばれ、宿主はそのノードを書き換える
+   */
+  initial?: { userSlug: string; presetName: string | null } | null;
 }
 
 /** Radix Select は空文字の value を持てないため、「既定の設定」は番兵値で持ち、挿入時に空へ戻す */
@@ -63,24 +70,48 @@ interface RunnerCandidate {
   customSkinUrl: string | null;
 }
 
-export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug }: EmbedDialogProps) {
+export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug, initial = null }: EmbedDialogProps) {
   const t = useT();
+  const editing = initial !== null;
   const [userSlug, setUserSlug] = useState(defaultUserSlug);
   const [preset, setPreset] = useState(DEFAULT_PRESET_VALUE);
+  // 「変更」で開いたとき、保存済みのプリセット名（走者を選び直したら使わない。一覧に無くても選択肢に残すため）
+  const [savedPreset, setSavedPreset] = useState<string | null>(null);
 
-  // 開くたびに既定（作者自身・既定の設定）へ戻す
+  // 開くたびに、挿入なら既定（作者自身・既定の設定）、変更なら保存済みの属性へ戻す
+  const initialUserSlug = initial?.userSlug;
+  const initialPresetName = initial?.presetName ?? null;
   useEffect(() => {
-    if (kind) {
+    if (!kind) return;
+    if (initialUserSlug !== undefined) {
+      setUserSlug(initialUserSlug);
+      setPreset(initialPresetName ?? DEFAULT_PRESET_VALUE);
+      setSavedPreset(initialPresetName);
+    } else {
       setUserSlug(defaultUserSlug);
       setPreset(DEFAULT_PRESET_VALUE);
+      setSavedPreset(null);
     }
-  }, [kind, defaultUserSlug]);
+  }, [kind, defaultUserSlug, initialUserSlug, initialPresetName]);
 
   // 選んだ走者を公開ページと同じ規則で解決する（走者が設定を変えていることがあるので、ダイアログでは取り直す）
   const state = useEmbedUser(kind ? userSlug : "", { fresh: true });
   const presetNames = state.status === "found" ? listEmbedPresetNames(state.user) : [];
   const presetName = preset === DEFAULT_PRESET_VALUE ? null : preset;
+  // 保存済みのプリセット名が今の一覧に無い（改名・削除）ときも、選択肢に残して空欄にしない
+  // （要約が「見つかりません。既定の設定が表示されます」と警告する。既定に戻すかは作者が選ぶ）
+  const missingSavedPreset =
+    savedPreset && state.status === "found" && !presetNames.includes(savedPreset) ? savedPreset : null;
   const canInsert = !!kind && isEmbedResolved(state);
+  // 中身が 0 件でも挿入は止めない（走者が後から設定すれば記事に出る）。ボタンを「このまま…」にして気づかせる
+  const empty = !!kind && isEmbedEmpty(kind, state, presetName);
+  const submitLabel = editing
+    ? empty
+      ? t("guideEditor.embedApplyAnyway")
+      : t("guideEditor.embedApply")
+    : empty
+      ? t("guideEditor.embedInsertAnyway")
+      : t("guideEditor.embedInsert");
 
   const submit = () => {
     if (!kind || state.status !== "found") return;
@@ -88,18 +119,24 @@ export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug }: E
     onOpenChange(false);
   };
 
+  // 「変更」から開いたときは、閉じたあとフォーカスをそのボタンへ戻す（トリガーが無いので Radix の既定では body に落ちる）
+  const returnFocus = useDialogReturnFocus(editing);
   const runnerLabelId = useId();
   const presetLabelId = useId();
   const presetTriggerId = useId();
 
   return (
     <Dialog open={kind !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>
             {kind === "searchcraft"
-              ? t("guideEditor.embedSearchCraftTitle")
-              : t("guideEditor.embedKeybindTitle")}
+              ? editing
+                ? t("guideEditor.embedSearchCraftEditTitle")
+                : t("guideEditor.embedSearchCraftTitle")
+              : editing
+                ? t("guideEditor.embedKeybindEditTitle")
+                : t("guideEditor.embedKeybindTitle")}
           </DialogTitle>
           <DialogDescription>{t("guideEditor.embedDialogDesc")}</DialogDescription>
         </DialogHeader>
@@ -114,6 +151,7 @@ export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug }: E
               onSelect={(slug) => {
                 setUserSlug(slug);
                 setPreset(DEFAULT_PRESET_VALUE);
+                setSavedPreset(null);
               }}
             />
           </div>
@@ -131,6 +169,11 @@ export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug }: E
                     {name}
                   </SelectItem>
                 ))}
+                {missingSavedPreset && (
+                  <SelectItem value={missingSavedPreset}>
+                    {t("guideEditor.embedPresetMissingOption", { preset: missingSavedPreset })}
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
             {state.status === "found" && presetNames.length === 0 && (
@@ -150,7 +193,7 @@ export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug }: E
             {t("guideEditor.embedCancel")}
           </Button>
           <Button size="sm" onClick={submit} disabled={!canInsert}>
-            {t("guideEditor.embedInsert")}
+            {submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

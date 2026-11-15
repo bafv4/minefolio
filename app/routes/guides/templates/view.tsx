@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageSection } from "@/components/page-section";
+import { HintTip } from "@/components/hint-tip";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -750,9 +751,12 @@ export default function TemplateViewPage() {
         first
         badge={
           loops.length > 0 ? (
-            <Badge variant="secondary" className="text-xs">
-              {t("templates.loopCount", { count: loops.length })}
-            </Badge>
+            // 何を数えているかの説明をホバー／フォーカス（タッチはタップ）で出す。名前は見えている文字から始まる説明文
+            <HintTip message={t("templates.loopCountHint", { count: loops.length })}>
+              <Badge variant="secondary" className="text-xs">
+                {t("templates.loopCount", { count: loops.length })}
+              </Badge>
+            </HintTip>
           ) : undefined
         }
       >
@@ -769,11 +773,14 @@ export default function TemplateViewPage() {
         )}
         <KeyBadgeLegend showCraftMarker={loops.length > 0} />
         {/* 記事内の埋め込み（guide-embeds.tsx の SearchCraftEmbedBody）と同じ開閉と枠: グループは箱にせず
-            見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、先頭が長ければ全部閉じて始める */}
+            見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、lg 以上は全部開いて、lg 未満は先頭が長ければ全部閉じて始める。
+            閉じた本体も DOM に残す（ページ内検索で見つかる） */}
         <SearchCraftGroupedList
           framed={false}
           collapsible={countSearchCraftGroups(parsedSearchCrafts, searchCraftLoopTimings) > 1}
           openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
+          openAllFromLg
+          keepClosedMounted
           groupHeadingLevel="h3"
           crafts={parsedSearchCrafts}
           remaps={remaps}

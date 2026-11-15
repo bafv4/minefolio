@@ -12,6 +12,7 @@ import { useT } from "@/hooks/use-locale";
 import type { GuideEditorProps, SlashCommandContext, GuideMediaContext } from "./types";
 import type { SlashCommandStorage } from "./extensions/slash-command";
 import { setImageMediaContext } from "./extensions/image";
+import { setEmbedEditContext } from "./lib/embed-edit-context";
 import { cropImageFromUrl, isAnimatedImageUrl, ImageLoadError } from "./lib/image-processing";
 import { cropAnimatedGifFromUrl } from "./lib/gif-crop";
 import { GifTooLargeError } from "./lib/gif-encode";
@@ -90,6 +91,20 @@ export function GuideEditor({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [templateEmbedOpen, setTemplateEmbedOpen] = useState(false);
+  // 埋め込み NodeView の「変更」から開いたときの初期値と書き戻し先（null なら挿入として開く）
+  const [embedEdit, setEmbedEdit] = useState<{
+    initial: { userSlug: string; presetName: string | null };
+    apply: (userSlug: string, presetName: string | null) => void;
+  } | null>(null);
+  const [templateEmbedApply, setTemplateEmbedApply] = useState<((templateId: string) => void) | null>(null);
+  const openEmbedInsert = useCallback((kind: EmbedKind) => {
+    setEmbedEdit(null);
+    setEmbedKind(kind);
+  }, []);
+  const openTemplateEmbedInsert = useCallback(() => {
+    setTemplateEmbedApply(null);
+    setTemplateEmbedOpen(true);
+  }, []);
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
   const [videoToGifOpen, setVideoToGifOpen] = useState(false);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
@@ -312,12 +327,12 @@ export function GuideEditor({
       openImagePicker: () => imageInputRef.current?.click(),
       insertYoutube: () => setYoutubeDialogOpen(true),
       insertLink: handleLinkInsert,
-      openEmbedDialog: (kind) => setEmbedKind(kind),
-      openTemplateEmbedDialog: () => setTemplateEmbedOpen(true),
+      openEmbedDialog: openEmbedInsert,
+      openTemplateEmbedDialog: openTemplateEmbedInsert,
       openGuideLinkSearch: () => setGuideLinkOpen(true),
       openVideoToGif: () => setVideoToGifOpen(true),
     }),
-    [editor, handleLinkInsert],
+    [editor, handleLinkInsert, openEmbedInsert, openTemplateEmbedInsert],
   );
 
   useEffect(() => {
@@ -341,13 +356,38 @@ export function GuideEditor({
     if (editor) setImageMediaContext(editor, mediaContext);
   }, [editor, mediaContext]);
 
+  // ── 埋め込み NodeView の「変更」の注入 ──────────
+  useEffect(() => {
+    if (!editor) return;
+    setEmbedEditContext(editor, {
+      editEmbed: (kind, initial, apply) => {
+        setEmbedEdit({ initial, apply });
+        setEmbedKind(kind);
+      },
+      editTemplateEmbed: (apply) => {
+        // 関数を state に入れるため、更新関数として解釈されないよう包む
+        setTemplateEmbedApply(() => apply);
+        setTemplateEmbedOpen(true);
+      },
+    });
+  }, [editor]);
+
   const handleInsertEmbed = (kind: EmbedKind, slug: string, preset: string) => {
+    // 「変更」から開いたときは、そのノードの属性を書き換える（挿入はしない）
+    if (embedEdit) {
+      embedEdit.apply(slug, preset || null);
+      return;
+    }
     if (editor) insertEmbed(editor, kind, slug, preset || null);
   };
 
   const handleInsertTemplateEmbed = (template: TemplateEmbedMeta) => {
     // 編集中表示がタイトルを再取得しなくて済むよう、選択結果を先にキャッシュへ入れる
     primeTemplateEmbedMeta(template);
+    if (templateEmbedApply) {
+      templateEmbedApply(template.id);
+      return;
+    }
     if (editor) insertTemplateEmbed(editor, template.id);
   };
 
@@ -381,8 +421,8 @@ export function GuideEditor({
           onYoutube={slashContext.insertYoutube}
           onVideoToGif={() => setVideoToGifOpen(true)}
           onLink={handleLinkInsert}
-          onEmbed={(kind) => setEmbedKind(kind)}
-          onTemplateEmbed={() => setTemplateEmbedOpen(true)}
+          onEmbed={openEmbedInsert}
+          onTemplateEmbed={openTemplateEmbedInsert}
           onGuideLink={() => setGuideLinkOpen(true)}
         />
       )}
@@ -513,11 +553,13 @@ export function GuideEditor({
         onOpenChange={(open) => !open && setEmbedKind(null)}
         onInsert={handleInsertEmbed}
         defaultUserSlug={authorSlug}
+        initial={embedEdit?.initial ?? null}
       />
       <TemplateEmbedDialog
         open={templateEmbedOpen}
         onOpenChange={setTemplateEmbedOpen}
         onInsert={handleInsertTemplateEmbed}
+        editing={templateEmbedApply !== null}
       />
       <GuideLinkSearch
         open={guideLinkOpen}

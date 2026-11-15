@@ -163,6 +163,8 @@ function useFollowActiveHeading(
  * SSR・初期描画では近似値を用い、マウント後に実測値へ差し替える。
  */
 const TOC_HEIGHT_MARGIN_PX = 64;
+/** 狭い画面の目次バーが貼り付く位置（top-16。サイトヘッダーの下） */
+const TOC_BAR_TOP_PX = 64;
 function useTocMaxHeight(): string {
   const [maxHeight, setMaxHeight] = useState("calc(100vh - 16rem)");
   useEffect(() => {
@@ -422,7 +424,27 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   useFollowActiveHeading(scrollRef, activeId);
   const { overrides, setOverrides, hasSections, expandAll, collapseAll } = useTocOverrides(items);
   const activeItem = items.find((i) => i.id === activeId);
-  if (items.length < 2) return null;
+  const shown = items.length >= 2;
+  // バーがヘッダーの直下に貼り付いているか。番兵（バーの直前の 1px）がヘッダーの下端より上へ出たら貼り付き。
+  // 貼り付いている間はサイトヘッダーを不透明にする（app/app.css の data-toc-stuck。半透明のヘッダーの下で
+  // 不透明なバーと食い違わないように）。属性名は走者画面の data-stuck と分ける（あちらは --sticky-bar-inset も変える）
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!shown || !el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      // xl 以上は番兵ごと隠れる（高さ 0）ので、貼り付きとはみなさない
+      ([entry]) =>
+        setStuck(
+          !entry.isIntersecting && entry.boundingClientRect.height > 0 && entry.boundingClientRect.top < TOC_BAR_TOP_PX,
+        ),
+      { rootMargin: `-${TOC_BAR_TOP_PX}px 0px 0px 0px` },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [shown]);
+  if (!shown) return null;
 
   const handleNavigate = (id: string) => {
     jumpingRef.current = true;
@@ -444,7 +466,14 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
     // （貼り付いた面の左右から下の本文が透けて見えないように。ui.md 10 章）。ボタンの px-4 で文字は本文と揃う。
     // 面は不透明（半透明だと下を流れる本文と重なって読みにくい）
     // data-guide-toc-bar: 本文の表の見出し行をこのバーの下に貼り付けるため、高さを測る目印（guides/view.tsx）
-    <div data-guide-toc-bar="" className="xl:hidden sticky top-16 z-30 mb-6 -mx-4 border-y border-border bg-background sm:-mx-6">
+    <>
+    {/* 貼り付きの番兵。高さ 1px を -mb-px で打ち消し、位置をバーの上端に重ねる（レイアウトは変えない） */}
+    <div ref={sentinelRef} aria-hidden="true" className="pointer-events-none -mb-px h-px xl:hidden" />
+    <div
+      data-guide-toc-bar=""
+      data-toc-stuck={stuck}
+      className="xl:hidden sticky top-16 z-30 mb-6 -mx-4 border-y border-border bg-background sm:-mx-6"
+    >
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
@@ -511,5 +540,6 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
         </SheetContent>
       </Sheet>
     </div>
+    </>
   );
 }
