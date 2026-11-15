@@ -735,7 +735,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 - 取得は loader で `loadPendingSpeedrunRecords`（`app/lib/speedruncom-pending.server.ts`）。cron が保存済みの行を読むだけで speedrun.com API は叩かない。承認済み・却下・他ユーザーの行は含めず、オーナーが非表示にした run ID は除外、タイムの速い順。非公開プロフィールは loader 冒頭のゲートで本人以外に 404 のため漏れない
 - 0 件の人にはカードごと出さない。カード右上の「審査中の記録も表示」トグルをオンにすると、カテゴリ名・タイム・「審査中」バッジ（`warning` トークン）・speedrun.com のランページへの外部リンク（新しいタブ）を並べる
-- トグル状態は URL の `srcPending=1` が唯一の指定元（切替は `replace` で履歴を汚さない）。`?tab=stats&srcPending=1` で開くと最初からオンで、カードの位置までスクロールする（ホームの注目の走者カードからの導線。形式は変更しない）
+- トグル状態は URL の `srcPending=1` が指定元（切替は `replace` で履歴を汚さない）。スイッチはタブと同じくローカル状態で即時に切り替え、URL の変化（リンク等）に追従させる（URL だけを読むと root / _layout の loader が返るまで切り替わって見えない）。`srcPending` は loader が読まないので、`shouldRevalidate` で `tab` と同じく profile の loader を再実行しない（`PROFILE_VIEW_ONLY_PARAMS`）。`?tab=stats&srcPending=1` で開くと最初からオンで、カードの位置までスクロールする（ホームの注目の走者カードからの導線。形式は変更しない）
 - テスト: `app/lib/__tests__/speedruncom-pending.server.test.ts`
 
 ### 各タブの欄構成

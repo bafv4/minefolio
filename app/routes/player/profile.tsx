@@ -309,6 +309,11 @@ export function headers(_: Route.HeadersArgs) {
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
 // プリセット切替オーバーレイの誤表示を防ぐ）。パス変更・preset 切替などは通常通り。
+// 審査中記録のトグル（`srcPending`）も表示だけの指定で loader は読まないので同じ扱いにする
+// （切り替えるたびに重い loader を走らせない。スイッチ自体はローカル状態で即時に切り替わる）。
+/** 表示だけを切り替える（loader が読まない）検索パラメータ。これだけが変わったときは loader を再実行しない */
+const PROFILE_VIEW_ONLY_PARAMS = ["tab", "srcPending"] as const;
+
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
@@ -320,8 +325,10 @@ export function shouldRevalidate({
   ) {
     const cur = new URLSearchParams(currentUrl.search);
     const next = new URLSearchParams(nextUrl.search);
-    cur.delete("tab");
-    next.delete("tab");
+    for (const key of PROFILE_VIEW_ONLY_PARAMS) {
+      cur.delete(key);
+      next.delete(key);
+    }
     if (cur.toString() === next.toString()) return false;
   }
   return defaultShouldRevalidate;
@@ -1183,8 +1190,17 @@ export default function PlayerProfilePage() {
       </div>
     ) : undefined;
 
-  // 審査中記録のトグル: URL の `srcPending=1` を唯一の指定元にする（共有・再訪に対応）。履歴は汚さない
+  // 審査中記録のトグル: URL の `srcPending=1` が指定元（共有・再訪に対応）。履歴は汚さない。
+  // スイッチはタブと同じくローカル状態で即時に切り替え、URL の変化（「審査中の記録を見る」リンク等）に追従させる。
+  // URL だけを読むと、ナビゲーションが終わる（root / _layout の loader が返る）まで切り替わって見えないため
+  // （profile の loader は shouldRevalidate で再実行しない）
+  const pendingFromUrl = searchParams.get("srcPending") === "1";
+  const [showPending, setShowPending] = useState(pendingFromUrl);
+  useEffect(() => {
+    setShowPending(pendingFromUrl);
+  }, [pendingFromUrl]);
   const handleShowPendingChange = (show: boolean) => {
+    setShowPending(show);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -1910,7 +1926,7 @@ export default function PlayerProfilePage() {
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
             pendingSpeedrunRecords={pendingSpeedrunRecords}
-            showPending={searchParams.get("srcPending") === "1"}
+            showPending={showPending}
             onShowPendingChange={handleShowPendingChange}
             pacemanStats={pacemanStats}
             minefolioEloRank={minefolioEloRank}
