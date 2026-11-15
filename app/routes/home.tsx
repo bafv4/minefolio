@@ -1075,7 +1075,7 @@ export default function HomePage() {
           candidates={spotlight?.candidates ?? []}
           initial={spotlight?.fallback ?? null}
           faces={heroFaces}
-          // lg 未満はヒーローが縦積みでライブ欄が遠いので、CTA の下に人数だけ先に出してライブ欄へ送る（lg 以上は非表示）
+          // CTA の注記の下に人数だけ先に出してライブ欄へ送る（モバイルはヒーローが縦積みでライブ欄が遠いため、デスクトップは左列の下の空きを埋めるため。全幅で表示）
           liveTeaser={
             <LiveTeaser
               count={liveSettled ? liveCount : 0}

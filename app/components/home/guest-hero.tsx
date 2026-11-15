@@ -148,7 +148,7 @@ export function GuestHero({
   candidates: FeaturedRunner[];
   initial: FeaturedRunner | null;
   faces: HeroFace[];
-  /** lg 未満で CTA の下（注目の走者より上）に出す「ライブ N人 →」の帯。縦積みでライブ欄が1画面目の外に出るため */
+  /** CTA の注記の下に出す「ライブ N人 →」の帯（全幅で表示。モバイルは縦積みでライブ欄が1画面目の外に出るため、デスクトップは左列の下の空きを埋めるため） */
   liveTeaser?: ReactNode;
 }) {
   const t = useT();
