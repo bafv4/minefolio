@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +33,7 @@ import { Twitch } from "@/components/brand-icons";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { StreamingBadge } from "@/components/home/streaming-badge";
+import { useLiveFlip, useStageReachPulse } from "@/components/home/use-live-motion";
 
 export type McidMaps = McidUserMaps;
 
@@ -146,8 +147,11 @@ function TimeBlock({
   time,
   aria,
   aside,
+  labelRef,
 }: {
   label: ReactNode;
+  /** 区間到達の合図（淡い面）を出す対象。区間名の行に付ける */
+  labelRef?: Ref<HTMLDivElement>;
   /** ラベル行の右肩に出す「現在 m:ss」（任意。出す・出さないでも行の高さは変わらない） */
   now?: ReactNode;
   time: string;
@@ -160,7 +164,9 @@ function TimeBlock({
   return (
     <div className={cn("flex flex-col gap-1", TIME_SLOT_CLASS)}>
       <div className="flex h-5 min-w-0 items-center justify-between gap-2 whitespace-nowrap text-xs leading-5 text-muted-foreground">
-        <div className="min-w-0 overflow-hidden">{label}</div>
+        <div ref={labelRef} className="-mx-1 min-w-0 overflow-hidden rounded px-1">
+          {label}
+        </div>
         {now && <div className="shrink-0">{now}</div>}
       </div>
       <div className="flex items-end justify-between gap-2">
@@ -215,6 +221,7 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
   // 進行バーの段は並び順と同じ深さ（構造物は種類ではなく着いた順で 1つ目=2・2つ目=3。
   // Fortress → Bastion と進んだランが Bastion に着いてバーが戻らないように）
   const stage = liveSortKey({ kind: "pace", run })?.depth ?? 0;
+  const pulseRef = useStageReachPulse<HTMLDivElement>(stage, ended);
   const name = pickMcidDisplayName(maps, key, locale) || run.nickname;
   // ベスト比は 2つ目の構造物（Second Structure）以降だけ（構造物は到達順で数える）
   // （2つ目の構造物は種類別のベストではなく、2つ目の構造物どうしのベストと比べる）
@@ -253,6 +260,7 @@ function LiveRunCard({ run, maps, bests, isFavorite, isStreaming, ended, classNa
         <StageBar stage={stage} muted={ended} />
       </StateBand>
       <TimeBlock
+        labelRef={pulseRef}
         label={timeline ? <PaceManSplitMark timeline={timeline} size={16} /> : null}
         now={elapsedMs != null ? <ElapsedShort ms={elapsedMs} /> : undefined}
         time={latest ? formatClock(latest.igt) : "-"}
@@ -304,6 +312,8 @@ function RankedMatchCard({
   const finishTimeMs = ended && result?.outcome === "win" && !result.forfeited ? result.timeMs : null;
   const shownTimeMs = finishTimeMs ?? (progress ? progress.timeMs : match.currentTimeMs);
   const liveUrl = match.liveUrl && (!ended || isStreaming) ? match.liveUrl : null;
+  const stage = finishTimeMs != null ? LIVE_STAGES.length : (progress?.stage ?? 0);
+  const pulseRef = useStageReachPulse<HTMLDivElement>(stage, ended);
   const resultLabel = !ended
     ? null
     : !result
@@ -361,11 +371,12 @@ function RankedMatchCard({
           )}
         </div>
         {/* 完走で勝った（大きな数字が完走タイム）ときは、バーも Finish まで埋めて数字と食い違わないようにする */}
-        <StageBar stage={finishTimeMs != null ? LIVE_STAGES.length : (progress?.stage ?? 0)} muted={ended} />
+        <StageBar stage={stage} muted={ended} />
       </StateBand>
       {/* 大きな数字は PaceMan のカードと同じく「最新区間に着いたタイム」に揃える（横に並ぶカードを同じ物差しで比べられるように）。
           試合の経過時間は右肩に小さく添える。まだ区間に着いていないときだけ経過時間を大きく出す */}
       <TimeBlock
+        labelRef={pulseRef}
         label={
           finishTimeMs != null ? (
             <PaceManSplitMark timeline="Finish" size={16} />
@@ -552,6 +563,12 @@ export function LiveRail({
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
+  // 並べ替え（区間到達でカードの順が入れ替わる）を滑らせる。対象は entries の変化だけ
+  const listRef = useRef<HTMLUListElement>(null);
+  useLiveFlip(
+    listRef,
+    entries.map((e) => e.id),
+  );
 
   if (loading) {
     return (
@@ -587,6 +604,7 @@ export function LiveRail({
       <div className="space-y-3">
         {notice}
         <ul
+          ref={listRef}
           aria-label={t("home.liveTitle")}
           // md 未満: 横レール。overflow-x-auto は縦方向もクリップするため、ホバー時の -translate-y-0.5 と
           // shadow-md が切れないよう上下左右に余白を取り、その分を負のマージンで打ち消す（snap の基準も余白の内側）。

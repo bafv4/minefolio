@@ -1138,13 +1138,21 @@ export default function PlayerProfilePage() {
 
   // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
   const [activeTab, setActiveTab] = useState(resolvedTab);
+  // タブ切替時だけ新しい中身を 150ms フェードインさせる。初回表示（SSR・ハイドレーション・`?tab=` 直開き）は
+  // false のままで動かさない。パネルは hidden 属性で隠れており、表示に戻るたびに CSS アニメーションが再生される
+  const [tabFade, setTabFade] = useState(false);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   useEffect(() => {
+    // 初回マウント時は activeTab === resolvedTab なので何もしない。戻る/進むで URL 由来の値が変わったときだけ切替扱いにする
+    if (resolvedTab !== activeTabRef.current) setTabFade(true);
     setActiveTab(resolvedTab);
   }, [resolvedTab]);
 
   // タブ変更ハンドラー: 即時にローカル反映し、URL の `tab` パラメータも更新する。
   // （`shouldRevalidate` により loader は再実行されない）
   const handleTabChange = (tab: string) => {
+    if (tab !== activeTab) setTabFade(true);
     setActiveTab(tab);
     setSearchParams(
       (prev) => {
@@ -1397,8 +1405,15 @@ export default function PlayerProfilePage() {
         }
       />
 
-      {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-6 relative">
+      {/* Main Content。切替後だけ、表示に戻ったパネルを opacity でフェードする（パネルは hidden 属性で隠れており、
+          display:none から表示に戻るときに CSS アニメーションが再生される。退場なし・reduced-motion は app.css の全体ルールで即時） */}
+      <div
+        className={cn(
+          "flex-1 min-w-0 space-y-6 relative",
+          tabFade &&
+            "[&>[role=tabpanel]]:animate-in [&>[role=tabpanel]]:fade-in [&>[role=tabpanel]]:duration-150 [&>[role=tabpanel]]:ease-out",
+        )}
+      >
         {/* プリセット切替中のオーバーレイ（メインコンテンツ全体を覆う） */}
         {isSwitchingPreset && (
           <div
