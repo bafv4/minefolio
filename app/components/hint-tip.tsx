@@ -25,12 +25,15 @@ export function HintTip({
   message,
   children,
   className,
+  describedBy,
 }: {
   /** 説明文。ヒント本文とトリガーのアクセシブルネームに使う */
   message: string;
   /** トリガーとして表示する内容（値・警告アイコンなど） */
   children: ReactNode;
   className?: string;
+  /** トリガーの説明として読み上げる要素の id（aria-describedby） */
+  describedBy?: string;
 }) {
   // SSR ではポインタ端末として描画し、ハイドレーション後にタッチなら Popover へ切り替える
   const isTouch = useMediaQuery("(pointer: coarse)", false);
@@ -39,8 +42,11 @@ export function HintTip({
     <button
       type="button"
       aria-label={message}
+      aria-describedby={describedBy}
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm cursor-help align-middle",
+        "relative inline-flex items-center gap-1 rounded-sm cursor-help align-middle",
+        // 見た目は変えずに押せる範囲だけ 24px 四方以上へ広げる（WCAG 2.5.8）。小さいボタンは中心から広げる
+        "after:absolute after:left-1/2 after:top-1/2 after:h-full after:min-h-6 after:w-full after:min-w-6 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}

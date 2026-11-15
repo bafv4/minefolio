@@ -1,7 +1,7 @@
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useId, useSyncExternalStore, type ReactNode } from "react";
 import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
 import { HintTip } from "@/components/hint-tip";
-import { useLocale } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -152,13 +152,28 @@ const SLOT_KEY_CHIP_CLASS =
   "inline-flex h-6 w-full min-w-0 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-0.5 font-mono text-xs font-semibold text-muted-foreground";
 
 /** スロットのタイルを、アイテム名のヒント（ポインタ=Tooltip / タッチ=Popover）で包む。空スロットは包まない */
-function ItemNameTip({ items, children }: { items: string[]; children: ReactNode }) {
+function ItemNameTip({
+  items,
+  describedBy,
+  keyLabel,
+  children,
+}: {
+  items: string[];
+  /** 押すキー表示の span の id。あればボタンの説明として読み上げに含める */
+  describedBy?: string;
+  /** 押すキーの全文。キーのチップはスロット幅に収めるため切れることがあるので、ヒントに全文を添える */
+  keyLabel?: string;
+  children: ReactNode;
+}) {
   const locale = useLocale();
+  const t = useT();
   if (items.length === 0) return <>{children}</>;
   const separator = locale === "en" ? ", " : "、";
-  const message = items.map((id) => getLocalizedItemName(id, locale)).join(separator);
+  const names = items.map((id) => getLocalizedItemName(id, locale)).join(separator);
+  const message = keyLabel ? t("playerProfile.hotbarSlotTip", { name: names, key: keyLabel }) : names;
   return (
-    <HintTip message={message} className="w-full cursor-default justify-center">
+    // キー全文を message に含めたときは、キーのチップを説明として重ねて読み上げない
+    <HintTip message={message} describedBy={keyLabel ? undefined : describedBy} className="w-full cursor-default justify-center">
       {children}
     </HintTip>
   );
@@ -198,10 +213,19 @@ export function ItemHotbar({
 }) {
   const getSlotItems = (slotNum: number): string[] => slots.find((s) => s.slot === slotNum)?.items ?? [];
 
-  const renderTile = (slotKey: number | "offhand", items: string[]) => {
+  const baseId = useId();
+  const keyChipId = (slotNum: number) => `${baseId}-key-${slotNum}`;
+
+  const renderTile = (slotKey: number | "offhand", items: string[], describedBy?: string, keyLabel?: string) => {
     const tile = <HotbarSlotTile items={items} fit={fitMobile} />;
     if (renderSlotWrapper) return renderSlotWrapper({ slotKey, items, tile });
-    return itemNameTips ? <ItemNameTip items={items}>{tile}</ItemNameTip> : tile;
+    return itemNameTips ? (
+      <ItemNameTip items={items} describedBy={describedBy} keyLabel={keyLabel}>
+        {tile}
+      </ItemNameTip>
+    ) : (
+      tile
+    );
   };
 
   // fitMobile の列は flex-1 + max-w-8 で、親幅が足りないとき均等に縮む。md 以上は従来の自然幅
@@ -229,11 +253,12 @@ export function ItemHotbar({
             const keyLabel = slotKeyLabels ? slotKeyLabels[slotNum] : undefined;
             return (
               <div key={slotNum} className={colClass}>
-                {renderTile(slotNum, getSlotItems(slotNum))}
+                {renderTile(slotNum, getSlotItems(slotNum), keyLabel ? keyChipId(slotNum) : undefined, keyLabel)}
                 {slotKeyLabels ? (
                   <>
                     <span className="sr-only">{slotNum}</span>
                     <span
+                      id={keyLabel ? keyChipId(slotNum) : undefined}
                       title={keyLabel}
                       className={cn(SLOT_KEY_CHIP_CLASS, !keyLabel && "opacity-50")}
                     >

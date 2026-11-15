@@ -53,7 +53,7 @@ export function renderVisibleSpaces(text: string, spaceClassName: string): React
  * スクリーンリーダーには aria-label で元の文字列を提供する。
  */
 export function SearchStringText({ value }: { value: string }) {
-  return <span aria-label={value}>{renderVisibleSpaces(value, "text-muted-foreground/70")}</span>;
+  return <span aria-label={value}>{renderVisibleSpaces(value, "text-muted-foreground")}</span>;
 }
 
 // ============================================
@@ -337,7 +337,7 @@ export function CraftMarker({
       <TooltipTrigger asChild>
         <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2">
           {items.map((itemId, idx) => (
-            <ItemIcon key={idx} itemId={itemId} size={24} />
+            <ItemIcon key={idx} itemId={itemId} size={24} alt={getLocalizedItemName(itemId, locale)} />
           ))}
           {content && <code className="font-mono text-sm">{content}</code>}
         </span>

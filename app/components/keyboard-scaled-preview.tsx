@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/hooks/use-locale";
+import { Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
@@ -82,6 +83,14 @@ export function KeyboardScaledPreview({
             className="absolute inset-0 cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
           />
         </DialogTrigger>
+        {/* 拡大できることを示す装飾チップ（クリックは下のボタンに通す） */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
+        >
+          <Maximize2 className="h-3 w-3" />
+          {t("keyboardView.expandChip")}
+        </span>
       </div>
       {open && (
         <DialogContent className="h-[calc(100dvh-2rem)] max-w-[calc(100%-1rem)] grid-rows-[auto_1fr] overflow-auto p-4 sm:max-w-[calc(100%-2rem)]">

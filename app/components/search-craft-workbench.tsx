@@ -216,7 +216,7 @@ function TypingTestArea({
                           key={idx}
                           className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2"
                         >
-                          <ItemIcon itemId={itemId} size={24} />
+                          <ItemIcon itemId={itemId} size={24} alt="" />
                           <span className="text-sm">{formatItemName(itemId)}</span>
                         </span>
                       ))}

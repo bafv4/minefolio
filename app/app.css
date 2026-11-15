@@ -115,7 +115,7 @@ body {
   --muted-foreground: oklch(0.46 0.04 256); /* WCAG AA: ≥5.5:1 on light bg */
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.52 0.22 27.3); /* 文字色・10% ティント面でも 4.5:1 以上（旧 0.577 は 3.97:1） */
   /* 枠線は少し濃いめ（slate-200 と slate-300 の間）。背景の格子模様は --page-grid-line で従来の濃さのまま */
   --border: oklch(0.9 0.017 254);
   --page-grid-line: oklch(0.929 0.013 255.508);
@@ -180,17 +180,17 @@ body {
   --twitch: oklch(0.558 0.288 302.321);
 
   /* ランキング1位・3位のメダル色（rankings 等で共有）。
-     yellow-500 相当だとライトの白背景で埋もれるため、金は yellow-600 相当まで落として濃くする */
-  --gold: oklch(0.681 0.162 75.834);
   --bronze: oklch(0.666 0.179 58.318);
+  --gold: oklch(0.52 0.12 75.8);
+  --bronze: oklch(0.52 0.14 58.3);
 
   /* MCSR Ranked のレート帯（階級）色（公式ゲーム内UIから抽出）。
      ライトは白背景での可読性のため明度を落とした変種（色相は抽出色と同一） */
   --rank-coal: oklch(0.48 0 0);
-  --rank-iron: oklch(0.65 0 0);
-  --rank-gold: oklch(0.66 0.155 73.3);
-  --rank-emerald: oklch(0.6 0.19 143.1);
-  --rank-diamond: oklch(0.6 0.115 195);
+  --rank-iron: oklch(0.5 0 0);
+  --rank-gold: oklch(0.5 0.11 73.3);
+  --rank-emerald: oklch(0.5 0.15 143.1);
+  --rank-diamond: oklch(0.48 0.088 195);
   --rank-netherite: oklch(0.526 0.224 314.5);
 }
 
@@ -335,7 +335,9 @@ body {
        コンテンツの順で描画させる。html にも背景色があるため body 背景は canvas に
        伝播せず、これが無いと body 背景が負 z-index の模様レイヤーを塗りつぶす */
     isolation: isolate;
-    /* 下端固定ドック（[data-bottom-dock]）の高さぶん末尾を空ける。ドック無し・md 以上は 0px */
+    padding-bottom: var(--bottom-dock-height);
+    padding-bottom: var(--bottom-dock-height);
+    padding-bottom: var(--bottom-dock-height);
     padding-bottom: var(--bottom-dock-height);
   }
 

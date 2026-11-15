@@ -9,7 +9,7 @@ import { useT } from "@/hooks/use-locale";
 export function EmptyValue() {
   const t = useT();
   return (
-    <span className="text-muted-foreground/60">
+    <span className="text-muted-foreground">
       <span aria-hidden>-</span>
       <span className="sr-only">{t("playerProfile.noValue")}</span>
     </span>

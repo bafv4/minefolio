@@ -230,7 +230,7 @@ function EntrySelect({
                 {entry.items.length > 0 && (
                   <span className="flex shrink-0 items-center gap-0.5">
                     {entry.items.map((itemId, i) => (
-                      <ItemIcon key={i} itemId={itemId} size={16} />
+                      <ItemIcon key={i} itemId={itemId} size={16} alt="" />
                     ))}
                   </span>
                 )}

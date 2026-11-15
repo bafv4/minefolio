@@ -760,7 +760,7 @@ function VirtualKeyboardComponent({
                   <span className="text-[10px] text-muted-foreground">→</span>
                   <span className={cn(
                     "font-bold text-[10px]",
-                    isDisabled ? "text-destructive" : "text-foreground"
+                    isDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
                   )}>
                     {targetLabel}
                   </span>
@@ -786,7 +786,7 @@ function VirtualKeyboardComponent({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
-                "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
@@ -820,7 +820,7 @@ function VirtualKeyboardComponent({
               {filteredBindings.map((binding, i) => (
                 <span
                   key={i}
-                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]", chipClass)}
+                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]", chipClass)}
                 >
                   {getShortActionLabel(t, binding.action)}
                 </span>
@@ -1006,7 +1006,7 @@ function VirtualKeyboardComponent({
                         className={cn(
                           "font-bold leading-tight truncate min-w-0",
                           labelFontClass(remapTargetLabel ?? ""),
-                          isRemapDisabled ? "text-destructive" : "text-foreground",
+                          isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                         )}
                       >
                         {remapTargetLabel}
@@ -1017,7 +1017,7 @@ function VirtualKeyboardComponent({
                   <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
                     <span
                       className={cn(
-                        "font-medium leading-none truncate min-w-0 text-muted-foreground",
+                        "font-medium -my-[2px] leading-snug truncate min-w-0 text-muted-foreground",
                         labelFontClass(ck.label),
                       )}
                     >
@@ -1028,7 +1028,7 @@ function VirtualKeyboardComponent({
                       className={cn(
                         "font-bold leading-tight truncate min-w-0",
                         labelFontClass(remapTargetLabel ?? ""),
-                        isRemapDisabled ? "text-destructive" : "text-foreground",
+                        isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                       )}
                     >
                       {remapTargetLabel}
@@ -1038,7 +1038,7 @@ function VirtualKeyboardComponent({
               ) : (
                 <span
                   className={cn(
-                    "font-semibold leading-none truncate max-w-full",
+                    "font-semibold -my-[2px] leading-snug truncate max-w-full",
                     labelFontClass(ck.label),
                     !(showFingerAssignments && finger) && "text-muted-foreground",
                   )}
@@ -1052,7 +1052,7 @@ function VirtualKeyboardComponent({
                     <span
                       key={i}
                       className={cn(
-                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
+                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
                         chipClass,
                       )}
                     >
@@ -1292,7 +1292,7 @@ export function VirtualMouse({
                   className={cn(
                     "font-bold leading-tight truncate min-w-0",
                     labelFontClass(remapTargetLabel ?? ""),
-                    isRemapDisabled ? "text-destructive" : "text-foreground",
+                    isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                   )}
                 >
                   {remapTargetLabel}
@@ -1301,13 +1301,13 @@ export function VirtualMouse({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
+              <span className="font-medium -my-[2px] leading-snug truncate min-w-0 text-[10px] text-muted-foreground">
                 {button.label}
               </span>
               <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive" : "text-foreground"
+                isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
               )}>
                 {remapTargetLabel}
               </span>
@@ -1315,7 +1315,7 @@ export function VirtualMouse({
           )
         ) : (
           <span className={cn(
-            "font-semibold leading-none truncate max-w-full text-[11px]",
+            "font-semibold -my-[2px] leading-snug truncate max-w-full text-[11px]",
             !finger && "text-muted-foreground"
           )}>
             {button.label}
@@ -1327,7 +1327,7 @@ export function VirtualMouse({
               <span
                 key={i}
                 className={cn(
-                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
+                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
                   chipClass
                 )}
               >
@@ -1547,7 +1547,7 @@ export function VirtualNumpad({
                 <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                 <span className={cn(
                   "font-bold leading-tight truncate min-w-0 text-[11px]",
-                  isRemapDisabled ? "text-destructive" : "text-foreground"
+                  isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
                 )}>
                   {remapTargetLabel}
                 </span>
@@ -1555,13 +1555,13 @@ export function VirtualNumpad({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
+              <span className="font-medium -my-[2px] leading-snug truncate min-w-0 text-[10px] text-muted-foreground">
                 {displayLabel}
               </span>
               <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive" : "text-foreground"
+                isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
               )}>
                 {remapTargetLabel}
               </span>
@@ -1569,7 +1569,7 @@ export function VirtualNumpad({
           )
         ) : (
           <span className={cn(
-            "font-semibold leading-none truncate max-w-full text-[11px]",
+            "font-semibold -my-[2px] leading-snug truncate max-w-full text-[11px]",
             !(showFingerAssignments && finger) && "text-muted-foreground"
           )}>
             {displayLabel}
@@ -1579,7 +1579,7 @@ export function VirtualNumpad({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span key={i} className={cn(
-                "min-w-0 max-w-full truncate rounded px-0.5 py-0 leading-none text-[10px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}

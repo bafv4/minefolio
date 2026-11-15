@@ -146,6 +146,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   keyboardView: {
     ariaKeyNoun: "key",
     expandPreview: "Enlarge keyboard",
+    expandChip: "Enlarge",
     ariaButtonNoun: "button",
     ariaRemap: "remapped {from} → {to}",
     ariaSeparator: ", ",
@@ -816,6 +817,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     chat: "Chat",
   },
   playerProfile: {
+    hotbarSlotTip: "{name} (key: {key})",
     hotbarOverview: "Profile",
     hotbarRecords: "Stats",
     hotbarGuides: "Guides",
@@ -1887,6 +1889,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
    *  the craft (variation) and loop trigger+dialog. */
   searchCraftKeySequence: {
     triggerLabel: "Show key press order",
+    triggerLabelNamed: "Show key press order for \"{subject}\"",
     dialogTitle: "Key press order",
     dialogDescription: "See the order to press keys on the keyboard.",
     modeLabel: "Display mode",

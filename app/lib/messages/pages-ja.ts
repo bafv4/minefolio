@@ -148,6 +148,7 @@ export const PAGES_JA = {
   keyboardView: {
     ariaKeyNoun: "キー",
     expandPreview: "キーボードを拡大表示",
+    expandChip: "拡大",
     ariaButtonNoun: "ボタン",
     ariaRemap: "リマップ {from} → {to}",
     /** aria-label 内の要素区切り */
@@ -789,6 +790,7 @@ export const PAGES_JA = {
     chat: "Chat",
   },
   playerProfile: {
+    hotbarSlotTip: "{name}（押すキー: {key}）",
     hotbarOverview: "概要",
     hotbarRecords: "記録",
     hotbarGuides: "ガイド",
@@ -1851,6 +1853,7 @@ export const PAGES_JA = {
    *  クラフト（バリエーション）・繋ぎ方（Loop）の両方のトリガー+ダイアログで共用する */
   searchCraftKeySequence: {
     triggerLabel: "キー入力順を表示",
+    triggerLabelNamed: "「{subject}」のキー入力順を表示",
     dialogTitle: "キー入力順",
     dialogDescription: "キーボード上でキーを押す順番を確認できます。",
     modeLabel: "表示モード",

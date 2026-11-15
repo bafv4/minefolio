@@ -208,7 +208,7 @@ function ItemSelectDialog({
                   className="cursor-pointer flex items-center gap-1 pl-1"
                   onClick={() => toggleItem(itemId)}
                 >
-                  <ItemIcon itemId={itemId} size={16} />
+                  <ItemIcon itemId={itemId} size={16} alt="" />
                   {formatItemName(itemId)}
                   <X className="ml-1 h-3 w-3 text-muted-foreground" />
                 </Badge>
@@ -230,7 +230,7 @@ function ItemSelectDialog({
                         : "border-transparent hover:border-border hover:bg-secondary/50"
                     }`}
                   >
-                    <ItemIcon itemId={itemId} size={28} />
+                    <ItemIcon itemId={itemId} size={28} alt={formatItemName(itemId)} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>{formatItemName(itemId)}</TooltipContent>
@@ -324,7 +324,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
               key={itemIndex}
               className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
             >
-              <ItemIcon itemId={itemId} size={20} />
+              <ItemIcon itemId={itemId} size={20} alt="" />
               <span className="text-sm">{formatItemName(itemId)}</span>
               <button
                 type="button"
