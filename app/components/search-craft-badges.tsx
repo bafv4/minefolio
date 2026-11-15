@@ -246,17 +246,17 @@ export function ControlKeyBadgeView({
           {info.isRemapped ? (
             // 複合ピル: 主ラベル＝実際に押すキー（既存の単一ピルと同じ text-sm）、
             // その中に「チップの中のチップ」として出力操作（BS 等）をミニチップで添える
-            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/10 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-2 ring-primary ring-offset-1 ring-offset-background">
+            <span className="inline-flex h-7 items-center gap-1 rounded-full border-2 border-info/50 bg-info/8 py-0.5 pl-2.5 pr-1.5 font-mono font-semibold text-info ring-2 ring-primary ring-offset-1 ring-offset-background">
               <span className="text-sm">
                 <KeyLabelText label={info.displayLabel} />
               </span>
-              <span className="rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-info">
+              <span className="rounded-full border border-info/40 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-info">
                 <KeyLabelText label={meta.label} shiftClassName="size-2.5" />
               </span>
             </span>
           ) : (
             // 文字入力キー（角丸 rounded）と一目で区別できるよう、制御キーは rounded-full のピル形状にする
-            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-2.5 font-mono text-sm font-semibold text-info">
+            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-info/50 bg-info/8 px-2.5 font-mono text-sm font-semibold text-info">
               <KeyLabelText label={meta.label} />
             </span>
           )}

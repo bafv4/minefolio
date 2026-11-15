@@ -144,7 +144,7 @@
 | カードの外枠 | `border-border/70` |
 | カード内の区切り・見出しの境界 | `/60`（`border-t` / `border-b`。リスト行の `divide-border/60` も同じ） |
 | 欄の区切り | `border-foreground/15` |
-| 意味色の面 | `/10`（枠は `/30`〜`/50`） |
+| 意味色の面 | `/10`（枠は `/30`〜`/50`）。`text-[10px]` の小さな文字を載せる制御キーのピル（`ControlKeyBadge`）は、dark の card 上で 4.5:1 を保つため `bg-info/8` |
 | `bg-secondary` | タイル・面 `/50`、kbd チップ `/80`、リンク行 `/30`（hover `/60`） |
 
 ### カードの面

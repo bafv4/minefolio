@@ -188,7 +188,7 @@ export function KeyBadgeLegend({
       </div>
       {showCraftMarker && (
         <div className="flex items-center gap-1.5">
-          <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/10 px-1 font-mono text-[10px] font-semibold text-info">
+          <span className="inline-flex h-3.5 items-center justify-center rounded-full border-2 border-info/50 bg-info/8 px-1 font-mono text-[10px] font-semibold text-info">
             BS
           </span>
           <span className="text-[11px] text-muted-foreground">
@@ -606,7 +606,7 @@ function SearchCraftRow({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                          className="relative h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground after:absolute after:-inset-y-2.5 after:-left-1 after:-right-4 sm:after:hidden"
                           aria-label={t("playerProfile.copySearchStrNamed", { str: variation.str })}
                           onClick={() => handleCopy(variation.str)}
                         >
