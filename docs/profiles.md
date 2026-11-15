@@ -176,26 +176,53 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 ## プロフィール表示タブ
 
-### 既定タブのハイライト行
+### 身元帯（全タブ共通）
 
-既定タブ（`profile`）のヘッダ直下に `ProfileHighlights`（`app/components/profile-highlights.tsx`）を出す。メインカテゴリ（`playstyles.mainCategory`）・そのカテゴリの PB（一致する記録が無ければ先頭の PB 付き記録。ラベルは記録名。**手入力の PB が無く `speedruncomUsername` がある場合のみ** speedrun.com の PB で代替する: 非表示記録は除外のうえ、ピン留め（speedrun.com カードの並びの先頭）→ メインカテゴリに確実に対応するもの〔rsg=`Any%` + Random Seed、ssg=`Any%` + Set Seed、aa=All Advancements。ce/ranked/other は対応付けない〕の最速 → 順位最上位。取得は `fetchSpeedrunComStatsCached`〔60 秒共有・失敗は非キャッシュ〕、取得中はスケルトン、失敗・該当無しは非表示。選択ロジックは `app/lib/profile-highlights.ts`）・MCSR Ranked Elo（クライアント取得。取得中はスケルトン、未登録・失敗・`showRankedStats === false` なら項目ごと非表示）・ゲーム内感度（+ 計算可能なら cm/180°）・サーチクラフト（タブが表示される〔`searchCraft !== does_not`〕うえ、登録済みサーチクラフトか回答があるとき。値はゲーム言語名、未設定なら回答ラベル。`searchcraft` タブへ）・ガイド（閲覧者に見える件数、0 件は非表示。`guides` タブへ）を、データがある項目だけこの順でタイルで並べる。行は常に 1 行の横並び（タイル幅は画面幅ごとの見える枚数で決まり総数に依存しない: 既定 2 枚・`sm` 3 枚・`xl` 4 枚。少ないときは引き伸ばさず左詰め）。収まらないときは scroll-snap の横スクロールになり、約 5 秒ごとにタイル 1 枚分ずつ同じ方向へ自動送りして無限ループする（元セットの複製を後ろに付け、複製側に入ったらスクロールが止まった時点〔`scrollend`、非対応ブラウザは 150ms の timeout〕で snap を一時的に外して元セットの対応位置へ瞬時に戻す。複製は `aria-hidden` / `inert` / `tabIndex=-1` で支援技術・キーボードから隠す。複製はクライアントで溢れを確認してから描画し、全タイルが収まる／`prefers-reduced-motion: reduce` のときは描画しない）。ホバー中・フォーカス中・手動操作の直後（約 8 秒）・タブ非表示・`prefers-reduced-motion: reduce` では自動送りしない。端のフェードは出さない（タイル幅が見える枚数でちょうど割り切れ、snap で両端が常にタイル境界に揃うため、フェードは完全に見えているタイルの枠を隠すだけになる。続きがある手がかりは自動送りの動きが担う。同じ理由で `HorizontalScrollArea` は流用していない）（全部無ければ行ごと非表示）。各タイルは `playstyle` / `stats` / `devices` タブへ切り替えるボタン。
+`/player/:slug` は全タブの上に共通の身元帯を置く（`app/routes/player/profile.tsx`）。`rounded-2xl border border-border/70 bg-card/70` の大型パネル（ui.md「欄枠」参照）で、中身は次のとおり。
+
+- アバター（md 未満 40px / 以上 64px を CSS で出し分け、ハイドレーション後に大きさが変わらないようにする）・表示名（**このページの `h1` はここだけ**。他タブ用の視覚非表示の h1 は無い）・アルファベット表記・`@MCID`・メインカテゴリ（押すとプレイスタイルタブへ）
+- 操作ボタン（編集〔本人のみ〕・お気に入り・シェア）。**md 未満はアイコンのみ**（ラベルは sr-only で残し、タップ目標は 44px 以上）で名前の右に置き、幅が足りないときだけ次の行へ折り返す。md 以上はラベル付き。**比較ボタンは置かない**（比較の導線は各タブ末尾の「ほかの走者と比べる」欄に集約）。モバイルでも第一画面に収まる
+- ハイライト（`ProfileHighlights`、`app/components/profile-highlights.tsx`）。**md 以上は静止グリッド**（1 行 4 列。自動スクロール・複製描画は無い）、**md 未満は 1 行の横スクロール**（`HorizontalScrollArea`、タイルは縮めず横に並べる。縦に積むと本文が押し下げられるため）で、データがある項目だけを次の順に並べる。タイルは見えているラベルと値がそのままアクセシブルネームになる（`aria-label` で値を上書きしない）。高さは固定（`TILE_HEIGHT_CLASS`）で、スケルトンとの切替でホットバーが跳ねない
+  - **PB**（代表 PB）: 次の優先順で 1 件を選ぶ（非表示にした speedrun.com 記録は全段階で除外）。1) 活動・記録タブでピン留めした speedrun.com の記録（`pinnedSpeedrunRecords`、speedrun.com カードの並びの先頭）→ 2) メインカテゴリの記録〔speedrun.com: rsg=`Any%` + Random Seed、ssg=`Any%` + Set Seed、aa=All Advancements の最速。メインカテゴリが ranked なら MCSR Ranked の自己ベスト（`seasonData.bestTimeAllTime`、無ければ `bestTime`。`showRankedStats` が有効で登録済みのときのみ）。ce/other は対応付けない〕→ 3) speedrun.com の**公式カテゴリ**の記録のうち順位最上位 → 4) 手入力のカスタム記録（メインカテゴリ一致の最速、無ければ先頭の PB 付き記録。ラベルは記録名）。公式カテゴリの判定（`isOfficialSpeedrunComPb`）: game の `abbreviation` が `mc` / `mcbe`（Java / Bedrock 本体）で、category が `miscellaneous`（Co-op 等）でなく、IL でないこと。Category Extensions（`mcce` 等）・Unofficial（`mc_juice` 等）・Datapack & Modded は対象外。公式カテゴリが無く手入力も無ければ PB タイルは出さない。speedrun.com（メインカテゴリが ranked のときは Ranked も）が手入力より優先されるため、取得が終わるまで（`speedruncomUsername` があれば常に）スケルトンを出す。取得は `fetchSpeedrunComStatsCached`〔60 秒共有・失敗は非キャッシュ〕。選択ロジックは `app/lib/profile-highlights.ts` の `pickRepresentativePb`（記録タブの「ハイライトの PB を必ず表示」〔`highlightSrcRunId`。代表が speedrun.com の記録のときだけ指定、Ranked・カスタムなら null〕もこの選択を共有する）
+  - **MCSR Ranked Elo**: クライアント取得。取得中はスケルトン、未登録・失敗・`showRankedStats === false` なら項目ごと非表示
+  - **ゲーム内感度**: 計算可能なら cm/180° を併記
+  - **サーチクラフト**: タブが表示される〔`searchCraft !== does_not`〕うえ、サーチクラフトの**登録が 1 件以上**あるときだけ（「53件・Yorùbá」の形。値はゲーム言語名、未設定なら回答ラベル）。以前のように回答だけでは出さない。押すと `searchcraft` タブへ
+  - 全部無ければ行ごと非表示。メインカテゴリ・ガイドのタイルは、身元帯とホットバーに役目が移ったため無い。各タイルは `stats` / `devices` / `searchcraft` 等のタブへ切り替えるボタン
+
+### ホットバー型タブ
+
+左サイドバーとモバイルのタブ選択ドロワー（旧「モバイルタブ選択ドロワー」）は撤去済み。タブは `ProfileHotbarTabs`（`app/components/profile-hotbar-tabs.tsx`）の**横一列のスロット型タブ**（Minecraft のホットバーの見立て）。
+
+- **並びと 2 群**（群の境目に `aria-hidden` の区切り線。tablist の子は tab だけにするため `role="group"` は使わない）:
+
+| 群 | タブ（順） |
+|---|---|
+| 人物系 | 概要（`profile`）・記録（`stats`）・ガイド（`guides`） |
+| セットアップ系 | スタイル（`playstyle`）・キー（`keybindings`）・デバイス（`devices`）・アイテム（`items`）・サーチ（`searchcraft`。**登録があるとき＝`searchCraft !== does_not` のときだけ**） |
+
+- **配置**: md 以上は身元帯の直下に置き、スクロールすると**サイトヘッダーの直下に追従（`sticky`、`top-[64px]`＝ヘッダー〈65px〉の下に 1px もぐらせる、z はヘッダーより下）**する。止まる前は 72px 角のスロット（アイコン＋短いラベル）、**貼り付いたらコンパクト表示**（横長の低いスロット〈高さ 40px〉でアイコンと短いラベルを横並び、不透明な `bg-background`＋下罫線）。貼り付き判定はバー直前の番兵（1px の要素）を `IntersectionObserver`（`rootMargin` でヘッダー高さぶん上を削る）で見て `data-stuck` を切り替える（scroll イベントで state を更新しない）。コンパクト時はバーが縮むぶんの `margin-bottom` でフロー上の高さ（72px）を保ち、切替の瞬間に下の内容が跳ねないようにする。アニメーションは色の transition のみ（高さ・位置は動かさない）。選択中・空スロット・数字キー・ツールチップ・アクセシブルネームの規則はコンパクト時も同じ。追従バーに着地点が隠れないよう、走者画面の `Tabs` 配下の `[id]` に md 以上で `scroll-mt-28`（ヘッダー 64px＋コンパクトバー 57px 以上）を付ける（スキップリンクのフォーカス移動・`?srcPending=1` の `scrollIntoView` 等）。**貼り付き中に別のタブへ切り替えたとき**は、タブ切替が `preventScrollReset`（スクロール位置を保つ）のため、新しいタブの先頭がコンパクトバーの直下に見える位置までスクロールを戻す（`activeValue` の変化で一本化。クリック・数字キー・戻る/進むで共通。貼り付いていないとき・md 未満は何もしない）。md 未満は**画面下端に固定**（`data-bottom-dock`、アイコンのみ＋上に選択中のタブ名）。固定 UI の避け方は `.claude/rules/ui.md`「下端の固定 UI」
+- **キーボード操作**: Radix Tabs を `activationMode="manual"`（矢印キーはフォーカス移動だけ、Enter / Space で切替）。**数字キー 1〜9 は、ホットバー（tablist）にフォーカスがあるときだけ**対応するタブへ切り替える（ページ全体のキー監視はしない＝WCAG 2.1.4。Ctrl / Alt / Meta / Shift 併用は無視）。対応は純粋関数 `hotbarTabForKey`（`app/lib/profile-hotbar.ts`）で、数字は上の並び順（サーチが無ければ詰まる）
+- **空スロット**: 中身が無いタブは破線枠（`border-muted-foreground/70`、背景比 3:1 以上）と薄い文字・アイコン（`text-muted-foreground/70`）で描くが押せる状態のまま（選択中の見た目が優先）。各スロットに `aria-keyshortcuts`（1〜9）を付け、ツールチップに数字を添える（`playerProfile.hotbarTooltipWithKey`）。アクセシブルネームに「、未登録」を付ける（`playerProfile.hotbarEmptySuffix`）。「中身あり」は各タブで 1 か所の変数が決め、パネルの `EmptyState` の条件と同じものを使う。記録タブは外部統計をクライアントで取得するので取得前は空と断定せず、MCID・speedrun.com ユーザー名・手入力記録・審査中記録のいずれも無いときだけ空とする
+- **ツールチップとアクセシブルネーム**: 短いラベル（スロット表示）と長いラベルが異なるときだけ長いラベルをツールチップに出す（モバイルでは出さない）。名前は見えている短いラベルを含める（label in name、WCAG 2.5.3）。長いラベルが短いラベルを含まなければ短いラベルを使う
+- **履歴**: タブ切替（`handleTabChange`）だけ履歴に push（ブラウザの「戻る」で前のタブへ戻れる）。プリセット切替と審査中記録のトグル（`srcPending`）は `replace`
+- 選択枠の移動アニメーションは無い（SSR 直後から選択状態が正しく見える）。選択状態の判定が `aria-selected` である理由は ui.md「タブ」参照
 
 ### タブ構成
 
-`/player/:slug` のタブ構成（サイドバー/モバイルドロワーの並び順）:
+`/player/:slug` のタブ構成（ホットバーの並び順）:
 
 | タブ | 説明 |
 |---|---|
-| `profile` | プロフィール詳細（スキン・基本情報。先頭に固定、アバター付きの専用トリガーで `tabItems` 配列には含まれない） |
+| `profile` | 概要（リンク・自己紹介・動画ほか。先頭。ホットバー・ツールチップ・ドック・パネル名・読み上げのすべてで「概要」／Overview に統一） |
 | `stats` | スピードラン記録・統計 |
+| `guides` | 投稿したガイド一覧 |
 | `playstyle` | プレイスタイル（下記「プレイスタイル」参照） |
 | `keybindings` | キーバインド設定 |
 | `devices` | デバイス設定 |
 | `items` | アイテム配置 (ホットバー等) |
 | `searchcraft` | サーチクラフト。**`playstyle.searchCraft === "does_not"` のとき非表示**（`hideSearchCraftTab`。未回答 `null` は表示する） |
-| `guides` | 投稿したガイド一覧 |
 
-- `defaultProfileTab`（`users` テーブル）はこの並びの初期表示タブを決める。値は上記の他に `settings` を enum として持つが、**UI 上に対応するタブは存在しない**（過去に存在したゲーム内設定タブの残置 enum 値）
+- `defaultProfileTab`（`users` テーブル）は初期表示タブを決める。値は上記の他に `settings` を enum として持つが、**UI 上に対応するタブは存在しない**（過去に存在したゲーム内設定タブの残置 enum 値）
 - 既定値は `profile`（新規ユーザーは insert 時に `$defaultFn(() => "profile")` で設定される）。未設定行（`null`）はアプリ側でも `profile` にフォールバックする
 - **サニタイズ**: `defaultProfileTab` が現在の有効タブ集合（上記 + `profile`）に含まれない場合（廃止された `settings` や、SC非表示中に保存されていた `searchcraft` など）は `profile` へフォールバックする。DB の `defaultProfileTab` 自体は書き換えない（サーチクラフトが再度「する」に変われば自然に復活する）
 - URL クエリ `?tab=` が唯一の直接指定手段。未指定・不正値のときに `defaultProfileTab`（サニタイズ後）へフォールバックする
@@ -552,7 +579,7 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 - **可視性ゲート**: `private` プロフィールは本人（セッション一致）のみ取得可（`Cache-Control: private, no-store`）、
   他人には 404。`public` / `unlisted` は取得可
 - **キャッシュ**: `api_cache`（`cacheType: "social_stats"`）に YouTube 6時間（取得失敗時は15分の
-  ネガティブキャッシュ）・Twitch 5分（配信中フラグの鮮度優先）。CDNは `s-maxage=300, stale-while-revalidate=3600`
+  ネガティブキャッシュ）・Twitch 5分（配信中フラグの鮮度優先。失敗も5分）。失敗は番兵値で保存する。CDNは `s-maxage=300, stale-while-revalidate=3600`
 - 統計未取得の間（ロード中・取得失敗・APIキー未設定）はリンク行のみ表示にフォールバックする
 - 実装: `app/lib/youtube.ts` の `getChannelStats()`（channels + playlistItems、計2 units）、
   `app/lib/twitch.ts` の `getChannelStats()`（users / channels/followers / streams / videos）
@@ -622,17 +649,27 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 これが無いと、`ProfileFeedCard` 等の `prefetch="intent"` Link がホバー時に `/player/:slug.data` を `<link rel="prefetch">` で先読みし、その応答がブラウザの HTTP キャッシュに乗ってしまう。結果として「リアクション後に別ページへ移動し、ホームのカード等からプレフェッチ経由で再訪すると、反応前の古い状態が一瞬〜継続的に表示される」不具合になる（ハードリロードはブラウザキャッシュを無視するため直る＝原因の特定に使えた症状）。
 
+### アイテム配置タブ・概要タブの動画
+
+アイテム配置タブは xl（1280px）以上で区間（`ItemLayoutRow`）を2列の格子に並べる（DOM 順＝左→右・上→下。メモは各ホットバーの下。罫線は先頭と最上段の右の欄だけ外す）。xl 未満は1列のまま（lg では列幅約457px に9スロットのホットバー約535px が収まらず、列ごとの横スクロールとページのはみ出しが出るため）。概要タブの動画（`VideoEmbed`）は YouTube を `YouTubeClickEmbed`（押してから iframe を読み込む。名前・title は動画のタイトル、無ければ URL）で出す。YouTube に変換できない URL は従来どおり外部リンクで、Twitch 等の iframe 埋め込みは元からない。
+
+### 貼り付いたホットバー（md 以上）
+
+貼り付き中のバーは不透明な `bg-background`（blur なし）・スロット `h-10`・`py-2`・下罫線 1px で高さ 57px。貼り付く前のフロー上の高さ 72px を保つため `mb-[15px]`（72 − 57）。貼り付き中はサイトヘッダーを不透明にする（`app.css` の `:root:has([data-stuck="true"]) header.sticky`）。ヘッダーの下罫線は残す。連動する値: `SCROLL_RESTORE_SENTINEL_TOP_PX`（42）、サーチクラフトの追従見出し `top`（120px。バーの下端 121px = 64 + 57 より 1px 上にもぐらせる）。バーと追従見出しを 1px ずつ重ねるのは、ちょうど接すると表示倍率 125%・150% 等で境目が小数の画素位置（81.25 等）になり、両者が半端に塗る1行から下のコンテンツが透けてちらつくため、`app.css` の `scroll-padding-top`（md 以上 8.5rem、追従見出しがあるとき 11.75rem）。
+
+貼り付き中だけ、バーの左（tablist の外）に走者のアバター（28px）と名前を表示する（`ProfileHotbarTabs` の `leading`。`aria-hidden`・クリック不可。名前は xl 以上だけで `max-w-40 truncate`、1024px 前後は8スロット＋プリセットでバー幅が埋まるためアバターだけ）。貼り付く前・md 未満の下端ドックには出さない。
+
 ### スキン表示
 
 `/player/:slug` のプロフィールタブでは、ページ上は**静止画**（`asImage`）で描画し、クリックでダイアログを開いたときだけ
 **インタラクティブモード**（`interactive` + `showInteractiveHint`）をマウントする（WebGL を常駐させないため）。サイズはレスポンシブ：
 
-| 画面幅 | サイズ |
+| 画面幅 | 表示サイズ |
 |---|---|
-| `(max-width: 640px)`（モバイル） | 320 × 380 |
-| それ以外（デスクトップ） | 240 × 280 |
+| sm 未満（モバイル） | 206 × 240（縦を使いすぎないため。縦横比 0.857 を維持） |
+| sm 以上（デスクトップ） | 240 × 280 |
 
-判定には `app/hooks/use-media-query.ts` の `useMediaQuery(query, ssrDefault)` フックを使用。SSR セーフ。
+出し分けは CSS（`h-[380px] w-[320px] sm:h-[280px] sm:w-[240px]` の箱）で行う。`useMediaQuery` で寸法を決めると SSR はデスクトップ寸法で描かれ、モバイルでハイドレーション後に大きくなって跳ねる（CLS）ため。描画解像度は 320 × 380 に固定し（どちらも縮小表示）、`MinecraftFullBody` の `fluid`（静止画のみ。表示は親の箱に `object-contain` で収める）で縮小表示する。
 
 スキンと右側の基本情報は `flex-col sm:flex-row sm:items-center` で、デスクトップ時は上下中央揃え。
 
@@ -643,8 +680,7 @@ Speedrun.comのPBはDBにキャッシュされず、プロフィール表示の�
 
 ### Bedrock版 MCID の表示
 
-`bedrockMcid` が登録されている場合、`/player/:slug` の3箇所（モバイルのタブ選択ボタン・デスクトップサイドバーの
-プロフィールタブ・ヘッダーカードの基本情報）で、Java版 MCID の `@{mcid}` 行と同じ `text-muted-foreground` の
+`bedrockMcid` が登録されている場合、`/player/:slug` の概要タブ先頭（スキン横の基本情報）で、Java版 MCID の `@{mcid}` 行と同じ `text-muted-foreground` の
 スタイルで `playerProfile.bedrockMcidLine`（ja: `Bedrock版: {id}` / en: `Bedrock: {id}`）を追加表示する。
 Java版 MCID が未登録で Bedrock版だけがある場合も、その行だけを表示する。
 OGP画像・`/compare`・`/browse` のカードは対象外。
@@ -663,15 +699,15 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### アクションボタン行・絵文字リアクション
 
-ヘッダーカードの基本情報カラム下部に、編集（本人のみ）/お気に入り/シェア/比較のアクションボタン行がある。**その直下**にプロフィール絵文字リアクションバー（常時表示、標準機能）を配置する。詳細は [`docs/profile-reactions.md`](./profile-reactions.md) を参照。
+編集（本人のみ）/お気に入り/シェアのアクションボタン行は身元帯にある（md 未満はアイコンのみ）。プロフィール絵文字リアクションバー（常時表示、標準機能）は概要タブの基本情報（短い自己紹介の下）に置く。未ログインでリアクションが 0 件のときもバーを消さず、短い案内文（`profileReactions.loginPrompt`）と既存の「ログインしてリアクション」ボタン（`/login`）を出す。詳細は [`docs/profile-reactions.md`](./profile-reactions.md) を参照。
 
 ### 自己紹介（bio / shortBio）の自動翻訳表示
 
-閲覧ロケールと原文のロケールが異なり、有効な訳文があるときだけ、`bio`（Bio カード）と `shortBio`（ヘッダーカード・サイドバー）を**訳文を既定で**表示する。仕様の全体は [`docs/translation.md`](./translation.md)。
+閲覧ロケールと原文のロケールが異なり、有効な訳文があるときだけ、`bio`（Bio 欄）と `shortBio`（概要タブの基本情報）を**訳文を既定で**表示する。仕様の全体は [`docs/translation.md`](./translation.md)。
 
 - loader が `getUserBioTranslation(db, player, resolveLocale(request))`（`app/lib/content-translation.server.ts`）を呼び、`bioTranslation`（`{ bio, shortBio, sourceLocale }` | `null`）を返す。`player` の原文も従来どおり返すため、訳文と原文の両方がクライアントに渡る（500字以内で負担は小さい）。`null` は機能無効・オプトアウト・失効・原文と閲覧ロケールが同じ、のいずれかで、その場合は原文のみ
 - SSR 時点で訳文が出る（切替前に原文が一瞬見えることはない）。切替はクライアント状態（`showBioOriginal`）のみで、`bio` と `shortBio` が同時に切り替わる
-- 訳文が存在する欄の近くに `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。ガイド記事ページと共通で、切替は `onToggle`〈ボタン〉または `to`〈URL リンク〉）を出す: ヘッダーカードの `shortBio` の下と Bio カードの見出し直下。「自動翻訳 · 原文を表示」→ 原文表示中は「原文を表示中 · 翻訳を表示」（`playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。自動翻訳を著者の言葉として黙って出さないための必須要素
+- 訳文が存在する欄の近くに `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。ガイド記事ページと共通で、切替は `onToggle`〈ボタン〉または `to`〈URL リンク〉）を出す: 概要タブの基本情報の `shortBio` の下と Bio 欄の見出し直下。「自動翻訳 · 原文を表示」→ 原文表示中は「原文を表示中 · 翻訳を表示」（`playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。自動翻訳を著者の言葉として黙って出さないための必須要素
 - 訳文の `bio` も原文と同じ `BioMarkdown`（`react-markdown` + `rehype-sanitize`）で描画する
 - `<meta>` の description / OGP・シェアの文面は原文（`shortBio`）のまま。一覧カード（`/browse`・ホーム・`/compare` 等）の `shortBio` は**未対応**（原文表示）
 
@@ -702,18 +738,51 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - トグル状態は URL の `srcPending=1` が唯一の指定元（切替は `replace` で履歴を汚さない）。`?tab=stats&srcPending=1` で開くと最初からオンで、カードの位置までスクロールする（ホームの注目の走者カードからの導線。形式は変更しない）
 - テスト: `app/lib/__tests__/speedruncom-pending.server.test.ts`
 
-### モバイルタブ選択ドロワー
+### 各タブの欄構成
 
-モバイル表示時の上部スティッキーボタンには `ChevronsDown` アイコンを使用（v1.4.0 でハンバーガー `Menu` から変更）。展開中は `X` アイコンに切り替わる。
+走者画面は**欄を箱にせず、上罫線で区切る**（共通部品 `PageSection`、`app/components/page-section.tsx`。ホームと共有。規約は ui.md「欄枠」）。**見出しの階層は 走者名 `h1`（身元帯）＞ タブタイトル `h2` ＞ 欄 `h3` ＞ 欄の中の小見出し `h4`**。**サイズは段差をつける**: 走者名 `h1` は `text-2xl md:text-3xl`（24/30px）、タブタイトル `h2` は `text-xl md:text-2xl`（20/24px）、欄 `h3` は `text-lg`（18px）、小見出し `h4` は `text-base`（`PageSection` は `headingLevel=="h3"` のときだけ `text-lg`、既定の `h2`＝ホームは `text-xl` のまま）。`PageSection` の `headingLevel` prop（既定 `h2`＝ホーム。走者画面だけ `"h3"`）で切り替え、共有部品の箱なし表示（`framed={false}`＝走者画面専用）は欄を `h3`・小見出しを `h4` で描く（箱あり表示の `/player/:slug/stats` 等は不変）。
+
+**タブタイトル**: 各タブパネルの先頭に、そのタブの名称（ホットバーのツールチップと同じ `tabItems` の `label`）を `h2`（`text-xl md:text-2xl font-bold`、`ProfileTabTitle`。`badge` でタイトル直後に HintTip、`trailing` で右端に操作）で出す。**欄が1つだけのタブ（ガイド・サーチクラフト）は、見える欄見出しを出さず、`sr-only` の `h3`（「ガイド一覧」「サーチクラフト一覧」、`playerProfile.guidesListHeading` / `searchCraftListHeading`）を1つ置く**（タブタイトルと同文言で二重になるため見せない。見出しの並びを h2 → h3 → h4 にそろえ、その下のカード名・サーチクラフトのグループ名を `h4` にする。見た目は変えない。ガイドカードは `GuideCardGrid` / `GuideListView` の `titleLevel="h4"`、サーチクラフトは `groupHeadingLevel="h4"`）。欄は `section` ではなく `role="group"` の div（`aria-labelledby` でこの `h3` を参照）にし、欄見出しの右にあった操作はタイトル行へ移す。空状態のタブも同じで、タイトルの下に `EmptyState`。パネルの名前（`aria-labelledby`）はこの `h2` を参照する。タイトルと最初の内容の間隔は欄どうしより詰める（`mb-3 sm:mb-4`）。md 未満のプリセット選択はタイトルと同じ行の右端（狭いと折り返す）。
+
+**先頭の罫線**: タイトル直下の最初の欄は上罫線・上余白なし、2つ目以降は罫線あり（`PANEL_CLASS` がパネル直下の最初の `section` に効く。`PageSection` の `first` / `className` でも指定できる）。2列グリッド（プレイスタイル lg・デバイスのキーボード/マウス md）は1行目に横並びになる欄がどれも罫線なし（1列に落ちる幅では最初の欄だけ）。概要の先頭（スキン等）と空状態の箱はそのままタイトル直下に来る。各タブ末尾の「ほかの走者と比べる」欄はパネルの外なので罫線あり・`h2`。欄どうしの間隔は `space-y-7 sm:space-y-8`。箱として残すのは1件ずつの物（記録のカテゴリ別カード・動画の埋め込み・リッチリンク・ガイドカード）だけ。他画面と共用する部品（`player-stats-cards.tsx`・`ItemHotbar`・`SearchCraftGroupedList`・`VirtualKeyboard` 等）は props で箱なし表示に切り替え、既定は従来のまま（`/player/:slug/stats`・`/me/items` 等は不変）。
+
+- **概要**（`profile`）: スキン＋基本情報（Bedrock MCID・短い自己紹介・バッジ・メタ情報・リアクション）、リンク、自己紹介、動画の各欄（アイコンなし）
+- **記録**（`stats`）: 本人のメインカテゴリに合う欄を先頭に置く（`orderStatsSections`、`app/lib/profile-stats-order.ts`。ranked → MCSR Ranked、rsg / ssg / aa / ce → Speedrun.com＋審査中、他は既定の順）。各カード（MCSR Ranked / PaceMan / Speedrun.com / 審査中 / 取得中）は `framed={false}` で欄になる。
+  - Speedrun.com は、身元帯と同じ規則で選んだハイライトの PB を `highlightRunId` で渡し、表示上限の外でも必ず表示する（先頭 5 件＋その PB）。7 件以上なら「すべて表示（N件）」／「表示を減らす」で切り替える
+  - PaceMan はリンクと過去 1 週間の統計を **1 欄**にまとめ、リンクを見出し右に置く。週間統計があるときは登録判定（クライアント取得）の状態も見出し右で扱う（読み込み中＝小さなスピナー、失敗＝「再試行」ボタン、成功＝リンク）。単独の取得中・失敗カードは週間統計が無いときだけ出す。取得中・失敗も確定後と同じ見出しの欄にして、完了で見出しが跳ねないようにする
+  - **代表 PB（Speedrun.com 欄）**: 身元帯の代表 PB（`pickRepresentativePb`）はカードを「ピン留めの次」（無ければ先頭）に置き、「代表記録」の Badge（secondary）と `border-primary/40` を付ける。カードは `id="stats-src-<runId>"`（`tabIndex=-1`）。同名カテゴリがほかにあるときだけ、カード見出しと身元帯タイルのラベルに版を添える（`speedrunComPbDisplayName`、例「Java · Any% Glitchless」）。身元帯の PB タイルを押すと記録タブへ切り替え、そのカードへスクロール（`:root` の scroll-padding でホットバーを避ける）してフォーカスを移す（`profile-highlights.tsx` の `goToStatsCard`。カードが現れるまで最大5秒待つ）
+  - **SRC の動画埋め込み**: 押してから読み込む（`youtube-click-embed.tsx`。サムネイル `i.ytimg.com`〔`getYouTubeThumbnailUrl`、feed-video-card と同じ送信先〕＋再生ボタン → 押すと `youtube-nocookie.com` の iframe〔autoplay=1〕）。ボタンの名前・iframe の title は「<版・カテゴリ> <記録時間>」
+  - **身元帯タイルの取得失敗**: Ranked / SRC の結果に `error` があるとき、Elo・PB タイルを消さず値の位置に「取得できませんでした」（`text-muted-foreground`）を出す（押すと記録タブの再試行カードへ）。`error` なしの未登録・データなしは従来どおりタイルを出さない
+  - **取得失敗の再試行**: MCSR Ranked / PaceMan / Speedrun.com の取得に失敗（関数が throw、または Ranked・SRC の結果に `error` あり。`error` なしの `isRegistered: false` や PB 0 件は「未登録・データなし」で欄ごと出さない）したら、失敗カード（`StatsServiceLoadingCard`）に「再試行」ボタン（`common.retry`、`RotateCw`、md 未満は高さ 44px 以上）を出す。押すとそのサービスだけ `loading` に戻して取り直す（`profile.tsx` の `StatsTabContent` がサービスごとの取得関数 `loadRanked` / `loadPaceman` / `loadSpeedruncom` を持つ。走者切替・アンマウントでは取得セッションを破棄し、古い結果は反映しない）。`onRetry` を渡さない利用箇所（`/player/:slug/stats` 等）は従来どおりボタン無し
+  - 箱なしのとき MCSR Ranked の統計タイルは 3+3（狭い幅は 2 列）、Elo グラフの見出しは `h4`（差分に「この間の増減」ラベル）
+  - カスタム記録も欄に入れ、`RecordCard` は 1 件ずつの箱のまま
+- **ガイド**（`guides`）: 欄見出しなし。タイトル行の右に表示切替（`ViewToggle`）→ プリセット（md 未満）、下にガイドカード（箱のまま。カードの見出しは `h3`）
+- **プレイスタイル**（`playstyle`）: プレイ内容・操作・テクニックの欄。lg 以上でカードを 2 列にする
+- **キー配置**（`keybindings`）: 2 欄。
+  - 「キーボード表示」: 上の 1 行に指の凡例・略号（OH / HB）の `HintTip`・Trigger/Chat 切替・「キーを押すと割り当ての詳細が出ます」・画像保存。キーボードは箱に入れず欄に直接置く。**キーボードのナビクラスタの位置は、本文幅 1120px（70rem）を境に切り替える**（container query。以上はナビをメイン部の右、未満は下の段に「ナビ → テンキー → マウス」）。両方を描いて `display:none` で片方だけ出す（SSR でちらつかず、隠れた側のキーに Tab が止まらない）。`VirtualKeyboard` の `section`（`"all" | "main" | "nav"`、既定 `"all"`）で分割して描く。**モバイルは** `KeyboardScaledPreview`（`app/components/keyboard-scaled-preview.tsx`）で実寸を縮小表示し、タップで全画面ダイアログ（実寸・ピンチ／スクロール）。縮小レイヤーは `inert`
+  - キーボードの直前に**スキップリンク**「キーボードを飛ばして割り当て一覧へ」（素の `href="#…"` は履歴を増やすので、ボタンで一覧の見出しへ focus する）
+  - 「割り当て一覧」: 各グループとカスタムアクションを `h3` グループ＋`divide-y` のリスト（2 列は維持）にする。**リマップは件数付きの折りたたみ（`details`）で既定は閉じる**
+- **デバイス**（`devices`）: キーボード・マウス・ゲーム内設定の欄。振り向きは**小数 1 桁＋「cm/180°」**表記（ホームの注目の走者と同じ）。キーボードレイアウトの生の値は「JIS TKL」のように表示し（`/me/devices` の選択肢と同表記）、ゲーム言語名・機種名・レイアウト名は等幅フォントにしない
+- **アイテム配置**（`items`）: レイアウト（セグメント）ごとに 1 欄（`h2`＝セグメント名、色ドットを見出しの左）。ホットバーは箱に入れず欄に直接置く。`ItemHotbar` の props: `slotKeyLabels`（各スロットに本人の `hotbar1`〜`9` の割り当てキーを出す。番号は sr-only に残し、未割り当ては「-」。キー配置タブと同じ `player.keybindings` から解決するのでプリセット表示中はプリセットのキー）／`fitMobile`（md 未満でスロットを最大 32px〈アイコン 24px〉に縮め、オフハンド＋9 スロットを横スクロールなしで収める）／`itemNameTips`（アイテム名を `HintTip` 方式で、ホバー・フォーカス・タップのどれでも出す）。アイテムアイコンの `alt` は翻訳済みのアイテム名（`ItemIcon` の `alt`。既定は従来の itemId）
+- **サーチクラフト**（`searchcraft`）: **1 欄**（欄見出しなし。タブタイトルの直後に説明の `HintTip`）。サマリーは箱にせず欄の先頭の行。タイトル行の右（プリセット選択の左）に、**閲覧者の言語でアイテム名を表示するトグル**（shadcn の `Switch`＋`<label>`「アイテム名を{表示言語名}で表示」。`playerProfile.searchCraftItemNamesIn` / `searchCraftViewerLangName`）を置く。既定は走者のゲーム言語のまま、押すとアイテム名だけを閲覧者のロケール（ja→日本語、en→英語）にし、もう一度押すと戻る。サーチ文字列・キー列は変えない。状態はコンポーネントの state のみで保存しない（localStorage・Cookie・URL に載せない）。走者のゲーム言語（未設定は日本語）が閲覧者の言語と同じときはトグルを出さない。走者のゲーム言語にアイテム名の辞書（`public/mcitems/1.16/lang/<code>.json`）が無い場合（`hasItemNameDictionary`＝`app/lib/game-languages.ts`。該当は `lo_la` / `nah` / `nb_no` / `ry_ua` / `sr_cs` / `zlm_arab`）、アイテム名は英語にフォールバックする。トグルが OFF（走者の言語で表示中）のときだけ、サマリー行の下に控えめな注記1行（`searchCraftNoItemDictionary`、Info アイコン＋`text-xs text-muted-foreground`、折り返し可）で理由を示す。閲覧者の言語へは自動で切り替えない。辞書の有無と集合の一致は `game-languages-label.test.ts` が検証する。`SearchCraftGroupedList` の `framed={false}`（タイトル直下の sr-only の h3「サーチクラフト一覧」の下なので `groupHeadingLevel="h4"`）＋`collapsible`（グループごとの開閉・件数・最初のグループだけ開く・「すべて開く／すべて閉じる」）。`stickyHeaders` ＋ `stickyTopClassName`（`top-[64px] md:top-[112px]`＝サイトヘッダー直下、md 以上は貼り付いたコンパクトなホットバーの直下。いずれも 1px 重ねる）で、**開いているグループの見出し行（名前・件数・開閉ボタン・列見出し）を `sticky`（`z-30`・`bg-background/95` ＋ `backdrop-blur`）で追従**させる（閉じたグループは追従しない。既定 off で他画面は不変）。中身（crafts も Loop も）が無いグループは出さない
+
+### 空状態・末尾の導線
+
+- **空状態**: 中身の無いタブは `EmptyState`。**訪問者**には、その走者で中身のあるタブを**最大 3 つ**（ホットバーの並び順、概要は最後）ボタンで案内し、押すとそのタブへ切り替える（`playerProfile.emptySuggestTabs`）。**本人**（`isOwner`）には従来どおり編集ページへの導線。見出しは「〇〇はまだありません」／"No X yet" にそろえる。人を指す語は「走者」（en: runner）
+- **末尾の導線**: 全タブの末尾に「ほかの走者と比べる」の欄（`playerProfile.exploreTitle`）を置く。「比較・似た走者を探す」（`/compare?p1=<slug>`。比較ページへ）、ログイン中に他人のページを見ているときだけ「自分と比較する」（`p2=<自分の slug>`）、「ほかの走者を見る」（`/browse`）。比較の導線はここに集約（身元帯には置かない）。モバイルでも下端のホットバーに隠れない（本文末尾にホットバーの高さぶんの余白が入る）
+
+### 登録者・フォロワーの 0 表記、スキン静止画の失敗
+
+- リンクのリッチカードで、YouTube の登録者数・Twitch のフォロワー数が **0 のときはその数を出さない**（新規チャンネル等で「登録者 0人」と見せない。リンクと配信の情報は残す）。取得失敗は従来から非表示。`/api/social-stats` は取得失敗を番兵値（`{ failed: true }`）で短 TTL ネガティブキャッシュする（`getDbCached` は「行なし／期限切れ」も保存済み null も null で返し区別できないため。YouTube 15 分・Twitch 5 分）
+- 3D スキンの静止画（`MinecraftFullBody` の `asImage`）が描画失敗で**全面透明**になったときは、2D アバター（`MinecraftAvatar`）を元の枠の中央に出す（canvas を 16x16 に縮小して alpha を検査）。透明と判定した結果はキャッシュしない（次の mount で再描画を試みる）。`/onboarding` にも効く
 
 ### プリセット切替
 
-`presets.length > 0` で対象タブ（`keybindings` / `devices` / `items` / `searchcraft`）を表示中のときは、プリセット切替ドロップダウンを描画する：
+`presets.length > 0` で対象タブ（`keybindings` / `devices` / `items` / `searchcraft`）を表示中のときは、**lg 以上ではホットバーと同じ行の右端（`ProfileHotbarTabs` の `trailing` slot。tablist の外に置き、貼り付いてコンパクト表示になってもバーの中に残る。バーは折り返さない）、lg 未満（〜1023px）ではタブタイトル（`h2`）と同じ行の右端（狭いと折り返す）に、小さなセレクト**（768〜1023px でバーに入れると貼り付き前に2行〈112px〉、貼り付くと1行になって高さが変わり、貼り付き判定が点滅するため。スロットの左右余白は lg 未満で詰める）（`SelectTrigger size="sm"`・幅は内容に合わせる。アクセシブルネームは `playerProfile.preset`、見える「プリセット:」ラベルは無い）を置く。箱・全幅の帯にはしない。特定の欄の見出しには付けない（2 列のデバイスタブで左の欄専用に見えるため）。4 タブとも同じ位置で、`EmptyState` だけのタブでも同じ（`presetSelectorNode`。lg 未満用は各タブの `ProfileTabTitle` の `trailing` に渡す `presetSelector`〔`lg:hidden`〕で、同じ部品を2か所に描き CSS で切り替える）。サーチクラフトタブのタイトル行は「HintTip … 言語トグル → プリセット」の並び（狭い幅は折り返す）。「プリセット表示中」バッジは md 以上のみ：
 
-- デスクトップではサイドバーに表示
-- モバイルではメインコンテンツ上部に表示
-- 選択肢に切替時は URL クエリ `?preset=...` を `setSearchParams` で更新し、`useRevalidator().revalidate()` も併せて呼ぶ
-- 切替中（`navigation.state === "loading"` または `revalidator.state === "loading"`）はメインコンテンツ右カラムにローディングオーバーレイを表示。サイドバー（プリセット選択 UI を含む）は表示維持
+- **アイテム配置・サーチクラフトは、表示中のデータもどのプリセットも空のときは出さない**（別のプリセットに中身があれば切替先として残す。プリセット一覧が種別ごとの有無フラグ `hasItemLayouts` / `hasSearchCrafts` を持つ）。キー配置・デバイスは有無の情報が無いので対象外
+- 選択肢に切替時は URL クエリ `?preset=...` を `setSearchParams` で更新し（`replace`）、`useRevalidator().revalidate()` も併せて呼ぶ
+- 切替中（`navigation.state === "loading"` または `revalidator.state === "loading"`）はメインコンテンツにローディングオーバーレイを表示。プリセット選択 UI は表示維持
 
 ### 視聴者ロールの扱い
 

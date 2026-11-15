@@ -40,7 +40,9 @@
   - 欄はパネルやカードで包まない。箱（カード）として残すのは**1件ずつの物**（記録のカテゴリ別カード・動画の埋め込み・ガイドカードなど）だけ。仮想キーボードやアイテム配置のような表示物も、箱に入れず欄の中に直接置く
   - 大型パネル（`rounded-2xl border border-border/70 bg-card/70` 系）は、ホームのヒーロー（未ログイン）・おかえりバー・注目の走者（ワイド）と、走者画面の身元帯（全タブ共通の名前・操作ボタン・ハイライトの帯）だけ
   - ページ幅のパネルはホバーで浮かせない（`-translate-y` と影は一覧アイテムのインタラクティブカード向け。パネルのホバーは枠色だけ）
-  - 走者画面は 2026-11 のリデザインで段階的に移行中で、まだ箱（静的セクションカード）のままのタブがある。タブの中身を触るときに、そのタブの欄をこの形に直す。他画面と共用する部品（`player-stats-cards.tsx`・`search-craft-template-view.tsx` 等）は、箱を外す表示を props で有効にし、他画面の見た目は変えない
+  - 走者画面は 2026-11 のリデザインで全タブが欄区切りに移行済み。他画面と共用する部品（`player-stats-cards.tsx`・`search-craft-template-view.tsx`・`ItemHotbar`・`SearchCraftGroupedList`・`VirtualKeyboard` 等）は、箱を外す表示を props（`framed` / `collapsible` / `section` 等）で有効にし、他画面の見た目は変えない（既定は従来のまま）
+  - 欄どうしの間隔は `space-y-7 sm:space-y-8`（ホーム・走者画面の全タブ共通）。欄の `h2` はアイコンなしでもよい。欄の中の小見出しは `h3`。欄が1つだけのタブ（走者画面のガイド・サーチクラフト）は、欄見出しを `sr-only` の `h3` で置いて見出しの飛びを作らず、その下のカード名・グループ名を `h4`（見た目は変えない）にする
+  - 箱なしの欄に置く `HorizontalScrollArea` は `surface="background"`（端のフェードを `from-background` にする。既定はカード内の `from-card`）
 - **ホームのカード面**: ページ背景に直接置くホームのカード（ライブ欄のカードなど）の面は不透明の `bg-card`。`bg-background/80` だと dark / ultra-dark でページ背景と同じ色になり外枠だけで同化する（light は両者とも白だが、不透明にすると背景の格子模様が隠れて面として読める）。ホームでは動画カード・Twitchライブの一覧・プロフィール一覧も `bg-card`、他ページと共有するガイドカードは `GuideCardGrid` の `surface="card"` で同じ面にする。他ページ（`/guides`・`/paces` 等）の一覧カードは従来の `bg-background/80` のまま
 
 ### グリッドカードの内部文法
@@ -172,3 +174,18 @@
 4. `TabsList` を別のスクロールコンテナ（`overflow-x-auto` の div 等）で包まない（基底が対応済み。包むと 1px 重なりがクリップされる）
 5. `dark:` バリアント禁止 — テーマトークン（`bg-card` / `border` / `bg-brand` / `ring-ring`）のみで 3 テーマ（light / dark / ultra-dark）に対応する
 6. Dialog 内など枠付きパネルが過剰な場面では、`TabsContent` に `rounded-none border-0 border-t bg-transparent p-0 pt-4`、`TabsTrigger` に `data-[state=active]:bg-background` を付けるデグレード構成を使う
+
+### 例外: プロフィールのホットバー型タブ
+`/player/:slug` のタブは、フォルダ型ではなく**ホットバー型**（`app/components/profile-hotbar-tabs.tsx`）。上の不変条件はこのタブには当てはまらない。
+
+- `ui/tabs.tsx` は変えない。Radix の `TabsPrimitive.List` / `Trigger` を直接使い、消費側の Root は `ui/tabs` の `<Tabs>` に `activationMode="manual"`（矢印はフォーカス移動のみ、Enter/Space で切替）を付ける。タブ切替は履歴に積むので、矢印で動くたびに履歴が増えないようにするため
+- 選択中の見た目は **`aria-selected:` で判定する**（`data-[state=active]` は使わない）。ツールチップ付きのスロットは `TooltipTrigger asChild` が `data-state` を `closed` / `delayed-open` で上書きするため、`data-[state=active]` が効かない
+- 数字キー 1〜9 のショートカットは tablist にフォーカスがあるときだけ効かせ、修飾キー併用は無視する（ページ全体のキー監視はしない。WCAG 2.1.4）。キーとタブの対応は純粋関数 `hotbarTabForKey`（`app/lib/profile-hotbar.ts`）
+- アクセシブルネームは見えている短いラベルを含める（label in name、WCAG 2.5.3）。空スロットは破線で描き、押せる状態のまま、名前に「、未登録」を付ける
+- md 未満は画面下端に固定する（下記「下端の固定 UI」）
+
+## 下端の固定 UI（`--bottom-dock-height`）
+ページが `[data-bottom-dock]` を持つ要素（現在はプロフィールのホットバー）を描くと、`app/app.css` の `:root:has([data-bottom-dock])` が **md 未満で** `--bottom-dock-height`（`4.75rem + env(safe-area-inset-bottom)`）を解決し、body に同じ高さの `padding-bottom` を付けて末尾がドックに隠れないようにする。ドックの無いページ・md 以上では `0px`。
+
+- 下端に固定する他の UI（クッキーバナー `cookie-consent.tsx`・トップへ戻る `back-to-top-button.tsx` など）は、`bottom-[calc(<元の値>+var(--bottom-dock-height,0px))]` のようにドックの高さぶんずらす。フォールバック `0px` を必ず付ける
+- 新しく下端固定の UI を足すときも同じ。ドックを持つページを足すときは、コンテナに `data-bottom-dock` を付け、高さは `--bottom-dock-height` を参照する
