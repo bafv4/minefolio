@@ -21,6 +21,7 @@ import {
   FileText,
   Keyboard,
   Package,
+  LayoutTemplate,
 } from "lucide-react";
 import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import type { SlashItem, SlashItemDef } from "../types";
@@ -201,6 +202,13 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
     icon: Package,
     groupKey: GROUP.embed,
     run: (_editor, ctx) => ctx.openEmbedDialog("searchcraft"),
+  },
+  {
+    titleKey: "guideEditor.slash.searchCraftTemplateEmbed",
+    keywords: ["template", "searchcraft", "てんぷれ", "テンプレート", "さーちくらふと"],
+    icon: LayoutTemplate,
+    groupKey: GROUP.embed,
+    run: (_editor, ctx) => ctx.openTemplateEmbedDialog(),
   },
 ];
 

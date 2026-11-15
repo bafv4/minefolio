@@ -51,6 +51,7 @@ import {
   PanelTop,
   PanelLeft,
   AlignHorizontalDistributeCenter,
+  LayoutTemplate,
 } from "lucide-react";
 import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ interface DesktopToolbarProps {
   onVideoToGif: () => void;
   onLink: () => void;
   onEmbed: (kind: "keybind" | "searchcraft") => void;
+  onTemplateEmbed: () => void;
   onGuideLink: () => void;
 }
 
@@ -193,6 +195,7 @@ export function DesktopToolbar({
   onVideoToGif,
   onLink,
   onEmbed,
+  onTemplateEmbed,
   onGuideLink,
 }: DesktopToolbarProps) {
   const t = useT();
@@ -430,6 +433,9 @@ export function DesktopToolbar({
                 </ToolbarButton>
                 <ToolbarButton label={t("guideEditor.embedSearchCraft")} onClick={() => onEmbed("searchcraft")}>
                   <Package className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton label={t("guideEditor.embedTemplate")} onClick={onTemplateEmbed}>
+                  <LayoutTemplate className="h-4 w-4" />
                 </ToolbarButton>
               </>
             )}

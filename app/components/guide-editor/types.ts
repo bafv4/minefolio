@@ -49,6 +49,8 @@ export interface SlashCommandContext {
   insertLink: () => void;
   /** 埋め込み入力ダイアログを開く */
   openEmbedDialog: (kind: "keybind" | "searchcraft") => void;
+  /** サーチクラフトテンプレート埋め込みの選択ダイアログを開く */
+  openTemplateEmbedDialog: () => void;
   /** ガイドリンク検索ダイアログを開く */
   openGuideLinkSearch: () => void;
   /** 動画から GIF を作るダイアログを開く */

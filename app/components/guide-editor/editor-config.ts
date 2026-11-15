@@ -19,6 +19,7 @@ import { ToggleListExtension } from "./extensions/toggle-list";
 import { GuideLinkExtension } from "./extensions/guide-link";
 import { KeybindEmbedExtension } from "./extensions/keybind-embed";
 import { SearchCraftEmbedExtension } from "./extensions/searchcraft-embed";
+import { SearchCraftTemplateEmbedExtension } from "./extensions/searchcraft-template-embed";
 import { ColumnsExtension, ColumnExtension } from "./extensions/columns";
 
 /**
@@ -50,6 +51,7 @@ export function buildExtensions(placeholder = ""): Extensions {
     GuideLinkExtension,
     KeybindEmbedExtension,
     SearchCraftEmbedExtension,
+    SearchCraftTemplateEmbedExtension,
     ColumnsExtension,
     ColumnExtension,
   ];

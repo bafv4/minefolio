@@ -336,6 +336,15 @@ export function insertGuideLink(
     .run();
 }
 
+/** サーチクラフトテンプレート埋め込みを挿入する（属性は templateId のみ） */
+export function insertTemplateEmbed(editor: Editor, templateId: string): void {
+  editor
+    .chain()
+    .focus()
+    .insertContent({ type: "searchCraftTemplateEmbed", attrs: { templateId } })
+    .run();
+}
+
 /** キーバインド / サーチクラフト埋め込みを挿入する */
 export function insertEmbed(
   editor: Editor,

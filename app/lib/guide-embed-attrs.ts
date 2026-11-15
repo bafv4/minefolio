@@ -33,3 +33,26 @@ export function collectPresetNames(html: string): Set<string> {
   }
   return names;
 }
+
+// ========================================
+// サーチクラフトテンプレート埋め込み（data-sctemplate-embed / data-template-id）
+// ========================================
+// サニタイザ（.server）・挿入ダイアログ・公開表示の3箇所が使うため、非 .server のここに置く。
+
+/** テンプレート ID の形式（cuid2。既定長 24、最大 32。先頭は英小文字） */
+const TEMPLATE_ID_PATTERN = /^[a-z][a-z0-9]{19,31}$/;
+
+export function isValidTemplateId(value: unknown): boolean {
+  return typeof value === "string" && TEMPLATE_ID_PATTERN.test(value);
+}
+
+/**
+ * 貼り付けられた文字列（テンプレート ID そのもの、または詳細ページの URL / パス
+ * `/guides/templates/:id`）からテンプレート ID を取り出す。取り出せなければ null。
+ */
+export function parseTemplateIdInput(input: string): string | null {
+  const text = input.trim();
+  if (isValidTemplateId(text)) return text;
+  const match = text.match(/\/guides\/templates\/([a-z0-9]+)(?:[/?#]|$)/);
+  return match && isValidTemplateId(match[1]) ? match[1] : null;
+}

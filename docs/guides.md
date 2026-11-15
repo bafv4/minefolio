@@ -69,11 +69,11 @@
 |------|------|
 | `index.tsx` | 宿主。メタ欄 + ツールバー + 本文 + ダイアログの組立（約 280 行） |
 | `editor-config.ts` | `buildExtensions()` — 拡張配列の単一ソース |
-| `extensions/` | カスタム拡張（callout / toggle-list / guide-link / keybind-embed / searchcraft-embed / columns / table / image / code-block / youtube / slash-command） |
+| `extensions/` | カスタム拡張（callout / toggle-list / guide-link / keybind-embed / searchcraft-embed / searchcraft-template-embed / columns / table / image / code-block / youtube / slash-command） |
 | `node-views/` | React NodeView（表示 + 属性編集） |
 | `slash-command/` | items / menu / renderer |
 | `toolbar/` | desktop / mobile / bubble / block-handle / table-handles / menu-item / 共通ボタン |
-| `panels/` | metadata-fields / color-picker / font-size-picker / settings-dialog / embed-dialog / youtube-dialog / link-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
+| `panels/` | metadata-fields / color-picker / font-size-picker / settings-dialog / embed-dialog / template-embed-dialog / youtube-dialog / link-dialog / guide-link-search / image-crop-dialog / video-to-gif-dialog |
 | `hooks/` | use-guide-editor / use-guide-save / use-editor-rerender / use-image-upload / use-unsaved-warning |
 | `lib/block-commands.ts` | ブロック種別・テーブル操作・挿入の共通コマンド |
 | `lib/image-processing.ts` | アップロード前の縮小・再エンコードと、トリミングの切り出し（canvas） |
@@ -101,6 +101,7 @@
 | 画像 | ファイル選択・クリップボードペースト。幅のドラッグ変更、**横方向の配置**（未設定 / 左 / 中央 / 右）、**トリミング**、**代替テキスト（alt）**に対応 |
 | GIF（動画から変換） | 短い動画をブラウザ内で GIF に変換して挿入（下記） |
 | YouTube埋め込み | YouTube動画のiframe埋め込み |
+| サーチクラフトテンプレート埋め込み | 公開済みテンプレート（`search_craft_templates`）を ID で参照して差し込む（下記） |
 | テーブル | リサイズ可能（列幅ドラッグ変更） |
 | ハイライト | 色付きハイライト |
 | テキスト色 | 文字色の変更 |
@@ -133,6 +134,19 @@
 - **テーブルをコピー**（`lib/block-commands.ts` の `copyTableToClipboard`）: テーブル全体を `text/html`（スキーマ直列化。エディタへの貼り付けで属性込みの完全復元が可能）+ `text/plain`（TSV。表計算ソフト向け）でクリップボードへコピーする。行・列ハンドルメニューとセル選択バブルから実行できる。TSV は TableMap でグリッド展開するため結合セル（colspan/rowspan）でも列位置が揃い、セル内の段落境界はスペースで区切る
 - **列幅スナップ**（`extensions/column-snap.ts`）: 列幅のドラッグ確定時、新しい幅が同じテーブルの既存列幅と ±8px 以内なら、その幅にぴったり揃える。ドラッグ確定 tr のみ対象（列境界ホバー中やドラッグ中の無関係な doc 変更・undo 等では発火しない。plugin state の dragging 判定 + 旧新の列幅比較で担保）
 - **公開ページの表示**: エディタは列幅未指定の列を 25px 換算で表の `min-width` に算入するため、そのままでは狭い画面で未指定列が潰れる。公開ページでは `normalizeGuideTables()`（`app/lib/guide-tables.ts`）が表の `min-width` を「固定列合計 + 未指定列 × 160px」に再計算し、収まらない分は `.table-scroll-wrapper` の横スクロールで表示する。全列をドラッグ指定した表（`style="width: ..."`）は作者の指定幅をそのまま尊重する
+
+### サーチクラフトテンプレート埋め込み
+
+- TipTap ノード `searchCraftTemplateEmbed`（atom・block。`extensions/searchcraft-template-embed.ts`）。属性は `templateId` のみ。保存 HTML は `<div data-sctemplate-embed data-template-id="…">`。`parseHTML` で読み戻すので編集→再保存で ID は消えない
+- 挿入口は既存の埋め込みと同じ: 「挿入」タブ（LayoutTemplate アイコン）とスラッシュコマンド。ダイアログは `panels/template-embed-dialog.tsx`。タイトル検索（候補にタイトル・作者・ゲーム内言語・クラフト数）と、テンプレート詳細の URL（`/guides/templates/:id`）または ID の貼り付けに対応。自分のテンプレートは非公開を含めて先頭に出し、非公開には「公開すると記事に表示されます」を付ける
+- 検索 API: `GET /api/guides/templates-search`。`?q=` はタイトル部分一致（公開済み＋作者 `public`、および自分のテンプレート）、`?id=` は ID 指定（公開済み＋作者が `private` でない、または自分のもの。他人の非公開は返さない）
+- 編集中表示（`node-views/template-embed-node-view.tsx`）は ID しか持たないため、タイトル・言語を `lib/template-embed-meta.ts`（モジュール内キャッシュ。挿入時は選択結果で先に埋める）で軽く取得する。取れなければ ID を表示する
+- サニタイズ: `data-sctemplate-embed` / `data-template-id` を許可。ID は cuid2 形式（`isValidTemplateId`、`lib/guide-embed-attrs.ts`）で検証し、形式外は属性ごと除去する
+- 公開表示: `guides/view.tsx` の loader が本文から ID を集め（`extractTemplateEmbedIds`）、`inArray` の1クエリで「公開済み・作者が `private` でない」ものだけ作者名つきで取得する（テンプレート詳細ページの閲覧規則と同じ。N+1 なし）。`splitContentAtEmbeds` が `sctemplate-embed` セグメントを返し、`SearchCraftTemplateEmbedView`（`guide-embeds.tsx`）が描く。見出し行はテンプレート名・作者・ゲーム内言語・「テンプレートを見る」、その下にサーチクラフト一覧（繋ぎ方 Loop があれば併せて）。描画本体は `SearchCraftEmbedBody` で、ユーザー参照のサーチクラフト埋め込みと共用する
+- リマップの鍵盤は出さない（本文の流れを切るため）。リマップが含まれるときは「リマップあり」と示し、入力キーの表示にはリマップを反映する。詳細ページで鍵盤を確認できる
+- 見つからない・未公開・削除済み・ID 不正のときは「このテンプレートは表示できません」の短い表示（下書きプレビューで作者本人が見る場合も同じ）
+- 自動翻訳: 埋め込み div は翻訳対象外（`guide-translate-html.server.ts` の `EMBED_ATTRS`）で、訳文でも同じ経路で描かれる
+- アイテム名は閲覧者の UI ロケールで表示する（既存のサーチクラフト埋め込みと同じ。テンプレート詳細ページはテンプレートの `gameLanguage` で出す）。サーチ文字列は言語依存なので、見出し行にゲーム内言語を出している
 
 ### 画像の代替テキスト（alt）
 
@@ -228,6 +242,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - **画像の配置**: `<img>` は `style` を許可しないため、横方向の配置は `data-align="left|center|right"` 属性で表す（未設定は属性ごと出力しない）。表示は `app/app.css` の `.guide-content.prose img[data-align=...]` が担い、エディタ側は `image-node-view.tsx` のラッパーが同じ見た目を作る
 - **colgroup/colタグ**: テーブルの列幅指定用に許可
 - **iframe**: YouTube 埋め込みホスト（www.youtube.com / www.youtube-nocookie.com）のみ src を許可
+- **テンプレート埋め込み**: `div` の `data-sctemplate-embed` / `data-template-id` を許可。`data-template-id` は cuid2 形式のみ（`onTagAttr` で検証し、形式外は属性ごと除去）
 
 ### スタイリング
 
@@ -357,6 +372,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 |----------------|----------|------|
 | /api/me/guides/upload-image | POST | 画像アップロード（Vercel Blob保存） |
 | /api/guides/search | GET | ガイド検索 |
+| /api/guides/templates-search | GET | サーチクラフトテンプレート検索（ガイドエディタの埋め込み用） |
 
 ---
 
@@ -397,3 +413,4 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 
 - `app/routes/api/me/guides/upload-image.ts` — 画像アップロードAPI
 - `app/routes/api/guides/search.ts` — ガイド検索API
+- `app/routes/api/guides/templates-search.ts` — サーチクラフトテンプレート検索API（埋め込み用）

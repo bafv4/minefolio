@@ -25,7 +25,10 @@ import { KeyLabelText } from "@/components/shift-mark";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { decodeHtmlAttr } from "@/lib/guide-embed-attrs";
+import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
+import { parseTemplateRemaps } from "@/lib/search-craft-templates";
+import { getGameLanguageName } from "@/lib/game-languages";
+import type { UiRemapInfo } from "@/lib/remap-utils";
 import { ArrowRight } from "lucide-react";
 
 // ========================================
@@ -127,6 +130,20 @@ export function extractEmbedRefs(html: string): EmbedRef[] {
   return refs;
 }
 
+/**
+ * 本文中のテンプレート埋め込みの ID を重複なしで集める（形式外は除く）。
+ * extractEmbedRefs には混ぜない（getUniqueEmbedSlugs に空 slug が入るため）。
+ */
+export function extractTemplateEmbedIds(html: string): string[] {
+  const ids = new Set<string>();
+  for (const m of html.matchAll(/<div[^>]*data-sctemplate-embed[^>]*>/g)) {
+    const idMatch = m[0].match(/data-template-id="([^"]*)"/);
+    const id = idMatch ? decodeHtmlAttr(idMatch[1]) : "";
+    if (isValidTemplateId(id)) ids.add(id);
+  }
+  return [...ids];
+}
+
 /** ユニークなユーザーslug一覧を取得 */
 export function getUniqueEmbedSlugs(refs: EmbedRef[]): string[] {
   return [...new Set(refs.map((r) => r.userSlug))];
@@ -139,11 +156,13 @@ export function getUniqueEmbedSlugs(refs: EmbedRef[]): string[] {
 export type ContentSegment =
   | { type: "html"; content: string }
   | { type: "keybind-embed"; userSlug: string; presetName: string | null }
-  | { type: "searchcraft-embed"; userSlug: string; presetName: string | null };
+  | { type: "searchcraft-embed"; userSlug: string; presetName: string | null }
+  /** サーチクラフトテンプレート埋め込み。templateId は形式外・欠落なら null（描画側で「表示できません」） */
+  | { type: "sctemplate-embed"; templateId: string | null };
 
 export function splitContentAtEmbeds(html: string): ContentSegment[] {
   const segments: ContentSegment[] = [];
-  const embedRegex = /<div[^>]*data-(keybind|searchcraft)-embed[^>]*><\/div>/g;
+  const embedRegex = /<div[^>]*data-(keybind|searchcraft|sctemplate)-embed[^>]*><\/div>/g;
 
   let lastIndex = 0;
   let match;
@@ -154,6 +173,13 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
     }
 
     const tag = match[0];
+    if (match[1] === "sctemplate") {
+      const idMatch = tag.match(/data-template-id="([^"]*)"/);
+      const id = idMatch ? decodeHtmlAttr(idMatch[1]) : "";
+      segments.push({ type: "sctemplate-embed", templateId: isValidTemplateId(id) ? id : null });
+      lastIndex = match.index + match[0].length;
+      continue;
+    }
     const embedType = match[1] as "keybind" | "searchcraft";
     const slugMatch = tag.match(/data-user-slug="([^"]*)"/);
     const presetMatch = tag.match(/data-preset-name="([^"]*)"/);
@@ -342,43 +368,11 @@ function InvalidKbd({ title, dashed }: { title: string; dashed?: boolean }) {
   );
 }
 
-export function SearchCraftEmbedView({
-  userData,
-  presetName,
-}: {
-  userData: EmbedUserData;
-  presetName: string | null;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  const displayName = getLocalizedDisplayName(userData, locale);
-
-  let remapsRaw = userData.keyRemaps;
-  // presetName 指定時のみ使う。プリセットスナップショットは行 id を保持しないため、
-  // このスナップショット内 crafts との突合は sequence フィールドで行う（配列位置は不可）
-  let rawLoopsData: string | null = null;
-  // presetName 指定時は preset.searchCraftsData の生JSONを直接パースする（破損・旧データが
-  // ありうる）ため unknown[] で受け、後段で必ず resolveVariations() を通す。無指定時は
-  // userData.searchCrafts（loader 側で resolveVariations() 済み）をそのまま使う。
-  let rawCrafts: unknown[] = userData.searchCrafts;
-
-  if (presetName) {
-    const preset = userData.presets.find((p) => p.name === presetName);
-    if (preset?.searchCraftsData) {
-      rawCrafts = safeParseArray<unknown>(preset.searchCraftsData) ?? [];
-    }
-    if (preset?.remapsData) {
-      remapsRaw = JSON.parse(preset.remapsData);
-    }
-    rawLoopsData = preset?.searchCraftLoopsData ?? null;
-  }
-
-  const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
-
-  // crafts をバリエーション正準の形へ正規化する。presetName 経路（生JSON直パース）は
-  // variations フィールドが欠落・破損していることがあるため、必ず resolveVariations() を
-  // 経由する（壊れたJSONでSSRが落ちないように、原始的な型ガードを一つずつ通す）。
-  const crafts = rawCrafts.map((item, idx) => {
+/** 生の craftsData 配列（破損・旧データがありうる）をバリエーション正準の形へ正規化する */
+function normalizeEmbedCrafts(rawCrafts: unknown[]) {
+  // presetName 経路（生JSON直パース）は variations フィールドが欠落・破損していることがあるため、
+  // 必ず resolveVariations() を経由する（壊れたJSONでSSRが落ちないように、原始的な型ガードを一つずつ通す）。
+  return rawCrafts.map((item, idx) => {
     const c = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
     return {
       id: typeof c.id === "string" ? c.id : `preset-craft-${idx}`,
@@ -393,29 +387,46 @@ export function SearchCraftEmbedView({
       }),
     };
   });
+}
 
-  if (crafts.length === 0) {
-    return (
-      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
-        {displayName} — {t("playerProfile.noSearchCraft")}
-      </div>
-    );
-  }
+type NormalizedEmbedCraft = ReturnType<typeof normalizeEmbedCrafts>[number];
+
+/**
+ * サーチクラフト一覧 + Loop の描画本体（カードの p-4 内）。
+ * ユーザー埋め込み（SearchCraftEmbedView）とテンプレート埋め込み（SearchCraftTemplateEmbedView）が共用する。
+ * presetMode=true は「スナップショット由来」（Loop の craft 参照は sequence で突合し、Loop は rawLoopsData の生JSON）、
+ * false は「ライブ」（craft 参照は id、Loop は liveLoops）。
+ */
+function SearchCraftEmbedBody({
+  crafts,
+  remaps,
+  presetMode,
+  rawLoopsData,
+  liveLoops,
+}: {
+  crafts: NormalizedEmbedCraft[];
+  remaps: UiRemapInfo[];
+  presetMode: boolean;
+  rawLoopsData: string | null;
+  liveLoops: EmbedUserData["searchCraftLoops"];
+}) {
+  const t = useT();
+  const locale = useLocale();
 
   const hasAnyTiming = crafts.some((c) => c.timing);
 
-  // Loop（繋ぎ方）の craft 参照解決キー。presetName 指定時は同スナップショット内の
+  // Loop（繋ぎ方）の craft 参照解決キー。presetMode 時は同スナップショット内の
   // sequence 値、無指定（ライブ / メインプリセットのスナップショット）時は id
   // （loader 側で decodePresetSearchCraftLoops により合成idへ解決済み）で突合する。
   const craftLookup = new Map<string, { items: string; variations: SearchCraftVariation[] }>(
     crafts.map((c) => [
-      presetName ? String(c.sequence) : c.id,
+      presetMode ? String(c.sequence) : c.id,
       { items: c.items, variations: c.variations },
     ]),
   );
   const getCraft = (craftId: string) => craftLookup.get(craftId);
 
-  const loops: EmbedLoopRow[] = presetName
+  const loops: EmbedLoopRow[] = presetMode
     ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
         const rawSteps = loop && Array.isArray(loop.steps) ? loop.steps : [];
         const steps: LoopStepData[] = rawSteps.map((rawStep) => {
@@ -434,7 +445,7 @@ export function SearchCraftEmbedView({
           resolved: resolveLoopSteps(toSafeLoopSteps(steps), getCraft),
         };
       })
-    : userData.searchCraftLoops.map((loop) => ({
+    : liveLoops.map((loop) => ({
         id: loop.id,
         timing: loop.timing,
         comment: loop.comment,
@@ -656,6 +667,65 @@ export function SearchCraftEmbedView({
   };
 
   return (
+    <div className="p-4">
+      {hasAnyTiming ? renderGrouped() : (
+        <div className="space-y-3">{crafts.map(renderCraft)}</div>
+      )}
+      {loops.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
+            {t("playerProfile.loopSectionTitle")}
+          </h4>
+          <div className="space-y-3">{loops.map(renderLoop)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SearchCraftEmbedView({
+  userData,
+  presetName,
+}: {
+  userData: EmbedUserData;
+  presetName: string | null;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const displayName = getLocalizedDisplayName(userData, locale);
+
+  let remapsRaw = userData.keyRemaps;
+  // presetName 指定時のみ使う。プリセットスナップショットは行 id を保持しないため、
+  // このスナップショット内 crafts との突合は sequence フィールドで行う（配列位置は不可）
+  let rawLoopsData: string | null = null;
+  // presetName 指定時は preset.searchCraftsData の生JSONを直接パースする（破損・旧データが
+  // ありうる）ため unknown[] で受け、後段で必ず resolveVariations() を通す。無指定時は
+  // userData.searchCrafts（loader 側で resolveVariations() 済み）をそのまま使う。
+  let rawCrafts: unknown[] = userData.searchCrafts;
+
+  if (presetName) {
+    const preset = userData.presets.find((p) => p.name === presetName);
+    if (preset?.searchCraftsData) {
+      rawCrafts = safeParseArray<unknown>(preset.searchCraftsData) ?? [];
+    }
+    if (preset?.remapsData) {
+      remapsRaw = JSON.parse(preset.remapsData);
+    }
+    rawLoopsData = preset?.searchCraftLoopsData ?? null;
+  }
+
+  const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
+  const crafts = normalizeEmbedCrafts(rawCrafts);
+
+  if (crafts.length === 0) {
+    return (
+      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+        {displayName} — {t("playerProfile.noSearchCraft")}
+      </div>
+    );
+  }
+
+  return (
     <div className="my-4 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
@@ -668,19 +738,101 @@ export function SearchCraftEmbedView({
             {t("playerProfile.viewProfile")}
           </Link>
         </div>
-        <div className="p-4">
-          {hasAnyTiming ? renderGrouped() : (
-            <div className="space-y-3">{crafts.map(renderCraft)}</div>
-          )}
-          {loops.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <h4 className="text-sm font-semibold text-muted-foreground border-b pb-1">
-                {t("playerProfile.loopSectionTitle")}
-              </h4>
-              <div className="space-y-3">{loops.map(renderLoop)}</div>
-            </div>
-          )}
+        <SearchCraftEmbedBody
+          crafts={crafts}
+          remaps={remaps}
+          presetMode={!!presetName}
+          rawLoopsData={rawLoopsData}
+          liveLoops={userData.searchCraftLoops}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ========================================
+// サーチクラフトテンプレート埋め込み
+// ========================================
+
+/** テンプレート埋め込みに渡す表示用データ（公開済み・作者が private でないものだけ loader が詰める） */
+export type EmbedTemplateData = {
+  id: string;
+  title: string;
+  gameLanguage: string | null;
+  craftsData: string;
+  remapsData: string | null;
+  loopsData: string | null;
+  authorSlug: string;
+  authorName: string;
+};
+
+/** 見つからない・非公開・削除済み・ID 不正のときの短い表示（本文の流れは壊さない） */
+function TemplateEmbedUnavailable() {
+  const t = useT();
+  return (
+    <div className="my-4 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
+      {t("guideView.embedTemplateUnavailable")}
+    </div>
+  );
+}
+
+export function SearchCraftTemplateEmbedView({
+  template,
+}: {
+  /** null = 表示できない（ID 不正・未公開・削除済み・非公開プロフィール） */
+  template: EmbedTemplateData | null;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  if (!template) return <TemplateEmbedUnavailable />;
+
+  // crafts は生JSONを直接パースする（スナップショットと同形式）。必ず normalizeEmbedCrafts を通す
+  const crafts = normalizeEmbedCrafts(safeParseArray<unknown>(template.craftsData) ?? []);
+  if (crafts.length === 0) return <TemplateEmbedUnavailable />;
+
+  // リマップは入力キー表示（実際に押すキー）にだけ反映し、鍵盤は出さない（詳細ページで見られる）
+  const remaps = parseTemplateRemaps(template.remapsData);
+  const href = `/guides/templates/${template.id}`;
+
+  return (
+    <div className="my-4 not-prose">
+      <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
+        <div className="px-4 py-2 border-b bg-muted/30 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <div className="min-w-0 text-sm">
+            <span className="font-medium break-words">{template.title}</span>
+            <span className="text-muted-foreground">
+              {" — "}
+              <Link to={`/player/${template.authorSlug}`} className="hover:underline">
+                {template.authorName}
+              </Link>
+            </span>
+            {template.gameLanguage && (
+              <span className="text-muted-foreground ml-2 text-xs">
+                {t("guideView.embedTemplateLanguage", {
+                  language: getGameLanguageName(t, locale, template.gameLanguage),
+                })}
+              </span>
+            )}
+          </div>
+          <Link
+            to={href}
+            className="-mx-2 -my-3 inline-flex items-center px-2 py-3 text-xs text-primary hover:underline"
+          >
+            {t("guideView.embedTemplateView")}
+          </Link>
         </div>
+        <SearchCraftEmbedBody
+          crafts={crafts}
+          remaps={remaps}
+          presetMode
+          rawLoopsData={template.loopsData}
+          liveLoops={[]}
+        />
+        {remaps.length > 0 && (
+          <p className="px-4 pb-4 text-xs text-muted-foreground">
+            {t("guideView.embedTemplateHasRemaps")}
+          </p>
+        )}
       </div>
     </div>
   );

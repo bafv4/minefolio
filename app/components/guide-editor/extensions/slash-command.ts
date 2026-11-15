@@ -21,6 +21,7 @@ const NOOP_CONTEXT: SlashCommandContext = {
   insertYoutube: () => {},
   insertLink: () => {},
   openEmbedDialog: () => {},
+  openTemplateEmbedDialog: () => {},
   openGuideLinkSearch: () => {},
   openVideoToGif: () => {},
 };

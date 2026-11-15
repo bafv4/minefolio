@@ -28,9 +28,11 @@ import {
 } from "./hooks/use-image-upload";
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
-import { insertEmbed, insertGuideLink } from "./lib/block-commands";
+import { insertEmbed, insertGuideLink, insertTemplateEmbed } from "./lib/block-commands";
 import { SettingsDialog } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
+import { TemplateEmbedDialog } from "./panels/template-embed-dialog";
+import { primeTemplateEmbedMeta, type TemplateEmbedMeta } from "./lib/template-embed-meta";
 import { YoutubeDialog } from "./panels/youtube-dialog";
 import { LinkDialog } from "./panels/link-dialog";
 import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
@@ -80,6 +82,7 @@ export function GuideEditor({
   // ── ダイアログ状態 ──────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
+  const [templateEmbedOpen, setTemplateEmbedOpen] = useState(false);
   const [guideLinkOpen, setGuideLinkOpen] = useState(false);
   const [videoToGifOpen, setVideoToGifOpen] = useState(false);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
@@ -269,6 +272,7 @@ export function GuideEditor({
       insertYoutube: () => setYoutubeDialogOpen(true),
       insertLink: handleLinkInsert,
       openEmbedDialog: (kind) => setEmbedKind(kind),
+      openTemplateEmbedDialog: () => setTemplateEmbedOpen(true),
       openGuideLinkSearch: () => setGuideLinkOpen(true),
       openVideoToGif: () => setVideoToGifOpen(true),
     }),
@@ -300,6 +304,12 @@ export function GuideEditor({
     if (editor) insertEmbed(editor, kind, slug, preset || null);
   };
 
+  const handleInsertTemplateEmbed = (template: TemplateEmbedMeta) => {
+    // 編集中表示がタイトルを再取得しなくて済むよう、選択結果を先にキャッシュへ入れる
+    primeTemplateEmbedMeta(template);
+    if (editor) insertTemplateEmbed(editor, template.id);
+  };
+
   const handleInsertGuideLink = (guide: GuideSearchResult) => {
     if (editor) insertGuideLink(editor, guide);
   };
@@ -328,6 +338,7 @@ export function GuideEditor({
           onVideoToGif={() => setVideoToGifOpen(true)}
           onLink={handleLinkInsert}
           onEmbed={(kind) => setEmbedKind(kind)}
+          onTemplateEmbed={() => setTemplateEmbedOpen(true)}
           onGuideLink={() => setGuideLinkOpen(true)}
         />
       )}
@@ -424,6 +435,11 @@ export function GuideEditor({
         kind={embedKind}
         onOpenChange={(open) => !open && setEmbedKind(null)}
         onInsert={handleInsertEmbed}
+      />
+      <TemplateEmbedDialog
+        open={templateEmbedOpen}
+        onOpenChange={setTemplateEmbedOpen}
+        onInsert={handleInsertTemplateEmbed}
       />
       <GuideLinkSearch
         open={guideLinkOpen}

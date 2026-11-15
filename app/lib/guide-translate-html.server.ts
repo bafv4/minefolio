@@ -17,7 +17,7 @@ type TextNode = DefaultTreeAdapterMap["textNode"];
 const SKIP_TAGS = new Set(["code", "pre", "kbd", "samp", "script", "style", "textarea", "template"]);
 
 /** 埋め込みノード（atom。中身を持たないが明示的にスキップする）を示す属性 */
-const EMBED_ATTRS = ["data-keybind-embed", "data-searchcraft-embed", "data-guide-link"];
+const EMBED_ATTRS = ["data-keybind-embed", "data-searchcraft-embed", "data-sctemplate-embed", "data-guide-link"];
 
 /** 訳文の書き戻し先 1 つ分（テキストノード、または img の alt 属性） */
 interface Slot {

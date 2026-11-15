@@ -13,7 +13,7 @@ import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, keybindings, keyRemaps, searchCrafts, searchCraftLoops } from "@/lib/schema";
+import { users, guides, keybindings, keyRemaps, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
 import { eq, ne, and, or, sql, asc, desc, inArray } from "drizzle-orm";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
@@ -42,11 +42,14 @@ import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
 import {
   extractEmbedRefs,
+  extractTemplateEmbedIds,
   getUniqueEmbedSlugs,
   splitContentAtEmbeds,
   KeybindEmbedView,
   SearchCraftEmbedView,
+  SearchCraftTemplateEmbedView,
   type EmbedUserData,
+  type EmbedTemplateData,
 } from "@/components/guide-embeds";
 import { collectPresetNames } from "@/lib/guide-embed-attrs";
 
@@ -86,6 +89,64 @@ export function meta({
     { name: "twitter:image", content: ogImage },
   ];
 }
+
+/**
+ * 本文のテンプレート埋め込み（data-template-id）を1クエリで解決する（N+1 にしない）。
+ * 公開済みで、作者が非公開（private）プロフィールでないものだけ返す（テンプレート詳細ページと同じ規則）。
+ * 該当しない ID はキーごと無い＝描画側で「表示できません」。クライアントへは表示に使う項目だけ渡す。
+ */
+async function resolveEmbedTemplates(
+  db: Database,
+  templateIds: string[],
+  locale: ReturnType<typeof resolveLocale>,
+): Promise<Record<string, EmbedTemplateData>> {
+  const result: Record<string, EmbedTemplateData> = {};
+  if (templateIds.length === 0) return result;
+  const rows = await db
+    .select({
+      id: searchCraftTemplates.id,
+      title: searchCraftTemplates.title,
+      gameLanguage: searchCraftTemplates.gameLanguage,
+      craftsData: searchCraftTemplates.craftsData,
+      remapsData: searchCraftTemplates.remapsData,
+      loopsData: searchCraftTemplates.loopsData,
+      authorSlug: users.slug,
+      authorDisplayName: users.displayName,
+      authorDisplayNameAlphabet: users.displayNameAlphabet,
+      authorMcid: users.mcid,
+    })
+    .from(searchCraftTemplates)
+    .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
+    .where(
+      and(
+        inArray(searchCraftTemplates.id, templateIds),
+        eq(searchCraftTemplates.isPublished, true),
+        publiclyReferencableCondition,
+      ),
+    );
+  for (const row of rows) {
+    result[row.id] = {
+      id: row.id,
+      title: row.title,
+      gameLanguage: row.gameLanguage,
+      craftsData: row.craftsData,
+      remapsData: row.remapsData,
+      loopsData: row.loopsData,
+      authorSlug: row.authorSlug,
+      authorName: getLocalizedDisplayName(
+        {
+          displayName: row.authorDisplayName,
+          displayNameAlphabet: row.authorDisplayNameAlphabet,
+          mcid: row.authorMcid,
+          slug: row.authorSlug,
+        },
+        locale,
+      ),
+    };
+  }
+  return result;
+}
+
 
 // ガイド本文に埋め込まれた（キーバインド/サーチクラフト）ユーザーのデータを解決する。
 // slug 一致と mcid 一致を1クエリで引き、slug 一致を優先する（mcid 一致は slug で
@@ -380,7 +441,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // extractEmbedRefs の正規表現には取りこぼし得る形があるため、属性値を本文全体から集める（上位集合）
   // 属性値は js-xss で HTML エスケープされているため、デコードして DB のプリセット名と比べる
   const presetNames = collectPresetNames(contentWithIds);
-  const embedUsers = await resolveEmbedUsers(db, embedSlugs, presetNames);
+  const [embedUsers, embedTemplates] = await Promise.all([
+    resolveEmbedUsers(db, embedSlugs, presetNames),
+    resolveEmbedTemplates(db, extractTemplateEmbedIds(contentWithIds), resolveLocale(request)),
+  ]);
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
@@ -412,6 +476,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     otherGuides,
     appUrl,
     embedUsers,
+    embedTemplates,
     isOwner,
     previewingDraft,
     toc,
@@ -426,7 +491,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { guide, author, otherGuides, embedUsers, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
+  const { guide, author, otherGuides, embedUsers, embedTemplates, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
@@ -620,6 +685,7 @@ export default function GuideViewPage() {
         contentRef={contentRef}
         html={guide.sanitizedContent}
         embedUsers={embedUsers}
+        embedTemplates={embedTemplates}
       />
 
       {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ） */}
@@ -677,10 +743,12 @@ function GuideContent({
   contentRef,
   html,
   embedUsers,
+  embedTemplates,
 }: {
   contentRef: React.RefObject<HTMLDivElement | null>;
   html: string;
   embedUsers: Record<string, EmbedUserData>;
+  embedTemplates: Record<string, EmbedTemplateData>;
 }) {
   const t = useT();
   const segments = splitContentAtEmbeds(html);
@@ -702,6 +770,14 @@ function GuideContent({
       {segments.map((seg, i) => {
         if (seg.type === "html") {
           return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
+        }
+        if (seg.type === "sctemplate-embed") {
+          return (
+            <SearchCraftTemplateEmbedView
+              key={i}
+              template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
+            />
+          );
         }
         const userData = embedUsers[seg.userSlug];
         if (!userData) {
