@@ -178,7 +178,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 ### 身元帯（全タブ共通）
 
-`/player/:slug` は全タブの上に共通の身元帯を置く（`app/routes/player/profile.tsx`）。`rounded-2xl border border-border/70 bg-card/70` の大型パネル（ui.md「欄枠」参照）で、中身は次のとおり。
+`/player/:slug` は全タブの上に共通の身元帯を置く（`app/routes/player/profile.tsx`）。`rounded-2xl border border-border/70 bg-card/70` の大型パネル（ui.md「大型パネル」参照）で、中身は次のとおり。
 
 - アバター（md 未満 40px / 以上 64px を CSS で出し分け、ハイドレーション後に大きさが変わらないようにする）・表示名（**このページの `h1` はここだけ**。他タブ用の視覚非表示の h1 は無い）・アルファベット表記・`@MCID`・メインカテゴリ（押すとプレイスタイルタブへ）
 - 操作ボタン（編集〔本人のみ〕・お気に入り・シェア）。**md 未満はアイコンのみ**（ラベルは sr-only で残し、タップ目標は 44px 以上）で名前の右に置き、幅が足りないときだけ次の行へ折り返す。md 以上はラベル付き。**比較ボタンは置かない**（比較の導線は各タブ末尾の「ほかの走者と比べる」欄に集約）。モバイルでも第一画面に収まる
@@ -740,7 +740,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### 各タブの欄構成
 
-走者画面は**欄を箱にせず、上罫線で区切る**（共通部品 `PageSection`、`app/components/page-section.tsx`。ホームと共有。規約は ui.md「欄枠」）。**見出しの階層は 走者名 `h1`（身元帯）＞ タブタイトル `h2` ＞ 欄 `h3` ＞ 欄の中の小見出し `h4`**。**サイズは段差をつける**: 走者名 `h1` は `text-2xl md:text-3xl`（24/30px）、タブタイトル `h2` は `text-xl md:text-2xl`（20/24px）、欄 `h3` は `text-lg`（18px）、小見出し `h4` は `text-base`（`PageSection` は `headingLevel=="h3"` のときだけ `text-lg`、既定の `h2`＝ホームは `text-xl` のまま）。`PageSection` の `headingLevel` prop（既定 `h2`＝ホーム。走者画面だけ `"h3"`）で切り替え、共有部品の箱なし表示（`framed={false}`＝走者画面専用）は欄を `h3`・小見出しを `h4` で描く（箱あり表示の `/player/:slug/stats` 等は不変）。
+走者画面は**欄を箱にせず、上罫線で区切る**（共通部品 `PageSection`、`app/components/page-section.tsx`。ホームと共有。規約は ui.md「欄枠」「見出しの段」）。**見出しの階層は 走者名 `h1`（身元帯）＞ タブタイトル `h2` ＞ 欄 `h3` ＞ 欄の中の小見出し `h4`**。**サイズは段差をつける**: 走者名 `h1` は `text-2xl md:text-3xl`（24/30px）、タブタイトル `h2` は `text-xl md:text-2xl`（20/24px）、欄 `h3` は `text-lg`（18px）、小見出し `h4` は `text-base`（`PageSection` は `headingLevel=="h3"` のときだけ `text-lg`、既定の `h2`＝ホームは `text-xl` のまま）。`PageSection` の `headingLevel` prop（既定 `h2`＝ホーム。走者画面だけ `"h3"`）で切り替え、共有部品の箱なし表示（`framed={false}`＝走者画面専用）は欄を `h3`・小見出しを `h4` で描く（箱あり表示の `/player/:slug/stats` 等は不変）。
 
 **タブタイトル**: 各タブパネルの先頭に、そのタブの名称（ホットバーのツールチップと同じ `tabItems` の `label`）を `h2`（`text-xl md:text-2xl font-bold`、`ProfileTabTitle`。`badge` でタイトル直後に HintTip、`trailing` で右端に操作）で出す。**欄が1つだけのタブ（ガイド・サーチクラフト）は、見える欄見出しを出さず、`sr-only` の `h3`（「ガイド一覧」「サーチクラフト一覧」、`playerProfile.guidesListHeading` / `searchCraftListHeading`）を1つ置く**（タブタイトルと同文言で二重になるため見せない。見出しの並びを h2 → h3 → h4 にそろえ、その下のカード名・サーチクラフトのグループ名を `h4` にする。見た目は変えない。ガイドカードは `GuideCardGrid` / `GuideListView` の `titleLevel="h4"`、サーチクラフトは `groupHeadingLevel="h4"`）。欄は `section` ではなく `role="group"` の div（`aria-labelledby` でこの `h3` を参照）にし、欄見出しの右にあった操作はタイトル行へ移す。空状態のタブも同じで、タイトルの下に `EmptyState`。パネルの名前（`aria-labelledby`）はこの `h2` を参照する。タイトルと最初の内容の間隔は欄どうしより詰める（`mb-3 sm:mb-4`）。md 未満のプリセット選択はタイトルと同じ行の右端（狭いと折り返す）。
 

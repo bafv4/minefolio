@@ -137,43 +137,41 @@ export function meta({ loaderData, matches }: Route.MetaArgs) {
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
+  // 現行の骨格（身元帯 → ホットバー → タブ名 h2 → 欄）と同じ配置。細部は再現しない
   return (
-    <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-200">
-      {/* Left Sidebar Skeleton */}
-      <aside className="lg:w-72 shrink-0 space-y-6">
-        <div className="flex flex-col items-center lg:items-start">
-          {/* Skin Skeleton */}
-          <div className="w-40 h-60 flex items-center justify-center">
-            <Skeleton className="w-12 h-40 rounded-lg" />
+    <div aria-hidden="true" className="flex flex-col gap-4 md:gap-6 animate-in fade-in duration-200">
+      {/* 身元帯（アバター 40px / md 以上 64px、名前、操作ボタン） */}
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
+        <div className="flex items-center justify-between gap-3 md:gap-6">
+          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+            <Skeleton className="size-10 shrink-0 rounded md:size-16" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-40 md:h-9" />
+              <Skeleton className="h-4 w-24" />
+            </div>
           </div>
-
-          <div className="mt-4 text-center lg:text-left w-full space-y-2">
-            <Skeleton className="h-8 w-32 mx-auto lg:mx-0" />
-            <Skeleton className="h-5 w-24 mx-auto lg:mx-0" />
-          </div>
-        </div>
-
-        {/* Bio Skeleton */}
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-20 w-full" />
-        </div>
-      </aside>
-
-      {/* Main Content Skeleton */}
-      <main className="flex-1 min-w-0 space-y-6">
-        {/* Tabs Skeleton */}
-        <Skeleton className="h-10 w-80" />
-
-        {/* Content Skeleton */}
-        <div className="space-y-4">
-          <Skeleton className="h-64 w-full rounded-lg" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Skeleton className="h-40 rounded-lg" />
-            <Skeleton className="h-40 rounded-lg" />
+          <div className="flex shrink-0 gap-1 md:gap-2">
+            <Skeleton className="size-9 md:w-20" />
+            <Skeleton className="size-9 md:w-20" />
           </div>
         </div>
-      </main>
+      </div>
+
+      {/* ホットバー */}
+      <Skeleton className="h-12 w-full rounded-xl md:h-14" />
+
+      {/* タブ名 h2 → 欄 */}
+      <div className="space-y-7 sm:space-y-8">
+        <Skeleton className="h-8 w-40" />
+        <div className="space-y-3 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </div>
+        <div className="space-y-3 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -750,20 +748,17 @@ export default function PlayerProfilePage() {
   type KeybindingDisplayGroup = {
     key: string;
     label: string;
-    colorClass: string;
     actions: string[];
   };
   const keybindingDisplayGroups: KeybindingDisplayGroup[] = [
     {
       key: "movement",
       label: t("playerProfile.movement"),
-      colorClass: getCategoryColorClass("movement"),
       actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
     },
     {
       key: "inventory",
       label: t("playerProfile.inventory"),
-      colorClass: getCategoryColorClass("inventory"),
       actions: [
         "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
         "hotbar6", "hotbar7", "hotbar8", "hotbar9",
@@ -773,7 +768,6 @@ export default function PlayerProfilePage() {
     {
       key: "combat-ui",
       label: t("playerProfile.combatAndUi"),
-      colorClass: getCategoryColorClass("combat"),
       actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
     },
   ];
@@ -1321,6 +1315,7 @@ export default function PlayerProfilePage() {
               skinUrl={player.customSkinUrl}
               mcid={player.mcid}
               size={40}
+              alt=""
               className="shrink-0 rounded md:hidden"
             />
             <MinecraftAvatar
@@ -1328,6 +1323,7 @@ export default function PlayerProfilePage() {
               skinUrl={player.customSkinUrl}
               mcid={player.mcid}
               size={64}
+              alt=""
               className="shrink-0 rounded max-md:hidden"
             />
             <div className="min-w-0">
@@ -1394,7 +1390,7 @@ export default function PlayerProfilePage() {
         trailing={presetSelectorNode}
         leading={
           <>
-            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} mcid={player.mcid} size={28} className="shrink-0 rounded" />
+            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} mcid={player.mcid} size={28} alt="" className="shrink-0 rounded" />
             {/* 名前は xl 以上だけ（1024px 前後は8スロット＋プリセットでバー幅が埋まるためアバターだけ）。1行で切る */}
             <span className="hidden max-w-40 truncate text-sm font-semibold xl:block">{playerName}</span>
           </>
@@ -1766,7 +1762,7 @@ export default function PlayerProfilePage() {
 
                     return (
                       <div key={group.key} className="mb-6 space-y-2 break-inside-avoid">
-                        <h4 className={`text-base font-semibold ${group.colorClass}`}>{group.label}</h4>
+                        <h4 className="text-base font-semibold">{group.label}</h4>
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -2502,7 +2498,7 @@ function RecordCard({
       <CardHeader className="px-5">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-1.5">
+            <CardTitle role="heading" aria-level={4} className="text-base flex items-center gap-1.5">
               {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
               {record.categoryDisplayName}
             </CardTitle>
@@ -2549,20 +2545,23 @@ function RecordCard({
 
 function SocialIcon({
   platform,
+  className = "h-5 w-5",
 }: {
   platform: string;
+  /** Button の中では基底の svg サイズ指定に負けるため `size-5` を渡す */
+  className?: string;
 }) {
   switch (platform) {
     case "youtube":
-      return <Youtube className="h-5 w-5" />;
+      return <Youtube className={className} />;
     case "twitch":
-      return <Twitch className="h-5 w-5" />;
+      return <Twitch className={className} />;
     case "twitter":
-      return <Twitter className="h-5 w-5" />;
+      return <Twitter className={className} />;
     case "speedruncom":
-      return <Trophy className="h-5 w-5" />;
+      return <Trophy className={className} />;
     default:
-      return <ExternalLink className="h-5 w-5" />;
+      return <ExternalLink className={className} />;
   }
 }
 
@@ -2677,7 +2676,7 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
             {plainLinks.map((link) => (
               <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
                 <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
-                  <SocialIcon platform={link.platform} />
+                  <SocialIcon platform={link.platform} className="size-5" />
                   <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
                   <span className="text-muted-foreground">{link.identifier}</span>
                 </a>
@@ -2828,21 +2827,6 @@ function CursorSpeedValue({ config }: { config: MouseReasonConfig }) {
       <span className="ml-1 text-muted-foreground">DPI</span>
     </>
   );
-}
-
-function getCategoryColorClass(category: string): string {
-  switch (category) {
-    case "movement":
-      return "text-category-movement";
-    case "combat":
-      return "text-category-combat";
-    case "inventory":
-      return "text-category-inventory";
-    case "ui":
-      return "text-category-ui";
-    default:
-      return "";
-  }
 }
 
 /** プロフィール動画の表示用エントリ（profileVideos 行 or 旧 featuredVideoUrl フォールバック） */

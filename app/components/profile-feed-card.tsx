@@ -78,6 +78,7 @@ export function ProfileFeedCard({
   isFavorite = false,
   showFavoriteButton = false,
   className,
+  surface = "background",
 }: {
   player: ProfileFeedCardPlayer;
   /** true のとき名前行の右端（カードの右側）にハートを出す（/browse でお気に入りが先頭に来る理由の表示） */
@@ -86,6 +87,8 @@ export function ProfileFeedCard({
   showFavoriteButton?: boolean;
   /** 外枠への追加クラス（例: 親が flex-col のとき `flex-1` で高さを揃える） */
   className?: string;
+  /** カードの面。既定は `bg-background/80`、欄の中でページ背景に直接並べるとき（ホーム）は "card"（不透明の `bg-card`） */
+  surface?: "background" | "card";
 }) {
   const t = useT();
   const locale = useLocale();
@@ -94,7 +97,8 @@ export function ProfileFeedCard({
     // オーバーレイリンク構成（ui.md）。hover の transform は外枠に置く。ボタンは relative z-10 でリンクより手前
     <div
       className={cn(
-        "group relative flex flex-col rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+        "group relative flex flex-col rounded-xl border border-border/70 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        surface === "card" ? "bg-card" : "bg-background/80",
         className,
       )}
     >
@@ -204,9 +208,9 @@ export function ProfileFeedListItem({
 }
 
 // ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）
-export function ProfileFeedCardSkeleton() {
+export function ProfileFeedCardSkeleton({ surface = "background" }: { surface?: "background" | "card" } = {}) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+    <div className={cn("rounded-xl border border-border/70 p-4", surface === "card" ? "bg-card" : "bg-background/80")}>
       <div className="flex items-start gap-3">
         <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
         <div className="flex-1 space-y-2">

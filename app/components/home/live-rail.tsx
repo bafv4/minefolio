@@ -683,7 +683,7 @@ export function LiveRail({
       {notice}
       {!error && <p className="text-sm text-muted-foreground">{t("home.liveEmpty")}</p>}
       {recentLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-hidden="true">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3" aria-hidden="true">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-36 rounded-xl" />
           ))}
@@ -695,7 +695,7 @@ export function LiveRail({
         <div className="space-y-2">
           {/* /paces への導線は欄見出しの「最近のペース →」に一本化 */}
           <h3 className="text-sm font-medium text-muted-foreground">{t("home.recentPacesTitle")}</h3>
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {recent.map((run) => (
               <RecentPaceCard key={`${run.mcid}-${run.pacemanRunId}-${run.timeline}`} run={run} maps={maps} />
             ))}

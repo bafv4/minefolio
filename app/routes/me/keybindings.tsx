@@ -819,13 +819,6 @@ const categoryLabelsOf = (t: Translator): Record<string, string> => ({
   ui: t("meKeybindings.categoryUi"),
 });
 
-const categoryColors: Record<string, string> = {
-  movement: "text-category-movement",
-  combat: "text-category-combat",
-  inventory: "text-category-inventory",
-  ui: "text-category-ui",
-};
-
 // 廃止済みアクション（表示から除外）
 const deprecatedActions = ["toggleHud"];
 
@@ -836,13 +829,11 @@ const KEYBINDING_DISPLAY_GROUPS = [
   {
     key: "movement",
     labelKey: "playerProfile.movement",
-    color: "text-category-movement",
     actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
   },
   {
     key: "inventory",
     labelKey: "playerProfile.inventory",
-    color: "text-category-inventory",
     actions: [
       "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
       "hotbar6", "hotbar7", "hotbar8", "hotbar9",
@@ -852,7 +843,6 @@ const KEYBINDING_DISPLAY_GROUPS = [
   {
     key: "combat-ui",
     labelKey: "playerProfile.combatAndUi",
-    color: "text-category-combat",
     actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
   },
 ] as const;
@@ -1482,7 +1472,6 @@ export default function KeybindingsPage() {
       return categoryOrder.map((category) => ({
         key: category,
         label: categoryLabelsOf(t)[category],
-        color: categoryColors[category],
         bindings: byCategory[category] ?? [],
       }));
     }
@@ -1490,7 +1479,6 @@ export default function KeybindingsPage() {
     return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
       key: group.key,
       label: t(group.labelKey),
-      color: group.color,
       bindings: group.actions
         .map((action) => byAction.get(action))
         .filter((kb): kb is (typeof keybindingsWithLocalChanges)[number] => kb !== undefined),
@@ -2278,7 +2266,7 @@ export default function KeybindingsPage() {
                         )}
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
-                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                        <span className={cn("text-xs", !binding && "text-muted-foreground")}>
                           {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
@@ -2304,7 +2292,7 @@ export default function KeybindingsPage() {
                         )}
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
-                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                        <span className={cn("text-xs", !binding && "text-muted-foreground")}>
                           {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
@@ -2436,7 +2424,7 @@ export default function KeybindingsPage() {
 
               return (
                 <section key={group.key}>
-                  <h3 className={`border-b border-border/60 pb-2 text-base font-semibold ${group.color}`}>
+                  <h3 className="border-b border-border/60 pb-2 text-base font-semibold">
                     {group.label}
                   </h3>
                   <div>
@@ -2700,7 +2688,7 @@ export default function KeybindingsPage() {
 
                   return (
                     <div key={category} className="mb-3 last:mb-0">
-                      <p className={`text-xs font-medium mb-1.5 ${categoryColors[category]}`}>
+                      <p className="text-xs font-medium mb-1.5">
                         {categoryLabelsOf(t)[category]}
                       </p>
                       <div className="space-y-1.5 pl-2">

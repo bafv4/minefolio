@@ -837,7 +837,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     hotbarTooltipWithKey: "{label} ({key})",
     viewSkin3d: "View skin in 3D",
     skinDialogTitle: "{name}'s skin",
-    noMcidNote: "This user hasn't registered an MCID",
+    noMcidNote: "This runner hasn't registered an MCID",
     bedrockMcidLine: "Bedrock: {id}",
     autoTranslated: "Auto-translated",
     showOriginal: "Show original",

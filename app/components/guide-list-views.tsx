@@ -99,7 +99,7 @@ export function GuideCardGrid({
               // ホバー時の浮き上がりは必ずこの外枠に持たせる。Card 側に transform を置くと
               // Card が重ね合わせコンテキストを作り、兄弟のオーバーレイリンク（z-0）より
               // 手前に描画されてカードのクリックが届かなくなる（ホバーしないと押せないため実質死ぬ）
-              "hover:-translate-y-0.5",
+              "hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
               // ピン留めカードはグリッド2列分に拡大して強調する
               guide.isPinned && "sm:col-span-2",
             )}

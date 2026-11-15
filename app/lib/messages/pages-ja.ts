@@ -810,7 +810,7 @@ export const PAGES_JA = {
     hotbarTooltipWithKey: "{label}（{key}）",
     viewSkin3d: "スキンを 3D で表示",
     skinDialogTitle: "{name} のスキン",
-    noMcidNote: "このユーザーはMCIDを登録していません",
+    noMcidNote: "この走者はMCIDを登録していません",
     bedrockMcidLine: "Bedrock版: {id}",
     /** 自己紹介の自動翻訳表示（訳文を既定で出しているときの注記と、原文/訳文の切替） */
     autoTranslated: "自動翻訳",

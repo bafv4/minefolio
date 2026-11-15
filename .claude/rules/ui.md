@@ -1,167 +1,308 @@
 # UIデザイン規約
 
-## コンポーネント選定
-- UIコンポーネントは **shadcn/ui** を第一候補とする
-- 新規コンポーネントが必要な場合、まず `npx shadcn add <component>` で追加可能か確認すること
-  - shadcn MCP toolが利用可能な場合はそれを使って検索する
-- shadcn/uiに該当するものがない場合のみ、独自コンポーネントを作成する
-- 導入済みコンポーネントは `app/components/ui/` に格納されている
+**正とする実装**: ホーム（`app/routes/home.tsx` ＋ `app/components/home/*`）と走者画面（`app/routes/player/profile.tsx`）。
+迷ったらこの2画面の書き方に合わせる。クラス文字列の正は**部品のソース**で、この規約は「どの部品を・どう使うか」と、
+部品になっていない数値（透明度・角丸・タップ領域など）だけを書く。部品の見た目を変えたいときは部品側を直す。
 
-## shadcn/ui 設定
-- スタイル: `new-york`
-- ベースカラー: `slate`
-- アイコン: `lucide-react`
-- CSS変数: 有効
-- RSC: 無効（SSR利用）
+## 1. 原則
 
-## スタイリング
-- **Tailwind CSS 4** を使用、クラスを直接記述
-- 条件付きクラスは `cn()` ユーティリティ（`@/lib/utils`）を使用
-- カスタムCSSは `app/app.css` に集約
-- CSSカスタムプロパティ（`--primary`, `--muted` 等）でテーマカラーを管理
-- ダークモード: `.dark`（通常ダーク=Slate）/ `.ultra-dark`（ウルトラダーク=Zinc・より深い黒）のクラスベース。`@custom-variant dark` は両クラスに適用される
-  - テーマは `next-themes`（`themes={["light","dark","ultra-dark"]}`）で管理し、選択は localStorage（key: `theme`）に永続化。`system` のダーク解決先は通常ダーク（Slate）
-  - 切替UIは `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS` に集約（デスクトップのドロップダウン / モバイルのセグメント切替で共有）
+### クリーンに
+- **面を増やさない。** ページは「欄」（4 章）で区切り、欄そのものは箱にしない。箱（カード）にするのは
+  **1件ずつの物**（走者・ペース・動画・ガイド・記録のカテゴリなど）だけ
+- 飾りのための面・影・グラデーション・アイコンチップを足さない。差を付けたいときは、まず余白・見出しの大きさ・文字色で付ける
+- 新しい種類の面を作らない。面はこの規約に挙げた物（大型パネル・カード・タイル・編集用の高密度ブロック）から選ぶ
 
-## 角丸（2層ルール）
-- 個別のカード・アイテム・ボックス: `rounded-xl`（14px）
-- ページ内の大型パネル（ホームのヒーロー・おかえりバー・注目の走者、走者画面の身元帯）: `rounded-2xl`（18px）。欄そのものは箱にしない（下記「欄枠」）
-- `rounded-3xl` 以上はコンテナには使わない（装飾要素は除く）
-- ネスト規則: `rounded-xl` カードの内側にネストするボックス（ドロップゾーン・プレースホルダ等）は1段下げて `rounded-lg`、さらに内側のチップは `rounded` でよい
+### Minefolio／Minecraft らしさは「データ由来の物」で出す
+らしさは、**実データを表す部品**を正しく使うことで出す。データの無い場所に Minecraft の飾りを置かない。
 
-## カードシステム
-カードは用途に応じて次の3レシピのいずれかに従う。
+| データ | 部品（所在） |
+|---|---|
+| 走者（人） | `MinecraftAvatar`（`minecraft-avatar.tsx`、スキンの顔をピクセルのまま）／全身は `MinecraftFullBody`（`minecraft-fullbody.tsx`） |
+| アイテム | `ItemIcon`（`item-icon.tsx`）。7 章「Minecraft アイテムアイコン」 |
+| ホットバー | `ItemHotbar`（`item-hotbar.tsx`） |
+| 区間・進行 | `PaceManSplitMark`（`paceman-split-mark.tsx`）／`StageBar`（`pace-stage-bar.tsx`） |
+| キー・指 | `KeyBadge` 系（`search-craft-badges.tsx`）／kbd チップ／`VirtualKeyboard`（`virtual-keyboard.tsx`、指色 `--finger-*`） |
+| 時間 | `font-mono tabular-nums`。大きな等幅数字はランのタイム（IGT・PB）だけに使う |
+| ランク | 鉱石の段階トークン `--rank-*`（`app/app.css`） |
+| 言葉 | 「走者」「区間」「ペース」「IGT」。プロフィールの持ち主（走者）を指すときに「ユーザー」と書かない（アカウント・規約の文脈は別） |
 
-- **インタラクティブカード**（遷移先のある一覧アイテム。走者/ペース/動画/ガイドカード）: `rounded-xl border border-border/70 bg-background/80`。ホバーは外側ラッパーに `-translate-y-0.5` ＋ `border-primary/40` ＋ `shadow-md`。カード全面クリックは上記「カード全体をクリック可能にする（オーバーレイリンク）」の構成に従う
-- **静的セクションカード**（情報グルーピング）: shadcn Card を `<Card className="gap-3 py-5">` ＋ `CardHeader`/`CardContent className="px-5"` で使う（外側余白 20px。カード面が大きいため 16px では窮屈になる）。**現行 `card.tsx` 基底は gap 方式のため、旧 API 前提の `pt-0` / `pb-3` / `py-2` は無効または逆効果（禁止）**
-- **リスト行**: `divide-y` 区切り＋`hover:bg-muted/50`（行がリンクの場合のみ。クリック不能な行にホバー背景を付けない）。この `divide-y` は既定濃度のままでよい（「カード内区切り `/60`」を適用しない）。`/60` は見出し・サブセクション境界などの `border-t`/`border-b` に適用するもので、両者は矛盾しない
-- **編集用高密度ブロック**（サーチクラフトの `SearchCraftTimingBoard` のような、多数のブロックを常設する編集ボード）: 静的セクションカードの代わりに `rounded-xl border border-border/70 bg-background/80`＋ヘッダ帯 `px-4 py-2.5`（`border-b border-border/60`）＋中身 `px-4 py-3` の高密度ブロックを使ってよい。ブロック見出しは `text-sm font-semibold`（CardTitle の `text-base` より1段小さい）
-- **欄枠（セクション区切り）**（`PageSection`、`app/components/page-section.tsx`。ホームと走者画面 `/player/:slug` で共有）: 箱なしの1種類（上罫線 `border-t border-foreground/15 pt-6`、見出し h2＝`text-xl font-bold`。アイコンは任意で、付けるときは呼び出し側の色のまま見出しの左に置く。丸背景チップは使わない）。欄の中の小見出しは h3 として1段下げる（`text-base` 程度）。区切り線は `/15` で、`--border`（`/60`〜`/70`）より濃くして欄の切れ目を見せる
-  - 欄はパネルやカードで包まない。箱（カード）として残すのは**1件ずつの物**（記録のカテゴリ別カード・動画の埋め込み・ガイドカードなど）だけ。仮想キーボードやアイテム配置のような表示物も、箱に入れず欄の中に直接置く
-  - 大型パネル（`rounded-2xl border border-border/70 bg-card/70` 系）は、ホームのヒーロー（未ログイン）・おかえりバー・注目の走者（ワイド）と、走者画面の身元帯（全タブ共通の名前・操作ボタン・ハイライトの帯）だけ
-  - ページ幅のパネルはホバーで浮かせない（`-translate-y` と影は一覧アイテムのインタラクティブカード向け。パネルのホバーは枠色だけ）
-  - 走者画面は 2026-11 のリデザインで全タブが欄区切りに移行済み。他画面と共用する部品（`player-stats-cards.tsx`・`search-craft-template-view.tsx`・`ItemHotbar`・`SearchCraftGroupedList`・`VirtualKeyboard` 等）は、箱を外す表示を props（`framed` / `collapsible` / `section` 等）で有効にし、他画面の見た目は変えない（既定は従来のまま）
-  - 欄どうしの間隔は `space-y-7 sm:space-y-8`（ホーム・走者画面の全タブ共通）。欄の `h2` はアイコンなしでもよい。欄の中の小見出しは `h3`。欄が1つだけのタブ（走者画面のガイド・サーチクラフト）は、欄見出しを `sr-only` の `h3` で置いて見出しの飛びを作らず、その下のカード名・グループ名を `h4`（見た目は変えない）にする
-  - 箱なしの欄に置く `HorizontalScrollArea` は `surface="background"`（端のフェードを `from-background` にする。既定はカード内の `from-card`）
-- **ホームのカード面**: ページ背景に直接置くホームのカード（ライブ欄のカードなど）の面は不透明の `bg-card`。`bg-background/80` だと dark / ultra-dark でページ背景と同じ色になり外枠だけで同化する（light は両者とも白だが、不透明にすると背景の格子模様が隠れて面として読める）。ホームでは動画カード・Twitchライブの一覧・プロフィール一覧も `bg-card`、他ページと共有するガイドカードは `GuideCardGrid` の `surface="card"` で同じ面にする。他ページ（`/guides`・`/paces` 等）の一覧カードは従来の `bg-background/80` のまま
+- **禁止**: 飾りのピクセル枠、ブロック模様・テクスチャ背景、Minecraft 風フォント、データと関係のないアイテムアイコンの散らし
+- 背景の格子模様（`.page-bg-pattern`）はサイト全体で1つだけ。ページごとに背景の飾りを足さない
 
-### グリッドカードの内部文法
-①メディア帯/ヘッダー行 → ②タイトル（`text-base font-semibold`。リスト行は `text-sm font-medium`）＋説明（`text-xs` muted）→ ③タグ行（Badge secondary、`rounded-full px-2 py-0.5 text-[11px]`・最大3個）→ ④フッターメタ行 `mt-3 border-t border-border/60 pt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground`、左＝著者/件数系（`truncate`/`min-w-0`）、右端＝`ml-auto shrink-0` で `Clock3 h-3 w-3` ＋相対時刻。**折返し耐性（`flex-wrap`＋`ml-auto`＋`shrink-0`＋`min-w-0`）は必須**。**フッターは下端固定**: カードを `flex flex-col` にし、フッター直前に伸縮スペーサー `<div className="flex-1" />`（またはヘッダー行に `flex-1`）を置いて、タイトル行数や任意項目の差があっても水平線位置が兄弟カード間で揃うようにする
+### 色の役割
+- **brand（緑）＝選択中・現在地・進行**: `StageBar` の現在区間、選択中のタブ（タブ上端の線）、
+  既定の `Button`（`variant="default"`）、ヘッダーの現在ページ。これ以外に brand を使わない
+  - 例外: プロフィールのホットバーの選択中スロットは、Minecraft のホットバーの選択枠に合わせて前景色の枠（`aria-selected:border-foreground`）
+- **primary ＝リンク・導線**: テキストリンク、欄見出しのアイコン、カードのホバー枠（`border-primary/40`）
+- **意味色**: 成功・警告・情報・エラーは `--success` / `--warning` / `--info` / `--destructive`（3 章）
+- 強調色を増やさない。新しく目立たせたい物は、brand と primary のどちらの役割かで色を決める
 
-### 透明度の規格
-- border: カード外枠 `/70`・カード内区切り `/60` の2値
-- `bg-secondary`: タイル・面 `/50`、kbd チップ `/80`、リンク行 `/30`（hover `/60`）
-- 意味色ティント: `/10`
+## 2. 部品の選び方
+- UI 部品は **shadcn/ui** を第一候補にする。導入済みは `app/components/ui/`。新しく要るときは
+  `npx shadcn add <component>` で入るか先に確かめる（shadcn MCP があればそれで探す）。無いときだけ自作する
+- shadcn の設定: スタイル `new-york`／ベースカラー `slate`／アイコン `lucide-react`／CSS 変数あり／RSC なし（SSR）
+- ドメイン部品（1 章の表・8 章の状態部品）があるものは、それを使う。同じ見た目をその場で書き直さない
+  （例外: ホームの `home/featured-runner-card.tsx` のキーチップは、アイテム名辞書のチャンクを初期表示から外すための意図的な複製）
 
-### kbd チップ
-`bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center`
+## 3. スタイリング・テーマ・色
 
-### 丸ピル（バッジピル・件数ピル）
-`inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`
+### スタイリング
+- **Tailwind CSS 4** のクラスを直接書く。条件付きクラスだけ `cn()`（`@/lib/utils`）
+- カスタム CSS は `app/app.css` にまとめる。色は CSS 変数（`--primary` / `--muted` 等）で管理する
 
-### キーバッジ（サーチクラフト系）
-実装は `app/components/search-craft-badges.tsx`（葉モジュール。`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` / `renderVisibleSpaces` 等）に集約している。既存 import 元を保つ re-export が残っているのは `search-craft-template-view.tsx`（`SearchStringText` / `KeyBadge` / `ShiftKeyGroup`）と `search-craft-loop-view.tsx`（`ControlKeyBadge`）のみで、`renderVisibleSpaces` 等の他は本モジュールから直接 import する。依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` のみで、表示ビュー2ファイル（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx`）にもキー入力順ダイアログ（`search-craft-key-sequence-dialog.tsx`）にも依存しないため、いずれから import しても循環importにならない。見た目を変える場合はこのファイルだけを直せばよい。
+### テーマ
+- `light` / `dark`（Slate）/ `ultra-dark`（Zinc、より深い黒）の3つ。`.dark` / `.ultra-dark` のクラスで切り替え、
+  `@custom-variant dark` は両方に効く
+- `next-themes`（`themes={["light","dark","ultra-dark"]}`）で管理し、選択は localStorage（key: `theme`）に保存する。`system` のダークは通常ダーク
+- 切替 UI は `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS`（デスクトップのドロップダウンとモバイルのセグメントで共有）
+- **`dark:` バリアントは使わない。** 3テーマの差はトークン側で吸収する
 
-- 基本形: `inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5`
-- トーン:
-  - 通常キー: `bg-secondary/50 border-border/50 text-muted-foreground`（指割り当てがあれば指色）
-  - リマップ済み: `ring-2 ring-primary ring-offset-1 ring-offset-background`
-  - Shift 同時押し（`needsShift`＝非 shiftHeld 時の単発大文字の逆引き）: 個別 `KeyBadge` 自体に `border-warning/50 bg-warning/10` を付ける（変更なし）。一方 `shiftHeld`（行全体で Shift を押しっぱなし＝「Shiftを押しながら」バリエーション）は、キー列の先頭に独立バッジを置くのではなく `ShiftKeyGroup` で実入力キー列全体を1つの枠（`rounded-lg border-2 border-warning/50 bg-warning/10 px-2 py-1.5`。ネスト規則どおり内側の `rounded` チップの1段上。余白はリマップリングの外側はみ出し〈約3px〉が枠に触れない値）で囲み、先頭にコンパクトな「⇧」マークのみ（`text-warning`、可視の "Shift" テキストは置かない。`ShiftMark` 内部の sr-only と Tooltip=`playerProfile.withShiftTooltip` が意味を補う）を置く
-  - 制御キー（BS/←/Home/⇧Home）: `rounded-full border-info/50 bg-info/10 text-info px-2.5`（文字入力キーの角丸 `rounded` と一目で区別するためのピル形状）。**リマップ考慮時（`remaps` を渡し、逆引きでリマップが見つかった場合のみ）**は「実キー主表記＋操作ラベルのミニチップ」の複合ピルにする — **主ラベル＝実際に押すキー**（既存の単一ピルと同じ `text-sm`、外側の見た目はそのまま）、その中に「チップの中のチップ」として**出力操作**（`BS` 等）を小さめの丸チップ（`rounded-full border border-info/40 bg-info/15 px-1.5 py-0.5 text-[10px]`）で添える。ピル全体にリマップ用リング（`ring-2 ring-primary ring-offset-1 ring-offset-background`）を付ける。リマップが無い（大多数）場合は非リマップ時と1px も変わらない単一ピルのまま
-  - 無効: `border-destructive/50 bg-destructive/10 text-destructive`
-- クラフト実行マーカー: 通常のアイテムチップと同じ見た目の `h-7 rounded bg-secondary/50 px-2`（`ItemIcon` 24px＋文字列。同じサーチ文字列で複数アイテムが出せるクラフトは最初の1件だけでなく全アイテムのアイコンを並べる〈チップは横に伸びる〉。Hammer 等の専用アイコン・破線ボーダーは付けない。「ここでクラフト実行」の説明は Tooltip と凡例が担う）。キー操作列ではキー系バッジと高さ h-7 を揃え、セグメント（制御キー・打鍵キー・チップ）間は `gap-2`、キー同士は `gap-1`
-- 回数は右肩の `×n` カウンタで表す（バッジを並べない）
-- マイクロテキストは2値: バッジ肩・印 = `text-[10px]`、凡例ラベル = `text-[11px]`
-- Shift の「⇧」はフォント依存でグリフが揺れるため、Unicode 文字の直書きではなく `app/components/shift-mark.tsx` の
-  `ShiftMark`（lucide `ArrowBigUp`、`aria-hidden` + `sr-only` の "Shift" 併記）で描画する。ラベル文字列中の "⇧" を
-  まとめて置換する場合は `KeyLabelText`（サイズは `shiftClassName` で調整。バッジ/`text-sm` 文脈は既定の `size-3.5`、
-  ミニチップ/`text-[10px]` 文脈は `size-2.5`）を使う。**データ層（`app/lib/remap-utils.ts` の `displayLabel` 等の
-  返り値、翻訳文言・Tooltip・aria-label のような純テキスト文脈）は "⇧" 文字のまま保持し、アイコンへの変換は
-  それを画面に描画する JSX 側でのみ行う**
+### 色トークン
+- テーマ色は **oklch** で CSS 変数に定義する
+- 意味色は必ずトークン（`text-success` / `text-warning` / `text-info` / `text-destructive`、面は各 `bg-*/10`、枠は `border-*/30`〜`/50`）。
+  `green-500` のようなパレット直指定・生 hex は禁止
+- 意味色は文字色にも使うので、全テーマで背景に対して 4.5:1 以上を保つ（例: ライトの `--warning` は amber-700 相当）。値を変えるときは全テーマで測る
+- 枠線 `--border` と背景の格子 `--page-grid-line` は別トークン。格子に `--border` を使わない（枠線を濃くすると背景まで濃くなる）
+- ドメイン色: キーカテゴリ `--key-*`、指 `--finger-*`、ランク `--rank-*`、`--discord`、`--favorite`（お気に入りのハート）、
+  `--youtube` / `--twitch` / `--gold` / `--bronze`
+- ブランド色（`--youtube` / `--twitch`）はダークで明るいので、白文字を載せる面に使わない。サムネイル上は `bg-black/70 text-white` のピルにして、ブランド色はアイコンに置く
+- inline style で色を書くときもトークンをそのまま参照する（`var(--muted)`）。oklch 定義なので `hsl(var(--token))` で包まない（無効な色になる）
 
-### カード内アイコン
-- セクション見出し（CardTitle）先頭: `h-5 w-5`
-- メタ行: `h-3 w-3`（テキストとは `gap-1`）
-- タイトル内の状態マーカー（Pin 等）: `h-4 w-4`
+## 4. ページの骨格と欄
 
-### グリッド段階
-セクションに常に4件表示するグリッドは `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4`（中間幅で3+1の孤立を作らない。4カラムは `xl` 以上）
+### 欄枠（PageSection）
+- **欄区切りを全画面の標準にする**（公開ページも編集・設定画面も）。部品は `PageSection`（`app/components/page-section.tsx`）
+  - 箱なし。欄の上に `border-t border-foreground/15 pt-6` の罫線を引き、見出しは h2（`text-xl font-bold`）
+  - 罫線の `/15` は `--border`（`/60`〜`/70`）より濃くして、欄の切れ目を見せるため
+  - 先頭の欄など罫線を消すときは `first` か `className` で外す。見出しは `tabIndex=-1`（フォーカスの戻り先になる）
+  - 見出しの右のリンクは `SectionHeaderLink`。見出しのアイコンは任意で、付けるなら呼び出し側の色で左に置く（丸背景のチップにしない）
+- 欄どうしの間隔は `space-y-7 sm:space-y-8`
+- **中身が無い欄は出さない**（空であることを見せる意味がある欄だけ、8 章の空状態を置く）
+- 欄の中に置く表示物（仮想キーボード・アイテム配置・グラフなど）は、箱に入れず直接置く
+- 箱なしの欄に置く `HorizontalScrollArea` は `surface="background"`（端のフェードを背景色にする。既定はカード内向け）
+- 既存のカード型の画面（`/me/*` の編集画面など）は、**触るときに欄区切りへ移す**。一度に全部は変えない
+- 他画面と共用する部品（`player-stats-cards.tsx`・`search-craft-template-view.tsx`・`ItemHotbar`・`SearchCraftGroupedList`・
+  `VirtualKeyboard` 等）は、箱を外す表示を props（`framed` / `collapsible` / `section` 等）で選べるようにし、既定は従来の見た目のまま残す
 
-## カラーシステム
-- テーマカラーは **oklch** 形式でCSS変数に定義
-- セマンティックカラー: `--success`, `--warning`, `--info`, `--destructive`
-- 枠線 `--border` と背景の格子模様 `--page-grid-line`（`.page-bg-pattern`）は別トークン。枠線はカードを背景から区切れる濃さ（light は slate-200 と 300 の間、dark 白14%、ultra-dark 白12%）、格子模様は背景として控えめな濃さ（light slate-200、dark 白10%、ultra-dark 白8%）。枠線を調整するときに背景まで濃くならないよう、格子模様に `--border` を使わない
-- ドメイン固有: `--key-movement`, `--key-combat` 等（キーカテゴリ色）、`--finger-*`（指割り当て色）、`--discord`、`--favorite`（お気に入りのハート色。`favorite-button` / `favorites` ページで使用）、`--youtube` / `--twitch` / `--gold` / `--bronze`
-- 区間モチーフ（進行バー `StageBar`・ホームのライブの区間分布の帯）: 現在区間／人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`。区間の分布の帯は人が居なくても7段を描く（0人の段は `bg-muted`・人数なし）。終了カード（ライブ欄で消えて少しの間残すもの）の進行バーは現在区間も `bg-brand/40`（強調なし）
-- コンポーネント内では `bg-primary`, `text-muted-foreground` 等のTailwindクラスで参照
-- 意味を持つ色（成功・警告・情報・エラー/破壊的）は必ずセマンティックトークン（`text-success` / `text-warning` / `text-info` / `text-destructive` と各 `bg-*/10` 等）を使う。`green-500` などのパレット直指定・生 hex は禁止
-- セマンティックトークンは `text-*` としても使うため、各テーマの値は背景（ライト=白系、ダーク=暗色）に対して文字コントラスト 4.5:1 以上を保つ（例: ライトの `--warning` は黄色ではなく amber-700 相当）。トークン値を変えるときは全テーマで測る
-- ブランド色（`--youtube` / `--twitch`）はダーク側が明るいため、白文字を載せる面には使わない。サムネイル上のバッジは `bg-black/70 text-white` の暗色ピルにしてブランド色はアイコンに置く
-- `dark:` バリアントは使わない。3テーマ（light / dark / ultra-dark）はトークン側で吸収する（タブ節の既存方針の一般化）
-- inline style で色を書く場合もトークンをそのまま参照する（例: `var(--muted)`）。`hsl(var(--token))` で包むのは oklch 定義のため無効色になるので禁止
+### 大型パネル
+- **ページの顔になる帯**にだけ使う: ホームのヒーロー（未ログイン）・おかえりバー・注目の走者、走者画面の身元帯
+- `rounded-2xl border border-border/70 bg-card/70`。ヒーローは不透明の `bg-card` でよい
+- ホバーで浮かせない（変えるなら枠色だけ）。新しい画面に大型パネルを足すのは、その画面に「顔」が要るときだけ
 
-## フォント
-- 本文: `Zen Kaku Gothic New`（sans-serif）
-- コード: `JetBrains Mono`, `Fira Code`（monospace）
-- いずれもセルフホスト（`@fontsource/*` を `app/app.css` で import。OGP 用 TTF は `public/fonts/`）。
-  **Google Fonts 等の外部配信は使わない**（プライバシーポリシーの外部送信記載と連動するため、
-  外部フォント配信を追加する場合はポリシー改定が必要）
-- `truncate` / `line-clamp-*`（overflow:hidden）の要素に `leading-none` を付けない。Zen Kaku Gothic New は
-  ディセンダーが深く、行間が約1.4em未満だと g / y / p / 括弧の下端が切れる（例: `text-base leading-none` で約2px）。
-  詰めたい場合も `leading-snug` 以上にする（`text-xs` 既定の 16px は実害なし）
+### 2列の並び
+- 2列にするブレークポイントは**中身の幅で決める**（走者画面: デバイス `md`、プレイスタイル `lg`、アイテム `xl`）。
+  2列目の1行目の欄は、`PageSection` の `className` で上罫線を外して1列目と揃える
 
-## レスポンシブ
-- モバイルファーストでTailwindブレークポイントを使用（`sm:`, `md:`, `lg:`）
-- テーブルなど横幅が必要な要素は `overflow-x: auto` でスクロール対応
+### タブのあるページ（走者画面）
+- タブの中身の先頭にタブ名の h2（`ProfileTabTitle`、`profile.tsx`）を置く
+- パネルは `PANEL_CLASS`（`profile.tsx`）。タブ名の直後の欄の上罫線を自動で外す
 
-## アイコン
-- `lucide-react` を統一使用
-- ブランドアイコン（YouTube / Twitch / X〔旧 Twitter〕/ GitHub）は lucide-react 1.x で削除されたため、`app/components/brand-icons.tsx`（`@icons-pack/react-simple-icons` のラッパー。`currentColor`・`aria-hidden`・空 `<title>` 既定、`className` の `h-* w-*` でサイズ指定）から import する。`Twitter` は X のロゴを描画する。新しいブランドアイコンが必要なときもこのファイルに追加する
-- サイズは用途に合わせる（フッター: `h-3 w-3`、ボタン内: `h-4 w-4`、空状態: `h-12 w-12`）
-- `Button` コンポーネント内の svg は基底の `[&_svg:not([class*='size-'])]:size-4` により 16px に強制される。16px 以外にしたい場合は `h-5 w-5` ではなく **`size-5` / `size-6` クラス**を使う（`h-*` 指定は上記セレクタに拾われず死にクラスになる）
+### カードが残る場面
+- **1件ずつの物の静的カード**: shadcn `Card` を `<Card className="gap-3 py-5">` ＋ `CardHeader` / `CardContent className="px-5"` で使う
+  - 基底の `card.tsx` は gap 方式なので、旧 API 前提の `pt-0` / `pb-3` / `py-2` は効かないか逆効果になる（禁止）
+- **編集用の高密度ブロック**（`SearchCraftTimingBoard` のように、多数のブロックを常に並べる編集ボード）:
+  `rounded-xl border border-border/70 bg-background/80`、ヘッダ帯 `px-4 py-2.5 border-b border-border/60`、中身 `px-4 py-3`、ブロック見出し `text-sm font-semibold`
+
+## 5. 見出しと文字
+
+### 見出しの段
+| 段 | タブのないページ（ホーム等） | 走者画面 |
+|---|---|---|
+| h1 | ページ名（`text-2xl font-bold`。ログイン中のホームは `sr-only`） | 走者名（`text-2xl md:text-3xl break-words`、身元帯） |
+| h2 | 欄見出し（`PageSection`、`text-xl`） | タブ名（`ProfileTabTitle`、`text-xl md:text-2xl`） |
+| h3 | 欄の中の小見出し | 欄見出し（`PageSection headingLevel="h3"`、`text-lg`） |
+| h4 | — | 欄の中のカード名・グループ名（`text-base font-semibold`） |
+
+- 欄の中の**ラベルのような小見出し**（ホームのライブ欄の区分など）は `text-sm font-medium text-muted-foreground`。内容のまとまりの名前（グループ名）は h4 の側
+- 欄が1つだけのタブ（走者画面のガイド・サーチクラフト）は、欄見出しを `sr-only` の h3 にして段を飛ばさない
+- 見た目の大きさのために見出しの段を飛ばさない。大きさはクラスで調整する
+- `h1` のサイト標準は `text-2xl font-bold`（ホームのヒーローとガイド記事のタイトルは例外）
+
+### 文字の大きさ
+- 本文 `text-sm`、メタ情報 `text-xs`、マイクロテキストは2値（バッジの肩・印 `text-[10px]`、凡例のラベル `text-[11px]`）
+- カードのタイトルは `text-base font-semibold`、リスト行のタイトルは `text-sm font-medium`。
+  サムネイルが主役のメディアカード（動画）は、長いタイトルを2行に収めるため `text-sm font-semibold line-clamp-2`
+
+### フォント
+- 本文 `Zen Kaku Gothic New`、コード `JetBrains Mono` / `Fira Code`。どちらも `@fontsource/*` を `app/app.css` で読むセルフホスト
+  （OGP 用の TTF は `public/fonts/`）。**Google Fonts 等の外部配信は使わない**（プライバシーポリシーの外部送信の記載と連動するため。足すならポリシー改定が要る）
+- `truncate` / `line-clamp-*` の要素に `leading-none` / `leading-tight` を付けない。このフォントはディセンダーが深く、
+  行間が約1.4em未満だと g / y / p / 括弧の下端が切れる。詰めたいときは `leading-snug` 以上にして、余白は負のマージンで詰める
+- 等幅は時間・キー・コードに使う。部品の中で等幅をやめたい箇所は、`plain` 等の props で切り替える
+
+## 6. 面・角丸・枠
+
+### 角丸（2層）
+- カード・アイテム・ボックス: `rounded-xl`（14px）
+- 大型パネル: `rounded-2xl`（18px）。`rounded-3xl` 以上はコンテナに使わない（飾りの要素は除く）
+- 入れ子は1段ずつ下げる: `rounded-xl` の中のボックス（ドロップゾーン・プレースホルダ等）は `rounded-lg`、その中のチップは `rounded`
+- アバターは大きさで決める: 96 / 64 / 44px は `rounded-xl`、36 / 32px は `rounded-lg`、20px は `rounded-md`
+
+### 透明度
+| 用途 | 値 |
+|---|---|
+| カードの外枠 | `border-border/70` |
+| カード内の区切り・見出しの境界 | `/60`（`border-t` / `border-b`。リスト行の `divide-border/60` も同じ） |
+| 欄の区切り | `border-foreground/15` |
+| 意味色の面 | `/10`（枠は `/30`〜`/50`） |
+| `bg-secondary` | タイル・面 `/50`、kbd チップ `/80`、リンク行 `/30`（hover `/60`） |
+
+### カードの面
+- 欄の中にページ背景へ直接並べる**一覧カード**（ホームのライブ・動画・プロフィール一覧など）は不透明の **`bg-card`**（`bg-background/80` だと dark / ultra-dark で背景と同じ色になり、枠線だけで同化する）。編集用の高密度ブロックは 4 章のとおり `bg-background/80`
+- 大型パネルの中に置くカードと、一覧ページ（`/guides`・`/paces` 等）の既存のカードは `bg-background/80`。共有部品は `surface` 等の props で面を選ぶ（例: `GuideCardGrid surface="card"`）
+- 箱にしない1件ずつのタイル（欄の中の小さなまとまり）は `rounded-xl bg-secondary/50 p-3`（枠なし）
+
+### ホバー
+- **遷移先のある一覧カード**（走者・ペース・動画・ガイド）: 外側のラッパーで `-translate-y-0.5`、カードで `border-primary/40` ＋ `shadow-md`。
+  動きには `motion-reduce:` の打ち消しを付ける
+- パネル・タイル・ハイライトなど、ページ側の面は浮かせない。ホバーで変えるのは枠色（`border-primary/40`）と面（`bg-muted/50`）まで
+- クリックできない物にホバーの見た目を付けない
+
+### リスト行
+- `divide-y divide-border/60` で区切り、行がリンクのときだけ `hover:bg-muted/50`
+- 走者のリスト行は高さ `h-14`、アバター 32px
+
+### グリッドカードの中身の順
+1. メディア帯／ヘッダー行
+2. タイトル＋説明（`text-xs` muted）
+3. タグ行（Badge secondary、`rounded-full px-2 py-0.5 text-[11px]`、最大3個）
+4. フッターのメタ行（`mt-3 border-t border-border/60 pt-3`、`text-xs text-muted-foreground`）。左に著者・件数、右端（`ml-auto shrink-0`）に時刻
+
+- フッターは折り返しに耐えさせる（`flex-wrap`＋`ml-auto`＋`shrink-0`＋`min-w-0`）
+- カードを `flex flex-col` にし、フッターの直前に `<div className="flex-1" />` を置いて、兄弟カードどうしで区切り線の高さを揃える
+- 項目は中身に合わせて省いてよい（動画カードは時刻なし、等）。順番は変えない
+
+### グリッドの段
+- 4件のグリッドは `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4`（中間の幅で3＋1の孤立を作らない）
+- 3列は `md:grid-cols-3` から（走者画面の記録は `md:grid-cols-2 lg:grid-cols-3`）
+- モバイルで横に流すときは、`HorizontalScrollArea` か、スナップするレール
+  （`-mx-2 -mt-2 flex snap-x snap-mandatory scroll-px-2 gap-4 overflow-x-auto px-2 pt-2 pb-3`、各要素 `w-[83%] shrink-0 snap-start`）
+
+### 丸ピル
+`inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`（件数・状態のピル）
+
+## 7. Minecraft 由来の部品
 
 ### Minecraft アイテムアイコン
-- **`ItemIcon`（`app/components/item-icon.tsx`）を使う**。`@bafv4/mcitems` の `MinecraftItemIcon` を直接呼ばない
-- ラッパー側でテクスチャ配信元（`TEXTURE_BASE_URL = "/mcitems"`）・`pixelated` クラス・読み込み中の円形プログレスを既定化している
-  （`loadLang()` に渡すベースURLも同モジュールの `TEXTURE_BASE_URL` を import する）
-- 読み込み中のプレースホルダは `size` と同じ外枠を保つため、画像に切り替わってもレイアウトがずれない
-- **例外**: `app/components/paceman-split-mark.tsx`（PaceMan 区間アイコン、固定8種）は `ItemIcon` を使わず、静的 `<img>` で `/mcitems/1.16.1/items/minecraft_*.png` を直接参照する。`ItemIcon` が引き込むアイテム名辞書チャンク（約162KB）をホーム・`/paces` の初期表示から外すため。読み込み中スピナーと取得失敗時フォールバックは無い
+- **`ItemIcon`（`app/components/item-icon.tsx`）を使う。** `@bafv4/mcitems` の `MinecraftItemIcon` を直接呼ばない
+- ラッパーが配信元（`TEXTURE_BASE_URL = "/mcitems"`）・`pixelated`・読み込み中の円形プログレスを既定にしている。
+  `loadLang()` に渡すベース URL も同じモジュールの `TEXTURE_BASE_URL` を使う
+- 読み込み中も `size` と同じ外枠を保つので、画像に変わってもずれない
+- **例外**: `app/components/paceman-split-mark.tsx`（PaceMan の区間アイコン、固定8種）は静的な `<img>` で `/mcitems/1.16.1/items/minecraft_*.png` を参照する。
+  `ItemIcon` が引き込むアイテム名辞書（約162KB）を、ホーム・`/paces` の初期表示から外すため。読み込み中の表示と失敗時の代替は無い
 
-## カード全体をクリック可能にする（オーバーレイリンク）
+### キーバッジ（サーチクラフト系）
+- 実装は `app/components/search-craft-badges.tsx`（`KeyBadge` / `ShiftKeyGroup` / `ControlKeyBadgeView` / `ControlKeyBadge` / `CraftMarker` /
+  `renderVisibleSpaces` 等）に集める。見た目を変えるときはこのファイルだけを直す
+  - 依存は `ui/tooltip`・`shift-mark`・`item-icon`・`virtual-keyboard`（`getFingerKeyStyle`）・`lib/keybindings`・`lib/remap-utils` だけ。
+    表示ビューやキー入力順ダイアログに依存しないので、どこから import しても循環しない
+  - 旧 import 元を保つ re-export は `search-craft-template-view.tsx`（`SearchStringText` / `KeyBadge` / `ShiftKeyGroup`）と
+    `search-craft-loop-view.tsx`（`ControlKeyBadge`）だけ。他は本モジュールから直接 import する
+- 形と色の意味（クラスはソースが正）:
+  - 文字入力キーは角の小さい `rounded` の四角、制御キー（BS / ← / Home / ⇧Home）は `info` 色の丸ピル。形でひと目で区別する
+  - リマップ済みは `ring-primary` のリング。制御キーがリマップされているときだけ「実際に押すキー＋操作名のミニチップ」の複合ピルにする（リマップが無ければ単一のピルのまま）
+  - Shift: 単発の大文字は個々のバッジを `warning` 色にする。行全体で Shift を押し続ける（`shiftHeld`）ときは、`ShiftKeyGroup` がキー列全体を
+    `warning` 色の枠（`rounded-lg`）で囲み、先頭に「⇧」マークだけを置く
+  - 無効は `destructive` 色。回数は右肩の `×n` で表す（バッジを並べない）
+  - クラフト実行は、通常のアイテムチップと同じ見た目の `CraftMarker`（同じ文字列で出せるアイテムは全部並べる）。説明は Tooltip と凡例が担う
+  - キー系のバッジとチップは高さ `h-7` で揃え、セグメント間は `gap-2`、キー同士は `gap-1`
+- Shift の「⇧」は `ShiftMark`（`shift-mark.tsx`、lucide `ArrowBigUp` ＋ sr-only の "Shift"）で描く。文字列中の "⇧" をまとめて置き換えるときは `KeyLabelText`
+  （`text-sm` の文脈は既定の `size-3.5`、`text-[10px]` の文脈は `size-2.5`）。データ層・翻訳文言・Tooltip・aria-label のような純テキストは "⇧" 文字のまま持ち、アイコンにするのは描画する JSX 側だけ
 
-カード内にボタン（いいね等）を置く場合、カード全体を `<a>` で包むと不正なHTMLになるため、
-`absolute inset-0 z-0` のリンク／ボタンを敷いてカード全体のクリックを受ける。構成は
+### kbd チップ
+`bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center`（キー割り当ての一覧などの単発のキー表示）
+
+### 仮想キーボード・指色
+- キーボードの表示は `VirtualKeyboard`。指の色は `getFingerKeyStyle`（同じファイル）を使い、色の組み立てをその場で書かない
+- 使えないリマップの表示など、トークン同士を混ぜる色は `color-mix()` でトークンから作る
+
+### 区間・進行
+- `StageBar`: 現在区間と人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`
+- ホームのライブの区間分布の帯は、人が居なくても7段を描く（0人の段は `bg-muted`・人数なし）
+- 終わったカード（ライブ欄で少しの間残す物）の進行バーは、現在区間も `bg-brand/40`（`StageBar muted`）
+
+### 時間・数値
+- 時間は `font-mono tabular-nums`。整形は既存の関数を使い、その場で整形しない: 記録・走者画面は `formatTime`（`app/lib/time-utils.ts`）、ホームのライブ・配信は `formatClock` / `formatClockSeconds`（`app/lib/home-format.ts`）、相対時刻は `app/lib/relative-time.ts`
+- 時刻・相対時刻のようにサーバーとクライアントで変わる文字には `suppressHydrationWarning` を付ける
+
+## 8. 状態（空・読み込み・失敗）
+
+### 空
+- ページ・欄の空状態は `EmptyState`（`app/components/empty-state.tsx`、props: `icon` / `title` / `description` / `action?` / `size?`）。独自のマークアップを書かない
+- 0件がよく起きる欄（ほかの欄と縦に並ぶ欄）は `size="compact"`（アイコンは `h-5 w-5`）。ページ全体が空のときは既定の大きさ
+- 欄の中の1項目が空なだけなら、muted の1文でよい。値が無いだけなら `EmptyValue`（`player-profile-bits.tsx`）
+- 本人が見ているときは編集への導線（`OwnerEditAction`、同じファイル）、他人が見ているときは状況の説明を出す
+
+### 読み込み
+- スケルトンは**本物と同じ配置**で描き、`aria-hidden` にする。読み込みの前後で高さが変わらないよう、高さを先に確保する
+- 再取得中の中身は `opacity-50` ＋ `aria-busy` で残す（消して空にしない）
+- 重い外部埋め込み（YouTube）は `YouTubeClickEmbed`（`youtube-click-embed.tsx`）で、クリックしてから読み込む
+
+### 失敗
+- フィードの失敗は `FeedErrorNotice`（`app/components/home/feed-error-notice.tsx`）、外部統計の読み込み中・失敗は `StatsServiceLoadingCard`（`player-stats-cards.tsx`）
+- 共通: `role="status"`、面は `border-destructive/30 bg-destructive/10`。再試行ボタンは押した直後に `aria-disabled` にし、
+  成功したら欄の見出しへフォーカスを戻す
+- 外部統計の取得は `createStatsCache`（`app/lib/stats-cache.ts`）を通す。再試行は `force` で取り直す
+
+### 読み上げ
+- `aria-live="polite"` は意味のある変化（件数・結果）だけに付ける。時刻の更新や飾りの変化には付けない
+
+## 9. 操作部品とアクセシビリティ
+
+### タップ領域
+- モバイルの押せる物は高さ 44px（`min-h-11`）。`sm` 以上で縮めてよい（例: `min-h-11 sm:min-h-8`）。最小でも 24px
+- 見た目を変えずに押せる範囲を広げるときは、負のマージン＋同じ量の padding で広げる
+
+### ボタン
+- 既定の `Button` は brand 色（＝主操作）。並ぶ副次の操作は `outline` / `ghost` にする
+- モバイルでアイコンだけにするボタンは、文字を `sr-only` で残す。切り替える幅は、ページの操作行（身元帯など）は `md`、欄見出しのリンク（`SectionHeaderLink`）は `sm`
+- 幅で表示を切り替える部品は、両方を描いて CSS で出し分ける（`useMediaQuery` で描き分けない。SSR とずれるため）
+- `Button` の中の svg は基底の `[&_svg:not([class*='size-'])]:size-4` で 16px になる。他の大きさにするときは `h-5 w-5` ではなく `size-5` を使う（`h-*` は効かない）
+
+### 名前と読み上げ
+- アクセシブルネームは、見えている短いラベルを含める（label in name）。短い表示と完全な文を出し分けるときは、見える短い文＋ `sr-only` の完全な文の組にする
+- 同じ情報を2回描くとき（アイコン＋文字など）は、片方を `aria-hidden` にする
+- 画像の `alt`: 隣に名前があるアバターは `alt=""`。名前が近くに無いときだけ名前を入れる
+- まとまりは `aria-labelledby` で見出しと結ぶ。スイッチは `label` で包んで、文字ごと押せるようにする
+- 操作の後のフォーカス先を決めておく（再試行の成功 → 欄見出し、など）
+
+### カード全体をクリック可能にする（オーバーレイリンク）
+カード内にボタン（いいね等）を置く場合、カード全体を `<a>` で包むと不正な HTML になるため、全面を覆うリンクを敷く。
 `pace-feed-card.tsx` と `guide-list-views.tsx` が基準。
 
-- 外枠を `group relative` にし、**ホバー時の `transform`（`-translate-y-*` / `scale-*`）は必ずこの外枠に置く**
-  - 兄弟要素（`Card` 等）に transform を置くと、その要素が**重ね合わせコンテキストを作って
-    オーバーレイリンクより手前に描画され**、カードのクリックが届かなくなる。
-    ホバーしないと transform が効かない＝ホバーしてからクリックする実際の操作では常に死ぬため、
-    静止状態の見た目やスナップショットでは気づけない
+- 敷き方は2通り: `absolute inset-0 z-0` のリンク／ボタンを置くか、タイトルのリンクに `after:absolute after:inset-0` を付ける
+- 外枠を `group relative` にし、**ホバーの `transform`（`-translate-y-*` / `scale-*`）は必ずこの外枠に置く**
+  - 兄弟要素（`Card` 等）に transform を置くと、その要素が**重ね合わせコンテキストを作ってオーバーレイリンクより手前に描かれ**、
+    カードのクリックが届かなくなる。ホバーしてからクリックする実際の操作では常に死ぬので、静止状態の見た目やスナップショットでは気づけない
   - `shadow` / `border` / `background` のホバー変化は重ね合わせコンテキストを作らないので、`Card` 側でよい
 - カード内の操作要素（`LikeButton` など）は `relative z-10` でオーバーレイより手前に出す
-- 変更したら**実際にホバーしてからクリック**して遷移を確認する
+- 変えたら**実際にホバーしてからクリック**して遷移を確かめる
 
-## 空状態
-- ページ・セクションの空状態は共有コンポーネント `EmptyState`（`app/components/empty-state.tsx`、props: `icon` / `title` / `description` / `action?` / `size?`）を使う。既定は破線ボーダー + アイコン `h-12 w-12` + タイトル + 説明（+ 任意の導線）のカード型
-- 0件が日常的に起こる欄（ホームの動画欄など、ほかの欄と縦に並ぶ中の1欄）は `size="compact"`（破線枠のまま1〜2行の横並び、アイコンは `h-5 w-5` を渡す）にして、空の面で縦を使い切らない。ページ全体が空のときは既定のまま
-- 独自の空状態マークアップを新規に書かない
+### 動き
+- 動き（移動・拡大・スクロールのアニメーション）には `motion-reduce:` の打ち消しを付ける
+- 選択状態のように SSR 直後から正しく見えるべきものに、移動のアニメーションを付けない
 
-## 公開一覧ページのヘッダ
-- フィード/データ系の公開一覧ページ（`/paces` `/videos` `/rankings` `/stats`）のページヘッダは「丸背景アイコンチップ（`rounded-xl bg-primary/10 p-2` + アイコン）+ `h1`（`text-2xl font-bold`）+ 件数バッジ」の構造
-- 英大文字の eyebrow ラベルは既存ページ（ホーム・`/paces`・`/videos`）のみ。新規ページに新設しない
-- ページタイトル `h1` のサイト標準は `text-2xl font-bold`（ホームの hero とガイド記事タイトルは例外）
+## 10. 貼り付く UI
 
-## ダイアログ・モーダル
-- shadcn/ui の `Dialog` コンポーネントを使用
-- `DialogContent` 基底は `max-h-[calc(100dvh-2rem)] overflow-y-auto` を持つ（低い画面でも内部スクロールで閉じるボタン/フッターに届く）。内側で独自にスクロールさせたい場合のみ消費側で `max-h-*`/`overflow-hidden` を上書きする
-- 構造: `DialogHeader` → `DialogTitle` → コンテンツ → `DialogFooter`（キャンセル + アクションボタン）
+### 上端
+- サイトヘッダーは高さ 65px（`h-16` ＋ 1px の線）、`z-50`。貼り付いている間は不透明になる（`app/app.css`）
+- ヘッダーの下に貼り付く物は `top-[64px]`（1px 沈めてヘッダーの線に重ねる）。重なり順はヘッダー `z-50` ＞ ホットバー `z-40` ＞ 見出し `z-30`
+- 貼り付いた面は `-mx-2 px-2` で、左右のはみ出し（リング・影）まで覆う
+- 貼り付く物を足したら、`:root` の `--sticky-bar-inset` / `--sticky-heading-inset`（`app/app.css`）に高さを足す。
+  `scroll-padding-top` がこの合計を読むので、アンカー移動やフォーカスで中身が貼り付いた物の裏に隠れない
+- タブの中で `scroll-mt-*` を個別に付けない（`scroll-padding-top` に任せる。Tabs のルートは `[&_[id]]:scroll-mt-0`）
 
-## トースト通知
-- `sonner` ライブラリ経由: `toast.success()`, `toast.error()`
-- メッセージは翻訳キーを使用
+### 下端の固定 UI（`--bottom-dock-height`）
+ページが `[data-bottom-dock]` を持つ要素（現在はプロフィールのホットバー）を描くと、`app/app.css` の `:root:has([data-bottom-dock])` が
+**md 未満で** `--bottom-dock-height`（`4.75rem + env(safe-area-inset-bottom)`）を解決し、body に同じ高さの `padding-bottom` を付けて末尾がドックに隠れないようにする。
+ドックの無いページ・md 以上では `0px`。
 
-## タブ
+- 下端に固定する他の UI（クッキーバナー `cookie-consent.tsx`・トップへ戻る `back-to-top-button.tsx` など）は、
+  `bottom-[calc(<元の値>+var(--bottom-dock-height,0px))]` のようにドックの高さぶんずらす。フォールバック `0px` を必ず付ける
+- `:root` の `--bottom-fixed-inset`（`--bottom-dock-height` ＋ Cookie バナーの `--cookie-banner-offset`。body の `padding-bottom` と `scroll-padding-bottom` が読む）を、下端インセットの合計として参照してよい
+- 新しく下端固定の UI を足すときも同じ。ドックを持つページを足すときは、コンテナに `data-bottom-dock` を付け、高さは `--bottom-dock-height` を参照する
+
+## 11. タブ
 `app/components/ui/tabs.tsx` はフォルダ型（一体カード）デザイン。タブ列とコンテンツ全体が 1 枚のカードに収まり、その中でアクティブタブがコンテンツ面と一続きに見える。**1px 単位の重なりで成立している**ため、下の不変条件を破ると崩れる。
 
 > タブUI そのものを改修する・見た目を変える・カード化を打ち消す・崩れを直す場合は、
@@ -182,11 +323,25 @@
 - 選択中の見た目は **`aria-selected:` で判定する**（`data-[state=active]` は使わない）。ツールチップ付きのスロットは `TooltipTrigger asChild` が `data-state` を `closed` / `delayed-open` で上書きするため、`data-[state=active]` が効かない
 - 数字キー 1〜9 のショートカットは tablist にフォーカスがあるときだけ効かせ、修飾キー併用は無視する（ページ全体のキー監視はしない。WCAG 2.1.4）。キーとタブの対応は純粋関数 `hotbarTabForKey`（`app/lib/profile-hotbar.ts`）
 - アクセシブルネームは見えている短いラベルを含める（label in name、WCAG 2.5.3）。空スロットは破線で描き、押せる状態のまま、名前に「、未登録」を付ける
-- md 未満は画面下端に固定する（下記「下端の固定 UI」）
+- md 未満は画面下端に固定する（10 章「下端の固定 UI」）。md 以上はヘッダーの下に貼り付き、貼り付いている間は小さな帯になる
 
-## 下端の固定 UI（`--bottom-dock-height`）
-ページが `[data-bottom-dock]` を持つ要素（現在はプロフィールのホットバー）を描くと、`app/app.css` の `:root:has([data-bottom-dock])` が **md 未満で** `--bottom-dock-height`（`4.75rem + env(safe-area-inset-bottom)`）を解決し、body に同じ高さの `padding-bottom` を付けて末尾がドックに隠れないようにする。ドックの無いページ・md 以上では `0px`。
+## 12. ダイアログ・トースト
+- ダイアログは shadcn/ui の `Dialog`。構造は `DialogHeader` → `DialogTitle` → 中身 → `DialogFooter`（キャンセル＋操作ボタン）。見るだけのダイアログは `DialogFooter` を省いてよい
+- `DialogContent` の基底は `max-h-[calc(100dvh-2rem)] overflow-y-auto`（低い画面でも閉じるボタン・フッターに届く）。中で別にスクロールさせたいときだけ `max-h-*` / `overflow-hidden` を上書きする
+- トーストは `sonner`（`toast.success()` / `toast.error()`）。文言は翻訳キーを使う
 
-- 下端に固定する他の UI（クッキーバナー `cookie-consent.tsx`・トップへ戻る `back-to-top-button.tsx` など）は、`bottom-[calc(<元の値>+var(--bottom-dock-height,0px))]` のようにドックの高さぶんずらす。フォールバック `0px` を必ず付ける
-- `:root` の `--bottom-fixed-inset`（`--bottom-dock-height` ＋ Cookie バナーの `--cookie-banner-offset` の合算。body の `padding-bottom` と `scroll-padding-bottom` が読む）を、下端インセットの合算として参照してよい。
-- 新しく下端固定の UI を足すときも同じ。ドックを持つページを足すときは、コンテナに `data-bottom-dock` を付け、高さは `--bottom-dock-height` を参照する
+## 13. 公開一覧ページのヘッダ
+- フィード・データ系の公開一覧ページ（`/paces` `/videos` `/rankings` `/stats`）のヘッダは「丸背景のアイコンチップ（`rounded-xl bg-primary/10 p-2` ＋アイコン）＋ `h1`（`text-2xl font-bold`）＋件数バッジ」
+- これは既存の4ページの形。丸背景のアイコンチップはこのヘッダだけで、欄見出し・カード・ハイライトには広げない（1 章「クリーンに」）
+- 英大文字の eyebrow ラベルは既存のページだけ。新しいページには作らない
+
+## 14. アイコン
+- `lucide-react` に統一する
+- ブランドアイコン（YouTube / Twitch / X〔旧 Twitter〕/ GitHub）は lucide-react 1.x で消えたため、`app/components/brand-icons.tsx`
+  （`@icons-pack/react-simple-icons` のラッパー。`currentColor`・`aria-hidden`・空の `<title>` が既定、大きさは `className` の `h-* w-*`）から import する。
+  `Twitter` は X のロゴを描く。新しいブランドアイコンもこのファイルに足す
+- 大きさ: 欄・カードの見出し `h-5 w-5`、ボタン内 `h-4 w-4`（`Button` の中は 9 章の `size-*`）、タイトル内の状態マーク（Pin 等）`h-4 w-4`、メタ行・フッター `h-3 w-3`（文字とは `gap-1`）、空状態 `h-12 w-12`
+
+## 15. レスポンシブ
+- モバイルファーストで Tailwind のブレークポイント（`sm:` / `md:` / `lg:` / `xl:`）を使う
+- 表など横幅が要る物は、`HorizontalScrollArea` か `overflow-x-auto` で横にスクロールさせる。ページ全体を横にスクロールさせない

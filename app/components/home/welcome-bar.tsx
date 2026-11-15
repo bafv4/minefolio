@@ -40,7 +40,7 @@ export function WelcomeBar({
   return (
     <section
       aria-label={greeting}
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 shadow-sm sm:gap-x-4 sm:px-5"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 sm:gap-x-4 sm:px-5"
     >
       <Link
         to={`/player/${slug}`}
