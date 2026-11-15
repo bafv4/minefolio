@@ -430,6 +430,11 @@ interface VirtualKeyboardProps {
   useDefaultFingerAssignments?: boolean; // デフォルトの指割り当てを使用
   hideNumpad?: boolean; // テンキーを非表示にする
   alwaysShowActions?: string[]; // showActionLabels=false でも常に表示する操作名
+  /**
+   * 描画する範囲。"all"（既定）は従来どおり全体、"main" はメイン部（＋カスタムキー・テンキー）のみ、
+   * "nav" はナビクラスタ（Insert〜PgDn の島＋矢印）のみ（F行の空き段なしの5段。テンキーと上端・下端がそろう）
+   */
+  section?: "all" | "main" | "nav";
 }
 
 // JIS の L 字 Enter（リターン）専用キー。
@@ -556,12 +561,15 @@ function VirtualKeyboardComponent({
   useDefaultFingerAssignments = false,
   hideNumpad = false,
   alwaysShowActions,
+  section = "all",
 }: VirtualKeyboardProps) {
   const t = useT();
   const isJIS = layout === "JIS" || layout === "JIS_TKL";
   const isTKL = layout === "US_TKL" || layout === "JIS_TKL";
   const mainLayout = isJIS ? JIS_MAIN_LAYOUT : US_MAIN_LAYOUT;
-  const showNumpad = !isTKL && !hideNumpad;
+  const showNumpad = !isTKL && !hideNumpad && section !== "nav";
+  const showMain = section !== "nav";
+  const showNav = section !== "main";
 
   // 有効な指割り当て（ユーザー設定がなければデフォルトを使用）
   const effectiveFingerAssignments: FingerAssignment = useDefaultFingerAssignments
@@ -1081,7 +1089,8 @@ function VirtualKeyboardComponent({
   // renderKey を使うため、クリック・ツールチップ・指色・リマップ表示は他のキーと同様に機能する
   const renderNavCluster = (baseSize: number, gap: number) => (
     <div className="flex flex-col" style={{ gap: `${gap}px` }}>
-      <div style={{ height: `${baseSize}px` }} />
+      {/* section="nav" ではF行用の空き段を外し、テンキー（5段）と上端・下端をそろえる */}
+      {section !== "nav" && <div style={{ height: `${baseSize}px` }} />}
       <div className="flex" style={{ gap: `${gap}px` }}>
         {renderKey({ code: "Insert" }, 100, 0, baseSize, gap)}
         {renderKey({ code: "Home" }, 100, 1, baseSize, gap)}
@@ -1110,23 +1119,32 @@ function VirtualKeyboardComponent({
   const mainKeyboardMinWidth = MAIN_KEYBOARD_UNITS * baseSize + (MAIN_KEYBOARD_UNITS - 1) * gap;
   // ナビクラスタ（3ユニット）と島間の余白を含めた全体最小幅
   const navClusterWidth = NAV_CLUSTER_UNITS * baseSize + (NAV_CLUSTER_UNITS - 1) * gap;
-  const totalMinWidth = mainKeyboardMinWidth + gap * 4 + navClusterWidth;
+  const totalMinWidth =
+    section === "main"
+      ? mainKeyboardMinWidth
+      : section === "nav"
+        ? navClusterWidth
+        : mainKeyboardMinWidth + gap * 4 + navClusterWidth;
 
   return (
     <TooltipProvider delayDuration={200}>
       <div className={cn("shrink-0", className)} style={{ minWidth: totalMinWidth }}>
         {/* メインキーボード + ナビゲーションクラスタ・矢印キー */}
         <div className="flex shrink-0 items-start" style={{ gap: `${gap * 4}px` }}>
-          <div className="shrink-0">
-            {renderKeyboardSection(mainLayout, baseSize, gap)}
-          </div>
-          <div className="shrink-0">
-            {renderNavCluster(baseSize, gap)}
-          </div>
+          {showMain && (
+            <div className="shrink-0">
+              {renderKeyboardSection(mainLayout, baseSize, gap)}
+            </div>
+          )}
+          {showNav && (
+            <div className="shrink-0">
+              {renderNavCluster(baseSize, gap)}
+            </div>
+          )}
         </div>
 
         {/* カスタムキーボードキー */}
-        {customKeys.length > 0 && (
+        {showMain && customKeys.length > 0 && (
           <div className="mt-4">
             <p className="text-xs text-muted-foreground mb-2">{t("keyboardView.customKeys")}</p>
             {renderCustomKeys(baseSize, gap)}

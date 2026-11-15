@@ -145,6 +145,7 @@ export const PAGES_JA = {
   /** バーチャルキーボード / マウスの補助表示（aria-label・ツールチップ） */
   keyboardView: {
     ariaKeyNoun: "キー",
+    expandPreview: "キーボードを拡大表示",
     ariaButtonNoun: "ボタン",
     ariaRemap: "リマップ {from} → {to}",
     /** aria-label 内の要素区切り */

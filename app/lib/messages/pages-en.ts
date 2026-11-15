@@ -143,6 +143,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   keyboardView: {
     ariaKeyNoun: "key",
+    expandPreview: "Enlarge keyboard",
     ariaButtonNoun: "button",
     ariaRemap: "remapped {from} → {to}",
     ariaSeparator: ", ",
