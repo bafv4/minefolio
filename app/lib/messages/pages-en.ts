@@ -2586,6 +2586,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     remapSection: "Remaps",
     remapSectionDescription:
       "The input keys in this template are calculated assuming the key remaps below.",
+    keyboardLayoutLabel: "Keyboard layout",
     craftSection: "Search-craft",
     loopCount: "{count} loop(s)",
     cancel: "Cancel",

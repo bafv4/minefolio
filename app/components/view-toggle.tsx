@@ -18,7 +18,7 @@ export function ViewToggle({
       <Button
         variant={viewMode === "card" ? "default" : "ghost"}
         size="icon"
-        className="h-8 w-8 rounded-r-none"
+        className="size-11 rounded-r-none sm:size-8"
         onClick={() => onChange("card")}
         aria-label={t("viewToggle.card")}
         aria-pressed={viewMode === "card"}
@@ -28,7 +28,7 @@ export function ViewToggle({
       <Button
         variant={viewMode === "list" ? "default" : "ghost"}
         size="icon"
-        className="h-8 w-8 rounded-l-none"
+        className="size-11 rounded-l-none sm:size-8"
         onClick={() => onChange("list")}
         aria-label={t("viewToggle.list")}
         aria-pressed={viewMode === "list"}

@@ -2541,6 +2541,7 @@ export const PAGES_JA = {
     manage: "テンプレート管理",
     remapSection: "リマップ設定",
     remapSectionDescription: "このテンプレートの入力キーは、以下のキーリマップを前提に計算されています。",
+    keyboardLayoutLabel: "キーボード配列",
     craftSection: "サーチクラフト",
     loopCount: "Loop {count}件",
     cancel: "キャンセル",

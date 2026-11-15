@@ -208,7 +208,7 @@ export default function TemplatesIndexPage() {
           <h1 className="text-2xl font-bold">{t("templates.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("templates.pageDesc")}</p>
         </div>
-        <Button asChild variant="outline" className="w-full sm:w-auto">
+        <Button asChild variant="outline" className="h-11 w-full sm:h-9 sm:w-auto">
           <Link to="/playground">
             <FlaskConical className="mr-2 h-4 w-4" />
             {t("templates.openPlayground")}
@@ -224,7 +224,7 @@ export default function TemplatesIndexPage() {
             name="q"
             placeholder={t("templates.searchPlaceholder")}
             defaultValue={q}
-            className="pl-10"
+            className="h-11 pl-10 sm:h-9"
           />
         </div>
         <div className="w-full sm:w-64">
@@ -235,12 +235,13 @@ export default function TemplatesIndexPage() {
             placeholder={t("templates.allLanguages")}
             searchPlaceholder={t("meDevices.search")}
             emptyText={t("meDevices.notFound")}
+            className="h-11 sm:h-9"
           />
         </div>
         {langValue !== "__all" && <input type="hidden" name="lang" value={langValue} />}
         {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（lang と同じ理由） */}
         {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
-        <Button type="submit">
+        <Button type="submit" className="h-11 sm:h-9">
           <Search className="mr-2 h-4 w-4" />
           {t("templates.searchButton")}
         </Button>
@@ -268,7 +269,7 @@ export default function TemplatesIndexPage() {
           ))}
         </div>
       ) : templates.length > 0 ? (
-        <div className="divide-y">
+        <div className="divide-y divide-border/60">
           {templates.map((template) => (
             // 行全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
             // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
@@ -284,9 +285,9 @@ export default function TemplatesIndexPage() {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1">
+                  <h2 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1">
                     {template.title}
-                  </h3>
+                  </h2>
                   {/* ゲーム内言語（最重要メタ情報として目立たせる） */}
                   {template.gameLanguage && (
                     <span className="flex items-center gap-1.5 text-sm font-medium shrink-0">

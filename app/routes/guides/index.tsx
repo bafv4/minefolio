@@ -7,7 +7,7 @@ import {
   Link,
   type LoaderFunctionArgs,
 } from "react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -18,6 +18,7 @@ import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,6 +206,19 @@ export default function GuidesIndexPage() {
   const isNavigating = navigation.state === "loading";
   const { isTabSwitching } = useTabNavigation();
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const tagNavRef = useRef<HTMLElement | null>(null);
+
+  // 選択中のタグが横スクロールのレールの外にあるときだけ、初回に見える位置へ寄せる
+  // （ページ本体はスクロールさせない。nav の scrollLeft だけ動かす）
+  useEffect(() => {
+    const nav = tagNavRef.current;
+    const el = nav?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!nav || !el) return;
+    const n = nav.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.left >= n.left && r.right <= n.right) return;
+    nav.scrollLeft += r.left - n.left - (n.width - r.width) / 2;
+  }, []);
 
   // Transform loader data to GuideItem[]
   // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
@@ -290,10 +304,20 @@ export default function GuidesIndexPage() {
                 name="q"
                 placeholder={t("guides.searchPlaceholder")}
                 defaultValue={q}
-                className="pl-10"
+                className="h-11 pl-10 pr-12 sm:h-9 sm:pr-3"
               />
+              {/* モバイルは検索ボタンを入力欄の右端に収めて縦を節約する（Enter でも送れる） */}
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 size-11 sm:hidden"
+              >
+                <Search className="h-4 w-4" aria-hidden />
+                <span className="sr-only">{t("common.search")}</span>
+              </Button>
             </div>
-            <Button type="submit">
+            <Button type="submit" className="hidden sm:inline-flex">
               <Search className="mr-2 h-4 w-4" />
               {t("common.search")}
             </Button>
@@ -315,26 +339,37 @@ export default function GuidesIndexPage() {
           </div>
         </div>
         {allTags.length > 0 && (
-          // モバイルは押せる範囲を 44px（::after で上下に広げる。見た目は 22px のピルのまま）、
-          // sm 以上は広げない。行間を広げて、隣の行の押せる範囲と重なりすぎないようにする
-          <nav aria-label={t("guides.tagFilterLabel")} className="flex flex-wrap gap-x-2 gap-y-3 sm:gap-y-2">
+          // md 未満は 1 行の横スクロールのレール（縦を取らない）。各タグは高さ 44px の枠に入れ、
+          // ::after で上下に広げた押せる範囲（見た目は 22px のピルのまま）が枠の中に収まるようにする。
+          // md 以上は折り返し表示で、押せる範囲は広げない
+          <nav
+            ref={tagNavRef}
+            aria-label={t("guides.tagFilterLabel")}
+            className="flex gap-x-2 overflow-x-auto [scrollbar-width:none] md:flex-wrap md:gap-y-2 md:overflow-visible [&::-webkit-scrollbar]:hidden"
+          >
             {[null, ...allTags].map((name) => {
               const selected = name === null ? !tag : tag === name;
               return (
-                <Badge
-                  key={name ?? "__all"}
-                  asChild
-                  variant={selected ? "default" : "outline"}
-                  className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] sm:after:hidden"
-                >
-                  <Link
-                    to={tagHref(name)}
-                    preventScrollReset
-                    aria-current={selected ? "true" : undefined}
+                <div key={name ?? "__all"} className="flex min-h-11 shrink-0 items-center md:min-h-0">
+                  <Badge
+                    asChild
+                    variant="outline"
+                    className={cn(
+                      "relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] md:after:hidden",
+                      // 選択中は brand（ui.md 1 章。primary は dark でほぼ白になる）
+                      selected &&
+                        "border-transparent bg-brand text-brand-foreground [a&]:hover:bg-brand/90 [a&]:hover:text-brand-foreground",
+                    )}
                   >
-                    {name ?? t("guides.tagAll")}
-                  </Link>
-                </Badge>
+                    <Link
+                      to={tagHref(name)}
+                      preventScrollReset
+                      aria-current={selected ? "true" : undefined}
+                    >
+                      {name ?? t("guides.tagAll")}
+                    </Link>
+                  </Badge>
+                </div>
               );
             })}
           </nav>

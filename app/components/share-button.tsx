@@ -19,9 +19,11 @@ interface ShareButtonProps {
   includeTab?: boolean; // 現在のタブをURLに含めるか
   /** md 未満はアイコンのみ（ラベルは sr-only で残す）。既定 false */
   compactOnMobile?: boolean;
+  /** トリガーボタンへの追加クラス（モバイルの 44px 化など。既定は変えない） */
+  className?: string;
 }
 
-export function ShareButton({ title, url, description, includeTab = false, compactOnMobile = false }: ShareButtonProps) {
+export function ShareButton({ title, url, description, includeTab = false, compactOnMobile = false, className }: ShareButtonProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
 
@@ -65,7 +67,7 @@ export function ShareButton({ title, url, description, includeTab = false, compa
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className={className}>
           <Share2 className={cn("h-4 w-4", compactOnMobile ? "md:mr-2" : "mr-2")} aria-hidden />
           <span className={cn(compactOnMobile && "max-md:sr-only")}>{t("share.label")}</span>
         </Button>

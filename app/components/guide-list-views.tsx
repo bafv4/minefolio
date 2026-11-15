@@ -123,7 +123,7 @@ export function GuideCardGrid({
               {guide.coverImageUrl ? (
                 <img
                   src={guide.coverImageUrl}
-                  alt=""
+                  alt="" loading="lazy" decoding="async"
                   className={cn("w-full object-cover", guide.isPinned ? "h-48" : "h-36")}
                 />
               ) : (
@@ -227,7 +227,7 @@ export function GuideListView({
 }) {
   const locale = useLocale();
   return (
-    <div className="divide-y">
+    <div className="divide-y divide-border/60">
       {guides.map((guide) => {
         const tags = parseGuideTags(guide.tags);
         return (
@@ -239,7 +239,7 @@ export function GuideListView({
             {guide.coverImageUrl ? (
               <img
                 src={guide.coverImageUrl}
-                alt=""
+                alt="" loading="lazy" decoding="async"
                 className="w-20 h-14 object-cover rounded-md shrink-0"
               />
             ) : (

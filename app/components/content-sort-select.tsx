@@ -50,7 +50,7 @@ export function ContentSortSelect({
     <div className="flex shrink-0 items-center gap-2">
       <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
       <Select value={value} onValueChange={(next) => onChange(next as ContentSort)}>
-        <SelectTrigger className="w-[130px]" aria-label={t("contentSort.label")}>
+        <SelectTrigger className="w-[130px] data-[size=default]:h-11 sm:data-[size=default]:h-9" aria-label={t("contentSort.label")}>
           {/* SelectValue に children を渡して、トリガーの表示を常に1行ラベルに固定する。
               Radix は valueNode に children があると SelectItemText のポータルを行わないため、
               選択中の項目に説明があってもトリガーへは転送されない（2行入ると崩れるため）。 */}

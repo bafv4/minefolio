@@ -26,7 +26,8 @@ import {
 import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -432,7 +433,7 @@ export default function TemplateViewPage() {
       </a>
 
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
           <Link to="/guides/templates">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("templates.backToList")}
@@ -471,7 +472,7 @@ export default function TemplateViewPage() {
         {template.gameLanguage && (
           <div className="flex items-center gap-2">
             <Languages className="h-5 w-5 text-primary" />
-            <span className="text-sm text-muted-foreground">
+            <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
               {t("playerProfile.gameLanguage")}:
             </span>
             <span className="text-lg font-semibold">
@@ -502,7 +503,7 @@ export default function TemplateViewPage() {
         {isLoggedIn ? (
           <Dialog open={applyDialogOpen} onOpenChange={handleApplyDialogOpenChange}>
             <DialogTrigger asChild>
-              <Button disabled={isSubmitting}>
+              <Button disabled={isSubmitting} className="h-11 sm:h-9">
                 <Download className="mr-2 h-4 w-4" />
                 {t("templates.apply")}
               </Button>
@@ -659,14 +660,14 @@ export default function TemplateViewPage() {
             </DialogContent>
           </Dialog>
         ) : (
-          <Button asChild>
+          <Button asChild className="h-11 sm:h-9">
             <Link to="/login">
               <LogIn className="mr-2 h-4 w-4" />
               {t("templates.loginToApply")}
             </Link>
           </Button>
         )}
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="h-11 sm:h-9">
           <Link to={`/playground?template=${template.id}`}>
             <FlaskConical className="mr-2 h-4 w-4" />
             {t("templates.tryInPlayground")}
@@ -675,6 +676,7 @@ export default function TemplateViewPage() {
         <ShareButton
           title={`${template.title} - ${t("templates.pageTitle")} | Minefolio`}
           url={`${appUrl}/guides/templates/${template.id}`}
+          className="h-11 sm:h-8"
         />
         <LikeButton
           variant="detail"
@@ -682,9 +684,10 @@ export default function TemplateViewPage() {
           targetId={template.id}
           likeCount={template.likeCount}
           isOwn={isOwner}
+          className="h-11 sm:h-8"
         />
         {isOwner && (
-          <Button asChild variant="ghost" size="sm" className="ml-auto">
+          <Button asChild variant="ghost" size="sm" className="ml-auto h-11 sm:h-8">
             <Link to="/my-guides/templates">
               <Settings className="mr-2 h-4 w-4" />
               {t("templates.manage")}
@@ -711,20 +714,20 @@ export default function TemplateViewPage() {
       )}
 
       {/* サーチクラフト（繋ぎ方〈Loop〉はタイミンググループカード内のサブセクションとして表示） */}
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="template-craft-heading" tabIndex={-1} className="text-lg font-semibold">
-            {t("templates.craftSection")}
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            {loops.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {t("templates.loopCount", { count: loops.length })}
-              </Badge>
-            )}
-            <KeyBadgeLegend showCraftMarker={loops.length > 0} />
-          </div>
-        </div>
+      {/* 見出しの id は PageSection が `${id}-heading` で付ける（スキップリンクの #template-craft-heading） */}
+      <PageSection
+        id="template-craft"
+        title={t("templates.craftSection")}
+        first
+        badge={
+          loops.length > 0 ? (
+            <Badge variant="secondary" className="text-xs">
+              {t("templates.loopCount", { count: loops.length })}
+            </Badge>
+          ) : undefined
+        }
+      >
+        <KeyBadgeLegend showCraftMarker={loops.length > 0} />
         <SearchCraftGroupedList
           crafts={parsedSearchCrafts}
           remaps={remaps}
@@ -733,21 +736,15 @@ export default function TemplateViewPage() {
           extraTimings={searchCraftLoopTimings}
           renderGroupExtra={renderSearchCraftLoopExtra}
         />
-      </section>
+      </PageSection>
 
       {/* リマップ（バーチャルキーボード表示）。本題はクラフトの節なので後ろに置き、
           md 未満では既定で閉じる（鍵盤は 1152px 幅・キーが多くタブ停止も増えるため。md 以上は常に開く） */}
       {remaps.length > 0 && (
-        <section className="space-y-3" aria-labelledby="template-remap-heading">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 id="template-remap-heading" className="text-lg font-semibold">
-                {t("templates.remapSection")}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {t("templates.remapSectionDescription")}
-              </p>
-            </div>
+        <PageSection
+          id="template-remap"
+          title={t("templates.remapSection")}
+          action={
             <Button
               type="button"
               variant="outline"
@@ -764,7 +761,11 @@ export default function TemplateViewPage() {
               )}
               {remapOpen ? t("templates.remapHide") : t("templates.remapShow")}
             </Button>
-          </div>
+          }
+        >
+          <p className="text-sm text-muted-foreground">
+            {t("templates.remapSectionDescription")}
+          </p>
           <div
             id="template-remap-panel"
             className={cn("space-y-3", !remapOpen && "hidden md:block")}
@@ -773,7 +774,7 @@ export default function TemplateViewPage() {
               value={keyboardLayout}
               onValueChange={(v) => setKeyboardLayout(v as KeyboardLayoutOption)}
             >
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -784,19 +785,17 @@ export default function TemplateViewPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Card>
-              <CardContent className="custom-scrollbar p-4 overflow-x-auto">
-                <VirtualKeyboard
-                  layout={keyboardLayout}
-                  keybindings={{}}
-                  remaps={remaps}
-                  showRemaps
-                  hideNumpad
-                />
-              </CardContent>
-            </Card>
+            <HorizontalScrollArea surface="background">
+              <VirtualKeyboard
+                layout={keyboardLayout}
+                keybindings={{}}
+                remaps={remaps}
+                showRemaps
+                hideNumpad
+              />
+            </HorizontalScrollArea>
           </div>
-        </section>
+        </PageSection>
       )}
     </div>
   );
