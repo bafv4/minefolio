@@ -27,8 +27,11 @@ export function FavoriteActivity({
 
   if (!shouldShow) return null;
 
+  // 取得が終わってお気に入りが0人のときだけ、動きの欄ではなく走者を勧める欄として見出しを切り替える
+  const noFavorites = state.status !== "loading" && state.status !== "error" && state.data.favoritesCount === 0;
+
   return (
-    <PageSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t("home.favTitle")} viewAllTo={state.status !== "loading" && state.status !== "error" && state.data.favoritesCount === 0 ? undefined : "/favorites/activity"}>
+    <PageSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t(noFavorites ? "home.favFindTitle" : "home.favTitle")} viewAllTo={noFavorites ? "/browse" : "/favorites/activity"}>
       {state.status === "loading" ? (
         <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 5 }).map((_, i) => (

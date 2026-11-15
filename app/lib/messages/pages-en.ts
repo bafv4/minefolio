@@ -466,6 +466,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     twitchViewers: "{count} watching",
     igtAria: "{minutes} minutes {seconds} seconds",
     favTitle: "Favorite runners' activity",
+    favFindTitle: "Find runners to favorite",
     favEmpty: "Favorite a runner and their activity will show up here",
     favNoActivity: "No activity in the last 7 days",
     favFetchFailed: "Couldn't load favorites activity.",

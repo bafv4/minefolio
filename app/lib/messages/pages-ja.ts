@@ -467,6 +467,7 @@ export const PAGES_JA = {
     twitchViewers: "{count}人が視聴中",
     igtAria: "{minutes}分{seconds}秒",
     favTitle: "お気に入り走者の動き",
+    favFindTitle: "お気に入りにする走者を探す",
     favEmpty: "走者をお気に入りに追加すると、ここに動きが並びます",
     favNoActivity: "直近7日の動きはありません",
     favFetchFailed: "お気に入りの動きを取得できませんでした。",
