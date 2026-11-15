@@ -21,6 +21,7 @@ import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
 import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
 import { sanitizeReturnTo } from "@/lib/return-to";
+import { findActiveNavHref } from "@/lib/nav-active";
 import { authClient } from "@/lib/auth-client";
 import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
@@ -53,6 +54,9 @@ export function Header({ user }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+
+  // サブルート（/guides/xxx 等）でも親のナビ項目を現在地にする
+  const activeHref = findActiveNavHref(location.pathname, navigation.map((n) => n.href));
 
   // 英語表示ではアルファベット表記を優先する
   const userName = user ? getLocalizedDisplayName(user, locale) : "";
@@ -95,6 +99,7 @@ export function Header({ user }: HeaderProps) {
             <div className="hidden lg:flex lg:items-center lg:space-x-1">
               {navigation.map((item, index) => {
                 const Icon = item.icon;
+                const active = item.href === activeHref;
                 return (
                   <div key={item.key} className="flex items-center">
                     {index > 0 && (
@@ -102,9 +107,10 @@ export function Header({ user }: HeaderProps) {
                     )}
                     <Link
                       to={item.href}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
-                        location.pathname === item.href
+                        active
                           ? "text-brand bg-brand/10"
                           : "text-muted-foreground"
                       )}
@@ -250,7 +256,7 @@ export function Header({ user }: HeaderProps) {
                   <div className="flex flex-col gap-0.5">
                     {navigation.map((item) => {
                       const Icon = item.icon;
-                      const active = location.pathname === item.href;
+                      const active = item.href === activeHref;
                       return (
                         <Link
                           key={item.key}
