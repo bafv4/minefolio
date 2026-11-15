@@ -66,6 +66,8 @@ import {
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   Download,
   EyeOff,
   FlaskConical,
@@ -329,6 +331,8 @@ export default function TemplateViewPage() {
   const [targetPresetId, setTargetPresetId] = useState("");
   const [applyRemaps, setApplyRemaps] = useState(remaps.length > 0);
   const [keyboardLayout, setKeyboardLayout] = useState<KeyboardLayoutOption>("US");
+  // リマップの鍵盤は md 未満でだけ開閉する（md 以上は常に表示）。既定は閉じる
+  const [remapOpen, setRemapOpen] = useState(false);
 
   const isSubmitting = fetcher.state === "submitting";
   const selectedTargetPreset = myPresets.find((p) => p.id === targetPresetId);
@@ -419,6 +423,14 @@ export default function TemplateViewPage() {
 
   return (
     <div className="space-y-6">
+      {/* スキップリンク: ヘッダー・操作ボタンを飛ばして本題のクラフトの節へ（フォーカス時だけ見える） */}
+      <a
+        href="#template-craft-heading"
+        className="sr-only rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-20 focus:z-50"
+      >
+        {t("templates.skipToCrafts")}
+      </a>
+
       <div>
         <Button variant="ghost" size="sm" asChild className="-ml-2">
           <Link to="/guides/templates">
@@ -698,50 +710,12 @@ export default function TemplateViewPage() {
         </div>
       )}
 
-      {/* リマップ（バーチャルキーボード表示） */}
-      {remaps.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold">{t("templates.remapSection")}</h2>
-              <p className="text-sm text-muted-foreground">
-                {t("templates.remapSectionDescription")}
-              </p>
-            </div>
-            <Select
-              value={keyboardLayout}
-              onValueChange={(v) => setKeyboardLayout(v as KeyboardLayoutOption)}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LAYOUT_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option.replace("_", " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Card>
-            <CardContent className="custom-scrollbar p-4 overflow-x-auto">
-              <VirtualKeyboard
-                layout={keyboardLayout}
-                keybindings={{}}
-                remaps={remaps}
-                showRemaps
-                hideNumpad
-              />
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
       {/* サーチクラフト（繋ぎ方〈Loop〉はタイミンググループカード内のサブセクションとして表示） */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">{t("templates.craftSection")}</h2>
+          <h2 id="template-craft-heading" tabIndex={-1} className="text-lg font-semibold">
+            {t("templates.craftSection")}
+          </h2>
           <div className="flex flex-wrap items-center gap-2">
             {loops.length > 0 && (
               <Badge variant="secondary" className="text-xs">
@@ -760,6 +734,70 @@ export default function TemplateViewPage() {
           renderGroupExtra={renderSearchCraftLoopExtra}
         />
       </section>
+
+      {/* リマップ（バーチャルキーボード表示）。本題はクラフトの節なので後ろに置き、
+          md 未満では既定で閉じる（鍵盤は 1152px 幅・キーが多くタブ停止も増えるため。md 以上は常に開く） */}
+      {remaps.length > 0 && (
+        <section className="space-y-3" aria-labelledby="template-remap-heading">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 id="template-remap-heading" className="text-lg font-semibold">
+                {t("templates.remapSection")}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {t("templates.remapSectionDescription")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11 md:hidden"
+              aria-expanded={remapOpen}
+              aria-controls="template-remap-panel"
+              onClick={() => setRemapOpen((open) => !open)}
+            >
+              {remapOpen ? (
+                <ChevronUp className="mr-1 h-4 w-4" />
+              ) : (
+                <ChevronDown className="mr-1 h-4 w-4" />
+              )}
+              {remapOpen ? t("templates.remapHide") : t("templates.remapShow")}
+            </Button>
+          </div>
+          <div
+            id="template-remap-panel"
+            className={cn("space-y-3", !remapOpen && "hidden md:block")}
+          >
+            <Select
+              value={keyboardLayout}
+              onValueChange={(v) => setKeyboardLayout(v as KeyboardLayoutOption)}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LAYOUT_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option.replace("_", " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Card>
+              <CardContent className="custom-scrollbar p-4 overflow-x-auto">
+                <VirtualKeyboard
+                  layout={keyboardLayout}
+                  keybindings={{}}
+                  remaps={remaps}
+                  showRemaps
+                  hideNumpad
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

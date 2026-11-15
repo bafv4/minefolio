@@ -293,6 +293,10 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 `/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`・`/guides/templates/:templateId` は、自ルートに `ErrorBoundary`（`app/components/guide-route-not-found.tsx` の `GuideRouteNotFound`）を持つ。404 のときだけ「見つかりません＋一覧へ戻る」を出し、それ以外のエラーは root へ投げ直す。ルート自身が境界になることで、その route の `meta`（「見つかりません - Minefolio」系のタイトル）が使われる。サイト全体の 404（`app/root.tsx`）は別。
 
+### /guides/templates/:templateId — テンプレート詳細のモバイル構成
+
+本題のサーチクラフトの節を先に置き、リマップ（鍵盤）の節は後ろに置く。リマップの鍵盤は md 未満で既定「閉」の開閉（`aria-expanded`）で、md 以上は常に表示。ページ先頭に、フォーカス時だけ見えるスキップリンク「サーチクラフトへ移動」を置く。
+
 ### 著者slugの解決（`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug` 共通）
 
 `users.slug` の照合は `/player/:slug` と同じ大文字小文字無視の完全一致で、一致しなければ404を
