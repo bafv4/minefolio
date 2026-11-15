@@ -835,6 +835,11 @@ export const PAGES_JA = {
     presetLoading: "プリセットを読み込み中...",
     edit: "編集",
     compare: "比較",
+    emptySuggestTabs: "この走者のほかの情報",
+    exploreTitle: "ほかの走者と比べる",
+    exploreCompare: "比較・似た走者を探す",
+    exploreCompareWithMe: "自分と比較する",
+    exploreBrowse: "他の走者を見る",
     /** RTA歴（経過期間 + 開始年月）。start はロケール依存（ja: "2020/6" / en: "Jun 2020"） */
     rtaCareerYears: "RTA歴 {years}年（{start}〜）",
     /** 英語の単数形用（日本語は単複同形なので同じ文言） */

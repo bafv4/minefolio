@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
-import { useLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useRouteLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import { useState, useEffect, useMemo, lazy, Suspense, Fragment, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
@@ -193,18 +193,17 @@ import {
   Trophy,
   Keyboard,
   Mouse,
-  Settings,
   ExternalLink,
   Pencil,
   Calendar,
   History,
   Target,
   CheckCircle2,
-  Video,
   Package,
   Search,
   BarChart3,
   GitCompare,
+  Users,
   Save,
   User,
   Loader2,
@@ -213,9 +212,6 @@ import {
   Languages,
   Pin,
   Gamepad2,
-  Layers,
-  SlidersHorizontal,
-  Sparkles,
   Speech,
   CircleHelp,
   ChevronRight,
@@ -225,6 +221,7 @@ import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import { EmptyState } from "@/components/empty-state";
+import type { loader as layoutLoader } from "../_layout";
 import { PageSection } from "@/components/page-section";
 import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
 import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
@@ -1007,7 +1004,7 @@ export default function PlayerProfilePage() {
     });
   }
 
-  const playstyleTechniqueRows: { label: string; value: ReactNode }[] = [];
+  const playstyleTechniqueRows: { label: string; value: ReactNode; plain?: boolean }[] = [];
   if (player.playstyle?.itemLayoutPolicy) {
     playstyleTechniqueRows.push({
       label: t("playerProfile.playstyleItemLayoutPolicy"),
@@ -1024,6 +1021,7 @@ export default function PlayerProfilePage() {
     playstyleTechniqueRows.push({
       label: t("playerProfile.gameLanguage"),
       value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
+      plain: true,
     });
   }
   if (showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle) {
@@ -1115,6 +1113,13 @@ export default function PlayerProfilePage() {
   const tabLabelOf = (value: string) => tabItems.find((i) => i.value === value)?.label ?? "";
   const panelA11yProps = (value: string) => ({ "aria-labelledby": undefined, "aria-label": tabLabelOf(value) });
 
+  // ログイン中の自分の slug（共通レイアウトのローダーが既に返している。追加の取得なし）。未ログイン・未オンボーディングは null
+  const viewerSlug = useRouteLoaderData<typeof layoutLoader>("routes/_layout")?.user?.slug ?? null;
+  const compareToViewerHref =
+    viewerSlug && viewerSlug !== player.slug
+      ? `/compare?p1=${player.slug}&p2=${viewerSlug}`
+      : null;
+
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
   // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
   // （廃止された旧enum値・SC非表示中の "searchcraft" 等）な場合は "profile" に落とす
@@ -1144,6 +1149,25 @@ export default function PlayerProfilePage() {
       { preventScrollReset: true },
     );
   };
+
+  // 訪問者向けの空状態の案内: この走者で中身のある他のタブ（最大3つ。概要は最後）へ切り替えるボタン。
+  // 本人には出さない（登録への導線 OwnerEditAction を出す）。中身のあるタブが無ければ何も出さない
+  const visitorSuggestTabs = [
+    ...tabItems.filter((i) => !i.empty && i.value !== activeTab && i.value !== "profile"),
+    ...tabItems.filter((i) => !i.empty && i.value !== activeTab && i.value === "profile"),
+  ].slice(0, 3);
+  const visitorEmptyAction =
+    !isOwner && visitorSuggestTabs.length > 0 ? (
+      <div className="flex flex-wrap items-center justify-center gap-2 px-4">
+        <span className="w-full text-xs text-muted-foreground">{t("playerProfile.emptySuggestTabs")}</span>
+        {visitorSuggestTabs.map((item) => (
+          <Button key={item.value} type="button" size="sm" variant="outline" onClick={() => handleTabChange(item.value)}>
+            <item.icon className="h-4 w-4" aria-hidden />
+            {item.shortLabel}
+          </Button>
+        ))}
+      </div>
+    ) : undefined;
 
   // 審査中記録のトグル: URL の `srcPending=1` を唯一の指定元にする（共有・再訪に対応）。履歴は汚さない
   const handleShowPendingChange = (show: boolean) => {
@@ -1361,10 +1385,9 @@ export default function PlayerProfilePage() {
 
 
         {/* Profile Tab */}
-        <TabsContent value="profile" {...panelA11yProps("profile")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {/* Header: Skin + Basic Info */}
-          <Card className="py-5">
-            <CardContent className="px-5">
+        <TabsContent value="profile" {...panelA11yProps("profile")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+          {/* Header: Skin + Basic Info（箱にせず欄の先頭にそのまま置く） */}
+          <div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {/* Info */}
                 <div className="contents sm:block sm:flex-1 sm:space-y-4">
@@ -1553,8 +1576,7 @@ export default function PlayerProfilePage() {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+          </div>
 
           {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
@@ -1563,14 +1585,10 @@ export default function PlayerProfilePage() {
 
           {/* Bio */}
           {displayBio && (
-            <Card className="gap-3 py-5">
-              <CardHeader className="px-5">
-                <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.bio")}</CardTitle>
+            <PageSection id="profile-bio" title={t("playerProfile.bio")}>
                 {hasTranslatedBio && (
                   <AutoTranslateNotice showOriginal={showBioOriginal} onToggle={toggleBioOriginal} />
                 )}
-              </CardHeader>
-              <CardContent className="px-5">
                 <Suspense
                   fallback={
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -1580,20 +1598,13 @@ export default function PlayerProfilePage() {
                 >
                   <BioMarkdown bio={displayBio} />
                 </Suspense>
-              </CardContent>
-            </Card>
+            </PageSection>
           )}
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <Card className="gap-3 py-5">
-              <CardHeader className="px-5">
-                <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                  <Video className="h-5 w-5" />
-                  {t("playerProfile.videos")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 space-y-4">
+            <PageSection id="profile-videos" title={t("playerProfile.videos")}>
+              <div className="space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
                   <VideoEmbed video={displayVideos[0]} size="large" />
@@ -1613,8 +1624,8 @@ export default function PlayerProfilePage() {
                     )}
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </PageSection>
           )}
         </TabsContent>
 
@@ -1831,7 +1842,7 @@ export default function PlayerProfilePage() {
               icon={<Keyboard className="h-12 w-12" />}
               title={t("playerProfile.noKeybindingsTitle")}
               description={t("playerProfile.noKeybindings")}
-              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : undefined}
+              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
@@ -1849,69 +1860,46 @@ export default function PlayerProfilePage() {
             minefolioEloRank={minefolioEloRank}
             isOwner={isOwner}
             mainCategory={player.playstyle?.mainCategory}
+            visitorEmptyAction={visitorEmptyAction}
           />
         </TabsContent>
 
         {/* Playstyle Tab */}
-        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasPlaystyleData ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 lg:grid-cols-2">
               {/* プレイ内容 */}
               {hasPlaystylePlayContent && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                      <Layers className="h-5 w-5" />
-                      {t("playerProfile.playstylePlayContent")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5 space-y-4">
+                <PageSection id="profile-playstyle-play" title={t("playerProfile.playstylePlayContent")}>
                     {playstylePlayContentRows.map((row, i) => (
                       <div key={i} className="space-y-2">
                         <p className="text-sm text-muted-foreground">{row.label}</p>
                         {row.value}
                       </div>
                     ))}
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
 
               {/* 操作 */}
               {hasPlaystyleControls && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                      <SlidersHorizontal className="h-5 w-5" />
-                      {t("playerProfile.playstyleControls")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection id="profile-playstyle-controls" title={t("playerProfile.playstyleControls")}>
                     <div className="divide-y">
                       {playstyleControlsRows.map((row, i) => (
                         <DeviceRow key={i} label={row.label} value={row.value} />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
 
               {/* テクニック */}
               {hasPlaystyleTechnique && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                      <Sparkles className="h-5 w-5" />
-                      {t("playerProfile.playstyleTechnique")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection id="profile-playstyle-technique" title={t("playerProfile.playstyleTechnique")}>
                     <div className="divide-y">
                       {playstyleTechniqueRows.map((row, i) => (
-                        <DeviceRow key={i} label={row.label} value={row.value} />
+                        <DeviceRow key={i} label={row.label} value={row.value} plain={row.plain} />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
             </div>
           ) : (
@@ -1924,7 +1912,7 @@ export default function PlayerProfilePage() {
                   <Button asChild size="sm" variant="outline" className="mt-4">
                     <Link to="/me/playstyle">{t("playerProfile.noPlaystyleEditLink")}</Link>
                   </Button>
-                ) : undefined
+                ) : visitorEmptyAction
               }
             />
           )}
@@ -1941,7 +1929,7 @@ export default function PlayerProfilePage() {
               icon={<Package className="h-12 w-12" />}
               title={t("playerProfile.noItemLayoutsTitle")}
               description={t("playerProfile.noItemLayouts")}
-              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : undefined}
+              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
@@ -2001,57 +1989,44 @@ export default function PlayerProfilePage() {
               icon={<Search className="h-12 w-12" />}
               title={t("playerProfile.searchCraftNoneTitle")}
               description={t("playerProfile.noSearchCraft")}
-              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : undefined}
+              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" {...panelA11yProps("devices")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="devices" {...panelA11yProps("devices")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasDevicesPanelData && player.playerConfig ? (
             <>
               {(hasKeyboardInfo || hasMouseInfo) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 md:grid-cols-2">
                 {/* Keyboard */}
                 {hasKeyboardInfo && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                      <Keyboard className="h-5 w-5" />
-                      {t("playerProfile.keyboard")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection id="profile-keyboard" title={t("playerProfile.keyboard")}>
                     {player.playerConfig.keyboardModel || player.playerConfig.keyboardLayout ? (
                       <div className="divide-y">
                         {player.playerConfig.keyboardModel && (
                           <DeviceRow
                             label={t("playerProfile.model")}
                             value={player.playerConfig.keyboardModel}
+                            plain
                           />
                         )}
                         {player.playerConfig.keyboardLayout && (
                           <DeviceRow
                             label={t("playerProfile.layout")}
-                            value={player.playerConfig.keyboardLayout}
+                            value={keyboardLayoutLabel(player.playerConfig.keyboardLayout)}
+                            plain
                           />
                         )}
                       </div>
                     ) : null}
-                  </CardContent>
-                </Card>
+                </PageSection>
                 )}
 
                 {/* Mouse */}
                 {hasMouseInfo && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                      <Mouse className="h-5 w-5" />
-                      {t("playerProfile.mouse")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection id="profile-mouse" title={t("playerProfile.mouse")}>
                     {hasMouseInfo ? (
                       <div className="divide-y">
                         {/* モデル */}
@@ -2059,6 +2034,7 @@ export default function PlayerProfilePage() {
                           <DeviceRow
                             label={t("playerProfile.model")}
                             value={player.playerConfig.mouseModel}
+                            plain
                           />
                         )}
                         {/* DPI */}
@@ -2134,22 +2110,14 @@ export default function PlayerProfilePage() {
                         />
                       </div>
                     ) : null}
-                  </CardContent>
-                </Card>
+                </PageSection>
                 )}
               </div>
               )}
 
               {/* Game Settings */}
               {hasInGameSettings && (
-              <Card className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    {t("playerProfile.inGameSettings")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
+              <PageSection id="profile-ingame" title={t("playerProfile.inGameSettings")}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                     <div className="divide-y">
                       {player.playerConfig.toggleSprint != null && (
@@ -2174,6 +2142,7 @@ export default function PlayerProfilePage() {
                         <DeviceRow
                           label={t("playerProfile.gameLanguage")}
                           value={getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
+                          plain
                         />
                       )}
                     </div>
@@ -2197,8 +2166,7 @@ export default function PlayerProfilePage() {
                       <p className="text-sm">{player.playerConfig.notes}</p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </PageSection>
               )}
             </>
           ) : (
@@ -2206,19 +2174,19 @@ export default function PlayerProfilePage() {
               icon={<Mouse className="h-12 w-12" />}
               title={t("playerProfile.noDevicesTitle")}
               description={t("playerProfile.noDevices")}
-              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : undefined}
+              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" {...panelA11yProps("guides")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          <h2 className="sr-only">{tabLabelOf("guides")}</h2>
+        <TabsContent value="guides" {...panelA11yProps("guides")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasGuidesData ? (
-            <>
-              <div className="flex justify-end">
-                <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />
-              </div>
+            <PageSection
+              id="profile-guides"
+              title={t("playerProfile.guidesTab")}
+              action={<ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />}
+            >
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
                   guides={playerGuides}
@@ -2231,16 +2199,44 @@ export default function PlayerProfilePage() {
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                 />
               )}
-            </>
+            </PageSection>
           ) : (
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
               title={t("playerProfile.noGuidesTitle")}
               description={t("playerProfile.noGuidesDescription")}
-              action={isOwner ? <OwnerEditAction to="/my-guides" label={t("playerProfile.editLinkGuides")} /> : undefined}
+              action={isOwner ? <OwnerEditAction to="/my-guides" label={t("playerProfile.editLinkGuides")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
+
+        {/* 各タブの末尾の導線（全タブ共通。TabsContent の外・後ろに1つだけ置く） */}
+        <div className="mt-7 sm:mt-8">
+          <PageSection id="profile-explore" title={t("playerProfile.exploreTitle")}>
+            <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11">
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/compare?p1=${player.slug}`}>
+                  <GitCompare className="h-4 w-4 mr-2" />
+                  {t("playerProfile.exploreCompare")}
+                </Link>
+              </Button>
+              {compareToViewerHref && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to={compareToViewerHref}>
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    {t("playerProfile.exploreCompareWithMe")}
+                  </Link>
+                </Button>
+              )}
+              <Button asChild variant="outline" size="sm">
+                <Link to="/browse">
+                  <Users className="h-4 w-4 mr-2" />
+                  {t("playerProfile.exploreBrowse")}
+                </Link>
+              </Button>
+            </div>
+          </PageSection>
+        </div>
 
       </div>
     </Tabs>
@@ -2502,11 +2498,8 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
   }, [slug, hasRichLinks]);
 
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.links")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-5 space-y-2">
+    <PageSection id="profile-links" title={t("playerProfile.links")}>
+      <div className="space-y-2">
         {hasRichLinks && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {richLinks.map((link) => (
@@ -2535,8 +2528,8 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </PageSection>
   );
 }
 
@@ -2618,11 +2611,17 @@ function SocialLinkRichCard({
   );
 }
 
-function DeviceRow({ label, value, unit }: { label: ReactNode; value: ReactNode; unit?: string }) {
+/** plain: 値が数値ではなく名前（ゲーム言語・機種名など）のとき等幅フォントにしない */
+/** キーボードレイアウトの生の値（US_TKL 等）を設定画面の選択肢と同じ表示名（US TKL）にする */
+function keyboardLayoutLabel(layout: string): string {
+  return layout.replace("_", " ");
+}
+
+function DeviceRow({ label, value, unit, plain }: { label: ReactNode; value: ReactNode; unit?: string; plain?: boolean }) {
   return (
     <div className="flex justify-between items-center py-2.5">
       <span className="text-sm">{label}</span>
-      <span className="font-medium font-mono text-sm">
+      <span className={cn("font-medium text-sm", !plain && "font-mono")}>
         {value}
         {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
@@ -2645,8 +2644,9 @@ function TurnDistanceValue({ config }: { config: MouseReasonConfig }) {
   }
   return (
     <>
-      {cm360.toFixed(2)}
-      <span className="text-muted-foreground ml-1">cm</span>
+      {/* calculateCm360 は半回転（180°）の距離を返す。身元帯のハイライト・ホームと同じ小数1桁＋cm/180° */}
+      {cm360.toFixed(1)}
+      <span className="text-muted-foreground ml-1">cm/180°</span>
     </>
   );
 }
@@ -2752,6 +2752,7 @@ function StatsTabContent({
   minefolioEloRank,
   isOwner,
   mainCategory,
+  visitorEmptyAction,
 }: {
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
@@ -2763,6 +2764,8 @@ function StatsTabContent({
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
   mainCategory: string | null | undefined;
+  /** 空のときに訪問者へ出す案内（他の中身あるタブへのボタン） */
+  visitorEmptyAction?: ReactNode;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
@@ -2849,6 +2852,7 @@ function StatsTabContent({
       isOwner={isOwner}
       loadState={loadState}
       mainCategory={mainCategory}
+      visitorEmptyAction={visitorEmptyAction}
     />
   );
 }
@@ -2875,6 +2879,7 @@ function StatsContent({
   isOwner,
   loadState,
   mainCategory,
+  visitorEmptyAction,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   player: StatsPlayer;
@@ -2886,6 +2891,7 @@ function StatsContent({
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
+  visitorEmptyAction?: ReactNode;
   loadState: {
     ranked: "loading" | "done" | "error";
     paceman: "loading" | "done" | "error";
@@ -3025,7 +3031,7 @@ function StatsContent({
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}
           description={t("playerProfile.noStatsDescription")}
-          action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : undefined}
+          action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
         />
       )}
     </>
