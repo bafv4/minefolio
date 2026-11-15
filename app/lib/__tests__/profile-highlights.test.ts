@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  pickHighlightPb,
   pickHighlightSpeedrunComPb,
   speedrunComPbMatchesMainCategory,
   type HighlightSpeedrunComPb,
@@ -68,5 +69,63 @@ describe("pickHighlightSpeedrunComPb", () => {
   });
   it("PB が無ければ null", () => {
     expect(pickHighlightSpeedrunComPb("rsg", [], [], [])).toBeNull();
+  });
+  it("記録時間が 0 以下の run は選ばない（ピン留め・一致・place のどの段階でも）", () => {
+    const zero = pb("zero", 1, 0, "Any% Glitchless", "Random Seed");
+    const neg = pb("neg", 1, -5, "All Advancements");
+    expect(pickHighlightSpeedrunComPb("rsg", [zero, ssg], [], ["zero"])?.run.id).toBe("ssg");
+    expect(pickHighlightSpeedrunComPb("rsg", [zero, aa], [], [])?.run.id).toBe("aa");
+    expect(pickHighlightSpeedrunComPb(null, [zero, neg, rsg], [], [])?.run.id).toBe("rsg");
+    expect(pickHighlightSpeedrunComPb("rsg", [zero, neg], [], [])).toBeNull();
+  });
+  it("メインカテゴリ一致が複数あれば最速を選ぶ", () => {
+    const slow = pb("slow", 1, 900, "Any% Glitchless", "Random Seed");
+    const fast = pb("fast", 30, 700, "Any% Glitchless", "Random Seed");
+    expect(pickHighlightSpeedrunComPb("rsg", [slow, fast], [], [])?.run.id).toBe("fast");
+  });
+  it("ILは一致扱いにならず place 判定に回る", () => {
+    const il = pb("il", 50, 100, "Any% Glitchless", "Random Seed", { level: "lv" });
+    expect(pickHighlightSpeedrunComPb("rsg", [il, aa], [], [])?.run.id).toBe("aa");
+  });
+  it("同順位は並びの先頭", () => {
+    const a = pb("a", 2, 900, "X");
+    const b = pb("b", 2, 800, "Y");
+    expect(pickHighlightSpeedrunComPb(null, [a, b], [], [])?.run.id).toBe("a");
+  });
+  it("選ばれた PB は常に非表示集合の外（表示対象に含まれる）", () => {
+    const all = [rsg, aa, ssg];
+    for (const main of ["rsg", "ssg", "aa", "ce", null]) {
+      for (const hidden of [[], ["rsg"], ["aa", "ssg"], ["rsg", "aa"]]) {
+        const picked = pickHighlightSpeedrunComPb(main, all, hidden, ["rsg", "aa"]);
+        if (picked) expect(hidden).not.toContain(picked.run.id);
+      }
+    }
+  });
+});
+
+describe("pickHighlightPb（手入力 PB。非 null なら speedrun.com の PB は使わない）", () => {
+  const rec = (category: string, personalBest: number | null) => ({
+    category,
+    categoryDisplayName: category,
+    personalBest,
+  });
+  it("メインカテゴリ一致の最速を matched: true で返す", () => {
+    const r = pickHighlightPb("rsg", [rec("ssg", 100), rec("rsg_any", 900), rec("rsg-any", 800)], true);
+    expect(r?.record.category).toBe("rsg-any");
+    expect(r?.matched).toBe(true);
+  });
+  it("一致が無ければ allowFallback のとき先頭の PB 付き記録（matched: false）", () => {
+    const r = pickHighlightPb("rsg", [rec("aa", null), rec("ssg", 700), rec("aa", 500)], true);
+    expect(r?.record.personalBest).toBe(700);
+    expect(r?.matched).toBe(false);
+    expect(pickHighlightPb("rsg", [rec("ssg", 700)], false)).toBeNull();
+  });
+  it("PB が 0 以下・null の記録は無視し、無ければ null（speedrun.com へフォールバックする側）", () => {
+    expect(pickHighlightPb("rsg", [rec("rsg", 0), rec("rsg", null), rec("rsg", -1)], true)).toBeNull();
+    expect(pickHighlightPb("rsg", [], true)).toBeNull();
+  });
+  it("mainCategory が other / 未設定ならフォールバックのみ", () => {
+    expect(pickHighlightPb("other", [rec("other", 100)], false)).toBeNull();
+    expect(pickHighlightPb(null, [rec("x", 100)], true)?.matched).toBe(false);
   });
 });

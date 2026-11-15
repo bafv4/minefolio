@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/time-utils";
 import { formatRelativeTimeInHours, formatRelativeTimeInMinutes } from "@/lib/relative-time";
@@ -13,6 +14,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { EloRateGraph } from "@/components/elo-rate-graph";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
+import { PageSection } from "@/components/page-section";
 import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
@@ -22,6 +24,62 @@ import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 // マークアップがほぼ重複していたため共有化。ロード状態・エラー表示・ピン留めなど、各ページ固有の
 // 挙動は呼び出し側の条件分岐に残し、このモジュールはデータ + 表示オプションのみを受け取る
 // ドメイン非依存の見た目コンポーネントに徹する。
+
+// ============================================
+// 箱あり / 箱なしの切り替え
+// ============================================
+// 各カード部品は `framed`（既定 true）を受け取る。true は従来どおりの Card（/player/:slug/stats など）。
+// false は走者画面の記録タブ用の「箱なし・上罫線」で、Card の代わりに PageSection（h2・アイコンなし）で描く。
+// 箱なしのときだけ、中の1件ずつのタイルは rounded-xl、中の小見出しは h3（text-base）にする。
+
+/** 箱なしのときの中の1件ずつのタイル（角丸 2 層ルール: ページ直置きの個別アイテムは rounded-xl） */
+const SECTION_TILE_RADIUS = "rounded-xl";
+/** 箱なしのときの欄内の小見出し（h3）の class */
+const SECTION_SUBHEADING_CLASS = "text-base font-semibold";
+
+function StatsFrame({
+  framed,
+  id,
+  title,
+  icon,
+  description,
+  action,
+  contentClassName,
+  children,
+}: {
+  framed: boolean;
+  /** 箱なし（PageSection）のときの id 接頭辞 */
+  id: string;
+  title: string;
+  /** 箱ありのときだけ見出しの左に置く（箱なしは付けない） */
+  icon?: ReactNode;
+  description?: ReactNode;
+  /** 箱なしのときだけ見出し右に置く */
+  action?: ReactNode;
+  contentClassName?: string;
+  children: ReactNode;
+}) {
+  if (!framed) {
+    return (
+      <PageSection id={id} title={title} action={action}>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        <div className={contentClassName}>{children}</div>
+      </PageSection>
+    );
+  }
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
+        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
+          {icon}
+          {title}
+        </CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className={cn("px-5", contentClassName)}>{children}</CardContent>
+    </Card>
+  );
+}
 
 // ============================================
 // MCSR Ranked
@@ -42,11 +100,14 @@ const RANK_TIER_CHIP_CLASSES: Record<RankTierKey, string> = {
 export function MCSRRankedCard({
   ranked,
   minefolioRank,
+  framed = true,
 }: {
   ranked: MCSRRankedStats;
   /** Minefolio 登録ユーザー内での Elo 順位（rankings-query.server.ts の cron キャッシュ基準。
    *  非公開プロフィール・Ranked統計非公開・Minefolio未登録などは null/undefined） */
   minefolioRank?: { rank: number; total: number } | null;
+  /** false で箱なし（PageSection）。統計タイルは 2 列（md 以上は 3 列）で 3+3 に並べる */
+  framed?: boolean;
 }) {
   const t = useT();
 
@@ -60,160 +121,165 @@ export function MCSRRankedCard({
   const playedMatches = ranked.seasonData?.playedMatches ?? 0;
   const ffRatePercent = playedMatches > 0 ? (forfeits / playedMatches) * 100 : null;
 
+  const tile = framed ? "rounded-lg" : SECTION_TILE_RADIUS;
+
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-          <Swords className="h-5 w-5" />
-          MCSR Ranked
-        </CardTitle>
-        <CardDescription>{t("playerStatsCards.rankedDescription")}</CardDescription>
-      </CardHeader>
-      <CardContent className="px-5 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {ranked.user?.eloRate && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">{ranked.user.eloRate}</p>
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.eloRate")}</p>
-              {(() => {
-                const tier = getRankTier(ranked.user.eloRate);
-                return (
-                  <span
-                    className={cn(
-                      "mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
-                      RANK_TIER_CHIP_CLASSES[tier.key],
-                    )}
-                  >
-                    {tier.label}
-                  </span>
-                );
-              })()}
-            </div>
-          )}
-          {ranked.user?.eloRank && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">#{ranked.user.eloRank}</p>
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.ranking")}</p>
-            </div>
-          )}
-          {ranked.seasonData && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              {seasonGames > 0 ? (
-                <p className="text-2xl font-bold">
-                  {seasonWins}W - {seasonLoses}L
-                </p>
-              ) : (
-                // 今シーズン未出場: 0W - 0L を大きく出さず控えめな表示にする
-                <p className="text-sm text-muted-foreground py-1">{t("playerStatsCards.seasonNoMatches")}</p>
-              )}
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.seasonRecord")}</p>
-            </div>
-          )}
-          {winRatePercent !== null && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">{winRatePercent.toFixed(1)}%</p>
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.winRate")}</p>
-            </div>
-          )}
-          {ffRatePercent !== null && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">{ffRatePercent.toFixed(1)}%</p>
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.ffRate")}</p>
-            </div>
-          )}
-          {ranked.countryRank !== null && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">#{ranked.countryRank}</p>
-              <p className="text-xs text-muted-foreground">{t("playerStatsCards.jpRank")}</p>
-            </div>
-          )}
-          {minefolioRank && (
-            <div className="text-center p-3 bg-secondary/50 rounded-lg">
-              <p className="text-2xl font-bold">#{minefolioRank.rank}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("playerStatsCards.minefolioRank")}
-                <span className="block">
-                  {t("playerStatsCards.minefolioRankOutOf", { total: minefolioRank.total })}
+    <StatsFrame
+      framed={framed}
+      id="stats-ranked"
+      title="MCSR Ranked"
+      icon={<Swords className="h-5 w-5" />}
+      description={t("playerStatsCards.rankedDescription")}
+      contentClassName="space-y-4"
+    >
+      <div className={cn("grid grid-cols-2 gap-4", framed ? "md:grid-cols-4" : "md:grid-cols-3")}>
+        {ranked.user?.eloRate && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">{ranked.user.eloRate}</p>
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.eloRate")}</p>
+            {(() => {
+              const tier = getRankTier(ranked.user.eloRate);
+              return (
+                <span
+                  className={cn(
+                    "mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                    RANK_TIER_CHIP_CLASSES[tier.key],
+                  )}
+                >
+                  {tier.label}
                 </span>
+              );
+            })()}
+          </div>
+        )}
+        {ranked.user?.eloRank && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">#{ranked.user.eloRank}</p>
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.ranking")}</p>
+          </div>
+        )}
+        {ranked.seasonData && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            {seasonGames > 0 ? (
+              <p className="text-2xl font-bold">
+                {seasonWins}W - {seasonLoses}L
               </p>
+            ) : (
+              // 今シーズン未出場: 0W - 0L を大きく出さず控えめな表示にする
+              <p className="text-sm text-muted-foreground py-1">{t("playerStatsCards.seasonNoMatches")}</p>
+            )}
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.seasonRecord")}</p>
+          </div>
+        )}
+        {winRatePercent !== null && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">{winRatePercent.toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.winRate")}</p>
+          </div>
+        )}
+        {ffRatePercent !== null && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">{ffRatePercent.toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.ffRate")}</p>
+          </div>
+        )}
+        {ranked.countryRank !== null && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">#{ranked.countryRank}</p>
+            <p className="text-xs text-muted-foreground">{t("playerStatsCards.jpRank")}</p>
+          </div>
+        )}
+        {minefolioRank && (
+          <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+            <p className="text-2xl font-bold">#{minefolioRank.rank}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("playerStatsCards.minefolioRank")}
+              <span className="block">
+                {t("playerStatsCards.minefolioRankOutOf", { total: minefolioRank.total })}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* PB表示（全期間 / 今シーズン） */}
+      {ranked.seasonData &&
+      (typeof ranked.seasonData.bestTimeAllTime === "number" ||
+        typeof ranked.seasonData.bestTime === "number") ? (
+        <div className="grid grid-cols-2 gap-4">
+          {typeof ranked.seasonData.bestTimeAllTime === "number" && (
+            <div className={cn("p-3 bg-secondary/50", tile)}>
+              <p className="text-xs text-muted-foreground mb-1">{t("playerStatsCards.allTimePb")}</p>
+              <p className="text-xl font-mono font-bold">{formatTime(ranked.seasonData.bestTimeAllTime)}</p>
+            </div>
+          )}
+          {typeof ranked.seasonData.bestTime === "number" && (
+            <div className={cn("p-3 bg-secondary/50", tile)}>
+              <p className="text-xs text-muted-foreground mb-1">{t("playerStatsCards.seasonPb")}</p>
+              <p className="text-xl font-mono font-bold">{formatTime(ranked.seasonData.bestTime)}</p>
             </div>
           )}
         </div>
+      ) : null}
 
-        {/* PB表示（全期間 / 今シーズン） */}
-        {ranked.seasonData &&
-        (typeof ranked.seasonData.bestTimeAllTime === "number" ||
-          typeof ranked.seasonData.bestTime === "number") ? (
-          <div className="grid grid-cols-2 gap-4">
-            {typeof ranked.seasonData.bestTimeAllTime === "number" && (
-              <div className="p-3 bg-secondary/50 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">{t("playerStatsCards.allTimePb")}</p>
-                <p className="text-xl font-mono font-bold">{formatTime(ranked.seasonData.bestTimeAllTime)}</p>
-              </div>
-            )}
-            {typeof ranked.seasonData.bestTime === "number" && (
-              <div className="p-3 bg-secondary/50 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">{t("playerStatsCards.seasonPb")}</p>
-                <p className="text-xl font-mono font-bold">{formatTime(ranked.seasonData.bestTime)}</p>
-              </div>
-            )}
-          </div>
-        ) : null}
+      {/* Eloレートグラフ */}
+      {ranked.recentMatches.length > 1 && (
+        <EloRateGraph
+          matches={ranked.recentMatches}
+          {...(framed ? {} : { headingLevel: "h3" as const, headingClassName: SECTION_SUBHEADING_CLASS, labelChange: true })}
+        />
+      )}
 
-        {/* Eloレートグラフ */}
-        {ranked.recentMatches.length > 1 && <EloRateGraph matches={ranked.recentMatches} />}
-
-        {/* 最近のマッチ */}
-        {ranked.recentMatches.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.recentMatches")}</h3>
-            <div className="space-y-1">
-              {ranked.recentMatches.slice(0, 5).map((match) => (
-                <div
-                  key={match.id}
-                  className={cn(
-                    "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-2 rounded text-sm",
-                    match.result === "win" && "bg-success/10",
-                    match.result === "lose" && "bg-destructive/10",
-                    match.result === "draw" && "bg-warning/10",
-                  )}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Badge
-                      variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
-                      className="w-12 shrink-0 justify-center"
-                    >
-                      {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
-                    </Badge>
-                    <span className="truncate">vs {match.opponentNickname}</span>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {match.time && (
-                      <span className="font-mono text-muted-foreground">{formatTime(match.time)}</span>
-                    )}
-                    <span
-                      className={cn(
-                        "font-medium",
-                        match.eloChange > 0 && "text-success",
-                        match.eloChange < 0 && "text-destructive",
-                      )}
-                    >
-                      {match.eloChange > 0 ? "+" : ""}
-                      {match.eloChange}
-                    </span>
-                  </div>
-                  {match.date > 0 && (
-                    <span className="w-full text-xs text-muted-foreground">
-                      {formatRelativeTimeInHours(t, new Date(match.date * 1000))}
-                    </span>
-                  )}
+      {/* 最近のマッチ */}
+      {ranked.recentMatches.length > 0 && (
+        <div className="space-y-2">
+          <h3 className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{t("playerStatsCards.recentMatches")}</h3>
+          <div className="space-y-1">
+            {ranked.recentMatches.slice(0, 5).map((match) => (
+              <div
+                key={match.id}
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-2 rounded text-sm",
+                  match.result === "win" && "bg-success/10",
+                  match.result === "lose" && "bg-destructive/10",
+                  match.result === "draw" && "bg-warning/10",
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Badge
+                    variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
+                    className={cn("shrink-0 justify-center", framed ? "w-12" : "min-w-12 px-2 whitespace-nowrap")}
+                  >
+                    {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
+                  </Badge>
+                  <span className="truncate">vs {match.opponentNickname}</span>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {match.time && (
+                    <span className="font-mono text-muted-foreground">{formatTime(match.time)}</span>
+                  )}
+                  <span
+                    className={cn(
+                      "font-medium",
+                      match.eloChange > 0 && "text-success",
+                      match.eloChange < 0 && "text-destructive",
+                    )}
+                  >
+                    {match.eloChange > 0 ? "+" : ""}
+                    {match.eloChange}
+                  </span>
+                </div>
+                {match.date > 0 && (
+                  <span className="w-full text-xs text-muted-foreground">
+                    {formatRelativeTimeInHours(t, new Date(match.date * 1000))}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </StatsFrame>
   );
 }
 
@@ -222,8 +288,22 @@ export function MCSRRankedCard({
 // ============================================
 
 /** PaceManに登録済みだが、詳細な週間データはここでは持たない場合のリンクのみカード（profile.tsx専用） */
-export function PaceManLinkCard({ mcid }: { mcid: string }) {
+export function PaceManLinkCard({ mcid, framed = true }: { mcid: string; framed?: boolean }) {
   const t = useT();
+  if (!framed) {
+    // 箱なし: 見出しは週間統計つきの欄（PaceManStatsCard framed=false）と同じ「PaceMan」。リンクは見出し右
+    return (
+      <StatsFrame
+        framed={false}
+        id="stats-paceman"
+        title="PaceMan"
+        description={t("playerStatsCards.pacemanLinkDescription")}
+        action={<PaceManHeaderLink mcid={mcid} />}
+      >
+        {null}
+      </StatsFrame>
+    );
+  }
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
@@ -246,6 +326,19 @@ export function PaceManLinkCard({ mcid }: { mcid: string }) {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+/** 箱なしの PaceMan 欄の見出し右リンク。sm 未満はアイコンのみ（44px 角・ラベルは sr-only） */
+function PaceManHeaderLink({ mcid }: { mcid: string }) {
+  const t = useT();
+  return (
+    <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto">
+      <a href={`https://paceman.gg/stats/player/${encodeURIComponent(mcid)}`} target="_blank" rel="noopener noreferrer">
+        <span className="sr-only sm:not-sr-only">{t("playerStatsCards.pacemanOpenDetails")}</span>
+        <ExternalLink className="h-3.5 w-3.5 sm:ml-1" aria-hidden="true" />
+      </a>
+    </Button>
   );
 }
 
@@ -307,76 +400,85 @@ export function PaceManStatsCard({
   netherEnterCount,
   mainPaces,
   openDetailsMcid,
+  framed = true,
 }: {
   netherEnterCount: number;
   mainPaces: GroupedPaceEntry[];
   openDetailsMcid?: string | null;
+  /** false で箱なし。見出しは「PaceMan」で、openDetailsMcid のリンクは末尾のボタンではなく見出し右に置く */
+  framed?: boolean;
 }) {
   const t = useT();
+  const tile = framed ? "rounded-lg" : SECTION_TILE_RADIUS;
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-          <Timer className="h-5 w-5" />
-          PaceMan Stats
-        </CardTitle>
-        <CardDescription>{t("playerStatsCards.pacemanStatsDescription")}</CardDescription>
-      </CardHeader>
-      <CardContent className="px-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="text-center p-3 bg-secondary/50 rounded-lg">
-            <div className="flex items-center justify-center gap-2">
-              <Flame className="h-5 w-5 text-warning" />
-              <p className="text-2xl font-bold">{netherEnterCount}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("playerStatsCards.netherEntryCount")}</p>
+    <StatsFrame
+      framed={framed}
+      id="stats-paceman"
+      title={framed ? "PaceMan Stats" : "PaceMan"}
+      icon={<Timer className="h-5 w-5" />}
+      description={t("playerStatsCards.pacemanStatsDescription")}
+      action={!framed && openDetailsMcid ? <PaceManHeaderLink mcid={openDetailsMcid} /> : undefined}
+      contentClassName="space-y-4"
+    >
+      <div className="grid grid-cols-2 gap-4">
+        <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+          <div className="flex items-center justify-center gap-2">
+            <Flame className="h-5 w-5 text-warning" />
+            <p className="text-2xl font-bold">{netherEnterCount}</p>
           </div>
-          <div className="text-center p-3 bg-secondary/50 rounded-lg">
-            <div className="flex items-center justify-center gap-2">
-              <Clock className="h-5 w-5 text-info" />
-              <p className="text-2xl font-bold">{mainPaces.length}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("playerStatsCards.mainPacesCount")}</p>
+          <p className="text-xs text-muted-foreground">{t("playerStatsCards.netherEntryCount")}</p>
+        </div>
+        <div className={cn("text-center p-3 bg-secondary/50", tile)}>
+          <div className="flex items-center justify-center gap-2">
+            <Clock className="h-5 w-5 text-info" />
+            <p className="text-2xl font-bold">{mainPaces.length}</p>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("playerStatsCards.mainPacesCount")}</p>
+        </div>
+      </div>
+
+      {mainPaces.length > 0 && (
+        <div className="space-y-2">
+          <h3 className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{t("playerStatsCards.mainPacesListTitle")}</h3>
+          <div className="space-y-1">
+            {mainPaces.map((pace) => (
+              <PaceRow key={pace.pacemanRunId} pace={pace} />
+            ))}
           </div>
         </div>
+      )}
 
-        {mainPaces.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">{t("playerStatsCards.mainPacesListTitle")}</h3>
-            <div className="space-y-1">
-              {mainPaces.map((pace) => (
-                <PaceRow key={pace.pacemanRunId} pace={pace} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {openDetailsMcid && (
-          <Button asChild variant="outline" className="w-full">
-            <a
-              href={`https://paceman.gg/stats/player/${encodeURIComponent(openDetailsMcid)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              {t("playerStatsCards.pacemanOpenDetails")}
-            </a>
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {framed && openDetailsMcid && (
+        <Button asChild variant="outline" className="w-full">
+          <a
+            href={`https://paceman.gg/stats/player/${encodeURIComponent(openDetailsMcid)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            {t("playerStatsCards.pacemanOpenDetails")}
+          </a>
+        </Button>
+      )}
+    </StatsFrame>
   );
 }
 
 // ============================================
 // Speedrun.com
 // ============================================
+/** Speedrun.com カードの既定の表示上限（PB の件数） */
+const PB_PREVIEW_LIMIT = 6;
+
 export function SpeedrunComCard({
   speedruncom,
   hiddenRunIds,
   pinnedRunIds,
   showVideoEmbed = false,
   showUsername = false,
+  framed = true,
+  highlightRunId,
+  expandable = false,
 }: {
   speedruncom: SpeedrunComStats;
   /** 非表示にする run.id（owner設定。無指定なら何も隠さない） */
@@ -387,82 +489,112 @@ export function SpeedrunComCard({
   showVideoEmbed?: boolean;
   /** CardDescriptionにSpeedrun.comのユーザー名を併記するか */
   showUsername?: boolean;
+  /** false で箱なし（PageSection）。PB の1件ずつのタイルは rounded-xl */
+  framed?: boolean;
+  /** 上限（6件）に関係なく必ず表示する run.id（身元帯のハイライトに選ばれた PB）。無指定なら上限どおり */
+  highlightRunId?: string | null;
+  /** true で表示対象が上限を超えるとき「すべて表示」（その場で展開・閉じる）を出す。既定は6件で打ち切り */
+  expandable?: boolean;
 }) {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
   const hiddenSet = hiddenRunIds ?? new Set<string>();
   const pinnedSet = pinnedRunIds ?? new Set<string>();
+  const visiblePbs = speedruncom.personalBests
+    .filter((pb) => !hiddenSet.has(pb.run.id))
+    // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
+    .sort((a, b) => Number(pinnedSet.has(b.run.id)) - Number(pinnedSet.has(a.run.id)));
+  let shownPbs = visiblePbs.slice(0, PB_PREVIEW_LIMIT);
+  if (expandable && expanded) {
+    shownPbs = visiblePbs;
+  } else if (highlightRunId && !shownPbs.some((pb) => pb.run.id === highlightRunId)) {
+    // ハイライトの PB が上限の外なら、末尾の1件と入れ替えて必ず含める（並びは元の順序のまま）
+    const highlighted = visiblePbs.find((pb) => pb.run.id === highlightRunId);
+    if (highlighted) {
+      const keep = new Set(shownPbs.slice(0, PB_PREVIEW_LIMIT - 1));
+      keep.add(highlighted);
+      shownPbs = visiblePbs.filter((pb) => keep.has(pb));
+    }
+  }
+  const canExpand = expandable && visiblePbs.length > PB_PREVIEW_LIMIT;
+  const tileRadius = framed ? "rounded-lg" : SECTION_TILE_RADIUS;
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-          <Trophy className="h-5 w-5" />
-          Speedrun.com
-        </CardTitle>
-        <CardDescription>
+    <StatsFrame
+      framed={framed}
+      id="stats-speedruncom"
+      title="Speedrun.com"
+      icon={<Trophy className="h-5 w-5" />}
+      description={
+        <>
           {t("playerStatsCards.officialRecords")}
           {showUsername && speedruncom.user && (
             <span className="ml-2">- {speedruncom.user.names.international}</span>
           )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {speedruncom.personalBests
-            .filter((pb) => !hiddenSet.has(pb.run.id))
-            // ピン留めを先頭に（同順位は元の順序を維持する安定ソート）
-            .sort((a, b) => Number(pinnedSet.has(b.run.id)) - Number(pinnedSet.has(a.run.id)))
-            .slice(0, 6)
-            .map((pb) => {
-              const isPinned = pinnedSet.has(pb.run.id);
-              const videoEmbedUrl = showVideoEmbed ? getSpeedrunComVideoEmbedUrl(pb) : null;
-              return (
-                <div
-                  key={pb.run.id}
-                  className={cn(
-                    "p-3 bg-secondary/50 rounded-lg space-y-1",
-                    isPinned && "md:col-span-2 border border-primary/40",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm truncate flex items-center gap-1.5">
-                      {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                      {pb.category?.data?.name ?? t("common.unknown")}
-                    </span>
-                    <Badge variant="outline" className="shrink-0">
-                      #{pb.place}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {pb.game?.data?.names?.international ?? t("common.unknownGame")}
-                  </p>
-                  {(pb.platformName || pb.versionName) && (
-                    <p className="text-xs text-muted-foreground">
-                      {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                    </p>
-                  )}
-                  <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
-                    {formatTime(pb.run.times.primary_t * 1000)}
-                  </p>
-                  {videoEmbedUrl && (
-                    <YouTubeEmbed embedUrl={videoEmbedUrl} title={pb.category?.data?.name ?? "Speedrun video"} />
-                  )}
-                  {pb.run.weblink && (
-                    <a
-                      href={pb.run.weblink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {t("playerStatsCards.viewRecord")}
-                    </a>
-                  )}
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {shownPbs
+          .map((pb) => {
+            const isPinned = pinnedSet.has(pb.run.id);
+            const videoEmbedUrl = showVideoEmbed ? getSpeedrunComVideoEmbedUrl(pb) : null;
+            return (
+              <div
+                key={pb.run.id}
+                className={cn(
+                  "p-3 bg-secondary/50 space-y-1",
+                  tileRadius,
+                  isPinned && "md:col-span-2 border border-primary/40",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm truncate flex items-center gap-1.5">
+                    {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    {pb.category?.data?.name ?? t("common.unknown")}
+                  </span>
+                  <Badge variant="outline" className="shrink-0">
+                    #{pb.place}
+                  </Badge>
                 </div>
-              );
-            })}
+                <p className="text-xs text-muted-foreground truncate">
+                  {pb.game?.data?.names?.international ?? t("common.unknownGame")}
+                </p>
+                {(pb.platformName || pb.versionName) && (
+                  <p className="text-xs text-muted-foreground">
+                    {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                  </p>
+                )}
+                <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
+                  {formatTime(pb.run.times.primary_t * 1000)}
+                </p>
+                {videoEmbedUrl && (
+                  <YouTubeEmbed embedUrl={videoEmbedUrl} title={pb.category?.data?.name ?? "Speedrun video"} />
+                )}
+                {pb.run.weblink && (
+                  <a
+                    href={pb.run.weblink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t("playerStatsCards.viewRecord")}
+                  </a>
+                )}
+              </div>
+            );
+          })}
+      </div>
+      {canExpand && (
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" size="sm" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+            {expanded
+              ? t("playerStatsCards.showFewerPbs")
+              : t("playerStatsCards.showAllPbs", { count: visiblePbs.length })}
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </StatsFrame>
   );
 }
 
@@ -473,12 +605,63 @@ export function PendingSpeedrunRecordsCard({
   records,
   show,
   onShowChange,
+  framed = true,
 }: {
   records: PendingSpeedrunRecord[];
   show: boolean;
   onShowChange: (show: boolean) => void;
+  /** false で箱なし（PageSection）。id="pending-speedruncom-records" と scroll-mt-20 は箱なしでも保つ */
+  framed?: boolean;
 }) {
   const t = useT();
+  const toggle = (
+    <label className="flex shrink-0 items-center gap-2 text-sm">
+      <Switch checked={show} onCheckedChange={onShowChange} />
+      {t("playerStatsCards.pendingRecordsToggle")}
+    </label>
+  );
+  const items = (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {records.map((r, i) => (
+        <div
+          key={r.runId ?? `${r.categoryName}-${i}`}
+          className={cn("p-3 bg-secondary/50 space-y-1 border border-warning/40", framed ? "rounded-lg" : SECTION_TILE_RADIUS)}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-sm truncate">{r.categoryName}</span>
+            <Badge variant="outline" className="shrink-0 border-warning/40 bg-warning/10 text-warning">
+              {t("playerStatsCards.pendingBadge")}
+            </Badge>
+          </div>
+          <p className="font-mono font-bold text-xl">{r.timeFormatted ?? formatTime(r.timeMs)}</p>
+          {r.recordDate && <p className="text-xs text-muted-foreground">{r.recordDate}</p>}
+          {r.runWeblink && (
+            <a
+              href={r.runWeblink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t("playerStatsCards.viewRecord")}
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+  if (!framed) {
+    return (
+      <div className="scroll-mt-20" id="pending-speedruncom-records">
+        <PageSection id="stats-pending-speedruncom" title={t("playerStatsCards.pendingRecordsTitle")}>
+          {/* スイッチは見出し右ではなく本文の先頭に置く（モバイルで見出しを押しつぶさないため） */}
+          {toggle}
+          {show && <p className="text-sm text-muted-foreground">{t("playerStatsCards.pendingRecordsDescription")}</p>}
+          {show && items}
+        </PageSection>
+      </div>
+    );
+  }
   return (
     <Card id="pending-speedruncom-records" className="gap-3 py-5 scroll-mt-20">
       <CardHeader className="px-5">
@@ -487,45 +670,11 @@ export function PendingSpeedrunRecordsCard({
             <Clock className="h-5 w-5 text-warning" />
             {t("playerStatsCards.pendingRecordsTitle")}
           </CardTitle>
-          <label className="flex shrink-0 items-center gap-2 text-sm">
-            <Switch checked={show} onCheckedChange={onShowChange} />
-            {t("playerStatsCards.pendingRecordsToggle")}
-          </label>
+          {toggle}
         </div>
         {show && <CardDescription>{t("playerStatsCards.pendingRecordsDescription")}</CardDescription>}
       </CardHeader>
-      {show && (
-        <CardContent className="px-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {records.map((r, i) => (
-              <div
-                key={r.runId ?? `${r.categoryName}-${i}`}
-                className="p-3 bg-secondary/50 rounded-lg space-y-1 border border-warning/40"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm truncate">{r.categoryName}</span>
-                  <Badge variant="outline" className="shrink-0 border-warning/40 bg-warning/10 text-warning">
-                    {t("playerStatsCards.pendingBadge")}
-                  </Badge>
-                </div>
-                <p className="font-mono font-bold text-xl">{r.timeFormatted ?? formatTime(r.timeMs)}</p>
-                {r.recordDate && <p className="text-xs text-muted-foreground">{r.recordDate}</p>}
-                {r.runWeblink && (
-                  <a
-                    href={r.runWeblink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("playerStatsCards.viewRecord")}
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      )}
+      {show && <CardContent className="px-5">{items}</CardContent>}
     </Card>
   );
 }
@@ -546,35 +695,50 @@ export function StatsServiceLoadingCard({
   title,
   description,
   state,
+  framed = true,
 }: {
   title: string;
   description: string;
   state: "loading" | "done" | "error";
+  /** false で箱なし。確定後の欄と同じ見出し（title）の PageSection にして、取得完了で見出しの位置が跳ねないようにする */
+  framed?: boolean;
 }) {
   const t = useT();
   const isLoading = state === "loading";
   const isError = state === "error";
 
+  const indicator = isLoading ? (
+    <LoadingProgressRing />
+  ) : isError ? (
+    <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center">
+      <span className="text-destructive text-sm font-bold">!</span>
+    </div>
+  ) : (
+    <div className="h-10 w-10 shrink-0 rounded-full border-2 border-primary/40 flex items-center justify-center">
+      <Loader2 className="h-4 w-4 text-primary" />
+    </div>
+  );
+  const message = isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete");
+
+  if (!framed) {
+    return (
+      <PageSection id={`stats-status-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} title={title}>
+        <div className="flex items-center gap-4">
+          {indicator}
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+      </PageSection>
+    );
+  }
+
   return (
     <Card className="py-5">
       <CardContent className="px-5">
         <div className="flex items-center gap-4">
-          {isLoading ? (
-            <LoadingProgressRing />
-          ) : isError ? (
-            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-destructive/40 flex items-center justify-center">
-              <span className="text-destructive text-sm font-bold">!</span>
-            </div>
-          ) : (
-            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-primary/40 flex items-center justify-center">
-              <Loader2 className="h-4 w-4 text-primary" />
-            </div>
-          )}
+          {indicator}
           <div>
             <p className="font-medium">{title}</p>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? description : isError ? t("common.loadFailed") : t("common.loadComplete")}
-            </p>
+            <p className="text-sm text-muted-foreground">{message}</p>
           </div>
         </div>
       </CardContent>

@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
 import { useLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, Fragment, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GuideCardGrid,
@@ -253,6 +253,8 @@ import { HintTip } from "@/components/hint-tip";
 import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
 import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
 import { ProfileHighlights } from "@/components/profile-highlights";
+import { pickHighlightPb, pickHighlightSpeedrunComPb } from "@/lib/profile-highlights";
+import { orderStatsSections, type StatsSectionKey } from "@/lib/profile-stats-order";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import {
@@ -1821,7 +1823,7 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" {...panelA11yProps("stats")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="stats" {...panelA11yProps("stats")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1832,6 +1834,7 @@ export default function PlayerProfilePage() {
             pacemanStats={pacemanStats}
             minefolioEloRank={minefolioEloRank}
             isOwner={isOwner}
+            mainCategory={player.playstyle?.mainCategory}
           />
         </TabsContent>
 
@@ -2742,6 +2745,7 @@ function StatsTabContent({
   pacemanStats,
   minefolioEloRank,
   isOwner,
+  mainCategory,
 }: {
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
@@ -2752,6 +2756,7 @@ function StatsTabContent({
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
   isOwner: boolean;
+  mainCategory: string | null | undefined;
 }) {
   const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
   const [loadState, setLoadState] = useState({
@@ -2837,6 +2842,7 @@ function StatsTabContent({
       minefolioEloRank={minefolioEloRank}
       isOwner={isOwner}
       loadState={loadState}
+      mainCategory={mainCategory}
     />
   );
 }
@@ -2862,6 +2868,7 @@ function StatsContent({
   minefolioEloRank,
   isOwner,
   loadState,
+  mainCategory,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
   player: StatsPlayer;
@@ -2878,6 +2885,8 @@ function StatsContent({
     paceman: "loading" | "done" | "error";
     speedruncom: "loading" | "done" | "error";
   };
+  /** 本人のメインカテゴリ（playstyle.mainCategory）。欄の並びとハイライト PB の選択に使う */
+  mainCategory: string | null | undefined;
 }) {
   const t = useT();
   // ?srcPending=1 で開いた直後に、審査中記録カードの位置へ移動する（外部統計の取得完了で上のカードが
@@ -2889,6 +2898,10 @@ function StatsContent({
     document.getElementById("pending-speedruncom-records")?.scrollIntoView({ block: "start" });
   }, [externalDone]); // eslint-disable-line react-hooks/exhaustive-deps
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
+  const hasWeeklyStats =
+    !!pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0);
+  const hasPacemanLink = !!externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && !!player.mcid;
+  const showPacemanSection = hasWeeklyStats || hasPacemanLink;
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
     && loadState.speedruncom !== "loading";
@@ -2899,80 +2912,105 @@ function StatsContent({
   const hiddenSet = new Set(hiddenSpeedrunRecords);
   const pinnedSet = new Set(pinnedSpeedrunRecords);
 
+  // ハイライト（身元帯）に選ばれた speedrun.com PB は、表示上限に関係なく Speedrun.com 欄へ必ず含める。
+  // 身元帯は手入力の PB があればそちらを出す（speedrun.com は使わない）ので、その場合は指定しない
+  const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
+  const highlightSrcRunId =
+    !pickHighlightPb(categoryKey, player.categoryRecords, true) && externalStats.speedruncom?.personalBests
+      ? (pickHighlightSpeedrunComPb(categoryKey, externalStats.speedruncom.personalBests, hiddenSpeedrunRecords, pinnedSpeedrunRecords)?.run.id ?? null)
+      : null;
+
+  const sections: Record<StatsSectionKey, ReactNode> = {
+    ranked: (
+      <>
+        {player.showRankedStats !== false && loadState.ranked !== "done" && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="MCSR Ranked"
+            description={t("loading.rankedStats")}
+            state={loadState.ranked}
+          />
+        )}
+        {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
+          <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
+        )}
+      </>
+    ),
+    // PaceMan は欄を 1 つ（「PaceMan」）にまとめる。リンク（クライアント取得）は見出し右、週間統計（loader 取得済み）は中身
+    paceman: (
+      <>
+        {loadState.paceman !== "done" && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="PaceMan"
+            description={t("loading.pacemanStats")}
+            state={loadState.paceman}
+          />
+        )}
+        {showPacemanSection &&
+          (hasWeeklyStats && pacemanStats ? (
+            <PaceManStatsCard
+              framed={false}
+              netherEnterCount={pacemanStats.netherEnterCount}
+              mainPaces={weeklyMainPaces}
+              openDetailsMcid={hasPacemanLink ? player.mcid : null}
+            />
+          ) : (
+            player.mcid && <PaceManLinkCard framed={false} mcid={player.mcid} />
+          ))}
+      </>
+    ),
+    speedruncom: (
+      <>
+        {player.speedruncomUsername && loadState.speedruncom !== "done" && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="Speedrun.com"
+            description={t("loading.speedruncomStats")}
+            state={loadState.speedruncom}
+          />
+        )}
+        {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
+          <SpeedrunComCard
+            framed={false}
+            speedruncom={externalStats.speedruncom}
+            hiddenRunIds={hiddenSet}
+            pinnedRunIds={pinnedSet}
+            showVideoEmbed
+            highlightRunId={highlightSrcRunId}
+            expandable
+          />
+        )}
+
+        {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
+        {pendingSpeedrunRecords.length > 0 && (
+          <PendingSpeedrunRecordsCard
+            framed={false}
+            records={pendingSpeedrunRecords}
+            show={showPending}
+            onShowChange={onShowPendingChange}
+          />
+        )}
+      </>
+    ),
+  };
+
   return (
     <>
-      {/* MCSR Ranked Section */}
-      {player.showRankedStats !== false && loadState.ranked !== "done" && (
-        <StatsServiceLoadingCard
-          title="MCSR Ranked"
-          description={t("loading.rankedStats")}
-          state={loadState.ranked}
-        />
-      )}
-      {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
-        <MCSRRankedCard ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
-      )}
+      {/* メインカテゴリに合う欄を先頭に置く（残りは既定の順） */}
+      {orderStatsSections(mainCategory).map((key) => (
+        <Fragment key={key}>{sections[key]}</Fragment>
+      ))}
 
-      {/* PaceMan Section - リンクのみ（週間統計とは独立にロード状態を持つため別カード） */}
-      {loadState.paceman !== "done" && (
-        <StatsServiceLoadingCard
-          title="PaceMan"
-          description={t("loading.pacemanStats")}
-          state={loadState.paceman}
-        />
-      )}
-      {externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && player.mcid && (
-        <PaceManLinkCard mcid={player.mcid} />
-      )}
-
-      {/* PaceMan 過去1週間の統計（loader取得済みのためロード状態に依存しない） */}
-      {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0) && (
-        <PaceManStatsCard netherEnterCount={pacemanStats.netherEnterCount} mainPaces={weeklyMainPaces} />
-      )}
-
-      {/* Speedrun.com Section */}
-      {player.speedruncomUsername && loadState.speedruncom !== "done" && (
-        <StatsServiceLoadingCard
-          title="Speedrun.com"
-          description={t("loading.speedruncomStats")}
-          state={loadState.speedruncom}
-        />
-      )}
-      {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
-        <SpeedrunComCard
-          speedruncom={externalStats.speedruncom}
-          hiddenRunIds={hiddenSet}
-          pinnedRunIds={pinnedSet}
-          showVideoEmbed
-        />
-      )}
-
-      {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
-      {pendingSpeedrunRecords.length > 0 && (
-        <PendingSpeedrunRecordsCard
-          records={pendingSpeedrunRecords}
-          show={showPending}
-          onShowChange={onShowPendingChange}
-        />
-      )}
-
-      {/* カスタム記録 */}
+      {/* カスタム記録（RecordCard は1件ずつの箱のまま） */}
       {player.categoryRecords.length > 0 && (
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              {t("playerProfile.customRecords")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {player.categoryRecords.map((record) => (
-                <RecordCard key={record.id} record={record} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <PageSection id="stats-custom-records" title={t("playerProfile.customRecords")}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {player.categoryRecords.map((record) => (
+              <RecordCard key={record.id} record={record} />
+            ))}
+          </div>
+        </PageSection>
       )}
 
       {/* データがない場合（外部サービスがエラーの場合は各セクションのエラー表示に任せ、ここでは出さない） */}
