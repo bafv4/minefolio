@@ -1163,89 +1163,87 @@ export default function PlayerProfilePage() {
     <Tabs value={activeTab} onValueChange={handleTabChange} activationMode="manual" className="flex flex-col gap-4 md:gap-6 overflow-visible rounded-none border-0 bg-transparent">
 
       {/* 身元帯（全タブ共通。h1 はここだけ） */}
-      <Card className="gap-3 py-3 md:py-5">
-        <CardContent className="space-y-3 px-4 md:space-y-4 md:px-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
-            <div className="flex min-w-0 items-center gap-3 md:gap-4">
-              {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く。
-                  size は描画解像度を決める数値 prop なので、md 未満 40px / 以上 64px を CSS で出し分ける
-                  （useMediaQuery だと SSR は 64px で描かれ、モバイルでハイドレーション後に縮んで跳ねる） */}
-              <MinecraftAvatar
-                uuid={player.uuid}
-                skinUrl={player.customSkinUrl}
-                mcid={player.mcid}
-                size={40}
-                className="shrink-0 rounded md:hidden"
-              />
-              <MinecraftAvatar
-                uuid={player.uuid}
-                skinUrl={player.customSkinUrl}
-                mcid={player.mcid}
-                size={64}
-                className="shrink-0 rounded max-md:hidden"
-              />
-              <div className="min-w-0">
-                <h1 className="truncate text-xl font-bold md:text-2xl">{playerName}</h1>
-                {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
-                {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
-                  <p className="truncate text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
-                )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                  {player.mcid && <span className="truncate">@{player.mcid}</span>}
-                  {mainCategoryKey && (
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("playstyle")}
-                      className="rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {categoryLabel(t, mainCategoryKey)}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 操作（モバイルでもタップ領域 44px） */}
-            <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
-              {isOwner && (
-                <Button asChild size="sm">
-                  <Link to="/me/edit">
-                    <Pencil className="mr-2 h-4 w-4" />
-                    {t("playerProfile.edit")}
-                  </Link>
-                </Button>
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
+          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+            {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く。
+                size は描画解像度を決める数値 prop なので、md 未満 40px / 以上 64px を CSS で出し分ける
+                （useMediaQuery だと SSR は 64px で描かれ、モバイルでハイドレーション後に縮んで跳ねる） */}
+            <MinecraftAvatar
+              uuid={player.uuid}
+              skinUrl={player.customSkinUrl}
+              mcid={player.mcid}
+              size={40}
+              className="shrink-0 rounded md:hidden"
+            />
+            <MinecraftAvatar
+              uuid={player.uuid}
+              skinUrl={player.customSkinUrl}
+              mcid={player.mcid}
+              size={64}
+              className="shrink-0 rounded max-md:hidden"
+            />
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold md:text-2xl">{playerName}</h1>
+              {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
+              {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
+                <p className="truncate text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
               )}
-              <FavoriteButton slug={player.slug} />
-              <ShareButton
-                title={`${playerName} - Minefolio`}
-                description={displayShortBio ?? undefined}
-                includeTab={true}
-              />
-              <Button asChild variant="outline" size="sm">
-                <Link to={`/compare?p1=${player.slug}`}>
-                  <GitCompare className="h-4 w-4 mr-2" />
-                  {t("playerProfile.compare")}
-                </Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                {player.mcid && <span className="truncate">@{player.mcid}</span>}
+                {mainCategoryKey && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("playstyle")}
+                    className="rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {categoryLabel(t, mainCategoryKey)}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          <ProfileHighlights
-            mcid={player.mcid}
-            showRankedStats={player.showRankedStats !== false}
-            mainCategory={player.playstyle?.mainCategory}
-            records={player.categoryRecords}
-            config={player.playerConfig}
-            speedruncomUsername={player.speedruncomUsername}
-            searchCraftLevel={player.playstyle?.searchCraft}
-            searchCraftCount={player.searchCrafts.length}
-            gameLanguage={player.playerConfig?.gameLanguage}
-            hiddenSpeedrunRecords={hiddenSpeedrunRecords}
-            pinnedSpeedrunRecords={pinnedSpeedrunRecords}
-            onSelectTab={handleTabChange}
-          />
-        </CardContent>
-      </Card>
+          {/* 操作（モバイルでもタップ領域 44px） */}
+          <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
+            {isOwner && (
+              <Button asChild size="sm">
+                <Link to="/me/edit">
+                  <Pencil className="mr-2 h-4 w-4" />
+                  {t("playerProfile.edit")}
+                </Link>
+              </Button>
+            )}
+            <FavoriteButton slug={player.slug} />
+            <ShareButton
+              title={`${playerName} - Minefolio`}
+              description={displayShortBio ?? undefined}
+              includeTab={true}
+            />
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/compare?p1=${player.slug}`}>
+                <GitCompare className="h-4 w-4 mr-2" />
+                {t("playerProfile.compare")}
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <ProfileHighlights
+          mcid={player.mcid}
+          showRankedStats={player.showRankedStats !== false}
+          mainCategory={player.playstyle?.mainCategory}
+          records={player.categoryRecords}
+          config={player.playerConfig}
+          speedruncomUsername={player.speedruncomUsername}
+          searchCraftLevel={player.playstyle?.searchCraft}
+          searchCraftCount={player.searchCrafts.length}
+          gameLanguage={player.playerConfig?.gameLanguage}
+          hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+          pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+          onSelectTab={handleTabChange}
+        />
+      </div>
 
       <ProfileHotbarTabs items={tabItems} activeValue={activeTab} onSelect={handleTabChange} />
 
