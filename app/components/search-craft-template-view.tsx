@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -26,7 +26,7 @@ import { ShiftMark } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { ChevronDown, Copy } from "lucide-react";
 
 /**
  * サーチクラフトの公開表示コンポーネント群。
@@ -221,10 +221,22 @@ export function SearchCraftGroupedList({
   keyboardLayout,
   renderGroupExtra,
   extraTimings,
+  framed = true,
+  collapsible = false,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /**
+   * false にすると各タイミンググループを Card ではなく「h3 小見出し＋中身」の箱なしで描く
+   * （外側の欄 h2 は呼び出し側が PageSection で用意する）。既定 true＝従来の Card 表示
+   */
+  framed?: boolean;
+  /**
+   * true にするとタイミング別グループを開閉できる（見出しに件数、先頭グループのみ開いた状態で開始、
+   * 一覧の上に「すべて開く／すべて閉じる」）。タイミングなしの1枚表示には効かない。既定 false
+   */
+  collapsible?: boolean;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
@@ -253,19 +265,6 @@ export function SearchCraftGroupedList({
   );
   const hasAnyTiming = crafts.some((c) => resolveCraftTiming(c.timing)) || extraOnlyTimings.length > 0;
 
-  if (!hasAnyTiming) {
-    return (
-      <SearchCraftGroupCard
-        crafts={crafts}
-        remaps={remaps}
-        fingerAssignments={fingerAssignments}
-        keyboardLayout={keyboardLayout}
-        lang={lang}
-        extra={renderGroupExtra?.(null)}
-      />
-    );
-  }
-
   // タイミング別にグループ化
   // enum 外の timing は "other" に寄せる（件数と描画対象を一致させる）
   const grouped: Map<string | null, SearchCraftRowData[]> = groupCraftsByTiming(crafts);
@@ -281,19 +280,74 @@ export function SearchCraftGroupedList({
     if (grouped.has(timing)) sortedKeys.push(timing);
   }
 
+  // crafts が0件で、renderGroupExtra の中身（Loop）も無いグループは描かない
+  // （extraTimings 由来の空グループは Loop を出すためのものなので、Loop があれば残る）
+  const groups = sortedKeys
+    .map((timing) => ({
+      timing,
+      groupKey: timing ?? "__none",
+      crafts: grouped.get(timing)!,
+      extra: renderGroupExtra?.(timing),
+    }))
+    .filter((g) => g.crafts.length > 0 || Boolean(g.extra));
+
+  // 開閉状態（collapsible のときだけ使う）。先頭のグループだけ開いた状態で始める
+  const [openKeys, setOpenKeys] = useState<Set<string>>(
+    () => new Set(groups.length > 0 ? [groups[0].groupKey] : []),
+  );
+  const toggleGroup = (groupKey: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(groupKey)) next.add(groupKey);
+      return next;
+    });
+
+  if (!hasAnyTiming) {
+    return (
+      <SearchCraftGroupCard
+        crafts={crafts}
+        remaps={remaps}
+        fingerAssignments={fingerAssignments}
+        keyboardLayout={keyboardLayout}
+        lang={lang}
+        framed={framed}
+        extra={renderGroupExtra?.(null)}
+      />
+    );
+  }
+
+  const allOpen = groups.length > 0 && groups.every((g) => openKeys.has(g.groupKey));
+
   return (
-    <div className="space-y-4">
-      {sortedKeys.map((timing) => (
+    <div className={framed ? "space-y-4" : "space-y-5"}>
+      {collapsible && groups.length > 1 && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setOpenKeys(allOpen ? new Set() : new Set(groups.map((g) => g.groupKey)))}
+          >
+            {allOpen ? t("playerProfile.searchCraftCollapseAll") : t("playerProfile.searchCraftExpandAll")}
+          </Button>
+        </div>
+      )}
+      {groups.map((g) => (
         <SearchCraftGroupCard
-          key={timing ?? "__none"}
-          title={timing ? timingLabelById(t, timing) : t("playerProfile.timingUnspecified")}
-          dotClass={timing ? TIMING_DOT_CLASSES[timing] : undefined}
-          crafts={grouped.get(timing)!}
+          key={g.groupKey}
+          title={g.timing ? timingLabelById(t, g.timing) : t("playerProfile.timingUnspecified")}
+          dotClass={g.timing ? TIMING_DOT_CLASSES[g.timing] : undefined}
+          crafts={g.crafts}
           remaps={remaps}
           fingerAssignments={fingerAssignments}
           keyboardLayout={keyboardLayout}
           lang={lang}
-          extra={renderGroupExtra?.(timing)}
+          framed={framed}
+          collapsible={collapsible}
+          open={openKeys.has(g.groupKey)}
+          onToggle={() => toggleGroup(g.groupKey)}
+          extra={g.extra}
         />
       ))}
     </div>
@@ -310,6 +364,10 @@ function SearchCraftGroupCard({
   keyboardLayout,
   lang,
   extra,
+  framed = true,
+  collapsible = false,
+  open = true,
+  onToggle,
 }: {
   title?: string;
   dotClass?: string;
@@ -319,55 +377,126 @@ function SearchCraftGroupCard({
   keyboardLayout?: KeyboardLayout;
   lang: string;
   extra?: ReactNode;
+  /** false なら Card ではなく h3 小見出し＋中身で描く */
+  framed?: boolean;
+  /** true なら見出しを開閉ボタンにする（title があるときのみ）。open / onToggle で制御 */
+  collapsible?: boolean;
+  open?: boolean;
+  onToggle?: () => void;
 }) {
   const t = useT();
+  const bodyId = useId();
   // タイミング未設定のみの1枚カード（title未設定）は crafts=[] でも従来どおり行リストの枠を出す。
   // タイミング別グループカード（title あり）は、extraTimings 由来で crafts=0件のことがあるため、
   // その場合は行リスト（列ヘッダー含む）を省略し extra だけを描画する。
   const showList = title === undefined || crafts.length > 0;
+  const isCollapsible = collapsible && title !== undefined;
+  const bodyVisible = !isCollapsible || open;
+
+  const body = (
+    <>
+      {showList && (
+        <>
+          {/* 列ヘッダー（デスクトップのみ） */}
+          <div
+            className={cn(
+              "hidden pb-2 border-b text-xs text-muted-foreground",
+              SEARCH_CRAFT_GRID_COLS,
+            )}
+          >
+            <span>{t("playerProfile.colItems")}</span>
+            <span>{t("playerProfile.colSearchStr")}</span>
+            <span>{t("playerProfile.colInputKeys")}</span>
+          </div>
+          <div className="divide-y">
+            {crafts.map((craft) => (
+              <SearchCraftRow
+                key={craft.id}
+                craft={craft}
+                remaps={remaps}
+                fingerAssignments={fingerAssignments}
+                keyboardLayout={keyboardLayout}
+                lang={lang}
+              />
+            ))}
+          </div>
+        </>
+      )}
+      {extra && <div className={showList ? "mt-3" : undefined}>{extra}</div>}
+    </>
+  );
+
+  const titleContent = (
+    <>
+      {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
+      {title}
+      {/* Loop だけのグループ（crafts 0件）は、新しい表示（箱なし・折りたたみ）では件数を出さない。
+          既定の Card 表示は従来どおり 0 も出す */}
+      {(crafts.length > 0 || (framed && !collapsible)) && (
+        <span className="text-xs font-normal text-muted-foreground">{crafts.length}</span>
+      )}
+    </>
+  );
+
+  if (!framed) {
+    return (
+      <section>
+        {title && (
+          <h3 className={cn("text-base font-semibold", showList && bodyVisible && "mb-2")}>
+            {isCollapsible ? (
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={bodyId}
+                onClick={onToggle}
+                className="-mx-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {titleContent}
+                <ChevronDown
+                  aria-hidden
+                  className={cn("ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+                />
+              </button>
+            ) : (
+              <span className="flex items-center gap-2">{titleContent}</span>
+            )}
+          </h3>
+        )}
+        {bodyVisible && <div id={bodyId}>{body}</div>}
+      </section>
+    );
+  }
+
   return (
     <Card className="gap-3 py-5">
       {title && (
         <CardHeader className="px-5">
           <CardTitle role="heading" aria-level={3} className="text-base font-semibold flex items-center gap-2">
-            {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
-            {title}
-            <span className="text-xs font-normal text-muted-foreground">
-              {crafts.length}
-            </span>
+            {isCollapsible ? (
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={bodyId}
+                onClick={onToggle}
+                className="flex w-full items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {titleContent}
+                <ChevronDown
+                  aria-hidden
+                  className={cn("ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+                />
+              </button>
+            ) : (
+              titleContent
+            )}
           </CardTitle>
         </CardHeader>
       )}
-      <CardContent className="px-5">
-        {showList && (
-          <>
-            {/* 列ヘッダー（デスクトップのみ） */}
-            <div
-              className={cn(
-                "hidden pb-2 border-b text-xs text-muted-foreground",
-                SEARCH_CRAFT_GRID_COLS,
-              )}
-            >
-              <span>{t("playerProfile.colItems")}</span>
-              <span>{t("playerProfile.colSearchStr")}</span>
-              <span>{t("playerProfile.colInputKeys")}</span>
-            </div>
-            <div className="divide-y">
-              {crafts.map((craft) => (
-                <SearchCraftRow
-                  key={craft.id}
-                  craft={craft}
-                  remaps={remaps}
-                  fingerAssignments={fingerAssignments}
-                  keyboardLayout={keyboardLayout}
-                  lang={lang}
-                />
-              ))}
-            </div>
-          </>
-        )}
-        {extra && <div className={showList ? "mt-3" : undefined}>{extra}</div>}
-      </CardContent>
+      {bodyVisible && (
+        <CardContent id={bodyId} className="px-5">
+          {body}
+        </CardContent>
+      )}
     </Card>
   );
 }

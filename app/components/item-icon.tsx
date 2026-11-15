@@ -42,7 +42,11 @@ export function getLocalizedItemName(itemId: string, locale: Locale): string {
   return getItemNameJa(itemId) || formatItemName(itemId);
 }
 
-export type ItemIconProps = Omit<MinecraftItemIconProps, "textureBaseUrl">;
+/**
+ * `alt` は @bafv4/mcitems の型では除外されているが、実装は `...props` を img の後ろに展開するため
+ * 渡せば上書きされる（未指定時は itemId）。翻訳済みの名前や、重複 img 用の空文字を渡す。
+ */
+export type ItemIconProps = Omit<MinecraftItemIconProps, "textureBaseUrl"> & { alt?: string };
 
 /**
  * Minecraft アイテムアイコン。テクスチャ配信元・ピクセル描画・読み込み中の

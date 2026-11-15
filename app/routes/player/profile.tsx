@@ -19,7 +19,6 @@ import {
   fetchAllExternalStats,
   checkPaceManPlayer,
 } from "@/lib/external-stats";
-import { getLocalizedItemName } from "@/components/item-icon";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -182,7 +181,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -1161,8 +1159,24 @@ export default function PlayerProfilePage() {
   };
 
   // プリセット選択を表示するタブ（プリセットが1件も無い場合はセレクタ自体を出さない）
+  // アイテム配置・サーチクラフトは、表示中が空でどのプリセットにも中身が無いときは選択自体が無意味なので出さない
+  // （プリセット一覧が種別ごとの有無フラグを持つ。他プリセットに中身があれば切替先として残す）
   const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
-  const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
+  const presetTabHasNothing =
+    (activeTab === "items" && !hasItemLayoutsData && !presets.some((p) => p.hasItemLayouts)) ||
+    (activeTab === "searchcraft" && !hasSearchCraftData && !presets.some((p) => p.hasSearchCrafts));
+  const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab) && !presetTabHasNothing;
+
+  // アイテム配置タブのホットバー下に出す「押すキー」（hotbar1〜9 の割り当て。キー配置タブと同じ解決）。
+  // キー配置が未登録なら渡さず、番号表示のままにする
+  const hotbarKeyLabels: Partial<Record<number, string>> | undefined = hasKeybindingsData
+    ? Object.fromEntries(
+        Array.from({ length: 9 }, (_, i) => {
+          const kb = keybindingsByAction.get(`hotbar${i + 1}`);
+          return [i + 1, kb && kb.keyCode !== UNBOUND_KEY ? resolveKeyLabel(kb.keyCode) : undefined] as const;
+        }),
+      )
+    : undefined;
 
   // メイン以外のプリセットを表示中か（「プリセット表示中」バッジ用)。
   // メインプリセットは既定表示そのものなのでバッジは出さない。
@@ -1917,18 +1931,11 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" {...panelA11yProps("items")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          <h2 className="sr-only">{tabLabelOf("items")}</h2>
+        <TabsContent value="items" {...panelA11yProps("items")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasItemLayoutsData ? (
-            <Card className="gap-3 py-5">
-              <CardContent className="px-5">
-                <div className="divide-y">
-                  {player.itemLayouts.map((layout) => (
-                    <ItemLayoutRow key={layout.id} layout={layout} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            player.itemLayouts.map((layout) => (
+              <ItemLayoutRow key={layout.id} layout={layout} slotKeyLabels={hotbarKeyLabels} />
+            ))
           ) : (
             <EmptyState
               icon={<Package className="h-12 w-12" />}
@@ -1940,12 +1947,19 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          <h2 className="sr-only">{tabLabelOf("searchcraft")}</h2>
+        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasSearchCraftData ? (
-            <>
-              {/* サマリーバー: ゲーム言語・件数・凡例 */}
-              <div className="rounded-xl border border-border/70 bg-card px-4 py-3 space-y-2.5">
+            <PageSection
+              id="profile-searchcraft"
+              title={t("playerProfile.searchCraftTab")}
+              badge={
+                <HintTip message={t("playerProfile.searchCraftTabHint")} className="text-muted-foreground">
+                  <CircleHelp className="h-4 w-4" aria-hidden />
+                </HintTip>
+              }
+            >
+              {/* ゲーム言語・件数・凡例（箱にせず欄の先頭に置く） */}
+              <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                   {player.playerConfig?.gameLanguage && (
                     <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -1971,6 +1985,8 @@ export default function PlayerProfilePage() {
                 />
               </div>
               <SearchCraftGroupedList
+                framed={false}
+                collapsible
                 crafts={parsedSearchCrafts}
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
@@ -1979,7 +1995,7 @@ export default function PlayerProfilePage() {
                 extraTimings={searchCraftLoopTimings}
                 renderGroupExtra={renderSearchCraftLoopExtra}
               />
-            </>
+            </PageSection>
           ) : (
             <EmptyState
               icon={<Search className="h-12 w-12" />}
@@ -2266,9 +2282,10 @@ const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
   "Blinded / Stronghold": "bg-primary",
 };
 
-/** アイテム配置カード内の1セグメント分の行（見出し + ホットバー + メモ）。アイテム名はホットバーの Tooltip でのみ提示する */
+/** アイテム配置タブの1セグメント分の欄（見出し + ホットバー + メモ）。アイテム名はホットバーのヒント（ホバー・フォーカス・タップ）で提示する */
 function ItemLayoutRow({
   layout,
+  slotKeyLabels,
 }: {
   layout: {
     id: string;
@@ -2277,42 +2294,31 @@ function ItemLayoutRow({
     offhand: string | null;
     notes: string | null;
   };
+  slotKeyLabels?: Partial<Record<number, string>>;
 }) {
   const t = useT();
-  const locale = useLocale();
   const slots = JSON.parse(layout.slots) as Slot[];
   const offhand = layout.offhand ? (JSON.parse(layout.offhand) as string[]) : [];
   const dotClass = ITEM_LAYOUT_SEGMENT_DOT_CLASSES[layout.segment] ?? "bg-muted-foreground";
 
   return (
-    <div className="py-4 first:pt-0 last:pb-0 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
-        {layout.segment}
-      </div>
+    <PageSection
+      id={`profile-items-${layout.id}`}
+      icon={<span aria-hidden className={cn("block h-2.5 w-2.5 rounded-full", dotClass)} />}
+      title={layout.segment}
+    >
       <ItemHotbar
         slots={slots}
         offhand={offhand}
         offhandLabel={t("playerProfile.offhandShort")}
-        renderSlotWrapper={({ items, tile }) =>
-          items.length === 0 ? (
-            tile
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>{tile}</div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {items.map((item) => getLocalizedItemName(item, locale)).join(", ")}
-              </TooltipContent>
-            </Tooltip>
-          )
-        }
+        slotKeyLabels={slotKeyLabels}
+        fitMobile
+        itemNameTips
       />
       {layout.notes && (
-        <p className="text-sm text-muted-foreground">{layout.notes}</p>
+        <p className="mt-3 text-sm text-muted-foreground">{layout.notes}</p>
       )}
-    </div>
+    </PageSection>
   );
 }
 
