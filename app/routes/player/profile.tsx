@@ -219,12 +219,16 @@ import {
   SlidersHorizontal,
   Sparkles,
   Speech,
+  CircleHelp,
+  ChevronRight,
 } from "lucide-react";
 import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import { EmptyState } from "@/components/empty-state";
+import { PageSection } from "@/components/page-section";
+import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
 import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
 import {
   Dialog,
@@ -952,7 +956,7 @@ export default function PlayerProfilePage() {
     });
   }
 
-  const playstyleControlsRows: { label: string; value: ReactNode }[] = [];
+  const playstyleControlsRows: { label: ReactNode; value: ReactNode }[] = [];
   if (player.inputMethod) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleInputMethod"),
@@ -967,7 +971,14 @@ export default function PlayerProfilePage() {
   }
   if (player.playstyle?.halfShift) {
     playstyleControlsRows.push({
-      label: t("playerProfile.playstyleHalfShift"),
+      label: (
+        <span className="inline-flex items-center gap-1">
+          {t("playerProfile.playstyleHalfShift")}
+          <HintTip message={t("playerProfile.halfShiftHint")} className="text-muted-foreground">
+            <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+          </HintTip>
+        </span>
+      ),
       value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift),
     });
   }
@@ -1155,6 +1166,44 @@ export default function PlayerProfilePage() {
   // メインプリセットは既定表示そのものなのでバッジは出さない。
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isMain;
+
+  // キー配置タブの仮想キーボード共通 props（デスクトップ版・モバイル版・拡大 Dialog で共有）
+  const vkCommon = {
+    fingerAssignments: userFingerAssignments,
+    remaps: remapsForKeyboard,
+    customActions: player.customActions,
+    showActionLabels: true,
+    showFingerAssignments: true,
+    showRemaps: true,
+  } as const;
+  const keyboardMainProps = { ...vkCommon, layout: keyboardLayout, keybindings: keybindingsMap, customKeys: customKeyboardKeys };
+  // 下の段（ナビは「下の段にナビ」版のときだけ）: ナビ → テンキー → マウス
+  const keyboardLowerRow = (showNav: boolean, navClassName?: string) => (
+    <div className="flex items-start gap-6">
+      {showNav && (
+        <div className={navClassName}>
+          <VirtualKeyboard {...keyboardMainProps} section="nav" />
+        </div>
+      )}
+      {!isTKL && (
+        <VirtualNumpad keybindings={keybindingsMap} {...vkCommon} />
+      )}
+      <VirtualMouse keybindings={keybindingsMap} {...vkCommon} customButtons={customButtons} />
+    </div>
+  );
+  // モバイル版の中身（縮小表示・拡大 Dialog 用。実寸固定で container query は使わない）
+  const keyboardMobileLayout = (
+    <div className="flex flex-col items-start gap-4">
+      <VirtualKeyboard {...keyboardMainProps} section="main" hideNumpad />
+      {keyboardLowerRow(true)}
+    </div>
+  );
+  const skipToKeyList = () => {
+    const heading = document.getElementById("profile-keylist-heading");
+    if (!heading) return;
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+  };
 
   return (
     <>
@@ -1554,105 +1603,99 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
           {hasKeybindingsData ? (
             <>
-              {/* Visual Keyboard */}
-              <Card className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <CardTitle role="heading" aria-level={2} className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
-                      {hasTypedRemaps && (
-                        <RemapViewToggle value={remapView} onChange={setRemapView} />
-                      )}
-                      <FingerLegend />
-                      <KeyboardExportDialog
-                        layout={keyboardLayout}
-                        keybindings={player.keybindings}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={player.keyRemaps}
-                        hasTypedRemaps={hasTypedRemaps}
-                        initialRemapContext={remapView}
-                        customKeys={customKeyboardKeys}
-                        customButtons={customButtons}
-                        isTKL={isTKL}
-                        player={{
-                          uuid: player.uuid,
-                          skinUrl: player.customSkinUrl,
-                          mcid: player.mcid,
-                          displayName: player.displayName,
-                          displayNameAlphabet: player.displayNameAlphabet,
-                          slug: player.slug,
-                        }}
-                      />
-                    </div>
+              <PageSection
+                id="profile-keyboard"
+                title={t("playerProfile.keyboardView")}
+              >
+                {/* ツールバー: 凡例・Trigger/Chat 切替・案内・画像保存 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <FingerLegend />
+                  <HintTip message={t("playerProfile.keyAbbrHint")} className="text-xs text-muted-foreground">
+                    <span className="underline decoration-dotted underline-offset-4">OH / HB</span>
+                    <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                  </HintTip>
+                  {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
+                  {hasTypedRemaps && (
+                    <span className="inline-flex items-center gap-1">
+                      <RemapViewToggle value={remapView} onChange={setRemapView} />
+                      <HintTip message={t("playerProfile.remapViewHint")} className="text-muted-foreground">
+                        <CircleHelp className="h-4 w-4" aria-hidden />
+                      </HintTip>
+                    </span>
+                  )}
+                  <p className="text-xs text-muted-foreground">{t("playerProfile.keyboardTapHint")}</p>
+                  <div className="ml-auto">
+                    <KeyboardExportDialog
+                      layout={keyboardLayout}
+                      keybindings={player.keybindings}
+                      fingerAssignments={userFingerAssignments}
+                      remaps={player.keyRemaps}
+                      hasTypedRemaps={hasTypedRemaps}
+                      initialRemapContext={remapView}
+                      customKeys={customKeyboardKeys}
+                      customButtons={customButtons}
+                      isTKL={isTKL}
+                      player={{
+                        uuid: player.uuid,
+                        skinUrl: player.customSkinUrl,
+                        mcid: player.mcid,
+                        displayName: player.displayName,
+                        displayNameAlphabet: player.displayNameAlphabet,
+                        slug: player.slug,
+                      }}
+                    />
                   </div>
-                </CardHeader>
-                <CardContent className="px-5">
+                </div>
+                <button
+                  type="button"
+                  onClick={skipToKeyList}
+                  className="sr-only rounded-md bg-background px-3 py-1.5 text-sm font-medium focus:not-sr-only focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t("playerProfile.skipToKeyList")}
+                </button>
+                {/* モバイル: 縮小表示＋タップで全画面（レイアウトは「下の段にナビ」固定の実寸） */}
+                <div className="md:hidden">
+                  <KeyboardScaledPreview dialogTitle={t("playerProfile.keyboardView")}>
+                    {keyboardMobileLayout}
+                  </KeyboardScaledPreview>
+                </div>
+                {/* デスクトップ: コンテナ幅 70rem（=1120px）以上で「右にナビ」、未満で「下の段にナビ」。
+                    @container は幅いっぱいのブロック要素に置く（flex 子・w-max・スクロール内容に置くと幅 0 で潰れる）。
+                    両方描いて display:none で片方を隠すので、隠れた側のキーは Tab 順から外れる */}
+                <div className="@container max-md:hidden">
                   <div className="flex flex-col items-start gap-4">
-                    {/* メインキーボード */}
-                    <HorizontalScrollArea showHint>
-                      <VirtualKeyboard
-                        layout={keyboardLayout}
-                        keybindings={keybindingsMap}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={remapsForKeyboard}
-                        customActions={player.customActions}
-                        customKeys={customKeyboardKeys}
-                        showActionLabels
-                        showFingerAssignments
-                        showRemaps
-                        hideNumpad
-                      />
-                    </HorizontalScrollArea>
-                    {/* テンキーとマウスを横並び */}
-                    <HorizontalScrollArea>
-                      <div className="flex items-start gap-6">
-                        {!isTKL && (
-                          <VirtualNumpad
-                            keybindings={keybindingsMap}
-                            fingerAssignments={userFingerAssignments}
-                            remaps={remapsForKeyboard}
-                            customActions={player.customActions}
-                            showActionLabels
-                            showFingerAssignments
-                            showRemaps
-                          />
-                        )}
-                        <VirtualMouse
-                          keybindings={keybindingsMap}
-                          fingerAssignments={userFingerAssignments}
-                          remaps={remapsForKeyboard}
-                          customActions={player.customActions}
-                          customButtons={customButtons}
-                          showActionLabels
-                          showFingerAssignments
-                          showRemaps
-                        />
-                      </div>
+                    <div className="hidden w-full @min-[70rem]:block">
+                      <HorizontalScrollArea showHint surface="background">
+                        <VirtualKeyboard {...keyboardMainProps} hideNumpad />
+                      </HorizontalScrollArea>
+                    </div>
+                    <div className="w-full @min-[70rem]:hidden">
+                      <HorizontalScrollArea showHint surface="background">
+                        <VirtualKeyboard {...keyboardMainProps} section="main" hideNumpad />
+                      </HorizontalScrollArea>
+                    </div>
+                    <HorizontalScrollArea surface="background">
+                      {keyboardLowerRow(true, "@min-[70rem]:hidden")}
                     </HorizontalScrollArea>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </PageSection>
 
-              {/* List View */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {keybindingDisplayGroups.map((group) => {
-                  const bindings = group.actions
-                    .map((action) => keybindingsByAction.get(action))
-                    .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
-                  if (bindings.length === 0) return null;
+              {/* 割り当て一覧 */}
+              <PageSection id="profile-keylist" title={t("playerProfile.keyListTitle")}>
+                <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+                  {keybindingDisplayGroups.map((group) => {
+                    const bindings = group.actions
+                      .map((action) => keybindingsByAction.get(action))
+                      .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
+                    if (bindings.length === 0) return null;
 
-                  return (
-                    <Card key={group.key} className="gap-3 py-5">
-                      <CardHeader className="px-5">
-                        <CardTitle role="heading" aria-level={2} className={`text-base ${group.colorClass}`}>
-                          {group.label}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-5">
+                    return (
+                      <div key={group.key} className="space-y-2">
+                        <h3 className={`text-base font-semibold ${group.colorClass}`}>{group.label}</h3>
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -1666,20 +1709,14 @@ export default function PlayerProfilePage() {
                             </div>
                           ))}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
 
-                {/* カスタムアクション（登録されている場合のみ） */}
-                {player.customActions.length > 0 && (
-                  <Card className="gap-3 py-5">
-                    <CardHeader className="px-5">
-                      <CardTitle role="heading" aria-level={2} className="text-base">
-                        {t("playerProfile.customActions")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5">
+                  {/* カスタムアクション（登録されている場合のみ） */}
+                  {player.customActions.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-base font-semibold">{t("playerProfile.customActions")}</h3>
                       <div className="divide-y">
                         {player.customActions.map((ca) => {
                           const chips = resolveKeyCombinationChips(ca.triggerKey);
@@ -1705,19 +1742,19 @@ export default function PlayerProfilePage() {
                           );
                         })}
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
+                  )}
 
-                {/* リマップ（登録されている場合のみ） */}
-                {player.keyRemaps.length > 0 && (
-                  <Card className="gap-3 py-5">
-                    <CardHeader className="px-5">
-                      <CardTitle role="heading" aria-level={2} className="text-base">
-                        {t("playerProfile.remaps")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5">
+                  {/* リマップ（登録されている場合のみ。既定は閉じる） */}
+                  {player.keyRemaps.length > 0 && (
+                    <details className="group space-y-2 lg:col-span-2">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+                        <h3 className="text-base font-semibold">{t("playerProfile.remaps")}</h3>
+                        <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
+                          {player.keyRemaps.length}
+                        </Badge>
+                      </summary>
                       <div className="divide-y">
                         {player.keyRemaps.map((remap) => {
                           const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
@@ -1768,10 +1805,10 @@ export default function PlayerProfilePage() {
                           );
                         })}
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+                    </details>
+                  )}
+                </div>
+              </PageSection>
             </>
           ) : (
             <EmptyState
@@ -2572,7 +2609,7 @@ function SocialLinkRichCard({
   );
 }
 
-function DeviceRow({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
+function DeviceRow({ label, value, unit }: { label: ReactNode; value: ReactNode; unit?: string }) {
   return (
     <div className="flex justify-between items-center py-2.5">
       <span className="text-sm">{label}</span>

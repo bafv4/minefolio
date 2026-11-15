@@ -11,19 +11,23 @@ interface HorizontalScrollAreaProps {
   wrapperClassName?: string;
   /** はみ出し時に「横にスクロールできます」を表示する（狭い画面のみ） */
   showHint?: boolean;
+  /** 端のフェードの色＝置き場所の面。既定はカード内（bg-card）、箱なしの欄に置くときは "background" */
+  surface?: "card" | "background";
 }
 
 /**
  * 横にはみ出す要素を包み、続きがある側にだけ端のフェードを出すスクロール領域。
  * はみ出していないときはレイアウトも見た目も通常の overflow-x-auto と変わらない。
- * フェードは bg-card 想定（カード内で使う）。
+ * フェードの色は置き場所の面に合わせる（既定はカード内の bg-card、箱なしの欄では surface="background"）。
  */
 export function HorizontalScrollArea({
   children,
   className,
   wrapperClassName,
   showHint = false,
+  surface = "card",
 }: HorizontalScrollAreaProps) {
+  const fadeFrom = surface === "background" ? "from-background" : "from-card";
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -72,14 +76,16 @@ export function HorizontalScrollArea({
         <div
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-card to-transparent transition-opacity",
+            "pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r to-transparent transition-opacity",
+            fadeFrom,
             edges.left ? "opacity-100" : "opacity-0",
           )}
         />
         <div
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-card to-transparent transition-opacity",
+            "pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l to-transparent transition-opacity",
+            fadeFrom,
             edges.right ? "opacity-100" : "opacity-0",
           )}
         />
