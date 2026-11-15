@@ -672,7 +672,8 @@ body {
     height: auto;
   }
 
-  /* YouTube embed in view page */
+  /* YouTube embed in view page。本文の直下の動画は YouTubeClickEmbed（押してから読み込む）に置き換わり、
+     ここに当たるのはコールアウト・トグル・段組の中に残る iframe（guide-embeds.tsx の splitContentAtEmbeds） */
   div[data-youtube-video] {
     @apply my-4;
   }
@@ -1502,6 +1503,14 @@ body {
 .guide-content.prose .guide-link-cover {
   margin: 0;
   border-radius: 0;
+}
+
+/* 本文の直下の YouTube（YouTubeClickEmbed）。サムネイルに本文の画像の余白・角丸・高さを当てない */
+.guide-content.prose .guide-youtube-embed img {
+  margin: 0;
+  border-radius: 0;
+  max-width: none;
+  height: 100%;
 }
 
 /* Columns layout in view */

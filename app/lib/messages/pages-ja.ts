@@ -8,6 +8,9 @@ export const PAGES_JA = {
     copied: "コピーしました",
     /** 横にはみ出す表の器（キーボードで横スクロールできる領域）の名前 */
     tableScrollRegion: "表（横にスクロールできます）",
+    /** 本文の YouTube（iframe の title・再生ボタンの名前。n は本文中の順番） */
+    youtubeTitle: "YouTube 動画 {n}",
+    youtubePlay: "YouTube 動画 {n} を再生",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
     embedTemplateUnavailable: "このテンプレートは表示できません",

@@ -16,6 +16,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     copy: "Copy",
     copied: "Copied",
     tableScrollRegion: "Table (scrolls horizontally)",
+    youtubeTitle: "YouTube video {n}",
+    youtubePlay: "Play YouTube video {n}",
     draftPreviewNotice:
       "You're viewing a draft preview. It may differ from the published version.",
     embedUserNotFound: 'User "{slug}" not found',

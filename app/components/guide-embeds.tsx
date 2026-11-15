@@ -27,6 +27,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
+import { GUIDE_YOUTUBE_BLOCK_SOURCE, htmlDepthDelta, parseGuideYouTubeEmbedUrl } from "@/lib/guide-view-html";
 import { parseTemplateRemaps } from "@/lib/search-craft-templates";
 import { getGameLanguageName } from "@/lib/game-languages";
 import type { UiRemapInfo } from "@/lib/remap-utils";
@@ -159,15 +160,52 @@ export type ContentSegment =
   | { type: "keybind-embed"; userSlug: string; presetName: string | null }
   | { type: "searchcraft-embed"; userSlug: string; presetName: string | null }
   /** サーチクラフトテンプレート埋め込み。templateId は形式外・欠落なら null（描画側で「表示できません」） */
-  | { type: "sctemplate-embed"; templateId: string | null };
+  | { type: "sctemplate-embed"; templateId: string | null }
+  /**
+   * 本文の直下の YouTube 埋め込み（押してから読み込む YouTubeClickEmbed で描く）。embedUrl は
+   * youtube-nocookie.com の埋め込み URL。index は本文中の YouTube の出現順（1 始まり、入れ子の動画も数える。
+   * titleGuideYouTubeIframes の番号と一致し、title / 再生ボタンの名前を一意にするのに使う）
+   */
+  | { type: "youtube"; embedUrl: string; index: number };
 
+const EMBED_REGEX_SOURCE = `<div[^>]*data-(keybind|searchcraft|sctemplate)-embed[^>]*></div>|${GUIDE_YOUTUBE_BLOCK_SOURCE}`;
+
+/**
+ * YouTube は本文の直下（要素の深さ 0）のものだけ分割する。コールアウト・トグル・段組の中で切ると
+ * 開きタグと閉じタグが別々の断片に分かれて本文の構造が壊れるため、入れ子の動画は iframe のまま
+ * 断片に残す（loader の titleGuideYouTubeIframes が title と loading="lazy" を付けている）。
+ * src が無い（許可外ホストでサニタイズが除去した）直下の動画は何も描かない（空の iframe を出さない）。
+ * src はあるが押してから読み込む形に直せない動画（再生リスト等。parseGuideYouTubeEmbedUrl）は iframe のまま残す。
+ */
 export function splitContentAtEmbeds(html: string): ContentSegment[] {
   const segments: ContentSegment[] = [];
-  const embedRegex = /<div[^>]*data-(keybind|searchcraft|sctemplate)-embed[^>]*><\/div>/g;
+  const embedRegex = new RegExp(EMBED_REGEX_SOURCE, "g");
 
   let lastIndex = 0;
+  // 直前の一致の終わりまでの要素の深さ（YouTube が本文の直下にあるかの判定）
+  let depth = 0;
+  let depthScannedTo = 0;
+  let youtubeIndex = 0;
   let match;
   while ((match = embedRegex.exec(html)) !== null) {
+    depth += htmlDepthDelta(html.slice(depthScannedTo, match.index));
+    depthScannedTo = match.index + match[0].length;
+
+    if (match[1] === undefined) {
+      // YouTube（一致はそれ自体で開閉が揃うので深さを変えない）
+      youtubeIndex += 1;
+      if (depth > 0) continue; // 入れ子は断片に残す
+      const iframeAttrs = match[2] ?? "";
+      const embedUrl = parseGuideYouTubeEmbedUrl(iframeAttrs);
+      if (!embedUrl && /\ssrc="/.test(iframeAttrs)) continue; // 直せない動画（再生リスト等）は断片に残す
+      if (match.index > lastIndex) {
+        segments.push({ type: "html", content: html.slice(lastIndex, match.index) });
+      }
+      if (embedUrl) segments.push({ type: "youtube", embedUrl, index: youtubeIndex });
+      lastIndex = match.index + match[0].length;
+      continue;
+    }
+
     // HTMLテキスト部分
     if (match.index > lastIndex) {
       segments.push({ type: "html", content: html.slice(lastIndex, match.index) });

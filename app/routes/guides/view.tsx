@@ -45,7 +45,8 @@ import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { isGuideTableOverflowing, normalizeGuideTables } from "@/lib/guide-tables";
-import { annotateGuideCallouts } from "@/lib/guide-view-html";
+import { annotateGuideCallouts, titleGuideYouTubeIframes } from "@/lib/guide-view-html";
+import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import {
   extractEmbedRefs,
   extractTemplateEmbedIds,
@@ -446,8 +447,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 見出し(h1〜h3)に id を付与し、目次データを生成する
   // 目次は元のレベルで抽出し、その後に本文見出しを1段下げる（ページタイトルが h1 のため。guide-heading-demote.ts）
   const { html: tocHtml, toc } = buildTableOfContents(wrappedContent);
-  // コールアウトに role="note" と種類名の aria-label を付ける（アイコンは装飾なので種類を読み上げで伝える。
-  // サニタイズで落ちる属性なので後段で足す。guide-view-html.ts）
+  // コールアウトに role="note" と種類名の aria-label を付け（アイコンは装飾なので種類を読み上げで伝える）、
+  // YouTube の iframe に番号付きの title を付ける（どちらもサニタイズで落ちる属性なので後段で足す。guide-view-html.ts）
   const tView = createTranslator(resolveLocale(request));
   const calloutLabels: Record<string, string> = {
     tip: tView("guideEditor.callout.tip"),
@@ -455,9 +456,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     warning: tView("guideEditor.callout.warning"),
     danger: tView("guideEditor.callout.danger"),
   };
-  const contentWithIds = annotateGuideCallouts(
-    blankGenericImageAlt(demoteGuideHeadings(tocHtml)),
-    (type) => calloutLabels[type] ?? null,
+  const contentWithIds = titleGuideYouTubeIframes(
+    annotateGuideCallouts(
+      blankGenericImageAlt(demoteGuideHeadings(tocHtml)),
+      (type) => calloutLabels[type] ?? null,
+    ),
+    (n) => tView("guideView.youtubeTitle", { n }),
   );
 
   // Extract embed references and fetch user data
@@ -817,6 +821,18 @@ function GuideContent({
         {segments.map((seg, i) => {
           if (seg.type === "html") {
             return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
+          }
+          if (seg.type === "youtube") {
+            // 本文の直下の動画は押してから読み込む（ui.md 8 章。入れ子の動画は iframe のまま。guide-embeds.tsx）
+            return (
+              <YouTubeClickEmbed
+                key={i}
+                embedUrl={seg.embedUrl}
+                title={t("guideView.youtubeTitle", { n: seg.index })}
+                playLabel={t("guideView.youtubePlay", { n: seg.index })}
+                className="guide-youtube-embed not-prose my-4 rounded-xl"
+              />
+            );
           }
           if (seg.type === "sctemplate-embed") {
             return (
