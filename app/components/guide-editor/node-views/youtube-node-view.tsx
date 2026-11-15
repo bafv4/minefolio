@@ -26,7 +26,7 @@ export function YoutubeNodeView({
   return (
     <NodeViewWrapper>
       <div className="relative group my-4">
-        <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-lg">
+        <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl">
           <iframe
             src={embedUrl}
             className="absolute top-0 left-0 w-full h-full"

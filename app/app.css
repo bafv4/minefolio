@@ -666,7 +666,8 @@ body {
   }
 
   .ProseMirror div[data-youtube-video] > iframe {
-    @apply w-full rounded-lg;
+    @apply w-full;
+    border-radius: var(--guide-radius, var(--radius-xl));
     aspect-ratio: 16 / 9;
     height: auto;
   }
@@ -677,7 +678,8 @@ body {
   }
 
   div[data-youtube-video] > iframe {
-    @apply w-full rounded-lg;
+    @apply w-full;
+    border-radius: var(--guide-radius, var(--radius-xl));
     aspect-ratio: 16 / 9;
     height: auto;
   }
@@ -911,15 +913,18 @@ body {
     margin: 0.75em 0;
   }
 
+  /* 本文の中の埋め込み（キー配置・サーチクラフト・テンプレート）と同じ面（bg-card・枠 /70）。
+     ホバーは一覧カードと同じ枠 primary/40 ＋ shadow-md で、浮かせない（本文の中の物なので。ui.md 6 章） */
   .guide-link-card:hover .guide-link-inner {
-    border-color: color-mix(in oklch, var(--border) 100%, oklch(0.5 0 0) 30%);
-    box-shadow: 0 2px 8px color-mix(in oklch, var(--foreground) 6%, transparent);
+    border-color: color-mix(in oklch, var(--primary) 40%, transparent);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   .guide-link-inner {
     display: flex;
-    border: 1px solid var(--border);
-    border-radius: 0.5em;
+    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+    border-radius: var(--guide-radius, var(--radius-xl));
+    background: var(--card);
     overflow: hidden;
     text-decoration: none;
     color: inherit;
@@ -987,7 +992,8 @@ body {
   --tw-prose-bold: var(--foreground);
   --tw-prose-counters: var(--muted-foreground);
   --tw-prose-bullets: var(--muted-foreground);
-  --tw-prose-hr: var(--border);
+  /* 区切り線は欄の区切りと同じ foreground/15（ui.md 6 章「透明度」） */
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
   --tw-prose-quotes: var(--foreground);
   --tw-prose-quote-borders: var(--border);
   --tw-prose-captions: var(--muted-foreground);
@@ -996,8 +1002,32 @@ body {
   --tw-prose-code: var(--foreground);
   --tw-prose-pre-code: var(--foreground);
   --tw-prose-pre-bg: var(--muted);
-  --tw-prose-th-borders: var(--border);
-  --tw-prose-td-borders: var(--border);
+  /* 表の行の区切りはカード内の区切りと同じ /60 */
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  /* 本文直下のブロック（コールアウト・トグル・コード・表の器・画像・ガイドリンク・YouTube）の角丸。
+     ui.md 6 章の 2 層: 本文直下は rounded-xl、箱（コールアウト・トグル・表のセル）の中では 1 段ずつ下げる
+     （下の「ブロックの角丸の入れ子」）。インラインの code は rounded のまま */
+  --guide-radius: var(--radius-xl);
+}
+
+/* ブロックの角丸の入れ子: 箱の子孫は 1 段下げる（自分自身の角丸は親から受けた値のまま） */
+.guide-content.prose :is(.callout, details, td, th) > * {
+  --guide-radius: var(--radius-lg);
+}
+.guide-content.prose :is(.callout, details) :is(.callout, details) > * {
+  --guide-radius: var(--radius-md);
+}
+
+/* 本文のリンク・トグルの見出しのキーボードフォーカス（リングは --ring、2px） */
+.guide-content.prose a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.guide-content.prose summary:focus-visible {
+  /* トグルの枠いっぱいに広げた summary なので、外へ出さず枠の内側に引く */
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 /* 本文の行長制限（max-width + 中央寄せ）は設けない。一度 65ch → 36rem 固定カラムを
@@ -1164,7 +1194,7 @@ body {
   position: relative;
   background: var(--muted);
   color: var(--foreground);
-  border-radius: 0.5em;
+  border-radius: var(--guide-radius);
   margin-top: 0.75em;
   margin-bottom: 0.75em;
 }
@@ -1212,7 +1242,7 @@ body {
 }
 
 .guide-content.prose :where(img) {
-  border-radius: 0.5em;
+  border-radius: var(--guide-radius);
   margin-top: 0.75em;
   margin-bottom: 0.75em;
   max-width: 100%;
@@ -1236,7 +1266,7 @@ body {
 }
 
 .guide-content.prose :where(hr) {
-  border-color: var(--border);
+  border-color: var(--tw-prose-hr);
   margin-top: 2em;
   margin-bottom: 2em;
 }
@@ -1245,6 +1275,7 @@ body {
   overflow-x: auto;
   margin-top: 0.75em;
   margin-bottom: 0.75em;
+  border-radius: var(--guide-radius);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1376,6 +1407,12 @@ body {
 
 .guide-content.prose .guide-link-title {
   color: var(--foreground);
+}
+
+/* カード内のカバー画像には本文の画像の余白・角丸を当てない（角はカードの overflow: hidden が切る） */
+.guide-content.prose .guide-link-cover {
+  margin: 0;
+  border-radius: 0;
 }
 
 /* Columns layout in view */
