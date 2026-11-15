@@ -3,19 +3,34 @@
 // - xl 未満: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
 // どちらも共通の TocList を描画し、現在表示中の見出しをハイライトする。
 // 最上位の階層だけを常に出し、下の階層は「いま読んでいる節」の分だけ既定で展開する（visibleTocItems）。
-// 節ごとの開閉ボタンで手動の開閉もでき、サイドバーは目次全体も畳める（状態は保存しない）。
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+// 節ごとの開閉ボタンで手動の開閉もできる（状態は保存しない）。
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useT } from "@/hooks/use-locale";
-import { ChevronRight, List } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  List,
+} from "lucide-react";
 import { useOverlayScrollbarY } from "@/hooks/use-overlay-scrollbar-y";
 import { cn } from "@/lib/utils";
 import {
   visibleTocItems,
   tocSectionKeys,
   tocDisplayedActiveId,
+  tocAllSectionOverrides,
   TOC_LEAD_SECTION,
   type TocItem,
 } from "@/lib/guide-toc";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -147,6 +162,52 @@ function useTocMaxHeight(): string {
   return maxHeight;
 }
 
+/** ドロワーの「すべて開く／閉じる」（モバイルで高さ 44px） */
+const TOUCH_TEXT_BUTTON =
+  "flex min-h-11 items-center rounded px-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+
+/**
+ * 節ごとの手動の開閉（overrides）と、「すべて開く／閉じる」。状態は保存しない（親が key で記事ごとに作り直す）。
+ * 開閉できる節（配下を持つ節）が無い目次では hasSections が false になり、ボタンを出さない。
+ */
+function useTocOverrides(items: TocItem[]) {
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const hasSections = Object.keys(tocAllSectionOverrides(items, true)).length > 0;
+  return {
+    overrides,
+    setOverrides,
+    hasSections,
+    expandAll: () => setOverrides(tocAllSectionOverrides(items, true)),
+    collapseAll: () => setOverrides(tocAllSectionOverrides(items, false)),
+  };
+}
+
+/** サイドバーの小さなアイコンボタン（24px 以上の押せる範囲 28px）。読み上げ名は sr-only、見た目の名前は Tooltip */
+function TocIconButton({
+  label,
+  children,
+  ...rest
+}: {
+  label: string;
+  children: ReactNode;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "type">) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          {...rest}
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {children}
+          <span className="sr-only">{label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * 目次リスト本体（サイドバー・ドロワー共通）。左の細い縦線の上に、アクティブ項目だけ brand の線を載せる。
  * 最上位の項目ごとに、配下の開閉ボタン（シェブロン）を持つ。既定の開閉は「読んでいる節だけ開く」で、
@@ -156,12 +217,17 @@ function useTocMaxHeight(): string {
 function TocList({
   items,
   activeId,
+  overrides,
+  onOverridesChange: setOverrides,
   onNavigate,
   touch = false,
   id,
 }: {
   items: TocItem[];
   activeId: string | null;
+  /** 節ごとの手動の開閉（親が持つ。「すべて開く／閉じる」と共有する） */
+  overrides: Record<string, boolean>;
+  onOverridesChange: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
   onNavigate?: (id: string) => void;
   /** true で項目・開閉ボタンの高さを 44px にする（ドロワー用） */
   touch?: boolean;
@@ -169,7 +235,6 @@ function TocList({
 }) {
   const t = useT();
   const baseId = useId();
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const visible = visibleTocItems(items, activeId, overrides);
   const visibleIds = new Set(visible.map((i) => i.id));
   const displayedActiveId = tocDisplayedActiveId(items, visible, activeId);
@@ -277,8 +342,7 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
   const { scrollerRef, scrollbar } = useOverlayScrollbarY();
   useFollowActiveHeading(scrollerRef, activeId);
   const maxHeight = useTocMaxHeight();
-  const [open, setOpen] = useState(true);
-  const listId = useId();
+  const { overrides, setOverrides, hasSections, expandAll, collapseAll } = useTocOverrides(items);
   if (items.length < 2) return null;
 
   return (
@@ -291,30 +355,32 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
       style={{ maxHeight }}
       className="sticky top-24 flex flex-col"
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((v) => !v)}
-        className="mb-2 flex min-h-7 w-full shrink-0 items-center justify-between rounded text-left text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {t("guideToc.title")}
-        <ChevronRight
-          className={cn(
-            "mr-1.5 h-4 w-4 text-muted-foreground transition-transform motion-reduce:transition-none",
-            open && "rotate-90",
-          )}
-          aria-hidden
-        />
-      </button>
+      <div className="mb-2 flex min-h-7 shrink-0 items-center gap-0.5">
+        <span className="min-w-0 flex-1 text-sm font-semibold">{t("guideToc.title")}</span>
+        {hasSections && (
+          <>
+            <TocIconButton label={t("guideToc.expandAll")} onClick={expandAll}>
+              <ChevronsUpDown className="h-4 w-4" aria-hidden />
+            </TocIconButton>
+            <TocIconButton label={t("guideToc.collapseAll")} onClick={collapseAll}>
+              <ChevronsDownUp className="h-4 w-4" aria-hidden />
+            </TocIconButton>
+          </>
+        )}
+      </div>
       {/* max-h では percentage 高さ（h-full）が解決しないため、
           入れ子の flex-col + flex-1 でスクローラを高さ制約する */}
-      <div className={cn("relative flex min-h-0 flex-1 flex-col", !open && "hidden")}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollerRef}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          <TocList items={items} activeId={activeId} id={listId} />
+          <TocList
+            items={items}
+            activeId={activeId}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
+          />
         </div>
         {scrollbar}
       </div>
@@ -334,6 +400,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   // ドロワーから選んで閉じる間は true。閉じたあとの Radix のフォーカス復帰（トリガーへ）を止め、見出しへ移す
   const jumpingRef = useRef(false);
   useFollowActiveHeading(scrollRef, activeId);
+  const { overrides, setOverrides, hasSections, expandAll, collapseAll } = useTocOverrides(items);
   const activeItem = items.find((i) => i.id === activeId);
   if (items.length < 2) return null;
 
@@ -397,11 +464,23 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
             <List className="h-4 w-4 text-muted-foreground" />
             {t("guideToc.title")}
           </SheetTitle>
+          {hasSections && (
+            <div className="flex items-center gap-1 border-b border-border/60 px-3">
+              <button type="button" onClick={expandAll} className={TOUCH_TEXT_BUTTON}>
+                {t("guideToc.expandAll")}
+              </button>
+              <button type="button" onClick={collapseAll} className={TOUCH_TEXT_BUTTON}>
+                {t("guideToc.collapseAll")}
+              </button>
+            </div>
+          )}
           <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3">
             {/* 項目タップで閉じてからスクロールする（handleNavigate） */}
             <TocList
               items={items}
               activeId={activeId}
+              overrides={overrides}
+              onOverridesChange={setOverrides}
               onNavigate={handleNavigate}
               touch
             />

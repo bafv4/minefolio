@@ -56,6 +56,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Contents",
     close: "Close",
     sectionToggle: "Show or hide subsections of \"{title}\"",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
   },
   backToTop: {
     label: "Back to top",

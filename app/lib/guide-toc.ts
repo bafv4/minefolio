@@ -174,6 +174,24 @@ export function tocSectionKeys(items: TocItem[]): string[] {
 }
 
 /**
+ * 配下を持つ節すべてを `open` に揃える overrides を作る（「すべて開く／閉じる」用）。
+ * 配下を持たない節と先頭の孤立した下位見出しの塊（`TOC_LEAD_SECTION`）は含めない。
+ * 空オブジェクトなら、開閉できる節が無い（ボタンを出さない）。
+ */
+export function tocAllSectionOverrides(
+  items: TocItem[],
+  open: boolean,
+): Record<string, boolean> {
+  const topLevel = items.length === 0 ? 0 : Math.min(...items.map((i) => i.level));
+  const keys = tocSectionKeys(items);
+  const result: Record<string, boolean> = {};
+  items.forEach((item, idx) => {
+    if (item.level !== topLevel && keys[idx] !== TOC_LEAD_SECTION) result[keys[idx]] = open;
+  });
+  return result;
+}
+
+/**
  * 目次に表示する項目を返す（折りたたみ）。
  * - 最上位（items の最小 level）は常に表示する。
  * - それより下の階層は、節（最上位項目から次の最上位項目の手前まで）が開いているときだけ表示する。

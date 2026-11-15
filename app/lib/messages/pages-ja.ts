@@ -49,6 +49,8 @@ export const PAGES_JA = {
     title: "目次",
     close: "閉じる",
     sectionToggle: "「{title}」の小見出しを開閉",
+    expandAll: "すべて開く",
+    collapseAll: "すべて閉じる",
   },
   /** ページ上部へ戻るボタン */
   backToTop: {

@@ -4,6 +4,7 @@ import {
   visibleTocItems,
   tocSectionKeys,
   tocDisplayedActiveId,
+  tocAllSectionOverrides,
   TOC_LEAD_SECTION,
 } from "../guide-toc";
 
@@ -227,6 +228,38 @@ describe("visibleTocItems（手動の開閉）", () => {
       { id: "t", text: "T", level: 1 },
     ];
     expect(ids(visibleTocItems(xs, "o", { [TOC_LEAD_SECTION]: false }))).toEqual(["o", "t"]);
+  });
+
+  it("tocAllSectionOverrides: 配下を持つ節だけを全部開く／閉じる", () => {
+    expect(tocAllSectionOverrides(items, true)).toEqual({ a: true, b: true });
+    expect(tocAllSectionOverrides(items, false)).toEqual({ a: false, b: false });
+    // 「すべて閉じる」は読んでいる節も畳む
+    expect(ids(visibleTocItems(items, "a1x", tocAllSectionOverrides(items, false)))).toEqual(["a", "b", "c"]);
+    expect(ids(visibleTocItems(items, null, tocAllSectionOverrides(items, true)))).toEqual(
+      ["a", "a1", "a1x", "b", "b1", "c"],
+    );
+  });
+
+  it("tocAllSectionOverrides: 開閉できる節が無ければ空（先頭の孤立見出しも除く）", () => {
+    expect(tocAllSectionOverrides([], true)).toEqual({});
+    expect(
+      tocAllSectionOverrides(
+        [
+          { id: "a", text: "A", level: 1 },
+          { id: "b", text: "B", level: 1 },
+        ],
+        true,
+      ),
+    ).toEqual({});
+    expect(
+      tocAllSectionOverrides(
+        [
+          { id: "o", text: "O", level: 2 },
+          { id: "t", text: "T", level: 1 },
+        ],
+        true,
+      ),
+    ).toEqual({});
   });
 });
 
