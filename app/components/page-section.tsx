@@ -7,7 +7,7 @@ import { useT } from "@/hooks/use-locale";
 /** 見出し右のリンク。sm 未満はアイコンのみ（44px 角・ラベルは sr-only）、sm 以上は文字＋アイコン */
 export function SectionHeaderLink({ to, label, prefetch }: { to: string; label: string; prefetch?: "intent" }) {
   return (
-    <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto">
+    <Button variant="ghost" size="sm" asChild className="size-11 shrink-0 sm:size-auto sm:min-h-8">
       <Link to={to} prefetch={prefetch}>
         <span className="sr-only sm:not-sr-only">{label}</span>
         <ArrowRight className="h-3.5 w-3.5 sm:ml-1" aria-hidden="true" />
@@ -48,7 +48,7 @@ export function PageSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className="space-y-4 border-t border-foreground/15 pt-6"
+      className="scroll-mt-20 space-y-4 border-t border-foreground/15 pt-6"
     >
       <div className="flex flex-nowrap items-center gap-x-2 sm:gap-x-3">
         {icon && <div className="shrink-0">{icon}</div>}
