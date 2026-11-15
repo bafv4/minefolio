@@ -447,6 +447,8 @@ export const PAGES_JA = {
     liveStreaming: "配信中",
     liveWatchTwitch: "Twitch で見る",
     liveWatchOf: "（{name} の配信）",
+    liveUpdatedSecondsAgo: "{count}秒前に更新",
+    liveUpdatedMinutesAgo: "{count}分前に更新",
     liveFavoritesFirstNote: "お気に入りの走者にはハートマークが付き、先頭に表示されます",
     liveFinished: "完走",
     liveRunReset: "リセット",

@@ -446,6 +446,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     liveStreaming: "Streaming",
     liveWatchTwitch: "Watch on Twitch",
     liveWatchOf: " ({name}'s stream)",
+    liveUpdatedSecondsAgo: "Updated {count}s ago",
+    liveUpdatedMinutesAgo: "Updated {count}m ago",
     liveFavoritesFirstNote: "Your favorite runners are marked with a heart and listed first",
     liveFinished: "Finished",
     liveRunReset: "Reset",

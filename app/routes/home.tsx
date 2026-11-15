@@ -57,6 +57,7 @@ import { GuestHero } from "@/components/home/guest-hero";
 import { LiveTeaser } from "@/components/home/live-teaser";
 import { LiveRail, type LiveRailEntry } from "@/components/home/live-rail";
 import { LiveSplitStrip } from "@/components/home/live-split-strip";
+import { LiveUpdatedAt } from "@/components/home/live-updated-at";
 import { FavoriteActivity } from "@/components/home/favorite-activity";
 import { CompactProfileList } from "@/components/home/compact-profiles";
 import { HomeVideoCard } from "@/components/home/home-video-card";
@@ -927,6 +928,7 @@ export default function HomePage() {
         {hasFavoriteLive && (
           <FavoritesFirstNote>{t("home.liveFavoritesFirstNote")}</FavoritesFirstNote>
         )}
+        <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
         {(feed.loading.liveRuns || liveSettled) && (
           <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
