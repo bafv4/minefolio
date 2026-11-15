@@ -749,10 +749,10 @@ function VirtualKeyboardComponent({
                   <span className="font-medium text-[10px] text-muted-foreground">
                     {displayLabel}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/70">→</span>
+                  <span className="text-[10px] text-muted-foreground">→</span>
                   <span className={cn(
                     "font-bold text-[10px]",
-                    isDisabled ? "text-destructive/80" : "text-foreground"
+                    isDisabled ? "text-destructive" : "text-foreground"
                   )}>
                     {targetLabel}
                   </span>
@@ -993,12 +993,12 @@ function VirtualKeyboardComponent({
                       {ck.label}
                     </span>
                     <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                      <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+                      <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                       <span
                         className={cn(
                           "font-bold leading-tight truncate min-w-0",
                           labelFontClass(remapTargetLabel ?? ""),
-                          isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                          isRemapDisabled ? "text-destructive" : "text-foreground",
                         )}
                       >
                         {remapTargetLabel}
@@ -1015,12 +1015,12 @@ function VirtualKeyboardComponent({
                     >
                       {ck.label}
                     </span>
-                    <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+                    <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                     <span
                       className={cn(
                         "font-bold leading-tight truncate min-w-0",
                         labelFontClass(remapTargetLabel ?? ""),
-                        isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                        isRemapDisabled ? "text-destructive" : "text-foreground",
                       )}
                     >
                       {remapTargetLabel}
@@ -1269,12 +1269,12 @@ export function VirtualMouse({
                 {button.label}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                 <span
                   className={cn(
                     "font-bold leading-tight truncate min-w-0",
                     labelFontClass(remapTargetLabel ?? ""),
-                    isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                    isRemapDisabled ? "text-destructive" : "text-foreground",
                   )}
                 >
                   {remapTargetLabel}
@@ -1286,10 +1286,10 @@ export function VirtualMouse({
               <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
                 {button.label}
               </span>
-              <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive/80" : "text-foreground"
+                isRemapDisabled ? "text-destructive" : "text-foreground"
               )}>
                 {remapTargetLabel}
               </span>
@@ -1526,10 +1526,10 @@ export function VirtualNumpad({
                 {displayLabel}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                 <span className={cn(
                   "font-bold leading-tight truncate min-w-0 text-[11px]",
-                  isRemapDisabled ? "text-destructive/80" : "text-foreground"
+                  isRemapDisabled ? "text-destructive" : "text-foreground"
                 )}>
                   {remapTargetLabel}
                 </span>
@@ -1540,10 +1540,10 @@ export function VirtualNumpad({
               <span className="font-medium leading-none truncate min-w-0 text-[10px] text-muted-foreground">
                 {displayLabel}
               </span>
-              <span className="leading-none text-[10px] text-muted-foreground/70 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
               <span className={cn(
                 "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive/80" : "text-foreground"
+                isRemapDisabled ? "text-destructive" : "text-foreground"
               )}>
                 {remapTargetLabel}
               </span>
