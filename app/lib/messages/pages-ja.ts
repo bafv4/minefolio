@@ -4,6 +4,8 @@ export const PAGES_JA = {
     notFoundTitle: "ガイドが見つかりません - Minefolio",
     metaDescription: "{name}のガイド",
     copy: "コピー",
+    /** コードブロックのコピーボタンの成功時（ボタンの名前と読み上げ） */
+    copied: "コピーしました",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
     embedTemplateUnavailable: "このテンプレートは表示できません",

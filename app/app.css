@@ -1204,23 +1204,42 @@ body {
   font-size: 0.875em;
 }
 
+/* コピーボタン（guides/view.tsx の useCodeCopyButtons が差し込む）。見た目 28px（rem 固定。コードの
+   文字の大きさに左右されない）。押せる範囲は ::after で 44px に広げる（ui.md 9 章。上と右の 8px は
+   pre の内側に収まるので、横スクロールの pre に切り抜かれない） */
 .guide-content.prose .code-copy-btn {
   position: absolute;
-  top: 0.5em;
-  right: 0.5em;
+  top: 0.5rem;
+  right: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.75em;
-  height: 1.75em;
-  border-radius: 0.375em;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-md);
   background: color-mix(in oklch, var(--background) 80%, transparent);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   color: var(--muted-foreground);
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
   cursor: pointer;
-  font-size: 0.75em;
+  font-size: 0.75rem;
+}
+
+.guide-content.prose .code-copy-btn::after {
+  content: "";
+  position: absolute;
+  inset: -0.5rem;
+}
+
+/* タッチ端末はホバーできないので常に出す。1 行目の右端がボタンに隠れないよう右の余白を取る */
+@media (hover: none) {
+  .guide-content.prose .code-copy-btn {
+    opacity: 1;
+  }
+  .guide-content.prose pre:has(> .code-copy-btn) {
+    padding-right: 2.75rem;
+  }
 }
 
 .guide-content.prose pre:hover .code-copy-btn,

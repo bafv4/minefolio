@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getGuideTranslation } from "@/lib/content-translation.server";
 import { AutoTranslateNotice } from "@/components/auto-translate-notice";
@@ -548,45 +548,6 @@ export default function GuideViewPage() {
     }).catch(() => {});
   }, [guideId, previewingDraft]);
 
-  // Inject copy buttons on code blocks
-  useEffect(() => {
-    if (!contentRef.current) return;
-    const pres = contentRef.current.querySelectorAll("pre");
-    const controllers: AbortController[] = [];
-    const timeouts: ReturnType<typeof setTimeout>[] = [];
-
-    pres.forEach((pre) => {
-      if (pre.querySelector(".code-copy-btn")) return;
-      const btn = document.createElement("button");
-      btn.className = "code-copy-btn";
-      btn.title = t("guideView.copy");
-      btn.setAttribute("aria-label", t("guideView.copy"));
-      btn.type = "button";
-      btn.innerHTML = COPY_ICON_SVG;
-      const controller = new AbortController();
-      controllers.push(controller);
-      btn.addEventListener("click", () => {
-        const code = pre.querySelector("code");
-        const text = code?.textContent ?? pre.textContent ?? "";
-        navigator.clipboard.writeText(text).then(() => {
-          btn.innerHTML = CHECK_ICON_SVG;
-          const tid = setTimeout(() => { btn.innerHTML = COPY_ICON_SVG; }, 1500);
-          timeouts.push(tid);
-        });
-      }, { signal: controller.signal });
-      pre.style.position = "relative";
-      pre.appendChild(btn);
-    });
-
-    return () => {
-      controllers.forEach((c) => c.abort());
-      timeouts.forEach((t) => clearTimeout(t));
-      pres.forEach((pre) => {
-        pre.querySelectorAll(".code-copy-btn").forEach((btn) => btn.remove());
-      });
-    };
-  }, []);
-
   // モバイルの左右パディングは main（_layout.tsx）側の px-4 と二重にならないよう、
   // article 側は 0 にする（sm 以上は main と article の両方で加算する既存の見た目を維持）。
   // GuideTocMobile 側の -mx-* もこの調整に合わせている（guide-toc-nav.tsx 参照）。
@@ -826,49 +787,130 @@ function GuideContent({
   embedTemplates: Record<string, EmbedTemplateData>;
 }) {
   const t = useT();
+  const statusRef = useRef<HTMLSpanElement>(null);
   const segments = splitContentAtEmbeds(html);
   const hasEmbeds = segments.some((s) => s.type !== "html");
+
+  useCodeCopyButtons(contentRef, statusRef, html, t);
+
+  // コピー成功の読み上げ（ボタンの名前の差し替えだけでは読まれないことがあるため併用する）
+  const copyStatus = <span ref={statusRef} role="status" className="sr-only" />;
 
   // embedが無ければ従来通り
   if (!hasEmbeds) {
     return (
-      <div
-        ref={contentRef}
-        className="guide-content guide-content-demoted prose max-w-none"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <>
+        <div
+          ref={contentRef}
+          className="guide-content guide-content-demoted prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+        {copyStatus}
+      </>
     );
   }
 
   return (
-    <div ref={contentRef} className="guide-content guide-content-demoted prose max-w-none">
-      {segments.map((seg, i) => {
-        if (seg.type === "html") {
-          return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
-        }
-        if (seg.type === "sctemplate-embed") {
-          return (
-            <SearchCraftTemplateEmbedView
-              key={i}
-              template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
-            />
-          );
-        }
-        const userData = embedUsers[seg.userSlug];
-        if (!userData) {
-          return (
-            <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
-              {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
-            </div>
-          );
-        }
-        if (seg.type === "keybind-embed") {
-          return <KeybindEmbedView key={i} userData={userData} presetName={seg.presetName} />;
-        }
-        return <SearchCraftEmbedView key={i} userData={userData} presetName={seg.presetName} />;
-      })}
-    </div>
+    <>
+      <div ref={contentRef} className="guide-content guide-content-demoted prose max-w-none">
+        {segments.map((seg, i) => {
+          if (seg.type === "html") {
+            return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
+          }
+          if (seg.type === "sctemplate-embed") {
+            return (
+              <SearchCraftTemplateEmbedView
+                key={i}
+                template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
+              />
+            );
+          }
+          const userData = embedUsers[seg.userSlug];
+          if (!userData) {
+            return (
+              <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
+              </div>
+            );
+          }
+          if (seg.type === "keybind-embed") {
+            return <KeybindEmbedView key={i} userData={userData} presetName={seg.presetName} />;
+          }
+          return <SearchCraftEmbedView key={i} userData={userData} presetName={seg.presetName} />;
+        })}
+      </div>
+      {copyStatus}
+    </>
   );
+}
+
+/**
+ * コードブロックにコピーボタンを差し込む。本文は innerHTML で描くので DOM へ直接足す。
+ * 原文/訳文の切替（?original=1）ではこのコンポーネントが再マウントされず innerHTML だけ差し替わるため、
+ * html を依存に入れて差し込み直す。成功時はボタンの名前を「コピーしました」に替え、読み上げ用の
+ * status 領域にも同じ文言を入れる。見た目（28px・タッチ端末では常に表示）は app/app.css の .code-copy-btn
+ */
+function useCodeCopyButtons(
+  contentRef: React.RefObject<HTMLDivElement | null>,
+  statusRef: React.RefObject<HTMLSpanElement | null>,
+  html: string,
+  t: Translator,
+) {
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    const pres = root.querySelectorAll("pre");
+    const controller = new AbortController();
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    const copyLabel = t("guideView.copy");
+    const copiedLabel = t("guideView.copied");
+    const setLabel = (btn: HTMLButtonElement, label: string) => {
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+    };
+
+    pres.forEach((pre) => {
+      if (pre.querySelector(".code-copy-btn")) return;
+      const btn = document.createElement("button");
+      btn.className = "code-copy-btn";
+      btn.type = "button";
+      setLabel(btn, copyLabel);
+      btn.innerHTML = COPY_ICON_SVG;
+      let resetTimer: ReturnType<typeof setTimeout> | null = null;
+      btn.addEventListener("click", () => {
+        const code = pre.querySelector("code");
+        const text = code?.textContent ?? pre.textContent ?? "";
+        navigator.clipboard.writeText(text).then(() => {
+          btn.innerHTML = CHECK_ICON_SVG;
+          setLabel(btn, copiedLabel);
+          const status = statusRef.current;
+          if (status) {
+            // 続けて押したときも読ませるため、いったん空にしてから入れる
+            status.textContent = "";
+            timeouts.push(setTimeout(() => { status.textContent = copiedLabel; }, 50));
+          }
+          if (resetTimer) clearTimeout(resetTimer);
+          resetTimer = setTimeout(() => {
+            btn.innerHTML = COPY_ICON_SVG;
+            setLabel(btn, copyLabel);
+            if (status) status.textContent = "";
+          }, 1500);
+          timeouts.push(resetTimer);
+        });
+      }, { signal: controller.signal });
+      pre.style.position = "relative";
+      pre.appendChild(btn);
+    });
+
+    return () => {
+      controller.abort();
+      timeouts.forEach((id) => clearTimeout(id));
+      pres.forEach((pre) => {
+        pre.querySelectorAll(".code-copy-btn").forEach((btn) => btn.remove());
+      });
+      if (statusRef.current) statusRef.current.textContent = "";
+    };
+  }, [contentRef, statusRef, html, t]);
 }
 
 export function ErrorBoundary() {
