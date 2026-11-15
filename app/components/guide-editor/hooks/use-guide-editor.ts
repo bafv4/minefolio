@@ -48,6 +48,9 @@ export function useGuideEditor({
         autocapitalize: "off",
         // contenteditable（role=textbox）のアクセシブルネーム
         "aria-label": t("guideEditor.ui.editorAriaLabel"),
+        // 「/」で項目の一覧（listbox）が開くことを伝える。開いている間は slash-command/renderer.ts が
+        // aria-controls / aria-activedescendant を付ける（textbox に aria-expanded は付けられない）
+        "aria-haspopup": "listbox",
       },
       // 外部リッチテキストのペーストでは、コピー元の算出スタイル
       // （閲覧テーマの文字色 = rgb(...) や Word/Docs の #000000、font-size: 14px 等）が

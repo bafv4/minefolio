@@ -19,18 +19,18 @@ export function createSlashRenderer(getT: () => Translator): SlashRender {
     let dismissed = false;
     let items: SlashItem[] = [];
     let command: ((item: SlashItem) => void) | null = null;
-    // フォーカスを持つエディタ本体（contenteditable）。メニューが開いている間だけ combobox 相当の
-    // aria-expanded / aria-controls / aria-activedescendant を付け、選択中の項目を読み上げさせる
+    // フォーカスを持つエディタ本体（contenteditable、role=textbox）。メニューが開いている間だけ
+    // aria-controls / aria-activedescendant を付け、選択中の項目を読み上げさせる。開閉の有無は
+    // この2つの有無で伝える（aria-expanded は textbox では無効な属性なので付けない。
+    // aria-haspopup="listbox" は use-guide-editor.ts の editorProps で常に付けている）
     let editorDom: HTMLElement | null = null;
 
     const syncEditorAria = () => {
       if (!editorDom) return;
       const open = !!root && !dismissed;
       if (open) {
-        editorDom.setAttribute("aria-expanded", "true");
         editorDom.setAttribute("aria-controls", SLASH_MENU_ID);
       } else {
-        editorDom.removeAttribute("aria-expanded");
         editorDom.removeAttribute("aria-controls");
       }
       if (open && items.length > 0) {

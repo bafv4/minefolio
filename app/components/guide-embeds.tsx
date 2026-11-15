@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { itemLangForLocale } from "@/components/item-icon";
-import { normalizeKeyRemapType, toUiRemaps } from "@/lib/remap-utils";
+import { toUiRemaps } from "@/lib/remap-utils";
 import { coerceStringArray, parseFingerAssignments, safeParseArray } from "@/lib/preset-read";
 import type { PresetSearchCraftLoopData, PresetLoopStepData } from "@/lib/preset-utils";
 import {
@@ -9,10 +9,19 @@ import {
   type LoopStepData,
   type LoopTransition,
 } from "@/lib/search-craft-loops";
-import { resolveVariations, type SearchCraftVariation } from "@/lib/search-craft-variations";
+import {
+  filterKeybindEmbedRemaps,
+  normalizeEmbedCrafts,
+  selectKeybindEmbedSource,
+  selectSearchCraftEmbedSource,
+  type EmbedUserData,
+  type NormalizedEmbedCraft,
+} from "@/lib/guide-embed-data";
 import { VirtualKeyboard, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import {
+  countSearchCraftGroups,
   KeyBadgeLegend,
+  SEARCH_CRAFT_OPEN_FIRST_MAX,
   SearchCraftGroupedList,
   type SearchCraftRowData,
 } from "@/components/search-craft-template-view";
@@ -34,62 +43,10 @@ import type { UiRemapInfo } from "@/lib/remap-utils";
 import type { KeyboardLayout } from "@/lib/keybindings";
 
 // ========================================
-// 共通型
+// 共通型（実体は lib/guide-embed-data.ts。既存の import 元を保つ re-export）
 // ========================================
 
-export type EmbedUserData = {
-  slug: string;
-  displayName: string | null;
-  displayNameAlphabet: string | null;
-  mcid: string | null;
-  presets: Array<{
-    name: string;
-    isActive: boolean;
-    keybindingsData: string | null;
-    remapsData: string | null;
-    playerConfigData: string | null;
-    searchCraftsData: string | null;
-    searchCraftLoopsData: string | null;
-  }>;
-  keybindings: Array<{ action: string; keyCode: string; category: string }>;
-  keyRemaps: Array<{
-    sourceKey: string;
-    targetKey: string | null;
-    software: string | null;
-    outputMode: string | null;
-    outputCharacter: string | null;
-    /** リマップ種別（旧データ・プリセットJSON由来では欠落することがある） */
-    remapType?: string | null;
-  }>;
-  playerConfig: {
-    keyboardLayout: string | null;
-    fingerAssignments: string | null;
-  } | null;
-  searchCrafts: Array<{
-    id: string;
-    sequence: number;
-    items: string;
-    searchStr: string | null;
-    comment: string | null;
-    timing: string | null;
-    /** Shiftを押しながらクラフトするか（プリセットJSON由来の場合は存在しないことがある） */
-    withShift?: boolean;
-    /**
-     * 複数サーチ文字列バリエーション（正準）。呼び出し元（guides/view.tsx のloader）は
-     * 旧データ・プリセットスナップショット由来でも必ず resolveVariations() を通した
-     * 値を渡すこと（このコンポーネント側では前提として信頼する）。
-     */
-    variations: SearchCraftVariation[];
-  }>;
-  /** サーチクラフトの繋ぎ方（Loop）。ライブ行の craftId は searchCrafts[].id を参照する */
-  searchCraftLoops: Array<{
-    id: string;
-    sequence: number;
-    steps: LoopStepData[];
-    comment: string | null;
-    timing: string | null;
-  }>;
-};
+export type { EmbedUserData };
 
 // ========================================
 // HTML からembed参照を抽出
@@ -254,44 +211,18 @@ export function KeybindEmbedView({
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(userData, locale);
 
-  // プリセット名指定時はそのプリセットのデータを使用
-  let keybindingsRaw = userData.keybindings;
-  let remapsRaw = userData.keyRemaps;
-  let layout = userData.playerConfig?.keyboardLayout ?? "US";
-
-  if (presetName) {
-    const preset = userData.presets.find((p) => p.name === presetName);
-    if (preset?.keybindingsData) {
-      keybindingsRaw = JSON.parse(preset.keybindingsData);
-    }
-    if (preset?.remapsData) {
-      remapsRaw = JSON.parse(preset.remapsData);
-    }
-    if (preset?.playerConfigData) {
-      const config = JSON.parse(preset.playerConfigData);
-      layout = config.keyboardLayout ?? layout;
-    }
-  }
-
+  // プリセット名指定時はそのプリセットのデータを使用（選び方は lib/guide-embed-data.ts。エディタの要約と同じ）
+  const source = selectKeybindEmbedSource(userData, presetName);
+  const keybindingsRaw = source.keybindingsRaw;
   // リマップ埋め込みはチャット・サーチクラフト用途の紹介なので、Trigger 種別は表示しない
   // （Chat / All / 未設定をそのまま一覧表示する。文脈シミュレーションではないため優先解決はしない）
   const remaps = toUiRemaps(
-    (remapsRaw as Parameters<typeof toUiRemaps>[0]).filter(
-      (r) => normalizeKeyRemapType(r.remapType) !== "trigger",
-    ),
+    filterKeybindEmbedRemaps(source.remapsRaw) as Parameters<typeof toUiRemaps>[0],
   );
-  const keyboardLayout = (layout || "US") as "US" | "JIS" | "US_TKL" | "JIS_TKL";
+  const keyboardLayout = source.layout as "US" | "JIS" | "US_TKL" | "JIS_TKL";
 
-  // 指割り当てを取得
-  let fingerAssignmentsJson = userData.playerConfig?.fingerAssignments ?? null;
-  if (presetName) {
-    const preset = userData.presets.find((p) => p.name === presetName);
-    if (preset?.playerConfigData) {
-      const config = JSON.parse(preset.playerConfigData);
-      if (config.fingerAssignments) fingerAssignmentsJson = config.fingerAssignments;
-    }
-  }
-  const fingerAssignments = parseFingerAssignments(fingerAssignmentsJson);
+  // 指割り当て
+  const fingerAssignments = parseFingerAssignments(source.fingerAssignmentsJson);
   // 指割り当てが1件も無い（キーボードに指色が出ない）場合は凡例を出さない
   const hasFingerAssignments = Object.values(fingerAssignments).some(
     (f) => Array.isArray(f) && f.length > 0,
@@ -322,11 +253,13 @@ export function KeybindEmbedView({
             {t("playerProfile.viewProfile")}
           </Link>
         </div>
-        {/* フェード・ヒントは bg-card 想定で、この埋め込みカードの背景（bg-card）と一致。ヒントは左右余白に揃える */}
+        {/* フェード・ヒントは bg-card 想定で、この埋め込みカードの背景（bg-card）と一致。ヒントは左右余白に揃える。
+            鍵盤（約 1,150px）は記事の本文幅より広いことがあるので、はみ出しているときはデスクトップでも案内を出す */}
         <HorizontalScrollArea
           className="p-4"
           wrapperClassName="[&>p]:px-4 [&>p]:pt-3"
           showHint
+          hintAtAllWidths
         >
           <VirtualKeyboard
             layout={keyboardLayout}
@@ -376,28 +309,6 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
   }));
 }
 
-/** 生の craftsData 配列（破損・旧データがありうる）をバリエーション正準の形へ正規化する */
-function normalizeEmbedCrafts(rawCrafts: unknown[]) {
-  // presetName 経路（生JSON直パース）は variations フィールドが欠落・破損していることがあるため、
-  // 必ず resolveVariations() を経由する（壊れたJSONでSSRが落ちないように、原始的な型ガードを一つずつ通す）。
-  return rawCrafts.map((item, idx) => {
-    const c = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
-    return {
-      id: typeof c.id === "string" ? c.id : `preset-craft-${idx}`,
-      sequence: typeof c.sequence === "number" ? c.sequence : idx,
-      items: typeof c.items === "string" ? c.items : "[]",
-      comment: typeof c.comment === "string" ? c.comment : null,
-      timing: typeof c.timing === "string" ? c.timing : null,
-      variations: resolveVariations({
-        variations: c.variations,
-        searchStr: typeof c.searchStr === "string" ? c.searchStr : null,
-        withShift: typeof c.withShift === "boolean" ? c.withShift : undefined,
-      }),
-    };
-  });
-}
-
-type NormalizedEmbedCraft = ReturnType<typeof normalizeEmbedCrafts>[number];
 
 /**
  * サーチクラフト一覧 + Loop の描画本体（埋め込みの外枠の中）。
@@ -406,7 +317,8 @@ type NormalizedEmbedCraft = ReturnType<typeof normalizeEmbedCrafts>[number];
  * false は「ライブ」（craft 参照は id、Loop は liveLoops）。
  *
  * 面は埋め込みの外枠1枚だけ（グループはカードにせず見出し＋行）。タイミングのグループが2つ以上なら開閉でき、
- * 最初のグループだけ開いた状態で始める（SearchCraftGroupedList の collapsible）。1つだけなら常に開く。
+ * 最初のグループのクラフトが SEARCH_CRAFT_OPEN_FIRST_MAX 件以下ならそれだけ開いて、多ければ全部閉じて始める
+ * （SearchCraftGroupedList の collapsible / openFirstMaxCount。テンプレート詳細と同じ）。1つだけなら常に開く。
  */
 function SearchCraftEmbedBody({
   crafts,
@@ -486,12 +398,7 @@ function SearchCraftEmbedBody({
 
   // グループの数（SearchCraftGroupedList と同じ数え方: クラフトの表示用タイミング ∪ Loop のタイミング）。
   // 2つ以上のときだけ開閉にする（1つだけなら閉じる意味がない）
-  const groupKeys = new Set<string | null>([
-    ...rows.map((c) => resolveCraftTiming(c.timing)),
-    ...loopTimings,
-  ]);
-  const hasAnyTiming = [...groupKeys].some((k) => k !== null);
-  const collapsible = hasAnyTiming && groupKeys.size > 1;
+  const collapsible = countSearchCraftGroups(rows, loopTimings) > 1;
 
   return (
     <div className="space-y-3 p-4">
@@ -499,6 +406,8 @@ function SearchCraftEmbedBody({
       <SearchCraftGroupedList
         framed={false}
         collapsible={collapsible}
+        // 先頭のグループが長いときは全部閉じて始める（テンプレート詳細と同じ）
+        openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
         crafts={rows}
         remaps={remaps}
         // アイテム名は閲覧者の UI ロケールで出す（docs/guides.md「サーチクラフトテンプレート埋め込み」）
@@ -522,35 +431,13 @@ export function SearchCraftEmbedView({
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(userData, locale);
 
-  let remapsRaw = userData.keyRemaps;
-  // presetName 指定時のみ使う。プリセットスナップショットは行 id を保持しないため、
-  // このスナップショット内 crafts との突合は sequence フィールドで行う（配列位置は不可）
-  let rawLoopsData: string | null = null;
-  // presetName 指定時は preset.searchCraftsData の生JSONを直接パースする（破損・旧データが
-  // ありうる）ため unknown[] で受け、後段で必ず resolveVariations() を通す。無指定時は
-  // userData.searchCrafts（loader 側で resolveVariations() 済み）をそのまま使う。
-  let rawCrafts: unknown[] = userData.searchCrafts;
-  // キー入力順ダイアログの鍵盤のレイアウト（キー配置の埋め込みと同じく、プリセット指定時はその設定を優先）
-  let layout = userData.playerConfig?.keyboardLayout ?? null;
+  // presetName 指定時のみプリセットの生 JSON を読む（選び方は lib/guide-embed-data.ts。エディタの要約と同じ）
+  const source = selectSearchCraftEmbedSource(userData, presetName);
+  const rawLoopsData = source.rawLoopsData;
+  const keyboardLayout = source.layout as KeyboardLayout;
 
-  if (presetName) {
-    const preset = userData.presets.find((p) => p.name === presetName);
-    if (preset?.searchCraftsData) {
-      rawCrafts = safeParseArray<unknown>(preset.searchCraftsData) ?? [];
-    }
-    if (preset?.remapsData) {
-      remapsRaw = JSON.parse(preset.remapsData);
-    }
-    if (preset?.playerConfigData) {
-      const config = JSON.parse(preset.playerConfigData);
-      if (typeof config?.keyboardLayout === "string") layout = config.keyboardLayout;
-    }
-    rawLoopsData = preset?.searchCraftLoopsData ?? null;
-  }
-  const keyboardLayout = (layout || "US") as KeyboardLayout;
-
-  const remaps = toUiRemaps(remapsRaw as Parameters<typeof toUiRemaps>[0]);
-  const crafts = normalizeEmbedCrafts(rawCrafts);
+  const remaps = toUiRemaps(source.remapsRaw as Parameters<typeof toUiRemaps>[0]);
+  const crafts = normalizeEmbedCrafts(source.rawCrafts);
 
   if (crafts.length === 0) {
     return (
@@ -576,7 +463,7 @@ export function SearchCraftEmbedView({
         <SearchCraftEmbedBody
           crafts={crafts}
           remaps={remaps}
-          presetMode={!!presetName}
+          presetMode={source.presetMode}
           rawLoopsData={rawLoopsData}
           liveLoops={userData.searchCraftLoops}
           keyboardLayout={keyboardLayout}

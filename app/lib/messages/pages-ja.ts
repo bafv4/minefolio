@@ -2165,6 +2165,9 @@ export const PAGES_JA = {
     errorSlugTaken: "このURLは既に使われています。別の値を指定してください",
     errorContentTooLong:
       "本文が長すぎます（公開できる上限は50万文字です）。下書きとしては保存できます。内容を分割・整理してから公開してください。",
+    /** 公開版が無いガイド（下書き保存が無く、保存ボタンが1つ）の保存で上限を超えたとき */
+    errorContentTooLongNoDraft:
+      "本文が長すぎます（保存できる上限は50万文字です）。内容を分割・整理してから保存してください。",
     errorUnauthorized: "ログインが必要です",
     errorNotFound: "ガイドが見つかりません",
     errorInvalidAction: "不正な操作です。ページを再読み込みしてから、もう一度お試しください",
@@ -2198,9 +2201,9 @@ export const PAGES_JA = {
       youtube: "YouTube",
       link: "リンク",
       guideLink: "ガイドリンク",
-      keybindEmbed: "キーバインド埋め込み",
-      searchCraftEmbed: "サーチクラフト埋め込み",
-      searchCraftTemplateEmbed: "サーチクラフトテンプレート埋め込み",
+      keybindEmbed: "キー配置の埋め込み",
+      searchCraftEmbed: "サーチクラフトの埋め込み",
+      searchCraftTemplateEmbed: "サーチクラフトテンプレートの埋め込み",
     },
     /** コールアウト種別 */
     callout: {
@@ -2213,7 +2216,8 @@ export const PAGES_JA = {
     toolbar: {
       ariaToolbar: "エディタツールバー",
       ariaTabs: "ツールバータブ",
-      ariaBlockType: "ブロックの種別",
+      /** ブロック種別のボタンの名前（見えている種別名で始める。label in name） */
+      ariaBlockTypeNamed: "{type}（ブロックの種別）",
       ariaInsertCallout: "コールアウトを挿入",
       tabHome: "ホーム",
       tabInsert: "挿入",
@@ -2234,6 +2238,8 @@ export const PAGES_JA = {
       toggleHeaderColumn: "見出し列を切替",
       deleteTable: "テーブルを削除",
       settings: "ガイド設定",
+      /** ツールバーの設定ボタンの見える文字（名前は settings） */
+      settingsShort: "設定",
       saveDraft: "下書き保存",
       /** 下書き保存ボタンのツールチップ（押した結果） */
       saveDraftHint: "公開版は変えずに、下書きとして保存します",
@@ -2251,9 +2257,18 @@ export const PAGES_JA = {
       statusPrivatePendingPublish: "非公開（公開は未保存）",
       /** プレビューのツールチップ */
       previewHint: "保存した内容を新しいタブで開きます（下書きがあれば下書き）",
-      previewUnsavedHint: "下書き保存した内容を開きます。未保存の変更は含まれません",
+      previewUnsavedHint: "保存した内容を開きます。未保存の変更は含まれません",
       calloutLabel: "コールアウト",
       unsavedChanges: "未保存の変更があります",
+      /** ツールバーの保存状態の見える短い表示（読み上げは unsavedChanges） */
+      unsavedShort: "未保存",
+      shortcutWontPublish: "Ctrl+S では公開しません。公開するときは「公開」ボタンを押してください",
+      /** 挿入タブの Minefolio 固有の埋め込み（グループ名と短い文字。説明はツールチップ） */
+      embedGroup: "Minefolio の埋め込み",
+      embedShortGuideLink: "ガイドリンク",
+      embedShortKeybind: "キー配置",
+      embedShortSearchCraft: "サーチクラフト",
+      embedShortTemplate: "テンプレート",
     },
     /** エディタ本体・ノードビュー・パネルの共通文言 */
     ui: {
@@ -2267,6 +2282,9 @@ export const PAGES_JA = {
       coverUploadFailed: "カバー画像のアップロードに失敗しました",
       draftBanner: "下書き保存した内容を編集中です（読者にはまだ見えません）。「{action}」で公開版に反映するか、公開版に戻せます。",
       revertToPublished: "公開版に戻す",
+      /** 公開版が無いのに下書きが残っているとき（下書き保存が非公開のガイドにも出ていた頃のもの） */
+      draftBannerUnpublished: "前に下書き保存した内容を編集中です。「{action}」で保存するか、最後に保存した内容に戻せます。",
+      revertToSaved: "保存した内容に戻す",
       copy: "コピー",
       columnsCount: "{count}カラム",
       deleteColumns: "段組を削除",
@@ -2300,20 +2318,26 @@ export const PAGES_JA = {
       titleLabel: "タイトル",
       summaryLabel: "概要",
       coverImage: "カバー画像",
-      thumbnailAlt: "サムネイル",
+      thumbnailAlt: "カバー画像",
       change: "変更",
       delete: "削除",
-      addThumbnail: "サムネイル画像を追加",
+      addThumbnail: "カバー画像を追加",
       tagsLabel: "タグ",
       removeTag: "{tag} を削除",
-      settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「下書き保存」か右端の保存ボタンで保存します）。",
+      /** 説明文はボタンの位置ではなく、いまのボタンの文言（{draft} / {save}）で指す */
+      settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{draft}」か「{save}」で保存します）。",
+      /** 公開版が無いガイド（保存ボタンが1つ） */
+      settingsDescSingle: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{save}」で保存します）。",
       /** 公開スイッチの見えるラベル兼アクセシブルネーム（オン/オフは switch の状態で伝える） */
       publishLabel: "公開する",
-      publishOn: "右端の保存ボタンで保存すると、読者に公開されます（下書き保存では公開の状態は変わりません）",
-      publishOff: "読者には見えません。公開中のガイドは、右端の保存ボタンで保存すると公開を取り下げます（下書き保存では変わりません）",
+      /** 公開スイッチの説明。オン/オフと、いま公開中か（Live）・公開版が無いか（New）で出し分ける */
+      publishOnLive: "公開中です。「{save}」で、今の内容が読者に公開されます（「{draft}」では公開版は変わりません）",
+      publishOnNew: "「{save}」で保存すると、読者に公開されます",
+      publishOffLive: "「{save}」で保存すると、公開を取り下げます（読者から見えなくなります）。「{draft}」では公開の状態は変わりません",
+      publishOffNew: "読者には見えません。「{save}」で、非公開のまま保存します",
       allowAutoTranslation: "自動翻訳を許可する",
       allowAutoTranslationHint:
-        "オンにすると、公開したガイドを閲覧者の言語に合わせて自動翻訳して表示します（原文への切り替えもできます）。翻訳には外部サービス（Anthropic）を使います。オフにすると既存の翻訳も削除されます。この設定は下書き保存・保存のどちらでも反映されます。",
+        "オンにすると、公開したガイドを閲覧者の言語に合わせて自動翻訳して表示します（原文への切り替えもできます）。翻訳には外部サービス（Anthropic）を使います。オフにすると既存の翻訳も削除されます。この設定は、どの保存ボタンで保存しても反映されます。",
       cancel: "キャンセル",
       apply: "適用",
       /** 本文の上のタイトル・概要（押すと設定モーダルが開く） */
@@ -2386,18 +2410,41 @@ export const PAGES_JA = {
     link: "リンク",
     image: "画像をアップロード",
     titlePlaceholder: "タイトルを入力...",
-    embedKeybind: "キーバインド埋め込み",
-    embedSearchCraft: "サーチクラフト埋め込み",
-    embedUserSlug: "ユーザーのスラッグまたはMCID",
-    embedUserSlugPlaceholder: "MCID またはスラッグ",
-    embedPresetName: "プリセット名（省略可）",
+    embedKeybind: "キー配置の埋め込み",
+    embedSearchCraft: "サーチクラフトの埋め込み",
+    /** キー配置 / サーチクラフト埋め込みの挿入ダイアログ */
+    embedDialogDesc: "走者とプリセットを選びます。記事には、読者が開いたときのその走者の設定が表示されます。",
+    embedRunnerLabel: "走者",
+    embedRunnerPlaceholder: "走者を選ぶ",
+    embedRunnerSearchPlaceholder: "MCID または表示名で検索",
+    embedRunnerSearchHint: "ほかの走者は MCID か表示名で検索できます",
+    embedRunnerSelf: "自分",
+    embedRunnerSelfMark: "（自分）",
+    embedRunnerNone: "走者が見つかりません",
+    embedPresetLabel: "プリセット",
+    embedPresetDefault: "既定（プロフィールに表示中の設定）",
+    embedPresetDefaultShort: "既定の設定",
+    embedPresetNone: "この走者にはプリセットがありません",
+    embedPreviewLabel: "記事に表示される内容",
+    /** 解決の状態（ダイアログのプレビューとノードビュー） */
+    embedLoading: "読み込み中…",
+    embedLoadFailed: "読み込めませんでした。時間をおいて開き直してください",
+    embedUserMissing: "走者「{user}」が見つかりません（非公開のプロフィールは記事に表示できません）",
+    embedUserEmpty: "走者が指定されていません",
+    embedPresetMissing: "プリセット「{preset}」が見つかりません。記事には既定の設定が表示されます",
+    /** 中身の要約。{groups} は「OW 29・Bastion 3」のようなグループごとの件数 */
+    embedSummarySearchCraft: "{groups}（計 {count} 件）",
+    embedSummaryNoSearchCraft: "サーチクラフトが登録されていません",
+    embedSummaryRemaps: "リマップ {count} 件",
+    embedSummaryNoRemaps: "リマップが設定されていません",
+    embedTemplateMissing: "テンプレートが見つかりません（未公開・削除済みのものは記事に表示できません）",
     embedInsert: "挿入",
     embedCancel: "キャンセル",
-    embedKeybindTitle: "キーバインド（リマップ）を埋め込む",
+    embedKeybindTitle: "キー配置を埋め込む",
     embedSearchCraftTitle: "サーチクラフトを埋め込む",
-    embedKeybindLabel: "リマップ",
+    embedKeybindLabel: "キー配置",
     embedSearchCraftLabel: "サーチクラフト",
-    embedTemplate: "サーチクラフトテンプレート埋め込み",
+    embedTemplate: "サーチクラフトテンプレートの埋め込み",
     embedTemplateTitle: "サーチクラフトテンプレートを埋め込む",
     embedTemplateLabel: "テンプレート",
     embedTemplateSearchPlaceholder: "テンプレートのタイトル、または詳細ページの URL",

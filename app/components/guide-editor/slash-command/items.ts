@@ -193,7 +193,7 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
   },
   {
     titleKey: "guideEditor.slash.keybindEmbed",
-    keywords: ["keybind", "remap", "きーばいんど", "リマップ"],
+    keywords: ["keybind", "controls", "remap", "きーはいち", "キー配置", "きーばいんど", "リマップ"],
     icon: Keyboard,
     groupKey: GROUP.embed,
     run: (_editor, ctx) => ctx.openEmbedDialog("keybind"),

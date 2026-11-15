@@ -9,8 +9,13 @@ interface HorizontalScrollAreaProps {
   className?: string;
   /** 外側ラッパーに追加するクラス */
   wrapperClassName?: string;
-  /** はみ出し時に「横にスクロールできます」を表示する（狭い画面のみ） */
+  /** はみ出し時に「横にスクロールできます」を表示する（既定は狭い画面のみ。hintAtAllWidths で全幅） */
   showHint?: boolean;
+  /**
+   * true なら案内を md 以上でも出す（実際にはみ出しているときだけ）。デスクトップでも幅が足りない物
+   * （記事のキー配置の鍵盤など）に使う。既定 false＝従来どおり md 未満のみ
+   */
+  hintAtAllWidths?: boolean;
   /** 端のフェードの色＝置き場所の面。既定はカード内（bg-card）、箱なしの欄に置くときは "background" */
   surface?: "card" | "background";
 }
@@ -25,6 +30,7 @@ export function HorizontalScrollArea({
   className,
   wrapperClassName,
   showHint = false,
+  hintAtAllWidths = false,
   surface = "card",
 }: HorizontalScrollAreaProps) {
   const fadeFrom = surface === "background" ? "from-background" : "from-card";
@@ -60,7 +66,7 @@ export function HorizontalScrollArea({
       {/* ヒントはスクロール領域の上に置く（下に置くと、縦に長い内容ではヒントに気づく前に
           はみ出した側を見落とす。モバイルではクッキーバナー等の下端固定 UI にも隠れやすい） */}
       {showHint && overflowing && (
-        <p className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground md:hidden">
+        <p className={cn("mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground", !hintAtAllWidths && "md:hidden")}>
           {t("common.scrollHorizontalHint")}
           <ChevronsRight className="h-3 w-3" aria-hidden />
         </p>

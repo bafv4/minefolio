@@ -219,9 +219,36 @@ export function KeyBadgeLegend({
 // グループカード + 行リスト
 // ============================================
 
+/**
+ * 開閉できる一覧（collapsible）で、先頭のグループを開いて始める件数の上限（記事の埋め込み・テンプレート詳細）。
+ * 先頭のグループのクラフトがこれより多ければ、全部閉じて始める（長い一覧でページが縦に伸びすぎないように）
+ */
+export const SEARCH_CRAFT_OPEN_FIRST_MAX = 10;
+
+/**
+ * SearchCraftGroupedList が描くタイミンググループの数（クラフトの表示用タイミング ∪ extraTimings）。
+ * 0 はタイミングが1件も無い（ヘッダーなしの1枚表示）。開閉にするか（2つ以上）を呼び出し側が決めるのに使う
+ */
+export function countSearchCraftGroups(
+  crafts: { timing: string | null }[],
+  extraTimings: (string | null)[] = [],
+): number {
+  const keys = new Set<string | null>([
+    ...crafts.map((c) => resolveCraftTiming(c.timing)),
+    ...extraTimings.map((timing) => resolveCraftTiming(timing)),
+  ]);
+  return [...keys].some((k) => k !== null) ? keys.size : 0;
+}
+
 // 行と列ヘッダーで共通のレスポンシブ3カラム定義（アイテム / サーチ文字列 / 入力キー）
 const SEARCH_CRAFT_GRID_COLS =
   "lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,5fr)] lg:gap-4";
+
+/**
+ * 1 バリエーション分の [サーチ文字列, 入力キー] の包み。lg 未満は1段に並べて入りきらなければ折り返し、
+ * lg 以上は display: contents で中身を親のサブグリッドに直接置く（列の揃えは従来どおり）
+ */
+const SEARCH_CRAFT_PAIR_CLASS = "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-4 sm:gap-y-2 lg:contents";
 
 /**
  * サーチクラフトの一覧表示（タイミング別グループカード + 3カラム表形式）。
@@ -240,6 +267,7 @@ export function SearchCraftGroupedList({
   stickyHeaders = false,
   stickyTopClassName,
   groupHeadingLevel = "h4",
+  openFirstMaxCount,
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
@@ -264,6 +292,11 @@ export function SearchCraftGroupedList({
    * 一覧の上に「すべて開く／すべて閉じる」）。タイミングなしの1枚表示には効かない。既定 false
    */
   collapsible?: boolean;
+  /**
+   * collapsible のとき、先頭のグループを開いて始めるのを、そのグループのクラフトがこの件数以下のときに限る
+   * （多ければ全部閉じて始める）。未指定なら従来どおり常に先頭を開く（走者画面）
+   */
+  openFirstMaxCount?: number;
   /** アイテム名の表示に使うゲーム内言語（未指定なら日本語） */
   gameLanguage?: string | null;
   /** キー入力順ダイアログのバーチャルキーボードに使うレイアウト（未指定なら "US"） */
@@ -319,9 +352,13 @@ export function SearchCraftGroupedList({
     .filter((g) => g.crafts.length > 0 || Boolean(g.extra));
 
   // 開閉状態（collapsible のときだけ使う）。先頭のグループだけ開いた状態で始める
-  const [openKeys, setOpenKeys] = useState<Set<string>>(
-    () => new Set(groups.length > 0 ? [groups[0].groupKey] : []),
-  );
+  // （openFirstMaxCount があれば、先頭のグループの件数がそれ以下のときだけ）
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => {
+    const first = groups[0];
+    if (!first) return new Set();
+    if (openFirstMaxCount !== undefined && first.crafts.length > openFirstMaxCount) return new Set();
+    return new Set([first.groupKey]);
+  });
   const toggleGroup = (groupKey: string) =>
     setOpenKeys((prev) => {
       const next = new Set(prev);
@@ -353,7 +390,8 @@ export function SearchCraftGroupedList({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 text-xs text-muted-foreground"
+            // モバイルは押せる範囲を 44px に（見た目の行の高さは負のマージンで変えない。ui.md 9 章）
+            className="-my-2 h-11 text-xs text-muted-foreground sm:my-0 sm:h-7"
             onClick={() => setOpenKeys(allOpen ? new Set() : new Set(groups.map((g) => g.groupKey)))}
           >
             {allOpen ? t("playerProfile.searchCraftCollapseAll") : t("playerProfile.searchCraftExpandAll")}
@@ -609,13 +647,16 @@ function SearchCraftRow({
         {/*
           サーチ文字列 + 入力キー（バリエーションごとに [文字列セル, キーセル] のペアで並べ、
           サブグリッドの1行に自動配置する。独立した縦積みだと行の高さが揃わないため、
-          ペアをグリッドの自動配置に委ねることで行を確実に揃える。
-          モバイルは flex-col のため DOM 順（文字列1→キー1→文字列2→キー2…）のまま縦に並ぶ。
+          ペアをグリッドの自動配置に委ねることで行を確実に揃える（ペアの包みは lg で display: contents）。
+          lg 未満はペアを1段に並べ、入りきらないときだけ入力キーを次の段へ折り返す（どちらも短いので、
+          1行が「アイテム／サーチ／入力キー」の3段にならないように）。sm 未満の段の間隔は 16px
+          （コピー・キー入力順の 24px のボタンを上下に 10px ずつ広げているので、28px の段どうしで重ならない幅）。
         */}
         <div className="min-w-0 flex flex-col gap-4 sm:gap-2 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2">
           {craft.variations.length > 0 ? (
-            craft.variations.flatMap((variation, idx) => [
-              <div key={`search-${idx}`} className="flex min-h-7 items-center gap-1 min-w-0">
+            craft.variations.map((variation, idx) => (
+              <div key={idx} className={SEARCH_CRAFT_PAIR_CLASS}>
+              <div className="flex min-h-7 items-center gap-1 min-w-0">
                 <span className="lg:hidden text-xs text-muted-foreground shrink-0">
                   {t("playerProfile.searchLabel")}
                 </span>
@@ -642,8 +683,8 @@ function SearchCraftRow({
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
-              </div>,
-              <div key={`keys-${idx}`} className="flex min-h-7 items-center gap-1">
+              </div>
+              <div className="flex min-h-7 items-center gap-1">
                 <span className="lg:hidden text-xs text-muted-foreground shrink-0">
                   {t("playerProfile.inputKeysLabel")}
                 </span>
@@ -669,10 +710,11 @@ function SearchCraftRow({
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
-              </div>,
-            ])
+              </div>
+              </div>
+            ))
           ) : (
-            <>
+            <div className={SEARCH_CRAFT_PAIR_CLASS}>
               <div className="flex min-h-7 items-center gap-1 min-w-0">
                 <span className="lg:hidden text-xs text-muted-foreground shrink-0">
                   {t("playerProfile.searchLabel")}
@@ -685,7 +727,7 @@ function SearchCraftRow({
                 </span>
                 <span className="text-sm text-muted-foreground">—</span>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

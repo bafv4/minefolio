@@ -17,7 +17,14 @@ import { cropAnimatedGifFromUrl } from "./lib/gif-crop";
 import { GifTooLargeError } from "./lib/gif-encode";
 import type { CropRect } from "./lib/image-crop";
 import { useGuideEditor } from "./hooks/use-guide-editor";
-import { useGuideSave, getPublishAction, PUBLISH_ACTION_MESSAGES } from "./hooks/use-guide-save";
+import {
+  useGuideSave,
+  getPublishAction,
+  getShortcutSaveMode,
+  hasDraftSave,
+  isSettingsChanged,
+  PUBLISH_ACTION_MESSAGES,
+} from "./hooks/use-guide-save";
 import {
   useImageUpload,
   buildInlineImagePath,
@@ -186,12 +193,18 @@ export function GuideEditor({
   // 下書き保存は isPublished を変えないので、保存ボタンの文言とピルはこの値と設定の組で決める
   const livePublished = publishedSnapshot.isPublished;
   const publishAction = getPublishAction(livePublished, isPublished);
+  // 下書き保存は「公開版を変えずに保存する」ためのもの。読者に見える版が無い（一度も公開していない・
+  // 公開を取り下げた）ガイドでは意味が無いので、保存ボタンは1つ（publish モード）だけにする（hasDraftSave）
+  const draftSaveAvailable = hasDraftSave(livePublished);
 
-  // Ctrl/⌘+S で下書き保存（ブラウザの「ページを保存」は止める）。Ctrl+Shift+S は打ち消し線なので除く。
-  // 保存しないとき: 保存中・未保存の変更が無いとき（押すたびに中身の同じ下書きを作らない）・設定モーダルが
+  // Ctrl/⌘+S で保存（ブラウザの「ページを保存」は止める）。Ctrl+Shift+S は打ち消し線なので除く。
+  // 公開中のガイドは下書き保存、公開版が無いガイドは唯一の保存ボタンと同じ保存（getShortcutSaveMode）。
+  // 保存しないとき: 保存中・未保存の変更が無いとき（押すたびに中身の同じ保存をしない）・設定モーダルが
   // 開いているとき（モーダルは「適用」前の値を持つため、保存すると表示と食い違う）
-  const shortcutStateRef = useRef({ save, saving, dirty, settingsOpen });
-  shortcutStateRef.current = { save, saving, dirty, settingsOpen };
+  // ただし、読者に初めて公開することになる保存（publishAction === "publish"）はショートカットでは行わない。
+  // 習慣で押した Ctrl+S で公開されないよう、ボタンから明示的に公開させる
+  const shortcutStateRef = useRef({ save, saving, dirty, settingsOpen, livePublished, publishAction, t });
+  shortcutStateRef.current = { save, saving, dirty, settingsOpen, livePublished, publishAction, t };
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
@@ -199,7 +212,12 @@ export function GuideEditor({
       e.preventDefault();
       const state = shortcutStateRef.current;
       if (e.repeat || state.saving || !state.dirty || state.settingsOpen) return;
-      state.save("draft");
+      const mode = getShortcutSaveMode(state.livePublished);
+      if (mode === "publish" && state.publishAction === "publish") {
+        toast.info(state.t("guideEditor.toolbar.shortcutWontPublish"));
+        return;
+      }
+      state.save(mode);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -354,6 +372,7 @@ export function GuideEditor({
           lastSaved={lastSaved}
           livePublished={livePublished}
           publishSetting={isPublished}
+          draftSaveAvailable={draftSaveAvailable}
           onSaveDraft={() => save("draft")}
           onSavePublish={() => save("publish")}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -382,7 +401,12 @@ export function GuideEditor({
         {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
         {draftActive && (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            <span>{t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })}</span>
+            <span>
+              {draftSaveAvailable
+                ? t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })
+                : // 公開版が無いのに下書きが残っている（下書き保存が非公開のガイドにも出ていた頃に作ったもの）
+                  t("guideEditor.ui.draftBannerUnpublished", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })}
+            </span>
             <Button
               type="button"
               variant="outline"
@@ -392,7 +416,7 @@ export function GuideEditor({
               disabled={saving}
             >
               <Undo2 className="h-3.5 w-3.5" />
-              {t("guideEditor.ui.revertToPublished")}
+              {draftSaveAvailable ? t("guideEditor.ui.revertToPublished") : t("guideEditor.ui.revertToSaved")}
             </Button>
           </div>
         )}
@@ -456,6 +480,7 @@ export function GuideEditor({
         initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
         authorSlug={authorSlug}
         translationEnabled={translationEnabled}
+        livePublished={livePublished}
         uploadCover={(file) =>
           coverUpload.uploadTo(
             buildCoverImagePath(userId, guideId),
@@ -466,7 +491,12 @@ export function GuideEditor({
         isUploadingCover={coverUpload.isUploading}
         uploadError={coverUpload.error ?? imageUpload.error}
         onApply={(v) => {
-          // モーダル内 State を全体 State へ反映（保存はしない → ダーティに）
+          // モーダル内 State を全体 State へ反映（保存はしない）。値が実際に変わったときだけダーティにする
+          // （開いて「適用」しただけで未保存扱いにしない）
+          const changed = isSettingsChanged(
+            { title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation },
+            v,
+          );
           setTitle(v.title);
           setSummary(v.summary);
           setTags(v.tags);
@@ -474,7 +504,7 @@ export function GuideEditor({
           setIsPublished(v.isPublished);
           setSlug(v.slug);
           setAllowAutoTranslation(v.allowAutoTranslation);
-          markDirty();
+          if (changed) markDirty();
         }}
       />
 
@@ -482,6 +512,7 @@ export function GuideEditor({
         kind={embedKind}
         onOpenChange={(open) => !open && setEmbedKind(null)}
         onInsert={handleInsertEmbed}
+        defaultUserSlug={authorSlug}
       />
       <TemplateEmbedDialog
         open={templateEmbedOpen}

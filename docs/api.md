@@ -29,6 +29,7 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/me/cape/upload-token` | POST | 必須 | マントアップロードトークン発行 |
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
+| `/api/guides/embed-resolve` | GET | 不要 | ガイドエディタのキー配置 / サーチクラフト埋め込みの走者の解決（`?user=` slug か MCID。公開ページと同じ規則で、非公開の走者は `null`。全プリセットを、要約に使う項目〔名前・リマップ・サーチクラフト・キーボードの配列〕だけに絞って返す。詳細は [guides.md](./guides.md)「キー配置 / サーチクラフト埋め込み」） |
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
 | `/api/likes` | POST | 必須 | ガイド・テンプレートのいいね追加/解除 |
 | `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |

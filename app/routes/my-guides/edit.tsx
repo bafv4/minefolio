@@ -220,7 +220,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // 公開時のみ本文の長さ上限を適用する（下書きは work 温存のため無制限）。
   if (saveMode !== "draft" && content.length > MAX_PUBLISHED_CONTENT_LENGTH) {
-    return { error: t("meGuides.errorContentTooLong") };
+    // 公開版が無いガイドのエディタには下書き保存が無い（hasDraftSave）ので、「下書きとしては保存できます」とは言わない
+    return { error: t(guide.isPublished ? "meGuides.errorContentTooLong" : "meGuides.errorContentTooLongNoDraft") };
   }
 
   if (saveMode === "draft") {

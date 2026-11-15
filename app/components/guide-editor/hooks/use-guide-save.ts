@@ -1,6 +1,7 @@
 // 手動保存フック（自動セーブ廃止）。
 // - draft（下書き保存）: ドラフト列へ保存。公開版と公開状態（isPublished）は変えない。
-// - publish（右端の保存ボタン。文言は「公開」/「更新を公開」/「保存」）: 公開版と isPublished を書き換え、ドラフトをクリアする。
+// - publish（保存ボタン。文言は「公開」/「更新を公開」/「保存」）: 公開版と isPublished を書き換え、ドラフトをクリアする。
+//   公開版が無いガイドでは下書き保存を出さず、保存ボタンはこれ1つ（hasDraftSave）。
 // パフォーマンスのため content 等を reactive に保持せず、保存時に値を受け取る。
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useFetcher } from "react-router";
@@ -46,7 +47,7 @@ function toFormData(v: GuideSaveValues, mode: SaveMode): FormData {
 }
 
 /**
- * 右端の保存ボタン（mode=publish）を押した結果。公開状態はこの保存でだけ書き換わる
+ * 保存ボタン（mode=publish）を押した結果。公開状態はこの保存でだけ書き換わる
  * （下書き保存は isPublished を送っても変えない — edit.tsx の action）ので、
  * 「いま読者に公開されているか（保存済みの isPublished）」と「公開の設定（設定モーダルのスイッチ）」の組で決まる。
  * - publish: 非公開 → 公開（読者に公開する）
@@ -59,6 +60,47 @@ export type PublishAction = "publish" | "publishUpdate" | "unpublish" | "saveUnp
 export function getPublishAction(livePublished: boolean, publishSetting: boolean): PublishAction {
   if (publishSetting) return livePublished ? "publishUpdate" : "publish";
   return livePublished ? "unpublish" : "saveUnpublished";
+}
+
+/**
+ * 下書き保存（mode=draft）を出すか。下書き保存は「公開版を変えずに保存する」ためのものなので、
+ * 読者に見える版がある（保存済みの isPublished が true）ときだけ出す。公開版が無い（一度も公開していない・
+ * 公開を取り下げた）ガイドは保存ボタン1つ（publish モード）だけにする。
+ * 公開版の有無は保存済みの isPublished でしか分からない（公開日時の列は無い）ので、取り下げたガイドも
+ * 「公開版が無い」側に入る（取り下げたガイドの本文は読者に見えず、守るべき公開版が無いため）
+ */
+export function hasDraftSave(livePublished: boolean): boolean {
+  return livePublished;
+}
+
+/** Ctrl/⌘+S が行う保存。下書き保存があればそれ、無ければ唯一の保存ボタン（publish モード）と同じ */
+export function getShortcutSaveMode(livePublished: boolean): "draft" | "publish" {
+  return hasDraftSave(livePublished) ? "draft" : "publish";
+}
+
+/** 設定モーダルが扱う値（settings-dialog.tsx の GuideSettingsValues と同じ形） */
+export interface GuideSettingsSnapshot {
+  title: string;
+  summary: string;
+  tags: string[];
+  coverImageUrl: string | null;
+  isPublished: boolean;
+  slug: string;
+  allowAutoTranslation: boolean;
+}
+
+/** 設定モーダルの「適用」で値が実際に変わったか（変わったときだけ未保存にする） */
+export function isSettingsChanged(before: GuideSettingsSnapshot, after: GuideSettingsSnapshot): boolean {
+  return (
+    before.title !== after.title ||
+    before.summary !== after.summary ||
+    before.coverImageUrl !== after.coverImageUrl ||
+    before.isPublished !== after.isPublished ||
+    before.slug !== after.slug ||
+    before.allowAutoTranslation !== after.allowAutoTranslation ||
+    before.tags.length !== after.tags.length ||
+    before.tags.some((tag, i) => tag !== after.tags[i])
+  );
 }
 
 /** 保存ボタンの文言・ツールチップ・公開状態ピルの文言 */

@@ -164,16 +164,24 @@ export default function UserGuidesPage() {
       {/* Author header */}
       {/* 名前が長く右の操作と並ばない幅では、操作を次の行の右端へ回す（名前を細い列で折り返させない） */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        {/* 名前とアバターは走者画面へのリンク。アバターのリンクは名前のリンクと同じ先なので、
+            Tab で止めず読み上げもしない（同じリンクを2回読ませない） */}
         <div className="flex min-w-0 items-center gap-4">
-          <MinecraftAvatar
-            uuid={author.uuid ?? undefined}
-            skinUrl={author.customSkinUrl}
-            size={44}
-            alt=""
-            className="shrink-0 rounded-xl"
-          />
+          <Link to={`/player/${author.slug}`} tabIndex={-1} aria-hidden className="shrink-0 rounded-xl">
+            <MinecraftAvatar
+              uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
+              size={44}
+              alt=""
+              className="shrink-0 rounded-xl"
+            />
+          </Link>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold break-words">{authorName}</h1>
+            <h1 className="text-2xl font-bold break-words">
+              <Link to={`/player/${author.slug}`} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {authorName}
+              </Link>
+            </h1>
             {author.mcid && (
               <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}

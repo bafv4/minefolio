@@ -61,6 +61,8 @@ import { getTemplateLikeCount } from "@/lib/likes.server";
 import {
   SearchCraftGroupedList,
   KeyBadgeLegend,
+  countSearchCraftGroups,
+  SEARCH_CRAFT_OPEN_FIRST_MAX,
 } from "@/components/search-craft-template-view";
 import {
   groupLoopsByTiming,
@@ -766,7 +768,13 @@ export default function TemplateViewPage() {
           </label>
         )}
         <KeyBadgeLegend showCraftMarker={loops.length > 0} />
+        {/* 記事内の埋め込み（guide-embeds.tsx の SearchCraftEmbedBody）と同じ開閉と枠: グループは箱にせず
+            見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、先頭が長ければ全部閉じて始める */}
         <SearchCraftGroupedList
+          framed={false}
+          collapsible={countSearchCraftGroups(parsedSearchCrafts, searchCraftLoopTimings) > 1}
+          openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
+          groupHeadingLevel="h3"
           crafts={parsedSearchCrafts}
           remaps={remaps}
           gameLanguage={itemNamesViewerLang ? viewerItemLang : template.gameLanguage}

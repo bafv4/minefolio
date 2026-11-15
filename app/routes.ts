@@ -96,6 +96,7 @@ export default [
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
   route("api/guides/templates-search", "routes/api/guides/templates-search.ts"),
+  route("api/guides/embed-resolve", "routes/api/guides/embed-resolve.ts"),
   route("api/guides/view-count", "routes/api/guides/view-count.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/likes", "routes/api/likes.ts"),

@@ -55,9 +55,29 @@ function jumpToHeading(id: string) {
   el.focus({ preventScroll: true });
 }
 
+/** 現在地とみなす見出し上端の位置（:root の scroll-padding-top ＋余白。読めなければ従来の 96px） */
+function getActiveThreshold(): number {
+  const padding = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);
+  return Number.isFinite(padding) && padding > 0 ? padding + 8 : 96;
+}
+
+/** 記事の末尾まで来たか（ページの最下部、または本文の終わりと最後の見出しがどちらも画面内） */
+function isAtContentEnd(lastId: string): boolean {
+  const viewportBottom = window.innerHeight;
+  // 小数のスクロール位置（拡大率 125% 等）で 1px 足りないことがあるので、切り上げて少し余裕を持たせる
+  if (Math.ceil(window.scrollY + viewportBottom) >= document.documentElement.scrollHeight - 2) return true;
+  const last = document.getElementById(lastId);
+  const content = last?.closest(".guide-content");
+  if (!last || !content) return false;
+  return (
+    content.getBoundingClientRect().bottom <= viewportBottom &&
+    last.getBoundingClientRect().top < viewportBottom
+  );
+}
+
 /**
  * スクロール位置に応じて現在の見出し id を返す。
- * 見出し上端が「追従ヘッダー下（約6rem）」を最後に超えたものをアクティブとする。
+ * 見出し上端が「貼り付く UI の下端（scroll-padding-top）＋余白」を最後に超えたものをアクティブとする。
  */
 function useActiveHeading(items: TocItem[]): string | null {
   const [activeId, setActiveId] = useState<string | null>(items[0]?.id ?? null);
@@ -70,8 +90,9 @@ function useActiveHeading(items: TocItem[]): string | null {
 
     const update = () => {
       ticking = false;
-      // ヘッダー(h-16=4rem) + 余白 を考慮したしきい値
-      const threshold = 96;
+      // しきい値は貼り付く UI の下端＝見出しへ移ったときの着地点（:root の scroll-padding-top。xl 未満は
+      // 目次バーのぶん深い）＋余白。固定値だと、目次から移った見出しがしきい値より下に着地して現在地にならない
+      const threshold = getActiveThreshold();
       let current = ids[0];
       for (const id of ids) {
         const el = document.getElementById(id);
@@ -82,11 +103,10 @@ function useActiveHeading(items: TocItem[]): string | null {
           break;
         }
       }
-      // ページ最下部付近では最後の見出しを active にする
-      if (
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 2
-      ) {
+      // 末尾まで来たら最後の見出しを現在地にする（最後の節が短いと、見出しがしきい値まで上がらないため）。
+      // 末尾＝ページの最下部か、本文（.guide-content）の終わりが画面に入り最後の見出しも画面内にあるとき
+      // （記事の下に「他のガイド」やフッターが続くと、ページの最下部より先に本文を読み終える）
+      if (isAtContentEnd(ids[ids.length - 1])) {
         current = ids[ids.length - 1];
       }
       setActiveId(current);
@@ -419,10 +439,12 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   return (
     // xl:hidden はこの sticky バー自身に付ける（ラッパーで包むと sticky の
     // 可動域がバー高さ分しかなくなり、スクロールで流れて操作できなくなる）。
-    // -mx-* は親（guides/view.tsx の article）の左右パディングを打ち消して全幅化する。
-    // モバイル（base）は article 側が px-0 になったため打ち消し不要（sm 以上は sm:px-6 と対）。
+    // -mx-* は親（guides/view.tsx の article）の左右パディングを打ち消して全幅化する（sm 以上は sm:px-6 と対）。
+    // モバイル（base）は article 側が px-0 なので、レイアウトの左右の余白（main の px-4）を -mx-4 で覆う
+    // （貼り付いた面の左右から下の本文が透けて見えないように。ui.md 10 章）。ボタンの px-4 で文字は本文と揃う。
+    // 面は不透明（半透明だと下を流れる本文と重なって読みにくい）
     // data-guide-toc-bar: 本文の表の見出し行をこのバーの下に貼り付けるため、高さを測る目印（guides/view.tsx）
-    <div data-guide-toc-bar="" className="xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
+    <div data-guide-toc-bar="" className="xl:hidden sticky top-16 z-30 mb-6 -mx-4 border-y border-border bg-background sm:-mx-6">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
