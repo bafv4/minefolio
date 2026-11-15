@@ -44,7 +44,26 @@ export const GUIDE_BG_COLORS: ReadonlyArray<{ nameKey: MessageKey; value: string
  * 過去バージョンで保存されたハイライト色（旧既定の Tailwind yellow-200 等）。
  * ピッカーには表示しないが、既存ガイドの表示を壊さないため許可は維持する。
  */
-const LEGACY_BG_COLORS = [{ value: "#FEF08A" }] as const;
+export const GUIDE_LEGACY_BG_COLORS = [{ value: "#FEF08A" }] as const;
+
+/**
+ * 背景色パレット（旧色を含む）→ テーマ別の表示色トークン（CSS 変数名）。
+ * 保存データ（inline style）はライトの淡い色のままなので、暗いテーマでは前景色（明るい文字）が
+ * 載らない（約 1.1:1）。app/app.css の `.guide-content [style*="…"]` が inline style を
+ * `!important` でこのトークンへ置き換え、暗いテーマでは同じ色味の暗い背景にする
+ * （ライトのトークン値は保存色と同じ hex）。オレンジと黄は同じ #FBF3DB なので 1 つのトークン。
+ * カラーピッカーの見本も guideBgColorVar() 経由でこのトークンを使い、適用後の見た目と揃える。
+ */
+export const GUIDE_BG_COLOR_TOKENS: Readonly<Record<string, string>> = {
+  "#f1f1ef": "--guide-bg-gray",
+  "#fdebec": "--guide-bg-red",
+  "#fbf3db": "--guide-bg-yellow",
+  "#edf3ec": "--guide-bg-green",
+  "#e7f3f8": "--guide-bg-blue",
+  "#f6f3f9": "--guide-bg-purple",
+  "#f9f0f5": "--guide-bg-pink",
+  "#fef08a": "--guide-bg-legacy-yellow",
+};
 
 function parseHex(hex: string): { r: number; g: number; b: number } {
   const value = hex.replace("#", "");
@@ -73,7 +92,7 @@ function buildAllowedSet(colors: ReadonlyArray<{ value: string }>): Set<string> 
 }
 
 const allowedTextColors = buildAllowedSet(GUIDE_TEXT_COLORS);
-const allowedBgColors = buildAllowedSet([...GUIDE_BG_COLORS, ...LEGACY_BG_COLORS]);
+const allowedBgColors = buildAllowedSet([...GUIDE_BG_COLORS, ...GUIDE_LEGACY_BG_COLORS]);
 
 /** 文字色としてパレットに含まれるか（hex / rgb 両形式を受理） */
 export function isPaletteTextColor(value: string): boolean {
@@ -83,6 +102,25 @@ export function isPaletteTextColor(value: string): boolean {
 /** 背景色としてパレットに含まれるか（hex / rgb 両形式を受理） */
 export function isPaletteBgColor(value: string): boolean {
   return allowedBgColors.has(normalizeColorValue(value));
+}
+
+/** rgb 形式（正規化済み）→ hex（小文字）の逆引き。guideBgColorVar() が rgb 形式も受けるため */
+const bgRgbToHex = new Map<string, string>(
+  Object.keys(GUIDE_BG_COLOR_TOKENS).map((hex) => {
+    const { r, g, b } = parseHex(hex);
+    return [`rgb(${r},${g},${b})`, hex];
+  }),
+);
+
+/**
+ * 背景パレット色（hex / rgb 形式）を、テーマ別の表示色トークンの `var(--guide-bg-*)` にする。
+ * パレット外は null。トークンが未定義の文脈でも元の色で描けるよう、フォールバックに元の hex を入れる。
+ */
+export function guideBgColorVar(value: string): string | null {
+  const normalized = normalizeColorValue(value);
+  const hex = bgRgbToHex.get(normalized) ?? normalized;
+  const token = GUIDE_BG_COLOR_TOKENS[hex];
+  return token ? `var(${token}, ${hex.toUpperCase()})` : null;
 }
 
 /**

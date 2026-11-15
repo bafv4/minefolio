@@ -2,7 +2,13 @@
 // ガイドの色パレット判定と、ペースト HTML からのパレット外色除去のテスト。
 // stripNonPaletteColorsFromHtml は DOMParser を使うため jsdom 環境で実行する。
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
+  GUIDE_BG_COLORS,
+  GUIDE_BG_COLOR_TOKENS,
+  GUIDE_LEGACY_BG_COLORS,
+  guideBgColorVar,
   isPaletteTextColor,
   isPaletteBgColor,
   stripNonPaletteColorsFromHtml,
@@ -70,5 +76,52 @@ describe("stripNonPaletteColorsFromHtml（ペースト時の色除去）", () =>
     expect(out).not.toContain("rgb(15, 23, 42)");
     // color 以外のスタイル（text-align）は残す
     expect(out).toContain("text-align");
+  });
+});
+
+describe("背景パレットのテーマ別表示色（GUIDE_BG_COLOR_TOKENS / app.css）", () => {
+  // jsdom 環境では import.meta.url が file: でないので、リポジトリ直下（vitest の実行場所）から辿る
+  const css = readFileSync(resolve(process.cwd(), "app/app.css"), "utf-8");
+  const allBg = [...GUIDE_BG_COLORS, ...GUIDE_LEGACY_BG_COLORS].map((c) => c.value).filter(Boolean);
+  const rgbOf = (hex: string) => {
+    const v = hex.replace("#", "");
+    return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
+  };
+
+  it("背景パレット（旧色を含む）のすべての色にトークンがある", () => {
+    for (const hex of allBg) expect(GUIDE_BG_COLOR_TOKENS[hex.toLowerCase()]).toBeTruthy();
+  });
+
+  it("guideBgColorVar は hex / rgb のどちらでもトークンを返し、パレット外は null", () => {
+    expect(guideBgColorVar("#FDEBEC")).toBe("var(--guide-bg-red, #FDEBEC)");
+    expect(guideBgColorVar("#fdebec")).toBe("var(--guide-bg-red, #FDEBEC)");
+    expect(guideBgColorVar("rgb(253, 235, 236)")).toBe("var(--guide-bg-red, #FDEBEC)");
+    expect(guideBgColorVar("#FEF08A")).toBe("var(--guide-bg-legacy-yellow, #FEF08A)");
+    expect(guideBgColorVar("#123456")).toBeNull();
+    expect(guideBgColorVar("#D44C47")).toBeNull(); // 文字色パレットは対象外
+  });
+
+  it("app.css が各色の hex と 2 つの rgb 形式を同じトークンへ置き換える", () => {
+    for (const hex of allBg) {
+      const token = GUIDE_BG_COLOR_TOKENS[hex.toLowerCase()];
+      const [r, g, b] = rgbOf(hex);
+      const rule = new RegExp(
+        [
+          String.raw`\.guide-content \[style\*="${hex.toLowerCase()}" i\],\s*`,
+          String.raw`\.guide-content \[style\*="rgb\(${r}, ${g}, ${b}\)"\],\s*`,
+          String.raw`\.guide-content \[style\*="rgb\(${r},${g},${b}\)"\]\s*\{\s*`,
+          String.raw`background-color: var\(${token}\) !important;`,
+        ].join(""),
+      );
+      expect(css, hex).toMatch(rule);
+    }
+  });
+
+  it("トークンはライト・dark・ultra-dark のすべてで定義され、ライトは保存色と同じ", () => {
+    for (const [hex, token] of Object.entries(GUIDE_BG_COLOR_TOKENS)) {
+      const defs = [...css.matchAll(new RegExp(`${token}: ([^;]+);`, "g"))].map((m) => m[1]);
+      expect(defs, token).toHaveLength(3);
+      expect(defs[0].toLowerCase(), token).toBe(hex);
+    }
   });
 });

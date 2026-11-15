@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Palette, Paintbrush, AlignLeft, AlignCenter, AlignRight, X, type LucideIcon } from "lucide-react";
 import type { MessageKey } from "@/lib/messages";
+import { guideBgColorVar } from "@/lib/guide-colors";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TEXT_COLORS, BG_COLORS, CELL_COLORS } from "../constants";
@@ -96,7 +97,8 @@ export function ColorSwatchGrid({
                 }}
                 aria-label={t(c.nameKey)}
                 className="h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all"
-                style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value || "transparent" }}
+                // 背景色の見本はテーマ別の表示色（暗いテーマでは暗い背景に置き換わる。guide-colors.ts）で描き、適用後の見た目と揃える
+                style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value ? (guideBgColorVar(c.value) ?? c.value) : "transparent" }}
               >
                 {kind === "text" ? "A" : c.value ? "" : "✕"}
               </button>

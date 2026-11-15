@@ -192,6 +192,19 @@ body {
   --rank-emerald: oklch(0.5 0.15 143.1);
   --rank-diamond: oklch(0.48 0.088 195);
   --rank-netherite: oklch(0.526 0.224 314.5);
+
+  /* ガイド本文の背景パレット（app/lib/guide-colors.ts の GUIDE_BG_COLOR_TOKENS）。
+     保存データの inline style（ライトの淡い色）を .guide-content 配下で置き換える表示色（下の
+     「Guide background palette」）。ライトは保存色そのもの（見た目を変えないため、変換誤差の出る
+     oklch ではなく保存値と同じ hex で持つ）。オレンジと黄は同じ #FBF3DB なので yellow 1 つ */
+  --guide-bg-gray: #F1F1EF;
+  --guide-bg-red: #FDEBEC;
+  --guide-bg-yellow: #FBF3DB;
+  --guide-bg-green: #EDF3EC;
+  --guide-bg-blue: #E7F3F8;
+  --guide-bg-purple: #F6F3F9;
+  --guide-bg-pink: #F9F0F5;
+  --guide-bg-legacy-yellow: #FEF08A;
 }
 
 .dark,
@@ -277,6 +290,17 @@ body {
   --finger-palm: oklch(0.55 0.13 70);
   /* 指色チップ上の文字色（ダーク/ウルトラダークは白。濃い背景 L 0.52〜0.55 に対し全指で 4.5:1 以上。黒だと 3.6〜4.6 で不足） */
   --finger-chip-fg: oklch(1 0 0);
+
+  /* ガイド本文の背景パレット（dark）。保存色と同じ色相の暗い背景（L 0.30）にして、前景色の文字を
+     13:1 前後にする（保存色のままだと約 1.1:1）。灰は彩度をほぼ 0 のまま、旧ハイライトの黄は少し濃く */
+  --guide-bg-gray: oklch(0.3 0.003 106);
+  --guide-bg-red: oklch(0.3 0.05 14);
+  --guide-bg-yellow: oklch(0.3 0.05 92);
+  --guide-bg-green: oklch(0.3 0.05 141);
+  --guide-bg-blue: oklch(0.3 0.05 225);
+  --guide-bg-purple: oklch(0.3 0.05 308);
+  --guide-bg-pink: oklch(0.3 0.05 343);
+  --guide-bg-legacy-yellow: oklch(0.3 0.06 102);
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -310,6 +334,16 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+
+  /* ガイド本文の背景パレット（ultra-dark）。背景が深いぶん dark より一段暗く（L 0.27） */
+  --guide-bg-gray: oklch(0.27 0.003 106);
+  --guide-bg-red: oklch(0.27 0.05 14);
+  --guide-bg-yellow: oklch(0.27 0.05 92);
+  --guide-bg-green: oklch(0.27 0.05 141);
+  --guide-bg-blue: oklch(0.27 0.05 225);
+  --guide-bg-purple: oklch(0.27 0.05 308);
+  --guide-bg-pink: oklch(0.27 0.05 343);
+  --guide-bg-legacy-yellow: oklch(0.27 0.06 102);
 }
 
 @layer base {
@@ -1449,4 +1483,64 @@ body {
 .code-block-wrapper pre::-webkit-scrollbar-thumb:hover,
 .guide-content.prose .table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Guide background palette — 保存データの背景色を、テーマ別の表示色へ置き換える
+   ハイライト（mark）・表のセル色・旧データの span の inline style（background-color）を、
+   保存されている色の部分一致で捕まえ、--guide-bg-*（:root / .dark / .ultra-dark で定義）に差し替える。
+   保存色はライトの淡い色なので、暗いテーマでは前景色（明るい文字）が載らない（約 1.1:1）。
+   - inline style には詳細度で勝てないため !important が必須（見出しの font-size の打ち消しと同じ理由）
+   - 形は hex（サニタイズ後は "background-color:#FDEBEC;"、エディタは "background-color: #FDEBEC"）と、
+     エディタが表のセル色を読み直したときの rgb（"rgb(253, 235, 236)"）、過去データの空白なし rgb の 3 つ。
+     hex は大文字小文字を問わない（i）。文字色パレットとは hex が重ならない
+   - パレットの単一情報源は app/lib/guide-colors.ts（GUIDE_BG_COLOR_TOKENS）。色を足したらここにも足す
+     （lib/__tests__/guide-colors.test.ts がずれを検出する）
+   - エディタ本体も .guide-content を持つので、編集中も同じ色に見える
+   ───────────────────────────────────────────────────────────── */
+.guide-content [style*="#f1f1ef" i],
+.guide-content [style*="rgb(241, 241, 239)"],
+.guide-content [style*="rgb(241,241,239)"] {
+  background-color: var(--guide-bg-gray) !important;
+}
+.guide-content [style*="#fdebec" i],
+.guide-content [style*="rgb(253, 235, 236)"],
+.guide-content [style*="rgb(253,235,236)"] {
+  background-color: var(--guide-bg-red) !important;
+}
+.guide-content [style*="#fbf3db" i],
+.guide-content [style*="rgb(251, 243, 219)"],
+.guide-content [style*="rgb(251,243,219)"] {
+  background-color: var(--guide-bg-yellow) !important;
+}
+.guide-content [style*="#edf3ec" i],
+.guide-content [style*="rgb(237, 243, 236)"],
+.guide-content [style*="rgb(237,243,236)"] {
+  background-color: var(--guide-bg-green) !important;
+}
+.guide-content [style*="#e7f3f8" i],
+.guide-content [style*="rgb(231, 243, 248)"],
+.guide-content [style*="rgb(231,243,248)"] {
+  background-color: var(--guide-bg-blue) !important;
+}
+.guide-content [style*="#f6f3f9" i],
+.guide-content [style*="rgb(246, 243, 249)"],
+.guide-content [style*="rgb(246,243,249)"] {
+  background-color: var(--guide-bg-purple) !important;
+}
+.guide-content [style*="#f9f0f5" i],
+.guide-content [style*="rgb(249, 240, 245)"],
+.guide-content [style*="rgb(249,240,245)"] {
+  background-color: var(--guide-bg-pink) !important;
+}
+.guide-content [style*="#fef08a" i],
+.guide-content [style*="rgb(254, 240, 138)"],
+.guide-content [style*="rgb(254,240,138)"] {
+  background-color: var(--guide-bg-legacy-yellow) !important;
+}
+/* 色を指定しないハイライト（エディタの ==x== 入力規則・Mod-Shift-H は色なしの <mark> を作る）。
+   UA 既定の黄（Mark）のままだと暗いテーマで明るい文字が載って読めないので、旧既定の黄と同じトークンに寄せる。
+   inline style が無いので !important は要らない */
+.guide-content mark:not([style*="background"]) {
+  background-color: var(--guide-bg-legacy-yellow);
 }
