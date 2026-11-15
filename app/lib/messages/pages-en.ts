@@ -55,6 +55,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   guideToc: {
     title: "Contents",
     close: "Close",
+    sectionToggle: "Show or hide subsections of \"{title}\"",
   },
   backToTop: {
     label: "Back to top",

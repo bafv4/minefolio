@@ -48,6 +48,7 @@ export const PAGES_JA = {
   guideToc: {
     title: "目次",
     close: "閉じる",
+    sectionToggle: "「{title}」の小見出しを開閉",
   },
   /** ページ上部へ戻るボタン */
   backToTop: {

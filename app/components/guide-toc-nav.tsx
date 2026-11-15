@@ -1,14 +1,21 @@
 // ガイドの目次（GitBook 風）。
-// - 広い画面（2xl 以上）: 本文左のガターに sticky 表示（GuideTocSidebar）
-// - それ未満: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
+// - 広い画面（xl 以上）: 本文左のガターに sticky 表示（GuideTocSidebar）
+// - xl 未満: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
 // どちらも共通の TocList を描画し、現在表示中の見出しをハイライトする。
-// 最上位の階層だけを常に出し、下の階層は「いま読んでいる節」の分だけ展開する（visibleTocItems）。
-import { useEffect, useRef, useState, type RefObject } from "react";
+// 最上位の階層だけを常に出し、下の階層は「いま読んでいる節」の分だけ既定で展開する（visibleTocItems）。
+// 節ごとの開閉ボタンで手動の開閉もでき、サイドバーは目次全体も畳める（状態は保存しない）。
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useT } from "@/hooks/use-locale";
-import { List } from "lucide-react";
+import { ChevronRight, List } from "lucide-react";
 import { useOverlayScrollbarY } from "@/hooks/use-overlay-scrollbar-y";
 import { cn } from "@/lib/utils";
-import { visibleTocItems, type TocItem } from "@/lib/guide-toc";
+import {
+  visibleTocItems,
+  tocSectionKeys,
+  tocDisplayedActiveId,
+  TOC_LEAD_SECTION,
+  type TocItem,
+} from "@/lib/guide-toc";
 import {
   Sheet,
   SheetContent,
@@ -101,7 +108,8 @@ function useFollowActiveHeading(
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !activeId) return;
-    const link = container.querySelector<HTMLElement>(`a[href="#${activeId}"]`);
+    // 現在地の項目（アクティブ見出しが畳まれた節の中なら、その節の最上位項目）
+    const link = container.querySelector<HTMLElement>('a[aria-current="location"]');
     if (!link) return;
     const cRect = container.getBoundingClientRect();
     const lRect = link.getBoundingClientRect();
@@ -139,50 +147,119 @@ function useTocMaxHeight(): string {
   return maxHeight;
 }
 
-/** 目次リスト本体（サイドバー・ドロワー共通）。左の細い縦線の上に、アクティブ項目だけ brand の線を載せる */
+/**
+ * 目次リスト本体（サイドバー・ドロワー共通）。左の細い縦線の上に、アクティブ項目だけ brand の線を載せる。
+ * 最上位の項目ごとに、配下の開閉ボタン（シェブロン）を持つ。既定の開閉は「読んでいる節だけ開く」で、
+ * 利用者が手で開閉した節はその操作を優先する（状態は保存しない。親が key で記事ごとに作り直す）。
+ * アクティブ項目が畳まれた節の中にあるときは、その節の最上位項目を現在地として強調する。
+ */
 function TocList({
   items,
   activeId,
   onNavigate,
   touch = false,
+  id,
 }: {
   items: TocItem[];
   activeId: string | null;
   onNavigate?: (id: string) => void;
-  /** true で項目の高さを 44px にする（ドロワー用） */
+  /** true で項目・開閉ボタンの高さを 44px にする（ドロワー用） */
   touch?: boolean;
+  id?: string;
 }) {
-  const visible = visibleTocItems(items, activeId);
+  const t = useT();
+  const baseId = useId();
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const visible = visibleTocItems(items, activeId, overrides);
+  const visibleIds = new Set(visible.map((i) => i.id));
+  const displayedActiveId = tocDisplayedActiveId(items, visible, activeId);
   const topLevel = Math.min(...items.map((i) => i.level));
+
+  const renderLink = (item: TocItem) => {
+    const isActive = item.id === displayedActiveId;
+    return (
+      <a
+        href={`#${item.id}`}
+        onClick={(e) => {
+          e.preventDefault();
+          // onNavigate があればスクロールも呼び出し側に委ねる
+          // （ドロワーは閉じてからスクロールする必要があるため）
+          if (onNavigate) onNavigate(item.id);
+          else jumpToHeading(item.id);
+        }}
+        aria-current={isActive ? "location" : undefined}
+        className={cn(
+          // -ml-px で2px の線が親の1px の縦線に重なる。アクティブだけ brand にする。ホバーは文字色のみ
+          "-ml-px block min-w-0 flex-1 border-l-2 py-1 pr-2 text-sm leading-snug transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+          touch && "flex min-h-11 items-center",
+          isActive
+            ? "border-brand font-medium text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground",
+        )}
+        style={{ paddingLeft: `${(item.level - topLevel) * 0.875 + 0.75}rem` }}
+      >
+        {item.text}
+      </a>
+    );
+  };
+
+  // 節ごとにまとめる（先頭の最上位より前の孤立した下位見出しは頭の無い節）
+  const sections: { key: string; head: TocItem | null; children: TocItem[] }[] = [];
+  items.forEach((item) => {
+    if (item.level === topLevel) sections.push({ key: item.id, head: item, children: [] });
+    else {
+      if (sections.length === 0) sections.push({ key: TOC_LEAD_SECTION, head: null, children: [] });
+      sections[sections.length - 1].children.push(item);
+    }
+  });
+
   return (
-    <ul className="border-l border-border/60">
-      {visible.map((item) => {
-        const isActive = item.id === activeId;
+    <ul id={id} className="border-l border-border/60">
+      {sections.map((section) => {
+        const expanded = section.children.some((c) => visibleIds.has(c.id));
+        const subId = `${baseId}-${section.key}`;
         return (
-          <li key={item.id}>
-            <a
-              href={`#${item.id}`}
-              onClick={(e) => {
-                e.preventDefault();
-                // onNavigate があればスクロールも呼び出し側に委ねる
-                // （ドロワーは閉じてからスクロールする必要があるため）
-                if (onNavigate) onNavigate(item.id);
-                else jumpToHeading(item.id);
-              }}
-              aria-current={isActive ? "location" : undefined}
-              className={cn(
-                // -ml-px で2px の線が親の1px の縦線に重なる。アクティブだけ brand にする。ホバーは文字色のみ
-                "-ml-px block border-l-2 py-1 pr-2 text-sm leading-snug transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                touch && "flex min-h-11 items-center",
-                isActive
-                  ? "border-brand font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-              style={{ paddingLeft: `${(item.level - topLevel) * 0.875 + 0.75}rem` }}
-            >
-              {item.text}
-            </a>
+          <li key={section.key || "lead"}>
+            {section.head && (
+              <div className="flex items-stretch">
+                {renderLink(section.head)}
+                {section.children.length > 0 && (
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={subId}
+                    aria-label={t("guideToc.sectionToggle", { title: section.head.text })}
+                    onClick={() =>
+                      setOverrides((prev) => ({ ...prev, [section.key]: !expanded }))
+                    }
+                    className={cn(
+                      "flex shrink-0 items-center justify-center self-start text-muted-foreground transition-colors hover:text-foreground",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      touch ? "min-h-11 min-w-11" : "size-7",
+                    )}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform motion-reduce:transition-none",
+                        expanded && "rotate-90",
+                      )}
+                      aria-hidden
+                    />
+                  </button>
+                )}
+              </div>
+            )}
+            {section.children.length > 0 && (
+              // 畳んでいる間も要素は残す（aria-controls の参照先）。hidden で見えず Tab も届かない
+              <ul id={subId} hidden={!expanded}>
+                {section.children.map((child) => (
+                  <li key={child.id}>
+                    <div className="flex items-stretch">{renderLink(child)}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </li>
         );
       })}
@@ -192,7 +269,7 @@ function TocList({
 
 /**
  * 広い画面用の目次サイドバー。sticky でスクロール追従する。
- * 親側で `hidden 2xl:block` などの表示制御を行う前提。
+ * 親側で `hidden xl:block` などの表示制御を行う前提。
  */
 export function GuideTocSidebar({ items }: { items: TocItem[] }) {
   const t = useT();
@@ -200,6 +277,8 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
   const { scrollerRef, scrollbar } = useOverlayScrollbarY();
   useFollowActiveHeading(scrollerRef, activeId);
   const maxHeight = useTocMaxHeight();
+  const [open, setOpen] = useState(true);
+  const listId = useId();
   if (items.length < 2) return null;
 
   return (
@@ -212,15 +291,30 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
       style={{ maxHeight }}
       className="sticky top-24 flex flex-col"
     >
-      <p className="mb-2 shrink-0 text-sm font-semibold">{t("guideToc.title")}</p>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((v) => !v)}
+        className="mb-2 flex min-h-7 w-full shrink-0 items-center justify-between rounded text-left text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {t("guideToc.title")}
+        <ChevronRight
+          className={cn(
+            "mr-1.5 h-4 w-4 text-muted-foreground transition-transform motion-reduce:transition-none",
+            open && "rotate-90",
+          )}
+          aria-hidden
+        />
+      </button>
       {/* max-h では percentage 高さ（h-full）が解決しないため、
           入れ子の flex-col + flex-1 でスクローラを高さ制約する */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className={cn("relative flex min-h-0 flex-1 flex-col", !open && "hidden")}>
         <div
           ref={scrollerRef}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          <TocList items={items} activeId={activeId} />
+          <TocList items={items} activeId={activeId} id={listId} />
         </div>
         {scrollbar}
       </div>
@@ -230,7 +324,7 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
 
 /**
  * 狭い画面用の目次。上部に sticky なバーを置き、ハンバーガーから左ドロワーで開く。
- * 親側で `2xl:hidden` などの表示制御を行う前提。
+ * 親側で `xl:hidden` などの表示制御を行う前提。
  */
 export function GuideTocMobile({ items }: { items: TocItem[] }) {
   const t = useT();
@@ -256,11 +350,11 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
   };
 
   return (
-    // 2xl:hidden はこの sticky バー自身に付ける（ラッパーで包むと sticky の
+    // xl:hidden はこの sticky バー自身に付ける（ラッパーで包むと sticky の
     // 可動域がバー高さ分しかなくなり、スクロールで流れて操作できなくなる）。
     // -mx-* は親（guides/view.tsx の article）の左右パディングを打ち消して全幅化する。
     // モバイル（base）は article 側が px-0 になったため打ち消し不要（sm 以上は sm:px-6 と対）。
-    <div className="2xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
+    <div className="xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
@@ -283,6 +377,8 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
           side="left"
           className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
           closeLabel={t("guideToc.close")}
+          // 閉じるボタンはモバイルで 44px、sm 以上は既定の大きさ
+          closeClassName="top-1.5 right-2 flex min-h-11 min-w-11 items-center justify-center sm:top-5 sm:right-4 sm:min-h-0 sm:min-w-0"
           // 開いたときは Radix 既定（先頭のフォーカス可能要素＝閉じるボタン）にせず、現在の項目へフォーカスする
           // （現在の項目が無ければ最初の項目）。閉じるボタンは Tab で届く
           onOpenAutoFocus={(e) => {
@@ -297,7 +393,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
             if (jumpingRef.current) e.preventDefault();
           }}
         >
-          <SheetTitle className="flex items-center gap-2 border-b border-border px-5 py-4 text-sm font-semibold">
+          <SheetTitle className="flex items-center gap-2 border-b border-border py-4 pl-5 pr-14 text-sm font-semibold">
             <List className="h-4 w-4 text-muted-foreground" />
             {t("guideToc.title")}
           </SheetTitle>

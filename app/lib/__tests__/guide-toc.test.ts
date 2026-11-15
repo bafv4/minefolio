@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildTableOfContents, visibleTocItems } from "../guide-toc";
+import {
+  buildTableOfContents,
+  visibleTocItems,
+  tocSectionKeys,
+  tocDisplayedActiveId,
+  TOC_LEAD_SECTION,
+} from "../guide-toc";
 
 // 旧実装（O(n^2) の遅延後方参照版）の逐語コピー。線形版が整形式HTMLに対して
 // バイト一致することを回帰テストで担保するためのリファレンス。
@@ -188,5 +194,60 @@ describe("visibleTocItems", () => {
 
   it("空配列", () => {
     expect(visibleTocItems([], null)).toEqual([]);
+  });
+});
+
+describe("visibleTocItems（手動の開閉）", () => {
+  const items = [
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "a1x", text: "A1x", level: 3 },
+    { id: "b", text: "B", level: 1 },
+    { id: "b1", text: "B1", level: 2 },
+    { id: "c", text: "C", level: 1 },
+  ];
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+  it("overrides が空なら従来どおり", () => {
+    expect(ids(visibleTocItems(items, "b", {}))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("アクティブの節を畳める（最上位だけ残る）", () => {
+    expect(ids(visibleTocItems(items, "a1x", { a: false }))).toEqual(["a", "b", "c"]);
+  });
+
+  it("アクティブ以外の節を開ける", () => {
+    expect(ids(visibleTocItems(items, "b", { a: true }))).toEqual(["a", "a1", "a1x", "b", "b1", "c"]);
+    expect(ids(visibleTocItems(items, null, { b: true }))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("先頭の孤立した下位見出しは overrides の対象外", () => {
+    const xs = [
+      { id: "o", text: "O", level: 2 },
+      { id: "t", text: "T", level: 1 },
+    ];
+    expect(ids(visibleTocItems(xs, "o", { [TOC_LEAD_SECTION]: false }))).toEqual(["o", "t"]);
+  });
+});
+
+describe("tocSectionKeys / tocDisplayedActiveId", () => {
+  const items = [
+    { id: "o", text: "O", level: 2 },
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "b", text: "B", level: 1 },
+  ];
+
+  it("節キーは最上位項目の id（先頭の孤立は空文字）", () => {
+    expect(tocSectionKeys(items)).toEqual([TOC_LEAD_SECTION, "a", "a", "b"]);
+    expect(tocSectionKeys([])).toEqual([]);
+  });
+
+  it("見えているアクティブはそのまま、畳まれた節の中なら節の最上位項目を返す", () => {
+    const visible = visibleTocItems(items, "a1", { a: false });
+    expect(tocDisplayedActiveId(items, visible, "a1")).toBe("a");
+    expect(tocDisplayedActiveId(items, visibleTocItems(items, "a1"), "a1")).toBe("a1");
+    expect(tocDisplayedActiveId(items, visible, null)).toBeNull();
+    expect(tocDisplayedActiveId(items, visible, "nope")).toBeNull();
   });
 });

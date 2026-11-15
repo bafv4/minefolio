@@ -578,13 +578,18 @@ export default function GuideViewPage() {
   // article 側は 0 にする（sm 以上は main と article の両方で加算する既存の見た目を維持）。
   // GuideTocMobile 側の -mx-* もこの調整に合わせている（guide-toc-nav.tsx 参照）。
   return (
-    <article className="relative w-full max-w-5xl mx-auto px-0 sm:px-6 lg:px-8">
+    // xl〜2xl 未満で本文を右へ寄せるのは、サイドバーの目次を出すとき（見出し 2 つ以上。GuideTocSidebar と同じ条件）だけ
+    <article
+      className={`relative w-full max-w-5xl mx-auto px-0 sm:px-6 lg:px-8${
+        toc.length >= 2 ? " xl:max-w-[74rem] xl:pl-60 2xl:max-w-5xl 2xl:pl-8" : ""
+      }`}
+    >
       {/* デスクトップ目次: 本文幅は削らず、中央寄せ本文の左余白（ガター）に固定表示する。
-          左端はヘッダーのロゴ始点（コンテナ左端）と揃える。2xl ではガター幅が w-56 と一致し、
-          right-full（右端＝本文パディング左端）と合わせて左端がコンテナ左端になる。
-          2xl 未満は下部の上部バー + ドロワーを使う。 */}
-      <div className="hidden 2xl:block absolute inset-y-0 right-full w-56">
-        <GuideTocSidebar items={toc} />
+          2xl ではガター幅が w-56 と一致し、right-full（右端＝本文パディング左端）と
+          合わせて左端がコンテナ左端（ヘッダーのロゴ始点）になる。xl〜2xl 未満はガターが狭いので、
+          本文を右へ寄せて（xl:pl-60）その左の余白（w-52）にサイドバーを置く。xl 未満は上部バー + ドロワーを使う。 */}
+      <div className="hidden xl:block absolute inset-y-0 left-0 w-52 2xl:left-auto 2xl:right-full 2xl:w-56">
+        <GuideTocSidebar key={guide.id} items={toc} />
       </div>
 
       {previewingDraft && (
@@ -712,10 +717,10 @@ export default function GuideViewPage() {
         />
       )}
 
-      {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。
-          2xl:hidden と sticky はコンポーネント側のバー本体に付く（ラッパーで包むと
+      {/* 目次（xl 未満: 上部固定バー + 左ドロワー）。
+          xl:hidden と sticky はコンポーネント側のバー本体に付く（ラッパーで包むと
           sticky の可動域が無くなるため、ここでは素で描画する） */}
-      <GuideTocMobile items={toc} />
+      <GuideTocMobile key={guide.id} items={toc} />
 
       {/* Content */}
       <GuideContent

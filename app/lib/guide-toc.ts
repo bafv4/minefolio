@@ -155,25 +155,65 @@ export function buildTableOfContents(html: string): { html: string; toc: TocItem
   return { html: out, toc };
 }
 
+/** 先頭の最上位項目より前にある下位見出しの塊の節キー（見出しが無いので開閉ボタンは持たない） */
+export const TOC_LEAD_SECTION = "";
+
+/**
+ * 各項目が属する節のキーを items と同じ順で返す。
+ * 節は最上位（items の最小 level）の項目ごとに始まり、キーはその項目の id。
+ * 先頭の最上位項目より前の下位見出しは `TOC_LEAD_SECTION`。
+ */
+export function tocSectionKeys(items: TocItem[]): string[] {
+  if (items.length === 0) return [];
+  const topLevel = Math.min(...items.map((i) => i.level));
+  let key = TOC_LEAD_SECTION;
+  return items.map((item) => {
+    if (item.level === topLevel) key = item.id;
+    return key;
+  });
+}
+
 /**
  * 目次に表示する項目を返す（折りたたみ）。
  * - 最上位（items の最小 level）は常に表示する。
- * - それより下の階層は、アクティブな見出しを含む最上位の節（次の最上位項目の手前まで）の分だけ表示する。
- * - アクティブ項目そのものは常に表示される（最上位より前に孤立した下位見出しでも、その塊が節として開く）。
- * 順序は items のまま。activeId が null / 未知なら最上位のみ。
+ * - それより下の階層は、節（最上位項目から次の最上位項目の手前まで）が開いているときだけ表示する。
+ *   既定では、アクティブな見出しを含む節だけが開く。
+ * - `overrides`（節キー → 開閉）は既定より優先する。利用者が手で開閉した節の分
+ *   （先頭の孤立した下位見出しの塊 `TOC_LEAD_SECTION` はボタンが無いので対象外）。
+ * - アクティブ項目そのものは、上の規則で畳まれていなければ見える。
+ * 順序は items のまま。activeId が null / 未知なら最上位のみ（overrides で開いた節を除く）。
  */
-export function visibleTocItems(items: TocItem[], activeId: string | null): TocItem[] {
+export function visibleTocItems(
+  items: TocItem[],
+  activeId: string | null,
+  overrides: Readonly<Record<string, boolean>> = {},
+): TocItem[] {
   if (items.length === 0) return [];
   const topLevel = Math.min(...items.map((i) => i.level));
-
-  // 各項目が属する節の番号（最上位項目ごとに +1。先頭の最上位より前は 0）
-  let section = 0;
-  const sectionOf = items.map((item) => {
-    if (item.level === topLevel) section += 1;
-    return section;
-  });
+  const keys = tocSectionKeys(items);
   const activeIndex = activeId === null ? -1 : items.findIndex((i) => i.id === activeId);
-  const activeSection = activeIndex === -1 ? null : sectionOf[activeIndex];
+  const activeKey = activeIndex === -1 ? null : keys[activeIndex];
 
-  return items.filter((item, idx) => item.level === topLevel || sectionOf[idx] === activeSection);
+  return items.filter((item, idx) => {
+    if (item.level === topLevel) return true;
+    const key = keys[idx];
+    if (key !== TOC_LEAD_SECTION && key in overrides) return overrides[key];
+    return key === activeKey;
+  });
+}
+
+/**
+ * 目次で現在地として強調する項目の id。
+ * アクティブ項目が畳まれた節の中にあるとき（見えていないとき）は、その節の最上位項目を返す。
+ */
+export function tocDisplayedActiveId(
+  items: TocItem[],
+  visible: TocItem[],
+  activeId: string | null,
+): string | null {
+  if (activeId === null) return null;
+  if (visible.some((i) => i.id === activeId)) return activeId;
+  const index = items.findIndex((i) => i.id === activeId);
+  if (index === -1) return null;
+  return tocSectionKeys(items)[index] || null;
 }
