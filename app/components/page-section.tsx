@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
@@ -20,7 +21,8 @@ export function SectionHeaderLink({ to, label, prefetch }: { to: string; label: 
  * ページ内の欄の共通枠（ホーム・走者画面などで共有）。`section` + `aria-labelledby`（h2）でランドマークにし、
  * 見出しにはアイコン（任意）・件数（badge）・「すべて見る」（viewAllTo）だけを置く（eyebrow は使わない）。
  * 箱なし（上罫線 `border-foreground/15` のみ）の1種類。アイコンは呼び出し側の色のまま見出しの左に置く。
- * 見出し行は折り返さない（モバイルで右のリンクがアイコンのみになるのもそのため）。
+ * 見出し行は既定で折り返さない（モバイルで右のリンクがアイコンのみになるのもそのため）。
+ * 右に幅のある操作（セレクト等）を置く欄は `wrapHeader` で、見出しを切り詰めずに操作を次の行（右寄せ）へ回す。
  */
 export function PageSection({
   id,
@@ -29,6 +31,10 @@ export function PageSection({
   badge,
   viewAllTo,
   action,
+  wrapHeader = false,
+  headingLevel = "h2",
+  first = false,
+  className,
   children,
 }: {
   /** h2 の id 接頭辞（aria-labelledby 用。ページ内で一意） */
@@ -40,24 +46,33 @@ export function PageSection({
   badge?: ReactNode;
   viewAllTo?: string;
   action?: ReactNode;
+  /** 見出し行の折り返しを許す（幅が足りないとき、右の操作を次の行の右端へ送る） */
+  wrapHeader?: boolean;
+  /** 見出しのタグ。既定 h2（ホーム）。走者画面はタブタイトルが h2 なので "h3" を渡す（h3 は text-lg、h2 は text-xl） */
+  headingLevel?: "h2" | "h3";
+  /** true で上罫線と上余白を外す（タイトル直下の最初の欄用） */
+  first?: boolean;
+  /** 追加クラス（2列グリッドの1行目だけ罫線を外す `lg:border-t-0 lg:pt-0` など） */
+  className?: string;
   children: ReactNode;
 }) {
   const t = useT();
   const headingId = `${id}-heading`;
+  const Heading = headingLevel;
   return (
     <section
       id={id}
       aria-labelledby={headingId}
-      className="scroll-mt-20 space-y-4 border-t border-foreground/15 pt-6"
+      className={cn("scroll-mt-20 space-y-4", first ? "" : "border-t border-foreground/15 pt-6", className)}
     >
-      <div className="flex flex-nowrap items-center gap-x-2 sm:gap-x-3">
+      <div className={cn("flex items-center gap-x-2 sm:gap-x-3", wrapHeader ? "flex-wrap gap-y-2" : "flex-nowrap")}>
         {icon && <div className="shrink-0">{icon}</div>}
         {/* 見出しは本文との段差（1.25倍以上）を保つため text-xl のまま。モバイルは隙間を詰めて、
             アイコン＋見出し＋件数＋右のアイコンリンクを1行に収める（収まらない言語では truncate）。
             長い件数表示はモバイルで出さないよう呼び出し側で隠す（例: プロフィール欄の総数） */}
-        <h2 id={headingId} className="min-w-0 truncate text-xl font-bold">
+        <Heading id={headingId} tabIndex={-1} className={cn("min-w-0 truncate font-bold", headingLevel === "h3" ? "text-lg" : "text-xl")}>
           {title}
-        </h2>
+        </Heading>
         {badge && <div className="shrink-0">{badge}</div>}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {action}

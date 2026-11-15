@@ -223,12 +223,25 @@ export function SearchCraftGroupedList({
   extraTimings,
   framed = true,
   collapsible = false,
+  stickyHeaders = false,
+  stickyTopClassName,
+  groupHeadingLevel = "h4",
 }: {
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
+  /** 箱なし表示（framed=false）のグループ見出しのタグ。親に欄見出し（h3）が無いときは "h3" に上げる。既定 h4 */
+  groupHeadingLevel?: "h3" | "h4";
   /**
-   * false にすると各タイミンググループを Card ではなく「h3 小見出し＋中身」の箱なしで描く
+   * true にすると、開いているグループの見出し行（グループ名・件数・開閉ボタン、あれば列見出しも）を
+   * スクロール中も画面上部に貼り付ける。`framed={false}` かつ `collapsible` のときだけ効く
+   * （閉じているグループは追従せず自然に流れる）。既定 false
+   */
+  stickyHeaders?: boolean;
+  /** stickyHeaders の貼り付き位置（Tailwind の top-* クラス。固定ヘッダーの下に合わせる。例: "top-[64px] md:top-[112px]"） */
+  stickyTopClassName?: string;
+  /**
+   * false にすると各タイミンググループを Card ではなく「h4 小見出し＋中身」の箱なしで描く
    * （外側の欄 h2 は呼び出し側が PageSection で用意する）。既定 true＝従来の Card 表示
    */
   framed?: boolean;
@@ -345,6 +358,9 @@ export function SearchCraftGroupedList({
           lang={lang}
           framed={framed}
           collapsible={collapsible}
+          stickyHeader={stickyHeaders}
+          stickyTopClassName={stickyTopClassName}
+          headingLevel={groupHeadingLevel}
           open={openKeys.has(g.groupKey)}
           onToggle={() => toggleGroup(g.groupKey)}
           extra={g.extra}
@@ -366,9 +382,13 @@ function SearchCraftGroupCard({
   extra,
   framed = true,
   collapsible = false,
+  stickyHeader = false,
+  stickyTopClassName,
+  headingLevel = "h4",
   open = true,
   onToggle,
 }: {
+  headingLevel?: "h3" | "h4";
   title?: string;
   dotClass?: string;
   crafts: SearchCraftRowData[];
@@ -377,10 +397,13 @@ function SearchCraftGroupCard({
   keyboardLayout?: KeyboardLayout;
   lang: string;
   extra?: ReactNode;
-  /** false なら Card ではなく h3 小見出し＋中身で描く */
+  /** false なら Card ではなく h4 小見出し＋中身で描く（走者画面: タブ h2 ＞ 欄 h3 ＞ グループ h4） */
   framed?: boolean;
   /** true なら見出しを開閉ボタンにする（title があるときのみ）。open / onToggle で制御 */
   collapsible?: boolean;
+  /** 開いているときに見出し行（＋列見出し）を貼り付ける。framed=false かつ collapsible のときだけ有効 */
+  stickyHeader?: boolean;
+  stickyTopClassName?: string;
   open?: boolean;
   onToggle?: () => void;
 }) {
@@ -392,22 +415,28 @@ function SearchCraftGroupCard({
   const showList = title === undefined || crafts.length > 0;
   const isCollapsible = collapsible && title !== undefined;
   const bodyVisible = !isCollapsible || open;
+  // 見出し行を貼り付けるときは、列見出しも同じ貼り付き枠に入れる（別々の top 指定をしなくて済む）
+  const stickyActive = stickyHeader && !framed && isCollapsible && open;
+
+  // 列ヘッダー（デスクトップのみ）
+  const columnHeader = (
+    <div
+      className={cn(
+        "hidden pb-2 border-b text-xs text-muted-foreground",
+        SEARCH_CRAFT_GRID_COLS,
+      )}
+    >
+      <span>{t("playerProfile.colItems")}</span>
+      <span>{t("playerProfile.colSearchStr")}</span>
+      <span>{t("playerProfile.colInputKeys")}</span>
+    </div>
+  );
 
   const body = (
     <>
       {showList && (
         <>
-          {/* 列ヘッダー（デスクトップのみ） */}
-          <div
-            className={cn(
-              "hidden pb-2 border-b text-xs text-muted-foreground",
-              SEARCH_CRAFT_GRID_COLS,
-            )}
-          >
-            <span>{t("playerProfile.colItems")}</span>
-            <span>{t("playerProfile.colSearchStr")}</span>
-            <span>{t("playerProfile.colInputKeys")}</span>
-          </div>
+          {!stickyActive && columnHeader}
           <div className="divide-y">
             {crafts.map((craft) => (
               <SearchCraftRow
@@ -433,16 +462,18 @@ function SearchCraftGroupCard({
       {/* Loop だけのグループ（crafts 0件）は、新しい表示（箱なし・折りたたみ）では件数を出さない。
           既定の Card 表示は従来どおり 0 も出す */}
       {(crafts.length > 0 || (framed && !collapsible)) && (
-        <span className="text-xs font-normal text-muted-foreground">{crafts.length}</span>
+        <>
+          <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{crafts.length}</span>
+          <span className="sr-only">{t("playerProfile.craftGroupCountSr", { count: crafts.length })}</span>
+        </>
       )}
     </>
   );
 
   if (!framed) {
-    return (
-      <section>
-        {title && (
-          <h3 className={cn("text-base font-semibold", showList && bodyVisible && "mb-2")}>
+    const Heading = headingLevel;
+    const heading = title && (
+          <Heading className={cn("text-base font-semibold", showList && bodyVisible && !stickyActive && "mb-2")}>
             {isCollapsible ? (
               <button
                 type="button"
@@ -460,7 +491,19 @@ function SearchCraftGroupCard({
             ) : (
               <span className="flex items-center gap-2">{titleContent}</span>
             )}
-          </h3>
+          </Heading>
+    );
+    return (
+      <section>
+        {stickyActive ? (
+          /* 見出しの開閉ボタンは -mx-1 で左右に 4px はみ出すため、追従中の背景も -mx-2 px-2 で広げて覆う
+              （覆わないと、下を流れる別グループのボタンやフォーカス枠が背景の外に見える） */
+          <div data-sticky-heading className={cn("sticky z-30 -mx-2 mb-2 bg-background px-2", stickyTopClassName)}>
+            {heading}
+            {showList && columnHeader}
+          </div>
+        ) : (
+          heading
         )}
         {bodyVisible && <div id={bodyId}>{body}</div>}
       </section>
@@ -534,7 +577,7 @@ function SearchCraftRow({
               key={idx}
               className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1"
             >
-              <ItemIcon itemId={itemId} size={24} />
+              <ItemIcon itemId={itemId} size={24} alt="" />
               <span className="text-sm">{getItemDisplayName(itemId, lang)}</span>
             </div>
           ))}
@@ -564,6 +607,7 @@ function SearchCraftRow({
                           variant="ghost"
                           size="sm"
                           className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                          aria-label={t("playerProfile.copySearchStrNamed", { str: variation.str })}
                           onClick={() => handleCopy(variation.str)}
                         >
                           <Copy className="h-3 w-3" />

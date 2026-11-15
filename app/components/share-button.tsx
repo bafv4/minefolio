@@ -10,15 +10,18 @@ import {
 import { Share2, Link2, Check } from "lucide-react";
 import { Twitter } from "@/components/brand-icons";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface ShareButtonProps {
   title: string;
   url?: string;
   description?: string;
   includeTab?: boolean; // 現在のタブをURLに含めるか
+  /** md 未満はアイコンのみ（ラベルは sr-only で残す）。既定 false */
+  compactOnMobile?: boolean;
 }
 
-export function ShareButton({ title, url, description, includeTab = false }: ShareButtonProps) {
+export function ShareButton({ title, url, description, includeTab = false, compactOnMobile = false }: ShareButtonProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
 
@@ -63,8 +66,8 @@ export function ShareButton({ title, url, description, includeTab = false }: Sha
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
-          <Share2 className="h-4 w-4 mr-2" />
-          {t("share.label")}
+          <Share2 className={cn("h-4 w-4", compactOnMobile ? "md:mr-2" : "mr-2")} aria-hidden />
+          <span className={cn(compactOnMobile && "max-md:sr-only")}>{t("share.label")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

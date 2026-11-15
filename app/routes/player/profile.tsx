@@ -177,6 +177,7 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -1052,6 +1053,12 @@ export default function PlayerProfilePage() {
   const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
   const hasPlaystyleControls = playstyleControlsRows.length > 0;
   const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
+  // プレイスタイルの欄は lg で2列。1行目（表示される最初の2欄）は罫線なし、1列の間は最初の1欄だけ罫線なし
+  const playstyleVisible = [hasPlaystylePlayContent, hasPlaystyleControls, hasPlaystyleTechnique];
+  const playstyleSectionFirst = playstyleVisible.map((shown, i) => shown && playstyleVisible.slice(0, i).every((v) => !v));
+  const playstyleSectionClass = playstyleVisible.map((shown, i) =>
+    shown && playstyleVisible.slice(0, i).filter(Boolean).length === 1 ? "lg:border-t-0 lg:pt-0" : undefined,
+  );
   const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
 
   // デバイスタブ: 中身のあるカードだけ出す（閲覧者に空カードを見せない）
@@ -1094,7 +1101,7 @@ export default function PlayerProfilePage() {
   // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
   const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
   const tabItems: ProfileHotbarItem[] = [
-    { value: "profile", icon: User, shortLabel: t("playerProfile.hotbarOverview"), label: t("playerProfile.profile"), empty: false, group: "person" },
+    { value: "profile", icon: User, shortLabel: t("playerProfile.hotbarOverview"), label: t("playerProfile.hotbarOverview"), empty: false, group: "person" },
     { value: "stats", icon: BarChart3, shortLabel: t("playerProfile.hotbarRecords"), label: t("playerProfile.activityAndStats"), empty: !hasStatsDataKnown, group: "person" },
     { value: "guides", icon: BookOpen, shortLabel: t("playerProfile.hotbarGuides"), label: t("playerProfile.guidesTab"), empty: !hasGuidesData, group: "person" },
     { value: "playstyle", icon: Gamepad2, shortLabel: t("playerProfile.hotbarStyle"), label: t("playerProfile.playstyleTab"), empty: !hasPlaystyleData, group: "setup" },
@@ -1111,7 +1118,8 @@ export default function PlayerProfilePage() {
 
   // 現在のタブ名（タブパネルのアクセシブルネーム用）。ホットバーのトリガー名は「未登録」が付くことがあるため、パネルには素のタブ名を明示する
   const tabLabelOf = (value: string) => tabItems.find((i) => i.value === value)?.label ?? "";
-  const panelA11yProps = (value: string) => ({ "aria-labelledby": undefined, "aria-label": tabLabelOf(value) });
+  // パネルの名前はタブタイトル（h2）を参照する
+  const panelA11yProps = (value: string) => ({ "aria-labelledby": `profile-tab-title-${value}`, "aria-label": undefined });
 
   // ログイン中の自分の slug（共通レイアウトのローダーが既に返している。追加の取得なし）。未ログイン・未オンボーディングは null
   const viewerSlug = useRouteLoaderData<typeof layoutLoader>("routes/_layout")?.user?.slug ?? null;
@@ -1207,6 +1215,48 @@ export default function PlayerProfilePage() {
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isMain;
 
+  // プリセット選択（箱にせず、タブパネルの一番上・右寄せに1行で置く小さなセレクト。
+  // キー配置・デバイス・アイテム・サーチクラフトで同じ位置、空状態のタブでも同じ）。表示条件は showPresetSelector
+  // md 以上はホットバーの行の右端（ProfileHotbarTabs の trailing）、md 未満はパネル上端の右に1行（下端ドックには入れない）。
+  // 同じ部品を2か所に描き、表示側を CSS（max-lg:hidden / lg:hidden）で切り替える
+  const presetSelectorNode = showPresetSelector ? (
+    <div className="flex min-w-0 items-center justify-end gap-2">
+      <Select value={selectedPresetId ?? ""} onValueChange={handlePresetChange}>
+        <SelectTrigger size="sm" aria-label={t("playerProfile.preset")} className="w-auto min-w-0 max-w-[min(100%,16rem)] sm:max-w-56">
+          <SelectValue placeholder={t("playerProfile.currentSetting")}>
+            {/* SSR の最初の描画から名前を出す（children なしだと選択項目の描画がハイドレーション後になり空のピルになる） */}
+            {selectedPreset ? `${selectedPreset.name}${selectedPreset.isMain ? t("playerProfile.presetMainSuffix") : ""}` : undefined}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {presets.map((preset) => (
+            <SelectItem key={preset.id} value={preset.id}>
+              {preset.name}
+              {preset.isMain && t("playerProfile.presetMainSuffix")}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isViewingPresetSnapshot && (
+        <Badge variant="secondary" className="text-xs max-md:hidden">
+          {t("playerProfile.presetViewing")}
+        </Badge>
+      )}
+    </div>
+  ) : null;
+  const presetSelector = presetSelectorNode ? <div className="lg:hidden">{presetSelectorNode}</div> : null;
+
+  // サーチクラフトのアイテム名を閲覧者の言語で表示するトグル（状態はこの state だけ。保存しない）。
+  // 既定は走者のゲーム言語（未設定は日本語）のまま。サーチ文字列・キー列は言語に依らず不変。
+  // 走者の言語が閲覧者の言語と同じときはボタン自体を出さない
+  const [searchCraftViewerLang, setSearchCraftViewerLang] = useState(false);
+  useEffect(() => {
+    setSearchCraftViewerLang(false);
+  }, [player.id]);
+  const viewerItemLang = locale === "en" ? "en_us" : "ja_jp";
+  const runnerItemLang = player.playerConfig?.gameLanguage || "ja_jp";
+  const canToggleSearchCraftLang = runnerItemLang !== viewerItemLang;
+
   // キー配置タブの仮想キーボード共通 props（デスクトップ版・モバイル版・拡大 Dialog で共有）
   const vkCommon = {
     fingerAssignments: userFingerAssignments,
@@ -1249,12 +1299,16 @@ export default function PlayerProfilePage() {
     <>
     {/* ホットバー型タブ（activationMode="manual": 矢印キーはフォーカス移動のみ、Enter/Space で切替）。
         身元帯・ホットバー・パネルの縦並び。フォルダ型ではないので間隔は gap で取る */}
-    <Tabs value={activeTab} onValueChange={handleTabChange} activationMode="manual" className="flex flex-col gap-4 md:gap-6 overflow-visible rounded-none border-0 bg-transparent">
+    <Tabs value={activeTab} onValueChange={handleTabChange} activationMode="manual" className="flex flex-col gap-4 md:gap-6 overflow-visible rounded-none border-0 bg-transparent [&_[id]]:scroll-mt-0">
 
       {/* 身元帯（全タブ共通。h1 はここだけ） */}
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
-          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+        {/* md 未満は操作ボタン（アイコンのみ）を名前の右に置き、名前に十分な幅（アバター 40px＋gap 12px＋
+            名前 約 124px ＝ 11rem）を取れないときだけ操作ボタンを次の行へ折り返す。
+            basis にアバターぶんを含めるので、7.5rem だと名前が約 50px しか取れず切れていた。
+            それでも収まらない長い名前は切らずに折り返す（h1 の break-words） */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:gap-6">
+          <div className="flex min-w-0 flex-1 basis-[11rem] items-center gap-3 md:basis-auto md:gap-4">
             {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く。
                 size は描画解像度を決める数値 prop なので、md 未満 40px / 以上 64px を CSS で出し分ける
                 （useMediaQuery だと SSR は 64px で描かれ、モバイルでハイドレーション後に縮んで跳ねる） */}
@@ -1273,7 +1327,7 @@ export default function PlayerProfilePage() {
               className="shrink-0 rounded max-md:hidden"
             />
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold md:text-2xl">{playerName}</h1>
+              <h1 className="break-words text-2xl font-bold md:text-3xl">{playerName}</h1>
               {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
               {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
                 <p className="truncate text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
@@ -1284,7 +1338,7 @@ export default function PlayerProfilePage() {
                   <button
                     type="button"
                     onClick={() => handleTabChange("playstyle")}
-                    className="rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex min-h-6 items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {categoryLabel(t, mainCategoryKey)}
                   </button>
@@ -1293,13 +1347,13 @@ export default function PlayerProfilePage() {
             </div>
           </div>
 
-          {/* 操作（モバイルでもタップ領域 44px） */}
-          <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
+          {/* 操作（md 未満はアイコンのみ。タップ領域は 44px 以上、ラベルは sr-only で残す） */}
+          <div className="flex shrink-0 gap-1 max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11 md:flex-wrap md:gap-2">
             {isOwner && (
               <Button asChild size="sm">
                 <Link to="/me/edit">
-                  <Pencil className="mr-2 h-4 w-4" />
-                  {t("playerProfile.edit")}
+                  <Pencil className="h-4 w-4 md:mr-2" aria-hidden />
+                  <span className="max-md:sr-only">{t("playerProfile.edit")}</span>
                 </Link>
               </Button>
             )}
@@ -1308,13 +1362,8 @@ export default function PlayerProfilePage() {
               title={`${playerName} - Minefolio`}
               description={displayShortBio ?? undefined}
               includeTab={true}
+              compactOnMobile
             />
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/compare?p1=${player.slug}`}>
-                <GitCompare className="h-4 w-4 mr-2" />
-                {t("playerProfile.compare")}
-              </Link>
-            </Button>
           </div>
         </div>
 
@@ -1334,7 +1383,19 @@ export default function PlayerProfilePage() {
         />
       </div>
 
-      <ProfileHotbarTabs items={tabItems} activeValue={activeTab} onSelect={handleTabChange} />
+      <ProfileHotbarTabs
+        items={tabItems}
+        activeValue={activeTab}
+        onSelect={handleTabChange}
+        trailing={presetSelectorNode}
+        leading={
+          <>
+            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} mcid={player.mcid} size={28} className="shrink-0 rounded" />
+            {/* 名前は xl 以上だけ（1024px 前後は8スロット＋プリセットでバー幅が埋まるためアバターだけ）。1行で切る */}
+            <span className="hidden max-w-40 truncate text-sm font-semibold xl:block">{playerName}</span>
+          </>
+        }
+      />
 
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-6 relative">
@@ -1352,40 +1413,9 @@ export default function PlayerProfilePage() {
           </div>
         )}
 
-        {/* Preset Selector（キー配置・デバイス・アイテム・サーチクラフトのタブのみ） */}
-        {showPresetSelector && (
-          <div className="flex flex-wrap items-center gap-3 p-3 border rounded-lg bg-card">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Save className="h-4 w-4" />
-              <span>{t("playerProfile.presetWithColon")}</span>
-            </div>
-            <Select
-              value={selectedPresetId ?? ""}
-              onValueChange={handlePresetChange}
-            >
-              <SelectTrigger className="min-w-40 flex-1">
-                <SelectValue placeholder={t("playerProfile.currentSetting")} />
-              </SelectTrigger>
-              <SelectContent>
-                {presets.map((preset) => (
-                  <SelectItem key={preset.id} value={preset.id}>
-                    {preset.name}
-                    {preset.isMain && t("playerProfile.presetMainSuffix")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {isViewingPresetSnapshot && (
-              <Badge variant="secondary" className="text-xs">
-                {t("playerProfile.presetViewing")}
-              </Badge>
-            )}
-          </div>
-        )}
-
-
         {/* Profile Tab */}
-        <TabsContent value="profile" {...panelA11yProps("profile")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="profile" {...panelA11yProps("profile")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="profile" label={tabLabelOf("profile")} trailing={presetSelector} />
           {/* Header: Skin + Basic Info（箱にせず欄の先頭にそのまま置く） */}
           <div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
@@ -1585,7 +1615,7 @@ export default function PlayerProfilePage() {
 
           {/* Bio */}
           {displayBio && (
-            <PageSection id="profile-bio" title={t("playerProfile.bio")}>
+            <PageSection headingLevel="h3" id="profile-bio" title={t("playerProfile.bio")}>
                 {hasTranslatedBio && (
                   <AutoTranslateNotice showOriginal={showBioOriginal} onToggle={toggleBioOriginal} />
                 )}
@@ -1603,7 +1633,7 @@ export default function PlayerProfilePage() {
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <PageSection id="profile-videos" title={t("playerProfile.videos")}>
+            <PageSection headingLevel="h3" id="profile-videos" title={t("playerProfile.videos")}>
               <div className="space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
@@ -1630,10 +1660,12 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="keybindings" label={tabLabelOf("keybindings")} trailing={presetSelector} />
           {hasKeybindingsData ? (
             <>
               <PageSection
+                headingLevel="h3"
                 id="profile-keyboard"
                 title={t("playerProfile.keyboardView")}
               >
@@ -1653,7 +1685,10 @@ export default function PlayerProfilePage() {
                       </HintTip>
                     </span>
                   )}
-                  <p className="text-xs text-muted-foreground">{t("playerProfile.keyboardTapHint")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="md:hidden">{t("playerProfile.keyboardTapHintMobile")}</span>
+                    <span className="max-md:hidden">{t("playerProfile.keyboardTapHint")}</span>
+                  </p>
                   <div className="ml-auto">
                     <KeyboardExportDialog
                       layout={keyboardLayout}
@@ -1712,8 +1747,8 @@ export default function PlayerProfilePage() {
               </PageSection>
 
               {/* 割り当て一覧 */}
-              <PageSection id="profile-keylist" title={t("playerProfile.keyListTitle")}>
-                <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+              <PageSection headingLevel="h3" id="profile-keylist" title={t("playerProfile.keyListTitle")}>
+                <div className="gap-x-8 lg:columns-2">
                   {keybindingDisplayGroups.map((group) => {
                     const bindings = group.actions
                       .map((action) => keybindingsByAction.get(action))
@@ -1721,8 +1756,8 @@ export default function PlayerProfilePage() {
                     if (bindings.length === 0) return null;
 
                     return (
-                      <div key={group.key} className="space-y-2">
-                        <h3 className={`text-base font-semibold ${group.colorClass}`}>{group.label}</h3>
+                      <div key={group.key} className="mb-6 space-y-2 break-inside-avoid">
+                        <h4 className={`text-base font-semibold ${group.colorClass}`}>{group.label}</h4>
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -1743,7 +1778,7 @@ export default function PlayerProfilePage() {
                   {/* カスタムアクション（登録されている場合のみ） */}
                   {player.customActions.length > 0 && (
                     <div className="space-y-2">
-                      <h3 className="text-base font-semibold">{t("playerProfile.customActions")}</h3>
+                      <h4 className="text-base font-semibold">{t("playerProfile.customActions")}</h4>
                       <div className="divide-y">
                         {player.customActions.map((ca) => {
                           const chips = resolveKeyCombinationChips(ca.triggerKey);
@@ -1777,7 +1812,7 @@ export default function PlayerProfilePage() {
                     <details className="group space-y-2 lg:col-span-2">
                       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
-                        <h3 className="text-base font-semibold">{t("playerProfile.remaps")}</h3>
+                        <h4 className="text-base font-semibold">{t("playerProfile.remaps")}</h4>
                         <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
                           {player.keyRemaps.length}
                         </Badge>
@@ -1838,17 +1873,20 @@ export default function PlayerProfilePage() {
               </PageSection>
             </>
           ) : (
-            <EmptyState
-              icon={<Keyboard className="h-12 w-12" />}
-              title={t("playerProfile.noKeybindingsTitle")}
-              description={t("playerProfile.noKeybindings")}
-              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
-            />
+            <>
+              <EmptyState
+                icon={<Keyboard className="h-12 w-12" />}
+                title={t("playerProfile.noKeybindingsTitle")}
+                description={t("playerProfile.noKeybindings")}
+                action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
+              />
+            </>
           )}
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" {...panelA11yProps("stats")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="stats" {...panelA11yProps("stats")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="stats" label={tabLabelOf("stats")} trailing={presetSelector} />
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
@@ -1865,12 +1903,13 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Playstyle Tab */}
-        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="playstyle" label={tabLabelOf("playstyle")} trailing={presetSelector} />
           {hasPlaystyleData ? (
             <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 lg:grid-cols-2">
               {/* プレイ内容 */}
               {hasPlaystylePlayContent && (
-                <PageSection id="profile-playstyle-play" title={t("playerProfile.playstylePlayContent")}>
+                <PageSection headingLevel="h3" id="profile-playstyle-play" className={playstyleSectionClass[0]} first={playstyleSectionFirst[0]} title={t("playerProfile.playstylePlayContent")}>
                     {playstylePlayContentRows.map((row, i) => (
                       <div key={i} className="space-y-2">
                         <p className="text-sm text-muted-foreground">{row.label}</p>
@@ -1882,10 +1921,10 @@ export default function PlayerProfilePage() {
 
               {/* 操作 */}
               {hasPlaystyleControls && (
-                <PageSection id="profile-playstyle-controls" title={t("playerProfile.playstyleControls")}>
+                <PageSection headingLevel="h3" id="profile-playstyle-controls" className={playstyleSectionClass[1]} first={playstyleSectionFirst[1]} title={t("playerProfile.playstyleControls")}>
                     <div className="divide-y">
                       {playstyleControlsRows.map((row, i) => (
-                        <DeviceRow key={i} label={row.label} value={row.value} />
+                        <DeviceRow key={i} label={row.label} value={row.value} plain />
                       ))}
                     </div>
                 </PageSection>
@@ -1893,7 +1932,7 @@ export default function PlayerProfilePage() {
 
               {/* テクニック */}
               {hasPlaystyleTechnique && (
-                <PageSection id="profile-playstyle-technique" title={t("playerProfile.playstyleTechnique")}>
+                <PageSection headingLevel="h3" id="profile-playstyle-technique" className={playstyleSectionClass[2]} first={playstyleSectionFirst[2]} title={t("playerProfile.playstyleTechnique")}>
                     <div className="divide-y">
                       {playstyleTechniqueRows.map((row, i) => (
                         <DeviceRow key={i} label={row.label} value={row.value} plain={row.plain} />
@@ -1919,33 +1958,73 @@ export default function PlayerProfilePage() {
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" {...panelA11yProps("items")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="items" {...panelA11yProps("items")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="items" label={tabLabelOf("items")} trailing={presetSelector} />
           {hasItemLayoutsData ? (
-            player.itemLayouts.map((layout) => (
-              <ItemLayoutRow key={layout.id} layout={layout} slotKeyLabels={hotbarKeyLabels} />
-            ))
+            // xl 以上は区間を2列の格子に並べる（DOM 順＝左→右・上→下の読み順）。メモは各ホットバーの下のまま。
+            // lg（1024px）では列幅約457px に9スロットのホットバー（約535px）が収まらず、列ごとに横スクロールが出て
+            // ページ幅もはみ出すため、収まる xl から2列にする。
+            // 欄の上罫線は、先頭（全幅で最初）だけ外し、2列のとき最上段の右の欄も外す（プレイスタイルの2列と同じ）
+            <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 xl:grid-cols-2">
+              {player.itemLayouts.map((layout, index) => (
+                <ItemLayoutRow
+                  key={layout.id}
+                  layout={layout}
+                  slotKeyLabels={hotbarKeyLabels}
+                  first={index === 0}
+                  className={index === 1 ? "xl:border-t-0 xl:pt-0" : undefined}
+                />
+              ))}
+            </div>
           ) : (
-            <EmptyState
-              icon={<Package className="h-12 w-12" />}
-              title={t("playerProfile.noItemLayoutsTitle")}
-              description={t("playerProfile.noItemLayouts")}
-              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
-            />
+            <>
+              <EmptyState
+                icon={<Package className="h-12 w-12" />}
+                title={t("playerProfile.noItemLayoutsTitle")}
+                description={t("playerProfile.noItemLayouts")}
+                action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
+              />
+            </>
           )}
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
-          {hasSearchCraftData ? (
-            <PageSection
-              id="profile-searchcraft"
-              title={t("playerProfile.searchCraftTab")}
-              badge={
+        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className={PANEL_CLASS}>
+          <ProfileTabTitle
+            value="searchcraft"
+            label={tabLabelOf("searchcraft")}
+            badge={
+              hasSearchCraftData ? (
                 <HintTip message={t("playerProfile.searchCraftTabHint")} className="text-muted-foreground">
                   <CircleHelp className="h-4 w-4" aria-hidden />
                 </HintTip>
-              }
-            >
+              ) : undefined
+            }
+            trailing={
+              (hasSearchCraftData && canToggleSearchCraftLang) || presetSelector ? (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {hasSearchCraftData && canToggleSearchCraftLang && (
+                    // スイッチ＋ラベル（label で結ぶ。min-h-8 で押せる範囲を 24px 以上に）。折り返しは親の flex-wrap に任せる
+                    <label className="flex min-h-8 max-w-full cursor-pointer items-center gap-2 text-sm">
+                      <Switch
+                        checked={searchCraftViewerLang}
+                        onCheckedChange={setSearchCraftViewerLang}
+                      />
+                      <span className="min-w-0">
+                        {t("playerProfile.searchCraftItemNamesIn", { language: t("playerProfile.searchCraftViewerLangName") })}
+                      </span>
+                    </label>
+                  )}
+                  {presetSelector}
+                </div>
+              ) : null
+            }
+          />
+          {hasSearchCraftData ? (
+            // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする（見出しの並びを h2 → h3 → h4 にそろえる）。
+            // グループの名前もこの h3 を参照する。サーチクラフトのグループ名は h4
+            <div id="profile-searchcraft" role="group" aria-labelledby="profile-searchcraft-heading" className="scroll-mt-20 space-y-4">
+              <h3 id="profile-searchcraft-heading" className="sr-only">{t("playerProfile.searchCraftListHeading")}</h3>
               {/* ゲーム言語・件数・凡例（箱にせず欄の先頭に置く） */}
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
@@ -1975,34 +2054,42 @@ export default function PlayerProfilePage() {
               <SearchCraftGroupedList
                 framed={false}
                 collapsible
+                stickyHeaders
+                // ヘッダー（md 未満）・ホットバー（md 以上、64+49=113 が下端）の下に 1px もぐらせて貼り付く。
+                // ちょうど接すると表示倍率 125% 等で境目が小数の画素位置になり、下のコンテンツが透けるため
+                stickyTopClassName="top-[64px] md:top-[120px]"
                 crafts={parsedSearchCrafts}
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
-                gameLanguage={player.playerConfig?.gameLanguage}
+                gameLanguage={searchCraftViewerLang ? viewerItemLang : player.playerConfig?.gameLanguage}
                 keyboardLayout={keyboardLayout}
                 extraTimings={searchCraftLoopTimings}
                 renderGroupExtra={renderSearchCraftLoopExtra}
+                groupHeadingLevel="h4"
               />
-            </PageSection>
+            </div>
           ) : (
-            <EmptyState
-              icon={<Search className="h-12 w-12" />}
-              title={t("playerProfile.searchCraftNoneTitle")}
-              description={t("playerProfile.noSearchCraft")}
-              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
-            />
+            <>
+              <EmptyState
+                icon={<Search className="h-12 w-12" />}
+                title={t("playerProfile.searchCraftNoneTitle")}
+                description={t("playerProfile.noSearchCraft")}
+                action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
+              />
+            </>
           )}
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" {...panelA11yProps("devices")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="devices" {...panelA11yProps("devices")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="devices" label={tabLabelOf("devices")} trailing={presetSelector} />
           {hasDevicesPanelData && player.playerConfig ? (
             <>
               {(hasKeyboardInfo || hasMouseInfo) && (
               <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 md:grid-cols-2">
                 {/* Keyboard */}
                 {hasKeyboardInfo && (
-                <PageSection id="profile-keyboard" title={t("playerProfile.keyboard")}>
+                <PageSection headingLevel="h3" id="profile-devices-keyboard" first title={t("playerProfile.keyboard")}>
                     {player.playerConfig.keyboardModel || player.playerConfig.keyboardLayout ? (
                       <div className="divide-y">
                         {player.playerConfig.keyboardModel && (
@@ -2026,7 +2113,7 @@ export default function PlayerProfilePage() {
 
                 {/* Mouse */}
                 {hasMouseInfo && (
-                <PageSection id="profile-mouse" title={t("playerProfile.mouse")}>
+                <PageSection headingLevel="h3" id="profile-mouse" first={!hasKeyboardInfo} className={hasKeyboardInfo ? "md:border-t-0 md:pt-0" : undefined} title={t("playerProfile.mouse")}>
                     {hasMouseInfo ? (
                       <div className="divide-y">
                         {/* モデル */}
@@ -2071,6 +2158,7 @@ export default function PlayerProfilePage() {
                           <DeviceRow
                             label={t("playerProfile.mouseAcceleration")}
                             value={player.playerConfig.mouseAcceleration ? t("common.on") : t("common.off")}
+                          plain
                           />
                         )}
                         {/* ゲーム内感度（有効範囲外は一覧と同じく警告付きで出す） */}
@@ -2096,6 +2184,7 @@ export default function PlayerProfilePage() {
                           <DeviceRow
                             label={t("playerProfile.rawInput")}
                             value={player.playerConfig.rawInput ? t("common.on") : t("common.off")}
+                          plain
                           />
                         )}
                         {/* 振り向き（計算できなければ行を消さず「-」+ 理由） */}
@@ -2117,25 +2206,28 @@ export default function PlayerProfilePage() {
 
               {/* Game Settings */}
               {hasInGameSettings && (
-              <PageSection id="profile-ingame" title={t("playerProfile.inGameSettings")}>
+              <PageSection headingLevel="h3" id="profile-ingame" title={t("playerProfile.inGameSettings")}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                     <div className="divide-y">
                       {player.playerConfig.toggleSprint != null && (
                         <DeviceRow
                           label={t("playerProfile.toggleSprint")}
                           value={player.playerConfig.toggleSprint ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.toggleSneak != null && (
                         <DeviceRow
                           label={t("playerProfile.toggleSneak")}
                           value={player.playerConfig.toggleSneak ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.autoJump != null && (
                         <DeviceRow
                           label={t("playerProfile.autoJump")}
                           value={player.playerConfig.autoJump ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.gameLanguage && (
@@ -2170,36 +2262,50 @@ export default function PlayerProfilePage() {
               )}
             </>
           ) : (
-            <EmptyState
-              icon={<Mouse className="h-12 w-12" />}
-              title={t("playerProfile.noDevicesTitle")}
-              description={t("playerProfile.noDevices")}
-              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
-            />
+            <>
+              <EmptyState
+                icon={<Mouse className="h-12 w-12" />}
+                title={t("playerProfile.noDevicesTitle")}
+                description={t("playerProfile.noDevices")}
+                action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
+              />
+            </>
           )}
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" {...panelA11yProps("guides")} className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8">
+        <TabsContent value="guides" {...panelA11yProps("guides")} className={PANEL_CLASS}>
+          <ProfileTabTitle
+            value="guides"
+            label={tabLabelOf("guides")}
+            trailing={
+              hasGuidesData || presetSelector ? (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {hasGuidesData && <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />}
+                  {presetSelector}
+                </div>
+              ) : null
+            }
+          />
           {hasGuidesData ? (
-            <PageSection
-              id="profile-guides"
-              title={t("playerProfile.guidesTab")}
-              action={<ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />}
-            >
+            // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする。グループの名前もこの h3 を参照し、カードのタイトルは h4
+            <div id="profile-guides" role="group" aria-labelledby="profile-guides-heading" className="scroll-mt-20">
+              <h3 id="profile-guides-heading" className="sr-only">{t("playerProfile.guidesListHeading")}</h3>
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
                   guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                   gridCols="sm:grid-cols-2"
+                  titleLevel="h4"
                 />
               ) : (
                 <GuideListView
                   guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
+                  titleLevel="h4"
                 />
               )}
-            </PageSection>
+            </div>
           ) : (
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
@@ -2278,10 +2384,50 @@ const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
   "Blinded / Stronghold": "bg-primary",
 };
 
+/**
+ * 走者画面のタブパネルの共通クラス。タイトル（`data-tab-title`）の直下の最初の欄は上罫線と上余白を外す
+ * （2つ目以降は罫線あり）。欄がパネル直下の section のとき、記録タブの審査中の欄（id 付き div で包む）に効く。
+ * 2列グリッドの1行目は PageSection の `className` で個別に外す。
+ */
+const PANEL_CLASS =
+  "rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8 [&>[data-tab-title]+section]:border-t-0 [&>[data-tab-title]+section]:pt-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:border-t-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:pt-0";
+
+/**
+ * 各タブの先頭のタイトル（h2 `text-xl md:text-2xl`。走者名は h1 `text-2xl md:text-3xl`、欄は h3 `text-lg`、欄内の小見出しは h4）。
+ * 欄が1つだけのタブ（ガイド・サーチクラフト）は欄見出しを出さず、その右の操作を `trailing`、HintTip を `badge` に置く。タブ名はホットバーのツールチップと同じ。
+ * md 未満のプリセット選択（trailing）は同じ行の右端（狭いと折り返す）。タイトルと最初の欄の間は欄どうしより詰める。
+ */
+function ProfileTabTitle({
+  value,
+  label,
+  badge,
+  trailing,
+}: {
+  value: string;
+  label: string;
+  /** タイトルの直後（HintTip など） */
+  badge?: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div data-tab-title className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:mb-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <h2 id={`profile-tab-title-${value}`} className="min-w-0 text-xl font-bold md:text-2xl">
+          {label}
+        </h2>
+        {badge && <div className="shrink-0">{badge}</div>}
+      </div>
+      {trailing}
+    </div>
+  );
+}
+
 /** アイテム配置タブの1セグメント分の欄（見出し + ホットバー + メモ）。アイテム名はホットバーのヒント（ホバー・フォーカス・タップ）で提示する */
 function ItemLayoutRow({
   layout,
   slotKeyLabels,
+  first,
+  className,
 }: {
   layout: {
     id: string;
@@ -2291,6 +2437,9 @@ function ItemLayoutRow({
     notes: string | null;
   };
   slotKeyLabels?: Partial<Record<number, string>>;
+  /** 欄の上罫線と上余白を外す（タブタイトル直下の最初の欄） */
+  first?: boolean;
+  className?: string;
 }) {
   const t = useT();
   const slots = JSON.parse(layout.slots) as Slot[];
@@ -2299,7 +2448,10 @@ function ItemLayoutRow({
 
   return (
     <PageSection
+      headingLevel="h3"
       id={`profile-items-${layout.id}`}
+      first={first}
+      className={className}
       icon={<span aria-hidden className={cn("block h-2.5 w-2.5 rounded-full", dotClass)} />}
       title={layout.segment}
     >
@@ -2498,7 +2650,7 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
   }, [slug, hasRichLinks]);
 
   return (
-    <PageSection id="profile-links" title={t("playerProfile.links")}>
+    <PageSection headingLevel="h3" id="profile-links" title={t("playerProfile.links")}>
       <div className="space-y-2">
         {hasRichLinks && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -3016,7 +3168,7 @@ function StatsContent({
 
       {/* カスタム記録（RecordCard は1件ずつの箱のまま） */}
       {player.categoryRecords.length > 0 && (
-        <PageSection id="stats-custom-records" title={t("playerProfile.customRecords")}>
+        <PageSection headingLevel="h3" id="stats-custom-records" title={t("playerProfile.customRecords")}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {player.categoryRecords.map((record) => (
               <RecordCard key={record.id} record={record} />

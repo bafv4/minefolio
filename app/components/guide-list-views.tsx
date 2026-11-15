@@ -64,10 +64,13 @@ export function GuideCardGrid({
   gridCols = "sm:grid-cols-2 lg:grid-cols-3",
   pageViewsMode = "additional",
   surface = "default",
+  titleLevel: TitleHeading = "h3",
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   gridCols?: string;
+  /** カードタイトルの見出しレベル。既定 h3。欄見出し（h3）の下に置く面（走者画面のガイドタブ）は h4 */
+  titleLevel?: "h3" | "h4";
   /**
    * カードの面。"default"（既定）はサイト共通の `bg-background/80`、"card" は不透明の `bg-card`
    * （ホームのように箱なしのセクションでページ背景に直接置くとき。dark 系で背景と同化しないように）
@@ -133,10 +136,10 @@ export function GuideCardGrid({
               <div className="flex flex-1 flex-col p-4">
                 {/* leading-none（16px）だと Zen Kaku Gothic New のディセンダー（g/y/p）が line-clamp の
                     overflow:hidden で約2px切れるため leading-snug（22px）。Pin は1行目の中央に揃える */}
-                <h3 className="flex items-start gap-1.5 text-base font-semibold leading-snug line-clamp-2 transition-colors group-hover:text-primary">
+                <TitleHeading className="flex items-start gap-1.5 text-base font-semibold leading-snug line-clamp-2 transition-colors group-hover:text-primary">
                   {guide.isPinned && <Pin className="h-4 w-4 text-primary shrink-0 mt-[3px]" />}
                   {guide.title}
-                </h3>
+                </TitleHeading>
                 {guide.summary && (
                   <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
                     {guide.summary}
@@ -200,9 +203,12 @@ export function GuideCardGrid({
 export function GuideListView({
   guides,
   linkFn,
+  titleLevel: TitleHeading = "h3",
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
+  /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
+  titleLevel?: "h3" | "h4";
 }) {
   const locale = useLocale();
   return (
@@ -233,10 +239,10 @@ export function GuideListView({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1 flex items-center gap-1.5">
+              <TitleHeading className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-1 flex items-center gap-1.5">
                 {guide.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
                 {guide.title}
-              </h3>
+              </TitleHeading>
               {guide.summary && (
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                   {guide.summary}
