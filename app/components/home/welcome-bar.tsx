@@ -42,7 +42,11 @@ export function WelcomeBar({
       aria-label={greeting}
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 shadow-sm sm:gap-x-4 sm:px-5"
     >
-      <Link to={`/player/${slug}`} className="shrink-0" aria-hidden="true" tabIndex={-1}>
+      <Link
+        to={`/player/${slug}`}
+        aria-label={t("home.welcomeMyProfile")}
+        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} className="rounded-xl" />
       </Link>
       <div className="min-w-0 flex-1">
@@ -50,7 +54,6 @@ export function WelcomeBar({
         {liveCount > 0 && (
           <Link
             to={liveHref}
-            aria-label={t("home.liveCountAria", { count: liveCount })}
             className="mt-1 inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mt-0.5"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
@@ -59,37 +62,37 @@ export function WelcomeBar({
           </Link>
         )}
       </div>
-      {/* DOM 順（＝フォーカス順）は 編集 → マイプロフィール → お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
+      {/* DOM 順（＝フォーカス順）は アバター（マイプロフィール）→ 編集 → マイプロフィール（sm 以上のみ）→ お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
       <div className="flex w-full items-center gap-x-1 sm:w-auto sm:gap-x-2">
-        <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
+        <Button asChild variant="outline" className="min-h-11 max-sm:has-[>svg]:px-2 sm:min-h-9">
           {/* モバイルは「カスタマイズ」の文字を残すぶん、編集は短い表記にして1行に収める（読み上げは全文） */}
           <Link to="/me/edit" aria-label={t("home.welcomeEditProfile")}>
-            <Pencil className="mr-1.5 h-4 w-4" />
+            <Pencil className="h-4 w-4 sm:mr-1.5" />
             <span className="sm:hidden">{t("home.welcomeEditProfileShort")}</span>
             <span className="max-sm:hidden">{t("home.welcomeEditProfile")}</span>
           </Link>
         </Button>
-        {/* モバイルはプロフィール・お気に入りをアイコンのみ（44px 角）にして1行に収める。ラベルは sr-only で残す。
-            カスタマイズはアイコンだけでは並べ替えと分からないので文字を残す */}
-        <Button asChild variant="ghost" className="min-h-11 max-sm:w-11 max-sm:px-0 sm:min-h-9">
+        {/* モバイルのマイプロフィールはアバターのリンクが担うのでボタンを出さない（空いた幅でお気に入りも文字付きにする）。
+            モバイルは基底の has-[>svg]:px-3 とアイコンの mr-1.5（基底の gap-2 と二重）を詰めて、3つを1行に収める */}
+        <Button asChild variant="ghost" className="min-h-11 max-sm:hidden sm:min-h-9">
           <Link to={`/player/${slug}`}>
-            <User className="h-4 w-4 sm:mr-1.5" />
-            <span className="sr-only sm:not-sr-only">{t("home.welcomeMyProfile")}</span>
+            <User className="mr-1.5 h-4 w-4" />
+            {t("home.welcomeMyProfile")}
           </Link>
         </Button>
-        <Button asChild variant="ghost" className="min-h-11 max-sm:w-11 max-sm:px-0 sm:min-h-9">
+        <Button asChild variant="ghost" className="min-h-11 max-sm:has-[>svg]:px-2 sm:min-h-9">
           <Link to="/favorites">
             <Heart className="h-4 w-4 sm:mr-1.5" />
-            <span className="sr-only sm:not-sr-only">{t("home.welcomeFavorites")}</span>
+            {t("home.welcomeFavorites")}
           </Link>
         </Button>
         <Button
           type="button"
           variant="ghost"
-          className="ml-auto min-h-11 max-sm:px-2 sm:ml-0 sm:min-h-9"
+          className="ml-auto min-h-11 max-sm:has-[>svg]:px-2 sm:ml-0 sm:min-h-9"
           onClick={() => setSettingsOpen(true)}
         >
-          <Settings2 className="mr-1.5 h-4 w-4" />
+          <Settings2 className="h-4 w-4 sm:mr-1.5" />
           {t("home.welcomeCustomize")}
         </Button>
       </div>
