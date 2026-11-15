@@ -45,6 +45,7 @@ import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { normalizeGuideTables } from "@/lib/guide-tables";
+import { annotateGuideCallouts } from "@/lib/guide-view-html";
 import {
   extractEmbedRefs,
   extractTemplateEmbedIds,
@@ -445,7 +446,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 見出し(h1〜h3)に id を付与し、目次データを生成する
   // 目次は元のレベルで抽出し、その後に本文見出しを1段下げる（ページタイトルが h1 のため。guide-heading-demote.ts）
   const { html: tocHtml, toc } = buildTableOfContents(wrappedContent);
-  const contentWithIds = blankGenericImageAlt(demoteGuideHeadings(tocHtml));
+  // コールアウトに role="note" と種類名の aria-label を付ける（アイコンは装飾なので種類を読み上げで伝える。
+  // サニタイズで落ちる属性なので後段で足す。guide-view-html.ts）
+  const tView = createTranslator(resolveLocale(request));
+  const calloutLabels: Record<string, string> = {
+    tip: tView("guideEditor.callout.tip"),
+    info: tView("guideEditor.callout.info"),
+    warning: tView("guideEditor.callout.warning"),
+    danger: tView("guideEditor.callout.danger"),
+  };
+  const contentWithIds = annotateGuideCallouts(
+    blankGenericImageAlt(demoteGuideHeadings(tocHtml)),
+    (type) => calloutLabels[type] ?? null,
+  );
 
   // Extract embed references and fetch user data
   const embedRefs = extractEmbedRefs(contentWithIds);
