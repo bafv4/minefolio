@@ -30,7 +30,7 @@ export function LiveSplitStrip({ entries, loading = false }: { entries: LiveSpli
             <div key={name} className="flex min-w-0 flex-col gap-1.5">
               <div className="flex h-5 items-center gap-0.5">
                 {/* ネザーラック系の暗い区間アイコンが dark / ultra-dark の背景に沈むため、淡い地を敷く */}
-                <span className={cn("inline-flex shrink-0 rounded bg-foreground/15 p-0.5", n === 0 && "opacity-40")}>
+                <span className={cn("inline-flex shrink-0 rounded bg-foreground/25 p-0.5", n === 0 && "opacity-50")}>
                   <PaceManSplitMark timeline={LIVE_STAGE_SPLIT_MARKS[i]} size={16} withLabel={false} className="shrink-0" />
                 </span>
                 {n > 0 && <span className="text-xs font-semibold tabular-nums">×{n}</span>}
