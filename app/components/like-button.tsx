@@ -18,6 +18,8 @@ interface LikeButtonProps {
   isOwn?: boolean;
   /** compact: 一覧カードのメタ行 / detail: 詳細ページのアクション行 */
   variant?: "compact" | "detail";
+  /** detail のみ。sm 未満では文字を sr-only にして、アイコン＋件数だけにする（読み上げ名は変えない） */
+  compactLabel?: boolean;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ export function LikeButton({
   isLiked = false,
   isOwn = false,
   variant = "compact",
+  compactLabel = false,
   className,
 }: LikeButtonProps) {
   const t = useT();
@@ -107,8 +110,8 @@ export function LikeButton({
     return (
       <Button asChild variant="outline" size="sm" className={className}>
         <Link to={loginHref}>
-          <ThumbsUp className="mr-2 size-4" aria-hidden />
-          {t("likes.loginToLike")}
+          <ThumbsUp className={cn("size-4", compactLabel ? "sm:mr-2" : "mr-2")} aria-hidden />
+          <span className={cn(compactLabel && "max-sm:sr-only")}>{t("likes.loginToLike")}</span>
           <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>
         </Link>
       </Button>
@@ -141,8 +144,13 @@ export function LikeButton({
         className,
       )}
     >
-      <ThumbsUp className={cn("mr-2 size-4", liked && "fill-current")} aria-hidden />
-      {liked ? t("likes.labelActive") : t("likes.label")}
+      <ThumbsUp
+        className={cn("size-4", compactLabel ? "sm:mr-2" : "mr-2", liked && "fill-current")}
+        aria-hidden
+      />
+      <span className={cn(compactLabel && "max-sm:sr-only")}>
+        {liked ? t("likes.labelActive") : t("likes.label")}
+      </span>
       <span className="ml-1 tabular-nums">{count}</span>
     </Button>
   );

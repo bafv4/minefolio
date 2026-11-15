@@ -27,6 +27,7 @@ import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { getGuideLikeCount } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
+import { ShareButton } from "@/components/share-button";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
@@ -504,7 +505,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { guide, author, otherGuides, embedUsers, embedTemplates, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
+  const { guide, author, appUrl, otherGuides, embedUsers, embedTemplates, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
@@ -621,12 +622,15 @@ export default function GuideViewPage() {
         )}
       </div>
 
-      {/* 筆者の行（走者。名前＋@MCID、更新日・閲覧数・いいね）。メタ行の罫線は廃止してここへ統合 */}
+      {/* 筆者の行（走者。名前＋@MCID、いいね・シェア、更新日・閲覧数）。メタ行の罫線は廃止してここへ統合。
+          いいね・シェアは1行目の右端（名前が折り返しても右端に残る）。モバイルはアイコン＋件数だけ */}
       <div className="mb-4">
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        {/* 1行目は折り返さない（折り返すと、いいね・シェアだけの行ができて本文が下がる）。
+            長い名前は省略し、狭い画面では @MCID を2行目へ回す */}
+        <div className="flex items-center gap-x-2.5">
           <Link
             to={`/player/${author.slug}`}
-            className="group flex min-h-11 items-center gap-2.5 sm:min-h-9"
+            className="group flex min-h-11 min-w-0 items-center gap-2.5 sm:min-h-9"
           >
             <MinecraftAvatar
               uuid={author.uuid ?? undefined}
@@ -635,11 +639,34 @@ export default function GuideViewPage() {
               alt=""
               className="shrink-0 rounded-lg"
             />
-            <span className="font-medium transition-colors group-hover:text-primary">{authorName}</span>
+            <span className="truncate font-medium transition-colors group-hover:text-primary">{authorName}</span>
           </Link>
-          {author.mcid && <span className="text-sm text-muted-foreground">@{author.mcid}</span>}
+          {author.mcid && (
+            <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:inline">@{author.mcid}</span>
+          )}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <LikeButton
+              variant="detail"
+              targetType="guide"
+              targetId={guide.id}
+              likeCount={guide.likeCount}
+              isOwn={isOwner}
+              compactLabel
+              className="h-11 max-sm:min-w-11 sm:h-8"
+            />
+            {!previewingDraft && (
+              <ShareButton
+                title={`${guide.title} | Minefolio`}
+                url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
+                compactOnMobile
+                compactBelow="sm"
+                className="h-11 max-sm:min-w-11 sm:h-8"
+              />
+            )}
+          </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          {author.mcid && <span className="sm:hidden">@{author.mcid}</span>}
           <span>
             {t("guideView.updatedOn", {
               date: format(guide.updatedAt, dateFormatPattern(locale), { locale: dateFnsLocale(locale) }),
@@ -648,14 +675,6 @@ export default function GuideViewPage() {
           <span className="tabular-nums">
             {t("guideView.viewCount", { count: guide.viewCount.toLocaleString(locale) })}
           </span>
-          <LikeButton
-            variant="detail"
-            targetType="guide"
-            targetId={guide.id}
-            likeCount={guide.likeCount}
-            isOwn={isOwner}
-            className="ml-auto h-11 sm:h-8"
-          />
         </div>
       </div>
 
@@ -705,6 +724,26 @@ export default function GuideViewPage() {
         embedUsers={embedUsers}
         embedTemplates={embedTemplates}
       />
+
+      {/* 読み終えた地点のいいね・シェア（上の筆者行と同じ部品。欄にも箱にもしない）。
+          シェアは公開 URL を渡すので、ドラフトのプレビュー中（公開前は 404 になる）は出さない */}
+      <div className="mt-10 flex flex-wrap items-center gap-2">
+        <LikeButton
+          variant="detail"
+          targetType="guide"
+          targetId={guide.id}
+          likeCount={guide.likeCount}
+          isOwn={isOwner}
+          className="h-11 sm:h-8"
+        />
+        {!previewingDraft && (
+          <ShareButton
+            title={`${guide.title} | Minefolio`}
+            url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
+            className="h-11 sm:h-8"
+          />
+        )}
+      </div>
 
       {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ） */}
       <PageSection
