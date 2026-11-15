@@ -2706,7 +2706,8 @@ function SocialLinkRichCard({
   if (stats) {
     if (link.platform === "youtube") {
       const yt = stats as YouTubeChannelStats;
-      if (yt.subscriberCount != null) {
+      // 本物の 0（新規チャンネル等）は「登録者 0人」と出さない（取得失敗は元から null で非表示）
+      if (yt.subscriberCount != null && yt.subscriberCount > 0) {
         statParts.push(
           t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount, locale) }),
         );
@@ -2721,7 +2722,8 @@ function SocialLinkRichCard({
     } else {
       const tw = stats as TwitchChannelStats;
       isLive = tw.isLive;
-      if (tw.followerCount != null) {
+      // フォロワー 0 も同じく出さない（リンクと配信の情報は残す）
+      if (tw.followerCount != null && tw.followerCount > 0) {
         statParts.push(
           t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount, locale) }),
         );
