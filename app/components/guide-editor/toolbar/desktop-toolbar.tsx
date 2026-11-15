@@ -218,17 +218,27 @@ export function DesktopToolbar({
   useEffect(() => {
     const el = barRef.current;
     if (!el) return;
-    const update = () => setBarHeight(el.offsetHeight);
+    // 高さは :root の scroll-padding-top（app/app.css の --sticky-bar-inset）にも渡し、Tab で移った
+    // フォーカスがヘッダー下に fixed のこのツールバーに隠れないようにする（WCAG 2.4.11）
+    const root = document.documentElement;
+    const update = () => {
+      setBarHeight(el.offsetHeight);
+      root.style.setProperty("--editor-toolbar-height", `${el.offsetHeight}px`);
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--editor-toolbar-height");
+    };
   }, []);
 
   return (
     <>
       <div
         ref={barRef}
+        data-editor-toolbar=""
         className="fixed top-16 left-0 right-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
         style={{ zIndex: EDITOR_Z.toolbar }}
         role="toolbar"

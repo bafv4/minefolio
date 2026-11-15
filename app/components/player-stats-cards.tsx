@@ -740,7 +740,7 @@ export function PendingSpeedrunRecordsCard({
   records: PendingSpeedrunRecord[];
   show: boolean;
   onShowChange: (show: boolean) => void;
-  /** false で箱なし（PageSection）。id="pending-speedruncom-records" と scroll-mt-20 は箱なしでも保つ */
+  /** false で箱なし（PageSection）。id="pending-speedruncom-records" は箱なしでも保つ */
   framed?: boolean;
 }) {
   const t = useT();
@@ -782,7 +782,7 @@ export function PendingSpeedrunRecordsCard({
   );
   if (!framed) {
     return (
-      <div className="scroll-mt-20" id="pending-speedruncom-records">
+      <div id="pending-speedruncom-records">
         <PageSection id="stats-pending-speedruncom" title={t("playerStatsCards.pendingRecordsTitle")} headingLevel="h3">
           {/* スイッチは見出し右ではなく本文の先頭に置く（モバイルで見出しを押しつぶさないため） */}
           {toggle}
@@ -793,7 +793,7 @@ export function PendingSpeedrunRecordsCard({
     );
   }
   return (
-    <Card id="pending-speedruncom-records" className="gap-3 py-5 scroll-mt-20">
+    <Card id="pending-speedruncom-records" className="gap-3 py-5">
       <CardHeader className="px-5">
         <div className="flex items-center justify-between gap-3">
           <CardTitle role="heading" aria-level={2} className="text-base flex items-center gap-2">

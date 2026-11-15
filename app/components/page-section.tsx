@@ -59,7 +59,7 @@ export function PageSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn("scroll-mt-20 space-y-4", !first && "border-t border-foreground/15 pt-6", className)}
+      className={cn("space-y-4", !first && "border-t border-foreground/15 pt-6", className)}
     >
       <div className={cn("flex items-center gap-x-2 sm:gap-x-3", "flex-nowrap")}>
         {icon && <div className="shrink-0">{icon}</div>}

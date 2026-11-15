@@ -396,19 +396,28 @@ body {
     scroll-padding-bottom: var(--bottom-fixed-inset);
   }
 
-  /* 走者画面（追従するホットバーの番兵 [data-stuck] を持つページ）の scroll-padding-top（WCAG 2.4.11）。
-     走者画面以外では両変数とも未設定で 0px（= scroll-padding-top の初期値 auto と同じ 0）。
-     --sticky-bar-inset: サイトヘッダー（65px）＋ md 以上の貼り付いたコンパクトなホットバー（57px）＋余白
-       モバイル 4.5rem（72px）/ md 以上 8.5rem（136px）
+  /* 上端に貼り付く UI の scroll-padding-top（WCAG 2.4.11: Tab で移ったフォーカス・アンカー移動の着地点を隠さない）。
+     --sticky-bar-inset: 上端に貼り付く帯の合計＋余白。既定はサイトヘッダー（全ページで sticky、65px）＋余白の 4.5rem（72px）。
+       - 走者画面（追従するホットバーの番兵 [data-stuck]）: md 以上はヘッダー＋貼り付いたコンパクトなホットバー（57px）＋余白の 8.5rem（136px）
+       - ガイド記事（xl 未満で出る目次バー [data-guide-toc-bar]、約 50px）: ヘッダー＋目次バー＋余白の 7.75rem（124px）
+       - ガイドエディタ（ヘッダー下に fixed のツールバー。高さは折り返しで変わる）: desktop-toolbar.tsx が実測して
+         --editor-toolbar-height を root に入れ、ヘッダー＋ツールバー＋余白にする
+       個々の要素に scroll-mt-* を付けない（この値と二重になる。ui.md 10 章）
      --sticky-heading-inset: サーチクラフト一覧で開いているグループの見出し行が追従する（data-sticky-heading。
        search-craft-template-view.tsx）ぶんの加算。貼り付き位置（モバイル 64px / md 以上 120px）＋追従見出しの
        高さ（モバイル約 32px / md 以上約 57px）＋余白 から --sticky-bar-inset を引いた差分
        モバイル 2.25rem（合計 6.75rem）/ md 以上 3.25rem（合計 11.75rem） */
   :root {
-    scroll-padding-top: calc(var(--sticky-bar-inset, 0px) + var(--sticky-heading-inset, 0px));
-  }
-  :root:has([data-stuck]) {
     --sticky-bar-inset: 4.5rem;
+    scroll-padding-top: calc(var(--sticky-bar-inset) + var(--sticky-heading-inset, 0px));
+  }
+  @media (width < 80rem) {
+    :root:has([data-guide-toc-bar]) {
+      --sticky-bar-inset: 7.75rem;
+    }
+  }
+  :root:has([data-editor-toolbar]) {
+    --sticky-bar-inset: calc(4.5rem + var(--editor-toolbar-height, 0px));
   }
   :root:has([data-stuck]):has([data-sticky-heading]) {
     --sticky-heading-inset: 2.25rem;
@@ -1045,25 +1054,8 @@ body {
   color: inherit;
 }
 
-/* 目次アンカーで移動した際、見出しが固定ヘッダーに隠れないよう余白を確保する。
-   狭い画面では固定ヘッダーに加えて目次バーもあるため、その分を余分に確保する
-   （xl 以上はサイドバー表示でバーが無いので控えめにする） */
-.guide-content.prose :where(h1, h2, h3) {
-  scroll-margin-top: 7.5rem;
-}
-/* 公開表示は本文見出しを降格するため（最小レベルが h2。guide-heading-demote.ts）h4 まで出うる */
-.guide-content-demoted.prose :where(h4) {
-  scroll-margin-top: 7.5rem;
-}
-
-@media (min-width: 1536px) {
-  .guide-content.prose :where(h1, h2, h3) {
-    scroll-margin-top: 5rem;
-  }
-  .guide-content-demoted.prose :where(h2, h3, h4) {
-    scroll-margin-top: 5rem;
-  }
-}
+/* 目次アンカーで移動した見出しがヘッダー・目次バーに隠れないための余白は、:root の scroll-padding-top
+   （--sticky-bar-inset。xl 未満は目次バーの分も足す）が持つ。見出しに scroll-margin-top を付けると二重になる */
 
 /* 本文見出しの大きさ: 1.6em / 1.35em / 1.15em / 1em。記事タイトル（h1、sm 以上 36px）との比を
    1.4 以上にして、本文の最上位の見出しがタイトルと張り合わないようにする。エディタ（h1〜）と
