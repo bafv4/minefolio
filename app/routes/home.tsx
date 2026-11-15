@@ -50,7 +50,7 @@ import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/c
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FavoritesFirstNote } from "@/components/favorite-mark";
-import { HomeSection, SectionHeaderLink } from "@/components/home/home-section";
+import { PageSection, SectionHeaderLink } from "@/components/page-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
 import { FeaturedRunnerCard } from "@/components/home/featured-runner-card";
 import { GuestHero } from "@/components/home/guest-hero";
@@ -902,7 +902,7 @@ export default function HomePage() {
       <FavoriteActivity isRegistered={isRegistered} recommended={recommended} />
     ),
     live: (
-      <HomeSection
+      <PageSection
         id="home-live"
         icon={<Radio className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("home.liveTitle")}
@@ -946,10 +946,10 @@ export default function HomePage() {
           recentError={feed.errors.paces}
           onRetryRecent={retryPaces}
         />
-      </HomeSection>
+      </PageSection>
     ),
     videos: (
-      <HomeSection
+      <PageSection
         id="home-videos"
         icon={<Play className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
         title={t("home.sectionVideos")}
@@ -996,11 +996,11 @@ export default function HomePage() {
             )}
           </div>
         )}
-      </HomeSection>
+      </PageSection>
     ),
     guides:
       newGuides.length > 0 ? (
-        <HomeSection
+        <PageSection
           id="home-guides"
             icon={<BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
           title={t("home.sectionGuides")}
@@ -1012,7 +1012,7 @@ export default function HomePage() {
             gridCols="sm:grid-cols-2 xl:grid-cols-4"
             surface="card"
           />
-        </HomeSection>
+        </PageSection>
       ) : null,
     // ログイン時の注目の走者（ゲストはヒーロー右に出すので、ここはログイン時のみ）
     featured: isRegistered ? (
@@ -1022,7 +1022,7 @@ export default function HomePage() {
       />
     ) : null,
     profiles: (
-      <HomeSection
+      <PageSection
         id="home-profiles"
         icon={<UserCheck className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
         title={t("home.sectionProfiles")}
@@ -1049,7 +1049,7 @@ export default function HomePage() {
             description={t("home.noProfilesDescription")}
           />
         )}
-      </HomeSection>
+      </PageSection>
     ),
   };
 

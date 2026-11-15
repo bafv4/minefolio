@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { EmptyState } from "@/components/empty-state";
 import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
-import { HomeSection } from "@/components/home/home-section";
+import { PageSection } from "@/components/page-section";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
 import { useT } from "@/hooks/use-locale";
@@ -28,7 +28,7 @@ export function FavoriteActivity({
   if (!shouldShow) return null;
 
   return (
-    <HomeSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t("home.favTitle")} viewAllTo={state.status !== "loading" && state.status !== "error" && state.data.favoritesCount === 0 ? undefined : "/favorites/activity"}>
+    <PageSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t("home.favTitle")} viewAllTo={state.status !== "loading" && state.status !== "error" && state.data.favoritesCount === 0 ? undefined : "/favorites/activity"}>
       {state.status === "loading" ? (
         <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -71,6 +71,6 @@ export function FavoriteActivity({
           ))}
         </ol>
       )}
-    </HomeSection>
+    </PageSection>
   );
 }

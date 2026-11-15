@@ -15,7 +15,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 
 ### ホームの構成（2026-11 全面改修）
 
-**ログイン状態で先頭（ヒーロー / おかえりバー）を分け、以降は共通**。各欄は `section` + `aria-labelledby`（h2、`id` 付き。例 `home-live`）。欄の見出しは「アイコン + h2 + 件数 + 右のリンク」のみで、英大文字の eyebrow・格子背景・ヒーローの統計タイルは無い（公開プロフィール数は「プロフィール」欄の見出し、ライブ人数は「ライブ」欄の見出しに移した。「記録ペース」の件数と `countHomeRecordedPaces` は廃止）。共通の欄枠は `app/components/home/home-section.tsx` の `HomeSection`。
+**ログイン状態で先頭（ヒーロー / おかえりバー）を分け、以降は共通**。各欄は `section` + `aria-labelledby`（h2、`id` 付き。例 `home-live`）。欄の見出しは「アイコン + h2 + 件数 + 右のリンク」のみで、英大文字の eyebrow・格子背景・ヒーローの統計タイルは無い（公開プロフィール数は「プロフィール」欄の見出し、ライブ人数は「ライブ」欄の見出しに移した。「記録ペース」の件数と `countHomeRecordedPaces` は廃止）。共通の欄枠は `app/components/page-section.tsx` の `PageSection`。
 
 - **外枠は箱なしの1種類**: 上罫線 `border-t border-foreground/15 pt-6`（`--border` より濃く、欄の切れ目を見せる）＋見出し左のアイコン（丸背景チップ無し。色は呼び出し側: ライブは `text-primary`、お気に入りのハートは `text-favorite`、動画・ガイド・プロフィールは無彩色）。大型パネルはヒーロー・おかえりバー・注目の走者（ワイド）だけ。ページ背景に直接載るライブ欄のカード（`live-rail.tsx` の `CARD_CLASS`）は不透明の `bg-card`（終了カードは枠 `/40` のまま面は同じ）。
 - **見出し行は折り返さない**（`flex-nowrap`）。h2 は `text-xl` で truncate 可、モバイルはチップと隙間を詰める。右のリンク（「すべて見る」「ペース一覧」）は `SectionHeaderLink` で、sm 未満はアイコンのみ（44px 角・ラベルは sr-only）。プロフィール欄の公開プロフィール数はモバイルでは出さない。

@@ -517,7 +517,7 @@ export type LiveRailEntry =
   | { kind: "ranked"; id: string; slug: string; match: RankedLiveMatch; ended?: boolean; result?: RankedLiveResult | null }
   | { kind: "twitch"; id: string; slug: string | undefined; item: HomeTwitchStream; ended?: undefined };
 
-/** ライブ欄の本体（件数見出しは HomeSection 側）。レール or 0件時の「いないよ」＋最近のペース */
+/** ライブ欄の本体（件数見出しは PageSection 側）。レール or 0件時の「いないよ」＋最近のペース */
 export function LiveRail({
   entries,
   maps,
