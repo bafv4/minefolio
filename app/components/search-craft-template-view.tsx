@@ -26,6 +26,7 @@ import { ShiftMark } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey, Translator } from "@/lib/messages";
 import { toast } from "sonner";
+import { hasItemNameDictionary } from "@/lib/game-languages";
 import { ChevronDown, Copy } from "lucide-react";
 
 /**
@@ -40,6 +41,17 @@ const DEFAULT_ITEM_LANG = "ja_jp";
 /** アイテム名を指定言語で取得（未ロード言語・キー欠落時は en_us / 整形IDにフォールバック）。 */
 function getItemDisplayName(itemId: string, lang: string): string {
   return getItemName(itemId, lang) ?? formatItemName(itemId);
+}
+
+/** 読み込みに失敗した言語（英語名のフォールバックを確定させる） */
+const failedItemLangs = new Set<string>();
+
+/**
+ * 辞書の読み込み待ちか。待ちの間は英語の仮の名前を出さない（読み込み後に名前が入れ替わって
+ * 行の幅が揺れるため）。バンドル済み・読込済み・辞書なしの言語・読込失敗は待ちではない。
+ */
+function isItemLangPending(lang: string): boolean {
+  return !isLangLoaded(lang) && hasItemNameDictionary(lang) && !failedItemLangs.has(lang);
 }
 
 /**
@@ -58,7 +70,9 @@ function useItemLang(gameLanguage: string | null | undefined): string {
         if (!cancelled) setLoadedVersion((v) => v + 1);
       })
       .catch(() => {
-        // 読み込み失敗時はフォールバック表示のまま
+        // 読み込み失敗時は英語名のフォールバック表示にする（スケルトンを出し続けない）
+        failedItemLangs.add(lang);
+        if (!cancelled) setLoadedVersion((v) => v + 1);
       });
     return () => {
       cancelled = true;
@@ -560,6 +574,7 @@ function SearchCraftRow({
   lang: string;
 }) {
   const t = useT();
+  const namesPending = isItemLangPending(lang);
   const handleCopy = (str: string) => {
     if (!str || !navigator.clipboard) return;
     navigator.clipboard.writeText(str).then(() => {
@@ -578,7 +593,15 @@ function SearchCraftRow({
               className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1"
             >
               <ItemIcon itemId={itemId} size={24} alt="" />
-              <span className="text-sm">{getItemDisplayName(itemId, lang)}</span>
+              {namesPending ? (
+                <>
+                  {/* 読み込み中は英語の仮名の代わりに同じ高さのスケルトン。読み上げは ID 由来の英語名 */}
+                  <span aria-hidden className="inline-block h-5 w-[7em] rounded bg-muted" />
+                  <span className="sr-only">{formatItemName(itemId)}</span>
+                </>
+              ) : (
+                <span className="text-sm">{getItemDisplayName(itemId, lang)}</span>
+              )}
             </div>
           ))}
         </div>
@@ -589,7 +612,7 @@ function SearchCraftRow({
           ペアをグリッドの自動配置に委ねることで行を確実に揃える。
           モバイルは flex-col のため DOM 順（文字列1→キー1→文字列2→キー2…）のまま縦に並ぶ。
         */}
-        <div className="min-w-0 flex flex-col gap-2 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2">
+        <div className="min-w-0 flex flex-col gap-4 sm:gap-2 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2">
           {craft.variations.length > 0 ? (
             craft.variations.flatMap((variation, idx) => [
               <div key={`search-${idx}`} className="flex min-h-7 items-center gap-1 min-w-0">
@@ -633,6 +656,7 @@ function SearchCraftRow({
                       shiftHeld={variation.withShift}
                     />
                     <CraftKeySequenceButton
+                      className="relative after:absolute after:-inset-y-2.5 after:-left-1 after:-right-4 sm:after:hidden"
                       searchStr={variation.str}
                       withShift={variation.withShift}
                       remaps={remaps}
