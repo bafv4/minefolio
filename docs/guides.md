@@ -257,17 +257,22 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 ### /guides — ガイド一覧
 
 - 全ユーザーの公開ガイドを一覧表示（著者が公開プロフィールのもののみ）
-- **グリッド表示**: カード形式で表示。カバー画像がない場合はプレースホルダーを表示
-- **リスト表示**: リスト形式で表示。カバー画像を左端に表示
+- **グリッド表示**: カード形式で表示。カバー画像がないカードは帯（プレースホルダー）を出さず、タイトルから始める（フッター直前の `flex-1` で兄弟カードと区切り線の高さは揃う）。カバー画像の下端には `border-b border-border/60` を付け、白地の画像（国旗など）がカードの面に溶けないようにする
+- **リスト表示**: リスト形式で表示。カバー画像を左端に表示（サムネイルにも `border border-border/60`）
 - 表示切替が可能
+- **件数とページ送り**: ローダーは絞り込み後の全件を返し、クライアントが `GuidePagedList`（`guide-paged-list.tsx`）で最初の 24 件（`GUIDE_PAGE_SIZE`）だけ描画する。残りは「もっと見る（残り n 件）」で 24 件ずつ出し、追加分の最初のカードのタイトルリンクへフォーカスを移す。24 件以下ならボタンは出ない。条件（検索語・タグ・並び順）が変わると出す件数は 24 に戻る（`key` に `searchParams`）。`/guides/:authorSlug` も同じ
+- **件数表示**: 並び替えの行の左に「n 件」（絞り込み中は「n 件（検索: …、タグ: …）」）を出す（`aria-live="polite"` は件数の `<p>` だけ）。この `<p>`（`id="guide-results"`、`tabIndex=-1`）は一覧の先頭で、タグの後ろにあるスキップリンク「結果へスキップ」（フォーカス時だけ見える）の飛び先になる
+- **ツールバーの組み方**（テンプレート一覧と共通）: ページ見出し＋説明文（`guides.pageDesc`）→ 検索（`role="search"`、入力欄は `aria-label`。検索ボタンは狭い画面は入力欄の右端、sm 以上は右隣）→ 絞り込み（ガイドはタグ、テンプレートは言語）→ 並び替え（→ ガイドのみ表示切替）。並び順の既定の呼び名は、ガイドが「更新順」（`updatedAt` 基準）、テンプレートが「新着順」（`createdAt` 基準）で、並べ替えに使う列が違うため別の名前のままにしている
+- ガイド／テンプレートを切り替えるタブ（`ContentTabs`）の `nav` には `aria-label`（`guides.contentTabsLabel`）が付き、タブの高さはモバイル 44px（`h-11 sm:h-9`）
 - **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」「いいね数順（総いいね数降順）」「閲覧数順（`guides.viewCount` 累計降順）」「人気順（直近7日のページビュー降順）」の4種を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、いずれも `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す。旧「おすすめ順」（`?sort=recommended`）は廃止済みで、更新順へフォールバックする。詳細は [`docs/likes.md`](./likes.md#並び替え)
   - 選択肢を開くと、各項目の下段に「何を基準に並ぶか」の1行説明（例: いいね数順→「総いいね数」、人気順→「直近7日でよく見られた順」）が表示される（`ContentSortSelect` の `descriptions`）。トリガー自体は選択中の項目名のみの1行表示のまま
   - 人気順のページビューは Vercel Web Analytics を cron で集計した `page_view_stats` を参照し、未集計時はいいね数順へ自然に落ちる。人気順を選んでいる間は、各カードに累計閲覧数の隣に直近7日PV（`TrendingUp` アイコン）を根拠数値として表示する。`page_view_stats` がまだ1件も無い（cron 未稼働・集計前）環境では、一覧上部に「閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています」の注記（`guides.popularPending`）を出す
-  - ツールバー（検索フォーム＋並び替え＋表示切替）は狭い画面では縦積みになる（`flex-col sm:flex-row`）。1行のままだと検索入力が潰れるため、テンプレート一覧と同じレイアウトに揃えている
+  - 検索フォームは狭い画面では縦積みになる（`flex-col sm:flex-row`）。1行のままだと検索入力が潰れる
+- **カードのメタ行の読み上げ**: 閲覧数（Eye）・いいね数（静的表示の `LikeButton`）は、アイコンを `aria-hidden`、見える数字を `aria-hidden` にして `sr-only` の「閲覧 N」「いいね N 件」を読ませる（裸の数字にしない。見た目は数字のまま）
 - **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
   - カード全体のクリックは**オーバーレイのリンク**が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない。リンクは**タイトル見出しの中のリンクの `::after`** をカード外枠（`group relative`）いっぱいに広げて敷く（読み上げがタイトル1回になる。サムネイルの `alt=""`・Pin は `aria-hidden`）。`line-clamp` は flex の見出しではなく内側の span に付ける
   - カードのタイトルの見出しレベルは `titleLevel`（既定 h3）。`/guides`・`/guides/:authorSlug` は h1 の直下なので h2 を渡す
-- **タグの絞り込み**: タグのピルは `Badge asChild` の `Link`（`?tag=`。検索語・並び順は保ち、tag だけ入れ替える／外す）。選択中は `aria-current="true"` で、色は brand（`bg-brand text-brand-foreground`）。md 未満は1行の横スクロールのレール（各タグを高さ 44px の枠に入れ、`::after` で押せる範囲を 44px に広げる。見た目は 22px のピルのまま。選択中のタグが外にあれば初回にレール内だけをスクロールして見える位置へ寄せる）、md 以上は折り返し表示。モバイルの検索ボタンは入力欄右端のアイコンボタン（`sr-only` のラベル、44px）で、sm 以上は従来のボタン。検索欄・並び替え・表示切替（`ViewToggle`）はモバイルで 44px、sm 以上で縮む。検索語・タグで0件のときは EmptyState の action から絞り込み（検索語＋タグ。並び順は保つ）を解除できる
+- **タグの絞り込み**: タグのピルは `Badge asChild` の `Link`（`?tag=`。検索語・並び順は保ち、tag だけ入れ替える／外す）。選択中は `aria-current="true"` で、色は brand（`bg-brand text-brand-foreground`）。押せる範囲は見た目（22px のピル）を変えず `::after` で広げる（`GUIDE_TAG_HIT_AREA`、`guide-list-views.tsx`。記事のタグも共用）。狭い画面は高さ 44px・幅は文字幅か 44px の大きいほう、md（記事は sm）以上は 24px 以上。`::after` は padding box 基準なので inset ではなく `h-11` / `w-full min-w-11` で寸法を指定する。md 未満は1行の横スクロールのレール（各タグを高さ 44px の枠に入れる。選択中のタグが外にあれば初回にレール内だけをスクロールして見える位置へ寄せる）、md 以上は折り返し表示。モバイルの検索ボタンは入力欄右端のアイコンボタン（`sr-only` のラベル、44px）で、sm 以上は従来のボタン。検索欄・並び替え・表示切替（`ViewToggle`）はモバイルで 44px、sm 以上で縮む。検索語・タグで0件のときは EmptyState の action から絞り込み（検索語＋タグ。並び順は保つ）を解除できる
 
 ### /guides/:authorSlug — 著者別ガイド一覧
 
@@ -281,6 +286,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - 閲覧数（`viewCount`）は**ページ表示時にクライアントから `POST /api/guides/view-count` を1回送って**加算する（`GuideViewPage` の effect、`guide.id` 単位）。loader では数えない — 原文/訳文切替（`?original=1`）など同一ページ内の search param 変更でも loader が再実行され、切替のたびに水増しされるため。ドラフトプレビューは送らず、API は公開済みガイドのみ加算する。JS を実行しないクローラは数えない
 - **ヘッダーの並び**: 戻る／編集 → 下書きプレビューの通知（`rounded-xl`）→ タイトル h1＋要約 → **筆者の行** → タグ → 自動翻訳の注記 → カバー画像（モバイルは 2:1、sm 以上は高さ `min(40vh, 320px)` の上限付き `object-cover`・`rounded-xl`・`alt=""`＝隣の h1 と重複して読ませない。最初の1画面に本文が入るよう上限を付けている）→ 目次バー（2xl 未満）→ 本文。罫線で挟んだメタ行は廃止し筆者の行へ統合した
 - **筆者の行**: 1行目は `MinecraftAvatar` 36px（`rounded-lg`・`alt=""`）＋筆者名（`/player/:slug` へのリンク）＋`@MCID`。2行目は「更新 {日付}」「閲覧 {件数}（ロケールの桁区切り）」と、右端（`ml-auto`）のいいねボタン（自分のガイドでは押せず件数のみ）。閲覧数は文字のラベルで示す（アイコンだけにしない）。375px でも1段に収まり、収まらない幅では折り返す
+- **目次ドロワー（2xl 未満）のフォーカス**: 開くと `onOpenAutoFocus` で Radix 既定（閉じるボタン）を止め、現在の項目（`aria-current="location"`）、無ければ最初の項目へフォーカスする（項目のリンクには `focus-visible` のリングがある）。閉じるボタンは `SheetContent` 既定の右上 X 1つだけで、読み上げ名は `closeLabel`（`guideToc.close`）で翻訳して渡す（`ui/sheet.tsx` の既定は "Close" のまま）。選んで閉じたあとに見出しへフォーカスを移す `onCloseAutoFocus` は従来どおり
 - **タグ**は `/guides?tag=<タグ>`（一覧の絞り込みクエリ）へのリンク
 - **末尾の「この走者のほかのガイド」**（`PageSection`・h2）: 筆者のアバター・名前・`@MCID`（プロフィールへのリンク）と、同じ筆者の**公開済み**のほかのガイドを更新日の新しい順に最大3件（このガイドは除く。下書き・非公開は含めない。ローダーの `otherGuides` は `slug` / `title` のみ）。見出し右に「すべてのガイド」（`/guides/:authorSlug`）。ほかのガイドが0件なら、リストと「すべてのガイド」は出さず筆者のリンクだけ
 - **目次**（`app/components/guide-toc-nav.tsx`。2xl 以上は本文左ガターの sticky サイドバー、未満はバー＋ドロワー）: 箱を作らず、見出し「目次」（`text-sm font-semibold`）と左の細い縦線のリスト（アクティブ項目だけ線が `border-brand`）。**折りたたみ**: 項目の最小 level の項目だけを常に出し、それより下の階層は「いま読んでいる節」（アクティブ見出しを含む最上位項目から次の最上位項目の手前まで）の分だけ展開する。アクティブ項目は常に見える。計算は `visibleTocItems`（`app/lib/guide-toc.ts`）。ドロワーの項目は高さ 44px。項目を選ぶとスクロールしたうえで、見出しへフォーカスも移す（実行時に `tabindex="-1"` を付けて `focus({ preventScroll: true })`。ドロワーは Radix のトリガーへのフォーカス復帰を `onCloseAutoFocus` で止める。リングは `.guide-content` の見出しで消す）。「動きを減らす」設定のときはスムーズスクロールにしない
@@ -306,11 +312,13 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 ### 404（ガイド記事・著者・テンプレート詳細）
 
-`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`・`/guides/templates/:templateId` は、自ルートに `ErrorBoundary`（`app/components/guide-route-not-found.tsx` の `GuideRouteNotFound`）を持つ。404 のときだけ「見つかりません＋一覧へ戻る」を出し、それ以外のエラーは root へ投げ直す。ルート自身が境界になることで、その route の `meta`（「見つかりません - Minefolio」系のタイトル）が使われる。サイト全体の 404（`app/root.tsx`）は別。
+`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug`・`/guides/templates/:templateId` は、自ルートに `ErrorBoundary`（`app/components/guide-route-not-found.tsx` の `GuideRouteNotFound`）を持つ。404 のときだけ「見つかりません＋一覧へ戻る」を出し（記事の 404 で著者が実在し本人以外にも見える場合は、loader が `data({ authorSlug }, { status: 404 })` で slug を載せ、「この走者のガイド」〔`/guides/:authorSlug`〕のリンクも出す。著者が存在しない・非公開のときは載せない）、それ以外のエラーは root へ投げ直す。ルート自身が境界になることで、その route の `meta`（「見つかりません - Minefolio」系のタイトル）が使われる。サイト全体の 404（`app/root.tsx`）は別。
 
 ### /guides/templates/:templateId — テンプレート詳細のモバイル構成
 
 本題のサーチクラフトの節を先に置き、リマップ（鍵盤）の節は後ろに置く。リマップの鍵盤は md 未満で既定「閉」の開閉（`aria-expanded`）で、md 以上は常に表示。ページ先頭に、フォーカス時だけ見えるスキップリンク「サーチクラフトへ移動」を置く。
+
+アイテム名は既定でテンプレートのゲーム言語（未設定は日本語）のまま表示する。サーチクラフトの節の先頭（凡例の上）に、走者画面のサーチクラフトタブと同じ「アイテム名を{言語}で表示」のスイッチ（`playerProfile.searchCraftItemNamesIn`、モバイルは 44px）があり、オンにすると `SearchCraftGroupedList` の `gameLanguage` に `itemLangForLocale(locale)` を渡す。テンプレートの言語が閲覧者の言語と同じときはスイッチを出さない。状態は保存せず、別のテンプレートへ移るとオフに戻る。ガイド本文の埋め込み（`guide-embeds.tsx`）にはない。
 
 ### 著者slugの解決（`/guides/:authorSlug`・`/guides/:authorSlug/:guideSlug` 共通）
 
@@ -406,6 +414,7 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 
 - `app/components/guide-editor/index.tsx` — TipTapガイドエディタ
 - `app/components/guide-list-views.tsx` — ガイド一覧のグリッド/リスト表示
+- `app/components/guide-paged-list.tsx` — 24 件ずつ出す「もっと見る」付きの一覧（`GuidePagedList`）
 - `app/components/auto-translate-notice.tsx` — 自動翻訳の注記と原文切替（ガイドは `to`＝`?original=1` のリンク、プロフィールは `onToggle`）
 - `app/lib/guide-translation-list.ts` — 一覧行へ訳文を適用する純関数（`applyGuideTranslation`）
 
