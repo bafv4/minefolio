@@ -657,6 +657,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     resultFilterTag: "tag: {tag}",
     resultFilterSeparator: ", ",
     loadMore: "Show more ({count} left)",
+    authorGuidesLink: "This runner's guides",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraft avatar",

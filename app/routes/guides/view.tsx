@@ -7,6 +7,9 @@ import {
   Link,
   useSearchParams,
   redirect,
+  data,
+  isRouteErrorResponse,
+  useRouteError,
   type LoaderFunctionArgs,
 } from "react-router";
 import { createDb, type Database } from "@/lib/db";
@@ -377,7 +380,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   });
 
   if (!guide) {
-    throw new Response("Not Found", { status: 404 });
+    // 著者は実在し本人以外にも見える（private はここへ来ない）ので、404 の画面から著者のガイド一覧へ案内できるよう slug を載せる
+    throw data({ authorSlug: author.slug }, { status: 404 });
   }
 
   // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
@@ -804,12 +808,24 @@ function GuideContent({
 
 export function ErrorBoundary() {
   const t = useT();
+  const error = useRouteError();
+  // 著者が実在するとき（loader が 404 の data に slug を載せる）は、その走者のガイド一覧へも案内する
+  const authorSlug =
+    isRouteErrorResponse(error) &&
+    error.status === 404 &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    typeof (error.data as { authorSlug?: unknown }).authorSlug === "string"
+      ? (error.data as { authorSlug: string }).authorSlug
+      : null;
   return (
     <GuideRouteNotFound
       title={t("guides.notFoundGuide")}
       description={t("guides.notFoundHint")}
       backTo="/guides"
       backLabel={t("guides.guideList")}
+      secondaryTo={authorSlug ? `/guides/${encodeURIComponent(authorSlug)}` : undefined}
+      secondaryLabel={authorSlug ? t("guides.authorGuidesLink") : undefined}
     />
   );
 }

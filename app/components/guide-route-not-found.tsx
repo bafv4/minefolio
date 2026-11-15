@@ -1,7 +1,7 @@
 import { Link, isRouteErrorResponse, useRouteError } from "react-router";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { ArrowLeft, FileQuestion } from "lucide-react";
+import { ArrowLeft, BookOpen, FileQuestion } from "lucide-react";
 
 /**
  * ガイド系ルート（記事・著者・テンプレート）の ErrorBoundary 本体。
@@ -13,11 +13,16 @@ export function GuideRouteNotFound({
   description,
   backTo,
   backLabel,
+  secondaryTo,
+  secondaryLabel,
 }: {
   title: string;
   description: string;
   backTo: string;
   backLabel: string;
+  /** 補助の導線（記事の 404 で著者が実在するときの「この走者のガイド」など）。両方そろったときだけ出す */
+  secondaryTo?: string;
+  secondaryLabel?: string;
 }) {
   const error = useRouteError();
   if (!isRouteErrorResponse(error) || error.status !== 404) {
@@ -29,12 +34,22 @@ export function GuideRouteNotFound({
       title={title}
       description={description}
       action={
-        <Button asChild variant="outline">
-          <Link to={backTo}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {backLabel}
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button asChild variant="outline">
+            <Link to={backTo}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {backLabel}
+            </Link>
+          </Button>
+          {secondaryTo && secondaryLabel && (
+            <Button asChild variant="outline">
+              <Link to={secondaryTo}>
+                <BookOpen className="mr-2 h-4 w-4" />
+                {secondaryLabel}
+              </Link>
+            </Button>
+          )}
+        </div>
       }
     />
   );

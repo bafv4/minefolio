@@ -2432,6 +2432,7 @@ export const PAGES_JA = {
     resultFilterTag: "タグ: {tag}",
     resultFilterSeparator: "、",
     loadMore: "もっと見る（残り {count} 件）",
+    authorGuidesLink: "この走者のガイド",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraftアバター",
