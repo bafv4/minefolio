@@ -37,8 +37,8 @@ const EMOJI_NAME_KEY_BY_EMOJI = new Map<ProfileReactionEmoji, MessageKey>(
  * - ピルは count>0 の絵文字のみ、表示順は PROFILE_REACTION_EMOJIS 固定
  *   （カウント順だと押すたびに並びが跳ねるため）
  * - 未ログイン時はピルを静的表示にし、追加ボタンは `/login` への導線にする
- * - カウントが1件も無く未ログインの場合はバーごと非表示にする
- *   （ログイン済みなら0件でも追加ボタンを出す必要があるため表示する）
+ * - カウントが1件も無く未ログインの場合は、ログインを促す一文と `/login` への導線を出す
+ *   （ログイン済みなら0件でも追加ボタンを出す）
  * - `pills`/`toggle` は props で受け取るだけの表示コンポーネントで、内部で
  *   `useProfileReactions()` は呼ばない。呼び出し元は `/player/:slug` の
  *   タブを描画する親ページコンポーネント側にすること（対象は常に1プロフィールのみで
@@ -57,7 +57,7 @@ export function ProfileReactionBar({
 
   const visiblePills = pills.filter((pill) => pill.count > 0);
 
-  if (!isLoggedIn && visiblePills.length === 0) return null;
+  const showLoginPrompt = !isLoggedIn && visiblePills.length === 0;
 
   return (
     <div
@@ -66,6 +66,9 @@ export function ProfileReactionBar({
         className,
       )}
     >
+      {showLoginPrompt && (
+        <span className="text-sm text-muted-foreground">{t("profileReactions.loginPrompt")}</span>
+      )}
       {visiblePills.map((pill) => {
         const emojiName = t(EMOJI_NAME_KEY_BY_EMOJI.get(pill.emoji)!);
 

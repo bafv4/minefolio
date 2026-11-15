@@ -569,6 +569,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   profileReactions: {
     addLabel: "Add a reaction",
     loginToReact: "Log in to react",
+    loginPrompt: "Log in to react to this runner",
     reactAria: "React with {emoji} (currently {count})",
     unreactAria: "Remove {emoji} reaction (currently {count})",
     pillAria: "{emoji} reactions: {count}",

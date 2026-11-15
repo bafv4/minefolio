@@ -646,6 +646,7 @@ export const PAGES_JA = {
   profileReactions: {
     addLabel: "リアクションを追加",
     loginToReact: "ログインしてリアクション",
+    loginPrompt: "この走者にリアクションするにはログインが必要です",
     /** aria-label（{emoji} は絵文字名、{count} は現在の件数） */
     reactAria: "{emoji}でリアクションする（現在{count}件）",
     unreactAria: "{emoji}のリアクションを取り消す（現在{count}件）",
