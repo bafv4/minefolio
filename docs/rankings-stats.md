@@ -159,7 +159,7 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | `fetchMCSRRankedStats` | MCSR Rankedの統計取得。今シーズンの `forfeits` / `playedMatches`（Win Rate/FF Rate算出用）と、`country === "jp"` かつ150位以内の場合の `countryRank` を含む |
 | `fetchSpeedrunComStats` | Speedrun.comの統計取得（`personal-bests` APIに動画リンク`run.videos.links`が同梱されるため追加のAPI呼び出しは不要） |
 | `getSpeedrunComVideoEmbedUrl` | Speedrun.com記録の動画リンクのうちYouTube埋め込みに変換できる最初のURLを返す（`youtube-url.ts`の`getYouTubeEmbedUrl`を利用）。Twitch等YouTube以外や動画リンク自体が無い場合はnullを返し、呼び出し側は外部リンク表示にフォールバックする |
-| `checkPaceManPlayer` | PaceManプレイヤーの存在確認 |
+| `checkPaceManPlayer` | PaceManプレイヤーの存在確認。404／`error`フィールド付き200は未登録、それ以外の非2xx・通信エラーは例外（取得失敗）。`fetchAllExternalStats` は失敗を未登録扱いにする。ブラウザからは CORS 非対応のため `/api/paceman-registration`（`fetchPaceManRegistration`）経由 |
 
 ### Speedrun.com記録の動画埋め込み
 

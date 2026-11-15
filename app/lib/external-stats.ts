@@ -153,14 +153,20 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
   try {
     // ユーザー情報を取得
     const userRes = await fetch(`${SPEEDRUN_API_BASE}/users?lookup=${encodeURIComponent(username)}`, { signal: AbortSignal.timeout(30000) });
+    // 404・400 は未登録（error なし。400 はクライアント側の要求の問題で再試行しても直らない）。
+    // それ以外の非2xx（420 レート制限・5xx 等）は取得失敗として error を付ける
+    if (userRes.status === 404 || userRes.status === 400) {
+      return { user: null, personalBests: [] };
+    }
     if (!userRes.ok) {
-      return { user: null, personalBests: [], error: "ユーザーが見つかりません" };
+      return { user: null, personalBests: [], error: "APIエラーが発生しました" };
     }
     const userData = (await userRes.json()) as { data: SpeedrunComUser[] };
     const users = userData.data;
 
+    // 正常応答で該当なしは未登録（error なし）
     if (!users || users.length === 0) {
-      return { user: null, personalBests: [], error: "ユーザーが見つかりません" };
+      return { user: null, personalBests: [] };
     }
 
     const user = users[0];
@@ -246,21 +252,20 @@ export function getSpeedrunComVideoEmbedUrl(pb: SpeedrunComPersonalBest): string
 // ============================================
 const PACEMAN_API_BASE = "https://paceman.gg/stats/api";
 
-// PaceManプレイヤー登録確認
+/**
+ * PaceManプレイヤー登録確認。
+ * 登録済み＝200でerrorフィールドなし、未登録＝404または200でerrorフィールドあり（{"error":"Unknown user"}）。
+ * それ以外の非2xx・ネットワーク例外・タイムアウトは「取得失敗」として例外を投げる（未登録と区別するため）。
+ */
 export async function checkPaceManPlayer(playerName: string): Promise<PaceManStats> {
-  try {
-    // getSessionStats APIはプレイヤーが存在しない場合 {"error":"Unknown user"} を返す
-    const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return { isRegistered: false };
-    const data = await res.json() as { error?: string } | Record<string, unknown> | null;
-    // エラーレスポンスの場合は未登録
-    if (data && typeof data === "object" && "error" in data) {
-      return { isRegistered: false };
-    }
-    return { isRegistered: true };
-  } catch {
+  const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`, { signal: AbortSignal.timeout(10000) });
+  if (res.status === 404) return { isRegistered: false };
+  if (!res.ok) throw new Error(`PaceMan HTTP ${res.status}`);
+  const data = await res.json() as { error?: string } | Record<string, unknown> | null;
+  if (data && typeof data === "object" && "error" in data) {
     return { isRegistered: false };
   }
+  return { isRegistered: true };
 }
 
 // ============================================
@@ -307,8 +312,13 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
   try {
     // ユーザー情報を取得（存在確認を兼ねる）
     const userRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}`, { signal: AbortSignal.timeout(10000) });
-    if (!userRes.ok) {
+    // 404・400 は未登録（error なし。実測で未登録ユーザーは 400 {"status":"error"} を返す。本文は読まない）。
+    // それ以外の非2xx（429・5xx 等）は取得失敗として error を付ける
+    if (userRes.status === 404 || userRes.status === 400) {
       return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
+    }
+    if (!userRes.ok) {
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "APIエラーが発生しました" };
     }
 
     const userData = (await userRes.json()) as RankedApiResponse | null;
@@ -480,9 +490,14 @@ export async function fetchAllExternalStats(
 
   // PaceMan（MCIDで検索、登録確認のみ）
   promises.push(
-    checkPaceManPlayer(mcid).then((data) => {
-      results.paceman = data;
-    })
+    checkPaceManPlayer(mcid)
+      .then((data) => {
+        results.paceman = data;
+      })
+      // 取得失敗は従来どおり未登録扱い
+      .catch(() => {
+        results.paceman = { isRegistered: false };
+      })
   );
 
   // MCSR Ranked（MCIDで検索）

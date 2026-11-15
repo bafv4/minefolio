@@ -50,6 +50,7 @@ function leaderboardBody(users: { uuid?: string }[]) {
 function stubRankedFetch(opts: {
   user?: unknown;
   userOk?: boolean;
+  userStatus?: number;
   matches?: unknown;
   matchesOk?: boolean;
   throwOnUser?: Error;
@@ -79,7 +80,7 @@ function stubRankedFetch(opts: {
       if (opts.throwOnUser) throw opts.throwOnUser;
       return {
         ok: opts.userOk ?? true,
-        status: opts.userOk === false ? 500 : 200,
+        status: opts.userStatus ?? (opts.userOk === false ? 500 : 200),
         json: async () => opts.user,
       };
     }),
@@ -87,10 +88,24 @@ function stubRankedFetch(opts: {
 }
 
 describe("fetchMCSRRankedStats - 登録確認", () => {
-  it("ユーザー取得が非2xxなら未登録として扱う", async () => {
-    stubRankedFetch({ user: undefined, userOk: false });
+  it("ユーザー取得が404なら未登録（error なし）として扱う", async () => {
+    stubRankedFetch({ user: undefined, userOk: false, userStatus: 404 });
     const result = await fetchMCSRRankedStats("nobody");
     expect(result).toEqual({ isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null });
+    expect(result.error).toBeUndefined();
+  });
+
+  it("ユーザー取得が400（User is not exists.）なら未登録（error なし）として扱う", async () => {
+    stubRankedFetch({ user: { status: "error", data: { error: "User is not exists." } }, userOk: false, userStatus: 400 });
+    const result = await fetchMCSRRankedStats("nobody");
+    expect(result).toEqual({ isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null });
+  });
+
+  it.each([500, 429])("ユーザー取得が %i なら未登録ではなく error 付きで返す", async (status) => {
+    stubRankedFetch({ user: undefined, userOk: false, userStatus: status });
+    const result = await fetchMCSRRankedStats("someone");
+    expect(result.error).toBe("APIエラーが発生しました");
+    expect(result.user).toBeNull();
   });
 
   it("status が success 以外なら未登録として扱う", async () => {
@@ -602,6 +617,7 @@ describe("fetchMCSRRankedStats - countryRank（国内Eloランキング順位）
 /** users?lookup=... と users/:id/personal-bests の両方をURLで振り分けてスタブする */
 function stubSpeedrunFetch(opts: {
   userOk?: boolean;
+  userStatus?: number;
   users?: unknown[];
   pbOk?: boolean;
   pbData?: unknown;
@@ -620,6 +636,7 @@ function stubSpeedrunFetch(opts: {
       }
       return {
         ok: opts.userOk ?? true,
+        status: opts.userStatus ?? (opts.userOk === false ? 500 : 200),
         json: async () => ({ data: opts.users ?? [] }),
       };
     }),
@@ -671,16 +688,28 @@ function pbFixture(overrides: Partial<SpeedrunComPersonalBest> = {}): SpeedrunCo
 }
 
 describe("fetchSpeedrunComStats - ユーザー・記録取得の失敗系", () => {
-  it("ユーザー検索が非2xxならエラーを返す", async () => {
-    stubSpeedrunFetch({ userOk: false });
+  it("ユーザー検索が404なら未登録（error なし）として扱う", async () => {
+    stubSpeedrunFetch({ userOk: false, userStatus: 404 });
     const result = await fetchSpeedrunComStats("nobody");
-    expect(result).toEqual({ user: null, personalBests: [], error: "ユーザーが見つかりません" });
+    expect(result).toEqual({ user: null, personalBests: [] });
   });
 
-  it("ユーザーが0件でもエラーを返す", async () => {
+  it("ユーザー検索が400なら未登録（error なし）として扱う", async () => {
+    stubSpeedrunFetch({ userOk: false, userStatus: 400 });
+    const result = await fetchSpeedrunComStats("nobody");
+    expect(result).toEqual({ user: null, personalBests: [] });
+  });
+
+  it.each([420, 429, 500])("ユーザー検索が %i なら error 付きで返す", async (status) => {
+    stubSpeedrunFetch({ userOk: false, userStatus: status });
+    const result = await fetchSpeedrunComStats("someone");
+    expect(result).toEqual({ user: null, personalBests: [], error: "APIエラーが発生しました" });
+  });
+
+  it("ユーザーが0件なら未登録（error なし）として扱う", async () => {
     stubSpeedrunFetch({ users: [] });
     const result = await fetchSpeedrunComStats("nobody");
-    expect(result).toEqual({ user: null, personalBests: [], error: "ユーザーが見つかりません" });
+    expect(result).toEqual({ user: null, personalBests: [] });
   });
 
   it("PB取得が非2xxならユーザー情報付きでエラーを返す", async () => {
@@ -862,15 +891,23 @@ describe("checkPaceManPlayer", () => {
     expect(result).toEqual({ isRegistered: false });
   });
 
-  it("非2xxやfetch例外も未登録として扱う", async () => {
-    silenceConsole();
+  it("404 は未登録と判定する", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    expect(await checkPaceManPlayer("nobody")).toEqual({ isRegistered: false });
+  });
+
+  it("404 以外の非2xxは失敗として例外を投げる", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
+    await expect(checkPaceManPlayer("runner")).rejects.toThrow();
+  });
+
+  it("fetch例外は失敗として例外を投げる", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
         throw new Error("network down");
       }),
     );
-    const result = await checkPaceManPlayer("runner");
-    expect(result).toEqual({ isRegistered: false });
+    await expect(checkPaceManPlayer("runner")).rejects.toThrow("network down");
   });
 });

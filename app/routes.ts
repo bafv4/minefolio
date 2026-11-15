@@ -105,6 +105,7 @@ export default [
   route("api/home-featured", "routes/api/home-featured.ts"),
   route("api/home-favorite-activity", "routes/api/home-favorite-activity.ts"),
   route("api/social-stats", "routes/api/social-stats.ts"),
+  route("api/paceman-registration", "routes/api/paceman-registration.ts"),
   route("api/paces", "routes/api/paces.ts"),
   route("api/videos", "routes/api/videos.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),

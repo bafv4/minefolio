@@ -186,6 +186,22 @@ describe("/api/social-stats - レスポンス形状とキャッシュ", () => {
     expect(twitchMocks.getChannelStats).not.toHaveBeenCalled();
   });
 
+  it("取得失敗もキャッシュされ、直後の2回目は外部APIを呼ばず null を返す", async () => {
+    youtubeMocks.getChannelStats.mockResolvedValue(null);
+    twitchMocks.getTwitchAppToken.mockResolvedValue(null);
+    const user = await seedUser(db, { slug: "failing", profileVisibility: "public" });
+    await seedSocialLink(user.id, "youtube", "failchannel");
+    await seedSocialLink(user.id, "twitch", "failtv");
+
+    const first = await callLoader("failing");
+    const second = await callLoader("failing");
+
+    expect(await first.json()).toEqual({ youtube: null, twitch: null });
+    expect(await second.json()).toEqual({ youtube: null, twitch: null });
+    expect(youtubeMocks.getChannelStats).toHaveBeenCalledTimes(1);
+    expect(twitchMocks.getTwitchAppToken).toHaveBeenCalledTimes(1);
+  });
+
   it("2回目の呼び出しはDBキャッシュから返し、外部APIを再度呼ばない", async () => {
     const user = await seedUser(db, { slug: "cached", profileVisibility: "public" });
     await seedSocialLink(user.id, "youtube", "cachedchannel");

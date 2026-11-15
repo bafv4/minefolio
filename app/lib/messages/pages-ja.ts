@@ -1709,6 +1709,7 @@ export const PAGES_JA = {
     pin: "ピン留めする",
     unpin: "ピン留めを解除する",
     viewRecord: "記録を見る",
+    speedrunUserNotFound: "Speedrun.comにユーザー「{username}」が見つかりません。ユーザー名の設定を確認してください。",
     noSpeedrunRecords: "Speedrun.comに記録がありません。",
     noSpeedrunRecordsHint: "Speedrun.comに登録されている記録がここに自動で表示されます",
     speedrunSectionTitle: "Speedrun.com 記録",

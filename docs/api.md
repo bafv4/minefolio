@@ -35,6 +35,7 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
 | `/api/videos` | GET | 不要 | 動画一覧（/videos）のページング+検索 |
 | `/api/social-stats` | GET | 不要（privateは本人のみ） | プロフィールのYouTube/Twitch統計 |
+| `/api/paceman-registration` | GET | 不要 | PaceMan登録確認（走者画面のPaceManリンク用） |
 | `/api/keybindings-csv` | GET | 不要 | キー配置CSVエクスポート |
 | `/api/set-locale` | POST | 不要 | ロケール切替（Cookie） |
 | `/api/cron/youtube-update` | GET | CRON_SECRET | YouTube動画キャッシュ更新 |
@@ -221,6 +222,21 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 - **キャッシュ**: DBキャッシュ（`api_cache` / `cacheType: "social_stats"`）YouTube 6時間（失敗時15分）・Twitch 5分。CDN `s-maxage=300, stale-while-revalidate=3600`
 
 **関連ファイル:** `app/routes/api/social-stats.ts`, `app/lib/youtube.ts`（`getChannelStats`）, `app/lib/twitch.ts`（`getChannelStats`）
+
+---
+
+### `GET /api/paceman-registration`
+
+走者画面で PaceMan のリンクを出すかの判定用。paceman.gg のレスポンスには CORS ヘッダーが無くブラウザから直接呼べないため、サーバーから確認する。
+
+**パラメータ:** `name`（必須）= MCID（`[A-Za-z0-9_]{3,16}`。不正なら 400）。上流ホストは固定で、任意URLへのプロキシにはならない
+
+**レスポンス:** `{ "isRegistered": boolean }`。上流の取得失敗（404 以外の非2xx・通信エラー・タイムアウト）は **502**（`{ "error": ... }`、`no-store`）で、未登録とは区別される
+
+- **キャッシュ**: 200 は CDN `s-maxage=10800, stale-while-revalidate=86400`。400/502 は `no-store`
+- クライアントからは `fetchPaceManRegistration(mcid)`（`app/lib/paceman-registration-client.ts`、失敗時は例外）
+
+**関連ファイル:** `app/routes/api/paceman-registration.ts`, `app/lib/external-stats.ts`（`checkPaceManPlayer`）
 
 ---
 

@@ -1737,6 +1737,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     pin: "Pin",
     unpin: "Unpin",
     viewRecord: "View record",
+    speedrunUserNotFound: "Couldn't find the user \"{username}\" on Speedrun.com. Please check your username setting.",
     noSpeedrunRecords: "No records found on Speedrun.com.",
     noSpeedrunRecordsHint: "Records registered on Speedrun.com will appear here automatically",
     speedrunSectionTitle: "Speedrun.com records",
