@@ -27,11 +27,8 @@ import { EmptyState } from "@/components/empty-state";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import { ViewToggle } from "@/components/view-toggle";
-import {
-  GuideCardGrid,
-  GuideListView,
-  type GuideItem,
-} from "@/components/guide-list-views";
+import type { GuideItem } from "@/components/guide-list-views";
+import { GuidePagedList } from "@/components/guide-paged-list";
 
 export function meta({
   loaderData,
@@ -225,10 +222,14 @@ export default function UserGuidesPage() {
           title={t("guides.noPublishedGuidesTitle")}
           description={t("guides.noPublishedGuides")}
         />
-      ) : viewMode === "card" ? (
-        <GuideCardGrid guides={authorGuides} linkFn={linkFn} titleLevel="h2" />
       ) : (
-        <GuideListView guides={authorGuides} linkFn={linkFn} titleLevel="h2" />
+        <GuidePagedList
+          key={author.slug}
+          guides={authorGuides}
+          linkFn={linkFn}
+          viewMode={viewMode}
+          titleLevel="h2"
+        />
       )}
     </div>
   );

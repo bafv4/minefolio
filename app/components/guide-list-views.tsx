@@ -54,6 +54,18 @@ function AutoTranslatedMark() {
   );
 }
 
+/** 累計閲覧数。アイコンは飾り（aria-hidden）、数字は sr-only の「閲覧 N」で意味を付ける（見た目は数字のまま） */
+function ViewCountMeta({ count, className }: { count: number; className?: string }) {
+  const t = useT();
+  return (
+    <span className={cn("flex items-center gap-1", className)}>
+      <Eye className="h-3 w-3" aria-hidden />
+      <span aria-hidden>{count}</span>
+      <span className="sr-only">{t("guideView.viewCount", { count })}</span>
+    </span>
+  );
+}
+
 /**
  * タイトルのリンクをカード全体へ広げるクラス（ui.md 9 章「オーバーレイリンク」の after 方式）。
  * 外枠が `group relative` で、::after がその外枠いっぱいに広がる。フォーカスリングは ::after に出す
@@ -62,6 +74,17 @@ const OVERLAY_LINK_BASE =
   "outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring";
 const OVERLAY_LINK_CLASS_CARD = `${OVERLAY_LINK_BASE} after:rounded-xl`;
 const OVERLAY_LINK_CLASS_LIST = `${OVERLAY_LINK_BASE} after:rounded`;
+
+/**
+ * タグのリンク（Badge asChild）の押せる範囲を、見た目（22px のピル）を変えずに ::after で広げるクラス。
+ * 狭い画面は 44px 四方以上（高さ 44px・幅は文字幅か 44px の大きいほう）、`sm` / `md` 以上は 24px 以上。
+ * ::after は padding box 基準なので、border の 1px ぶんを inset で数えずに h / w で寸法を指定している。
+ * 呼び出し側の折り返し方に合わせ、中身が 2 行以上に折り返す幅（記事は sm、一覧は md）を選ぶ。
+ */
+export const GUIDE_TAG_HIT_AREA = {
+  sm: "relative overflow-visible after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-full after:min-w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] sm:after:h-6 sm:after:min-w-6",
+  md: "relative overflow-visible after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-full after:min-w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] md:after:h-6 md:after:min-w-6",
+} as const;
 
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
@@ -120,21 +143,17 @@ export function GuideCardGrid({
                 guide.isPinned && "border-primary/40",
               )}
             >
-              {guide.coverImageUrl ? (
+              {/* 表紙が無いカードは帯を出さず、タイトルから始める。表紙の下端の線は、白地の表紙（国旗など）が
+                  カードの面に溶けないため */}
+              {guide.coverImageUrl && (
                 <img
                   src={guide.coverImageUrl}
                   alt="" loading="lazy" decoding="async"
-                  className={cn("w-full object-cover", guide.isPinned ? "h-48" : "h-36")}
-                />
-              ) : (
-                <div
                   className={cn(
-                    "w-full bg-muted/50 flex items-center justify-center",
+                    "w-full border-b border-border/60 object-cover",
                     guide.isPinned ? "h-48" : "h-36",
                   )}
-                >
-                  <FileText className="h-8 w-8 text-muted-foreground/30" />
-                </div>
+                />
               )}
               <div className="flex flex-1 flex-col p-4">
                 {/* leading-none（16px）だと Zen Kaku Gothic New のディセンダー（g/y/p）が line-clamp の
@@ -149,6 +168,7 @@ export function GuideCardGrid({
                     <Link
                       to={linkFn(guide)}
                       prefetch="intent"
+                      data-guide-link
                       className={OVERLAY_LINK_CLASS_CARD}
                     >
                       {guide.title}
@@ -181,10 +201,7 @@ export function GuideCardGrid({
                   {/* "replace" モードでは pageViews7d がある間だけ累計View数を隠し、7日間PVに差し替える
                       （ホームの「よく読まれているガイド」専用。/guides の人気順は "additional" のまま両方出す） */}
                   {!(pageViewsMode === "replace" && guide.pageViews7d !== undefined) && (
-                    <span className="flex shrink-0 items-center gap-1">
-                      <Eye className="h-3 w-3" />
-                      {guide.viewCount}
-                    </span>
+                    <ViewCountMeta count={guide.viewCount} className="shrink-0" />
                   )}
                   {guide.pageViews7d !== undefined && (
                     <PageViews7dMeta count={guide.pageViews7d} />
@@ -240,7 +257,7 @@ export function GuideListView({
               <img
                 src={guide.coverImageUrl}
                 alt="" loading="lazy" decoding="async"
-                className="w-20 h-14 object-cover rounded-md shrink-0"
+                className="w-20 h-14 object-cover rounded-md border border-border/60 shrink-0"
               />
             ) : (
               <div className="w-20 h-14 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
@@ -254,6 +271,7 @@ export function GuideListView({
                   <Link
                     to={linkFn(guide)}
                     prefetch="intent"
+                    data-guide-link
                     className={OVERLAY_LINK_CLASS_LIST}
                   >
                     {guide.title}
@@ -277,10 +295,7 @@ export function GuideListView({
               <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                 {guide.authorName && <span className="truncate">{guide.authorName}</span>}
                 {guide.autoTranslated && <AutoTranslatedMark />}
-                <span className="flex items-center gap-1">
-                  <Eye className="h-3 w-3" />
-                  {guide.viewCount}
-                </span>
+                <ViewCountMeta count={guide.viewCount} />
                 {guide.pageViews7d !== undefined && (
                   <PageViews7dMeta count={guide.pageViews7d} />
                 )}

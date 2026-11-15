@@ -35,11 +35,11 @@ import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { ViewToggle } from "@/components/view-toggle";
 import {
-  GuideCardGrid,
-  GuideListView,
+  GUIDE_TAG_HIT_AREA,
   type GuideItem,
   type GuideItemWithAuthorSlug,
 } from "@/components/guide-list-views";
+import { GuidePagedList } from "@/components/guide-paged-list";
 import {
   ContentSortSelect,
   parseContentSort,
@@ -254,6 +254,19 @@ export default function GuidesIndexPage() {
     return qs ? `?${qs}` : "?";
   };
 
+  // 件数の文言。絞り込み中は「n 件（検索: …、タグ: …）」のように何で絞っているかを添える
+  const activeFilters = [
+    q ? t("guides.resultFilterQuery", { q }) : "",
+    tag ? t("guides.resultFilterTag", { tag }) : "",
+  ].filter(Boolean);
+  const resultCountText =
+    activeFilters.length > 0
+      ? t("guides.resultCountFiltered", {
+          count: guideItems.length,
+          filters: activeFilters.join(t("guides.resultFilterSeparator")),
+        })
+      : t("guides.resultCount", { count: guideItems.length });
+
   // 絞り込み（検索語・タグ）だけを外す。並び順は保つ
   const clearFiltersHref = (() => {
     const params = new URLSearchParams(searchParams);
@@ -288,60 +301,45 @@ export default function GuidesIndexPage() {
       {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
       <div>
         <h1 className="text-2xl font-bold">{t("guides.pageTitle")}</h1>
+        <p className="text-sm text-muted-foreground">{t("guides.pageDesc")}</p>
       </div>
 
-      {/* Search + tag filter + toggle */}
+      {/* 検索 → 絞り込み（タグ）→ 並び替え → 表示 の順。テンプレート一覧と同じ組み方 */}
       <div className="flex flex-col gap-3">
-        {/* 狭い画面では縦積みにする（1行のままだと検索入力が潰れる。テンプレート一覧と同じ構成） */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <Form method="get" className="flex flex-col sm:flex-row gap-2 flex-1">
-            {tag && <input type="hidden" name="tag" value={tag} />}
-            {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
-            {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                name="q"
-                placeholder={t("guides.searchPlaceholder")}
-                defaultValue={q}
-                className="h-11 pl-10 pr-12 sm:h-9 sm:pr-3"
-              />
-              {/* モバイルは検索ボタンを入力欄の右端に収めて縦を節約する（Enter でも送れる） */}
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 size-11 sm:hidden"
-              >
-                <Search className="h-4 w-4" aria-hidden />
-                <span className="sr-only">{t("common.search")}</span>
-              </Button>
-            </div>
-            <Button type="submit" className="hidden sm:inline-flex">
-              <Search className="mr-2 h-4 w-4" />
-              {t("common.search")}
-            </Button>
-          </Form>
-          <div className="flex items-center justify-end gap-2">
-            <ContentSortSelect
-              value={sort}
-              onChange={handleSortChange}
-              options={GUIDE_SORTS}
-              newestLabel={t("contentSort.recentlyUpdated")}
-              // 同じ「人気順」でも一覧ごとに基準が違うため、説明は呼び出し側で用意する
-              descriptions={{
-                likes: t("contentSort.likesDesc"),
-                views: t("contentSort.viewsDesc"),
-                popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
-              }}
+        {/* 狭い画面では縦積みにする（1行のままだと検索入力が潰れる） */}
+        <Form method="get" role="search" className="flex flex-col sm:flex-row gap-2">
+          {tag && <input type="hidden" name="tag" value={tag} />}
+          {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
+          {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
+            <Input
+              name="q"
+              aria-label={t("guides.searchLabel")}
+              placeholder={t("guides.searchPlaceholder")}
+              defaultValue={q}
+              className="h-11 pl-10 pr-12 sm:h-9 sm:pr-3"
             />
-            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+            {/* モバイルは検索ボタンを入力欄の右端に収めて縦を節約する（Enter でも送れる） */}
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 size-11 sm:hidden"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <span className="sr-only">{t("common.search")}</span>
+            </Button>
           </div>
-        </div>
+          <Button type="submit" className="hidden sm:inline-flex">
+            <Search className="mr-2 h-4 w-4" />
+            {t("common.search")}
+          </Button>
+        </Form>
         {allTags.length > 0 && (
           // md 未満は 1 行の横スクロールのレール（縦を取らない）。各タグは高さ 44px の枠に入れ、
-          // ::after で上下に広げた押せる範囲（見た目は 22px のピルのまま）が枠の中に収まるようにする。
-          // md 以上は折り返し表示で、押せる範囲は広げない
+          // ::after で広げた押せる範囲（見た目は 22px のピルのまま。GUIDE_TAG_HIT_AREA）が枠の中に収まるようにする。
+          // md 以上は折り返し表示で、押せる範囲は 24px 以上（隣と重ならない大きさ）
           <nav
             ref={tagNavRef}
             aria-label={t("guides.tagFilterLabel")}
@@ -355,7 +353,7 @@ export default function GuidesIndexPage() {
                     asChild
                     variant="outline"
                     className={cn(
-                      "relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] md:after:hidden",
+                      GUIDE_TAG_HIT_AREA.md,
                       // 選択中は brand（ui.md 1 章。primary は dark でほぼ白になる）
                       selected &&
                         "border-transparent bg-brand text-brand-foreground [a&]:hover:bg-brand/90 [a&]:hover:text-brand-foreground",
@@ -374,6 +372,41 @@ export default function GuidesIndexPage() {
             })}
           </nav>
         )}
+        {/* スキップリンク: 検索・タグ・並び替えを飛ばして一覧の先頭へ（フォーカス時だけ見える） */}
+        <a
+          href="#guide-results"
+          className="sr-only rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-20 focus:z-50"
+        >
+          {t("guides.skipToResults")}
+        </a>
+        {/* 件数（左）と、並び替え・表示（右）。aria-live は件数だけに付ける。
+            件数は一覧の先頭の目印にもなる（スキップリンクの飛び先） */}
+        {/* 件数が長い（絞り込みの内容つき）ときは、並び替え・表示を次の行へ回す（件数を細い列に押し込まない） */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <p
+            id="guide-results"
+            tabIndex={-1}
+            aria-live="polite"
+            className="min-w-0 text-sm text-muted-foreground outline-none"
+          >
+            {resultCountText}
+          </p>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <ContentSortSelect
+              value={sort}
+              onChange={handleSortChange}
+              options={GUIDE_SORTS}
+              newestLabel={t("contentSort.recentlyUpdated")}
+              // 同じ「人気順」でも一覧ごとに基準が違うため、説明は呼び出し側で用意する
+              descriptions={{
+                likes: t("contentSort.likesDesc"),
+                views: t("contentSort.viewsDesc"),
+                popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
+              }}
+            />
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
       </div>
 
       {/* ページビュー集計がまだ無い間は人気順が「いいね数 → 更新日時」へ落ちるので、
@@ -421,10 +454,15 @@ export default function GuidesIndexPage() {
             ) : undefined
           }
         />
-      ) : viewMode === "card" ? (
-        <GuideCardGrid guides={guideItems} linkFn={linkFn} titleLevel="h2" />
       ) : (
-        <GuideListView guides={guideItems} linkFn={linkFn} titleLevel="h2" />
+        // 条件（検索語・タグ・並び順）が変わったら出す件数を戻す
+        <GuidePagedList
+          key={searchParams.toString()}
+          guides={guideItems}
+          linkFn={linkFn}
+          viewMode={viewMode}
+          titleLevel="h2"
+        />
       )}
       </>
       )}

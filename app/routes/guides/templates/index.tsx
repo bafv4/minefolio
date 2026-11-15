@@ -216,45 +216,58 @@ export default function TemplatesIndexPage() {
         </Button>
       </div>
 
-      {/* 検索バー（検索ボタン押下でGET送信 → 画面更新） */}
-      <Form method="get" className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            name="q"
-            placeholder={t("templates.searchPlaceholder")}
-            defaultValue={q}
-            className="h-11 pl-10 sm:h-9"
-          />
-        </div>
-        <div className="w-full sm:w-64">
-          <Combobox
-            options={languageOptions}
-            value={langValue}
-            onValueChange={setLangValue}
-            placeholder={t("templates.allLanguages")}
-            searchPlaceholder={t("meDevices.search")}
-            emptyText={t("meDevices.notFound")}
-            className="h-11 sm:h-9"
-          />
-        </div>
-        {langValue !== "__all" && <input type="hidden" name="lang" value={langValue} />}
-        {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（lang と同じ理由） */}
-        {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
-        <Button type="submit" className="h-11 sm:h-9">
-          <Search className="mr-2 h-4 w-4" />
-          {t("templates.searchButton")}
-        </Button>
-      </Form>
+      {/* 検索 → 絞り込み（言語）→ 並び替え の順。ガイド一覧と同じ組み方（検索ボタンは入力欄の右端〔狭い画面〕／右隣〔sm 以上〕）。
+          検索ボタン押下でGET送信 → 画面更新 */}
+      <div className="flex flex-col gap-3">
+        <Form method="get" role="search" className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
+            <Input
+              name="q"
+              aria-label={t("templates.searchLabel")}
+              placeholder={t("templates.searchPlaceholder")}
+              defaultValue={q}
+              className="h-11 pl-10 pr-12 sm:h-9 sm:pr-3"
+            />
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 size-11 sm:hidden"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <span className="sr-only">{t("templates.searchButton")}</span>
+            </Button>
+          </div>
+          <div className="w-full sm:w-64">
+            <Combobox
+              options={languageOptions}
+              value={langValue}
+              onValueChange={setLangValue}
+              placeholder={t("templates.allLanguages")}
+              searchPlaceholder={t("meDevices.search")}
+              emptyText={t("meDevices.notFound")}
+              className="h-11 sm:h-9"
+            />
+          </div>
+          {langValue !== "__all" && <input type="hidden" name="lang" value={langValue} />}
+          {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（lang と同じ理由） */}
+          {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
+          <Button type="submit" className="hidden sm:inline-flex">
+            <Search className="mr-2 h-4 w-4" />
+            {t("templates.searchButton")}
+          </Button>
+        </Form>
 
-      <div className="flex items-center justify-end">
-        <ContentSortSelect
-          value={sort}
-          onChange={handleSortChange}
-          options={TEMPLATE_SORTS}
-          newestLabel={t("contentSort.newest")}
-          descriptions={{ likes: t("contentSort.likesDesc") }}
-        />
+        <div className="flex items-center justify-end">
+          <ContentSortSelect
+            value={sort}
+            onChange={handleSortChange}
+            options={TEMPLATE_SORTS}
+            newestLabel={t("contentSort.newest")}
+            descriptions={{ likes: t("contentSort.likesDesc") }}
+          />
+        </div>
       </div>
 
       {isNavigating ? (

@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageSection, SectionHeaderLink } from "@/components/page-section";
 import { ArrowLeft, Pencil } from "lucide-react";
+import { GUIDE_TAG_HIT_AREA } from "@/components/guide-list-views";
 import { format } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
@@ -654,7 +655,7 @@ export default function GuideViewPage() {
               key={tag}
               variant="secondary"
               asChild
-              className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] sm:after:hidden"
+              className={GUIDE_TAG_HIT_AREA.sm}
             >
               <Link to={`/guides?tag=${encodeURIComponent(tag)}`}>{tag}</Link>
             </Badge>
