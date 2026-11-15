@@ -6,6 +6,8 @@ export const PAGES_JA = {
     copy: "コピー",
     /** コードブロックのコピーボタンの成功時（ボタンの名前と読み上げ） */
     copied: "コピーしました",
+    /** 横にはみ出す表の器（キーボードで横スクロールできる領域）の名前 */
+    tableScrollRegion: "表（横にスクロールできます）",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
     embedTemplateUnavailable: "このテンプレートは表示できません",

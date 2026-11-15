@@ -15,6 +15,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     metaDescription: "A guide by {name}",
     copy: "Copy",
     copied: "Copied",
+    tableScrollRegion: "Table (scrolls horizontally)",
     draftPreviewNotice:
       "You're viewing a draft preview. It may differ from the published version.",
     embedUserNotFound: 'User "{slug}" not found',

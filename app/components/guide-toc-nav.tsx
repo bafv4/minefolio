@@ -421,7 +421,8 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
     // 可動域がバー高さ分しかなくなり、スクロールで流れて操作できなくなる）。
     // -mx-* は親（guides/view.tsx の article）の左右パディングを打ち消して全幅化する。
     // モバイル（base）は article 側が px-0 になったため打ち消し不要（sm 以上は sm:px-6 と対）。
-    <div className="xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
+    // data-guide-toc-bar: 本文の表の見出し行をこのバーの下に貼り付けるため、高さを測る目印（guides/view.tsx）
+    <div data-guide-toc-bar="" className="xl:hidden sticky top-16 z-30 mb-6 border-y border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:-mx-6">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button

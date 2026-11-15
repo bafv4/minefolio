@@ -1296,6 +1296,19 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* はみ出す表の器は tabindex="0" でキーボードから横スクロールできる（useGuideTableScroll） */
+.guide-content.prose .table-scroll-wrapper:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 表が器に収まっているとき（data-fits。useGuideTableScroll が付ける）は器をスクロール容器にしない。
+   overflow: auto の器の中では sticky がページに効かないため。clip はスクロール容器を作らずに角丸で切り抜く
+   （見出し行の背景の角を器の角丸に合わせる）。JS 前（SSR）は data-fits が無く、従来どおり横スクロール */
+.guide-content.prose .table-scroll-wrapper[data-fits] {
+  overflow: clip;
+}
+
 .guide-content.prose :where(table) {
   font-size: 0.9em;
   table-layout: fixed;
@@ -1336,11 +1349,33 @@ body {
       linear-gradient(to right, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
       linear-gradient(to left, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
   }
+  /* 収まっている表はスクロールしないので端のフェードも出さない */
+  .guide-content.prose .table-scroll-wrapper[data-fits] {
+    background: none;
+  }
 }
 
+/* 見出しセルの面は不透明（背景と混ぜる）。貼り付いた見出し行の下を、流れていく行が透けないように */
 .guide-content.prose :where(th) {
   font-weight: 600;
-  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  background: color-mix(in oklch, var(--muted) 60%, var(--background));
+}
+
+/* 長い表の見出し行をページに貼り付ける（公開ビューだけ。.guide-content-demoted）。
+   - 器に収まっている表（data-fits）だけ。はみ出す表は横スクロールのままで、見出しは貼り付かない
+   - 最初の行が全部 th のときだけ（見出し列だけの表で 1 マスだけ貼り付かないように）
+   - 位置はサイトヘッダー（64px。1px 沈めてヘッダーの線に重ねる。ui.md 10 章）＋ xl 未満の目次バーの高さ
+     （--guide-toc-bar-height を useGuideTableScroll が実測。バーが無い・非表示なら 0。バーの下端の線にも 1px 重ねる）
+   - 重なり順は目次バー（z-30）より下
+   - 表は border-collapse なので行の下線は貼り付いた th に付いてこない。th 側の内側の影で引き直し、行の下線は消す */
+.guide-content-demoted.prose .table-scroll-wrapper[data-fits] table > :is(thead, tbody:not(thead ~ tbody)) > tr:first-child:not(:has(> td)) {
+  border-bottom-color: transparent;
+}
+.guide-content-demoted.prose .table-scroll-wrapper[data-fits] table > :is(thead, tbody:not(thead ~ tbody)) > tr:first-child:not(:has(> td)) > th {
+  position: sticky;
+  top: calc(4rem + max(var(--guide-toc-bar-height, 0px) - 1px, 0px));
+  z-index: 20;
+  box-shadow: inset 0 -1px 0 var(--tw-prose-th-borders);
 }
 
 .guide-content.prose :where(a) {

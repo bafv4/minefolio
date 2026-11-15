@@ -44,7 +44,7 @@ import { buildTableOfContents } from "@/lib/guide-toc";
 import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
-import { normalizeGuideTables } from "@/lib/guide-tables";
+import { isGuideTableOverflowing, normalizeGuideTables } from "@/lib/guide-tables";
 import { annotateGuideCallouts } from "@/lib/guide-view-html";
 import {
   extractEmbedRefs,
@@ -792,6 +792,7 @@ function GuideContent({
   const hasEmbeds = segments.some((s) => s.type !== "html");
 
   useCodeCopyButtons(contentRef, statusRef, html, t);
+  useGuideTableScroll(contentRef, html, t);
 
   // コピー成功の読み上げ（ボタンの名前の差し替えだけでは読まれないことがあるため併用する）
   const copyStatus = <span ref={statusRef} role="status" className="sr-only" />;
@@ -911,6 +912,81 @@ function useCodeCopyButtons(
       if (statusRef.current) statusRef.current.textContent = "";
     };
   }, [contentRef, statusRef, html, t]);
+}
+
+/**
+ * 本文の表の器（.table-scroll-wrapper。loader が表を包む）を、表がはみ出しているかで切り替える。
+ * - はみ出している: 横スクロールのまま、キーボードで届くよう tabindex="0"・role="region"・aria-label を付ける
+ * - 収まっている: data-fits を付ける。app/app.css が器の overflow を外し、最初の行が全部 th なら
+ *   その行をページに貼り付ける（overflow のある器の中では sticky がページに効かないため）
+ * 判定は表の実幅と器の幅の比較（isGuideTableOverflowing）。JS 前（SSR）は従来どおり横スクロールの器のまま。
+ * 器・表の大きさが変わる（画面幅・画像の読み込み・トグルの開閉）たびに ResizeObserver で判定し直す。
+ * 貼り付く位置のため、xl 未満の目次バー（GuideTocMobile、data-guide-toc-bar）の高さを
+ * --guide-toc-bar-height に入れる（バーが無い・xl 以上で非表示なら 0）
+ */
+function useGuideTableScroll(
+  contentRef: React.RefObject<HTMLDivElement | null>,
+  html: string,
+  t: Translator,
+) {
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    const wrappers = Array.from(root.querySelectorAll<HTMLElement>(".table-scroll-wrapper"));
+    if (wrappers.length === 0) return;
+    const label = t("guideView.tableScrollRegion");
+
+    const update = (wrapper: HTMLElement) => {
+      const table = wrapper.querySelector("table");
+      if (!table) return;
+      if (isGuideTableOverflowing(table.getBoundingClientRect().width, wrapper.clientWidth)) {
+        delete wrapper.dataset.fits;
+        wrapper.tabIndex = 0;
+        wrapper.setAttribute("role", "region");
+        wrapper.setAttribute("aria-label", label);
+      } else {
+        wrapper.dataset.fits = "";
+        wrapper.removeAttribute("tabindex");
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      }
+    };
+
+    const tocBar = document.querySelector<HTMLElement>("[data-guide-toc-bar]");
+    const updateTocBar = () => {
+      root.style.setProperty("--guide-toc-bar-height", `${tocBar?.offsetHeight ?? 0}px`);
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === tocBar) {
+          updateTocBar();
+          continue;
+        }
+        const wrapper = (entry.target as HTMLElement).closest<HTMLElement>(".table-scroll-wrapper");
+        if (wrapper) update(wrapper);
+      }
+    });
+    updateTocBar();
+    if (tocBar) observer.observe(tocBar);
+    for (const wrapper of wrappers) {
+      update(wrapper);
+      observer.observe(wrapper);
+      const table = wrapper.querySelector("table");
+      if (table) observer.observe(table);
+    }
+
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--guide-toc-bar-height");
+      for (const wrapper of wrappers) {
+        delete wrapper.dataset.fits;
+        wrapper.removeAttribute("tabindex");
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      }
+    };
+  }, [contentRef, html, t]);
 }
 
 export function ErrorBoundary() {

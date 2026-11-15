@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeGuideTables } from "../guide-tables";
+import { isGuideTableOverflowing, normalizeGuideTables } from "../guide-tables";
 
 /** 表タグの min-width を取り出すヘルパー */
 function tableMinWidth(html: string): string | null {
@@ -222,5 +222,23 @@ describe("normalizeGuideTables: ReDoS 耐性（未閉じ/不均衡なタグで�
       "<table>".repeat(50) +
       `<table style="min-width: 50px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr><td>a</td><td>b</td></tr></tbody></table>`;
     expect(normalizeGuideTables(input)).toBe(legacyNormalizeGuideTables(input));
+  });
+});
+
+describe("isGuideTableOverflowing", () => {
+  it("表が器より広ければはみ出し", () => {
+    expect(isGuideTableOverflowing(800, 600)).toBe(true);
+  });
+  it("同じ幅・狭い表は収まっている", () => {
+    expect(isGuideTableOverflowing(600, 600)).toBe(false);
+    expect(isGuideTableOverflowing(400, 600)).toBe(false);
+  });
+  it("1px までの丸め差は収まっているとみなす", () => {
+    expect(isGuideTableOverflowing(600.8, 600)).toBe(false);
+    expect(isGuideTableOverflowing(601, 600)).toBe(false);
+    expect(isGuideTableOverflowing(601.5, 600)).toBe(true);
+  });
+  it("畳まれたトグルの中（幅 0）は収まっている", () => {
+    expect(isGuideTableOverflowing(0, 0)).toBe(false);
   });
 });

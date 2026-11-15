@@ -128,3 +128,13 @@ export function normalizeGuideTables(html: string): string {
   result += html.slice(cursor);
   return result;
 }
+
+/**
+ * 公開ページで、表が器（.table-scroll-wrapper）からはみ出しているか（DOM で測った幅を渡す）。
+ * はみ出していれば器は横スクロールのまま（キーボードで届くよう tabindex 等を付ける）、収まっていれば
+ * 器の overflow を外して見出し行をページに貼り付ける（guides/view.tsx の useGuideTableScroll）。
+ * 小数の幅の丸め差で揺れないよう、1px までの差は「収まっている」とみなす。
+ */
+export function isGuideTableOverflowing(tableWidth: number, containerWidth: number): boolean {
+  return tableWidth - containerWidth > 1;
+}
