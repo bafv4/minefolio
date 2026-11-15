@@ -14,7 +14,7 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, keybindings, keyRemaps, searchCrafts, searchCraftLoops } from "@/lib/schema";
-import { eq, and, or, sql, asc, inArray } from "drizzle-orm";
+import { eq, ne, and, or, sql, asc, desc, inArray } from "drizzle-orm";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { resolveRowVariations } from "@/lib/search-craft-variations";
@@ -28,7 +28,8 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, ArrowLeft, Calendar, Pencil } from "lucide-react";
+import { PageSection, SectionHeaderLink } from "@/components/page-section";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
@@ -329,9 +330,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // ?original=1 は原文への切替（SSR で切り替えるので共有・再読み込みでも状態が保てる）。
   // 切替リンクを出すため、original 指定でも訳文の有無は引く
   // いいね数（guide.id にのみ依存）は翻訳取得と独立なので並行する
-  const [translation, likeCount] = await Promise.all([
+  // 末尾の「ほかのガイド」用に、同じ著者の公開済みガイドを最大3件（このガイドは除く。下書き・非公開は含めない）
+  const [translation, likeCount, otherGuides] = await Promise.all([
     draftPreview ? null : getGuideTranslation(db, guide, resolveLocale(request)),
     getGuideLikeCount(db, guide.id),
+    db.query.guides.findMany({
+      where: and(
+        eq(guides.authorId, author.id),
+        eq(guides.isPublished, true),
+        ne(guides.id, guide.id)
+      ),
+      columns: { slug: true, title: true },
+      orderBy: [desc(guides.updatedAt)],
+      limit: 3,
+    }),
   ]);
   const showOriginal = url.searchParams.get("original") === "1";
   const translated = translation !== null && !showOriginal ? translation : null;
@@ -396,6 +408,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       displayNameAlphabet: author.displayNameAlphabet,
       customSkinUrl: author.customSkinUrl,
     },
+    otherGuides,
     appUrl,
     embedUsers,
     isOwner,
@@ -412,7 +425,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { guide, author, embedUsers, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
+  const { guide, author, otherGuides, embedUsers, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
@@ -495,7 +508,7 @@ export default function GuideViewPage() {
       </div>
 
       {previewingDraft && (
-        <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+        <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           {t("guideView.draftPreviewNotice")}
         </div>
       )}
@@ -517,17 +530,8 @@ export default function GuideViewPage() {
         )}
       </div>
 
-      {/* Cover image */}
-      {guide.coverImageUrl && (
-        <img
-          src={guide.coverImageUrl}
-          alt={guide.title}
-          className="w-full rounded-xl object-cover aspect-2/1 mb-8"
-        />
-      )}
-
       {/* Title + summary */}
-      <div className="mb-5">
+      <div className="mb-4">
         <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight mb-3">
           {guide.title}
         </h1>
@@ -538,12 +542,50 @@ export default function GuideViewPage() {
         )}
       </div>
 
-      {/* Tags */}
+      {/* 筆者の行（走者。名前＋@MCID、更新日・閲覧数・いいね）。メタ行の罫線は廃止してここへ統合 */}
+      <div className="mb-4">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <Link
+            to={`/player/${author.slug}`}
+            className="group flex min-h-11 items-center gap-2.5 sm:min-h-9"
+          >
+            <MinecraftAvatar
+              uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
+              size={36}
+              alt=""
+              className="shrink-0 rounded-lg"
+            />
+            <span className="font-medium transition-colors group-hover:text-primary">{authorName}</span>
+          </Link>
+          {author.mcid && <span className="text-sm text-muted-foreground">@{author.mcid}</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <span>
+            {t("guideView.updatedOn", {
+              date: format(guide.updatedAt, dateFormatPattern(locale), { locale: dateFnsLocale(locale) }),
+            })}
+          </span>
+          <span className="tabular-nums">
+            {t("guideView.viewCount", { count: guide.viewCount.toLocaleString(locale) })}
+          </span>
+          <LikeButton
+            variant="detail"
+            targetType="guide"
+            targetId={guide.id}
+            likeCount={guide.likeCount}
+            isOwn={isOwner}
+            className="ml-auto"
+          />
+        </div>
+      </div>
+
+      {/* Tags（クリックで /guides?tag= の絞り込みへ） */}
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {tags.map((tag) => (
-            <Badge key={tag} variant="secondary">
-              {tag}
+            <Badge key={tag} variant="secondary" asChild>
+              <Link to={`/guides?tag=${encodeURIComponent(tag)}`}>{tag}</Link>
             </Badge>
           ))}
         </div>
@@ -554,41 +596,18 @@ export default function GuideViewPage() {
         <AutoTranslateNotice
           showOriginal={autoTranslation.showingOriginal}
           to={{ search: translationToggleSearch }}
-          className="mb-6"
+          className="mb-4"
         />
       )}
 
-      {/* Meta */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y py-3 mb-6">
-        <Link
-          to={`/player/${author.slug}`}
-          className="flex items-center gap-2 hover:text-foreground transition-colors"
-        >
-          <MinecraftAvatar
-            uuid={author.uuid ?? undefined}
-            skinUrl={author.customSkinUrl}
-            size={20}
-            className="rounded-full shrink-0"
-          />
-          <span className="font-medium">{authorName}</span>
-        </Link>
-        <span className="flex items-center gap-1">
-          <Calendar className="h-3.5 w-3.5" />
-          {format(guide.updatedAt, dateFormatPattern(locale), { locale: dateFnsLocale(locale) })}
-        </span>
-        <span className="flex items-center gap-1">
-          <Eye className="h-3.5 w-3.5" />
-          {guide.viewCount}
-        </span>
-        <LikeButton
-          variant="detail"
-          targetType="guide"
-          targetId={guide.id}
-          likeCount={guide.likeCount}
-          isOwn={isOwner}
-          className="ml-auto"
+      {/* Cover image（装飾扱い: 隣の h1 と同文の重複読み上げを避けて alt=""。ファーストビュー近くなので eager） */}
+      {guide.coverImageUrl && (
+        <img
+          src={guide.coverImageUrl}
+          alt=""
+          className="w-full rounded-xl object-cover aspect-2/1 mb-6"
         />
-      </div>
+      )}
 
       {/* 目次（2xl 未満: 上部固定バー + 左ドロワー）。
           2xl:hidden と sticky はコンポーネント側のバー本体に付く（ラッパーで包むと
@@ -602,28 +621,52 @@ export default function GuideViewPage() {
         embedUsers={embedUsers}
       />
 
-      {/* Author card at bottom */}
-      <div className="border-t mt-12 pt-8">
+      {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ） */}
+      <PageSection
+        id="guide-more-by-author"
+        title={t("guideView.moreFromAuthor")}
+        className="mt-12"
+        action={
+          otherGuides.length > 0 ? (
+            <SectionHeaderLink to={`/guides/${author.slug}`} label={t("guideView.allGuidesByAuthor")} />
+          ) : undefined
+        }
+      >
         <Link
           to={`/player/${author.slug}`}
-          className="flex items-center gap-3 group"
+          className="group flex min-h-11 items-center gap-2.5"
         >
           <MinecraftAvatar
             uuid={author.uuid ?? undefined}
             skinUrl={author.customSkinUrl}
-            size={40}
-            className="rounded-full"
+            size={36}
+            alt=""
+            className="shrink-0 rounded-lg"
           />
-          <div>
-            <p className="font-medium group-hover:text-primary transition-colors">
+          <span className="min-w-0">
+            <span className="block truncate font-medium transition-colors group-hover:text-primary">
               {authorName}
-            </p>
+            </span>
             {author.mcid && (
-              <p className="text-sm text-muted-foreground">@{author.mcid}</p>
+              <span className="block truncate text-sm text-muted-foreground">@{author.mcid}</span>
             )}
-          </div>
+          </span>
         </Link>
-      </div>
+        {otherGuides.length > 0 && (
+          <ul className="divide-y divide-border/60">
+            {otherGuides.map((g) => (
+              <li key={g.slug}>
+                <Link
+                  to={`/guides/${author.slug}/${g.slug}`}
+                  className="flex min-h-11 items-center py-2 text-sm font-medium transition-colors hover:text-primary"
+                >
+                  {g.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PageSection>
     </article>
   );
 }

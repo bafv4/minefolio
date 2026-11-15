@@ -17,6 +17,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     draftPreviewNotice:
       "You're viewing a draft preview. It may differ from the published version.",
     embedUserNotFound: 'User "{slug}" not found',
+    updatedOn: "Updated {date}",
+    viewCount: "{count} views",
+    moreFromAuthor: "More guides by this runner",
+    allGuidesByAuthor: "All guides",
   },
   theme: {
     toggle: "Toggle theme",

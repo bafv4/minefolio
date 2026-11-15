@@ -261,7 +261,11 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - 個別ガイドの全文表示
 - カバー画像、タイトル、著者情報、本文を表示
 - 閲覧数（`viewCount`）は**ページ表示時にクライアントから `POST /api/guides/view-count` を1回送って**加算する（`GuideViewPage` の effect、`guide.id` 単位）。loader では数えない — 原文/訳文切替（`?original=1`）など同一ページ内の search param 変更でも loader が再実行され、切替のたびに水増しされるため。ドラフトプレビューは送らず、API は公開済みガイドのみ加算する。JS を実行しないクローラは数えない
-- メタ帯（著者・更新日・閲覧数）の右端に**いいねボタン**を置く。自分のガイドでは押せず件数のみ表示する
+- **ヘッダーの並び**: 戻る／編集 → 下書きプレビューの通知（`rounded-xl`）→ タイトル h1＋要約 → **筆者の行** → タグ → 自動翻訳の注記 → カバー画像（2:1・`rounded-xl`・`alt=""`＝隣の h1 と重複して読ませない）→ 目次バー（2xl 未満）→ 本文。罫線で挟んだメタ行は廃止し筆者の行へ統合した
+- **筆者の行**: 1行目は `MinecraftAvatar` 36px（`rounded-lg`・`alt=""`）＋筆者名（`/player/:slug` へのリンク）＋`@MCID`。2行目は「更新 {日付}」「閲覧 {件数}（ロケールの桁区切り）」と、右端（`ml-auto`）のいいねボタン（自分のガイドでは押せず件数のみ）。閲覧数は文字のラベルで示す（アイコンだけにしない）。375px でも1段に収まり、収まらない幅では折り返す
+- **タグ**は `/guides?tag=<タグ>`（一覧の絞り込みクエリ）へのリンク
+- **末尾の「この走者のほかのガイド」**（`PageSection`・h2）: 筆者のアバター・名前・`@MCID`（プロフィールへのリンク）と、同じ筆者の**公開済み**のほかのガイドを更新日の新しい順に最大3件（このガイドは除く。下書き・非公開は含めない。ローダーの `otherGuides` は `slug` / `title` のみ）。見出し右に「すべてのガイド」（`/guides/:authorSlug`）。ほかのガイドが0件なら、リストと「すべてのガイド」は出さず筆者のリンクだけ
+- **目次**（`app/components/guide-toc-nav.tsx`。2xl 以上は本文左ガターの sticky サイドバー、未満はバー＋ドロワー）: 箱を作らず、見出し「目次」（`text-sm font-semibold`）と左の細い縦線のリスト（アクティブ項目だけ線が `border-brand`）。**折りたたみ**: 項目の最小 level の項目だけを常に出し、それより下の階層は「いま読んでいる節」（アクティブ見出しを含む最上位項目から次の最上位項目の手前まで）の分だけ展開する。アクティブ項目は常に見える。計算は `visibleTocItems`（`app/lib/guide-toc.ts`）。ドロワーの項目は高さ 44px
 - **ローダーは表示に使うフィールドだけを返す**（`guide`: id / slug / title / summary / coverImageUrl / tags / viewCount / updatedAt / sanitizedContent / likeCount、meta 用の原文 metaTitle / metaSummary、`author`: slug / mcid / uuid / displayName / customSkinUrl）。行をそのまま展開すると、著者の未公開ドラフト（`draftTitle` / `draftContent` 等）とサニタイズ前の生 `content` が全閲覧者のSSRペイロードに載るため。ドラフトプレビュー（`?draft=1`、本人のみ）では表示値にドラフトを採用するが、ドラフト列そのものは渡さない。回帰テスト: `app/routes/guides/__tests__/view.test.ts`
 
 #### 自動翻訳の表示（`/guides/:authorSlug/:guideSlug`）
@@ -270,7 +274,7 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 
 - ローダーは公開版の原文を `getGuideTranslation()` に渡し、訳文（title / summary / 本文）が使えれば**既定で訳文を表示**する。使えない（機能無効・著者がオプトアウト・失効・未公開・原文と閲覧ロケールが同じ）ときは `null` で、従来どおり原文。**ドラフトプレビュー（`?draft=1`）では翻訳を引かない**
 - 訳文の本文も原文と同じ経路（サニタイズ → 表の整形 → 目次 → 埋め込みの抽出・描画 → `guide-content`）で描画するため、キー配置・サーチクラフト・ガイドリンクの埋め込みは訳文でも同じに動く（埋め込み div は翻訳対象外で原文のまま）
-- 記事上部（タグ行とメタ帯の間）に共通の `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。プロフィールと共用）を出す。「自動翻訳 · 原文を表示」（文言キーは `playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。色は `border-info/40 bg-info/10`。誤訳が意味の反転になりうる技術記事のため、注記と原文への切替は必須要素
+- 記事上部（タグ行の下）に共通の `AutoTranslateNotice`（`app/components/auto-translate-notice.tsx`。プロフィールと共用）を出す。「自動翻訳 · 原文を表示」（文言キーは `playerProfile.autoTranslated` / `showOriginal` / `viewingOriginal` / `showTranslation`）。色は `border-info/40 bg-info/10`。誤訳が意味の反転になりうる技術記事のため、注記と原文への切替は必須要素
 - **原文への切替は `?original=1`**（SSR で出し分け。共有・再読み込みでも状態が保てる）。原文表示中は「原文を表示中 · 翻訳を表示」に変わり、クエリから `original` を外すだけで訳文に戻る。他のクエリ（`draft` 等）は維持する
 - 訳文があるとき（原文表示中も含む）だけローダーが `autoTranslation: { sourceLocale, showingOriginal }` を返す。無いときは `null`＝バナーを出さない
 - **meta / OGP は常に原文**（クローラーには常に日本語。ローダーが `guide.metaTitle` / `guide.metaSummary` を別に返す）

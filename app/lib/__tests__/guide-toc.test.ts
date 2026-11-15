@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTableOfContents } from "../guide-toc";
+import { buildTableOfContents, visibleTocItems } from "../guide-toc";
 
 // 旧実装（O(n^2) の遅延後方参照版）の逐語コピー。線形版が整形式HTMLに対して
 // バイト一致することを回帰テストで担保するためのリファレンス。
@@ -142,5 +142,51 @@ describe("buildTableOfContents", () => {
 
     expect(toc).toEqual([{ id: "heading-1", text: "末尾", level: 2 }]);
     expect(elapsedMs).toBeLessThan(1000);
+  });
+});
+
+describe("visibleTocItems", () => {
+  const items = [
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "a1x", text: "A1x", level: 3 },
+    { id: "b", text: "B", level: 1 },
+    { id: "b1", text: "B1", level: 2 },
+    { id: "c", text: "C", level: 1 },
+  ];
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+  it("アクティブが無ければ最上位のみ", () => {
+    expect(ids(visibleTocItems(items, null))).toEqual(["a", "b", "c"]);
+    expect(ids(visibleTocItems(items, "nope"))).toEqual(["a", "b", "c"]);
+  });
+
+  it("アクティブを含む最上位の節だけ展開する", () => {
+    expect(ids(visibleTocItems(items, "a1x"))).toEqual(["a", "a1", "a1x", "b", "c"]);
+    expect(ids(visibleTocItems(items, "b"))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("最小レベルが 2 の目次では h2 が最上位", () => {
+    const xs = [
+      { id: "x", text: "X", level: 2 },
+      { id: "x1", text: "X1", level: 3 },
+      { id: "y", text: "Y", level: 2 },
+      { id: "y1", text: "Y1", level: 3 },
+    ];
+    expect(ids(visibleTocItems(xs, "y1"))).toEqual(["x", "y", "y1"]);
+  });
+
+  it("最上位より前の下位見出しがアクティブでも常に見える", () => {
+    const xs = [
+      { id: "o", text: "O", level: 2 },
+      { id: "t", text: "T", level: 1 },
+      { id: "t1", text: "T1", level: 2 },
+    ];
+    expect(ids(visibleTocItems(xs, "o"))).toEqual(["o", "t"]);
+    expect(ids(visibleTocItems(xs, "t"))).toEqual(["t", "t1"]);
+  });
+
+  it("空配列", () => {
+    expect(visibleTocItems([], null)).toEqual([]);
   });
 });

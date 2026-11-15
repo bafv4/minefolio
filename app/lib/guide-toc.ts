@@ -154,3 +154,26 @@ export function buildTableOfContents(html: string): { html: string; toc: TocItem
   out += html.slice(emitted);
   return { html: out, toc };
 }
+
+/**
+ * 目次に表示する項目を返す（折りたたみ）。
+ * - 最上位（items の最小 level）は常に表示する。
+ * - それより下の階層は、アクティブな見出しを含む最上位の節（次の最上位項目の手前まで）の分だけ表示する。
+ * - アクティブ項目そのものは常に表示される（最上位より前に孤立した下位見出しでも、その塊が節として開く）。
+ * 順序は items のまま。activeId が null / 未知なら最上位のみ。
+ */
+export function visibleTocItems(items: TocItem[], activeId: string | null): TocItem[] {
+  if (items.length === 0) return [];
+  const topLevel = Math.min(...items.map((i) => i.level));
+
+  // 各項目が属する節の番号（最上位項目ごとに +1。先頭の最上位より前は 0）
+  let section = 0;
+  const sectionOf = items.map((item) => {
+    if (item.level === topLevel) section += 1;
+    return section;
+  });
+  const activeIndex = activeId === null ? -1 : items.findIndex((i) => i.id === activeId);
+  const activeSection = activeIndex === -1 ? null : sectionOf[activeIndex];
+
+  return items.filter((item, idx) => item.level === topLevel || sectionOf[idx] === activeSection);
+}

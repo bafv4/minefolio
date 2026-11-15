@@ -1,13 +1,14 @@
 // ガイドの目次（GitBook 風）。
-// - 広い画面（xl 以上）: 本文左に sticky 表示（GuideTocSidebar）
-// - 狭い画面: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
+// - 広い画面（2xl 以上）: 本文左のガターに sticky 表示（GuideTocSidebar）
+// - それ未満: 上部固定バーのハンバーガーから左ドロワーで表示（GuideTocMobile）
 // どちらも共通の TocList を描画し、現在表示中の見出しをハイライトする。
+// 最上位の階層だけを常に出し、下の階層は「いま読んでいる節」の分だけ展開する（visibleTocItems）。
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useT } from "@/hooks/use-locale";
 import { List } from "lucide-react";
 import { useOverlayScrollbarY } from "@/hooks/use-overlay-scrollbar-y";
 import { cn } from "@/lib/utils";
-import type { TocItem } from "@/lib/guide-toc";
+import { visibleTocItems, type TocItem } from "@/lib/guide-toc";
 import {
   Sheet,
   SheetContent,
@@ -130,19 +131,24 @@ function useTocMaxHeight(): string {
   return maxHeight;
 }
 
-/** 目次リスト本体（サイドバー・ドロワー共通） */
+/** 目次リスト本体（サイドバー・ドロワー共通）。左の細い縦線の上に、アクティブ項目だけ brand の線を載せる */
 function TocList({
   items,
   activeId,
   onNavigate,
+  touch = false,
 }: {
   items: TocItem[];
   activeId: string | null;
   onNavigate?: (id: string) => void;
+  /** true で項目の高さを 44px にする（ドロワー用） */
+  touch?: boolean;
 }) {
+  const visible = visibleTocItems(items, activeId);
+  const topLevel = Math.min(...items.map((i) => i.level));
   return (
-    <ul className="space-y-0.5">
-      {items.map((item) => {
+    <ul className="border-l border-border/60">
+      {visible.map((item) => {
         const isActive = item.id === activeId;
         return (
           <li key={item.id}>
@@ -157,13 +163,14 @@ function TocList({
               }}
               aria-current={isActive ? "location" : undefined}
               className={cn(
-                // アクティブは左端の真っ直ぐな縦線（角丸なし）。ホバーは文字色のみ変え、枠線・背景は付けない
-                "block border-l-2 py-1 pr-2 text-sm leading-snug transition-colors",
+                // -ml-px で2px の線が親の1px の縦線に重なる。アクティブだけ brand にする。ホバーは文字色のみ
+                "-ml-px block border-l-2 py-1 pr-2 text-sm leading-snug transition-colors",
+                touch && "flex min-h-11 items-center",
                 isActive
                   ? "border-brand font-medium text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
-              style={{ paddingLeft: `${(item.level - 1) * 0.875 + 0.625}rem` }}
+              style={{ paddingLeft: `${(item.level - topLevel) * 0.875 + 0.75}rem` }}
             >
               {item.text}
             </a>
@@ -176,7 +183,7 @@ function TocList({
 
 /**
  * 広い画面用の目次サイドバー。sticky でスクロール追従する。
- * 親側で `hidden xl:block` などの表示制御を行う前提。
+ * 親側で `hidden 2xl:block` などの表示制御を行う前提。
  */
 export function GuideTocSidebar({ items }: { items: TocItem[] }) {
   const t = useT();
@@ -187,19 +194,16 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
   if (items.length < 2) return null;
 
   return (
-    // 目次領域をカード化。高さは最大で「画面高 - ヘッダー - フッター - マージン」とし
+    // 箱は作らない（欄は箱にしない）。高さは最大で「画面高 - ヘッダー - フッター - マージン」とし
     // sticky 表示（ヘッダー/フッターは可変なので実測して算出）。
     // 「目次」見出しは固定し、リスト部分だけを内部スクロールさせる。
     // スクロールバーは横幅を取らないオーバーレイ（ネイティブは非表示）。
     <nav
       aria-label={t("guideToc.title")}
       style={{ maxHeight }}
-      className="sticky top-24 flex flex-col rounded-xl border bg-card p-3"
+      className="sticky top-24 flex flex-col"
     >
-      <p className="mb-2 flex shrink-0 items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <List className="h-3.5 w-3.5" />
-        {t("guideToc.title")}
-      </p>
+      <p className="mb-2 shrink-0 text-sm font-semibold">{t("guideToc.title")}</p>
       {/* max-h では percentage 高さ（h-full）が解決しないため、
           入れ子の flex-col + flex-1 でスクローラを高さ制約する */}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -217,7 +221,7 @@ export function GuideTocSidebar({ items }: { items: TocItem[] }) {
 
 /**
  * 狭い画面用の目次。上部に sticky なバーを置き、ハンバーガーから左ドロワーで開く。
- * 親側で `xl:hidden` などの表示制御を行う前提。
+ * 親側で `2xl:hidden` などの表示制御を行う前提。
  */
 export function GuideTocMobile({ items }: { items: TocItem[] }) {
   const t = useT();
@@ -274,6 +278,7 @@ export function GuideTocMobile({ items }: { items: TocItem[] }) {
               items={items}
               activeId={activeId}
               onNavigate={handleNavigate}
+              touch
             />
           </div>
           {/* アクセシビリティ用の隠しクローズ（右上 X は SheetContent 既定） */}

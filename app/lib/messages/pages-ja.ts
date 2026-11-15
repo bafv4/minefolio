@@ -6,6 +6,10 @@ export const PAGES_JA = {
     copy: "コピー",
     draftPreviewNotice: "ドラフト（仮保存）のプレビューを表示しています。公開中の内容とは異なる場合があります。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
+    updatedOn: "更新 {date}",
+    viewCount: "閲覧 {count}",
+    moreFromAuthor: "この走者のほかのガイド",
+    allGuidesByAuthor: "すべてのガイド",
   },
   /** テーマ切替（components/layout/theme-toggle.tsx） */
   theme: {
