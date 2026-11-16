@@ -119,8 +119,9 @@ export function EmbedDialog({ kind, onOpenChange, onInsert, defaultUserSlug, ini
     onOpenChange(false);
   };
 
-  // 「変更」から開いたときは、閉じたあとフォーカスをそのボタンへ戻す（トリガーが無いので Radix の既定では body に落ちる）
-  const returnFocus = useDialogReturnFocus(editing);
+  // 閉じたあと、フォーカスが body に落ちたときだけ開く前の要素（「変更」ボタン等）かエディタへ戻す
+  // （トリガーが無いので Radix の既定では body に落ちる。挿入でエディタへ移したフォーカスは奪わない）
+  const returnFocus = useDialogReturnFocus(kind !== null);
   const runnerLabelId = useId();
   const presetLabelId = useId();
   const presetTriggerId = useId();

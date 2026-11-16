@@ -78,9 +78,10 @@ function isAtContentEnd(lastId: string): boolean {
 /**
  * スクロール位置に応じて現在の見出し id を返す。
  * 見出し上端が「貼り付く UI の下端（scroll-padding-top）＋余白」を最後に超えたものをアクティブとする。
+ * 最初の見出しより上にいる間は null（まだどの節にも入っていない。モバイルのバーは「目次」だけを出す）。
  */
 function useActiveHeading(items: TocItem[]): string | null {
-  const [activeId, setActiveId] = useState<string | null>(items[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -93,7 +94,7 @@ function useActiveHeading(items: TocItem[]): string | null {
       // しきい値は貼り付く UI の下端＝見出しへ移ったときの着地点（:root の scroll-padding-top。xl 未満は
       // 目次バーのぶん深い）＋余白。固定値だと、目次から移った見出しがしきい値より下に着地して現在地にならない
       const threshold = getActiveThreshold();
-      let current = ids[0];
+      let current: string | null = null;
       for (const id of ids) {
         const el = document.getElementById(id);
         if (!el) continue;
@@ -105,8 +106,10 @@ function useActiveHeading(items: TocItem[]): string | null {
       }
       // 末尾まで来たら最後の見出しを現在地にする（最後の節が短いと、見出しがしきい値まで上がらないため）。
       // 末尾＝ページの最下部か、本文（.guide-content）の終わりが画面に入り最後の見出しも画面内にあるとき
-      // （記事の下に「他のガイド」やフッターが続くと、ページの最下部より先に本文を読み終える）
-      if (isAtContentEnd(ids[ids.length - 1])) {
+      // （記事の下に「他のガイド」やフッターが続くと、ページの最下部より先に本文を読み終える）。
+      // ページの先頭（まだスクロールしていない）では上書きしない: 1画面に収まる短い記事で、開いた直後から
+      // 最後の見出しが現在地になってしまう
+      if (window.scrollY > 0 && isAtContentEnd(ids[ids.length - 1])) {
         current = ids[ids.length - 1];
       }
       setActiveId(current);

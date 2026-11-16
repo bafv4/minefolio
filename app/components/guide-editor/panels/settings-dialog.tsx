@@ -18,6 +18,7 @@ import { MetadataFields } from "./metadata-fields";
 import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
 import { getPublishAction, hasDraftSave, PUBLISH_ACTION_MESSAGES } from "../hooks/use-guide-save";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 
 export interface GuideSettingsValues {
   title: string;
@@ -61,6 +62,8 @@ export function SettingsDialog({
   onApply,
 }: SettingsDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   // ── モーダル内ローカル State ──
   const [title, setTitle] = useState(initialValues.title);
   const [summary, setSummary] = useState(initialValues.summary);
@@ -112,7 +115,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>

@@ -261,6 +261,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // ドラフトが存在し、プレビュー指定時はドラフト各値を採用
   const previewingDraft = draftPreview && guide.draftUpdatedAt !== null;
+  // 著者本人が非公開のガイドを見ている（非公開を見せる経路はドラフトプレビューだけ。?draft=1 なしは上の条件で 404）
+  const unpublished = !guide.isPublished;
   const viewTitle = previewingDraft ? guide.draftTitle ?? guide.title : guide.title;
   const viewSummary = previewingDraft ? guide.draftSummary : guide.summary;
   const viewCover = previewingDraft ? guide.draftCoverImageUrl : guide.coverImageUrl;
@@ -374,6 +376,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     embedTemplates,
     isOwner,
     previewingDraft,
+    unpublished,
     toc,
     // 訳文が存在するとき（原文表示中も含む）だけ非 null。バナーの文言と切替リンクに使う
     autoTranslation: translation
@@ -386,7 +389,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
-  const { guide, author, appUrl, otherGuides, embedUsers, embedTemplates, isOwner, previewingDraft, toc, autoTranslation } = useLoaderData<typeof loader>();
+  const { guide, author, appUrl, otherGuides, embedUsers, embedTemplates, isOwner, previewingDraft, unpublished, toc, autoTranslation } = useLoaderData<typeof loader>();
+  // シェアは公開 URL を渡すので、読者に見えない状態（下書きのプレビュー・非公開）では出さない。
+  // いいねは非公開の記事では意味が無い（読者が居ない）ので出さない。公開済みガイドの下書きのプレビューでは従来どおり出す
+  const showShare = !previewingDraft && !unpublished;
+  const showLike = !unpublished;
   const [searchParams] = useSearchParams();
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
@@ -434,9 +441,10 @@ export default function GuideViewPage() {
         <GuideTocSidebar key={guide.id} items={toc} />
       </div>
 
-      {previewingDraft && (
+      {/* 非公開のときは非公開の帯を優先する（下書きが残っている非公開ガイドでも「公開中の内容とは…」は当てはまらない） */}
+      {(unpublished || previewingDraft) && (
         <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          {t("guideView.draftPreviewNotice")}
+          {unpublished ? t("guideView.unpublishedPreviewNotice") : t("guideView.draftPreviewNotice")}
         </div>
       )}
       {/* Back button + Owner edit button */}
@@ -491,26 +499,30 @@ export default function GuideViewPage() {
           {author.mcid && (
             <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:inline">@{author.mcid}</span>
           )}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <LikeButton
-              variant="detail"
-              targetType="guide"
-              targetId={guide.id}
-              likeCount={guide.likeCount}
-              isOwn={isOwner}
-              compactLabel
-              className="h-11 max-sm:min-w-11 sm:h-8"
-            />
-            {!previewingDraft && (
-              <ShareButton
-                title={`${guide.title} | Minefolio`}
-                url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
-                compactOnMobile
-                compactBelow="sm"
-                className="h-11 max-sm:min-w-11 sm:h-8"
-              />
-            )}
-          </div>
+          {(showLike || showShare) && (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {showLike && (
+                <LikeButton
+                  variant="detail"
+                  targetType="guide"
+                  targetId={guide.id}
+                  likeCount={guide.likeCount}
+                  isOwn={isOwner}
+                  compactLabel
+                  className="h-11 max-sm:min-w-11 sm:h-8"
+                />
+              )}
+              {showShare && (
+                <ShareButton
+                  title={`${guide.title} | Minefolio`}
+                  url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
+                  compactOnMobile
+                  compactBelow="sm"
+                  className="h-11 max-sm:min-w-11 sm:h-8"
+                />
+              )}
+            </div>
+          )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
           {author.mcid && <span className="sm:hidden">@{author.mcid}</span>}
@@ -573,24 +585,28 @@ export default function GuideViewPage() {
       />
 
       {/* 読み終えた地点のいいね・シェア（上の筆者行と同じ部品。欄にも箱にもしない）。
-          シェアは公開 URL を渡すので、ドラフトのプレビュー中（公開前は 404 になる）は出さない */}
-      <div className="mt-10 flex flex-wrap items-center gap-2">
-        <LikeButton
-          variant="detail"
-          targetType="guide"
-          targetId={guide.id}
-          likeCount={guide.likeCount}
-          isOwn={isOwner}
-          className="h-11 sm:h-8"
-        />
-        {!previewingDraft && (
-          <ShareButton
-            title={`${guide.title} | Minefolio`}
-            url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
-            className="h-11 sm:h-8"
-          />
-        )}
-      </div>
+          出し分けは上の筆者行と同じ（showLike / showShare）。両方出ない非公開のときは行ごと出さない */}
+      {(showLike || showShare) && (
+        <div className="mt-10 flex flex-wrap items-center gap-2">
+          {showLike && (
+            <LikeButton
+              variant="detail"
+              targetType="guide"
+              targetId={guide.id}
+              likeCount={guide.likeCount}
+              isOwn={isOwner}
+              className="h-11 sm:h-8"
+            />
+          )}
+          {showShare && (
+            <ShareButton
+              title={`${guide.title} | Minefolio`}
+              url={`${appUrl}/guides/${author.slug}/${guide.slug}`}
+              className="h-11 sm:h-8"
+            />
+          )}
+        </div>
+      )}
 
       {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ） */}
       <PageSection

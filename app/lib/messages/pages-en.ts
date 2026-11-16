@@ -20,6 +20,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     youtubePlay: "Play YouTube video {n}",
     draftPreviewNotice:
       "You're viewing a preview of your saved draft. It may differ from the published version.",
+    unpublishedPreviewNotice: "This guide is unpublished. Readers can't see it.",
     embedUserNotFound: 'User "{slug}" not found',
     embedTemplateUnavailable: "This template can't be shown",
     embedTemplateLanguage: "In-game language: {language}",

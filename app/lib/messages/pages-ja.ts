@@ -12,6 +12,8 @@ export const PAGES_JA = {
     youtubeTitle: "YouTube 動画 {n}",
     youtubePlay: "YouTube 動画 {n} を再生",
     draftPreviewNotice: "下書き保存した内容のプレビューを表示しています。公開中の内容とは異なる場合があります。",
+    /** 著者本人が非公開のガイドを見ているときの帯（読者には 404 になる） */
+    unpublishedPreviewNotice: "非公開のガイドです。読者には見えません。",
     embedUserNotFound: "ユーザー「{slug}」が見つかりません",
     embedTemplateUnavailable: "このテンプレートは表示できません",
     embedTemplateLanguage: "ゲーム内言語: {language}",

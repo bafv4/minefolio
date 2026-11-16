@@ -45,6 +45,7 @@ import { YoutubeDialog } from "./panels/youtube-dialog";
 import { LinkDialog } from "./panels/link-dialog";
 import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
+import { DialogReturnFocusEditorContext } from "./lib/dialog-return-focus";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
 import { EditorBubbleMenu } from "./toolbar/bubble-menu";
 import { TableCellBubbleMenu } from "./toolbar/table-cell-bubble-menu";
@@ -403,193 +404,196 @@ export function GuideEditor({
   const previewUrl = `/guides/${authorSlug}/${guideSlug}?draft=1`;
 
   return (
-    <div className="flex flex-col">
-      {editor && (
-        <DesktopToolbar
-          editor={editor}
-          isDirty={dirty}
-          saving={saving}
-          lastSaved={lastSaved}
-          livePublished={livePublished}
-          publishSetting={isPublished}
-          draftSaveAvailable={draftSaveAvailable}
-          onSaveDraft={() => save("draft")}
-          onSavePublish={() => save("publish")}
-          onOpenSettings={() => setSettingsOpen(true)}
-          previewUrl={previewUrl}
-          onImagePicker={() => imageInputRef.current?.click()}
-          onYoutube={slashContext.insertYoutube}
-          onVideoToGif={() => setVideoToGifOpen(true)}
-          onLink={handleLinkInsert}
-          onEmbed={openEmbedInsert}
-          onTemplateEmbed={openTemplateEmbedInsert}
-          onGuideLink={() => setGuideLinkOpen(true)}
-        />
-      )}
-
-      {/* コンテンツ幅は公開ビュー（guides/view.tsx の article）と一致させ WYSIWYG にする */}
-      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-2 mt-4">
-          <Button variant="ghost" size="sm" asChild className="-ml-2">
-            <Link to="/my-guides">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              {t("guideEditor.back")}
-            </Link>
-          </Button>
-        </div>
-
-        {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
-        {draftActive && (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-            <span>
-              {draftSaveAvailable
-                ? t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })
-                : // 公開版が無いのに下書きが残っている（下書き保存が非公開のガイドにも出ていた頃に作ったもの）
-                  t("guideEditor.ui.draftBannerUnpublished", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={handleRollback}
-              disabled={saving}
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-              {draftSaveAvailable ? t("guideEditor.ui.revertToPublished") : t("guideEditor.ui.revertToSaved")}
-            </Button>
-          </div>
+    // エディタのダイアログ（トリガーなしで開く）が、閉じたあと body に落ちたフォーカスをエディタへ戻せるように配る
+    <DialogReturnFocusEditorContext.Provider value={editor}>
+      <div className="flex flex-col">
+        {editor && (
+          <DesktopToolbar
+            editor={editor}
+            isDirty={dirty}
+            saving={saving}
+            lastSaved={lastSaved}
+            livePublished={livePublished}
+            publishSetting={isPublished}
+            draftSaveAvailable={draftSaveAvailable}
+            onSaveDraft={() => save("draft")}
+            onSavePublish={() => save("publish")}
+            onOpenSettings={() => setSettingsOpen(true)}
+            previewUrl={previewUrl}
+            onImagePicker={() => imageInputRef.current?.click()}
+            onYoutube={slashContext.insertYoutube}
+            onVideoToGif={() => setVideoToGifOpen(true)}
+            onLink={handleLinkInsert}
+            onEmbed={openEmbedInsert}
+            onTemplateEmbed={openTemplateEmbedInsert}
+            onGuideLink={() => setGuideLinkOpen(true)}
+          />
         )}
 
-        {/* タイトルと概要（読み取り専用の表示。編集は設定モーダル。押すとモーダルが開く）。
-            「適用」した未保存の値もここに出る。見た目は公開ビュー（guides/view.tsx）のタイトル・概要に合わせる。
-            押せる範囲は概要まで広げる（タイトルのボタンの after で全面を覆う。ui.md 9 章「オーバーレイリンク」） */}
-        <div className="group relative mt-4 -mx-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/50 focus-within:bg-muted/50">
-          <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight">
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="w-full pr-6 text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
-            >
-              {title.trim() ? title : <span className="text-muted-foreground">{t("guideEditor.ui.titleEmpty")}</span>}
-              <span className="sr-only"> {t("guideEditor.ui.editInSettings")}</span>
-            </button>
-          </h1>
-          {summary.trim() && (
-            <p className="mt-3 text-lg text-muted-foreground leading-relaxed">{summary}</p>
-          )}
-          <Pencil
-            aria-hidden
-            className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-          />
-        </div>
+        {/* コンテンツ幅は公開ビュー（guides/view.tsx の article）と一致させ WYSIWYG にする */}
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-2 mt-4">
+            <Button variant="ghost" size="sm" asChild className="-ml-2">
+              <Link to="/my-guides">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                {t("guideEditor.back")}
+              </Link>
+            </Button>
+          </div>
 
-        <div className="py-3 min-h-100">
-          <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">
-            {editor && !isTouch && (
-              <EditorBubbleMenu editor={editor} onLink={handleLinkInsert} enabled={!isTouch} />
+          {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
+          {draftActive && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+              <span>
+                {draftSaveAvailable
+                  ? t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })
+                  : // 公開版が無いのに下書きが残っている（下書き保存が非公開のガイドにも出ていた頃に作ったもの）
+                    t("guideEditor.ui.draftBannerUnpublished", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={handleRollback}
+                disabled={saving}
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                {draftSaveAvailable ? t("guideEditor.ui.revertToPublished") : t("guideEditor.ui.revertToSaved")}
+              </Button>
+            </div>
+          )}
+
+          {/* タイトルと概要（読み取り専用の表示。編集は設定モーダル。押すとモーダルが開く）。
+              「適用」した未保存の値もここに出る。見た目は公開ビュー（guides/view.tsx）のタイトル・概要に合わせる。
+              押せる範囲は概要まで広げる（タイトルのボタンの after で全面を覆う。ui.md 9 章「オーバーレイリンク」） */}
+          <div className="group relative mt-4 -mx-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/50 focus-within:bg-muted/50">
+            <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="w-full pr-6 text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+              >
+                {title.trim() ? title : <span className="text-muted-foreground">{t("guideEditor.ui.titleEmpty")}</span>}
+                <span className="sr-only"> {t("guideEditor.ui.editInSettings")}</span>
+              </button>
+            </h1>
+            {summary.trim() && (
+              <p className="mt-3 text-lg text-muted-foreground leading-relaxed">{summary}</p>
             )}
-            {/* セル跨ぎ選択（CellSelection）にはテーブル編集用のバブルを出す */}
-            {editor && !isTouch && <TableCellBubbleMenu editor={editor} enabled={!isTouch} />}
-            {/* デスクトップ: テーブル上はブロックハンドルの代わりに行・列ハンドルを出す */}
-            {editor && <BlockHandle editor={editor} touch={isTouch} suppressInTable={!isTouch} />}
-            {editor && !isTouch && <TableHandles editor={editor} />}
-            <EditorContent editor={editor} />
+            <Pencil
+              aria-hidden
+              className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            />
+          </div>
+
+          <div className="py-3 min-h-100">
+            <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">
+              {editor && !isTouch && (
+                <EditorBubbleMenu editor={editor} onLink={handleLinkInsert} enabled={!isTouch} />
+              )}
+              {/* セル跨ぎ選択（CellSelection）にはテーブル編集用のバブルを出す */}
+              {editor && !isTouch && <TableCellBubbleMenu editor={editor} enabled={!isTouch} />}
+              {/* デスクトップ: テーブル上はブロックハンドルの代わりに行・列ハンドルを出す */}
+              {editor && <BlockHandle editor={editor} touch={isTouch} suppressInTable={!isTouch} />}
+              {editor && !isTouch && <TableHandles editor={editor} />}
+              <EditorContent editor={editor} />
+            </div>
           </div>
         </div>
+
+        {editor && isTouch && <MobileToolbar editor={editor} onLink={handleLinkInsert} />}
+
+        {/* 画像ファイル選択（slash / paste から起動） */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleImageUpload(file);
+            e.target.value = "";
+          }}
+        />
+
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
+          authorSlug={authorSlug}
+          translationEnabled={translationEnabled}
+          livePublished={livePublished}
+          uploadCover={(file) =>
+            coverUpload.uploadTo(
+              buildCoverImagePath(userId, guideId),
+              file,
+              { ...COVER_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.coverUploadFailed") },
+            )
+          }
+          isUploadingCover={coverUpload.isUploading}
+          uploadError={coverUpload.error ?? imageUpload.error}
+          onApply={(v) => {
+            // モーダル内 State を全体 State へ反映（保存はしない）。値が実際に変わったときだけダーティにする
+            // （開いて「適用」しただけで未保存扱いにしない）
+            const changed = isSettingsChanged(
+              { title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation },
+              v,
+            );
+            setTitle(v.title);
+            setSummary(v.summary);
+            setTags(v.tags);
+            setCoverImageUrl(v.coverImageUrl);
+            setIsPublished(v.isPublished);
+            setSlug(v.slug);
+            setAllowAutoTranslation(v.allowAutoTranslation);
+            if (changed) markDirty();
+          }}
+        />
+
+        <EmbedDialog
+          kind={embedKind}
+          onOpenChange={(open) => !open && setEmbedKind(null)}
+          onInsert={handleInsertEmbed}
+          defaultUserSlug={authorSlug}
+          initial={embedEdit?.initial ?? null}
+        />
+        <TemplateEmbedDialog
+          open={templateEmbedOpen}
+          onOpenChange={setTemplateEmbedOpen}
+          onInsert={handleInsertTemplateEmbed}
+          editing={templateEmbedApply !== null}
+        />
+        <GuideLinkSearch
+          open={guideLinkOpen}
+          onOpenChange={setGuideLinkOpen}
+          onInsert={handleInsertGuideLink}
+        />
+        <YoutubeDialog
+          open={youtubeDialogOpen}
+          onOpenChange={setYoutubeDialogOpen}
+          onInsert={handleInsertYoutube}
+        />
+        <LinkDialog
+          open={linkDialogOpen}
+          onOpenChange={setLinkDialogOpen}
+          selectionEmpty={linkSelectionEmpty}
+          onInsert={handleInsertLink}
+        />
+        <VideoToGifDialog
+          open={videoToGifOpen}
+          onOpenChange={setVideoToGifOpen}
+          onInsert={(gif) => {
+            // 先に閉じてから挿入する（開いたままだと Dialog のフォーカストラップが
+            // editor.chain().focus() と競合し、挿入位置が復元されない）
+            setVideoToGifOpen(false);
+            void handleImageUpload(gif);
+          }}
+        />
+
+        {/* 未保存離脱の確認 */}
+        <UnsavedChangesDialog blocker={blocker} />
       </div>
-
-      {editor && isTouch && <MobileToolbar editor={editor} onLink={handleLinkInsert} />}
-
-      {/* 画像ファイル選択（slash / paste から起動） */}
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleImageUpload(file);
-          e.target.value = "";
-        }}
-      />
-
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
-        authorSlug={authorSlug}
-        translationEnabled={translationEnabled}
-        livePublished={livePublished}
-        uploadCover={(file) =>
-          coverUpload.uploadTo(
-            buildCoverImagePath(userId, guideId),
-            file,
-            { ...COVER_IMAGE_PREPARE, errorMessage: t("guideEditor.ui.coverUploadFailed") },
-          )
-        }
-        isUploadingCover={coverUpload.isUploading}
-        uploadError={coverUpload.error ?? imageUpload.error}
-        onApply={(v) => {
-          // モーダル内 State を全体 State へ反映（保存はしない）。値が実際に変わったときだけダーティにする
-          // （開いて「適用」しただけで未保存扱いにしない）
-          const changed = isSettingsChanged(
-            { title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation },
-            v,
-          );
-          setTitle(v.title);
-          setSummary(v.summary);
-          setTags(v.tags);
-          setCoverImageUrl(v.coverImageUrl);
-          setIsPublished(v.isPublished);
-          setSlug(v.slug);
-          setAllowAutoTranslation(v.allowAutoTranslation);
-          if (changed) markDirty();
-        }}
-      />
-
-      <EmbedDialog
-        kind={embedKind}
-        onOpenChange={(open) => !open && setEmbedKind(null)}
-        onInsert={handleInsertEmbed}
-        defaultUserSlug={authorSlug}
-        initial={embedEdit?.initial ?? null}
-      />
-      <TemplateEmbedDialog
-        open={templateEmbedOpen}
-        onOpenChange={setTemplateEmbedOpen}
-        onInsert={handleInsertTemplateEmbed}
-        editing={templateEmbedApply !== null}
-      />
-      <GuideLinkSearch
-        open={guideLinkOpen}
-        onOpenChange={setGuideLinkOpen}
-        onInsert={handleInsertGuideLink}
-      />
-      <YoutubeDialog
-        open={youtubeDialogOpen}
-        onOpenChange={setYoutubeDialogOpen}
-        onInsert={handleInsertYoutube}
-      />
-      <LinkDialog
-        open={linkDialogOpen}
-        onOpenChange={setLinkDialogOpen}
-        selectionEmpty={linkSelectionEmpty}
-        onInsert={handleInsertLink}
-      />
-      <VideoToGifDialog
-        open={videoToGifOpen}
-        onOpenChange={setVideoToGifOpen}
-        onInsert={(gif) => {
-          // 先に閉じてから挿入する（開いたままだと Dialog のフォーカストラップが
-          // editor.chain().focus() と競合し、挿入位置が復元されない）
-          setVideoToGifOpen(false);
-          void handleImageUpload(gif);
-        }}
-      />
-
-      {/* 未保存離脱の確認 */}
-      <UnsavedChangesDialog blocker={blocker} />
-    </div>
+    </DialogReturnFocusEditorContext.Provider>
   );
 }

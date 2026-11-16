@@ -67,8 +67,8 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
     return () => clearTimeout(timer.current);
   }, [query, open]);
 
-  // 「変更」から開いたときは、閉じたあとフォーカスをそのボタンへ戻す
-  const returnFocus = useDialogReturnFocus(editing);
+  // 閉じたあと、フォーカスが body に落ちたときだけ開く前の要素（「変更」ボタン等）かエディタへ戻す
+  const returnFocus = useDialogReturnFocus(open);
 
   const select = (template: TemplateEmbedMeta) => {
     onInsert(template);

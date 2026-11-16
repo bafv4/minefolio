@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 
 interface YoutubeDialogProps {
   open: boolean;
@@ -20,6 +21,8 @@ interface YoutubeDialogProps {
 
 export function YoutubeDialog({ open, onOpenChange, onInsert }: YoutubeDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   const [url, setUrl] = useState("");
 
   // 開くたびに入力をリセット
@@ -35,7 +38,7 @@ export function YoutubeDialog({ open, onOpenChange, onInsert }: YoutubeDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.youtube")}</DialogTitle>
         </DialogHeader>

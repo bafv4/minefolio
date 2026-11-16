@@ -254,6 +254,7 @@ export function ImageNodeView({
         onOpenChange={(open) => !open && setCropOpen(false)}
         onApply={handleCropApply}
         applying={cropping}
+        editor={editor}
       />
     </NodeViewWrapper>
   );

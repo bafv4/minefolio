@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
+import type { Editor } from "@tiptap/react";
 import {
   FULL_CROP,
   clampCropRect,
@@ -63,10 +65,14 @@ interface ImageCropDialogProps {
   onApply: (rect: CropRect) => void;
   /** 適用処理の実行中（ボタンをスピナーにして二重送信を防ぐ） */
   applying?: boolean;
+  /** 閉じたあと戻し先が無いときにフォーカスするエディタ（NodeView から開くので明示的に渡す） */
+  editor?: Editor | null;
 }
 
-export function ImageCropDialog({ src, onOpenChange, onApply, applying }: ImageCropDialogProps) {
+export function ImageCropDialog({ src, onOpenChange, onApply, applying, editor }: ImageCropDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(src !== null, editor);
   const [rect, setRect] = useState<CropRect>(FULL_CROP);
   const [aspectKey, setAspectKey] = useState("free");
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
@@ -146,7 +152,7 @@ export function ImageCropDialog({ src, onOpenChange, onApply, applying }: ImageC
 
   return (
     <Dialog open={src !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.cropTitle")}</DialogTitle>
           <DialogDescription>{t("guideEditor.cropDesc")}</DialogDescription>

@@ -1,6 +1,7 @@
 // ガイドリンク検索ダイアログ。タイトルで検索し、選択したガイドをカードとして挿入。
 // 旧 index.tsx の手動ポップオーバー + debounce 検索を shadcn Dialog に再構成。
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
@@ -67,6 +68,8 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
   }, [query]);
 
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   const select = (guide: GuideSearchResult) => {
     onInsert(guide);
     onOpenChange(false);
@@ -74,7 +77,7 @@ export function GuideLinkSearch({ open, onOpenChange, onInsert }: GuideLinkSearc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.ui.insertGuideLink")}</DialogTitle>
         </DialogHeader>
