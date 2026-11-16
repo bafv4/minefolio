@@ -22,7 +22,6 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { BookOpen, Search } from "lucide-react";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -36,6 +35,7 @@ import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GUIDE_TAG_HIT_AREA,
+  GuideListSkeleton,
   type GuideItem,
   type GuideItemWithAuthorSlug,
 } from "@/components/guide-list-views";
@@ -418,31 +418,7 @@ export default function GuidesIndexPage() {
       )}
 
       {isNavigating ? (
-        viewMode === "card" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border border-border/70 rounded-xl overflow-hidden">
-                <Skeleton className="h-36 w-full" />
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 px-1">
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )
+        <GuideListSkeleton viewMode={viewMode} />
       ) : guideItems.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
@@ -450,7 +426,7 @@ export default function GuidesIndexPage() {
           description={tag || q ? t("guides.noMatchDesc") : t("guides.noGuides")}
           action={
             tag || q ? (
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
                 <Link to={clearFiltersHref}>{t("guides.clearFilters")}</Link>
               </Button>
             ) : undefined

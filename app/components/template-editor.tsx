@@ -230,9 +230,11 @@ export function TemplateEditorForm({
                   variant="ghost"
                   size="sm"
                   className="h-9 w-9 p-0 shrink-0"
+                  aria-label={t("meTemplates.languageClear")}
+                  title={t("meTemplates.languageClear")}
                   onClick={() => setGameLanguage("")}
                 >
-                  <X className="h-4 w-4" />
+                  <X aria-hidden />
                 </Button>
               )}
             </div>

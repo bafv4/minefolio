@@ -14,7 +14,7 @@ import { getGameLanguageName } from "@/lib/game-languages";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/status-pill";
 import { EmptyState } from "@/components/empty-state";
 import {
   AlertDialog,
@@ -203,21 +203,24 @@ export default function MyTemplatesPage() {
             {t("meTemplates.pageDescription")}
           </p>
         </div>
-        <Button asChild className="w-full sm:w-auto h-11 sm:h-10">
-          <Link to="/my-guides/templates/new">
-            <Plus className="mr-2 h-4 w-4" />
-            {t("meTemplates.create")}
-          </Link>
-        </Button>
+        {/* 0 件のときは空状態の action に同じボタンがあるので出さない */}
+        {templates.length > 0 && (
+          <Button asChild className="w-full sm:w-auto h-11 sm:h-10">
+            <Link to="/my-guides/templates/new">
+              <Plus className="mr-2 h-4 w-4" />
+              {t("meTemplates.create")}
+            </Link>
+          </Button>
+        )}
       </div>
 
-      <div className="rounded-lg border border-dashed bg-secondary/30 p-4 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {t("meTemplates.hint")}{" "}
         <Link to="/guides/templates" className="text-primary hover:underline inline-flex items-center gap-1">
           {t("meTemplates.viewGallery")}
-          <ExternalLink className="h-3 w-3" />
+          <ExternalLink className="h-3 w-3" aria-hidden />
         </Link>
-      </div>
+      </p>
 
       {templates.length > 0 ? (
         <div className="space-y-3">
@@ -233,17 +236,9 @@ export default function MyTemplatesPage() {
                       >
                         {template.title}
                       </Link>
-                      {template.isPublished ? (
-                        <Badge variant="default" className="text-xs">
-                          <Globe className="h-3 w-3" />
-                          {t("meTemplates.published")}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">
-                          <Lock className="h-3 w-3" />
-                          {t("meTemplates.unpublished")}
-                        </Badge>
-                      )}
+                      <StatusPill icon={template.isPublished ? Globe : Lock} className="shrink-0">
+                        {template.isPublished ? t("meTemplates.published") : t("meTemplates.unpublished")}
+                      </StatusPill>
                     </div>
                     {template.description && (
                       <p className="text-xs text-muted-foreground line-clamp-2">
@@ -252,23 +247,23 @@ export default function MyTemplatesPage() {
                     )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
-                        <Search className="h-3 w-3" />
+                        <Search className="h-3 w-3" aria-hidden />
                         {t("meTemplates.craftCount", { count: template.craftCount })}
                       </span>
                       {template.gameLanguage && (
                         <span className="inline-flex items-center gap-1">
-                          <Languages className="h-3 w-3" />
+                          <Languages className="h-3 w-3" aria-hidden />
                           {getGameLanguageName(t, locale, template.gameLanguage)}
                         </span>
                       )}
                       {template.hasRemaps && (
                         <span className="inline-flex items-center gap-1">
-                          <Keyboard className="h-3 w-3" />
+                          <Keyboard className="h-3 w-3" aria-hidden />
                           {t("meTemplates.includesRemaps")}
                         </span>
                       )}
                       <span className="inline-flex items-center gap-1">
-                        <Download className="h-3 w-3" />
+                        <Download className="h-3 w-3" aria-hidden />
                         {t("meTemplates.applyCount", { count: template.applyCount })}
                       </span>
                       {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
@@ -291,25 +286,34 @@ export default function MyTemplatesPage() {
                       }
                     >
                       {template.isPublished ? (
-                        <EyeOff className="h-4 w-4" />
+                        <EyeOff className="h-4 w-4" aria-hidden />
                       ) : (
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-4 w-4" aria-hidden />
                       )}
-                      <span className="hidden sm:inline">
+                      <span className="sr-only sm:not-sr-only">
                         {template.isPublished
                           ? t("meTemplates.unpublish")
                           : t("meTemplates.publish")}
                       </span>
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
-                      <Link to={`/my-guides/templates/${template.id}/edit`}>
-                        <Pencil className="h-4 w-4" />
+                      <Link
+                        to={`/my-guides/templates/${template.id}/edit`}
+                        aria-label={t("guideEditor.edit")}
+                        title={t("guideEditor.edit")}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden />
                       </Link>
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={t("meTemplates.delete")}
+                          title={t("meTemplates.delete")}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -345,7 +349,7 @@ export default function MyTemplatesPage() {
           title={t("meTemplates.emptyTitle")}
           description={t("meTemplates.emptyDescription")}
           action={
-            <Button asChild size="sm" className="mt-4">
+            <Button asChild size="sm" className="min-h-11 sm:min-h-9">
               <Link to="/my-guides/templates/new">
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meTemplates.create")}

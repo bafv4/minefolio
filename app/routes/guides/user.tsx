@@ -21,14 +21,13 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { EmptyState } from "@/components/empty-state";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { SectionHeaderLink } from "@/components/page-section";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import { ViewToggle } from "@/components/view-toggle";
-import type { GuideItem } from "@/components/guide-list-views";
+import { GuideListSkeleton, type GuideItem } from "@/components/guide-list-views";
 import { GuidePagedList } from "@/components/guide-paged-list";
 
 export function meta({
@@ -198,31 +197,7 @@ export default function UserGuidesPage() {
 
       {/* Guide list */}
       {isNavigating ? (
-        viewMode === "card" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border border-border/70 rounded-xl overflow-hidden">
-                <Skeleton className="h-36 w-full" />
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 px-1">
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )
+        <GuideListSkeleton viewMode={viewMode} />
       ) : authorGuides.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}

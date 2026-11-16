@@ -2201,6 +2201,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "A custom cape is active. It takes priority over the Mojang cape.",
   },
   meGuides: {
+    /** 新規作成ページの「戻る」リンク（/my-guides へ） */
+    backToManagement: "Back to my guides",
     title: "Guides - Minefolio",
     pageTitle: "Guides",
     pageDesc: "Write and publish strategy and setup guides",
@@ -2602,6 +2604,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     languageLabel: "In-game language",
     languageHint: "The in-game language these search strings assume (optional)",
     languageNone: "Unset",
+    languageClear: "Clear the in-game language",
     loadFromCurrent: "Load my current settings",
     loadFromCurrentConfirmTitle: "Load your current settings?",
     loadFromCurrentConfirmDescription:
@@ -2626,7 +2629,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     emptyDescriptionSuffix: "Create and publish your first template",
     searchPlaceholder: "Search by template name…",
     searchLabel: "Search templates",
-    searchButton: "Search",
     allLanguages: "All languages",
     resultCount: "{count} templates",
     resultCountFiltered: "{count} templates ({filters})",

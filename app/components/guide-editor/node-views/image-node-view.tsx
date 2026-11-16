@@ -243,7 +243,7 @@ export function ImageNodeView({
           }}
         />
         {width && (
-          <span className="absolute bottom-1 left-1 text-[10px] text-white bg-black/50 rounded px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="absolute bottom-1 left-1 text-[10px] text-white bg-black/70 rounded px-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {width}px
           </span>
         )}

@@ -51,7 +51,7 @@ export function EmbedNodeFrame({
           broken ? "border-dashed border-destructive/50" : "border-border/70",
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-4 py-2">
           <div className="min-w-0 text-sm font-medium">{header}</div>
           {actions}
         </div>

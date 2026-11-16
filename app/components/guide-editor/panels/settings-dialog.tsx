@@ -115,7 +115,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" {...returnFocus}>
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>

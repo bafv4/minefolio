@@ -15,7 +15,6 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
-import { cn } from "@/lib/utils";
 import { GUIDE_WRITING_GUIDE_PATH } from "@/lib/official-guides";
 import { deleteGuide } from "@/lib/content-cleanup.server";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -33,6 +32,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { StatusPill } from "@/components/status-pill";
 import { MyContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
@@ -110,10 +110,6 @@ export async function action({ request }: ActionFunctionArgs) {
   return null;
 }
 
-/** 状態の丸ピル（ui.md 6 章）。色は呼び出し側で上書きする */
-const STATUS_PILL_CLASS =
-  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground";
-
 export default function MyGuidesPage() {
   const t = useT();
   const locale = useLocale();
@@ -152,12 +148,15 @@ export default function MyGuidesPage() {
             </Link>
           </p>
         </div>
-        <Button asChild>
-          <Link to="/my-guides/new">
-            <Plus className="h-4 w-4 mr-2" />
-            {t("meGuides.newGuide")}
-          </Link>
-        </Button>
+        {/* 0 件のときは空状態の action に同じボタンがあるので出さない */}
+        {userGuides.length > 0 && (
+          <Button asChild>
+            <Link to="/my-guides/new">
+              <Plus className="h-4 w-4 mr-2" />
+              {t("meGuides.newGuide")}
+            </Link>
+          </Button>
+        )}
       </div>
 
       {userGuides.length === 0 ? (
@@ -166,7 +165,7 @@ export default function MyGuidesPage() {
           title={t("meGuides.noGuidesTitle")}
           description={t("meGuides.noGuides")}
           action={
-            <Button asChild size="sm" className="mt-4">
+            <Button asChild size="sm" className="min-h-11 sm:min-h-9">
               <Link to="/my-guides/new">
                 <Plus className="h-4 w-4 mr-2" />
                 {t("meGuides.newGuide")}
@@ -200,22 +199,16 @@ export default function MyGuidesPage() {
                       )}
                       {/* 公開状態はエディタの公開状態のピル（desktop-toolbar.tsx の PublishStatusPill）と同じ丸ピル・同じ語。
                           brand は選択中・進行だけに使うので、公開中も muted にする（ui.md 1 章） */}
-                      <span className={STATUS_PILL_CLASS}>
-                        {guide.isPublished ? (
-                          <Globe className="h-3 w-3" aria-hidden />
-                        ) : (
-                          <Lock className="h-3 w-3" aria-hidden />
-                        )}
+                      <StatusPill icon={guide.isPublished ? Globe : Lock} className="shrink-0">
                         {guide.isPublished ? t("meGuides.statusPublished") : t("meGuides.statusPrivate")}
-                      </span>
+                      </StatusPill>
                       {/* 公開中のガイドに下書き保存した未公開の変更があるときだけ。非公開のガイドに残る下書き
                           （下書き保存が非公開にも出ていた頃のもの）は読者に関係しないので出さない
                           （エディタの draftBannerUnpublished・プレビューの帯と同じ扱い） */}
                       {guide.isPublished && guide.draftUpdatedAt !== null && (
-                        <span className={cn(STATUS_PILL_CLASS, "border-warning/40 text-warning")}>
-                          <PencilLine className="h-3 w-3" aria-hidden />
+                        <StatusPill icon={PencilLine} tone="warning" className="shrink-0">
                           {t("meGuides.statusUnpublishedChanges")}
-                        </span>
+                        </StatusPill>
                       )}
                       {guide.isPinned && <PinnedBadge className="shrink-0" />}
                     </div>
@@ -231,7 +224,7 @@ export default function MyGuidesPage() {
                       </span>
                       {guide.isPublished && (
                         <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" />
+                          <Eye className="h-3 w-3" aria-hidden />
                           {guide.viewCount}
                         </span>
                       )}

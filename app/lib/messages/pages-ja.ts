@@ -2132,6 +2132,8 @@ export const PAGES_JA = {
     customCapeActive: "カスタムマントが有効です。Mojangのマントより優先されます。",
   },
   meGuides: {
+    /** 新規作成ページの「戻る」リンク（/my-guides へ） */
+    backToManagement: "マイガイドへ戻る",
     title: "ガイド - Minefolio",
     pageTitle: "ガイド",
     pageDesc: "攻略法や設定のガイドを作成・公開できます",
@@ -2602,6 +2604,7 @@ export const PAGES_JA = {
     languageLabel: "ゲーム内言語",
     languageHint: "サーチ文字列が想定するゲーム内言語（任意）",
     languageNone: "未設定",
+    languageClear: "ゲーム内言語の指定を外す",
     loadFromCurrent: "現在の設定を読み込む",
     loadFromCurrentConfirmTitle: "現在の設定を読み込みますか？",
     loadFromCurrentConfirmDescription: "編集中のサーチクラフトとリマップは、現在の設定の内容で置き換えられます。",
@@ -2624,7 +2627,6 @@ export const PAGES_JA = {
     emptyDescriptionSuffix: "最初のテンプレートを作成して公開しましょう",
     searchPlaceholder: "テンプレート名で検索...",
     searchLabel: "テンプレートを検索",
-    searchButton: "検索",
     allLanguages: "すべての言語",
     resultCount: "{count} 件",
     resultCountFiltered: "{count} 件（{filters}）",

@@ -3,6 +3,7 @@ import { useLocale, useT } from "@/hooks/use-locale";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eye, FileText, Languages, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
@@ -34,7 +35,7 @@ export type GuideItem = {
    * 未指定の呼び出し元（走者画面のガイドタブなど著者が全部同じ一覧）は従来どおり文字だけ
    */
   authorAvatar?: { uuid: string | null; skinUrl: string | null };
-  /** プロフィールのガイドタブでのピン留め（カード表示で先頭・拡大） */
+  /** プロフィールのガイドタブでのピン留め（先頭に並べ、タイトルにピンを付ける） */
   isPinned?: boolean;
   /** 閲覧者自身のガイドか（自分のガイドにはいいねできない） */
   isOwn?: boolean;
@@ -157,15 +158,12 @@ export function GuideCardGrid({
               // Card が重ね合わせコンテキストを作り、兄弟のオーバーレイリンク（z-0）より
               // 手前に描画されてカードのクリックが届かなくなる（ホバーしないと押せないため実質死ぬ）
               "hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              // ピン留めカードはグリッド2列分に拡大して強調する
-              guide.isPinned && "sm:col-span-2",
             )}
           >
             <div
               className={cn(
                 "flex h-full flex-col overflow-hidden rounded-xl border border-border/70 transition-all group-hover:border-primary/40 group-hover:shadow-md",
                 surface === "card" ? "bg-card" : "bg-background/80",
-                guide.isPinned && "border-primary/40",
               )}
             >
               {/* 表紙が無いカードは帯を出さず、タイトルから始める。表紙の下端の線は、白地の表紙（国旗など）が
@@ -174,10 +172,7 @@ export function GuideCardGrid({
                 <img
                   src={guide.coverImageUrl}
                   alt="" loading="lazy" decoding="async"
-                  className={cn(
-                    "w-full border-b border-border/60 object-cover",
-                    guide.isPinned ? "h-48" : "h-36",
-                  )}
+                  className="h-36 w-full border-b border-border/60 object-cover"
                 />
               )}
               <div className="flex flex-1 flex-col p-4">
@@ -185,9 +180,9 @@ export function GuideCardGrid({
                     overflow:hidden で約2px切れるため leading-snug（22px）。Pin は1行目の中央に揃える */}
                 {/* オーバーレイはタイトルのリンクの ::after で敷く（読み上げがタイトル1回になる）。
                     line-clamp は flex 要素では効かないため、内側のブロック（span）に付ける */}
-                <TitleHeading className="flex items-start gap-1.5 text-base font-semibold leading-snug transition-colors group-hover:text-primary">
+                <TitleHeading className="flex items-start gap-1.5 text-base font-semibold leading-snug">
                   {guide.isPinned && (
-                    <Pin className="h-4 w-4 text-primary shrink-0 mt-[3px]" aria-hidden />
+                    <Pin className="h-4 w-4 text-foreground shrink-0 mt-[3px]" aria-hidden />
                   )}
                   <span className="min-w-0 flex-1 line-clamp-2">
                     <Link
@@ -288,8 +283,8 @@ export function GuideListView({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <TitleHeading className="flex items-center gap-1.5 text-sm font-medium transition-colors group-hover:text-primary">
-                {guide.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />}
+              <TitleHeading className="flex items-center gap-1.5 text-sm font-medium">
+                {guide.isPinned && <Pin className="h-3.5 w-3.5 text-foreground shrink-0" aria-hidden />}
                 <span className="min-w-0 flex-1 line-clamp-1">
                   <Link
                     to={linkFn(guide)}
@@ -340,6 +335,56 @@ export function GuideListView({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 一覧の読み込み中スケルトン（`GuideCardGrid` / `GuideListView` と同じ配置・同じ高さの目安）。
+ * 読み込みの前後でレイアウトが跳ねないようにし、読み上げには出さない（aria-hidden。ui.md 8 章）
+ */
+export function GuideListSkeleton({
+  viewMode,
+  count = 6,
+}: {
+  viewMode: "card" | "list";
+  count?: number;
+}) {
+  if (viewMode === "card") {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80">
+            <Skeleton className="h-36 w-full rounded-none" />
+            <div className="p-4">
+              <Skeleton className="h-[22px] w-3/4" />
+              <Skeleton className="mt-1.5 h-4 w-1/2" />
+              <div className="mt-3 flex items-center gap-3 border-t border-border/60 pt-3">
+                <Skeleton className="size-5 rounded-md" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="ml-auto h-4 w-16" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="divide-y divide-border/60" aria-hidden>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
+          <Skeleton className="h-14 w-20 shrink-0 rounded-md" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-5 w-48 max-w-full" />
+            <Skeleton className="mt-1.5 h-4 w-2/3" />
+            <div className="mt-1.5 flex items-center gap-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="ml-auto h-4 w-16" />
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

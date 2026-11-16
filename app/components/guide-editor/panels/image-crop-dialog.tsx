@@ -152,7 +152,7 @@ export function ImageCropDialog({ src, onOpenChange, onApply, applying, editor }
 
   return (
     <Dialog open={src !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" {...returnFocus}>
+      <DialogContent className="sm:max-w-2xl" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.cropTitle")}</DialogTitle>
           <DialogDescription>{t("guideEditor.cropDesc")}</DialogDescription>

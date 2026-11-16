@@ -183,6 +183,12 @@
 
 ### 丸ピル
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`（件数・状態のピル）
+- 部品は `StatusPill`（`app/components/status-pill.tsx`。`icon` / `tone="warning"`）。新しく書くときはこれを使う（ガイド関連は置き換え済み。ホーム・ランキング等の既存の複製は、触るときに移す）
+- 公開状態の印も丸ピル（muted）。公開中を primary や brand で塗らない（1 章）
+
+### 通知帯
+- 警告・成功・失敗・情報の帯は `NoticeBanner`（`app/components/notice-banner.tsx`。`tone` / `icon`）。`rounded-xl`・`text-sm`・意味色の面 `/10` と枠。文字は前景色のまま
+- 帯をその場で書き直さない。詰めたいときは `className`（例: `px-3 py-2`）
 
 ## 7. Minecraft 由来の部品
 
@@ -341,6 +347,12 @@
   - キーボードでホットバーにフォーカスがある間だけ（`:focus-visible`、md 以上。貼り付いたコンパクトな帯では出さない）、スロットの角に番号を出して数字キーで切り替えられることを知らせる。番号は `aria-hidden`（意味は `aria-keyshortcuts` とツールチップが担う）。マウス操作では出さない
 - アクセシブルネームは見えている短いラベルを含める（label in name、WCAG 2.5.3）。空スロットは破線で描き、押せる状態のまま、名前に「、未登録」を付ける
 - md 未満は画面下端に固定する（10 章「下端の固定 UI」）。md 以上はヘッダーの下に貼り付き、貼り付いている間は小さな帯になる
+
+### ほかのタブ形（ページ間のナビと、エディタのリボン）
+上の不変条件は、同じページの中でパネルを切り替える `ui/tabs.tsx` のためのもの。次の2つは役割が違うので、それぞれの部品の作りに従う。
+- **ページ間のナビ**（`app/components/content-tabs.tsx` の `ContentTabs`。`GuidesContentTabs` / `MyContentTabs` など）: タブの見た目をした `nav` のリンク列。行き先は別のページ（URL）で、下にパネルを持たないので一体カードにしない。選択中は `aria-current="page"`。ベースラインと 1px 重ねる仕組みは `ui/tabs.tsx` と同じなので、外側を別のスクロールコンテナで包まない
+- **エディタのリボン**（`app/components/guide-editor/toolbar/desktop-toolbar.tsx`）: ツールバーの操作群を切り替える自作の tablist。選択中は brand の下線（1 章「選択中」）。編集ボードの中の道具なので、フォルダ型にしない
+- 新しくタブを足すときは、まず `ui/tabs.tsx`（パネル切替）か `ContentTabs`（ページ間）のどちらかに当てはめる。3つ目の形を作らない
 
 ## 12. ダイアログ・トースト
 - ダイアログは shadcn/ui の `Dialog`。構造は `DialogHeader` → `DialogTitle` → 中身 → `DialogFooter`（キャンセル＋操作ボタン）。見るだけのダイアログは `DialogFooter` を省いてよい

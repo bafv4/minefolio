@@ -163,7 +163,7 @@ export function VideoToGifDialog({ open, onOpenChange, onInsert }: VideoToGifDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" {...returnFocus}>
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.gifTitle")}</DialogTitle>
           <DialogDescription>

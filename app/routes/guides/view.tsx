@@ -50,12 +50,14 @@ import {
   titleGuideYouTubeIframes,
 } from "@/lib/guide-view-html";
 import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
+import { NoticeBanner } from "@/components/notice-banner";
 import {
   extractEmbedRefs,
   extractTemplateEmbedIds,
   getUniqueEmbedSlugs,
   splitContentAtEmbeds,
   embedGroupHeadingLevels,
+  EmbedUnavailable,
   KeybindEmbedView,
   SearchCraftEmbedView,
   SearchCraftTemplateEmbedView,
@@ -459,16 +461,16 @@ export default function GuideViewPage() {
 
       {/* 非公開のときは非公開の帯を優先する（下書きが残っている非公開ガイドでも「公開中の内容とは…」は当てはまらない） */}
       {(unpublished || previewingDraft) && (
-        <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+        <NoticeBanner tone="warning" className="mb-4 px-3 py-2">
           {unpublished ? t("guideView.unpublishedPreviewNotice") : t("guideView.draftPreviewNotice")}
-        </div>
+        </NoticeBanner>
       )}
       {/* Back button + Owner edit button */}
       <div className="mb-6 flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
           <Link to="/guides">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            {t("guides.pageTitle")}
+            {t("guides.guideList")}
           </Link>
         </Button>
         {isOwner && (
@@ -745,9 +747,9 @@ function GuideContent({
           const userData = embedUsers[seg.userSlug];
           if (!userData) {
             return (
-              <div key={i} className="my-6 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              <EmbedUnavailable key={i} variant="missing">
                 {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
-              </div>
+              </EmbedUnavailable>
             );
           }
           if (seg.type === "keybind-embed") {

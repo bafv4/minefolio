@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { cn } from "@/lib/utils";
 import { itemLangForLocale } from "@/components/item-icon";
 import { toUiRemaps } from "@/lib/remap-utils";
 import { coerceStringArray, parseFingerAssignments, safeParseArray } from "@/lib/preset-read";
@@ -233,6 +235,30 @@ export function embedGroupHeadingLevels(
  * リマップ / サーチクラフト埋め込みのヘッダー（「走者名（プリセット）— 種別」と「プロフィールを見る」）。
  * 狭い幅で語の途中で折れないよう、種別とリンクは折り返さず（shrink-0 whitespace-nowrap）、長い名前だけ省略する
  */
+/**
+ * 埋め込みを出せないときの箱（本文の流れは壊さない短い表示）。
+ * - `empty`（実線）: 対象はあるが、まだ設定していない（走者にリマップ・サーチクラフトが無い）
+ * - `missing`（破線）: 対象が見つからない・表示できない（走者が無い・非公開・テンプレートが見えない）
+ */
+export function EmbedUnavailable({
+  variant,
+  children,
+}: {
+  variant: "empty" | "missing";
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "my-6 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground",
+        variant === "missing" && "border-dashed",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function UserEmbedHeader({
   displayName,
   presetName,
@@ -246,7 +272,7 @@ function UserEmbedHeader({
 }) {
   const t = useT();
   return (
-    <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+    <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-4 py-2">
       <p className="flex min-w-0 items-center text-sm font-medium">
         <span className="min-w-0 truncate">
           {displayName}
@@ -295,9 +321,9 @@ export function KeybindEmbedView({
 
   if (remaps.length === 0) {
     return (
-      <div className="my-6 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+      <EmbedUnavailable variant="empty">
         {displayName} — {t("playerProfile.noRemaps")}
-      </div>
+      </EmbedUnavailable>
     );
   }
 
@@ -510,9 +536,9 @@ export function SearchCraftEmbedView({
 
   if (crafts.length === 0) {
     return (
-      <div className="my-6 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+      <EmbedUnavailable variant="empty">
         {displayName} — {t("playerProfile.noSearchCraft")}
-      </div>
+      </EmbedUnavailable>
     );
   }
 
@@ -561,9 +587,7 @@ export type EmbedTemplateData = {
 function TemplateEmbedUnavailable() {
   const t = useT();
   return (
-    <div className="my-6 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
-      {t("guideView.embedTemplateUnavailable")}
-    </div>
+    <EmbedUnavailable variant="missing">{t("guideView.embedTemplateUnavailable")}</EmbedUnavailable>
   );
 }
 
@@ -591,7 +615,7 @@ export function SearchCraftTemplateEmbedView({
   return (
     <div className="my-6 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
-        <div className="px-4 py-2 border-b bg-muted/30 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/60 bg-muted/30 px-4 py-2">
           <div className="min-w-0 text-sm">
             <span className="font-medium break-words">{template.title}</span>
             <span className="text-muted-foreground">

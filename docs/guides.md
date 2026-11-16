@@ -27,7 +27,7 @@
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時（保存=公開版更新時のみ） |
 | allowAutoTranslation | boolean | 自動翻訳を許可するか（既定 true）。ライブ列（ドラフト対象外・ロールバック対象外）。編集画面の設定モーダルのスイッチで切り替える（下記「自動翻訳」） |
-| isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭・拡大表示）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
+| isPinned | boolean | プロフィールのガイドタブでのピン留め（先頭に並べ、タイトルにピンを付ける。カードの大きさ・枠はほかと同じ）。`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）で切替。グローバル `/guides` の表示には影響しない |
 
 #### 保存モデル（下書き保存 / 保存）
 
@@ -56,7 +56,7 @@
 - **TipTap 3.x** ベースのリッチテキストエディタ
 - v1.5.0 で全面再構築。旧単一ファイル（約 2993 行）を責務ごとにディレクトリ分割。
 - 操作モデルは複数の導線を併用:
-  - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: 1段目の右に書き方の手引き・設定・プレビュー・保存状態・公開状態のピル・下書き保存/保存（公開）、2段目の左に Undo/Redo。保存状態は保存ボタンの隣（1段目）に置き、未保存のときは見た目は短い「未保存」、読み上げは「未保存の変更があります」（`unsavedShort` ＋ sr-only の `unsavedChanges`）。挿入タブの文字付きの埋め込みで2段目の幅を使うため、デスクトップの幅（`max-w-5xl`）で1段ずつに収まるようにした（1280px で ja / en とも、テーブルタブ・「公開中（非公開は未保存）」・下書き保存済みの最も長い状態を実測。挿入タブのコールアウトは文字を出さずアイコン＋シェブロン。設定ボタンの見える文字は「設定」で名前は「ガイド設定」）。書き方の手引き（公式ガイド `GUIDE_WRITING_GUIDE_PATH`、`app/lib/official-guides.ts`）は1段目の幅に余裕が無いのでアイコン（`CircleHelp`）だけにし、新しいタブで開く。名前とツールチップは「書き方の手引き（新しいタブで開きます）」（`meGuides.writingGuide` ＋ `meGuides.opensInNewTab`）。このアイコン（約 32px）を足した後の 1280px での収まりは未実測。それでも足りないときは1段目の操作の塊ごと次の行へ回す（`flex-wrap`。はみ出して切れないように）。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。ツールバーの面は不透明（`bg-background`。半透明だと下を流れる本文と重なる）。ブロック種別のボタンの名前は見えている種別名で始める（「見出し 2（ブロックの種別）」、`guideEditor.toolbar.ariaBlockTypeNamed`。label in name）。
+  - **常設ツールバー**（タブ式リボン、ヘッダー直下に fixed 固定）— `toolbar/desktop-toolbar.tsx`。常時表示: 1段目の右に書き方の手引き・設定・プレビュー・保存状態・公開状態のピル・下書き保存/保存（公開）、2段目の左に Undo/Redo。保存状態は保存ボタンの隣（1段目）に置き、「保存済み」は平常なので muted（色で知らせるのは「未保存」の warning だけ）、未保存のときは見た目は短い「未保存」、読み上げは「未保存の変更があります」（`unsavedShort` ＋ sr-only の `unsavedChanges`）。挿入タブの文字付きの埋め込みで2段目の幅を使うため、デスクトップの幅（`max-w-5xl`）で1段ずつに収まるようにした（1280px で ja / en とも、テーブルタブ・「公開中（非公開は未保存）」・下書き保存済みの最も長い状態を実測。挿入タブのコールアウトは文字を出さずアイコン＋シェブロン。設定ボタンの見える文字は「設定」で名前は「ガイド設定」）。書き方の手引き（公式ガイド `GUIDE_WRITING_GUIDE_PATH`、`app/lib/official-guides.ts`）は1段目の幅に余裕が無いのでアイコン（`CircleHelp`）だけにし、新しいタブで開く。名前とツールチップは「書き方の手引き（新しいタブで開きます）」（`meGuides.writingGuide` ＋ `meGuides.opensInNewTab`）。このアイコン（約 32px）を足した後の 1280px での収まりは未実測。それでも足りないときは1段目の操作の塊ごと次の行へ回す（`flex-wrap`。はみ出して切れないように）。タブ: 「ホーム」(ブロック種別/整形/リスト)・「挿入」(メディア/表/段組/埋め込み)・「テーブル」(行列操作/セル色)。ツールバーの面は不透明（`bg-background`。半透明だと下を流れる本文と重なる）。ブロック種別のボタンの名前は見えている種別名で始める（「見出し 2（ブロックの種別）」、`guideEditor.toolbar.ariaBlockTypeNamed`。label in name）。
     挿入タブの末尾の Minefolio 固有の埋め込み（ガイドリンク・リマップ・サーチクラフト・テンプレート）は、区切りのあとに文字付きのボタンのグループ（`role=group`、名前「Minefolio の埋め込み」）で並べる（アイコン＋短い文字〔`guideEditor.toolbar.embedShort*`〕、説明はツールチップ）。語は `/` メニューと同じタブは `role=tablist/tab`（roving tabindex。左右の矢印・Home/End でフォーカスと選択を移す）、2 段目のタブごとのツール群が `role=tabpanel`（`aria-labelledby` で選択中のタブと結ぶ。Undo/Redo はタブに依らないので外）。
   - **保存ボタンと公開状態**（`hooks/use-guide-save.ts` の `getPublishAction` / `PUBLISH_ACTION_MESSAGES`）: 公開状態は保存（publish）でだけ書き換わるので、「保存済みの `isPublished`（loader の公開版スナップショット。保存のたびの再検証で更新）」と「設定モーダルの公開スイッチ」の組で決める。
 
@@ -438,13 +438,15 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - ログインユーザーが作成した全ガイド（公開・非公開含む）を表示
 - 説明文の隣に、書き方の手引き（公式ガイド `/guides/bfmkn/guide-writing-guide`、`GUIDE_WRITING_GUIDE_PATH`）へのリンク。新しいタブで開き、外部リンクのアイコンと sr-only の「（新しいタブで開きます）」で伝える。ガイドが無い環境（ローカル DB）ではリンク先が 404 になるだけ
 - 削除の確認ダイアログの実行ボタンは destructive（`buttonVariants({ variant: "destructive" })`）。削除ボタンのスピナーは、そのガイドの削除（`_action === "delete"`）を送っている間だけ回す（ピン留めも同じ fetcher・同じ `guideId` で送るため、`guideId` だけでは回ってしまっていた）
-- 各行の状態は ui.md 6 章の丸ピル（エディタの公開状態のピル `PublishStatusPill` と同じ見た目・同じ語）。公開中は「公開中」（Globe）、非公開は「非公開」（Lock、`meGuides.statusPrivate`。以前の「下書き」はエディタ・プレビューの帯の「非公開」と食い違っていたのでそろえた）。どちらも muted（brand は選択中・進行だけ。ui.md 1 章）
+- 0 件のときは見出し横の「新規」ボタンを出さない（空状態の action に同じボタンがあるため。テンプレート管理も同じ）
+- 各行の状態は ui.md 6 章の丸ピル（`StatusPill`。エディタの公開状態のピル `PublishStatusPill` と同じ見た目・同じ語）。公開中は「公開中」（Globe）、非公開は「非公開」（Lock、`meGuides.statusPrivate`。以前の「下書き」はエディタ・プレビューの帯の「非公開」と食い違っていたのでそろえた）。どちらも muted（brand は選択中・進行だけ。ui.md 1 章）
 - 公開中のガイドに下書き保存した未公開の変更（`draftUpdatedAt` が null でない）があるときは、警告色の丸ピル「未公開の変更あり」（`meGuides.statusUnpublishedChanges`）を添える。非公開のガイドに残っている下書き（下書き保存が非公開のガイドにも出ていた頃のもの）では出さない（読者に見える公開版が無く「未公開」の区別に意味が無い。エディタの `draftBannerUnpublished`・プレビューの帯で非公開の帯だけを出すのと同じ扱い）
 
 ### /my-guides/new — 新規作成
 
 - タイトルと **URL（スラッグ）** を入力して空のガイドを作り、`/my-guides/{slug}/edit` へ遷移する
 - 本文は空の段落（`<p></p>`）で始める。タイトルはガイド設定と公開ページの h1 が持つ（以前は `<h1>タイトル</h1><p></p>` で始めていて、公開ページでタイトルが重なっていた。既存の記事は表示時に取り除く。上記「公開表示の本文」）。空の本文には、エディタの案内「本文を書く。/ でブロックや埋め込みを挿入」（`guideEditor.contentPlaceholder`）が出る
+- 構成は他の管理ページ（`/my-guides/templates/new`）と同じ「戻るリンク（`/my-guides`）＋ h1 ＋ 説明 ＋ フォーム」。カードには入れない
 - ページの `<title>` は「新しいガイドを作成 - Minefolio」
 - **スラッグは必須入力**。タイトルからの自動生成は行わない（日本語のみのタイトルは `normalizeSlug()` で空になり、`guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため）
   - 入力欄は `softNormalizeSlug()` でタイプ中に許可外文字を落とすため、日本語だけを打つと空のままになり、`required` でそのまま送信できない
@@ -519,6 +521,10 @@ v1.4.0 で新設された [`/developers`](developers.md) ページが、API ド�
 
 - `app/components/guide-editor/index.tsx` — TipTapガイドエディタ
 - `app/components/guide-list-views.tsx` — ガイド一覧のグリッド/リスト表示
+- `app/components/status-pill.tsx` — 状態の丸ピル（`StatusPill`。ui.md 6 章「丸ピル」。`icon` で先頭アイコン、`tone="warning"` で未保存などの警告色。マイガイド・テンプレート管理・テンプレート詳細・エディタの公開状態で使う）
+- `app/components/notice-banner.tsx` — 通知帯（`NoticeBanner`。`tone` = `warning` / `success` / `error` / `info`、`rounded-xl`・`text-sm`・意味色の面 /10 と枠。非公開プレビューの帯・エディタの下書きバナー・テンプレート反映後の成功帯・アップロード失敗で使う。ガイド固有ではなく他画面から使ってよい）
+- `app/components/guide-list-views.tsx` の `GuideListSkeleton` — 一覧の読み込み中スケルトン（カード / リストの本物と同じ配置、`aria-hidden`）
+- `app/components/guide-embeds.tsx` の `EmbedUnavailable` — 埋め込みを出せないときの箱（`variant="empty"` 実線＝まだ設定していない、`"missing"` 破線＝見つからない・表示できない）
 - `app/components/guide-paged-list.tsx` — 24 件ずつ出す「もっと見る」付きの一覧（`GuidePagedList`）
 - `app/components/auto-translate-notice.tsx` — 自動翻訳の注記と原文切替（ガイドは `to`＝`?original=1` のリンク、プロフィールは `onToggle`）
 - `app/lib/guide-translation-list.ts` — 一覧行へ訳文を適用する純関数（`applyGuideTranslation`）

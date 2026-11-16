@@ -60,6 +60,7 @@ import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { StatusPill } from "@/components/status-pill";
 import { GUIDE_WRITING_GUIDE_PATH } from "@/lib/official-guides";
 import {
   DropdownMenu,
@@ -246,9 +247,9 @@ function SaveIndicator({
       </span>
     );
   }
-  // 保存済み（変更なし）→ 成功色
+  // 保存済み（変更なし）→ 平常なので色は付けない（色で知らせるのは「未保存」の warning だけ）
   return (
-    <span className="flex items-center gap-1 text-xs text-success whitespace-nowrap" aria-live="polite">
+    <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
       <Check className="h-3.5 w-3.5" />
       {lastSaved?.mode === "draft" ? t("guideEditor.toolbar.savedDraft") : t("guideEditor.saved")}
       {time && <span className="tabular-nums">{time}</span>}
@@ -261,17 +262,10 @@ function PublishStatusPill({ livePublished, publishSetting }: { livePublished: b
   const t = useT();
   const action = getPublishAction(livePublished, publishSetting);
   const pending = livePublished !== publishSetting;
-  const Icon = livePublished ? Globe : Lock;
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border bg-background/75 px-2.5 py-1 text-xs",
-        pending ? "border-warning/40 text-warning" : "border-border/70 text-muted-foreground",
-      )}
-    >
-      <Icon className="h-3 w-3" aria-hidden />
+    <StatusPill icon={livePublished ? Globe : Lock} tone={pending ? "warning" : "default"}>
       {t(PUBLISH_ACTION_MESSAGES[action].status)}
-    </span>
+    </StatusPill>
   );
 }
 

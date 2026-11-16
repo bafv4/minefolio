@@ -277,7 +277,7 @@ export default function TemplatesIndexPage() {
               className="absolute right-0 top-0 size-11 sm:hidden"
             >
               <Search className="h-4 w-4" aria-hidden />
-              <span className="sr-only">{t("templates.searchButton")}</span>
+              <span className="sr-only">{t("common.search")}</span>
             </Button>
           </div>
           <div className="w-full sm:w-64">
@@ -296,7 +296,7 @@ export default function TemplatesIndexPage() {
           {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
           <Button type="submit" className="hidden sm:inline-flex">
             <Search className="mr-2 h-4 w-4" />
-            {t("templates.searchButton")}
+            {t("common.search")}
           </Button>
         </Form>
 
@@ -328,12 +328,19 @@ export default function TemplatesIndexPage() {
       </div>
 
       {isNavigating ? (
-        <div className="space-y-1">
+        // 本物の行（タイトル・説明・メタ行）と同じ配置。読み込みの前後で高さが変わらないようにする
+        <div className="divide-y divide-border/60" aria-hidden>
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 py-3 px-1">
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-3 w-32" />
+            <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-5 w-48 max-w-full" />
+                <Skeleton className="mt-1.5 h-4 w-2/3" />
+                <div className="mt-1.5 flex items-center gap-3">
+                  <Skeleton className="size-5 rounded-md" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-12" />
+                  <Skeleton className="ml-auto h-4 w-16" />
+                </div>
               </div>
             </div>
           ))}
@@ -363,7 +370,7 @@ export default function TemplatesIndexPage() {
                       {getGameLanguageName(t, locale, template.gameLanguage)}
                     </span>
                   )}
-                  <h2 className="text-sm font-medium group-hover:text-primary transition-colors line-clamp-2 sm:line-clamp-1">
+                  <h2 className="text-sm font-medium line-clamp-2 sm:line-clamp-1">
                     {template.title}
                   </h2>
                   {template.gameLanguage && (
@@ -390,12 +397,12 @@ export default function TemplatesIndexPage() {
                     <span className="truncate">{t("templates.byAuthorPrefix")} {template.authorName}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <Search className="h-3 w-3" />
+                    <Search className="h-3 w-3" aria-hidden />
                     {t("templates.craftCount", { count: template.craftCount })}
                   </span>
                   {template.hasRemaps && (
                     <span className="flex items-center gap-1">
-                      <Keyboard className="h-3 w-3" />
+                      <Keyboard className="h-3 w-3" aria-hidden />
                       {t("templates.includesRemaps")}
                     </span>
                   )}
@@ -430,7 +437,7 @@ export default function TemplatesIndexPage() {
           title={t("templates.noResultsTitle")}
           description={t("templates.noResultsDescription")}
           action={
-            <Button asChild variant="outline" className="mt-2 min-h-11 sm:min-h-9">
+            <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
               <Link to={clearFiltersHref}>{t("templates.resetFilters")}</Link>
             </Button>
           }
@@ -441,7 +448,7 @@ export default function TemplatesIndexPage() {
           title={t("templates.emptyTitle")}
           description={t("templates.emptyDescriptionSuffix")}
           action={
-            <Button asChild variant="outline" size="sm" className="mt-2">
+            <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-9">
               <Link to="/my-guides/templates">{t("templates.emptyDescriptionLink")}</Link>
             </Button>
           }

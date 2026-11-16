@@ -3,6 +3,7 @@ import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState } from "react";
 import {
   redirect,
+  Link,
   useActionData,
   useLoaderData,
   Form,
@@ -23,13 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 
 export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
@@ -127,56 +122,61 @@ export default function NewGuidePage() {
   const resolvedSlug = normalizeSlug(slug);
 
   return (
-    <div className="max-w-lg mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("meGuides.newTitle")}</CardTitle>
-          <CardDescription>{t("meGuides.newDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form method="post" className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">{t("meGuides.titleLabel")}</Label>
-              <Input
-                id="title"
-                name="title"
-                placeholder={t("meGuides.titlePlaceholder")}
-                required
-                autoFocus
-                maxLength={200}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">{t("meGuides.slugLabel")}</Label>
-              <Input
-                id="slug"
-                name="slug"
-                value={slug}
-                onChange={(e) => setSlug(softNormalizeSlug(e.target.value))}
-                placeholder={t("guideEditor.slugPlaceholder")}
-                required
-                maxLength={MAX_GUIDE_SLUG_LENGTH}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-              />
-              <p className="text-xs text-muted-foreground break-all">
-                /guides/{authorSlug}/
-                <span className="text-foreground font-medium">
-                  {resolvedSlug || t("meGuides.slugEmptyPreview")}
-                </span>
-              </p>
-              <p className="text-xs text-muted-foreground">{t("meGuides.slugHint")}</p>
-            </div>
-            {actionData && "error" in actionData && (
-              <p className="text-sm text-destructive">{actionData.error}</p>
-            )}
-            <Button type="submit" className="w-full">
-              {t("meGuides.createAndEdit")}
-            </Button>
-          </Form>
-        </CardContent>
-      </Card>
+    <div className="space-y-6">
+      <div>
+        <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
+          <Link to="/my-guides">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {t("meGuides.backToManagement")}
+          </Link>
+        </Button>
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold">{t("meGuides.newTitle")}</h1>
+        <p className="text-sm text-muted-foreground">{t("meGuides.newDesc")}</p>
+      </div>
+
+      <Form method="post" className="max-w-lg space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="title">{t("meGuides.titleLabel")}</Label>
+          <Input
+            id="title"
+            name="title"
+            placeholder={t("meGuides.titlePlaceholder")}
+            required
+            autoFocus
+            maxLength={200}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="slug">{t("meGuides.slugLabel")}</Label>
+          <Input
+            id="slug"
+            name="slug"
+            value={slug}
+            onChange={(e) => setSlug(softNormalizeSlug(e.target.value))}
+            placeholder={t("guideEditor.slugPlaceholder")}
+            required
+            maxLength={MAX_GUIDE_SLUG_LENGTH}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+          <p className="text-xs text-muted-foreground break-all">
+            /guides/{authorSlug}/
+            <span className="text-foreground font-medium">
+              {resolvedSlug || t("meGuides.slugEmptyPreview")}
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">{t("meGuides.slugHint")}</p>
+        </div>
+        {actionData && "error" in actionData && (
+          <p className="text-sm text-destructive">{actionData.error}</p>
+        )}
+        <Button type="submit" className="w-full">
+          {t("meGuides.createAndEdit")}
+        </Button>
+      </Form>
     </div>
   );
 }

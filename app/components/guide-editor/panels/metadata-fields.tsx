@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ImagePlus, Trash2, Loader2, AlertCircle, X } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { NoticeBanner } from "@/components/notice-banner";
 
 interface MetadataFieldsProps {
   title: string;
@@ -97,15 +98,16 @@ export function MetadataFields({
                   背景はテーマトークンに追従させず常に白で固定する（暗い画像 × ダークテーマ等でも
                   一定のコントラストを保つための意図的な固定色）。文字色もその白背景を前提に、
                   変更ボタンは中立色、削除ボタンはセマンティックな破壊色で揃える。 */}
-              <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
+              <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-black/40 rounded-lg">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
+                      aria-label={t("guideEditor.ui.change")}
                       className="h-7 w-7 flex items-center justify-center bg-white/90 text-black/70 rounded-md text-xs hover:bg-white transition-colors"
                     >
-                      <ImagePlus className="h-3.5 w-3.5" />
+                      <ImagePlus className="h-3.5 w-3.5" aria-hidden />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{t("guideEditor.ui.change")}</TooltipContent>
@@ -115,9 +117,10 @@ export function MetadataFields({
                     <button
                       type="button"
                       onClick={onCoverRemove}
+                      aria-label={t("guideEditor.ui.delete")}
                       className="h-7 w-7 flex items-center justify-center bg-white/90 text-destructive rounded-md text-xs hover:bg-white transition-colors"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{t("guideEditor.ui.delete")}</TooltipContent>
@@ -153,13 +156,9 @@ export function MetadataFields({
         </div>
         {/* アップロードエラー（カバー画像セクション内に表示） */}
         {uploadError && (
-          <div
-            className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2"
-            role="alert"
-          >
-            <AlertCircle className="h-4 w-4 shrink-0" />
+          <NoticeBanner tone="error" icon={AlertCircle} className="items-center px-3 py-2">
             {uploadError}
-          </div>
+          </NoticeBanner>
         )}
       </div>
 

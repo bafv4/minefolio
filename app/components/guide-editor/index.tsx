@@ -53,6 +53,7 @@ import { TableCellBubbleMenu } from "./toolbar/table-cell-bubble-menu";
 import { MobileToolbar } from "./toolbar/mobile-toolbar";
 import { BlockHandle } from "./toolbar/block-handle";
 import { TableHandles } from "./toolbar/table-handles";
+import { NoticeBanner } from "@/components/notice-banner";
 
 export function GuideEditor({
   guideId,
@@ -444,7 +445,8 @@ export function GuideEditor({
 
           {/* 未公開ドラフト編集中の通知 + 公開版へのロールバック */}
           {draftActive && (
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+            <NoticeBanner tone="warning" className="mt-3 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
               <span>
                 {draftSaveAvailable
                   ? t("guideEditor.ui.draftBanner", { action: t(PUBLISH_ACTION_MESSAGES[publishAction].label) })
@@ -462,7 +464,8 @@ export function GuideEditor({
                 <Undo2 className="h-3.5 w-3.5" />
                 {draftSaveAvailable ? t("guideEditor.ui.revertToPublished") : t("guideEditor.ui.revertToSaved")}
               </Button>
-            </div>
+              </div>
+            </NoticeBanner>
           )}
 
           {/* タイトルと概要（読み取り専用の表示。編集は設定モーダル。押すとモーダルが開く）。

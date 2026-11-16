@@ -27,6 +27,8 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { useLoginHref } from "@/hooks/use-login-href";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/status-pill";
+import { NoticeBanner } from "@/components/notice-banner";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageSection } from "@/components/page-section";
 import { HintTip } from "@/components/hint-tip";
@@ -464,10 +466,7 @@ export default function TemplateViewPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold">{template.title}</h1>
           {!template.isPublished && (
-            <Badge variant="outline" className="text-muted-foreground">
-              <EyeOff className="h-3 w-3 mr-1" />
-              {t("templates.unpublishedBadge")}
-            </Badge>
+            <StatusPill icon={EyeOff}>{t("templates.unpublishedBadge")}</StatusPill>
           )}
         </div>
         {/* MinecraftAvatar は div を描くので、p ではなく div で包む（p の中に div は置けずハイドレーションが壊れる） */}
@@ -475,7 +474,7 @@ export default function TemplateViewPage() {
           <span>{t("templates.byAuthorPrefix")}</span>
           <Link
             to={`/player/${author.slug}`}
-            className="inline-flex items-center gap-1.5 text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-primary"
           >
             <MinecraftAvatar
               uuid={author.uuid}
@@ -501,28 +500,28 @@ export default function TemplateViewPage() {
         {/* ゲーム内言語（サーチ文字列の前提となる最重要情報のため大きく表示） */}
         {template.gameLanguage && (
           <div className="flex items-center gap-2">
-            <Languages className="h-5 w-5 text-primary" />
+            <Languages className="h-5 w-5 text-primary" aria-hidden />
             <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
               {t("playerProfile.gameLanguage")}:
             </span>
-            <span className="text-lg font-semibold">
+            <span className="text-base font-medium">
               {getGameLanguageName(t, locale, template.gameLanguage)}
             </span>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="secondary" className="text-xs">
-            <Search className="h-3 w-3 mr-1" />
+          <span className="inline-flex items-center gap-1">
+            <Search className="h-3 w-3" aria-hidden />
             {t("templates.craftCount", { count: crafts.length })}
-          </Badge>
+          </span>
           {remaps.length > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              <Keyboard className="h-3 w-3 mr-1" />
+            <span className="inline-flex items-center gap-1">
+              <Keyboard className="h-3 w-3" aria-hidden />
               {t("templates.remapCount", { count: remaps.length })}
-            </Badge>
+            </span>
           )}
           <span className="inline-flex items-center gap-1">
-            <Download className="h-3 w-3" />
+            <Download className="h-3 w-3" aria-hidden />
             {t("templates.applyCount", { count: template.applyCount })}
           </span>
         </div>
@@ -646,9 +645,9 @@ export default function TemplateViewPage() {
                       </SelectContent>
                     </Select>
                     {selectedTargetPreset?.isActive && (
-                      <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+                      <NoticeBanner tone="warning" className="px-3 py-2">
                         {t("templates.applyActiveWarning")}
-                      </p>
+                      </NoticeBanner>
                     )}
                   </div>
                 )}
@@ -727,7 +726,7 @@ export default function TemplateViewPage() {
       </div>
 
       {fetcher.data && "success" in fetcher.data && fetcher.data.success && (
-        <div className="rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+        <NoticeBanner tone="success" className="px-3 py-2">
           {t("templates.appliedHint")}{" "}
           {fetcher.data.target === "existing" && fetcher.data.wasActive ? (
             // アクティブプリセットへ反映した場合は現在の設定が変わっている
@@ -740,7 +739,7 @@ export default function TemplateViewPage() {
               {t("templates.goToPresets")}
             </Link>
           )}
-        </div>
+        </NoticeBanner>
       )}
 
       {/* サーチクラフト（繋ぎ方〈Loop〉はタイミンググループカード内のサブセクションとして表示） */}

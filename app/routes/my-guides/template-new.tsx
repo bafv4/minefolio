@@ -119,7 +119,7 @@ export default function TemplateNewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
           <Link to="/my-guides/templates">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("meTemplates.backToManagement")}
