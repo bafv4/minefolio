@@ -242,3 +242,21 @@ describe("getKeyCodeAliases", () => {
     expect(getKeyCodeAliases("KeyA", "JIS")).toEqual(["KeyA"]);
   });
 });
+
+describe("読めないキー名の表示ラベル", () => {
+  const t = createTranslator("ja");
+  it("JIS の変換系キーは日本語のラベルになる", () => {
+    expect(getKeyLabel(t, "NonConvert")).toBe("無変換");
+    expect(getKeyLabel(t, "Convert")).toBe("変換");
+    expect(getKeyLabel(t, "KanaMode")).toBe("かな");
+  });
+
+  it("scancode.N は「スキャンコード N」になる", () => {
+    expect(getKeyLabel(t, "scancode.93")).toBe("スキャンコード 93");
+    expect(getKeyLabel(createTranslator("en"), "scancode.93")).toBe("Scancode 93");
+  });
+
+  it("不使用は「-」のまま（統計側で「未割り当て」に差し替える）", () => {
+    expect(getKeyLabel(t, "_UNBOUND")).toBe("-");
+  });
+});

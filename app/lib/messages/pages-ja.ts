@@ -164,6 +164,8 @@ export const PAGES_JA = {
     mouseSide2Short: "サイド2",
     /** 対応表にない16進のキーコード（Windows 仮想キーコード等） */
     unknownKey: "不明なキー（{code}）",
+    /** Minecraft がキー名を持たないキーの記録（scancode.NNN） */
+    scancode: "スキャンコード {code}",
   },
 
   /** バーチャルキーボード / マウスの補助表示（aria-label・ツールチップ） */

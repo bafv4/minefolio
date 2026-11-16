@@ -159,6 +159,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     mouseSide2Short: "Side 2",
     /** 対応表にない16進のキーコード（Windows 仮想キーコード等） */
     unknownKey: "Unknown key ({code})",
+    /** Keys Minecraft has no name for (recorded as scancode.NNN) */
+    scancode: "Scancode {code}",
   },
   keyboardView: {
     ariaKeyNoun: "key",

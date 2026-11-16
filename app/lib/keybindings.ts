@@ -187,6 +187,10 @@ const KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
   AltRight: "keyLabels.altRight",
   MetaLeft: "keyLabels.winLeft",
   MetaRight: "keyLabels.winRight",
+  // JIS 配列の変換系キー（KeyboardEvent.code の名前のままでは読めない）
+  NonConvert: "keyLabels.nonConvert",
+  Convert: "keyLabels.convert",
+  KanaMode: "keyLabels.kana",
 };
 
 /** JIS 配列だけ翻訳が要るキー */
@@ -563,6 +567,12 @@ export function getKeyLabel(
   // NumpadX形式の場合（例: Numpad1 → Num1）
   if (normalized.startsWith("Numpad")) {
     return "Num" + normalized.slice(6);
+  }
+
+  // Minecraft がキー名を持たないキーは "scancode.NNN" で記録される。番号だけを読める形にする
+  const scancode = normalized.match(/^scancode\.(\d+)$/i);
+  if (scancode) {
+    return t("keyLabels.scancode", { code: scancode[1] });
   }
 
   // 未解決の16進表記（Windows 仮想キーコード等）は生のまま出さず、意味の分かる名称にする
