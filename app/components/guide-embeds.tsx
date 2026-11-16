@@ -23,6 +23,7 @@ import {
   KeyBadgeLegend,
   SEARCH_CRAFT_OPEN_FIRST_MAX,
   SearchCraftGroupedList,
+  type SearchCraftGroupHeadingLevel,
   type SearchCraftRowData,
 } from "@/components/search-craft-template-view";
 import {
@@ -36,7 +37,12 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
-import { GUIDE_YOUTUBE_BLOCK_SOURCE, htmlDepthDelta, parseGuideYouTubeEmbedUrl } from "@/lib/guide-view-html";
+import {
+  GUIDE_YOUTUBE_BLOCK_SOURCE,
+  htmlDepthDelta,
+  lastHeadingLevel,
+  parseGuideYouTubeEmbedUrl,
+} from "@/lib/guide-view-html";
 import { parseTemplateRemaps, resolveCraftTiming } from "@/lib/search-craft-templates";
 import { getGameLanguageName } from "@/lib/game-languages";
 import type { UiRemapInfo } from "@/lib/remap-utils";
@@ -194,6 +200,29 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
   }
 
   return segments;
+}
+
+/**
+ * 埋め込みのグループ見出し（サーチクラフト一覧のタイミング）の段を、セグメントごとに返す（並びは segments と同じ。
+ * html・YouTube のセグメントは null）。段は、その埋め込みより前で最後に現れる本文の見出し（降格した後の段。
+ * セグメントをまたいで持ち越す）の1つ下で、上限は h6。前に見出しが無ければ h3（記事のタイトルが h1、本文の最上位が h2）。
+ * 固定の段にすると、本文のどの段の見出しの下に置くかで段が飛んだり（h2 → h4）並んだり（h3 → h3）する。
+ * html は loader が降格まで済ませた本文で、SSR とハイドレーションで同じ値を返す（render 中に呼んでよい）。
+ * リマップ埋め込み（KeybindEmbedView）には見出しが無いが、並びをそろえるため値は返す。
+ */
+export function embedGroupHeadingLevels(
+  segments: ContentSegment[],
+): (SearchCraftGroupHeadingLevel | null)[] {
+  let preceding: number | null = null;
+  return segments.map((seg) => {
+    if (seg.type === "html") {
+      preceding = lastHeadingLevel(seg.content) ?? preceding;
+      return null;
+    }
+    if (seg.type === "youtube") return null;
+    const level = Math.min(Math.max((preceding ?? 2) + 1, 3), 6);
+    return `h${level}` as SearchCraftGroupHeadingLevel;
+  });
 }
 
 // ========================================
@@ -357,6 +386,7 @@ function SearchCraftEmbedBody({
   rawLoopsData,
   liveLoops,
   keyboardLayout,
+  groupHeadingLevel,
 }: {
   crafts: NormalizedEmbedCraft[];
   remaps: UiRemapInfo[];
@@ -365,6 +395,8 @@ function SearchCraftEmbedBody({
   liveLoops: EmbedUserData["searchCraftLoops"];
   /** キー入力順ダイアログの鍵盤のレイアウト（未指定なら US） */
   keyboardLayout?: KeyboardLayout;
+  /** グループ見出しの段（embedGroupHeadingLevels。未指定なら h3＝本文の最上位の見出しの下） */
+  groupHeadingLevel?: SearchCraftGroupHeadingLevel;
 }) {
   const locale = useLocale();
 
@@ -440,6 +472,8 @@ function SearchCraftEmbedBody({
         openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
         openAllFromLg
         keepClosedMounted
+        // 段は直前の本文の見出しの1つ下（embedGroupHeadingLevels）。既定の h4 のままだと本文 h2 の下で段が飛ぶ
+        groupHeadingLevel={groupHeadingLevel ?? "h3"}
         crafts={rows}
         remaps={remaps}
         // アイテム名は閲覧者の UI ロケールで出す（docs/guides.md「サーチクラフトテンプレート埋め込み」）
@@ -455,9 +489,12 @@ function SearchCraftEmbedBody({
 export function SearchCraftEmbedView({
   userData,
   presetName,
+  groupHeadingLevel,
 }: {
   userData: EmbedUserData;
   presetName: string | null;
+  /** グループ見出しの段（embedGroupHeadingLevels） */
+  groupHeadingLevel?: SearchCraftGroupHeadingLevel;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -495,6 +532,7 @@ export function SearchCraftEmbedView({
           rawLoopsData={rawLoopsData}
           liveLoops={userData.searchCraftLoops}
           keyboardLayout={keyboardLayout}
+          groupHeadingLevel={groupHeadingLevel}
         />
       </div>
     </div>
@@ -531,9 +569,12 @@ function TemplateEmbedUnavailable() {
 
 export function SearchCraftTemplateEmbedView({
   template,
+  groupHeadingLevel,
 }: {
   /** null = 表示できない（ID 不正・未公開・削除済み・非公開プロフィール） */
   template: EmbedTemplateData | null;
+  /** グループ見出しの段（embedGroupHeadingLevels） */
+  groupHeadingLevel?: SearchCraftGroupHeadingLevel;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -590,6 +631,7 @@ export function SearchCraftTemplateEmbedView({
           presetMode
           rawLoopsData={template.loopsData}
           liveLoops={[]}
+          groupHeadingLevel={groupHeadingLevel}
         />
         {remaps.length > 0 && (
           <p className="px-4 pb-4 text-xs text-muted-foreground">

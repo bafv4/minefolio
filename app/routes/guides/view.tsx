@@ -55,6 +55,7 @@ import {
   extractTemplateEmbedIds,
   getUniqueEmbedSlugs,
   splitContentAtEmbeds,
+  embedGroupHeadingLevels,
   KeybindEmbedView,
   SearchCraftEmbedView,
   SearchCraftTemplateEmbedView,
@@ -689,6 +690,8 @@ function GuideContent({
   const t = useT();
   const statusRef = useRef<HTMLSpanElement>(null);
   const segments = splitContentAtEmbeds(html);
+  // 埋め込みのグループ見出しの段（直前の本文の見出しの1つ下。html は降格済みなので SSR とハイドレーションで一致する）
+  const headingLevels = embedGroupHeadingLevels(segments);
   const hasEmbeds = segments.some((s) => s.type !== "html");
 
   useCodeCopyButtons(contentRef, statusRef, html, t);
@@ -735,6 +738,7 @@ function GuideContent({
               <SearchCraftTemplateEmbedView
                 key={i}
                 template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
+                groupHeadingLevel={headingLevels[i] ?? undefined}
               />
             );
           }
@@ -749,7 +753,14 @@ function GuideContent({
           if (seg.type === "keybind-embed") {
             return <KeybindEmbedView key={i} userData={userData} presetName={seg.presetName} />;
           }
-          return <SearchCraftEmbedView key={i} userData={userData} presetName={seg.presetName} />;
+          return (
+            <SearchCraftEmbedView
+              key={i}
+              userData={userData}
+              presetName={seg.presetName}
+              groupHeadingLevel={headingLevels[i] ?? undefined}
+            />
+          );
         })}
       </div>
       {copyStatus}

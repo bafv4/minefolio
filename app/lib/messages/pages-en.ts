@@ -2407,6 +2407,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       apply: "Apply",
       titleEmpty: "No title yet (click to set one)",
       editInSettings: "Edit in guide settings",
+      leadingTitleHeadingNote: "The first heading matches the title, so it isn't shown on the published page",
+      removeLeadingTitleHeading: "Delete this heading",
       tagHint: "Press Enter or comma (,) to add. Backspace in the empty field removes the last tag. Up to {max}",
       editorAriaLabel: "Content",
       tableSearchStrHint: "For search strings, a search-craft (template) embed shows them in monospace with a copy button",

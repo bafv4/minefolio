@@ -2354,6 +2354,9 @@ export const PAGES_JA = {
       /** 本文の上のタイトル・概要（押すと設定モーダルが開く） */
       titleEmpty: "タイトルが未設定です（押して設定）",
       editInSettings: "ガイド設定で編集",
+      /** 本文の先頭の見出しがタイトルと同じとき、タイトル・概要の下に出す注記（公開ページはその見出しを出さない） */
+      leadingTitleHeadingNote: "本文の先頭の見出しはタイトルと同じなので、公開ページでは表示しません",
+      removeLeadingTitleHeading: "この見出しを削除",
       /** タグ入力の追加の仕方 */
       tagHint: "Enter かカンマ（,）で追加。空欄で Backspace を押すと最後のタグを削除。{max}件まで",
       /** エディタ本文（contenteditable）のアクセシブルネーム */

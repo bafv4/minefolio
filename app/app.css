@@ -1101,7 +1101,9 @@ body {
   line-height: 1.3;
 }
 
-.guide-content.prose :where(h3) {
+/* 埋め込み（.not-prose）のグループ見出しは直前の本文の見出しの1つ下の段（h3〜h6）で描くので、
+   h3 からは h4〜h6 と同じく埋め込みの中を除く（当たると部品の text-base・mb-2 に勝つ。guide-embeds.tsx） */
+.guide-content.prose :where(h3):not(:where(.not-prose *)) {
   font-size: 1.15em;
   font-weight: 600;
   margin-top: 1.25em;

@@ -46,6 +46,7 @@ import { LinkDialog } from "./panels/link-dialog";
 import { VideoToGifDialog } from "./panels/video-to-gif-dialog";
 import { GuideLinkSearch, type GuideSearchResult } from "./panels/guide-link-search";
 import { DialogReturnFocusEditorContext } from "./lib/dialog-return-focus";
+import { LeadingTitleHeadingNote } from "./panels/leading-title-heading-note";
 import { DesktopToolbar } from "./toolbar/desktop-toolbar";
 import { EditorBubbleMenu } from "./toolbar/bubble-menu";
 import { TableCellBubbleMenu } from "./toolbar/table-cell-bubble-menu";
@@ -486,6 +487,9 @@ export function GuideEditor({
               className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
             />
           </div>
+
+          {/* 本文の先頭の見出しがタイトル（「適用」した未保存の値）と同じ間だけ、公開ページでは出さないことを知らせる */}
+          {editor && <LeadingTitleHeadingNote editor={editor} title={title} />}
 
           <div className="py-3 min-h-100">
             <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">

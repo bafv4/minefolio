@@ -252,6 +252,9 @@ const SEARCH_CRAFT_GRID_COLS =
  */
 const SEARCH_CRAFT_PAIR_CLASS = "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-4 sm:gap-y-2 lg:contents";
 
+/** 箱なし表示のグループ見出しに使えるタグ（h1・h2 はページ名・欄見出しの段なので受けない） */
+export type SearchCraftGroupHeadingLevel = "h3" | "h4" | "h5" | "h6";
+
 /**
  * サーチクラフトの一覧表示（タイミング別グループカード + 3カラム表形式）。
  * タイミングが1件もない場合はヘッダーなしの1枚のカードにまとめる。
@@ -276,8 +279,11 @@ export function SearchCraftGroupedList({
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
-  /** 箱なし表示（framed=false）のグループ見出しのタグ。親に欄見出し（h3）が無いときは "h3" に上げる。既定 h4 */
-  groupHeadingLevel?: "h3" | "h4";
+  /**
+   * 箱なし表示（framed=false）のグループ見出しのタグ。親に欄見出し（h3）が無いときは "h3" に上げる。既定 h4。
+   * ガイド記事の埋め込みは、直前の本文の見出しの1つ下の段を渡す（h5・h6 もありうる。guide-embeds.tsx）
+   */
+  groupHeadingLevel?: SearchCraftGroupHeadingLevel;
   /**
    * true にすると、開いているグループの見出し行（グループ名・件数・開閉ボタン、あれば列見出しも）を
    * スクロール中も画面上部に貼り付ける。`framed={false}` かつ `collapsible` のときだけ効く
@@ -492,7 +498,7 @@ function SearchCraftGroupCard({
   onToggle,
   onReveal,
 }: {
-  headingLevel?: "h3" | "h4";
+  headingLevel?: SearchCraftGroupHeadingLevel;
   title?: string;
   dotClass?: string;
   crafts: SearchCraftRowData[];

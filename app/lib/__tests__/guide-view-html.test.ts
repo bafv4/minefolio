@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
   annotateGuideCallouts,
   htmlDepthDelta,
+  lastHeadingLevel,
   leadingHeadingMatchesTitle,
   parseGuideYouTubeEmbedUrl,
   removeLeadingHeading,
@@ -11,7 +12,8 @@ import {
 } from "../guide-view-html";
 import { sanitizeGuideHtml } from "../guide-sanitize.server";
 import { buildTableOfContents } from "../guide-toc";
-import { splitContentAtEmbeds } from "../../components/guide-embeds";
+import { embedGroupHeadingLevels, splitContentAtEmbeds } from "../../components/guide-embeds";
+import { demoteGuideHeadings } from "../guide-heading-demote";
 
 const LABELS: Record<string, string> = { tip: "ヒント", info: "情報", warning: "警告", danger: "危険" };
 const labelFor = (type: string) => LABELS[type] ?? null;
@@ -212,5 +214,55 @@ describe("leadingHeadingMatchesTitle / removeLeadingHeading", () => {
     const { toc } = buildTableOfContents(html);
     expect(toc.map((i) => i.text)).toEqual(["節A", "小節"]);
     expect(toc[0].id).toBe("heading-1");
+  });
+});
+
+describe("lastHeadingLevel", () => {
+  it("最後に現れる見出しの開きタグの段を返す（閉じタグ・入れ物の中も文書順）", () => {
+    expect(lastHeadingLevel("<h2>A</h2><p>x</p><h4>B</h4>")).toBe(4);
+    expect(lastHeadingLevel(`<h2>A</h2>${callout("tip", "<h3>中</h3>")}`)).toBe(3);
+    expect(lastHeadingLevel('<H3 id="a">A</H3>')).toBe(3);
+  });
+
+  it("見出しが無ければ null（h1x のような別タグ・エスケープされた文字列は数えない）", () => {
+    expect(lastHeadingLevel("<p>本文</p>")).toBeNull();
+    expect(lastHeadingLevel("<header>x</header><hr><p>&lt;h2&gt;</p>")).toBeNull();
+  });
+
+  it("降格後は data-guide-level（元の段）ではなくタグ名の段を返す", () => {
+    expect(lastHeadingLevel(demoteGuideHeadings("<h1>A</h1><h2>B</h2>"))).toBe(3);
+    // h3 始まりは1段上がる（−1）
+    expect(lastHeadingLevel(demoteGuideHeadings("<h3>A</h3>"))).toBe(2);
+  });
+});
+
+describe("embedGroupHeadingLevels", () => {
+  const sc = '<div data-searchcraft-embed="" data-user-slug="r"></div>';
+  const tpl = '<div data-sctemplate-embed="" data-template-id="abc"></div>';
+  const kb = '<div data-keybind-embed="" data-user-slug="r"></div>';
+  const levels = (html: string) =>
+    embedGroupHeadingLevels(splitContentAtEmbeds(demoteGuideHeadings(html)));
+
+  it("直前の本文の見出し（降格後）の1つ下にする（本文 h1 → 公開 h2 → 埋め込み h3）", () => {
+    expect(levels(`<h1>サーチクラフト</h1>${sc}`)).toEqual([null, "h3"]);
+  });
+
+  it("本文 h2 の下は h4（固定の h3 だと h3 → h3 になる）", () => {
+    expect(levels(`<h1>A</h1><h2>B</h2><p>x</p>${tpl}`)).toEqual([null, "h4"]);
+  });
+
+  it("前に見出しが無ければ h3、上限は h6", () => {
+    expect(levels(`<p>前</p>${sc}`)).toEqual([null, "h3"]);
+    expect(levels(sc)).toEqual(["h3"]);
+    expect(levels(`<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5>${sc}`)).toEqual([null, "h6"]);
+  });
+
+  it("直前の見出しはセグメントをまたいで持ち越し、後ろの見出しは前の埋め込みに効かない", () => {
+    const html = `<h1>A</h1>${sc}${youtube(YT)}${kb}<h2>B</h2>${tpl}`;
+    expect(levels(html)).toEqual([null, "h3", null, "h3", null, "h4"]);
+  });
+
+  it("h3 始まりの本文（降格で h2 に上がる）の下も h3", () => {
+    expect(levels(`<h3>A</h3>${sc}`)).toEqual([null, "h3"]);
   });
 });

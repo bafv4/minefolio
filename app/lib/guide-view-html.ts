@@ -65,6 +65,21 @@ export function removeLeadingHeading(html: string): string {
   return heading ? html.slice(heading.end).replace(/^\s+/, "") : html;
 }
 
+/** 見出しの開きタグ（閉じタグ `</hN` は `<` の直後が `/` なので一致しない） */
+const HEADING_OPEN_TAG = /<[hH]([1-6])(?=[\s>/])/g;
+
+/**
+ * HTML の中で最後に現れる見出しの段（開きタグのタグ名の数字、1〜6）。見出しが無ければ null。
+ * 公開表示の本文は降格（guide-heading-demote.ts）の後なので、タグ名の数字が実際に描かれる段になる
+ * （data-guide-level は元の段なので見ない）。入れ物の中の見出しも文書順に数える。
+ * 本文中の埋め込みの見出しの段を、直前の本文の見出しから決めるのに使う（guide-embeds.tsx の embedGroupHeadingLevels）。
+ */
+export function lastHeadingLevel(html: string): number | null {
+  let level: number | null = null;
+  for (const m of html.matchAll(HEADING_OPEN_TAG)) level = Number(m[1]);
+  return level;
+}
+
 /** `data-callout` 属性（`data-callout-type` ではない）を持つ開きタグか */
 const CALLOUT_ATTR = /(?:^|\s)data-callout(?=\s|=|$)/;
 const CALLOUT_TYPE_ATTR = /\sdata-callout-type="([^"]*)"/;
