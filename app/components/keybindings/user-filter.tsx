@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { bindConditionLabel } from "@/lib/keybindings-filter";
 import type { Locale } from "@/lib/locale";
 
 export type UserFilterPlayer = {
@@ -94,7 +95,7 @@ export function UserSelectList({
                 // cmdk の検索対象。表示名・MCID・slug すべてでヒットさせる。
                 value={`${label} ${p.mcid ?? ""} ${p.slug}`}
                 onSelect={() => onToggle(p.slug)}
-                className="gap-2"
+                className="gap-2 max-md:min-h-11"
               >
                 <MinecraftAvatar
                   uuid={p.uuid}
@@ -137,8 +138,15 @@ function rangeChipLabel(
 export function UserFilterChips({ players }: { players: UserFilterPlayer[] }) {
   const t = useT();
   const locale = useLocale();
-  const { params, toggleUser, setRange, clearFilters, hasActiveFilters } =
-    useKeybindingsFilters();
+  const {
+    params,
+    toggleUser,
+    setRange,
+    clearFilters,
+    hasActiveFilters,
+    bindConditions,
+    removeBindCondition,
+  } = useKeybindingsFilters();
   const selectedSet = new Set(params.users);
   const selectedPlayers = players.filter((p) => selectedSet.has(p.slug));
   const sep = t("common.rangeSeparator");
@@ -207,6 +215,22 @@ export function UserFilterChips({ players }: { players: UserFilterPlayer[] }) {
           </button>
         </Badge>
       ))}
+      {bindConditions.map((c) => {
+        const label = bindConditionLabel(t, c);
+        return (
+          <Badge key={c.action} variant="secondary" className="gap-1 font-mono">
+            {label}
+            <button
+              type="button"
+              onClick={() => removeBindCondition(c.action)}
+              className="-m-2 p-2 hover:opacity-70"
+              aria-label={t("keybindings.removeFilterChip", { label })}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        );
+      })}
       {ranges.map((r) => (
         <Badge key={r.key} variant="secondary" className="gap-1 font-mono">
           {r.label}

@@ -285,7 +285,7 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 
 ### 表示パーセントへの換算
 
-内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページ・`/me/devices` の編集フォーム（内部値欄↔パーセント欄の相互変換）のいずれも同じ整数%になる（以前はプロフィール・比較ページが四捨五入、`/me/devices` は独自の四捨五入ロジックを持っていたため、境界値で表示が1%ずれることがあった）。逆変換（表示%→内部値、フォーム保存値の正規形＝小数4桁固定の文字列）は `fromSensitivityPercent()` が担う。パーセントの上限は定数 `SENSITIVITY_PERCENT_MAX`（`= 200`）で持ち、フィルターダイアログの入力上限（`inputMax`）や感度ビン区分（`SENSITIVITY_PERCENT_BINS`、後述）もここから導出する。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
+内部値（`0..1`）から表示用パーセント（`0〜200%`、Minecraft準拠）への換算は `toSensitivityPercent()`（`app/lib/mouse-settings.ts`）に一本化されている。端数は**切り捨て**（floor）で統一しており、一覧セル・CSVエクスポート・プロフィール・比較ページ・`/me/devices` の編集フォーム（内部値欄↔パーセント欄の相互変換）のいずれも同じ整数%になる（以前はプロフィール・比較ページが四捨五入、`/me/devices` は独自の四捨五入ロジックを持っていたため、境界値で表示が1%ずれることがあった）。逆変換（表示%→内部値、フォーム保存値の正規形＝小数4桁固定の文字列）は `fromSensitivityPercent()` が担う。パーセントの上限は定数 `SENSITIVITY_PERCENT_MAX`（`= 200`）で持ち、フィルタダイアログの入力上限（`inputMax`）や感度ビン区分（`SENSITIVITY_PERCENT_BINS`、後述）もここから導出する。比較ページは感度 `0`（0%）のプレイヤーの値も表示する（以前は truthy 判定により非表示になっていた）。
 
 ### バリデーション
 
@@ -401,7 +401,7 @@ type ControllerSettings = {
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
 - 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる
-- ビュー切替（`ViewSwitcher`）は各ルートへの `<Link>`。表・ビジュアル間は現在の検索パラメータ（フィルタ・`tab`）を維持する。ルート遷移のため読み込み中は共通の `NavigationProgress` オーバーレイが表示される
+- ビュー切替（`ViewSwitcher`）は各ルートへの `<Link>`で、`nav`（`aria-label`）＋ `aria-current="page"`（`role="tablist"` / `tab` ではない。ui.md 11 章・`ContentTabs` と同じ）。表・ビジュアル間は現在の検索パラメータ（フィルタ・`tab`）を維持する。ルート遷移のため読み込み中は共通の `NavigationProgress` オーバーレイが表示される
 
 テーブルビュー（`view=table`）のサブタブ。操作系はプレイヤー画面（プロフィール）と同じ粒度（移動 / インベントリ / 戦闘・UI）で分割する:
 
@@ -416,25 +416,43 @@ type ControllerSettings = {
 
 - 列定義は `COLUMN_PRESETS`（`keybindings-columns.tsx`）でプリセット名＝タブ名として管理する
 - **各カラムはドラッグでリサイズ可能**（TanStack Table の `columnResizeMode: "onChange"`）。`KeybindingsTable` は `getSize()` から `grid-template-columns` を算出する
-- テーブルは **TanStack Table v9**（`useTable`）。使う機能だけを `keybindingsTableFeatures`（`keybindings-columns.tsx`）に明示登録している（`rowSortingFeature` ＋ `sortedRowModel` / `columnSizingFeature` / `columnResizingFeature`、ソート関数は数値列用の `basic` のみ）。列定義の型は `KeybindingsColumnDef`（= `ColumnDef<KeybindingsFeatures, KeybindingsRow>`）。列の可視性機能は使わないため `getAllLeafColumns()` / `row.getAllCells()` で描画する。リサイズ中の列幅は `table.state.columnSizing`（v8 の `getState()` は廃止）
+- テーブルは **TanStack Table v9**（`useTable`）。使う機能だけを `keybindingsTableFeatures`（`keybindings-columns.tsx`）に明示登録している（`rowSortingFeature` ＋ `sortedRowModel` / `columnSizingFeature` / `columnResizingFeature`、ソート関数は数値列用の `basic` のみ登録し、アクション列（キー名）は列定義の関数 `sortFn` で比較する）。列定義の型は `KeybindingsColumnDef`（= `ColumnDef<KeybindingsFeatures, KeybindingsRow>`）。列の可視性機能は使わないため `getAllLeafColumns()` / `row.getAllCells()` で描画する。リサイズ中の列幅は `table.state.columnSizing`（v8 の `getState()` は廃止）
 - **表は仮想化しない**（走者は高々数百・タブごとに 1 表）。role は `table`（`rowgroup` / `row` / `columnheader` / `cell`、並べ替え中の列に `aria-sort`、`aria-rowcount` / `aria-rowindex`）。SSR でも全行が出る。0 件は表を描かず `KeybindingsEmptyState`（共有 `EmptyState`）
-- ヘッダーは折り返して全文を読めるようにする。セルは `overflow-hidden` で列幅にクリップ。マウス列の見出しは翻訳キー（`keybindings.columnWinSens` 等。モバイルの短縮は `columnSensShort` / `columnTurnShort`）。未設定の表記は「-」に統一
-- **見出し行は本体の横スクロール枠の外**に置き、本体の `scrollLeft` に CSS 変数 `--kb-scroll-left` で追従させる（走者列だけ打ち消して固定）。md 未満は本体の縦スクロール枠を外してページのスクロールに任せ、見出しは `top-[64px]` でページに貼り付く。md 以上は本体が `max-h-[70vh]` の縦スクロール枠。貼り付きのため、表の `Tabs` ルートは `overflow-clip`（既定の `overflow-hidden` はスクロールコンテナになり sticky を止める）
-- 走者列の幅は CSS 変数 `--kb-runner-col`（md 未満 96px / md 以上 224px。リサイズ後は px）。走者セルは両方の頭を描いて CSS で出し分ける（`useMediaQuery` は使わない）
-- md 未満のツールバー: ビュー切替は全幅の 3 分割で、件数・フィルターは次の行（`ViewSwitcher`。DOM は 1 つで CSS により並べ替え）。サブタブは `TabsList scrollFade`（`ui/tabs.tsx` の opt-in。続きがある側の端にフェード）。タップ領域は 44px（`max-md:h-11` / `max-md:min-h-11`）
-- 件数表示は、いま見えている表の行数（タブごと。マウスタブは設定のある走者のみ）。ビジュアルは絞り込み後の全走者
+- ヘッダーは折り返して全文を読めるようにする。セルは `overflow-hidden` で列幅にクリップ。マウス列の見出しは翻訳キー（`keybindings.columnWinSens` 等。モバイルの短縮は `columnSensShort` / `columnTurnShort`）。未設定の表記は「-」に統一し、見た目は `text-muted-foreground`（薄くしすぎない）、読み上げは sr-only の文言に差し替える（`EmptyMark`: キー未割り当て = 「未割り当て」、マウスの値 = 「未設定」、リマップ・カスタムアクションなし = 「なし」。見える「-」は `aria-hidden`）
+- **見出しの説明**: 見えている文字と同じ内容の Tooltip は付けない。意味の説明が要る見出し（cm/180°・カーソル速度・Win Sens・Raw Input・マウス加速）だけ、並べ替えボタンの外に `HintTip`（Info アイコン。`column.meta.hint`）を置く
+- **キーバッジ**（`KeyBadge`、`keybindings-cells.tsx`）: 文字キーは角の小さい `rounded` の四角（ui.md 7 章。`search-craft-badges` の KeyBadge と語彙をそろえる。指色は持たないので部品は共有しない）。マウスボタンだけ info 色。表示幅（全角=2）の上限を超えると省略し、**全文は `HintTip`（ボタン。aria-label = 全文、ホバー/フォーカス = Tooltip、タッチ = Popover）で届ける**
+- **ホットバー列**: 9 スロットを同じ幅のグリッド（md 以上 9 列 / md 未満 5 + 4 の 2 段）に並べ、行ごとに 1〜9 の位置がそろう。ラベルは省略（上限 4 幅）し、全文は `KeyBadge` の `HintTip`
+- **列リサイズの取っ手**（`role="separator"`）: フォーカス可能（`tabIndex=0`、`aria-valuenow/min/max`）。左右キーで ±16px（Shift で ±64px）、Enter・ダブルクリックで既定の幅に戻す
+- **キー名の表示ラベル**（`getKeyLabel`）: JIS の変換系（`NonConvert` = 無変換 / `Convert` = 変換 / `KanaMode` = かな）と、Minecraft がキー名を持たないキーの `scancode.N`（= 「スキャンコード N」）に表示名を付ける（`keyLabels.*`）
+- **縦スクロールは全幅でページに任せる**（本体に内側の縦スクロール枠〔旧 `md:max-h-[70vh]`〕は持たない）。**見出し行は本体の横スクロール枠の外**に置き、本体の `scrollLeft` に CSS 変数 `--kb-scroll-left` で追従させる（走者列だけ打ち消して固定）。見出しは md 未満・以上とも `top-[64px]` でページに貼り付く。貼り付きのため、表の `Tabs` ルートは `overflow-clip`（既定の `overflow-hidden` はスクロールコンテナになり sticky を止める）
+- **横スクロールバー**: 長い表では本体の下端が画面外になるため、md 以上は本体のネイティブバーを隠し、下端（`--bottom-fixed-inset` の上）に貼り付く同期スクロールバー（`StickyScrollbar`、`keybindings-table.tsx`）を出す。横にあふれていないときは出さない。md 未満はネイティブのまま
+- **列幅**: 各列は grid の `minmax(下限, 基準幅fr)` で、表の合計が枠より狭いときは余りを全列で基準幅に比例して分け合う（右に空き帯を作らない）。行は `w-max` にせず、下限の合計を `min-width`（`calc()`）に渡す（`w-max` だと fr が中身の max-content まで広がり、チップが折り返さない）。md 未満 / 以上で下限が違う列は CSS 変数で持つ（列の `meta.widthVar`。リサイズした列だけ px で固定。リサイズ開始時に描画中の幅へ固定してから始める）。末尾の見出しの右には区切りを出さない
+  - `--kb-runner-col`: 走者列（md 未満 96px / md 以上 224px。固定幅）。走者セルは両方の頭を描いて CSS で出し分ける（`useMediaQuery` は使わない）
+  - `--kb-action-col`: 1 キーのアクション列（md 未満 56px / md 以上 104px）。md 未満は見出しの並べ替え矢印を文字の下に置く
+  - `--kb-hotbar-col`: ホットバー列（md 未満 240px / md 以上 360px。md 未満は 9 枠が 2 行に折り返す）
+  - `--kb-fill-col`: リマップ・カスタムアクション列（md 未満は下限 0 で残りの幅に収めてチップを折り返す / md 以上は 600px 下限）
+- md 未満のツールバー: ビュー切替は全幅の 3 分割で、件数・フィルタは次の行（`ViewSwitcher`。DOM は 1 つで CSS により並べ替え）。サブタブは `TabsList scrollFade`（`ui/tabs.tsx` の opt-in。続きがある側の端にフェード）。選択中のタブが横スクロールで隠れていれば、マウント時（動きなし）と選択変更時に見える位置へ寄せる（`TabsList` の共通挙動。リスト自身の `scrollLeft` だけを動かす）。タップ領域は 44px（`max-md:h-11` / `max-md:min-h-11`）
+- 件数表示は、いま見えている表の行数（タブごと）。**キーのタブ（移動・インベントリ・戦闘・UI）は、そのタブの列がすべて「未割り当て」の走者を載せず**（タブごとに判定。インベントリはホットバー 1〜9 を含む）、マウスタブも設定のある走者のみ（`hasKeyBindings` / `hasMouseSettings`、`lib/keybindings-filter.ts`）。ビジュアルは、キーボードに描くものが何もない走者（割り当て・リマップ・カスタムアクションのどれも無い。`hasKeyboardContent`）を除いた、絞り込み後の走者。件数は `aria-live="polite"` で変化を伝える（初回表示では読まれない）
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 
-- **統合フィルターモーダル**（`FilterDialog`）: ユーザー絞り込みと数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
-  - ユーザー絞り込み（`users` パラメータ）: 表示するユーザーを検索してリスト登録する横断フィルター（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
+- **統合フィルタモーダル**（`FilterDialog`）: 走者の絞り込み・操作＝キー・数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
+  - 走者の絞り込み（`users` パラメータ。ダイアログの見出しは「走者で絞り込み」）: 表示する走者を検索してリスト登録する横断フィルタ（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
   - 効いている数値範囲は `UserFilterChips` の行に「DPI 400〜800 ×」のチップで出し、そこから外せる。「フィルタをクリア」はチップ行の 1 か所（ダイアログ内はフッターの 1 つ）
+  - **操作＝キー**（`bind` パラメータ。例: `bind=sprint:ControlLeft,jump:Space`）: 「ダッシュ = 左Ctrl」のように、操作に割り当てているキーで絞る。表・ビジュアル両ビューで適用される
+    - 複数条件は **AND**（すべて満たす走者）。**同じ操作の条件は置き換える**（1 つの操作に同時に割り当てられるキーは 1 つなので、同じ操作の AND は常に空になるため）。形式は `<操作>:<keyCode>`（最初の `:` で分ける）。未知の操作・キーが空の要素は無視する。選べる操作は表の列と同じ（`BIND_FILTER_ACTIONS`）
+    - キーは、選んだ操作に**いずれかの走者が実際に割り当てているキー**の一覧（表示名の昇順。人数順にはしない）から選ぶ（物理キーのないスマホ・マウスボタンでも選べる）。「キーを押して指定」（`KeyCaptureButton`、ダイアログ内のため `keyCaptureEscapeGuard` で Escape をキーとして受ける）でも指定できる。修飾キーとの組み合わせ（`Ctrl+KeyA`）は `bind` に載せない
+    - 比較は `keysEqual`（大文字小文字・Minecraft 形式の違いを吸収）で、JIS の半角（`IntlYen` と `Backquote`）は走者の配列で `getKeyCodeAliases` を両側に当てて同じキーとして扱う（`bindKeysMatch`、`lib/keybindings-filter.ts`）。その操作が未割り当て・不使用の走者は条件を満たさない
+    - 効いている条件は `UserFilterChips` の行に「ダッシュ = 左Ctrl ×」のチップで出し、そこから外せる。`clearFilters` と「フィルタ数」にも含まれる
+  - モバイル（md 未満）: 閉じる×・フッターのボタン・数値入力・走者候補・操作＝キーの部品は 44px（`min-h-11`）。閉じる×は共有の `ui/dialog.tsx` を変えず、`FilterDialog` が自前の `DialogClose` を出す。開いたとき**検索欄へ自動でフォーカスを入れない**（ソフトキーボードが画面の半分を覆うため。`onOpenAutoFocus` を止めてダイアログ自身へフォーカスを置くので、Tab で最初の操作に進める）
   - ユーザー検索欄の Enter は、矢印キー・ポインタで候補に触れるまで無効（cmdk が先頭の候補を自動選択してしまうため）
   - 数値欄は最小・最大それぞれに sr-only の `Label` を `id` で結ぶ（プレースホルダは「最小」「最大」）
+  - 数値の絞り込みは**キーボードのタブにも効く**（DPI・感度・振り向きのいずれかを指定すると、マウス設定がある走者だけに絞られる。`dpiMin=400&dpiMax=800` で移動タブも該当者のみになる）。この挙動は保ち、ダイアログの数値の欄に注記する（`keybindings.numericFilterNote`）
   - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
   - 各入力欄は number input の `min` / `max` 属性で有効範囲を示し（DPI: `min=1`、感度: `0〜200`、振り向き: `min=0`）、感度欄には有効範囲の補足テキスト（`keybindings.sensitivityRangeHint`）を常時表示する（`FilterRange` の `inputMin` / `inputMax` / `hint`）
   - 「適用」時に **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
+  - **アクション列（1 キーの列）はキー名で並べ替えられる**（`sort=action.<操作>:asc|desc`。例: `action.sprint:asc`）。並べ替えのキーは表示ラベル（カスタムキー名 → 組み合わせ → その走者の配列を考慮した `getKeyLabel`。`getBoundKeyLabel`）。比較は数値順（F2 < F10）で、ロケールを明示した `localeCompare`（`compareKeyLabels`）。**未割り当て・不使用は昇順・降順どちらでも末尾**。ホットバー列（9 キーの集約）は並べ替えない。ビジュアルの `sortKeybindingsRows(rows, sort, t, locale)` も同じ `sort` に対応する（URL を共有しているため）。1 つの操作を全員で見比べる手段は、並べ替え・操作＝キーの絞り込み・統計からの導線（中立な手段）に限る
   - **未設定の行は昇順・降順のどちらでも末尾**。TanStack Table の `sortUndefined: "last"` は
     `undefined` のみを見る（`null` は素通りして通常比較に回り、昇順で先頭に来る）ため、
     ソート対象の `accessorFn` は未設定を必ず `undefined` で返す（`keybindings-columns.tsx` の `forSort()`）
@@ -442,7 +460,7 @@ type ControllerSettings = {
     - 警告・「-」理由の吹き出しは共有コンポーネント `HintTip`（`app/components/hint-tip.tsx`）が担う。ポインタ端末（マウス等）は Tooltip（ホバー/フォーカス）、タッチ端末（`pointer: coarse`）は Popover（タップ）に自動で出し分ける（`KeyInfoTrigger` と同じ方針）。SR 向けにトリガーは `<button aria-label="{説明文}">` で実装する
   - **0件になったときの空状態**（`KeybindingsEmptyState`、表・カードビュー共通）: 有効なフィルタが1つでもある場合は理由が伝わる文言（`keybindings.emptyFiltered`）とその場でフィルタを一括解除できる「クリア」ボタン（`clearFilters()`、ソート・タブは維持）を出す。フィルタなしで0件（そもそも登録者がいない）なら従来どおり `keybindings.noPlayers`
 - プレイヤー名クリックでプロフィールページへ遷移
-- **ビジュアルカードビュー**: キーボード（実寸 1120px）とマウスを走者画面のモバイル表示と同じ `KeyboardScaledPreview` で包み、カード幅に収まるよう縮小する（スケール上限 1。タップ/クリックで実寸の Dialog。縮小中は inert でツールチップは効かない）。マウスはキーボードの下に置き、カード幅 1360px 以上（`@container`）のときだけ横に並べる。並び順は表と同じ URL の `sort`（`sortKeybindingsRows`。未設定は末尾）。**描画は 20 人ずつ**（「さらに表示」。メモリ内の state のみ）。画面外のカードは IntersectionObserver で可視化されるまでキーボードを描かない
+- **ビジュアルカードビュー**（要約行: マウス設定がまったく無い走者は、未設定の 3 項目を並べず 1 つの「マウス設定なし」〔muted〕にする。Trigger / Chat 切替には `HintTip` の説明を添え、md 未満は 44px。カードの仮の高さ `contain-intrinsic-size` は md 未満 400px / md 以上 700px、未描画のプレースホルダーは 250px / 550px で、描画時の高さの跳ねを抑える）: キーボード（実寸 1120px）とマウスを走者画面のモバイル表示と同じ `KeyboardScaledPreview` で包み、カード幅に収まるよう縮小する（スケール上限 1。タップ/クリックで実寸の Dialog。縮小中は inert でツールチップは効かない。**縮小していない〔scale が 1〕ときは、拡大の印・ボタン・inert を出さず**ツールチップが効く通常の表示。幅の変化は ResizeObserver に加え、ウィンドウの resize と交差の変化でも再計測する〔`content-visibility:auto` の画面外カードは ResizeObserver が届かないため〕）。マウスはキーボードの下に置き、カード幅 1360px 以上（`@container`）のときだけ横に並べる。並び順は表と同じ URL の `sort`（`sortKeybindingsRows`。未設定は末尾）。**描画は 20 人ずつ**（「さらに表示」。メモリ内の state のみ）。画面外のカードは IntersectionObserver で可視化されるまでキーボードを描かない
 - ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
 
@@ -452,6 +470,11 @@ type ControllerSettings = {
 
 視聴者ロールは集計から除外している（v1.4.0〜）。h1 は「操作設定統計」。
 
+- **統計は公開走者の全員が対象**（一覧の絞り込みは効かない）。概要に注記を出す。DPI の区分は幅がそろっていないので、棒の長さは人数の割合であることを欄の説明に添える
+- **キーの統計の「未割り当て」**: 集計は不使用（`UNBOUND_KEY`）の割り当ても 1 つのキーとして数える。その行は「-」というキーではなく「未割り当て」と表示する（F3 欄の未設定〔`UNASSIGNED_INPUT_KEY`〕と同じ `keybindingsStats.unassigned`）。Minus キーは「-」のまま。「未割り当て」の走者群から表へのリンクは `users` のみ（`bind` では絞れない）
+- 統計の行ボタンのアクセシブルネームは「5位、2キー、1人、1%、走者を見る」のようなまとまった文（`keybindingsStats.rowAria` / `rangeRowAria`）。走者一覧ダイアログには `DialogDescription`（人数と案内）を付ける
+- **走者一覧ダイアログから表へ**: キー・F3・マウスの各区分の走者一覧ダイアログに「この N 人を表で見る」リンクを出す。行き先は `/keybindings?users=<slug,…>&tab=<その操作が載っているタブ>`（キーの操作は `tabForAction`、F3 は `remaps`、マウス系・Raw Input は `mouse`。`buildKeybindingsTableHref`）。`users` に載せるのは **100 人まで**（`MAX_USERS_IN_LINK`。URL が長くなりすぎるため）。超えたときは、キーの統計なら `users` の代わりに `bind=<操作>:<キー>` で同じ走者群を表で絞り込む。それ以外（マウスの区分）はリンクを出さない。F3 の区分は、リマップした走者（元のキーごとの区分）は `remaps` タブへリンクし、「F3 のまま」の区分（リマップ行を持たず表のリマップタブに出ない）はリンクを出さない。表の行数は、統計（ライブのテーブル）と一覧（メインプリセットのスナップショット・公開走者）の母集団の違いで、ダイアログの人数と一致しないことがある（マウスタブは DPI・感度・Windows 速度のある走者のみ）
+- Raw Input の ON / OFF（統計・表）はどちらも同じ見た目（`Badge variant="secondary"`）で、文字だけで区別する。走者の設定値に優劣・多数派/少数派を思わせる装飾をしない
 - 概要の人数は母集団が違うので、名前と注記で区別する: **登録走者数**（操作設定を登録している公開走者。`/keybindings` の一覧と同じ母集団で、`loadKeybindingsListPlayers` の件数）／**キー配置の登録者**・**マウス設定の登録者**（ライブの `keybindings` / `playerConfigs`（DPI あり）テーブルを数える）／**公開プロフィール**（公開設定の全走者）。割合は母集団が揃わないため出さない
 - 注意: 一覧は「メインプリセットが非アクティブならそのスナップショット」を、統計の集計はライブテーブルを元にする（今は未統一）
 - サブタブ（キーボード／マウス）は URL の `statsTab`（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要はタイル（`rounded-xl bg-secondary/50`）
@@ -528,7 +551,9 @@ type ControllerSettings = {
 | `app/lib/keybindings-list.server.ts` | 表・ビジュアル共有の走者一覧ローダー |
 | `app/components/keybindings/keybindings-list-layout.tsx` | 表・ビジュアル共有レイアウト（タイトル・ツールバー・フィルタ適用） |
 | `app/components/keybindings/card-view.tsx` | ビジュアルカードビュー（`VirtualKeyboard` を読み取り専用で再利用） |
-| `app/components/keybindings/filter-dialog.tsx` | 統合フィルターモーダル（ユーザー絞り込み + 数値範囲、適用で反映） |
+| `app/components/keybindings/filter-dialog.tsx` | 統合フィルタモーダル（ユーザー絞り込み + 操作＝キー + 数値範囲、適用で反映） |
+| `app/lib/keybindings-filter.ts` | キー名の表示ラベル・比較（並べ替え）と、操作＝キーの絞り込み判定（`rowMatchesBind`）の純粋ロジック |
+| `app/lib/keybindings-search-params.ts` | URL パラメータ定義（`bind` の parse / format、操作→タブの対応、統計→表のリンク組み立て） |
 | `app/components/keybindings/user-filter.tsx` | ユーザー検索・選択リスト（`UserSelectList`）と選択チップ（`UserFilterChips`、`users` パラメータ） |
 | `app/components/keybindings/keybindings-empty-state.tsx` | 0件表示（表・カードビュー共通）。フィルタ起因なら理由 + クリアボタンを出す |
 | `app/components/sensitivity-warning.tsx` | 感度が有効範囲外のときの警告表示（値 + 警告アイコン + ヒント）。一覧・プロフィール共通 |

@@ -30,7 +30,7 @@ const ITEMS: Item[] = [
 const serialize = createSerializer(keybindingsParsers);
 
 /**
- * ビュー切替タブ（表 / ビジュアル / 統計）。
+ * ビュー切替タブ（表 / ビジュアル / 統計）。別ページへのリンク列（nav ＋ aria-current）。
  * md 以上: 全幅のベースライン行として描画され、`actions` に渡した要素（件数表示・
  * フィルターボタン等）は同じ行の右端・ベースラインの上に並ぶ。
  * md 未満: タブ行は全幅を 3 等分し（「統計」が画面外に押し出されない）、actions は次の行へ移す
@@ -57,11 +57,11 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
       <div className="flex items-end border-b border-border md:min-w-0 md:flex-1 md:border-b-0">
       {/* relative ラッパ: カスタムスクロールバーの位置基準。-mb-px で行の
           ベースラインに 1px 重ね、アクティブタブの bg が線を覆う */}
-      <div className="relative -mb-px min-w-0 flex-1">
+      {/* 表・ビジュアル・統計は別ページへのリンクなので、tablist ではなく nav ＋ aria-current
+          （ui.md 11 章。ContentTabs と同じ） */}
+      <nav aria-label={t("keybindings.viewSwitcher")} className="relative -mb-px min-w-0 flex-1">
       <div
         ref={scrollerRef}
-        role="tablist"
-        aria-label={t("keybindings.viewSwitcher")}
         className={cn(
           "flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           // スクロールが必要なときだけ、上側にスクロールバーの余白を確保
@@ -79,8 +79,7 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
             <Link
               key={item.path}
               to={to}
-              role="tab"
-              aria-selected={isActive}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg border border-border px-3 text-sm font-medium transition-colors max-md:flex-1 md:h-9",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -97,7 +96,7 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
         })}
       </div>
       {scrollbar}
-      </div>
+      </nav>
       </div>
       {actions && (
         // md 以上: タブ列ラッパと同じ h-9 + -mb-px に固定 — actions の有無で行の高さ（＝タブの位置）が変わらないようにする

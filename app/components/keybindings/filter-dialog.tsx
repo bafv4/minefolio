@@ -1,11 +1,13 @@
 // ユーザー絞り込み + 数値範囲フィルタを1つに統合したモーダル。
 // - ユーザー絞り込み: 表示するユーザーを検索してリスト登録（即時反映）
+// - 操作＝キー: 「ダッシュ = 左Ctrl」のように、操作に割り当てているキーで絞る（ドラフト → 適用で反映）
 // - 数値フィルタ: DPI / 感度 / 振り向きの範囲（ドラフト → 適用で反映）
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { SENSITIVITY_PERCENT_MAX } from "@/lib/mouse-settings";
-import { SlidersHorizontal, X } from "lucide-react";
+import { Plus, SlidersHorizontal, X } from "lucide-react";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -17,9 +19,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
+import { getActionLabel } from "@/lib/keybindings";
+import {
+  bindConditionLabel,
+  collectBoundKeys,
+  type BoundKeyRow,
+} from "@/lib/keybindings-filter";
+import {
+  BIND_FILTER_ACTIONS,
+  formatBindCondition,
+  parseBindConditions,
+  upsertBindCondition,
+} from "@/lib/keybindings-search-params";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { UserSelectList, type UserFilterPlayer } from "./user-filter";
-import { useT } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
+import type { Locale } from "@/lib/locale";
 
 function parseNumber(value: string): number | null {
   if (value.trim() === "") return null;
@@ -39,13 +62,20 @@ function orderedRange(
   return [min, max];
 }
 
-export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
+export function FilterDialog({
+  players,
+}: {
+  players: Array<UserFilterPlayer & Partial<BoundKeyRow>>;
+}) {
   const t = useT();
+  const locale = useLocale();
   const { params, setParams, activeFilterCount } = useKeybindingsFilters();
   const [open, setOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // すべてドラフト（「適用」を押すまでクエリは走らせない）
   const [draftUsers, setDraftUsers] = useState<string[]>([]);
+  const [draftBinds, setDraftBinds] = useState<string[]>([]);
   const [draftDpiMin, setDraftDpiMin] = useState("");
   const [draftDpiMax, setDraftDpiMax] = useState("");
   const [draftSensMin, setDraftSensMin] = useState("");
@@ -57,6 +87,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
   useEffect(() => {
     if (!open) return;
     setDraftUsers(params.users);
+    setDraftBinds(parseBindConditions(params.bind).map(formatBindCondition));
     setDraftDpiMin(params.dpiMin != null ? String(params.dpiMin) : "");
     setDraftDpiMax(params.dpiMax != null ? String(params.dpiMax) : "");
     setDraftSensMin(params.sensMin != null ? String(params.sensMin) : "");
@@ -81,6 +112,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
     );
     setParams({
       users: draftUsers.length > 0 ? draftUsers : null,
+      bind: draftBinds.length > 0 ? draftBinds : null,
       dpiMin,
       dpiMax,
       sensMin,
@@ -93,6 +125,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
 
   const clearDrafts = () => {
     setDraftUsers([]);
+    setDraftBinds([]);
     setDraftDpiMin("");
     setDraftDpiMax("");
     setDraftSensMin("");
@@ -105,6 +138,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
   const totalActive = activeFilterCount + (userCount > 0 ? 1 : 0);
   const draftActive =
     draftUsers.length > 0 ||
+    draftBinds.length > 0 ||
     [draftDpiMin, draftDpiMax, draftSensMin, draftSensMax, draftCm360Min, draftCm360Max].some(
       (v) => v.trim() !== "",
     );
@@ -122,8 +156,25 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
           )}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent
+        ref={contentRef}
+        showCloseButton={false}
+        className="sm:max-w-md max-h-[85vh] flex flex-col"
+        // 検索欄へ自動でフォーカスを入れない（スマホではソフトキーボードが画面の半分を覆うため）。
+        // キーボード操作の開始点は、ダイアログ自身に置く（Tab で最初の操作に進める）
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          contentRef.current?.focus();
+        }}
+        // 操作＝キーの「キーを押して指定」中の Escape は、ダイアログを閉じずにキーとして受け取る
+        onEscapeKeyDown={keyCaptureEscapeGuard}
+      >
+        {/* 閉じるボタン: 共有の DialogContent の既定は 16px。md 未満は 44px の押せる範囲にする */}
+        <DialogClose className="ring-offset-background focus-visible:ring-ring absolute top-1.5 right-1.5 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden md:top-3 md:right-3 md:size-8">
+          <X className="size-4" aria-hidden />
+          <span className="sr-only">{t("common.close")}</span>
+        </DialogClose>
+        <DialogHeader className="pr-10">
           <DialogTitle>{t("keybindings.filter")}</DialogTitle>
           <DialogDescription>
             {t("keybindings.filterDescription")}
@@ -141,6 +192,14 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
             />
           </div>
 
+          {/* 操作＝キーの絞り込み（ドラフト） */}
+          <BindFilterSection
+            players={players}
+            binds={draftBinds}
+            onChange={setDraftBinds}
+            locale={locale}
+          />
+
           {/* 数値フィルタ（ドラフト） */}
           <form
             id="keybindings-numeric-filter"
@@ -150,6 +209,8 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
             <Label className="text-sm font-medium">
               {t("keybindings.numericFilter")}
             </Label>
+            {/* 数値で絞ると、キーボードのタブも含めてマウス設定のある走者だけになる */}
+            <p className="text-xs text-muted-foreground">{t("keybindings.numericFilterNote")}</p>
             <FilterRange
               label="DPI"
               min={draftDpiMin}
@@ -187,16 +248,145 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
             variant="ghost"
             onClick={clearDrafts}
             disabled={!draftActive}
+            className="max-md:min-h-11"
           >
             <X className="h-4 w-4 mr-1" />
             {t("keybindings.clearFilter")}
           </Button>
-          <Button type="submit" form="keybindings-numeric-filter">
+          <Button type="submit" form="keybindings-numeric-filter" className="max-md:min-h-11">
             {t("keybindings.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * 操作＝キーの条件を足す・外す。キーは、選んだ操作に実際に割り当てられているキーの一覧から選ぶ
+ * （物理キーのないスマホ・マウスボタンでも選べる）。「キーを押して指定」でも選べる。
+ * 同じ操作の条件は置き換える。
+ */
+function BindFilterSection({
+  players,
+  binds,
+  onChange,
+  locale,
+}: {
+  players: Array<Partial<BoundKeyRow>>;
+  binds: string[];
+  onChange: (next: string[]) => void;
+  locale: Locale;
+}) {
+  const t = useT();
+  const id = useId();
+  const [action, setAction] = useState("");
+  const [keyCode, setKeyCode] = useState("");
+
+  const rows = useMemo(
+    () => players.map((p) => ({ keybindings: p.keybindings ?? [], customKeys: p.customKeys })),
+    [players],
+  );
+  const keyOptions = useMemo(
+    () => (action ? collectBoundKeys(t, rows, action, locale) : []),
+    [t, rows, action, locale],
+  );
+  const conditions = parseBindConditions(binds);
+
+  const add = () => {
+    if (!action || !keyCode) return;
+    onChange(upsertBindCondition(binds, { action, keyCode }));
+    setKeyCode("");
+  };
+
+  return (
+    <div role="group" aria-labelledby={`${id}-label`} className="space-y-2">
+      <Label id={`${id}-label`}>{t("keybindings.bindFilter")}</Label>
+      <p className="text-xs text-muted-foreground">{t("keybindings.bindFilterHint")}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Select
+          value={action}
+          onValueChange={(v) => {
+            setAction(v);
+            setKeyCode("");
+          }}
+        >
+          <SelectTrigger className="w-full max-md:min-h-11" aria-label={t("keybindings.bindFilterAction")}>
+            <SelectValue placeholder={t("keybindings.bindFilterActionPlaceholder")} />
+          </SelectTrigger>
+          <SelectContent>
+            {BIND_FILTER_ACTIONS.map((a) => (
+              <SelectItem key={a} value={a} className="max-md:min-h-11">
+                {getActionLabel(t, a)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={keyCode} onValueChange={setKeyCode} disabled={!action}>
+          <SelectTrigger className="w-full max-md:min-h-11" aria-label={t("keybindings.bindFilterKey")}>
+            <SelectValue placeholder={t("keybindings.bindFilterKeyPlaceholder")} />
+          </SelectTrigger>
+          <SelectContent>
+            {keyOptions.length === 0 ? (
+              <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                {t("keybindings.bindFilterNoKeys")}
+              </p>
+            ) : (
+              keyOptions.map((k) => (
+                <SelectItem key={k.keyCode} value={k.keyCode} className="max-md:min-h-11">
+                  {k.label}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <KeyCaptureButton
+          value={keyCode}
+          placeholder={t("keybindings.bindFilterCapture")}
+          keyboardLayout={null}
+          // Tab はキーの取り込み部品へフォーカスが移る途中で押されるので取り込まない（共有部品は変えない）
+          onCapture={(code) => {
+            if (code !== "Tab") setKeyCode(code);
+          }}
+          className="max-md:min-h-11"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={add}
+          disabled={!action || !keyCode}
+          className="max-md:min-h-11"
+        >
+          <Plus aria-hidden />
+          {t("keybindings.bindFilterAdd")}
+        </Button>
+      </div>
+      {conditions.length > 0 && (
+        <ul className="space-y-1">
+          {conditions.map((c) => (
+            <li
+              key={c.action}
+              className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 py-0.5 pl-3 text-sm"
+            >
+              <span className="min-w-0 truncate font-mono">{bindConditionLabel(t, c)}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 max-md:size-11"
+                onClick={() => onChange(binds.filter((b) => !b.startsWith(`${c.action}:`)))}
+                aria-label={t("keybindings.removeFilterChip", { label: bindConditionLabel(t, c) })}
+              >
+                <X aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -248,6 +438,7 @@ function FilterRange({
             value={min}
             onChange={(e) => onMin(e.target.value)}
             placeholder={t("keybindings.rangeMin")}
+            className="max-md:min-h-11"
           />
           {suffix && (
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
@@ -269,6 +460,7 @@ function FilterRange({
             value={max}
             onChange={(e) => onMax(e.target.value)}
             placeholder={t("keybindings.rangeMax")}
+            className="max-md:min-h-11"
           />
           {suffix && (
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">

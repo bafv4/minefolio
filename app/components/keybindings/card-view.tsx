@@ -8,7 +8,9 @@
 // そうでなければキーボードの下に置く。
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ArrowRight, WandSparkles } from "lucide-react";
+import { ArrowRight, Info, WandSparkles } from "lucide-react";
+import { HintTip } from "@/components/hint-tip";
+import { hasMouseSettings } from "@/lib/keybindings-filter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -62,8 +64,19 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
   return (
     <div className="flex flex-col gap-4">
       {hasTypedRemaps && (
-        <div className="flex justify-end">
-          <RemapViewToggle value={remapView} onChange={setRemapView} />
+        <div className="flex items-center justify-end gap-1">
+          {/* 何を切り替えるのかの説明（フォーカス・タップで開く） */}
+          <HintTip
+            message={t("keybindings.remapViewHint")}
+            className="text-muted-foreground max-md:min-h-11 max-md:min-w-11 max-md:justify-center"
+          >
+            <Info className="size-4" aria-hidden />
+          </HintTip>
+          <RemapViewToggle
+            value={remapView}
+            onChange={setRemapView}
+            buttonClassName="max-md:min-h-11 max-md:px-4"
+          />
         </div>
       )}
       {shown.map((player, index) => (
@@ -162,7 +175,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   return (
     <Card
       ref={cardRef}
-      className="flex flex-col gap-3 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_520px]"
+      className="flex flex-col gap-3 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_400px] md:[contain-intrinsic-size:auto_700px]"
     >
       <CardHeader className="px-5">
         <div className="flex items-center gap-2 min-w-0">
@@ -224,20 +237,28 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
             </KeyboardScaledPreview>
           </div>
         ) : (
-          <div aria-hidden className="h-[300px] rounded-lg bg-muted/30 animate-pulse" />
+          // 高さは実寸（カード約 400px〜700px のうちプレビュー部分）に近づけ、描画されたときに跳ねないようにする
+          <div aria-hidden className="h-[250px] rounded-lg bg-muted/30 animate-pulse md:h-[550px]" />
         )}
 
         {/* マウス要約 + リマップ/カスタムアクション件数 */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-          <MouseStat label="DPI">
-            <DpiCell config={player.playerConfig} />
-          </MouseStat>
-          <MouseStat label={t("keybindings.inGameSensitivityRange")}>
-            <SensitivityCell config={player.playerConfig} />
-          </MouseStat>
-          <MouseStat label={t("keybindings.turnDistanceRange")}>
-            <Cm360Cell config={player.playerConfig} />
-          </MouseStat>
+          {hasMouseSettings(player.playerConfig) ? (
+            <>
+              <MouseStat label="DPI">
+                <DpiCell config={player.playerConfig} />
+              </MouseStat>
+              <MouseStat label={t("keybindings.inGameSensitivityRange")}>
+                <SensitivityCell config={player.playerConfig} />
+              </MouseStat>
+              <MouseStat label={t("keybindings.turnDistanceRange")}>
+                <Cm360Cell config={player.playerConfig} />
+              </MouseStat>
+            </>
+          ) : (
+            // 未設定が 3 つ並ばないよう、1 つにまとめる
+            <span className="text-xs text-muted-foreground">{t("keybindings.noMouseSettings")}</span>
+          )}
           {remapCount > 0 && (
             <Badge variant="secondary" className="gap-1 text-xs">
               <ArrowRight className="h-3 w-3" />

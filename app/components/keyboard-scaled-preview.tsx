@@ -21,6 +21,7 @@ const FALLBACK_ASPECT = 0.34;
 /**
  * 実寸の中身（キーボード等）をラッパー幅に合わせて縮小表示し、タップで全画面 Dialog に実寸表示する。
  * 縮小レイヤーは inert（中のボタンを操作・フォーカス対象から外す）で、その上に重ねた1つの button が開閉を受ける。
+ * 縮小していない（scale が 1）ときは、拡大の印・ボタン・inert を出さず、ツールチップが効く通常の表示にする。
  * 計測前は縮小レイヤーを visibility:hidden にし、高さは幅×仮の縦横比で確保する（実寸が一瞬出るのを避ける）。
  */
 export function KeyboardScaledPreview({
@@ -53,8 +54,21 @@ export function KeyboardScaledPreview({
     const ro = new ResizeObserver(measure);
     ro.observe(wrapper);
     ro.observe(content);
-    return () => ro.disconnect();
+    // content-visibility:auto の祖先は、画面外では描画（レイアウト）が省かれ、ResizeObserver も届かない。
+    // 幅が変わった後に画面へ入ったときに測り直せるよう、交差の変化でも再計測する。
+    // ウィンドウの幅変更も直接拾う（監視対象のサイズ変化が通知されない経路の保険）
+    const io = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(measure);
+    io?.observe(wrapper);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      io?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
+
+  // 縮小しているときだけ、拡大の操作（ボタン・印）を出して中身を inert にする
+  const scaled = measured == null || measured.scale < 1;
 
   // Dialog で全体を包み、重ねたボタンを DialogTrigger にする（Radix は閉じたときに trigger へフォーカスを戻すため、
   // trigger が無いとフォーカスが body に落ちる）
@@ -67,7 +81,7 @@ export function KeyboardScaledPreview({
       >
         <div
           ref={contentRef}
-          inert
+          inert={scaled}
           className="w-max origin-top-left"
           style={{
             transform: measured ? `scale(${measured.scale})` : undefined,
@@ -76,23 +90,27 @@ export function KeyboardScaledPreview({
         >
           {children}
         </div>
-        <DialogTrigger asChild>
-          <button
-            type="button"
-            aria-label={expandLabel ?? t("keyboardView.expandPreview")}
-            className="absolute inset-0 cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </DialogTrigger>
-        {/* 拡大できることを示す装飾チップ（クリックは下のボタンに通す） */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
-        >
-          <Maximize2 className="h-3 w-3" />
-          {t("keyboardView.expandChip")}
-        </span>
+        {scaled && (
+          <>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                aria-label={expandLabel ?? t("keyboardView.expandPreview")}
+                className="absolute inset-0 cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </DialogTrigger>
+            {/* 拡大できることを示す装飾チップ（クリックは下のボタンに通す） */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
+            >
+              <Maximize2 className="h-3 w-3" />
+              {t("keyboardView.expandChip")}
+            </span>
+          </>
+        )}
       </div>
-      {open && (
+      {open && scaled && (
         <DialogContent className="h-[calc(100dvh-2rem)] max-w-[calc(100%-1rem)] grid-rows-[auto_1fr] overflow-auto p-4 sm:max-w-[calc(100%-2rem)]">
           <DialogTitle className="text-sm">{dialogTitle}</DialogTitle>
           <div className="min-h-0 overflow-auto" style={{ touchAction: "pan-x pan-y pinch-zoom" }}>

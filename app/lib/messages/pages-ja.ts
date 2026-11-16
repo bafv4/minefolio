@@ -748,7 +748,7 @@ export const PAGES_JA = {
     mouseTab: "マウス",
     numericFilter: "数値フィルタ",
     inGameSensitivityRange: "ゲーム内感度 (%)",
-    turnDistanceRange: "振り向き (cm/180)",
+    turnDistanceRange: "振り向き (cm/180°)",
     clearFilter: "フィルタをクリア",
     customMultiplier: "カスタム係数",
     sensitivityOutOfRange:
@@ -768,13 +768,13 @@ export const PAGES_JA = {
     countText: "{count}人の{suffix}",
     hotbarColumn: "ホットバー",
     noPlayers: "該当する走者がいません",
-    filter: "フィルター",
-    filterDescription: "ユーザーや数値範囲で表示する走者を絞り込みます",
+    filter: "フィルタ",
+    filterDescription: "走者の指定・操作とキー・数値範囲で、表示する走者を絞り込みます",
     apply: "適用",
-    userFilter: "ユーザーで絞り込み",
-    userFilterSearch: "ユーザーを検索...",
+    userFilter: "走者で絞り込み",
+    userFilterSearch: "走者を検索...",
     userFilterSelected: "{count}人を表示中",
-    userFilterActive: "表示中のユーザー:",
+    userFilterActive: "表示中の走者:",
     /** ビュー切替タブ（components/keybindings/view-switcher.tsx） */
     viewSwitcher: "ビュー切替",
     viewTable: "表",
@@ -805,6 +805,42 @@ export const PAGES_JA = {
     rangeMaxOf: "{label}の最大",
     /** 表のアクセシブルネーム（タブ名と組にして使う） */
     tableLabel: "操作設定の表: {tab}",
+    /** フィルター: 操作＝キーの絞り込み（例: ダッシュ = 左Ctrl）。チップは「{action} = {key}」 */
+    bindFilter: "操作とキーで絞り込み",
+    bindFilterHint: "選んだ操作に、選んだキーを割り当てている走者だけを表示します。複数の条件はすべて満たす走者が対象です。",
+    bindFilterAction: "操作",
+    bindFilterKey: "キー",
+    bindFilterKeyPlaceholder: "キーを選ぶ",
+    bindFilterActionPlaceholder: "操作を選ぶ",
+    bindFilterCapture: "キーを押して指定",
+    bindFilterAdd: "条件を追加",
+    bindFilterChip: "{action} = {key}",
+    bindFilterNoKeys: "この操作にキーを割り当てている走者がいません",
+    /** 空のセルの印（見える「-」は aria-hidden にして、読み上げはこの文言） */
+    unassigned: "未割り当て",
+    notSet: "未設定",
+    noneValue: "なし",
+    /** ビジュアルカードの要約: マウス設定がまったく無いとき */
+    noMouseSettings: "マウス設定なし",
+    /** ビジュアルの Trigger / Chat 切替の説明 */
+    remapViewHint:
+      "キーボードに重ねて表示するリマップの種類を切り替えます。Trigger はゲーム操作用、Chat はチャット・サーチクラフトの文字入力用です。",
+    /** 表の見出しの説明（意味の説明が要るものだけ） */
+    hintTurnDistance:
+      "視点を 180° 回すのに必要なマウスの移動距離です。DPI・ゲーム内感度・Raw Input・Windows のポインター速度から計算します。",
+    hintCursorSpeed:
+      "DPI に Windows のポインター速度の乗数をかけた、カーソルの実効 DPI です。",
+    hintWinSens:
+      "Windows のポインター速度の設定（1〜20）と、その乗数です。",
+    hintRawInput:
+      "ゲームがマウスの生の入力を直接読む設定です。ON のときは Windows のポインター設定の影響を受けません。",
+    hintMouseAccel: "Windows の「ポインターの精度を高める」（マウス加速）の設定です。",
+    /** 列幅のリサイズ取っ手 */
+    resizeColumn: "列幅（左右キーで変更、Enter で既定に戻す）",
+    resizeColumnReset: "ダブルクリックで既定の幅に戻す",
+    /** 数値フィルタの注記 */
+    numericFilterNote:
+      "数値で絞ると、マウス設定がある走者に絞られます（キー配置のタブにも効きます）。",
   },
   keybindingsStats: {
     title: "操作設定統計",
@@ -816,6 +852,13 @@ export const PAGES_JA = {
     publicProfiles: "公開プロフィール",
     publicProfilesNote: "公開設定の走者すべて",
     emptyDialog: "該当する走者はいません",
+    openInTable: "この{count}人を表で見る",
+    unassigned: "未割り当て",
+    rowAria: "{rank}位、{label}、{count}人、{percent}%、走者を見る",
+    rangeRowAria: "{label}、{count}人、{percent}%、走者を見る",
+    dialogDescription: "{count}人の走者。選ぶとプロフィールへ移動します",
+    scopeNote: "統計は公開走者の全員が対象です（一覧の絞り込みは効きません）",
+    barNote: "棒の長さは人数の割合です（区分の幅は同じではありません）",
     keybindingsRegistered: "キー配置の登録者",
     keybindingsRegisteredNote: "現在の設定にキー割り当てがある公開走者",
     mouseRegistered: "マウス設定の登録者",

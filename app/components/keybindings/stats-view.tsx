@@ -1,18 +1,20 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { parseAsStringEnum, useQueryState } from "nuqs";
-import { Keyboard, Mouse, Users, TrendingUp } from "lucide-react";
+import { Keyboard, Mouse, Users, TrendingUp, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getKeyLabel } from "@/lib/keybindings";
+import { getKeyLabel, isUnbound } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MOUSE_KEY_BADGE_CLASS } from "@/components/keybindings/keybindings-cells";
@@ -20,6 +22,13 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 // 値は非 .server モジュールから取る（.server はクライアントバンドルに入れられない）
 import { UNASSIGNED_INPUT_KEY } from "@/lib/keybindings-stats-shared";
+import {
+  buildKeybindingsTableHref,
+  MAX_USERS_IN_LINK,
+  tabForAction,
+  type BindCondition,
+  type Tab,
+} from "@/lib/keybindings-search-params";
 import type {
   KeybindingStats,
   F3RemapStats,
@@ -31,6 +40,13 @@ import type {
 interface StatsViewProps {
   data: KeybindingsStatsData;
 }
+
+/**
+ * 走者一覧ダイアログから開く表の行き先。tab はその操作が載っているタブ。
+ * bind は、人数が多くて users を URL に載せられないときの代わり（その操作＝そのキーの走者を表で絞り込む）
+ */
+type TableTarget = { tab: Tab; bind?: BindCondition };
+type PlayerClickHandler = (title: string, players: PlayerInfo[], target?: TableTarget) => void;
 
 /** 統計ビュー内のサブタブ（URL の statsTab）。表の `tab` とは別名にする（ビュー切替リンクが tab を引き継ぐため） */
 const STATS_TABS = ["keyboard", "mouse"] as const;
@@ -56,12 +72,28 @@ export function StatsView({ data }: StatsViewProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTitle, setDialogTitle] = useState("");
   const [dialogPlayers, setDialogPlayers] = useState<PlayerInfo[]>([]);
+  const [dialogTarget, setDialogTarget] = useState<TableTarget | undefined>();
 
-  const openPlayersDialog = (title: string, players: PlayerInfo[]) => {
+  const openPlayersDialog: PlayerClickHandler = (title, players, target) => {
     setDialogTitle(title);
     setDialogPlayers(players);
+    setDialogTarget(target);
     setDialogOpen(true);
   };
+
+  // この一覧の走者を表で見るリンク。users にスラッグを載せるのは MAX_USERS_IN_LINK 人まで
+  // （それ以上は URL が長くなりすぎるため）。超えたときは操作＝キーの条件があればそれで代える
+  const tableHref =
+    dialogTarget && dialogPlayers.length > 0
+      ? dialogPlayers.length <= MAX_USERS_IN_LINK
+        ? buildKeybindingsTableHref({
+            tab: dialogTarget.tab,
+            users: dialogPlayers.map((p) => p.slug),
+          })
+        : dialogTarget.bind
+          ? buildKeybindingsTableHref({ tab: dialogTarget.tab, bind: [dialogTarget.bind] })
+          : null
+      : null;
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
@@ -96,6 +128,7 @@ export function StatsView({ data }: StatsViewProps) {
             value={publicProfiles}
           />
         </dl>
+        <p className="mt-2 text-xs text-muted-foreground">{t("keybindingsStats.scopeNote")}</p>
       </section>
 
       {/* タブ（選択は URL に残す） */}
@@ -146,6 +179,8 @@ export function StatsView({ data }: StatsViewProps) {
                   ? ` / ${t("keybindingsStats.median", { value: dpiStats.median })}`
                   : "")
               }
+              // DPI の区分は幅がそろっていない。棒の長さは人数の割合であることを添える
+              note={t("keybindingsStats.barNote")}
               ranges={dpiStats.ranges}
               dialogTitle={(label) => t("keybindingsStats.dialogDpi", { label })}
               onPlayerClick={openPlayersDialog}
@@ -209,13 +244,21 @@ export function StatsView({ data }: StatsViewProps) {
                       type="button"
                       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
                       disabled={count === 0}
+                      aria-label={t("keybindingsStats.rangeRowAria", {
+                        label: on ? "Raw Input ON" : "Raw Input OFF",
+                        count,
+                        percent: percentage.toFixed(1),
+                      })}
                       onClick={() =>
-                        openPlayersDialog(on ? "Raw Input ON" : "Raw Input OFF", players)
+                        openPlayersDialog(on ? "Raw Input ON" : "Raw Input OFF", players, {
+                          tab: "mouse",
+                        })
                       }
                     >
                       <div className="flex justify-between text-sm">
                         <span className="flex items-center gap-2">
-                          <Badge variant={on ? "default" : "secondary"}>{on ? "ON" : "OFF"}</Badge>
+                          {/* ON / OFF はどちらも同じ見た目（設定値に優劣の色を付けない） */}
+                          <Badge variant="secondary">{on ? "ON" : "OFF"}</Badge>
                         </span>
                         <span className="text-muted-foreground">
                           {count}
@@ -237,7 +280,18 @@ export function StatsView({ data }: StatsViewProps) {
         <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription>
+              {t("keybindingsStats.dialogDescription", { count: dialogPlayers.length })}
+            </DialogDescription>
           </DialogHeader>
+          {tableHref && (
+            <Button asChild variant="outline" size="sm" className="self-start max-md:min-h-11">
+              <Link to={tableHref} onClick={() => setDialogOpen(false)}>
+                <Table2 aria-hidden />
+                {t("keybindingsStats.openInTable", { count: dialogPlayers.length })}
+              </Link>
+            </Button>
+          )}
           <div className="overflow-y-auto flex-1 -mx-6 px-6">
             <div className="space-y-2">
               {dialogPlayers.map((player) => (
@@ -348,7 +402,7 @@ function RangeDistribution({
   note?: string;
   ranges: RangeStatWithPlayers[];
   dialogTitle: (label: string) => string;
-  onPlayerClick: (title: string, players: PlayerInfo[]) => void;
+  onPlayerClick: PlayerClickHandler;
 }) {
   const t = useT();
   return (
@@ -366,7 +420,14 @@ function RangeDistribution({
             type="button"
             className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
             disabled={range.count === 0}
-            onClick={() => onPlayerClick(dialogTitle(range.label), range.players)}
+            aria-label={t("keybindingsStats.rangeRowAria", {
+              label: range.label,
+              count: range.count,
+              percent: range.percentage.toFixed(1),
+            })}
+            onClick={() =>
+              onPlayerClick(dialogTitle(range.label), range.players, { tab: "mouse" })
+            }
           >
             <div className="flex justify-between text-sm">
               <span>{range.label}</span>
@@ -385,12 +446,20 @@ function RangeDistribution({
   );
 }
 
+/** キーの統計 1 行から、その操作が載っている表のタブと、操作＝キーの条件を作る */
+function keyTarget(action: string, keyCode: string): TableTarget | undefined {
+  const tab = tabForAction(action);
+  if (!tab) return undefined;
+  // 未割り当ての走者群は「そのキー」では絞り込めない（bind は割り当てのあるキーだけを比べる）
+  return isUnbound(keyCode) ? { tab } : { tab, bind: { action, keyCode } };
+}
+
 function KeybindingStatCard({
   stat,
   onPlayerClick,
 }: {
   stat: KeybindingStats;
-  onPlayerClick: (title: string, players: PlayerInfo[]) => void;
+  onPlayerClick: PlayerClickHandler;
 }) {
   const t = useT();
   const title = t(stat.labelKey);
@@ -412,7 +481,10 @@ function KeybindingStatCard({
     >
       <div className="space-y-2">
         {stat.topKeys.map((key, index) => {
-          const label = getKeyLabel(t, key.keyCode);
+          // 未割り当て（不使用）は「-」というキーではなく「未割り当て」として出す（F3 欄の未設定と同じ扱い）
+          const label = isUnbound(key.keyCode)
+            ? t("keybindingsStats.unassigned")
+            : getKeyLabel(t, key.keyCode);
           return (
             <StatRow
               key={key.keyCode}
@@ -421,7 +493,9 @@ function KeybindingStatCard({
               isMouse={isMouseKey(key.keyCode)}
               count={key.count}
               percentage={key.percentage}
-              onClick={() => onPlayerClick(`${title}: ${label}`, key.players)}
+              onClick={() =>
+                onPlayerClick(`${title}: ${label}`, key.players, keyTarget(stat.action, key.keyCode))
+              }
             />
           );
         })}
@@ -435,7 +509,7 @@ function F3RemapStatCard({
   onPlayerClick,
 }: {
   stat: F3RemapStats;
-  onPlayerClick: (title: string, players: PlayerInfo[]) => void;
+  onPlayerClick: PlayerClickHandler;
 }) {
   const t = useT();
   if (stat.totalCount === 0) {
@@ -459,7 +533,7 @@ function F3RemapStatCard({
           // 集計側は未設定行を内部キーでまとめている。表示時に訳へ差し替える
           const label =
             target.targetKey === UNASSIGNED_INPUT_KEY
-              ? t("meKeybindings.unassigned")
+              ? t("keybindingsStats.unassigned")
               : getKeyLabel(t, target.targetKey);
           const dialogTitle =
             target.targetKey === "F3"
@@ -473,7 +547,14 @@ function F3RemapStatCard({
               isMouse={isMouseKey(target.targetKey)}
               count={target.count}
               percentage={target.percentage}
-              onClick={() => onPlayerClick(dialogTitle, target.players)}
+              onClick={() =>
+                onPlayerClick(
+                  dialogTitle,
+                  target.players,
+                  // F3 のままの走者はリマップ行を持たず、表のリマップタブに出ないのでリンクしない
+                  target.targetKey === "F3" ? undefined : { tab: "remaps" },
+                )
+              }
             />
           );
         })}
@@ -507,6 +588,13 @@ function StatRow({
     <button
       type="button"
       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+      // 子の「5.」「キー名」「2人 (1%)」がつながって「5.21人」と読まれないよう、まとまった文にする
+      aria-label={t("keybindingsStats.rowAria", {
+        rank: index + 1,
+        label,
+        count,
+        percent: percentage.toFixed(0),
+      })}
       onClick={onClick}
     >
       <div className="flex items-center justify-between gap-2">

@@ -6,14 +6,23 @@ import {
   keybindingsParsers,
   parseSort,
   formatSort,
+  parseBindConditions,
+  upsertBindCondition,
+  formatBindCondition,
+  type BindCondition,
   type Tab,
 } from "@/lib/keybindings-search-params";
+import { rowMatchesBind, type BoundKeyRow } from "@/lib/keybindings-filter";
 import { calculateCm360, toSensitivityPercent } from "@/lib/mouse-settings";
 
 /** プレイヤー型（applyToPlayers が読み取る最小集合） */
 export type FilterablePlayer = {
   slug: string;
+  /** 操作＝キーの絞り込み用。持たない行（キー配置の無い走者）は条件を満たさない */
+  keybindings?: BoundKeyRow["keybindings"];
+  customKeys?: BoundKeyRow["customKeys"];
   playerConfig?: {
+    keyboardLayout?: string | null;
     mouseDpi: number | null;
     gameSensitivity: number | null;
     rawInput: boolean | null;
@@ -51,6 +60,15 @@ export function useKeybindingsFilters() {
   };
   const clearUsers = () => setUsers([]);
 
+  // 操作＝キーの絞り込み（"action:keyCode"）。同じ操作の条件は置き換える。
+  const bindConditions = useMemo(() => parseBindConditions(params.bind), [params.bind]);
+  const setBindConditions = (conds: BindCondition[]) =>
+    setParams({ bind: conds.length > 0 ? conds.map(formatBindCondition) : null });
+  const addBindCondition = (cond: BindCondition) =>
+    setParams({ bind: upsertBindCondition(params.bind, cond) });
+  const removeBindCondition = (action: string) =>
+    setBindConditions(bindConditions.filter((c) => c.action !== action));
+
   /**
    * 表示に効いているフィルタ（数値範囲 + ユーザー絞り込み）を一括解除する。
    * 0件の空状態からの復帰用。ソート・タブは表示件数に影響しないので残す。
@@ -64,6 +82,7 @@ export function useKeybindingsFilters() {
       cm360Min: null,
       cm360Max: null,
       users: null,
+      bind: null,
     });
 
   const activeFilterCount = useMemo(() => {
@@ -71,8 +90,10 @@ export function useKeybindingsFilters() {
     if (params.dpiMin != null || params.dpiMax != null) count += 1;
     if (params.sensMin != null || params.sensMax != null) count += 1;
     if (params.cm360Min != null || params.cm360Max != null) count += 1;
+    count += bindConditions.length;
     return count;
   }, [
+    bindConditions,
     params.dpiMin,
     params.dpiMax,
     params.sensMin,
@@ -102,6 +123,16 @@ export function useKeybindingsFilters() {
     if (users.length > 0) {
       const set = new Set(users);
       players = players.filter((p) => set.has(p.slug));
+    }
+
+    // 操作＝キーの絞り込み（全条件を満たす走者のみ）
+    if (bindConditions.length > 0) {
+      players = players.filter((p) =>
+        rowMatchesBind(
+          { keybindings: p.keybindings ?? [], customKeys: p.customKeys, playerConfig: p.playerConfig },
+          bindConditions,
+        ),
+      );
     }
 
     const hasMouseFilter =
@@ -144,7 +175,7 @@ export function useKeybindingsFilters() {
       if (cm360Max != null && (cm360 == null || cm360 > cm360Max)) return false;
       return true;
     });
-  }, [params]);
+  }, [params, bindConditions]);
 
   /** 表示件数に効くフィルタが1つでも有効か（空状態の文言・クリア導線の出し分け用） */
   const hasActiveFilters = activeFilterCount > 0 || params.users.length > 0;
@@ -158,6 +189,9 @@ export function useKeybindingsFilters() {
     setUsers,
     toggleUser,
     clearUsers,
+    bindConditions,
+    addBindCondition,
+    removeBindCondition,
     clearFilters,
     activeFilterCount,
     hasActiveFilters,

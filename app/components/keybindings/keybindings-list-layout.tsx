@@ -22,9 +22,19 @@ import { sortKeybindingsRows } from "./keybindings-columns";
 import { UserFilterChips } from "./user-filter";
 import type { KeybindingsRow, PresetKey } from "./keybindings-columns";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
-import type { Tab } from "@/lib/keybindings-search-params";
-import { useT } from "@/hooks/use-locale";
+import { hasKeyBindings, hasKeyboardContent, hasMouseSettings } from "@/lib/keybindings-filter";
+import {
+  COMBAT_UI_ACTIONS,
+  HOTBAR_ACTIONS,
+  INVENTORY_ACTIONS,
+  MOVEMENT_ACTIONS,
+  type Tab,
+} from "@/lib/keybindings-search-params";
+import { useLocale, useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
+
+/** インベントリのタブに載る操作（ホットバー 1〜9 を含む） */
+const INVENTORY_TAB_ACTIONS: readonly string[] = [...INVENTORY_ACTIONS, ...HOTBAR_ACTIONS];
 
 /** ページ共通タイトル。h1 はビュー（表 / ビジュアル / 統計）の名前、説明文は共通 */
 export function KeybindingsPageTitle({ title }: { title?: string }) {
@@ -32,7 +42,7 @@ export function KeybindingsPageTitle({ title }: { title?: string }) {
   return (
     <div>
       <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Keyboard className="h-6 w-6" />
+        <Keyboard className="h-6 w-6" aria-hidden />
         {title ?? t("keybindings.title")}
       </h1>
       <p className="text-sm text-muted-foreground mt-1">
@@ -50,6 +60,7 @@ export function KeybindingsListLayout({
   mode: "table" | "visual";
 }) {
   const t = useT();
+  const locale = useLocale();
   const filters = useKeybindingsFilters();
   const tab = filters.params.tab;
   // ビュー切替（/keybindings ⇄ /visual ⇄ /stats）中は本体をスケルトンに差し替える
@@ -70,24 +81,32 @@ export function KeybindingsListLayout({
     [filteredPlayers],
   );
   const mousePlayersFiltered = useMemo(
-    () =>
-      filteredPlayers.filter((p) => {
-        const c = p.playerConfig;
-        return (
-          c != null &&
-          (c.mouseDpi != null ||
-            c.gameSensitivity != null ||
-            c.windowsSpeed != null ||
-            c.windowsSpeedMultiplier != null)
-        );
-      }),
+    () => filteredPlayers.filter((p) => hasMouseSettings(p.playerConfig)),
+    [filteredPlayers],
+  );
+  // キーのタブは、そのタブの列がすべて「未割り当て」の走者を載せない（マウスタブの「設定のある走者のみ」と同じ扱い）
+  const movementPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, MOVEMENT_ACTIONS)),
+    [filteredPlayers],
+  );
+  const inventoryPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, INVENTORY_TAB_ACTIONS)),
+    [filteredPlayers],
+  );
+  const combatUiPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, COMBAT_UI_ACTIONS)),
+    [filteredPlayers],
+  );
+  // ビジュアルは、キーボードに描くものが何も無い走者（空のカードになる）を載せない
+  const visualBase = useMemo(
+    () => filteredPlayers.filter(hasKeyboardContent),
     [filteredPlayers],
   );
 
   const rowsByTab: Record<Tab, KeybindingsRow[]> = {
-    movement: filteredPlayers,
-    inventory: filteredPlayers,
-    "combat-ui": filteredPlayers,
+    movement: movementPlayers,
+    inventory: inventoryPlayers,
+    "combat-ui": combatUiPlayers,
     remaps: remapsPlayers,
     "custom-actions": customActionsPlayersFiltered,
     mouse: mousePlayersFiltered,
@@ -96,12 +115,11 @@ export function KeybindingsListLayout({
   // ビジュアルは表と同じ並べ替え（URL の sort）で並べる
   const { sort } = filters;
   const visualPlayers = useMemo(
-    () => sortKeybindingsRows(filteredPlayers, sort),
-    [filteredPlayers, sort],
+    () => sortKeybindingsRows(visualBase, sort, t, locale),
+    [visualBase, sort, t, locale],
   );
   // 件数は、いま見えている表の行数（タブごとに母集団が違う）。ビジュアルは絞り込み後の全走者
-  const visibleCount =
-    mode === "visual" ? filteredPlayers.length : rowsByTab[tab].length;
+  const visibleCount = mode === "visual" ? visualBase.length : rowsByTab[tab].length;
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
@@ -114,7 +132,8 @@ export function KeybindingsListLayout({
         <ViewSwitcher
           actions={
             <>
-              <span className="text-sm text-muted-foreground tabular-nums">
+              {/* 件数の変化を読み上げる（aria-live は描画済みの領域の変化だけを読むので、初回表示では読まれない） */}
+              <span className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
                 {t("keybindings.countText", {
                   count: visibleCount,
                   suffix: t("keybindings.countSuffix"),
