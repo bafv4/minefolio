@@ -2135,6 +2135,10 @@ export const PAGES_JA = {
     title: "ガイド - Minefolio",
     pageTitle: "ガイド",
     pageDesc: "攻略法や設定のガイドを作成・公開できます",
+    /** 公式ガイド「ガイドのガイド」へのリンク（マイガイドの説明の隣・エディタのツールバー） */
+    writingGuide: "書き方の手引き",
+    /** 新しいタブで開くリンクに sr-only で添える文 */
+    opensInNewTab: "（新しいタブで開きます）",
     tabGuides: "ガイド",
     tabTemplates: "サーチクラフトテンプレート",
     newGuide: "新規作成",
@@ -2401,7 +2405,8 @@ export const PAGES_JA = {
     slugPlaceholder: "例: fastest-any-rsg",
     slugHint: "ガイドの公開URLになります。半角英小文字・数字・「-」「_」が使えます。変更すると以前のURLは無効になります。",
     tagPlaceholder: "タグを追加 (Enter)",
-    contentPlaceholder: "Markdownで記述してください...\n\n# 見出し\n\n本文をここに書きます。",
+    /** 空の本文の案内（エディタの最初の段落に出る1行） */
+    contentPlaceholder: "本文を書く。/ でブロックや埋め込みを挿入",
     preview: "プレビュー",
     edit: "編集",
     bold: "太字",

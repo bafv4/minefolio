@@ -2204,6 +2204,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Guides - Minefolio",
     pageTitle: "Guides",
     pageDesc: "Write and publish strategy and setup guides",
+    writingGuide: "How to write a guide",
+    opensInNewTab: " (opens in a new tab)",
     tabGuides: "Guides",
     tabTemplates: "Search-craft templates",
     newGuide: "New guide",
@@ -2453,8 +2455,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     slugHint:
       "This becomes the public URL of your guide. Lowercase letters, numbers, \"-\", and \"_\" are allowed. Changing it invalidates the old URL.",
     tagPlaceholder: "Add a tag (Enter)",
-    contentPlaceholder:
-      "Write in Markdown…\n\n# Heading\n\nYour content goes here.",
+    contentPlaceholder: "Start writing. Type / to insert blocks and embeds",
     preview: "Preview",
     edit: "Edit",
     bold: "Bold",

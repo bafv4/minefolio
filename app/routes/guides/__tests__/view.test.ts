@@ -313,3 +313,89 @@ describe("自動翻訳の表示切替", () => {
     expect(guide.sanitizedContent).toContain(DRAFT_SECRET);
   });
 });
+
+describe("本文の先頭のタイトルの見出しを出さない", () => {
+  async function seedTitled(content: string, draft?: { title: string; content: string }) {
+    const author = await seedUser(db, {
+      slug: "author",
+      discordId: "discord-author",
+      displayName: "Author",
+      profileVisibility: "public",
+    });
+    await seedGuide(db, author.id, {
+      slug: "titled",
+      title: "ウクライナ語サーチクラフト",
+      content,
+      isPublished: true,
+      ...(draft
+        ? { draftTitle: draft.title, draftContent: draft.content, draftUpdatedAt: new Date() }
+        : {}),
+    });
+  }
+
+  it("タイトルと同じ文の先頭の見出しは本文にも目次にも出さない", async () => {
+    await seedTitled("<h1>ウクライナ語サーチクラフト</h1><h2>特徴</h2><p>本文</p>");
+    const data = await callLoader("author", "titled");
+    const guide = data.guide as Record<string, unknown>;
+    expect(guide.sanitizedContent).not.toContain("ウクライナ語サーチクラフト");
+    expect(guide.sanitizedContent).toContain("特徴");
+    expect((data.toc as { text: string }[]).map((i) => i.text)).toEqual(["特徴"]);
+  });
+
+  it("言い換えた見出しは残す", async () => {
+    await seedTitled("<h1>ウクライナ語のサーチ</h1><p>本文</p>");
+    const data = await callLoader("author", "titled");
+    expect((data.guide as Record<string, unknown>).sanitizedContent).toContain("ウクライナ語のサーチ");
+  });
+
+  it("下書きのプレビューでは、下書きのタイトルと下書きの本文で比べる", async () => {
+    await seedTitled("<p>公開版</p>", { title: "下書きの題", content: "<h1>下書きの題</h1><p>下書き本文</p>" });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "discord-author" } });
+    const data = await callLoader("author", "titled", "?draft=1");
+    const guide = data.guide as Record<string, unknown>;
+    expect(data.previewingDraft).toBe(true);
+    expect(guide.sanitizedContent).not.toContain("下書きの題");
+    expect(guide.sanitizedContent).toContain("下書き本文");
+  });
+
+  it("訳文で、訳文のタイトルと訳文の先頭の見出しが一致すれば出さない", async () => {
+    await seedTitled("<h1>別の見出し</h1><p>本文</p>");
+    translationMocks.getGuideTranslation.mockResolvedValue({
+      title: "Ukrainian search crafting",
+      summary: null,
+      content: "<h1>Ukrainian search crafting</h1><p>BODY</p>",
+      sourceLocale: "ja",
+    });
+    const data = await callLoader("author", "titled");
+    const guide = data.guide as Record<string, unknown>;
+    expect(guide.sanitizedContent).not.toContain("Ukrainian search crafting");
+    expect(guide.sanitizedContent).toContain("BODY");
+  });
+
+  it("訳文で訳が食い違っても、原文のタイトルと先頭の見出しが一致していれば訳文の先頭の見出しを出さない", async () => {
+    await seedTitled("<h1>ウクライナ語サーチクラフト</h1><p>本文</p>");
+    translationMocks.getGuideTranslation.mockResolvedValue({
+      title: "Ukrainian Search Crafting",
+      summary: null,
+      content: "<h1>Search crafting in Ukrainian</h1><p>BODY</p>",
+      sourceLocale: "ja",
+    });
+    const data = await callLoader("author", "titled");
+    const guide = data.guide as Record<string, unknown>;
+    expect(guide.title).toBe("Ukrainian Search Crafting");
+    expect(guide.sanitizedContent).not.toContain("Search crafting in Ukrainian");
+    expect(data.toc).toEqual([]);
+  });
+
+  it("訳文で、原文の先頭の見出しがタイトルと違えば訳文の見出しは残す", async () => {
+    await seedTitled("<h1>はじめに</h1><p>本文</p>");
+    translationMocks.getGuideTranslation.mockResolvedValue({
+      title: "Ukrainian Search Crafting",
+      summary: null,
+      content: "<h1>Introduction</h1><p>BODY</p>",
+      sourceLocale: "ja",
+    });
+    const data = await callLoader("author", "titled");
+    expect((data.guide as Record<string, unknown>).sanitizedContent).toContain("Introduction");
+  });
+});

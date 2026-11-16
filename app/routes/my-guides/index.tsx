@@ -16,8 +16,9 @@ import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
 import { cn } from "@/lib/utils";
+import { GUIDE_WRITING_GUIDE_PATH } from "@/lib/official-guides";
 import { deleteGuide } from "@/lib/content-cleanup.server";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -36,7 +37,7 @@ import { MyContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
-import { BookOpen, Plus, Pencil, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
+import { BookOpen, ExternalLink, Plus, Pencil, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -135,7 +136,21 @@ export default function MyGuidesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meGuides.pageTitle")}</h1>
-          <p className="text-muted-foreground text-sm">{t("meGuides.pageDesc")}</p>
+          <p className="text-muted-foreground text-sm">
+            {t("meGuides.pageDesc")}
+            {/* 書き方の手引き（公式ガイド）。新しいタブで開き、そのことを読み上げでも伝える。
+                押せる高さは負のマージン＋同じ量の padding で広げる（モバイル 44px、sm 以上 28px。行の高さは変えない） */}
+            <Link
+              to={GUIDE_WRITING_GUIDE_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 -my-3 inline-flex items-center gap-1 py-3 text-primary hover:underline sm:-my-1 sm:py-1"
+            >
+              {t("meGuides.writingGuide")}
+              <ExternalLink className="h-3 w-3" aria-hidden />
+              <span className="sr-only">{t("meGuides.opensInNewTab")}</span>
+            </Link>
+          </p>
         </div>
         <Button asChild>
           <Link to="/my-guides/new">
@@ -282,7 +297,9 @@ export default function MyGuidesPage() {
                           aria-label={t("meGuides.delete")}
                           title={t("meGuides.delete")}
                         >
+                          {/* 回すのはこのガイドの削除中だけ（ピン留めも同じ fetcher・同じ guideId で送るため） */}
                           {fetcher.state !== "idle" &&
+                          fetcher.formData?.get("_action") === "delete" &&
                           fetcher.formData?.get("guideId") === guide.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
@@ -300,6 +317,7 @@ export default function MyGuidesPage() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>{t("meGuides.cancel")}</AlertDialogCancel>
                           <AlertDialogAction
+                            className={buttonVariants({ variant: "destructive" })}
                             onClick={() => {
                               const formData = new FormData();
                               formData.set("_action", "delete");

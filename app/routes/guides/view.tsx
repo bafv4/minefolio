@@ -43,7 +43,12 @@ import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
 import { isGuideTableOverflowing, normalizeGuideTables } from "@/lib/guide-tables";
-import { annotateGuideCallouts, titleGuideYouTubeIframes } from "@/lib/guide-view-html";
+import {
+  annotateGuideCallouts,
+  leadingHeadingMatchesTitle,
+  removeLeadingHeading,
+  titleGuideYouTubeIframes,
+} from "@/lib/guide-view-html";
 import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import {
   extractEmbedRefs,
@@ -301,8 +306,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Sanitize HTML on the server（許可タグ・属性等は guide-sanitize.server.ts 参照）
   const sanitizedContent = sanitizeGuideHtml(displayContent);
 
+  // 本文の最初のブロックがタイトルと同じ文の見出しなら、表示しない（目次からも外す）。旧仕様の新規作成が本文を
+  // `<h1>タイトル</h1>` で始めていたため、ページのタイトルの h1 の直後に同じ文が重なって見える。保存データ・エディタは変えない。
+  // 訳文では、タイトルと本文の見出しが別々の文として訳されて食い違うことがあるので、原文の組で一致していれば
+  // 訳文の先頭の見出し（同じ見出しの訳）も外す。訳文の組そのものが一致する場合も外す
+  const stripTitleHeading =
+    leadingHeadingMatchesTitle(sanitizedContent, displayTitle) ||
+    (translated !== null &&
+      leadingHeadingMatchesTitle(sanitizeGuideHtml(viewContent), viewTitle));
+  const bodyContent = stripTitleHeading ? removeLeadingHeading(sanitizedContent) : sanitizedContent;
+
   // 列幅未指定の列が潰れないよう表の min-width を再計算する（guide-tables.ts 参照）
-  const normalizedContent = normalizeGuideTables(sanitizedContent);
+  const normalizedContent = normalizeGuideTables(bodyContent);
 
   // Wrap <table> in a scrollable container so wide tables scroll on mobile
   const wrappedContent = normalizedContent.replace(

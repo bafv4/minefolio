@@ -4,10 +4,13 @@ import { describe, it, expect } from "vitest";
 import {
   annotateGuideCallouts,
   htmlDepthDelta,
+  leadingHeadingMatchesTitle,
   parseGuideYouTubeEmbedUrl,
+  removeLeadingHeading,
   titleGuideYouTubeIframes,
 } from "../guide-view-html";
 import { sanitizeGuideHtml } from "../guide-sanitize.server";
+import { buildTableOfContents } from "../guide-toc";
 import { splitContentAtEmbeds } from "../../components/guide-embeds";
 
 const LABELS: Record<string, string> = { tip: "ヒント", info: "情報", warning: "警告", danger: "危険" };
@@ -152,5 +155,62 @@ describe("splitContentAtEmbeds の YouTube", () => {
       `${youtube(YT)}<div data-keybind-embed="" data-user-slug="runner1"></div><p>x</p>`,
     );
     expect(splitContentAtEmbeds(html).map((s) => s.type)).toEqual(["youtube", "keybind-embed", "html"]);
+  });
+});
+
+describe("leadingHeadingMatchesTitle / removeLeadingHeading", () => {
+  it("本文の先頭がタイトルと同じ文の h1 なら一致し、取り除くと次のブロックから始まる", () => {
+    const html = sanitizeGuideHtml("<h1>ウクライナ語サーチクラフト</h1><h2>1.特徴</h2><p>本文</p>");
+    expect(leadingHeadingMatchesTitle(html, "ウクライナ語サーチクラフト")).toBe(true);
+    expect(removeLeadingHeading(html)).toBe("<h2>1.特徴</h2><p>本文</p>");
+  });
+
+  it("前後の空白・全角と半角の空白の違い・インラインの装飾は無視して比べる", () => {
+    const html = sanitizeGuideHtml("<h1>  <strong>地下Blind</strong>　の対処法 </h1><p>x</p>");
+    expect(leadingHeadingMatchesTitle(html, "地下Blind の対処法")).toBe(true);
+    expect(leadingHeadingMatchesTitle(html, " 地下Blind　の対処法")).toBe(true);
+  });
+
+  it("文字参照を復号して比べる（タイトルの & や < も一致する）", () => {
+    const html = sanitizeGuideHtml("<h2>A &amp; B &lt;1.16&gt;</h2><p>x</p>");
+    expect(html.startsWith("<h2>A &amp; B &lt;1.16&gt;</h2>")).toBe(true);
+    expect(leadingHeadingMatchesTitle(html, "A & B <1.16>")).toBe(true);
+  });
+
+  it("言い換えた見出し・空白の有無が違う見出しは一致しない", () => {
+    const html = sanitizeGuideHtml("<h1>ハンガリー語サーチクラフト</h1><p>x</p>");
+    expect(leadingHeadingMatchesTitle(html, "Magyar(ハンガリー語)サーチクラフト")).toBe(false);
+    expect(leadingHeadingMatchesTitle(html, "ハンガリー語 サーチクラフト")).toBe(false);
+  });
+
+  it("最初のブロックが見出しでなければ一致せず、取り除かない（2番目以降の見出しは見ない）", () => {
+    const html = sanitizeGuideHtml("<p>はじめに</p><h1>タイトル</h1>");
+    expect(leadingHeadingMatchesTitle(html, "タイトル")).toBe(false);
+    expect(removeLeadingHeading(html)).toBe(html);
+  });
+
+  it("段組み・コールアウトの中の見出しは見ない", () => {
+    const columns = sanitizeGuideHtml(
+      '<div data-columns="2"><div data-column=""><h1>タイトル</h1><p>a</p></div><div data-column=""><p>b</p></div></div>',
+    );
+    expect(leadingHeadingMatchesTitle(columns, "タイトル")).toBe(false);
+    expect(removeLeadingHeading(columns)).toBe(columns);
+  });
+
+  it("タイトルか見出しが空なら一致しない", () => {
+    expect(leadingHeadingMatchesTitle(sanitizeGuideHtml("<h1></h1><p>x</p>"), "")).toBe(false);
+    expect(leadingHeadingMatchesTitle(sanitizeGuideHtml("<h1>a</h1>"), "   ")).toBe(false);
+  });
+
+  it("閉じていない見出しは見出しとして扱わない", () => {
+    expect(leadingHeadingMatchesTitle("<h1>タイトル<p>x</p>", "タイトル")).toBe(false);
+    expect(removeLeadingHeading("<h1>タイトル<p>x</p>")).toBe("<h1>タイトル<p>x</p>");
+  });
+
+  it("目次は取り除いた後の本文から作られ、タイトルの見出しを含まない", () => {
+    const html = removeLeadingHeading(sanitizeGuideHtml("<h1>T</h1><h1>節A</h1><h2>小節</h2>"));
+    const { toc } = buildTableOfContents(html);
+    expect(toc.map((i) => i.text)).toEqual(["節A", "小節"]);
+    expect(toc[0].id).toBe("heading-1");
   });
 });

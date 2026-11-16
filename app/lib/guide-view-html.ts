@@ -1,10 +1,11 @@
-// ガイド公開表示（/guides/:author/:slug）の本文 HTML に、サニタイズ後に施す a11y の変換と、
-// 本文中の YouTube 埋め込みを読むための補助。クライアント/サーバー共用の純粋関数
+// ガイド公開表示（/guides/:author/:slug）の本文 HTML に、サニタイズ後に施す変換（先頭のタイトルの見出しの除去・
+// a11y の属性付け）と、本文中の YouTube 埋め込みを読むための補助。クライアント/サーバー共用の純粋関数
 // （loader が変換し、splitContentAtEmbeds が YouTube の分割に使う）。
 //
 // 変換はサニタイズの「後」に行う（role / aria-label / title はサニタイザの許可属性に無く、
-// 前に付けると落ちる）。保存データ・エディタの HTML は変えない。
+// 前に付けると落ちる）。タイトルの見出しの除去だけは、目次の生成より前に行う。保存データ・エディタの HTML は変えない。
 import { decodeHtmlAttr } from "./guide-embed-attrs";
+import { headingText } from "./guide-toc";
 import { getYouTubeEmbedUrl } from "./youtube-url";
 
 /** 属性値に入れる文字列のエスケープ */
@@ -14,6 +15,54 @@ function escapeAttr(value: string): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/** 本文の最初のブロックが見出し（h1〜h6）のとき、その開きタグ（タグ名と `>`）に一致する。先頭の空白は許す */
+const LEADING_HEADING_OPEN = /^\s*<([hH])([1-6])(?:\s[^>]*)?>/;
+
+/** 比較用の正規化（前後の空白を落とし、全角・半角・改行などの空白の並びを半角1つにそろえる） */
+function normalizeTitleText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 本文の最初のブロックの見出し（h1〜h6）の位置とテキストを返す。最初のブロックが見出しでなければ null。
+ * 段組み・コールアウトなどの入れ物の中の見出しは見ない（本文の直下の最初のブロックだけ）。
+ * 閉じタグは indexOf で探す（遅延一致の正規表現で末尾まで読み直さない。guide-toc.ts の ReDoS の注記と同じ理由）。
+ */
+function findLeadingHeading(html: string): { end: number; text: string } | null {
+  const open = LEADING_HEADING_OPEN.exec(html);
+  if (!open) return null;
+  const innerStart = open[0].length;
+  const closeTag = `</${open[1]}${open[2]}>`;
+  let close = html.indexOf(closeTag, innerStart);
+  // サニタイズ後は小文字だが、大文字の閉じタグも受ける
+  if (close === -1) close = html.toLowerCase().indexOf(closeTag.toLowerCase(), innerStart);
+  if (close === -1) return null;
+  return { end: close + closeTag.length, text: headingText(html.slice(innerStart, close)) };
+}
+
+/**
+ * 本文の最初のブロックが、タイトル（title）と同じ文の見出しか。
+ * 比較は目次と同じ正規化（タグ除去・文字参照の復号・空白の並びを1つに）のうえでの完全一致で、
+ * 言い換えた見出し（語の足し引き・装飾の文字の違い）は一致しない。タイトルか見出しが空なら false。
+ */
+export function leadingHeadingMatchesTitle(html: string, title: string): boolean {
+  const heading = findLeadingHeading(html);
+  if (!heading) return false;
+  const expected = normalizeTitleText(title);
+  return expected !== "" && normalizeTitleText(heading.text) === expected;
+}
+
+/**
+ * 本文の最初のブロックが見出しなら、それを取り除いた本文を返す（見出しでなければそのまま）。
+ * 旧仕様の新規作成は本文を `<h1>タイトル</h1>` で始めていたため、公開ページではタイトルの h1 の直後に
+ * 同じ文の見出しが出ていた。loader が leadingHeadingMatchesTitle で一致を確かめてから呼ぶ
+ * （目次の生成より前に呼び、目次からも外す）。保存データ・エディタの本文は変えない。
+ */
+export function removeLeadingHeading(html: string): string {
+  const heading = findLeadingHeading(html);
+  return heading ? html.slice(heading.end).replace(/^\s+/, "") : html;
 }
 
 /** `data-callout` 属性（`data-callout-type` ではない）を持つ開きタグか */

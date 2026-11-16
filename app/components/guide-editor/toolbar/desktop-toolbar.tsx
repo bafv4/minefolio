@@ -12,6 +12,7 @@ import {
   Check,
   Loader2,
   Settings,
+  CircleHelp,
   Eye,
   Type,
   Heading1,
@@ -59,6 +60,7 @@ import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { GUIDE_WRITING_GUIDE_PATH } from "@/lib/official-guides";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -377,7 +379,8 @@ export function DesktopToolbar({
       >
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
           {/* 1段目: タブ + メタ操作 */}
-          {/* 1段目は折り返さない幅に収めている（保存状態・ピル・2つの保存ボタンが最も長い状態で 1280px の ja/en を実測）。
+          {/* 1段目は折り返さない幅に収めている（保存状態・ピル・2つの保存ボタンが最も長い状態で 1280px の ja/en を実測。
+              書き方の手引きのアイコンを足した後は未実測）。
               それでも足りないときは、操作の塊ごと次の行へ回す（はみ出して切れないように） */}
           <div className="flex flex-wrap items-center gap-x-1 gap-y-1 pt-1.5">
             <div
@@ -414,8 +417,24 @@ export function DesktopToolbar({
               ))}
             </div>
 
-            {/* 右側: 設定 / プレビュー | 保存状態 / 公開状態 / 下書き保存 / 保存（公開） */}
+            {/* 右側: 書き方の手引き / 設定 / プレビュー | 保存状態 / 公開状態 / 下書き保存 / 保存（公開） */}
             <div className="ml-auto flex items-center gap-1.5">
+              {/* 書き方の手引き（公式ガイド）。1段目の幅に余裕が無いのでアイコンだけにし、名前は sr-only で
+                  「新しいタブで開く」ことまで伝える */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button asChild type="button" variant="ghost" size="sm">
+                    <Link to={GUIDE_WRITING_GUIDE_PATH} target="_blank" rel="noopener noreferrer">
+                      <CircleHelp className="h-4 w-4" aria-hidden />
+                      <span className="sr-only">
+                        {t("meGuides.writingGuide")}
+                        {t("meGuides.opensInNewTab")}
+                      </span>
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <HintTooltipContent hint={`${t("meGuides.writingGuide")}${t("meGuides.opensInNewTab")}`} />
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   {/* 見える文字は短い「設定」、名前は「ガイド設定」（見える文字を含む。label in name） */}

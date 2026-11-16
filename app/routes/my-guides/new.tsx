@@ -34,7 +34,7 @@ import { useT } from "@/hooks/use-locale";
 
 export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
   const t = createTranslator(localeFromMatches(matches));
-  return [{ title: t("meGuides.newTitle") }];
+  return [{ title: `${t("meGuides.newTitle")} - Minefolio` }];
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -106,7 +106,8 @@ export async function action({ request }: ActionFunctionArgs) {
       authorId: user.id,
       slug,
       title,
-      content: `<h1>${title}</h1><p></p>`,
+      // 本文は空の段落で始める（タイトルはガイド設定と公開ページの h1 が持つ。本文に繰り返すと公開ページで重なる）
+      content: "<p></p>",
       isPublished: false,
       tags: "[]",
       viewCount: 0,
