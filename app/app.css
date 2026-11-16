@@ -552,7 +552,9 @@ body {
 
   .ProseMirror td,
   .ProseMirror th {
-    @apply border border-border p-2 align-top text-left;
+    /* 枠は付けない: 公開ページの表は行の区切り線だけ（.guide-content.prose の表の規則）で、セルの縦線は無い。
+       編集中の列の境目はリサイズハンドルと選択の枠が示す */
+    @apply p-2 align-top text-left;
     min-width: 2em;
     position: relative;
   }
@@ -599,7 +601,8 @@ body {
 
   .ProseMirror .tableWrapper {
     overflow-x: auto;
-    margin: 1em 0;
+    /* 公開ページの器（.table-scroll-wrapper）と同じ角丸 */
+    border-radius: var(--guide-radius, var(--radius-xl));
   }
 
   /* Inline code in editor */
@@ -619,7 +622,6 @@ body {
   /* Code block with copy button */
   .code-block-wrapper {
     position: relative;
-    margin: 0.75em 0;
   }
 
   .code-block-wrapper pre {
@@ -681,10 +683,6 @@ body {
   }
 
   /* YouTube embed in editor */
-  .ProseMirror div[data-youtube-video] {
-    @apply my-4;
-  }
-
   .ProseMirror div[data-youtube-video] > iframe {
     @apply w-full;
     border-radius: var(--guide-radius, var(--radius-xl));
@@ -694,10 +692,6 @@ body {
 
   /* YouTube embed in view page。本文の直下の動画は YouTubeClickEmbed（押してから読み込む）に置き換わり、
      ここに当たるのはコールアウト・トグル・段組の中に残る iframe（guide-embeds.tsx の splitContentAtEmbeds） */
-  div[data-youtube-video] {
-    @apply my-4;
-  }
-
   div[data-youtube-video] > iframe {
     @apply w-full;
     border-radius: var(--guide-radius, var(--radius-xl));
@@ -717,7 +711,6 @@ body {
     --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
     border-radius: var(--guide-radius, var(--radius-xl));
     padding: 0.75em 1em;
-    margin: 0.5em 0;
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: 0.5em;
@@ -851,7 +844,6 @@ body {
   /* Columns layout — editor（公開ビュー div[data-columns] と同じ見た目に揃える） */
   .columns-editor {
     position: relative;
-    margin: 0.75em 0;
   }
 
   /* 編集アフォーダンス（カラム数 + 削除）はホバー時のみ右上に小さく表示 */
@@ -929,7 +921,6 @@ body {
   /* Guide link card — base (editor + view) */
   .guide-link-card {
     position: relative;
-    margin: 0.75em 0;
   }
 
   /* 本文の中の埋め込み（キー配置・サーチクラフト・テンプレート）と同じ面（bg-card・枠 /70）。
@@ -1028,6 +1019,9 @@ body {
      ui.md 6 章の 2 層: 本文直下は rounded-xl、箱（コールアウト・トグル・表のセル）の中では 1 段ずつ下げる
      （下の「ブロックの角丸の入れ子」）。インラインの code は rounded のまま */
   --guide-radius: var(--radius-xl);
+  /* 縦の余白の「塊」の段（表・画像・コード・コールアウト・トグル・段組・リンクカード・動画・埋め込みの上下）。
+     箱の中（コールアウト・トグル・表のセル・リスト・段組）では 0.75rem に下げる（下の「縦の余白」） */
+  --guide-gap-block: 1.5rem;
 }
 
 /* ブロックの角丸の入れ子: 箱の子孫は 1 段下げる（自分自身の角丸は親から受けた値のまま） */
@@ -1068,7 +1062,7 @@ body {
    当たると埋め込みの部品（SearchCraftGroupedList 等）の Tailwind クラス（mb-2・rounded 等）に勝ってしまい、
    テンプレート詳細ページと同じ部品でも見た目がずれる（アイテムアイコンの img に上下の余白が付く等） */
 .guide-content.prose :where(p):not(:where(.not-prose *)) {
-  /* 段落の切れ目が行間と見分けられる量（行間 1.8 のとき 1 行の約半分） */
+  /* 文の間（段落どうし・段落とリスト）: 段落の切れ目が行間と見分けられる量（行間 1.8 のとき 1 行の約半分） */
   margin-top: 0.8em;
   margin-bottom: 0.8em;
 }
@@ -1082,22 +1076,26 @@ body {
 /* 目次アンカーで移動した見出しがヘッダー・目次バーに隠れないための余白は、:root の scroll-padding-top
    （--sticky-bar-inset。xl 未満は目次バーの分も足す）が持つ。見出しに scroll-margin-top を付けると二重になる */
 
-/* 本文見出しの大きさ: 1.6em / 1.35em / 1.15em / 1em。記事タイトル（h1、sm 以上 36px）との比を
+/* 見出しの余白（rem 固定。em だと見出しの字の大きさに掛かって段ごとの値がずれる）: 上は最上位 48px・2 段目 32px・
+   3 段目 24px・それ以下 20px、下は 8px で見出しを自分の本文に寄せる。見出しの直後の要素の上余白は
+   下の「縦の余白」が 0 にして、直下を確実に 8px にする（見出しが続くとき・直後が表やコールアウトのときも）。
+
+   本文見出しの大きさ: 1.6em / 1.35em / 1.15em / 1em。記事タイトル（h1、sm 以上 36px）との比を
    1.4 以上にして、本文の最上位の見出しがタイトルと張り合わないようにする。エディタ（h1〜）と
    公開表示（data-guide-level）は同じ値に保つ */
 .guide-content.prose :where(h1) {
   font-size: 1.6em;
   font-weight: 700;
-  margin-top: 2em;
-  margin-bottom: 0.3em;
+  margin-top: 3rem;
+  margin-bottom: 0.5rem;
   line-height: 1.25;
 }
 
 .guide-content.prose :where(h2) {
   font-size: 1.35em;
   font-weight: 700;
-  margin-top: 1.5em;
-  margin-bottom: 0.25em;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
   line-height: 1.3;
 }
 
@@ -1106,16 +1104,18 @@ body {
 .guide-content.prose :where(h3):not(:where(.not-prose *)) {
   font-size: 1.15em;
   font-weight: 600;
-  margin-top: 1.25em;
-  margin-bottom: 0.2em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
   line-height: 1.35;
 }
 
 .guide-content.prose :where(h4, h5, h6):not(:where(.not-prose *)) {
   font-size: 1em;
   font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.15em;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  /* 公開表示は降格で h4〜h6 のどれにもなり、Typography は h4 だけ行間 1.5 を持つ。タグで行間が変わらないよう固定する */
+  line-height: 1.5;
 }
 
 /* 公開表示では本文見出しを、最小レベルが h2 になるよう降格して出力する（ページタイトルが h1。
@@ -1124,32 +1124,33 @@ body {
 .guide-content-demoted.guide-content.prose :where([data-guide-level="1"]) {
   font-size: 1.6em;
   font-weight: 700;
-  margin-top: 2em;
-  margin-bottom: 0.3em;
+  margin-top: 3rem;
+  margin-bottom: 0.5rem;
   line-height: 1.25;
 }
 
 .guide-content-demoted.guide-content.prose :where([data-guide-level="2"]) {
   font-size: 1.35em;
   font-weight: 700;
-  margin-top: 1.5em;
-  margin-bottom: 0.25em;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
   line-height: 1.3;
 }
 
 .guide-content-demoted.guide-content.prose :where([data-guide-level="3"]) {
   font-size: 1.15em;
   font-weight: 600;
-  margin-top: 1.25em;
-  margin-bottom: 0.2em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
   line-height: 1.35;
 }
 
 .guide-content-demoted.guide-content.prose :where([data-guide-level="4"], [data-guide-level="5"], [data-guide-level="6"]) {
   font-size: 1em;
   font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.15em;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
 }
 
 /* 見出し内の文字サイズ指定を無効化する（既存ガイドや外部ペースト由来で
@@ -1213,8 +1214,6 @@ body {
   background: var(--muted);
   color: var(--foreground);
   border-radius: var(--guide-radius);
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
 }
 
 .guide-content.prose :where(pre code) {
@@ -1280,8 +1279,8 @@ body {
 
 .guide-content.prose :where(img):not(:where(.not-prose *)) {
   border-radius: var(--guide-radius);
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
   max-width: 100%;
   height: auto;
 }
@@ -1310,8 +1309,6 @@ body {
 
 .guide-content.prose .table-scroll-wrapper {
   overflow-x: auto;
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
   border-radius: var(--guide-radius);
   -webkit-overflow-scrolling: touch;
 }
@@ -1330,6 +1327,10 @@ body {
 }
 
 .guide-content.prose :where(table) {
+  /* 表の前後の余白は器（.table-scroll-wrapper / .tableWrapper）が持つ。prose 既定の 2em を残すと、
+     器が overflow: clip のとき（data-fits）は表の余白が器を抜けて、器の余白と二重になる */
+  margin-top: 0;
+  margin-bottom: 0;
   font-size: 0.9em;
   table-layout: fixed;
   min-width: 100%;
@@ -1339,6 +1340,9 @@ body {
 .guide-content.prose :where(td),
 .guide-content.prose :where(th) {
   padding: 0.35em 0.75em;
+  /* エディタのセル（align-top）と同じ。Typography 既定の baseline / bottom だと、空のセル（行ボックスが無く
+     基線が下端になる）が混ざる行で、行が文字のぶん高くなる */
+  vertical-align: top;
 }
 
 /* 列潰れ対策はサーバ側の normalizeGuideTables()（app/lib/guide-tables.ts）が
@@ -1409,7 +1413,6 @@ body {
 .guide-content.prose .callout {
   border-radius: var(--guide-radius);
   padding: 0.75em 1em;
-  margin: 0.5em 0;
   display: grid;
   grid-template-columns: auto 1fr;
   column-gap: 0.5em;
@@ -1423,12 +1426,10 @@ body {
   margin-bottom: 0.2em;
 }
 
-.guide-content.prose .callout p:first-child {
+/* 公開ビューは段落が grid の直下の兄弟で、margin が相殺されない（エディタは .callout-body の中で相殺される）。
+   段落の間をエディタと同じ 0.2em にそろえる */
+.guide-content.prose .callout > p + p {
   margin-top: 0;
-}
-
-.guide-content.prose .callout p:last-child {
-  margin-bottom: 0;
 }
 
 /* Mark / highlight */
@@ -1446,11 +1447,10 @@ body {
   border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   border-radius: var(--guide-radius);
   padding: 0 0.75em;
-  margin: 0.5em 0;
 }
 
 .guide-content.prose details[open] {
-  padding-bottom: 0.5em;
+  padding-bottom: 0.75em;
 }
 
 .guide-content.prose details > summary {
@@ -1496,19 +1496,7 @@ body {
   }
 }
 
-.guide-content.prose details > :not(summary) {
-  margin-top: 0;
-}
-
-.guide-content.prose details > :not(summary) > :first-child {
-  margin-top: 0;
-}
-
 /* Guide link card in view */
-.guide-content.prose .guide-link-card {
-  margin: 0.75em 0;
-}
-
 .guide-content.prose .guide-link-inner {
   text-decoration: none;
   color: inherit;
@@ -1524,6 +1512,18 @@ body {
   border-radius: 0;
 }
 
+/* ガイドリンクカードの印。保存 HTML は絵文字（📄）の span だが、ui.md 14 章のとおりアイコンは lucide の線画にそろえる
+   （コールアウトのアイコンと同じ mask。絵文字は OS ごとに見た目が違い、色も変えられない）。
+   エディタの NodeView も同じ span を描くので、公開ページとエディタで同じ 16px の印になる */
+.guide-content.prose .guide-link-icon {
+  width: 1rem;
+  height: 1rem;
+  font-size: 0;
+  background-color: var(--muted-foreground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 /* 本文の直下の YouTube（YouTubeClickEmbed）。サムネイルに本文の画像の余白・角丸・高さを当てない */
 .guide-content.prose .guide-youtube-embed img {
   margin: 0;
@@ -1536,7 +1536,6 @@ body {
 .guide-content.prose div[data-columns] {
   display: grid;
   gap: 1em;
-  margin: 0.75em 0;
 }
 
 .guide-content.prose div[data-columns="2"] {
@@ -1556,6 +1555,105 @@ body {
   .guide-content.prose div[data-columns="3"] {
     grid-template-columns: 1fr;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   縦の余白（公開ページ・プレビュー・エディタで同じ値。docs/guides.md「本文の余白」）
+   3 段: 文の間（段落どうし・段落とリストは 0.8em のまま）／塊の前後 1.5rem／見出し（上 48・32・24・20px、下 8px）。
+   隣り合う余白は margin の相殺で大きいほうになるので、塊どうしが続いても 24px で二重にならない。
+   構造で余白を 0 にする規則は、個々の要素の規則（詳細度が高いもの・Tailwind の my-*）に勝つため !important。
+   ───────────────────────────────────────────────────────────── */
+
+/* 塊の前後。公開ページの表の器・コールアウト・トグル・段組・リンクカード・動画、エディタ側の同じ物
+   （.tableWrapper・.code-block-wrapper・.columns-editor・.guide-block-node＝画像と動画の NodeView のラッパー）。本文の画像と pre は上の個別規則 */
+.guide-content.prose :is(
+  .table-scroll-wrapper, .tableWrapper, .code-block-wrapper, .callout, details, div[data-columns],
+  .columns-editor, .guide-link-card, div[data-youtube-video], .guide-youtube-embed, .guide-block-node
+) {
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
+}
+
+.guide-content.prose :where(pre):not(:where(.not-prose *)) {
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
+}
+
+/* エディタのコードブロックの余白は器（.code-block-wrapper）が持つ */
+.guide-content.prose .code-block-wrapper pre {
+  margin: 0;
+}
+
+/* エディタのコードは TipTap の NodeViewContent が code の中に block の div を入れ（行の高さが code の 21px になり、
+   公開ページの pre の行 24px より低くなる）、white-space: pre-wrap を inline style で付ける（公開ページは pre で折り返さず
+   横スクロール）。div を inline にして pre の行の高さを使い、折り返しも公開ページにそろえる */
+.guide-content.prose .code-block-wrapper pre code {
+  white-space: pre !important;
+}
+.guide-content.prose .code-block-wrapper pre [data-node-view-content-react] {
+  display: inline;
+}
+
+/* 箱の中では塊の段を 0.75rem に下げる（--guide-radius と同じ、子孫へ継承する形。箱自身の余白は外側の値のまま） */
+.guide-content.prose :is(.callout, details, td, th, li, [data-column], .column-editor) > * {
+  --guide-gap-block: 0.75rem;
+}
+
+/* エディタの NodeView は div.react-renderer > div[data-node-view-wrapper] > (見た目の要素) の二重の入れ物で、
+   余白を持つ要素はその内側。内側の余白は入れ物を抜けて外の余白と相殺されるので、構造で 0 にする規則は
+   入れ物の中の先頭（または末尾）の要素と、ラッパー自身（画像・動画は余白をラッパーに持つ）にも当てる。
+   箱の中身（段落・NodeView）は [data-node-view-content-react] の直下に並ぶ */
+
+/* 以下の構造で余白を 0 にする規則は、本文に差し込む React の埋め込み（.not-prose）の中には当てない（本文の段落・見出しの
+   上書きと同じ除外。当たるとテンプレート詳細ページと共有する部品の Tailwind の余白に勝ってしまう）。
+   埋め込みの外枠自身は .not-prose の子孫ではないので、見出しの直後の埋め込みには当たる */
+
+/* 見出しの直下は、直後が何でも 8px（見出しの margin-bottom）。直後の要素の上余白を 0 にする */
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + *:not(:where(.not-prose *)),
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + .react-renderer > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + .react-renderer > [data-node-view-wrapper] > :first-child:not(:where(.not-prose *)) {
+  margin-top: 0 !important;
+}
+
+/* 公開ページは埋め込みの位置で本文がかたまり（クラスの無い div）に分かれる。見出しで終わるかたまりの直後が
+   埋め込みでも、見出しと埋め込みの間は 8px */
+.guide-content.prose > div:not([class]):has(> :is(h1, h2, h3, h4, h5, h6):last-child) + * {
+  margin-top: 0 !important;
+}
+
+/* 箱（コールアウト・トグル・表のセル・リスト・段組）の中の先頭・末尾は 0 */
+.guide-content.prose :is(.callout, .callout-body, .toggle-content, td, th, li, [data-column], .column-editor, [data-node-view-content-react]) > :first-child:not(:where(.not-prose *)),
+.guide-content.prose details > summary + *:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:first-child > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:first-child > [data-node-view-wrapper] > :first-child:not(:where(.not-prose *)) {
+  margin-top: 0 !important;
+}
+.guide-content.prose :is(.callout, .callout-body, .toggle-content, details, td, th, li, [data-column], .column-editor, [data-node-view-content-react]) > :last-child:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:last-child > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:last-child > [data-node-view-wrapper] > :last-child:not(:where(.not-prose *)) {
+  margin-bottom: 0 !important;
+}
+
+/* 本文の最後の要素の下は 0（いいね行との間を広げない。かたまりに分かれる公開ページは最後のかたまりの最後の要素も） */
+.guide-content.prose > :last-child,
+.guide-content.prose > div:not([class]):last-child > :last-child,
+.guide-content.prose .ProseMirror > :last-child,
+.guide-content.prose .ProseMirror > .react-renderer:last-child > [data-node-view-wrapper],
+.guide-content.prose .ProseMirror > .react-renderer:last-child > [data-node-view-wrapper] > :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 表のセル（th も同じ）: 1 行のセルは「文字の高さ＋セルの上下 padding」になる。段落が複数あるときの間は 0.4em */
+.guide-content.prose :is(td, th) > :where(p):not(:where(.not-prose *)) {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+
+/* 空の段落（作者が入れた空行。公開 HTML では <p></p>）は 1 行ぶんの高さにする。エディタの空段落は
+   ProseMirror の trailing break で 1 行になるので、公開ページと見た目をそろえる（行間はその場の line-height に従う） */
+.guide-content.prose p:empty:not(:where(.not-prose *)) {
+  min-height: 1.8em;
+  min-height: 1lh;
 }
 
 /* エディタ内の段組も公開ビューと同じく横並びに。

@@ -24,8 +24,8 @@ export function YoutubeNodeView({
   const embedUrl = getYouTubeEmbedUrl(String(node.attrs.src));
 
   return (
-    <NodeViewWrapper>
-      <div className="relative group my-4">
+    <NodeViewWrapper className="guide-block-node">
+      <div className="relative group">
         <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl">
           <iframe
             src={embedUrl}

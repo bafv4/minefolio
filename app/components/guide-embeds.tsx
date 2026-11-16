@@ -295,14 +295,14 @@ export function KeybindEmbedView({
 
   if (remaps.length === 0) {
     return (
-      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+      <div className="my-6 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
         {displayName} — {t("playerProfile.noRemaps")}
       </div>
     );
   }
 
   return (
-    <div className="my-4 not-prose">
+    <div className="my-6 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <UserEmbedHeader
           displayName={displayName}
@@ -510,14 +510,14 @@ export function SearchCraftEmbedView({
 
   if (crafts.length === 0) {
     return (
-      <div className="my-4 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+      <div className="my-6 rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
         {displayName} — {t("playerProfile.noSearchCraft")}
       </div>
     );
   }
 
   return (
-    <div className="my-4 not-prose">
+    <div className="my-6 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <UserEmbedHeader
           displayName={displayName}
@@ -561,7 +561,7 @@ export type EmbedTemplateData = {
 function TemplateEmbedUnavailable() {
   const t = useT();
   return (
-    <div className="my-4 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
+    <div className="my-6 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
       {t("guideView.embedTemplateUnavailable")}
     </div>
   );
@@ -589,7 +589,7 @@ export function SearchCraftTemplateEmbedView({
   const href = `/guides/templates/${template.id}`;
 
   return (
-    <div className="my-4 not-prose">
+    <div className="my-6 not-prose">
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
         <div className="px-4 py-2 border-b bg-muted/30 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <div className="min-w-0 text-sm">

@@ -5,10 +5,10 @@
 import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
-import { AlertTriangle, LayoutTemplate, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { getGameLanguageName } from "@/lib/game-languages";
 import {
   fetchTemplateEmbedMeta,
@@ -16,7 +16,7 @@ import {
   type TemplateEmbedMeta,
 } from "../lib/template-embed-meta";
 import { getEmbedEditContext } from "../lib/embed-edit-context";
-import { EmbedNodeActions, EMBED_NODE_CARD_CLASS, deleteEmbedNode } from "./embed-node-actions";
+import { EmbedNodeActions, EmbedNodeFrame, deleteEmbedNode } from "./embed-node-actions";
 
 interface Props {
   node: { attrs: Record<string, string> };
@@ -49,60 +49,76 @@ export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, delet
     };
   }, [templateId]);
 
+  // ヘッダー帯の文字は公開ページのテンプレート埋め込み（SearchCraftTemplateEmbedView）と同じ
+  // 「テンプレート名 — [アバター] 作者名  ゲーム内言語」。取得できるまで（読み込み中・見つからない）は種別だけ
+  const header = meta ? (
+    <div className="break-words">
+      <span>{meta.title}</span>
+      <span className="font-normal text-muted-foreground">
+        {" — "}
+        <span className="inline-flex items-center gap-1.5 align-middle">
+          <MinecraftAvatar
+            uuid={meta.authorUuid}
+            skinUrl={meta.authorSkinUrl}
+            size={20}
+            alt=""
+            className="shrink-0 rounded-md"
+          />
+          {meta.authorName}
+        </span>
+      </span>
+      {meta.gameLanguage && (
+        <span className="ml-2 text-xs font-normal text-muted-foreground">
+          {t("guideView.embedTemplateLanguage", { language: getGameLanguageName(t, locale, meta.gameLanguage) })}
+        </span>
+      )}
+    </div>
+  ) : (
+    <span>{t("guideEditor.embedTemplateLabel")}</span>
+  );
+
   return (
     <NodeViewWrapper>
-      <div
-        className={cn(EMBED_NODE_CARD_CLASS, meta === null && "border-dashed border-destructive/50")}
-        contentEditable={false}
+      <EmbedNodeFrame
+        broken={meta === null}
+        header={header}
+        actions={
+          <EmbedNodeActions
+            selected={selected}
+            label={t("guideEditor.embedTemplateLabel")}
+            // 宿主の注入は NodeView の初回描画より後になることがあるので、押したときに取り出す
+            onEdit={() =>
+              getEmbedEditContext(editor)?.editTemplateEmbed((nextId) => updateAttributes({ templateId: nextId }))
+            }
+            onDelete={() => deleteEmbedNode(editor, getPos, deleteNode)}
+          />
+        }
       >
-        <div className="flex items-start gap-2 pr-28">
-          <LayoutTemplate className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="text-xs font-medium text-muted-foreground">{t("guideEditor.embedTemplateLabel")}</p>
-            {meta === undefined ? (
-              <p className="flex items-center gap-1.5 text-sm text-muted-foreground" role="status">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                {t("guideEditor.embedLoading")}
-              </p>
-            ) : meta === null ? (
-              <p className="flex items-start gap-1.5 text-sm text-destructive" role="status">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                {t("guideEditor.embedTemplateMissing")}
-              </p>
-            ) : (
-              <>
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                  <span className="min-w-0 break-words font-medium">{meta.title}</span>
-                  {meta.gameLanguage && (
-                    <Badge variant="outline" className="text-xs">
-                      {getGameLanguageName(t, locale, meta.gameLanguage)}
-                    </Badge>
-                  )}
-                  {!meta.isPublished && (
-                    <Badge variant="outline" className="text-xs text-warning border-warning/50">
-                      {t("guideEditor.embedTemplateUnpublishedBadge")}
-                    </Badge>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {meta.isOwn ? t("guideEditor.embedTemplateMine") : meta.authorName}
-                  {"・"}
-                  {t("guideEditor.embedTemplateCraftCount", { count: meta.craftCount })}
-                </p>
-              </>
+        {meta === undefined ? (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            {t("guideEditor.embedLoading")}
+          </p>
+        ) : meta === null ? (
+          <p className="flex items-start gap-1.5 text-sm text-destructive" role="status">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            {t("guideEditor.embedTemplateMissing")}
+          </p>
+        ) : (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              {meta.isOwn ? t("guideEditor.embedTemplateMine") : meta.authorName}
+              {"・"}
+              {t("guideEditor.embedTemplateCraftCount", { count: meta.craftCount })}
+            </span>
+            {!meta.isPublished && (
+              <Badge variant="outline" className="text-xs text-warning border-warning/50">
+                {t("guideEditor.embedTemplateUnpublishedBadge")}
+              </Badge>
             )}
-          </div>
-        </div>
-        <EmbedNodeActions
-          selected={selected}
-          label={t("guideEditor.embedTemplateLabel")}
-          // 宿主の注入は NodeView の初回描画より後になることがあるので、押したときに取り出す
-          onEdit={() =>
-            getEmbedEditContext(editor)?.editTemplateEmbed((nextId) => updateAttributes({ templateId: nextId }))
-          }
-          onDelete={() => deleteEmbedNode(editor, getPos, deleteNode)}
-        />
-      </div>
+          </p>
+        )}
+      </EmbedNodeFrame>
     </NodeViewWrapper>
   );
 }

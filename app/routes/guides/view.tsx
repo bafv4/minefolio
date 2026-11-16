@@ -729,7 +729,7 @@ function GuideContent({
                 embedUrl={seg.embedUrl}
                 title={t("guideView.youtubeTitle", { n: seg.index })}
                 playLabel={t("guideView.youtubePlay", { n: seg.index })}
-                className="guide-youtube-embed not-prose my-4 rounded-xl"
+                className="guide-youtube-embed not-prose rounded-xl"
               />
             );
           }
@@ -745,7 +745,7 @@ function GuideContent({
           const userData = embedUsers[seg.userSlug];
           if (!userData) {
             return (
-              <div key={i} className="my-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              <div key={i} className="my-6 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
                 {t("guideView.embedUserNotFound", { slug: seg.userSlug })}
               </div>
             );

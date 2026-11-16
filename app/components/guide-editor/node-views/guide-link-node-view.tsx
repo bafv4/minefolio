@@ -2,7 +2,7 @@
 // 旧 index.tsx GuideLinkNodeView から逐語移植（class 名 guide-link-* を保持）。
 import { useT } from "@/hooks/use-locale";
 import { NodeViewWrapper } from "@tiptap/react";
-import { FileText, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 export function GuideLinkNodeView({
@@ -30,9 +30,10 @@ export function GuideLinkNodeView({
             />
           )}
           <div className="guide-link-body">
-            <div className="guide-link-icon">
-              <FileText className="h-4 w-4" />
-            </div>
+            {/* 保存 HTML（guide-link.ts の renderHTML）と同じ span。印は app.css が描く */}
+            <span className="guide-link-icon" aria-hidden>
+              📄
+            </span>
             <div className="guide-link-text">
               <span className="guide-link-title">{node.attrs.guideTitle}</span>
               {node.attrs.authorName && (

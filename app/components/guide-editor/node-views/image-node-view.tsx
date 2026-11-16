@@ -100,13 +100,13 @@ export function ImageNodeView({
   }, [updateAttributes]);
 
   return (
-    <NodeViewWrapper>
+    <NodeViewWrapper className="guide-block-node">
       <div
         className={cn(
-          "relative group my-2",
-          // 配置指定時はブロック化して寄せる（inline-block のままだと margin:auto が効かない）。
-          // 未設定は従来どおり inline-block ＝ 行の流れに従う
-          align ? cn("w-fit", WRAPPER_ALIGN_CLASS[align]) : "inline-block",
+          "relative group w-fit",
+          // 配置指定時は寄せる。未設定は左に置く。どちらもブロック（inline-block だと中の img の上下の余白が
+          // 外の余白と相殺されず、公開ページ〔img が block で余白が相殺される〕より 48px 高くなる）
+          align && WRAPPER_ALIGN_CLASS[align],
           (selected || resizing) && "ring-2 ring-primary/50 rounded-lg",
         )}
       >

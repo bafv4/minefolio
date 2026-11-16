@@ -77,12 +77,15 @@ export function EmbedSummary({
   state,
   userQuery,
   presetName,
+  showIdentity = true,
 }: {
   kind: EmbedKind;
   state: EmbedUserState;
   /** 保存されている（または選んだ）走者の指定。見つからないときの表示に使う */
   userQuery: string;
   presetName: string | null;
+  /** 走者名・プリセット名の行を出すか。ノードビューはヘッダー帯が持つので false（ダイアログのプレビューは true） */
+  showIdentity?: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -140,16 +143,18 @@ export function EmbedSummary({
 
   return (
     <div className="min-w-0 space-y-0.5 text-sm">
-      <p className="min-w-0 break-words">
-        <span className="font-medium">{name}</span>
-        {user.mcid && user.mcid !== name && (
-          <span className="ml-1.5 text-xs text-muted-foreground">@{user.mcid}</span>
-        )}
-        <span className="text-muted-foreground">
-          {" — "}
-          {presetName && !presetMissing ? presetName : t("guideEditor.embedPresetDefaultShort")}
-        </span>
-      </p>
+      {showIdentity && (
+        <p className="min-w-0 break-words">
+          <span className="font-medium">{name}</span>
+          {user.mcid && user.mcid !== name && (
+            <span className="ml-1.5 text-xs text-muted-foreground">@{user.mcid}</span>
+          )}
+          <span className="text-muted-foreground">
+            {" — "}
+            {presetName && !presetMissing ? presetName : t("guideEditor.embedPresetDefaultShort")}
+          </span>
+        </p>
+      )}
       {summary !== null ? (
         <p className="text-xs text-muted-foreground">{summary}</p>
       ) : (

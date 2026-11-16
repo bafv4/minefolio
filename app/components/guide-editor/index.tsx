@@ -492,7 +492,7 @@ export function GuideEditor({
           {editor && <LeadingTitleHeadingNote editor={editor} title={title} />}
 
           <div className="py-3 min-h-100">
-            <div className="guide-content prose prose-neutral dark:prose-invert max-w-none">
+            <div className="guide-content prose max-w-none">
               {editor && !isTouch && (
                 <EditorBubbleMenu editor={editor} onLink={handleLinkInsert} enabled={!isTouch} />
               )}

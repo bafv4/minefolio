@@ -2,6 +2,7 @@
 // ノードを選択しているとき・ホバーしているとき・中にフォーカスがあるときに見せる。
 // 押した処理は onClick で行い、onMouseDown では preventDefault だけする（エディタのフォーカスと選択を奪わない）。
 // ボタン要素なので Enter / Space でも押せる（Tiptap の NodeView は BUTTON 上のイベントを ProseMirror に渡さない）。
+import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
@@ -24,8 +25,41 @@ export function deleteEmbedNode(editor: Editor, getPos: () => number | undefined
   editor.view.focus();
 }
 
-/** 埋め込み NodeView の外枠（EmbedNodeActions の表示条件に使う group を含む） */
-export const EMBED_NODE_CARD_CLASS = "relative group my-2 rounded-lg border bg-card p-4";
+/**
+ * 埋め込み NodeView の外枠。公開ページの埋め込み（guide-embeds.tsx）と同じ「外の余白＋カード＋ヘッダー帯」の形で、
+ * ヘッダー帯の右に操作（EmbedNodeActions。公開ページでは「プロフィールを見る」等のリンクがある位置）を置く。
+ * 中身（children）は要約などで、公開ページの表・鍵盤の代わり。壊れた参照（見つからない）は破線の枠にする。
+ * 外側は group（操作の表示条件）かつ not-prose（本文の段落・リンク・画像の規則を当てない。公開ページと同じ）
+ */
+export function EmbedNodeFrame({
+  header,
+  actions,
+  broken,
+  children,
+}: {
+  /** ヘッダー帯の左（公開ページの UserEmbedHeader / テンプレートのヘッダーと同じ文字の組み立て） */
+  header: ReactNode;
+  actions: ReactNode;
+  broken?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="group my-6 not-prose" contentEditable={false}>
+      <div
+        className={cn(
+          "overflow-hidden rounded-xl border bg-card",
+          broken ? "border-dashed border-destructive/50" : "border-border/70",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+          <div className="min-w-0 text-sm font-medium">{header}</div>
+          {actions}
+        </div>
+        <div className="px-4 py-3">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 export function EmbedNodeActions({
   selected,
@@ -44,7 +78,8 @@ export function EmbedNodeActions({
   return (
     <div
       className={cn(
-        "absolute top-2 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+        // 高さ 28px のボタンを、ヘッダー帯の高さ（文字の行＋上下の padding）を変えずに収めるため上下の負マージンで逃がす
+        "-my-1 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
         selected && "opacity-100",
       )}
     >
