@@ -29,6 +29,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     updatedOn: "Updated {date}",
     viewCount: "{count} views",
     moreFromAuthor: "More guides by this runner",
+    aboutAuthor: "Author",
     allGuidesByAuthor: "All guides",
   },
   theme: {
@@ -2214,7 +2215,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     delete: "Delete",
     viewPublished: "View published page",
     statusPublished: "Published",
-    statusDraft: "Draft",
+    statusPrivate: "Private",
+    statusUnpublishedChanges: "Unpublished changes",
     pin: "Pin to profile",
     unpin: "Unpin",
     newTitle: "Create a new guide",

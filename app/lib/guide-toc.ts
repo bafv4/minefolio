@@ -196,10 +196,12 @@ export function tocAllSectionOverrides(
  * - 最上位（items の最小 level）は常に表示する。
  * - それより下の階層は、節（最上位項目から次の最上位項目の手前まで）が開いているときだけ表示する。
  *   既定では、アクティブな見出しを含む節だけが開く。
+ *   ただし最上位の項目が1つだけの目次（記事タイトルを見出し1で繰り返し、その下に本文の見出しが並ぶ形）は、
+ *   その節を既定で開く（畳むと目次が1行だけになり、目次の役に立たないため）。
  * - `overrides`（節キー → 開閉）は既定より優先する。利用者が手で開閉した節の分
  *   （先頭の孤立した下位見出しの塊 `TOC_LEAD_SECTION` はボタンが無いので対象外）。
  * - アクティブ項目そのものは、上の規則で畳まれていなければ見える。
- * 順序は items のまま。activeId が null / 未知なら最上位のみ（overrides で開いた節を除く）。
+ * 順序は items のまま。activeId が null / 未知なら最上位のみ（overrides で開いた節と、最上位が1つだけの節を除く）。
  */
 export function visibleTocItems(
   items: TocItem[],
@@ -211,12 +213,15 @@ export function visibleTocItems(
   const keys = tocSectionKeys(items);
   const activeIndex = activeId === null ? -1 : items.findIndex((i) => i.id === activeId);
   const activeKey = activeIndex === -1 ? null : keys[activeIndex];
+  const topItems = items.filter((i) => i.level === topLevel);
+  // 最上位が1つだけなら、その節は既定で開く（先頭の孤立した下位見出しの塊は従来どおり）
+  const defaultOpenKey = topItems.length === 1 ? topItems[0].id : null;
 
   return items.filter((item, idx) => {
     if (item.level === topLevel) return true;
     const key = keys[idx];
     if (key !== TOC_LEAD_SECTION && key in overrides) return overrides[key];
-    return key === activeKey;
+    return key === activeKey || key === defaultOpenKey;
   });
 }
 

@@ -608,10 +608,11 @@ export default function GuideViewPage() {
         </div>
       )}
 
-      {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ） */}
+      {/* 末尾: この走者のほかのガイド（0件なら筆者とプロフィールへのリンクだけ）。
+          0件でも欄（h2）は残して筆者への導線を置き、見出しだけ中身に合わせて「筆者」にする */}
       <PageSection
         id="guide-more-by-author"
-        title={t("guideView.moreFromAuthor")}
+        title={otherGuides.length > 0 ? t("guideView.moreFromAuthor") : t("guideView.aboutAuthor")}
         className="mt-12"
         action={
           otherGuides.length > 0 ? (

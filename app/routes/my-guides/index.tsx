@@ -15,6 +15,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { eq, and, desc } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 import { deleteGuide } from "@/lib/content-cleanup.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,7 @@ import { MyContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
-import { BookOpen, Plus, Pencil, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
+import { BookOpen, Plus, Pencil, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -108,6 +109,10 @@ export async function action({ request }: ActionFunctionArgs) {
   return null;
 }
 
+/** 状態の丸ピル（ui.md 6 章）。色は呼び出し側で上書きする */
+const STATUS_PILL_CLASS =
+  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground";
+
 export default function MyGuidesPage() {
   const t = useT();
   const locale = useLocale();
@@ -178,16 +183,24 @@ export default function MyGuidesPage() {
                           {guide.title}
                         </Link>
                       )}
-                      {guide.isPublished ? (
-                        <Badge variant="default" className="shrink-0 text-xs">
-                          <Globe className="h-3 w-3" />
-                          {t("meGuides.statusPublished")}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="shrink-0 text-xs">
-                          <Lock className="h-3 w-3" />
-                          {t("meGuides.statusDraft")}
-                        </Badge>
+                      {/* 公開状態はエディタの公開状態のピル（desktop-toolbar.tsx の PublishStatusPill）と同じ丸ピル・同じ語。
+                          brand は選択中・進行だけに使うので、公開中も muted にする（ui.md 1 章） */}
+                      <span className={STATUS_PILL_CLASS}>
+                        {guide.isPublished ? (
+                          <Globe className="h-3 w-3" aria-hidden />
+                        ) : (
+                          <Lock className="h-3 w-3" aria-hidden />
+                        )}
+                        {guide.isPublished ? t("meGuides.statusPublished") : t("meGuides.statusPrivate")}
+                      </span>
+                      {/* 公開中のガイドに下書き保存した未公開の変更があるときだけ。非公開のガイドに残る下書き
+                          （下書き保存が非公開にも出ていた頃のもの）は読者に関係しないので出さない
+                          （エディタの draftBannerUnpublished・プレビューの帯と同じ扱い） */}
+                      {guide.isPublished && guide.draftUpdatedAt !== null && (
+                        <span className={cn(STATUS_PILL_CLASS, "border-warning/40 text-warning")}>
+                          <PencilLine className="h-3 w-3" aria-hidden />
+                          {t("meGuides.statusUnpublishedChanges")}
+                        </span>
                       )}
                       {guide.isPinned && <PinnedBadge className="shrink-0" />}
                     </div>

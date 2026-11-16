@@ -189,8 +189,37 @@ describe("visibleTocItems", () => {
       { id: "t", text: "T", level: 1 },
       { id: "t1", text: "T1", level: 2 },
     ];
-    expect(ids(visibleTocItems(xs, "o"))).toEqual(["o", "t"]);
+    // 最上位が t だけなので t の節は既定で開く。先頭の孤立した o はアクティブのときだけ見える
+    expect(ids(visibleTocItems(xs, "o"))).toEqual(["o", "t", "t1"]);
     expect(ids(visibleTocItems(xs, "t"))).toEqual(["t", "t1"]);
+    expect(ids(visibleTocItems(xs, null))).toEqual(["t", "t1"]);
+  });
+
+  it("最上位が1つだけなら、その節を既定で開く", () => {
+    const xs = [
+      { id: "h", text: "H", level: 1 },
+      { id: "h1", text: "H1", level: 2 },
+      { id: "h1x", text: "H1x", level: 3 },
+      { id: "h2", text: "H2", level: 2 },
+    ];
+    expect(ids(visibleTocItems(xs, null))).toEqual(["h", "h1", "h1x", "h2"]);
+    expect(ids(visibleTocItems(xs, "h2"))).toEqual(["h", "h1", "h1x", "h2"]);
+    // 利用者の開閉は既定より優先する
+    expect(ids(visibleTocItems(xs, "h2", { h: false }))).toEqual(["h"]);
+    expect(ids(visibleTocItems(xs, null, tocAllSectionOverrides(xs, false)))).toEqual(["h"]);
+    expect(ids(visibleTocItems(xs, null, { h: true }))).toEqual(["h", "h1", "h1x", "h2"]);
+    // 「すべて開く／閉じる」の対象にもなる（開閉ボタンを出す）
+    expect(tocAllSectionOverrides(xs, true)).toEqual({ h: true });
+  });
+
+  it("最上位が2つ以上なら、アクティブの無い節は既定で畳んだまま", () => {
+    const xs = [
+      { id: "p", text: "P", level: 1 },
+      { id: "p1", text: "P1", level: 2 },
+      { id: "q", text: "Q", level: 1 },
+    ];
+    expect(ids(visibleTocItems(xs, null))).toEqual(["p", "q"]);
+    expect(ids(visibleTocItems(xs, "q"))).toEqual(["p", "q"]);
   });
 
   it("空配列", () => {

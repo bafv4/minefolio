@@ -22,6 +22,8 @@ export const PAGES_JA = {
     updatedOn: "更新 {date}",
     viewCount: "閲覧 {count}",
     moreFromAuthor: "この走者のほかのガイド",
+    /** 末尾の欄で、ほかの公開ガイドが無く筆者へのリンクだけのときの見出し */
+    aboutAuthor: "筆者",
     allGuidesByAuthor: "すべてのガイド",
   },
   /** テーマ切替（components/layout/theme-toggle.tsx） */
@@ -2144,7 +2146,10 @@ export const PAGES_JA = {
     delete: "削除",
     viewPublished: "公開ページを見る",
     statusPublished: "公開中",
-    statusDraft: "下書き",
+    /** 状態のピル（エディタの公開状態のピル・プレビューの帯と同じ語） */
+    statusPrivate: "非公開",
+    /** 公開中のガイドに、下書き保存した未公開の変更があるとき */
+    statusUnpublishedChanges: "未公開の変更あり",
     pin: "プロフィールにピン留めする",
     unpin: "ピン留めを解除する",
     newTitle: "新しいガイドを作成",
