@@ -18,6 +18,57 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
   )
 }
 
+/**
+ * 選択中のタブが横スクロールで隠れていたら、見える位置まで寄せる（マウント時と選択が変わったとき）。
+ * - scrollIntoView は使わない。タブ列が画面外にあるとページの縦スクロールまで動いてしまい、全ページのタブに効く
+ *   ので、リスト自身の scrollLeft だけを動かす
+ * - 選択中の判定は aria-selected（ツールチップ付きのトリガーは data-state が上書きされるため）
+ * - マウント時は動きなし（即時）、変更時はなめらか（reduced-motion では即時）
+ */
+function useRevealActiveTab(scrollerRef: React.RefObject<HTMLDivElement | null>) {
+  React.useEffect(() => {
+    const list = scrollerRef.current
+    if (!list) return
+    const reveal = (animate: boolean) => {
+      const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      if (!tab || list.scrollWidth <= list.clientWidth + 1) return
+      const listRect = list.getBoundingClientRect()
+      const tabRect = tab.getBoundingClientRect()
+      // 端の余白（帯の左右の padding ぶん）を残して見せる
+      const margin = 6
+      let delta = 0
+      if (tabRect.left < listRect.left + margin) delta = tabRect.left - listRect.left - margin
+      else if (tabRect.right > listRect.right - margin) delta = tabRect.right - listRect.right + margin
+      if (delta === 0) return
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      list.scrollTo({
+        left: list.scrollLeft + delta,
+        behavior: animate && !reduced ? "smooth" : "auto",
+      })
+    }
+    reveal(false)
+    // マウント後にタブの幅が変わる（Web フォントの読み込み・画面幅の変更）と位置がずれるので、動きなしで合わせ直す
+    let cancelled = false
+    document.fonts?.ready.then(() => {
+      if (!cancelled) reveal(false)
+    })
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => reveal(false))
+    resizeObserver?.observe(list)
+    const observer = new MutationObserver(() => reveal(true))
+    observer.observe(list, {
+      attributes: true,
+      attributeFilter: ["aria-selected"],
+      subtree: true,
+    })
+    return () => {
+      cancelled = true
+      observer.disconnect()
+      resizeObserver?.disconnect()
+    }
+  }, [scrollerRef])
+}
+
 function TabsList({
   className,
   scrollFade = false,
@@ -31,6 +82,7 @@ function TabsList({
   // スクロールバー（スクロール可能時のみ表示・ドラッグ可）をラッパに重ねる。
   const { scrollerRef, scrollbar, isScrollable, canScrollStart, canScrollEnd } =
     useTabScrollbar()
+  useRevealActiveTab(scrollerRef)
   return (
     // ラッパは非スクロールの relative 親（つまみの位置基準 + z-[1] の持ち主）。
     // List の -mb-px でラッパの高さが 1px 縮み、List の描画がラッパ下端から
