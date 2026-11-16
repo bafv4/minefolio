@@ -175,7 +175,7 @@ export function HydrateFallback() {
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type KeyboardLayout } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, isTklLayout, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type KeyboardLayout } from "@/lib/keybindings";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
 import { ProfileHotbarTabs, type ProfileHotbarItem } from "@/components/profile-hotbar-tabs";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
@@ -883,7 +883,7 @@ export default function PlayerProfilePage() {
     [player.rtaStartedYearMonth, locale, now],
   );
 
-  const isTKL = keyboardLayout === "US_TKL" || keyboardLayout === "JIS_TKL";
+  const isTKL = isTklLayout(keyboardLayout);
 
 
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
@@ -2803,7 +2803,7 @@ function SocialLinkRichCard({
 /** plain: 値が数値ではなく名前（ゲーム言語・機種名など）のとき等幅フォントにしない */
 /** キーボードレイアウトの生の値（US_TKL 等）を設定画面の選択肢と同じ表示名（US TKL）にする */
 function keyboardLayoutLabel(layout: string): string {
-  return layout.replace("_", " ");
+  return layout.replace(/[_-]/g, " ");
 }
 
 function DeviceRow({ label, value, unit, plain }: { label: ReactNode; value: ReactNode; unit?: string; plain?: boolean }) {

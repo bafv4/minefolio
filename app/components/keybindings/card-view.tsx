@@ -182,7 +182,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
             </Link>
           </h2>
           <Badge variant="outline" className="text-[10px] shrink-0">
-            {layout.replace("_", " ")}
+            {layout.replace(/[_-]/g, " ")}
           </Badge>
         </div>
       </CardHeader>

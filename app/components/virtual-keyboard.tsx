@@ -4,22 +4,25 @@ import { useT } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { getKeyLabel, getKeyCodeAliases, isJisLayout, isTklLayout, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
 import { getRemapOutputLabel, getRemapSourceLabel, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
 
 // カスタムアクションのトリガーキー（修飾キー組み合わせ可）が指定キーコードに一致するものを抽出。
 // リマップと同様、修飾キー組み合わせ（"Ctrl+KeyX"）はベースキー（KeyX）で照合する。
+// layout を渡すと、JIS の半角キー（IntlYen）には別名の Backquote をトリガーにするものも含める。
 function getCustomActionsForKeyCode(
   customActions: KeyInfoCustomAction[],
   keyCode: string,
+  layout?: string | null,
 ): KeyInfoCustomAction[] {
+  const codes = getKeyCodeAliases(keyCode, layout);
   return customActions.filter((ca) => {
     const baseKey = ca.triggerKey.includes("+")
       ? parseKeyCombination(ca.triggerKey).keyCode
       : ca.triggerKey;
-    return keysEqual(baseKey, keyCode);
+    return codes.some((c) => keysEqual(baseKey, c));
   });
 }
 
@@ -564,8 +567,8 @@ function VirtualKeyboardComponent({
   section = "all",
 }: VirtualKeyboardProps) {
   const t = useT();
-  const isJIS = layout === "JIS" || layout === "JIS_TKL";
-  const isTKL = layout === "US_TKL" || layout === "JIS_TKL";
+  const isJIS = isJisLayout(layout);
+  const isTKL = isTklLayout(layout);
   const mainLayout = isJIS ? JIS_MAIN_LAYOUT : US_MAIN_LAYOUT;
   const showNumpad = !isTKL && !hideNumpad && section !== "nav";
   const showMain = section !== "nav";
@@ -578,46 +581,50 @@ function VirtualKeyboardComponent({
 
   // キーコードからバインディング情報を検索（正規化して検索、複数操作対応）
   const getBindingsForKey = (keyCode: string): KeybindingInfoList => {
-    // 直接 → 正規化 → 小文字 の順に検索
-    const normalized = normalizeKeyCode(keyCode);
-    const list =
-      keybindings[keyCode] ||
-      keybindings[normalized] ||
-      keybindings[keyCode.toLowerCase()] ||
-      [];
+    // 別名のキーコード（JIS の半角 IntlYen ← Backquote）の割り当ても合わせる（同じ操作は1つに）
+    const merged: KeybindingInfoList = [];
+    for (const code of getKeyCodeAliases(keyCode, layout)) {
+      // 直接 → 正規化 → 小文字 の順に検索
+      const normalized = normalizeKeyCode(code);
+      const list =
+        keybindings[code] ||
+        keybindings[normalized] ||
+        keybindings[code.toLowerCase()] ||
+        [];
+      for (const b of list) {
+        if (!merged.some((m) => m.action === b.action && m.category === b.category)) merged.push(b);
+      }
+    }
     // toggleHud はバーチャルキーボード上には表示しない
-    return list.filter((b) => b.action !== "toggleHud");
+    return merged.filter((b) => b.action !== "toggleHud");
   };
 
   // キーコードから指割り当てを取得（正規化して検索）
   const getFingersForKey = (keyCode: string): FingerType[] => {
-    const normalized = normalizeKeyCode(keyCode);
-    return effectiveFingerAssignments[normalized] ||
-           effectiveFingerAssignments[keyCode] ||
-           effectiveFingerAssignments[keyCode.toLowerCase()] ||
-           [];
+    // 別名のキーコード（JIS の半角 IntlYen ← Backquote）の指割り当ても合わせる（重複は除く）
+    const merged: FingerType[] = [];
+    for (const code of getKeyCodeAliases(keyCode, layout)) {
+      const normalized = normalizeKeyCode(code);
+      const list =
+        effectiveFingerAssignments[normalized] ||
+        effectiveFingerAssignments[code] ||
+        effectiveFingerAssignments[code.toLowerCase()] ||
+        [];
+      for (const f of list) if (!merged.includes(f)) merged.push(f);
+    }
+    return merged;
   };
 
   // キーコードからリマップ情報を取得
   // 修飾キー組み合わせの場合はベースキーが一致するものを返す
-  const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) => {
-      if (r.sourceKey.includes("+")) {
-        const parsed = parseKeyCombination(r.sourceKey);
-        return keysEqual(parsed.keyCode, keyCode);
-      }
-      return keysEqual(r.sourceKey, keyCode);
-    });
-  };
+  const getRemapForKey = (keyCode: string): RemapInfo | undefined => getRemapsForKey(keyCode)[0];
 
   // 特定キーに関連する全リマップを取得（修飾キー組み合わせを含む）
   const getRemapsForKey = (keyCode: string): RemapInfo[] => {
+    const codes = getKeyCodeAliases(keyCode, layout);
     return remaps.filter((r) => {
-      if (r.sourceKey.includes("+")) {
-        const parsed = parseKeyCombination(r.sourceKey);
-        return keysEqual(parsed.keyCode, keyCode);
-      }
-      return keysEqual(r.sourceKey, keyCode);
+      const source = r.sourceKey.includes("+") ? parseKeyCombination(r.sourceKey).keyCode : r.sourceKey;
+      return codes.some((c) => keysEqual(source, c));
     });
   };
 
@@ -641,12 +648,13 @@ function VirtualKeyboardComponent({
     const finger: FingerType | undefined = fingers[0];
     // 複数リマップ対応: このキーに関連する全リマップを取得
     const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
-    const isHighlighted = highlightedKeys.includes(key.code);
-    const isHeld = heldKeys.includes(key.code);
-    const annotation = keyAnnotations[key.code];
+    const keyCodes = getKeyCodeAliases(key.code, layout);
+    const isHighlighted = keyCodes.some((c) => highlightedKeys.includes(c));
+    const isHeld = keyCodes.some((c) => heldKeys.includes(c));
+    const annotation = keyCodes.map((c) => keyAnnotations[c]).find((a) => a !== undefined);
     const isDimmed =
       emphasizedKeys !== undefined &&
-      !emphasizedKeys.includes(key.code) &&
+      !keyCodes.some((c) => emphasizedKeys.includes(c)) &&
       !isHeld &&
       !isHighlighted;
     const displayLabel =
@@ -802,7 +810,7 @@ function VirtualKeyboardComponent({
       title: getKeyLabel(t, key.code, layout),
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
       remaps: keyRemaps,
-      customActions: getCustomActionsForKeyCode(customActions, key.code),
+      customActions: getCustomActionsForKeyCode(customActions, key.code, layout),
       fingers: showFingerAssignments ? fingers : undefined,
       layout,
     };

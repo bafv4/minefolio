@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getKeyCombinationLabel } from "@/lib/keybindings";
+import { getKeyLabel, getKeyCombinationLabel, isJisLayout } from "@/lib/keybindings";
 import { useT } from "@/hooks/use-locale";
 
 const MODIFIER_KEY_CODES = new Set([
@@ -76,6 +76,11 @@ export function KeyCaptureButton({
   const [isCapturing, setIsCapturing] = useState(false);
   const [heldModifiers, setHeldModifiers] = useState<string[]>([]);
 
+  // JIS の配列を受け取っているときだけ、実キーの ¥（IntlYen）をサイトの ¥ キー（IntlBackslash）として保存する
+  // （サイトの JIS 仮想キーボードは IntlYen を半角キーに使うため）。実キーの半角は Backquote のまま保存する
+  const toStoredCode = (code: string) =>
+    code === "IntlYen" && isJisLayout(keyboardLayout) ? "IntlBackslash" : code;
+
   const finalize = (e: React.SyntheticEvent, keyCode: string) => {
     onCapture(keyCode);
     (e.currentTarget as HTMLElement).blur();
@@ -104,10 +109,10 @@ export function KeyCaptureButton({
         if (allowModifiers) {
           // 非修飾キーの押下で（押下中の修飾キーとの）組み合わせとして確定
           const modifiers = modifiersFromEvent(e);
-          finalize(e, modifiers.length > 0 ? [...modifiers, e.code].join("+") : e.code);
+          finalize(e, modifiers.length > 0 ? [...modifiers, toStoredCode(e.code)].join("+") : toStoredCode(e.code));
         } else {
           // リマップ先は単一キーのみ: 押下中の修飾キーは無視し基底キーだけ確定
-          finalize(e, e.code);
+          finalize(e, toStoredCode(e.code));
         }
       }}
       onKeyUp={(e) => {

@@ -160,6 +160,8 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   Comma: ",",
   Period: ".",
   Backquote: "`",
+  // JIS 以外では ¥ キー（JIS の半角は JIS_KEY_LABEL_KEY_OVERRIDES で上書き）
+  IntlYen: "¥",
   // テンキー
   NumpadEnter: "Num Enter",
   NumpadAdd: "Num +",
@@ -190,6 +192,8 @@ const KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
 /** JIS 配列だけ翻訳が要るキー */
 const JIS_KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
   Backquote: "keyLabels.hankaku",
+  // サイトの JIS 仮想キーボードは半角キーを IntlYen で持つ（¥ キーは IntlBackslash）
+  IntlYen: "keyLabels.hankaku",
 };
 
 /**
@@ -458,14 +462,40 @@ export function keysEqual(keyCode1: string, keyCode2: string): boolean {
 // =====================================
 
 // JIS配列とUS配列で異なるキーのマッピング
+// キーコードは物理的な位置（ブラウザの KeyboardEvent.code・Minecraft のキー名とも US 配列の位置で名付ける）。
+// JIS の刻印は仮想キーボードの JIS_MAIN_LAYOUT（virtual-keyboard.tsx）と同じにする
 const JIS_KEY_LABELS: Record<string, string> = {
-  Semicolon: ":",
-  Quote: "^",
+  Equal: "^",
+  Quote: ":",
   BracketLeft: "@",
   BracketRight: "[",
   Backslash: "]",
   Backquote: "",  // → keyLabels.hankaku
+  IntlBackslash: "¥",
 };
+
+/** 配列名が JIS 系か（"JIS" / "JIS_TKL" / "JIS-TKL"。大文字小文字は問わない。null・未指定は US 扱い） */
+export function isJisLayout(layout: string | null | undefined): boolean {
+  return layout?.toUpperCase().startsWith("JIS") ?? false;
+}
+
+/** 配列名が TKL（テンキーレス）か（"US_TKL" / "JIS-TKL" 等。大文字小文字は問わない） */
+export function isTklLayout(layout: string | null | undefined): boolean {
+  return layout?.toUpperCase().includes("TKL") ?? false;
+}
+
+/**
+ * 仮想キーボード上の1キーに重ねて出す、同じキーを指す別名のキーコード（自身を先頭に含む）。
+ * サイトの JIS 配列では半角キーを IntlYen で描くが、Minecraft 取り込み・実キーボードの半角は
+ * Backquote で保存される。JIS の IntlYen には Backquote の割り当ても出す。US は Backquote キーが
+ * そのまま別にあるので別名なし。
+ */
+export function getKeyCodeAliases(keyCode: string, layout: string | null | undefined): string[] {
+  if (isJisLayout(layout) && normalizeKeyCode(keyCode) === "IntlYen") {
+    return [keyCode, "Backquote"];
+  }
+  return [keyCode];
+}
 
 const US_KEY_LABELS: Record<string, string> = {
   Semicolon: ";",
@@ -485,7 +515,7 @@ const US_KEY_LABELS: Record<string, string> = {
  * - PascalCase形式: "KeyW" → "W"
  *
  * @param keyCode キーコード（任意の形式）
- * @param keyboardLayout キーボード配列 ("jis" | "us" | null)
+ * @param keyboardLayout キーボード配列（保存値の "JIS" / "JIS_TKL" / "US" / "US_TKL"、ハイフン表記（"JIS-TKL"）も可。大文字小文字は問わない。null は US）
  */
 export function getKeyLabel(
   t: Translator,
@@ -501,7 +531,7 @@ export function getKeyLabel(
   const normalized = normalizeKeyCode(keyCode);
 
   // キーボード配列による違いを適用（JIS の半角キーだけ翻訳が要る）
-  const isJis = keyboardLayout === "jis";
+  const isJis = isJisLayout(keyboardLayout);
   if (isJis && JIS_KEY_LABEL_KEY_OVERRIDES[normalized]) {
     return t(JIS_KEY_LABEL_KEY_OVERRIDES[normalized]);
   }

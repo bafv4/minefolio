@@ -318,16 +318,28 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 
 ### キーボード配列による表示差異
 
-JIS配列とUS配列で同一キーコードの表示ラベルが異なる。
+JIS配列とUS配列で同一キーコードの表示ラベルが異なる。キーコードは物理的な位置（ブラウザの `KeyboardEvent.code`・Minecraft のキー名とも US 配列の位置で名付ける）なので、JIS の表示は仮想キーボードの JIS 配列（`JIS_MAIN_LAYOUT`）の刻印と同じにする。
+
+配列名の判定は `isJisLayout` / `isTklLayout`（`app/lib/keybindings.ts`）に集約している。保存値は `JIS` / `JIS_TKL` / `US` / `US_TKL` だが、ハイフン表記（`JIS-TKL` / `US-TKL`）や大文字小文字違いも受け付ける（大文字化して `JIS` で始まれば JIS、`TKL` を含めば TKL）。`getKeyLabel` と `VirtualKeyboard` は同じ判定を使う。
 
 | キーコード | JIS | US |
 |---|---|---|
-| Semicolon | `:` | `;` |
-| Quote | `^` | `'` |
+| Equal | `^` | `=` |
+| Quote | `:` | `'` |
 | BracketLeft | `@` | `[` |
 | BracketRight | `[` | `]` |
 | Backslash | `]` | `\` |
 | Backquote | `半角` | `` ` `` |
+| IntlYen | `半角` | `¥` |
+| IntlBackslash | `¥` | （ラベル表なし・生のコード） |
+
+#### JIS の半角キーと ¥ キー（サイトの約束ごと）
+
+- サイトの JIS 仮想キーボードは、**半角キーを `IntlYen`、¥ キーを `IntlBackslash`** として描く（クリックで渡るコードもこれ。既存データとの互換のため）
+- 実キーボードの半角/全角は、ブラウザでもゲーム（GLFW）でも `Backquote`。Minecraft 取り込みの `key.keyboard.grave.accent` も `Backquote` になる。そのため **JIS では `Backquote` を `IntlYen`（半角）の別名**として扱い、仮想キーボードの半角キーには `IntlYen` と `Backquote` の両方の割り当て（keybindings / fingerAssignments / remaps / customActions、ハイライト等）を重ねて出す（重複は除く。`getKeyCodeAliases`）。US 配列には `Backquote` キーがそのままあるので別名は使わない
+- `KeyCaptureButton` は、**JIS の配列を受け取っているときだけ**、押された実キーの ¥（`IntlYen`）を `IntlBackslash` に読み替えて保存する（サイトの ¥ キーと一致させるため）。実キーの半角（`Backquote`）はそのまま保存する。配列が `null`・US のときは読み替えない
+- DB のデータは書き換えない。表示・入力側で吸収する
+- `/keybindings/stats` はキーコード単位で集計し、配列を見ずにラベルを引く。JIS の走者の `Backquote` と `IntlYen` は別の行になる（現状は寄せていない）
 
 ### 指割り当て
 
