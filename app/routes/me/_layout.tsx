@@ -26,6 +26,8 @@ import { Button } from "@/components/ui/button";
 import { ShareButton } from "@/components/share-button";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
+import { loadMeChecklist } from "@/lib/me-checklist.server";
+import { MeTour } from "@/components/me/me-tour";
 
 // 同じ pathname で検索パラメータだけが変わる GET 遷移では、このレイアウトのデータ（ユーザー行・appUrl）は
 // 変わらないので再取得しない。action 後・パス変更・revalidator.revalidate()（URL 不変）は従来どおり。
@@ -60,7 +62,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 
-  return { user, appUrl };
+  // 「はじめに」チェックリスト（/me/edit が useRouteLoaderData で読む。閉じ済み・全完了なら null）
+  const checklist = await loadMeChecklist(db, user);
+
+  return { user, appUrl, checklist };
 }
 
 // 主要なナビゲーション項目（プロフィールのホットバーと同じ 2 群: 人物系 | セットアップ系。群の間に区切りを入れる）
@@ -73,6 +78,19 @@ const mainNavItems = [
   { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package, startsGroup: false },
   { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search, startsGroup: false },
 ];
+
+// ナビのリンクの見た目。現在地は brand（ヘッダーの現在ページと同じ text-brand bg-brand/10。NavLink が aria-current="page" を付ける）。
+// md 未満は押せる高さを 44px にする
+function navLinkClass({ isActive, isPending }: { isActive: boolean; isPending: boolean }) {
+  return cn(
+    "flex items-center gap-3 px-3 py-2 min-h-11 md:min-h-0 rounded-lg text-sm transition-colors",
+    isActive
+      ? "text-brand bg-brand/10 font-medium"
+      : isPending
+      ? "bg-secondary/50 text-muted-foreground"
+      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+  );
+}
 
 // 補助的なナビゲーション項目（区切り線の下）
 const secondaryNavItems = [
@@ -105,7 +123,7 @@ export default function MeLayout() {
       {/* Sidebar Navigation */}
       <aside className="lg:w-64 shrink-0">
         <nav className="sticky top-24 space-y-1">
-          <div className="mb-3 pb-3 lg:mb-4 lg:pb-4 border-b flex items-start justify-between gap-2">
+          <div data-me-tour="identity" className="mb-3 pb-3 lg:mb-4 lg:pb-4 border-b flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium truncate">
                 {userName}
@@ -117,6 +135,7 @@ export default function MeLayout() {
             <ShareButton
               title={`${userName} - Minefolio`}
               url={`${appUrl}/player/${user.slug}`}
+              className="min-h-11 md:min-h-0"
             />
           </div>
 
@@ -124,17 +143,18 @@ export default function MeLayout() {
           <Button
             type="button"
             variant="outline"
-            className="w-full justify-between lg:hidden"
+            data-me-tour="sidebar-toggle"
+            className="w-full justify-between min-h-11 md:min-h-0 lg:hidden"
             aria-expanded={mobileMenuOpen}
             aria-controls="me-mobile-menu"
             aria-label={t("meLayout.mobileMenuLabel", { page: currentLabel })}
             onClick={() => setMobileMenuOpen((open) => !open)}
           >
-            <span className="min-w-0 truncate text-sm font-medium text-primary">{currentLabel}</span>
+            <span className="min-w-0 truncate text-sm font-medium text-brand">{currentLabel}</span>
             {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
           </Button>
 
-          <div id="me-mobile-menu" className={cn("space-y-1", !mobileMenuOpen && "hidden", "lg:block")}>
+          <div id="me-mobile-menu" data-me-tour="sidebar" className={cn("space-y-1", !mobileMenuOpen && "hidden", "lg:block")}>
           {/* 主要なナビゲーション項目 */}
           {mainNavItems.map((item) => (
             <Fragment key={item.to}>
@@ -143,14 +163,7 @@ export default function MeLayout() {
               to={item.to}
               end
               className={({ isActive, isPending }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : isPending
-                    ? "bg-secondary/50 text-muted-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )
+                navLinkClass({ isActive, isPending })
               }
             >
               {({ isPending }) => (
@@ -168,7 +181,7 @@ export default function MeLayout() {
           ))}
 
           {/* 区切り線 */}
-          <div className="my-3 border-t" />
+          <div aria-hidden="true" className="my-3 border-t" />
 
           {/* 補助的なナビゲーション項目 */}
           {secondaryNavItems.map((item) => (
@@ -177,14 +190,7 @@ export default function MeLayout() {
               to={item.to}
               end
               className={({ isActive, isPending }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : isPending
-                    ? "bg-secondary/50 text-muted-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )
+                navLinkClass({ isActive, isPending })
               }
             >
               {({ isPending }) => (
@@ -204,14 +210,16 @@ export default function MeLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0">
+      {/* <main> はサイトの共通レイアウト（routes/_layout.tsx）が持つので、ここは div にする */}
+      <div className="flex-1 min-w-0">
         <div className={cn(
           "transition-opacity duration-150",
           isNavigating && "opacity-50 pointer-events-none"
         )}>
           <Outlet />
         </div>
-      </main>
+      </div>
+      <MeTour show={!user.meTourCompletedAt} />
     </div>
   );
 }

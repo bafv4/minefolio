@@ -3,7 +3,7 @@ import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/records";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createDb } from "@/lib/db";
+import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -12,11 +12,26 @@ import { eq, and, asc, count } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
-import { parseRunIdList, toggleRunId } from "@/lib/run-id-list";
+import { parseRunIdList, parseRunIdListInput, sameRunIdSet, toggleRunId } from "@/lib/run-id-list";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { PageSection } from "@/components/page-section";
+import { NoticeBanner } from "@/components/notice-banner";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +46,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Trophy,
   Plus,
@@ -44,10 +58,13 @@ import {
   EyeOff,
   Pin,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import { isHttpUrl } from "@/lib/safe-url";
+import { categoryLabel, type CategoryKey } from "@/lib/playstyle";
+import { RECORD_CATEGORY_KEYS, resolveRecordCategory, splitRecordCategory } from "@/lib/record-category";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -219,21 +236,32 @@ export async function action({ request }: Route.ActionArgs) {
         if (e instanceof RecordLimitError) {
           return { error: t("meRecords.errorLimitReached") };
         }
+        // (userId, category, recordType) の一意制約。同じカテゴリの記録は1件だけ
+        if (isUniqueConstraintError(e)) {
+          return { error: t("meRecords.categoryDuplicate") };
+        }
         throw e;
       }
     } else if (id) {
-      await db
-        .update(categoryRecords)
-        .set({
-          category,
-          categoryDisplayName,
-          personalBest,
-          pbVideoUrl,
-          isVisible,
-          isPinned,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
+      try {
+        await db
+          .update(categoryRecords)
+          .set({
+            category,
+            categoryDisplayName,
+            personalBest,
+            pbVideoUrl,
+            isVisible,
+            isPinned,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
+      } catch (e) {
+        if (isUniqueConstraintError(e)) {
+          return { error: t("meRecords.categoryDuplicate") };
+        }
+        throw e;
+      }
     }
 
     return { success: true };
@@ -249,42 +277,26 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true };
   }
 
-  // Speedrun.com記録の表示/非表示トグル
-  if (action === "toggleSpeedrunRecord") {
-    const runId = formData.get("runId") as string;
-    if (!runId) {
-      return { error: t("meRecords.recordIdRequired") };
+  // Speedrun.com記録の非表示・ピン留めを、下書きの内容でまとめて保存する（FloatingSaveBar から）
+  if (action === "saveSpeedrunFlags") {
+    const hidden = parseRunIdListInput(formData.get("hidden"));
+    const pinned = parseRunIdListInput(formData.get("pinned"));
+    if (!hidden || !pinned) {
+      return { error: t("meRecords.invalidAction") };
     }
 
-    const newHidden = toggleRunId(parseRunIdList(user.hiddenSpeedrunRecords), runId);
+    // 非表示は露出を減らす操作なので updatedAt（ホームの「最近の更新」等）は進めない。ピン留めが変わったときだけ進める
+    const pinnedChanged = !sameRunIdSet(parseRunIdList(user.pinnedSpeedrunRecords), pinned);
     await db
       .update(users)
       .set({
-        hiddenSpeedrunRecords: JSON.stringify(newHidden),
-        // 非表示は露出を減らす操作なので updatedAt（ホームの「最近の更新」等）は更新しない
+        hiddenSpeedrunRecords: JSON.stringify(hidden),
+        pinnedSpeedrunRecords: JSON.stringify(pinned),
+        ...(pinnedChanged ? { updatedAt: new Date() } : {}),
       })
       .where(eq(users.id, user.id));
 
-    return { success: true, hiddenRecords: newHidden };
-  }
-
-  // Speedrun.com記録のピン留めトグル
-  if (action === "toggleSpeedrunRecordPin") {
-    const runId = formData.get("runId") as string;
-    if (!runId) {
-      return { error: t("meRecords.recordIdRequired") };
-    }
-
-    const newPinned = toggleRunId(parseRunIdList(user.pinnedSpeedrunRecords), runId);
-    await db
-      .update(users)
-      .set({
-        pinnedSpeedrunRecords: JSON.stringify(newPinned),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
-
-    return { success: true, pinnedRecords: newPinned };
+    return { success: true, flags: true as const };
   }
 
   return { error: t("meRecords.invalidAction") };
@@ -295,57 +307,81 @@ export default function RecordsPage() {
   const {
     records,
     speedruncomRecords,
-    hiddenSpeedrunRecords: initialHidden,
-    pinnedSpeedrunRecords: initialPinned,
+    hiddenSpeedrunRecords: savedHidden,
+    pinnedSpeedrunRecords: savedPinned,
     speedruncomUsername,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const flagsFetcher = useFetcher<typeof action>();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<typeof records[0] | null>(null);
-  const [hiddenSpeedrunRecords, setHiddenSpeedrunRecords] = useState<string[]>(initialHidden);
-  const [pinnedSpeedrunRecords, setPinnedSpeedrunRecords] = useState<string[]>(initialPinned);
+  const [deletingRecord, setDeletingRecord] = useState<typeof records[0] | null>(null);
+  const [categoryKey, setCategoryKey] = useState<CategoryKey>("rsg");
+  const [categorySuffix, setCategorySuffix] = useState("");
+  // Speedrun.com 記録の非表示・ピン留めは下書きで持ち、FloatingSaveBar で保存する
+  const [draftHidden, setDraftHidden] = useState<string[]>(savedHidden);
+  const [draftPinned, setDraftPinned] = useState<string[]>(savedPinned);
 
   const isSubmitting = fetcher.state === "submitting";
+  const isSavingFlags = flagsFetcher.state !== "idle";
   const data = fetcher.data;
 
-  // fetcherの結果を反映
+  // 保存済みの内容が変わったとき（保存の完了・別操作の再検証で中身が変わったとき）だけ下書きを取り直す。
+  // カスタム記録の追加・削除でも loader は再検証されるので、配列の参照ではなく内容で比べる
+  // （そうしないと、未保存の下書きがその度に消える）
+  const savedFlagsKey = JSON.stringify([[...savedHidden].sort(), [...savedPinned].sort()]);
   useEffect(() => {
-    if (fetcher.data && "hiddenRecords" in fetcher.data && fetcher.data.hiddenRecords) {
-      setHiddenSpeedrunRecords(fetcher.data.hiddenRecords);
-    }
-    if (fetcher.data && "pinnedRecords" in fetcher.data && fetcher.data.pinnedRecords) {
-      setPinnedSpeedrunRecords(fetcher.data.pinnedRecords);
-    }
-  }, [fetcher.data]);
+    setDraftHidden(savedHidden);
+    setDraftPinned(savedPinned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedFlagsKey]);
 
-  // Speedrun.com記録のフラグ（非表示/ピン留め）を、サーバー送信 + 楽観的更新でトグルする
-  const toggleSpeedrunRecordFlag = (
-    action: "toggleSpeedrunRecord" | "toggleSpeedrunRecordPin",
-    setter: React.Dispatch<React.SetStateAction<string[]>>,
-    runId: string,
-  ) => {
-    fetcher.submit({ _action: action, runId }, { method: "post" });
-    setter((prev) => toggleRunId(prev, runId));
+  const flagsDirty = !sameRunIdSet(draftHidden, savedHidden) || !sameRunIdSet(draftPinned, savedPinned);
+
+  const flagsResult = flagsFetcher.data;
+  const handledFlagsResult = useRef<typeof flagsResult>(undefined);
+  useEffect(() => {
+    if (!flagsResult || flagsResult === handledFlagsResult.current) return;
+    handledFlagsResult.current = flagsResult;
+    if ("success" in flagsResult && flagsResult.success) {
+      toast.success(t("meRecords.saveFlagsSuccess"));
+    } else {
+      toast.error("error" in flagsResult ? flagsResult.error : t("meRecords.saveFlagsFailed"));
+    }
+  }, [flagsResult, t]);
+
+  const handleSaveFlags = () => {
+    flagsFetcher.submit(
+      { _action: "saveSpeedrunFlags", hidden: JSON.stringify(draftHidden), pinned: JSON.stringify(draftPinned) },
+      { method: "post" },
+    );
   };
 
-  const toggleSpeedrunRecordVisibility = (runId: string) =>
-    toggleSpeedrunRecordFlag("toggleSpeedrunRecord", setHiddenSpeedrunRecords, runId);
-
-  const toggleSpeedrunRecordPin = (runId: string) =>
-    toggleSpeedrunRecordFlag("toggleSpeedrunRecordPin", setPinnedSpeedrunRecords, runId);
+  const handleResetFlags = () => {
+    setDraftHidden(savedHidden);
+    setDraftPinned(savedPinned);
+  };
 
   const handleOpenCreate = () => {
     setEditingRecord(null);
+    setCategoryKey("rsg");
+    setCategorySuffix("");
     setIsDialogOpen(true);
   };
 
   const handleOpenEdit = (record: typeof records[0]) => {
+    const { key, suffix } = splitRecordCategory(record.category);
     setEditingRecord(record);
+    setCategoryKey(key);
+    setCategorySuffix(suffix);
     setIsDialogOpen(true);
   };
 
+  const iconButtonClass =
+    "inline-flex size-11 items-center justify-center rounded transition-colors hover:bg-secondary sm:size-8";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 pb-24 sm:space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meRecords.pageTitle")}</h1>
@@ -369,6 +405,7 @@ export default function RecordsPage() {
             >
               <input type="hidden" name="_action" value={editingRecord ? "update" : "create"} />
               {editingRecord && <input type="hidden" name="id" value={editingRecord.id} />}
+              <input type="hidden" name="category" value={resolveRecordCategory(editingRecord?.category ?? null, categoryKey, categorySuffix)} />
               <DialogHeader>
                 <DialogTitle>{editingRecord ? t("meRecords.editRecord") : t("meRecords.addRecordTitle")}</DialogTitle>
                 <DialogDescription>
@@ -377,15 +414,34 @@ export default function RecordsPage() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category">{t("meRecords.categoryId")}</Label>
+                  <Label htmlFor="categoryKey">{t("meRecords.categoryKey")}</Label>
+                  <Select value={categoryKey} onValueChange={(v) => setCategoryKey(v as CategoryKey)}>
+                    <SelectTrigger id="categoryKey" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RECORD_CATEGORY_KEYS.map((key) => (
+                        <SelectItem key={key} value={key}>
+                          {categoryLabel(t, key)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("meRecords.categoryKeyHint")}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="categorySuffix">{t("meRecords.subcategory")}</Label>
                   <Input
-                    id="category"
-                    name="category"
-                    defaultValue={editingRecord?.category ?? ""}
-                    placeholder={t("meRecords.categoryIdPlaceholder")}
-                    maxLength={100}
-                    required
+                    id="categorySuffix"
+                    value={categorySuffix}
+                    onChange={(e) => setCategorySuffix(e.target.value)}
+                    placeholder={t("meRecords.subcategoryPlaceholder")}
+                    maxLength={80}
+                    aria-describedby="categorySuffix-hint"
                   />
+                  <p id="categorySuffix-hint" className="text-xs text-muted-foreground">
+                    {t("meRecords.subcategoryHint")}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="categoryDisplayName">{t("meRecords.displayName")}</Label>
@@ -440,6 +496,9 @@ export default function RecordsPage() {
                 </div>
               </div>
               <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  {t("meRecords.cancel")}
+                </Button>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -453,174 +512,183 @@ export default function RecordsPage() {
       </div>
 
       {data && "error" in data && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{data.error}</AlertDescription>
-        </Alert>
+        <NoticeBanner tone="error" icon={AlertCircle}>
+          {data.error}
+        </NoticeBanner>
       )}
 
       {/* Speedrun.com記録セクション */}
       {speedruncomUsername && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5" />
-              {t("meRecords.speedrunSectionTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meRecords.speedrunSectionDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {speedruncomRecords && !speedruncomRecords.error && speedruncomRecords.personalBests.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {speedruncomRecords.personalBests.map((pb) => {
-                  const isHidden = hiddenSpeedrunRecords.includes(pb.run.id);
-                  const isPinned = pinnedSpeedrunRecords.includes(pb.run.id);
-                  const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
-                  return (
-                    <div
-                      key={pb.run.id}
-                      className={cn(
-                        "p-3 bg-secondary/50 rounded-lg space-y-1 relative group",
-                        isHidden && "opacity-50"
-                      )}
-                    >
-                      <div className="absolute top-2 right-2 flex items-center gap-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => toggleSpeedrunRecordPin(pb.run.id)}
-                              className="p-1.5 rounded hover:bg-secondary transition-colors"
-                            >
-                              {isPinned ? (
-                                <Pin className="h-4 w-4 text-primary" />
-                              ) : (
-                                <Pin className="h-4 w-4 text-muted-foreground" />
-                              )}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {isPinned ? t("meRecords.unpin") : t("meRecords.pin")}
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => toggleSpeedrunRecordVisibility(pb.run.id)}
-                              className="p-1.5 rounded hover:bg-secondary transition-colors"
-                            >
-                              {isHidden ? (
-                                <EyeOff className="h-4 w-4 text-muted-foreground" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                              )}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {isHidden ? t("meRecords.show") : t("meRecords.hide")}
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex items-center justify-between pr-16">
-                        <span className="font-medium text-sm truncate">
-                          {pb.category?.data?.name ?? "Unknown"}
-                        </span>
-                        <Badge variant="outline" className="shrink-0">
-                          #{pb.place}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {pb.game?.data?.names?.international ?? "Unknown Game"}
-                      </p>
-                      {(pb.platformName || pb.versionName) && (
-                        <p className="text-xs text-muted-foreground">
-                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                        </p>
-                      )}
-                      <p className="text-lg font-mono font-bold">
-                        {formatTime(pb.run.times.primary_t * 1000)}
-                      </p>
-                      {videoEmbedUrl && (
-                        <YouTubeEmbed
-                          embedUrl={videoEmbedUrl}
-                          title={pb.category?.data?.name ?? "Speedrun video"}
-                        />
-                      )}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {isPinned && <PinnedBadge />}
-                        {isHidden && (
-                          <Badge variant="secondary" className="text-xs">{t("meRecords.hidden")}</Badge>
-                        )}
-                        {pb.run.weblink && (
-                          <a
-                            href={pb.run.weblink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline flex items-center gap-1"
+        <PageSection
+          id="records-speedruncom"
+          first
+          icon={<Trophy className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meRecords.speedrunSectionTitle")}
+        >
+          <p className="text-sm text-muted-foreground">
+            {t("meRecords.speedrunSectionDescription")} {t("meRecords.sectionDraftHint")}
+          </p>
+          {speedruncomRecords && !speedruncomRecords.error && speedruncomRecords.personalBests.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {speedruncomRecords.personalBests.map((pb) => {
+                const isHidden = draftHidden.includes(pb.run.id);
+                const isPinned = draftPinned.includes(pb.run.id);
+                const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
+                const recordName = [pb.game?.data?.names?.international, pb.category?.data?.name]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <div
+                    key={pb.run.id}
+                    className={cn(
+                      "rounded-xl bg-secondary/50 p-3 space-y-1 relative group",
+                      isHidden && "opacity-50"
+                    )}
+                  >
+                    <div className="absolute top-1 right-1 flex items-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setDraftPinned((prev) => toggleRunId(prev, pb.run.id))}
+                            disabled={isSavingFlags}
+                            aria-label={t("meRecords.pinRecordLabel", { name: recordName })}
+                            aria-pressed={isPinned}
+                            className={iconButtonClass}
                           >
-                            <ExternalLink className="h-3 w-3" />
-                            {t("meRecords.viewRecord")}
-                          </a>
-                        )}
-                      </div>
+                            <Pin className={cn("h-4 w-4", isPinned ? "text-primary" : "text-muted-foreground")} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isPinned ? t("meRecords.unpin") : t("meRecords.pin")}
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setDraftHidden((prev) => toggleRunId(prev, pb.run.id))}
+                            disabled={isSavingFlags}
+                            aria-label={t("meRecords.showRecordLabel", { name: recordName })}
+                            aria-pressed={!isHidden}
+                            className={iconButtonClass}
+                          >
+                            {isHidden ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isHidden ? t("meRecords.show") : t("meRecords.hide")}
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
-                  );
-                })}
-              </div>
-            ) : speedruncomRecords?.error ? (
-              <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
-            ) : speedruncomRecords && speedruncomRecords.user === null ? (
-              // error なしで user が null ＝ speedrun.com にそのユーザー名が無い（ユーザー名の誤設定に気づけるようにする）
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {t("meRecords.speedrunUserNotFound", { username: speedruncomUsername })}
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">{t("meRecords.noSpeedrunRecords")}</p>
-                <p className="text-xs mt-1">{t("meRecords.noSpeedrunRecordsHint")}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    <div className="flex items-center justify-between pr-24 sm:pr-20">
+                      <h3 className="font-medium text-sm truncate">
+                        {pb.category?.data?.name ?? "Unknown"}
+                      </h3>
+                      <Badge variant="outline" className="shrink-0">
+                        #{pb.place}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {pb.game?.data?.names?.international ?? "Unknown Game"}
+                    </p>
+                    {(pb.platformName || pb.versionName) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                      </p>
+                    )}
+                    <p className="text-lg font-mono font-bold">
+                      {formatTime(pb.run.times.primary_t * 1000)}
+                    </p>
+                    {videoEmbedUrl && (
+                      <YouTubeEmbed
+                        embedUrl={videoEmbedUrl}
+                        title={pb.category?.data?.name ?? "Speedrun video"}
+                      />
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isPinned && <PinnedBadge />}
+                      {isHidden && (
+                        <Badge variant="secondary" className="text-xs">{t("meRecords.hidden")}</Badge>
+                      )}
+                      {pb.run.weblink && (
+                        <a
+                          href={pb.run.weblink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="-mx-2 -my-3.5 flex items-center gap-1 px-2 py-3.5 text-xs text-primary hover:underline sm:-my-2 sm:py-2"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {t("meRecords.viewRecord")}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : speedruncomRecords?.error ? (
+            <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
+          ) : speedruncomRecords && speedruncomRecords.user === null ? (
+            // error なしで user が null ＝ speedrun.com にそのユーザー名が無い（ユーザー名の誤設定に気づけるようにする）
+            <NoticeBanner tone="info" icon={AlertCircle}>
+              {t("meRecords.speedrunUserNotFound", { username: speedruncomUsername })}
+            </NoticeBanner>
+          ) : (
+            <EmptyState
+              size="compact"
+              icon={<Trophy className="h-5 w-5" />}
+              title={t("meRecords.noSpeedrunRecords")}
+              description={t("meRecords.noSpeedrunRecordsHint")}
+            />
+          )}
+        </PageSection>
       )}
 
       {/* カスタム記録セクション */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4">{t("meRecords.customRecords")}</h2>
+      <PageSection
+        id="records-custom"
+        icon={<Trophy className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("meRecords.customRecords")}
+        first={!speedruncomUsername}
+      >
         {records.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {records.map((record) => (
-              <Card key={record.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">
-                        {record.categoryDisplayName}
-                      </CardTitle>
+              <Card key={record.id} className="gap-3 py-5">
+                <CardHeader className="px-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold">{record.categoryDisplayName}</h3>
                       <CardDescription>{record.category}</CardDescription>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(record)}>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11 sm:size-9"
+                        aria-label={t("meRecords.editRecordLabel", { name: record.categoryDisplayName })}
+                        onClick={() => handleOpenEdit(record)}
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <fetcher.Form method="post">
-                        <input type="hidden" name="_action" value="delete" />
-                        <input type="hidden" name="id" value={record.id} />
-                        <Button variant="ghost" size="icon" type="submit">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </fetcher.Form>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11 sm:size-9"
+                        aria-label={t("meRecords.deleteRecordLabel", { name: record.categoryDisplayName })}
+                        onClick={() => setDeletingRecord(record)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-5">
                   {record.personalBest && (
                     <p className="text-2xl font-mono font-bold">
                       {formatTime(record.personalBest)}
@@ -630,7 +698,7 @@ export default function RecordsPage() {
                     {!record.isVisible && <Badge variant="secondary">{t("meRecords.private")}</Badge>}
                     {record.isPinned && <PinnedBadge />}
                     {record.pbVideoUrl && (
-                      <Button variant="outline" size="sm" asChild>
+                      <Button variant="outline" size="sm" asChild className="min-h-11 sm:min-h-8">
                         <a href={record.pbVideoUrl} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="mr-1 h-3 w-3" />
                           {t("meRecords.video")}
@@ -643,21 +711,51 @@ export default function RecordsPage() {
             ))}
           </div>
         ) : (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-lg font-medium">{t("meRecords.noCustomRecords")}</p>
-              <p className="text-sm text-muted-foreground mb-4">
-                {t("meRecords.noCustomRecordsDescription")}
-              </p>
+          <EmptyState
+            size="compact"
+            icon={<Trophy className="h-5 w-5" />}
+            title={t("meRecords.noCustomRecords")}
+            description={t("meRecords.noCustomRecordsDescription")}
+            action={
               <Button onClick={handleOpenCreate}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meRecords.addFirstRecord")}
               </Button>
-            </CardContent>
-          </Card>
+            }
+          />
         )}
-      </div>
+      </PageSection>
+
+      <AlertDialog open={deletingRecord !== null} onOpenChange={(open) => !open && setDeletingRecord(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("meRecords.deleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("meRecords.deleteDescription", { name: deletingRecord?.categoryDisplayName ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("meRecords.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletingRecord) {
+                  fetcher.submit({ _action: "delete", id: deletingRecord.id }, { method: "post" });
+                }
+              }}
+            >
+              {t("meRecords.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <FloatingSaveBar
+        hasChanges={flagsDirty}
+        isSubmitting={isSavingFlags}
+        onSave={handleSaveFlags}
+        onReset={handleResetFlags}
+      />
     </div>
   );
 }

@@ -17,7 +17,7 @@ import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination,
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,13 +38,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, Gamepad2, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
-import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
+import { PageSection } from "@/components/page-section";
+import { NoticeBanner } from "@/components/notice-banner";
+import { KeyDialogSection } from "@/components/keybindings/key-dialog-section";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -956,11 +956,14 @@ function KeybindingRow({
   isControllerMode,
   updateKeybindingKey,
   getKeyLabelWithCustom,
+  onAnnounce,
 }: {
   kb: { id: string; action: string; keyCode: string };
   isControllerMode: boolean;
   updateKeybindingKey: (keybindingId: string, newKeyCode: string) => void;
   getKeyLabelWithCustom: (keyCode: string) => string;
+  /** 確定結果をページ共通のライブ領域へ伝える（行ごとに領域を持たない） */
+  onAnnounce: (message: string) => void;
 }) {
   const t = useT();
   // フォーカスだけではキャプチャしない。クリック / Enter / Space で明示的に開始する
@@ -972,11 +975,10 @@ function KeybindingRow({
       ? getKeyLabelWithCustom(kb.keyCode)
       : t("meKeybindings.unassigned");
   // 確定結果をスクリーンリーダーへ伝える（フォーカスはボタンに残す）
-  const [announcement, setAnnouncement] = useState("");
   const commitKey = (keyCode: string) => {
     updateKeybindingKey(kb.id, keyCode);
     setIsCapturing(false);
-    setAnnouncement(
+    onAnnounce(
       t("meKeybindings.keyAssignedAnnounce", { action: actionLabel, key: getKeyLabelWithCustom(keyCode) })
     );
   };
@@ -990,7 +992,7 @@ function KeybindingRow({
             value={kb.keyCode || ""}
             onValueChange={(value) => updateKeybindingKey(kb.id, value)}
           >
-            <SelectTrigger className="w-32 h-8">
+            <SelectTrigger aria-label={actionLabel} className="w-32 h-8 max-sm:h-11">
               <SelectValue placeholder={t("meKeybindings.unassigned")}>
                 {isUnbound(kb.keyCode) ? (
                   <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
@@ -1020,7 +1022,7 @@ function KeybindingRow({
                 : t("meKeybindings.keyRowAriaLabel", { action: actionLabel, key: currentKeyLabel })
             }
             onClick={() => {
-              setAnnouncement("");
+              onAnnounce("");
               setIsCapturing(true);
             }}
             onBlur={() => setIsCapturing(false)}
@@ -1061,7 +1063,7 @@ function KeybindingRow({
               commitKey(e.code);
             }}
             className={cn(
-              "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
+              "min-w-32 h-8 max-sm:h-11 px-3 rounded-md border text-sm transition-colors",
               "bg-secondary/50 hover:bg-secondary/70",
               "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
               isCapturing ? "border-primary" : "border-input"
@@ -1078,9 +1080,6 @@ function KeybindingRow({
             )}
           </button>
         )}
-        <span className="sr-only" aria-live="polite">
-          {isControllerMode ? "" : isCapturing ? t("meKeybindings.pressKeyToAssign") : announcement}
-        </span>
         <Button
           type="button"
           variant="ghost"
@@ -1090,7 +1089,7 @@ function KeybindingRow({
           onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
           disabled={!kb.keyCode || isUnbound(kb.keyCode)}
           className={cn(
-            "h-8 w-8 shrink-0 text-destructive hover:text-destructive",
+            "size-8 max-sm:size-11 shrink-0 text-destructive hover:text-destructive",
             (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
           )}
         >
@@ -1124,6 +1123,7 @@ function CustomActionRow({
             value={action.actionName}
             onChange={(e) => onUpdate(index, { actionName: e.target.value })}
             placeholder={t("meKeybindings.actionNamePlaceholder")}
+            aria-label={t("meKeybindings.actionNameAria")}
             className="text-sm"
           />
         </div>
@@ -1131,7 +1131,7 @@ function CustomActionRow({
           value={action.category}
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
-          <SelectTrigger className="w-28">
+          <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1145,9 +1145,10 @@ function CustomActionRow({
           variant="ghost"
           size="icon"
           onClick={() => onDelete(index)}
-          className="text-destructive hover:text-destructive shrink-0"
+          aria-label={t("meKeybindings.deleteCustomActionAria")}
+          className="text-destructive hover:text-destructive shrink-0 max-sm:size-11"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -1160,6 +1161,7 @@ function CustomActionRow({
           onCapture={(keyCode) => onUpdate(index, { triggerKey: keyCode })}
           allowModifiers={true}
           className="min-w-40 h-8"
+          ariaLabel={t("meKeybindings.triggerKey")}
         />
       </div>
       <div>
@@ -1167,6 +1169,7 @@ function CustomActionRow({
           value={action.description || ""}
           onChange={(e) => onUpdate(index, { description: e.target.value || null })}
           placeholder={t("meKeybindings.descriptionOptional")}
+          aria-label={t("meKeybindings.descriptionOptional")}
           className="text-sm"
         />
       </div>
@@ -1209,10 +1212,11 @@ function DialogCustomActionRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+          aria-label={t("meKeybindings.deleteCustomActionAria")}
+          className="size-7 max-sm:size-11 p-0 text-destructive hover:text-destructive ml-auto"
           onClick={() => onDelete(index)}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -1223,14 +1227,15 @@ function DialogCustomActionRow({
             value={action.actionName}
             onChange={(e) => onUpdate(index, { actionName: e.target.value })}
             placeholder={t("meKeybindings.actionNamePlaceholder")}
-            className="text-sm h-8"
+            aria-label={t("meKeybindings.actionNameAria")}
+            className="text-sm h-8 max-sm:h-11"
           />
         </div>
         <Select
           value={action.category}
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
-          <SelectTrigger className="w-28 h-8 text-sm">
+          <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28 h-8 max-sm:h-11 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1245,7 +1250,8 @@ function DialogCustomActionRow({
         value={action.description || ""}
         onChange={(e) => onUpdate(index, { description: e.target.value || null })}
         placeholder={t("meKeybindings.descriptionOptional")}
-        className="text-sm h-8"
+        aria-label={t("meKeybindings.descriptionOptional")}
+        className="text-sm h-8 max-sm:h-11"
       />
     </div>
   );
@@ -1258,15 +1264,14 @@ function DialogCustomActionRow({
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meKeybindings.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meKeybindings.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -1318,6 +1323,8 @@ export default function KeybindingsPage() {
   // ダイアログ関連
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  // 行ごとの確定結果を読み上げるページ共通のライブ領域（行ごとに持つと空の aria-live が行数だけ並ぶ）
+  const [keyAnnouncement, setKeyAnnouncement] = useState("");
   const [modalDraftKeybindingChanges, setModalDraftKeybindingChanges] = useState<Record<string, string> | null>(null);
   const [modalDraftRemaps, setModalDraftRemaps] = useState<RemapEntry[] | null>(null);
   const [modalDraftFingerAssignments, setModalDraftFingerAssignments] = useState<FingerAssignmentMap | null>(null);
@@ -1547,9 +1554,6 @@ export default function KeybindingsPage() {
   }, [localCustomActions, initialCustomActions]);
 
   const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges;
-
-  // 未保存の変更があるままページを離れようとしたら警告（タブを閉じる/リロード・アプリ内遷移）
-  const unsavedBlocker = useUnsavedWarning(hasUnsavedChanges);
 
   // 現在選択中のキーに関するデータ
   // 複数の操作が同じキーに割り当てられている場合はすべて取得
@@ -2182,7 +2186,10 @@ export default function KeybindingsPage() {
   }, [customKeyFetcher, localCustomKeys, activePreset]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {keyAnnouncement}
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meKeybindings.pageTitle")}</h1>
@@ -2231,22 +2238,15 @@ export default function KeybindingsPage() {
       {/* プリセット切替中はキーボードビュー・入力欄をロックする */}
       <PresetSwitchLock locked={presetSwitching}>
       {/* キーボードビューとタブの間の余白（ページ直下の space-y-6 相当）を維持する */}
-      <div className="space-y-6">
+      <div className="space-y-7 sm:space-y-8">
       {/* コントローラーモード: コントローラービュー */}
       {isControllerMode ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle role="heading" aria-level={2} className="text-base font-semibold flex items-center gap-2">
-                <Gamepad2 className="h-5 w-5" />
-                {t("meKeybindings.controllerView")}
-              </CardTitle>
-            </div>
-            <CardDescription>
-              {t("meKeybindings.controllerViewDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <PageSection
+          id="controller-view"
+          icon={<Gamepad2 className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meKeybindings.controllerView")}
+        >
+            <p className="text-sm text-muted-foreground">{t("meKeybindings.controllerViewDesc")}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 左側: フェイスボタン・バンパー・トリガー */}
               <div className="space-y-4">
@@ -2309,27 +2309,18 @@ export default function KeybindingsPage() {
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
       ) : (
         /* キーボード/マウスモード: 仮想キーボード */
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle role="heading" aria-level={2} className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
-                {hasTypedRemaps && (
-                  <RemapViewToggle value={remapView} onChange={setRemapView} />
-                )}
-                <FingerLegend />
-              </div>
+        <PageSection id="keyboard-view" title={t("meKeybindings.keyboardView")}>
+            <p className="text-sm text-muted-foreground">{t("meKeybindings.keyboardViewDesc")}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
+              {hasTypedRemaps && (
+                <RemapViewToggle value={remapView} onChange={setRemapView} />
+              )}
+              <FingerLegend />
             </div>
-            <CardDescription>
-              {t("meKeybindings.keyboardViewDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
             <div className="flex flex-col items-start gap-4">
               {/* 仮想キー約100個を飛ばして操作割り当てへ移動するスキップリンク */}
               <a
@@ -2381,8 +2372,7 @@ export default function KeybindingsPage() {
                 />
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
       )}
 
       {/* タブ分け設定セクション */}
@@ -2413,11 +2403,9 @@ export default function KeybindingsPage() {
         {/* 操作割り当てタブ */}
         <TabsContent value="keybindings" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
-          <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-4", !canEditPresetData && "pointer-events-none opacity-50")}>
-            {/* 見出し階層（h1 > h2 > h3）用。スキップリンクの移動先も兼ねる */}
-            <h2 id="keybindings-actions-heading" tabIndex={-1} className="sr-only">
-              {t("meKeybindings.tabActions")}
-            </h2>
+          {/* 見出し（h1 > h2 > h3）。id は `keybindings-actions-heading` になり、スキップリンクの移動先を兼ねる */}
+          <PageSection id="keybindings-actions" first title={t("meKeybindings.tabActions")} className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {displayGroups.map((group) => {
               const bindings = group.bindings;
               if (!bindings || bindings.length === 0) return null;
@@ -2436,6 +2424,7 @@ export default function KeybindingsPage() {
                           isControllerMode={isControllerMode}
                           updateKeybindingKey={updateKeybindingKey}
                           getKeyLabelWithCustom={getKeyLabelWithCustom}
+                          onAnnounce={setKeyAnnouncement}
                         />
                       ))}
                     </div>
@@ -2444,6 +2433,7 @@ export default function KeybindingsPage() {
               );
             })}
           </div>
+          </PageSection>
         </TabsContent>
 
         {/* リマップタブ（コントローラーモード以外） */}
@@ -2451,12 +2441,18 @@ export default function KeybindingsPage() {
         <TabsContent value="remaps" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <section>
-            <header className="pb-4">
-              <h2 className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{t("meKeybindings.remapsDescription")}</p>
-            </header>
-            <div className="border-t border-border/60 pt-4">
+          <PageSection id="remaps" first title={t("meKeybindings.remapsTitle")}>
+            <div className="space-y-1.5 text-sm text-muted-foreground">
+              <p>{t("meKeybindings.remapsDescription")}</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                <li>{t("meKeybindings.remapsGuideSource")}</li>
+                <li>{t("meKeybindings.remapsGuideTarget")}</li>
+                <li>{t("meKeybindings.remapsGuideTrigger")}</li>
+                <li>{t("meKeybindings.remapsGuideChat")}</li>
+                <li>{t("meKeybindings.remapsGuideAll")}</li>
+              </ul>
+            </div>
+            <div>
               {localRemaps.filter((r) => !r._delete).length > 0 ? (
                 <div className="divide-y border-y">
                   {localRemaps.map((remap, index) => {
@@ -2495,7 +2491,7 @@ export default function KeybindingsPage() {
                 {t("meKeybindings.addRemap")}
               </Button>
             </div>
-          </section>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2505,14 +2501,11 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-keys" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <section>
-            <header className="pb-4">
-              <h2 className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("meKeybindings.customKeysDescription")}
-              </p>
-            </header>
-            <div className="space-y-4 border-t border-border/60 pt-4">
+          <PageSection id="custom-keys" first title={t("meKeybindings.customKeysTitle")}>
+            <p className="text-sm text-muted-foreground">
+              {t("meKeybindings.customKeysDescription")}
+            </p>
+            <div className="space-y-4">
               {activeCustomKeys.length > 0 ? (
                 <div className="space-y-2">
                   {localCustomKeys.map((ck, index) => {
@@ -2524,19 +2517,21 @@ export default function KeybindingsPage() {
                             value={ck.keyCode}
                             onChange={(e) => updateCustomKey(index, { keyCode: e.target.value })}
                             placeholder={t("meKeybindings.keyCode")}
-                            className="font-mono text-sm"
+                            aria-label={t("meKeybindings.keyCode")}
+                            className="font-mono text-sm max-sm:h-11"
                           />
                           <Input
                             value={ck.keyName}
                             onChange={(e) => updateCustomKey(index, { keyName: e.target.value })}
                             placeholder={t("meKeybindings.displayName")}
-                            className="text-sm"
+                            aria-label={t("meKeybindings.displayName")}
+                            className="text-sm max-sm:h-11"
                           />
                           <Select
                             value={ck.category}
                             onValueChange={(value: "mouse" | "keyboard") => updateCustomKey(index, { category: value })}
                           >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger aria-label={t("meKeybindings.customKeyCategoryAria")} className="w-full max-sm:h-11">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -2550,9 +2545,10 @@ export default function KeybindingsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => deleteCustomKey(index)}
-                          className="text-destructive hover:text-destructive"
+                          aria-label={t("meKeybindings.deleteCustomKeyAria")}
+                          className="text-destructive hover:text-destructive max-sm:size-11"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>
                     );
@@ -2585,7 +2581,7 @@ export default function KeybindingsPage() {
                 )}
               </div>
             </div>
-          </section>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2595,14 +2591,11 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-actions" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <section>
-            <header className="pb-4">
-              <h2 className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("meKeybindings.customActionsDescription")}
-              </p>
-            </header>
-            <div className="space-y-4 border-t border-border/60 pt-4">
+          <PageSection id="custom-actions" first title={t("meKeybindings.customActionsTitle")}>
+            <p className="text-sm text-muted-foreground">
+              {t("meKeybindings.customActionsDescription")}
+            </p>
+            <div className="space-y-4">
               {localCustomActions.filter((a) => !a._delete).length > 0 ? (
                 <div className="space-y-3">
                   {localCustomActions.map((action, index) => {
@@ -2629,7 +2622,7 @@ export default function KeybindingsPage() {
                 {t("meKeybindings.addCustomAction")}
               </Button>
             </div>
-          </section>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2672,16 +2665,22 @@ export default function KeybindingsPage() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="space-y-6">
+          <div className="space-y-3">
+            {/* 段階的に見せる: 操作割り当ては常に開き、関係の薄い段（リマップ・指・カスタムアクション）は中身があるときだけ開く */}
             {/* 操作割り当て（複数選択可能） */}
-            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <Label>{t("meKeybindings.actionAssignment")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">
+            <KeyDialogSection
+              key={`assign-${editingKeyCode}`}
+              defaultOpen
+              title={t("meKeybindings.actionAssignment")}
+              summary={t("meKeybindings.sectionCount", { count: modalAssignedCountOnKey })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
+              <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.actionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-              <div className="border rounded-md p-2">
+              <div>
                 {categoryOrder.map((category) => {
                   const bindings = modalByCategory[category];
                   if (!bindings || bindings.length === 0) return null;
@@ -2737,33 +2736,22 @@ export default function KeybindingsPage() {
                   );
                 })}
               </div>
-            </div>
+            </KeyDialogSection>
 
             {/* リマップ（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <div className="flex items-center justify-between">
-                <Label>{t("meKeybindings.keyRemapSetting")}</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canEditPresetData}
-                  onClick={() => {
-                    // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
-                    modalAddRemapForKey(editingKeyCode);
-                  }}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  {t("meKeybindings.add")}
-                </Button>
-              </div>
+            <KeyDialogSection
+              key={`remap-${editingKeyCode}`}
+              defaultOpen={modalSelectedKeyRemaps.length > 0}
+              title={t("meKeybindings.keyRemapSetting")}
+              summary={t("meKeybindings.sectionCount", { count: modalSelectedKeyRemaps.length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.remapsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-
               {modalSelectedKeyRemaps.length > 0 ? (
                 <div className="space-y-2">
                   {modalSelectedKeyRemaps.map((remap) => {
@@ -2791,47 +2779,56 @@ export default function KeybindingsPage() {
                   {t("meKeybindings.remapsNotConfigured")}
                 </p>
               )}
-            </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-sm:min-h-11"
+                disabled={!canEditPresetData}
+                onClick={() => {
+                  // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
+                  modalAddRemapForKey(editingKeyCode);
+                }}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {t("meKeybindings.add")}
+              </Button>
+            </KeyDialogSection>
             )}
 
             {/* 指割り当て（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <Label>{t("meKeybindings.fingerAssignment")}</Label>
+            <KeyDialogSection
+              key={`finger-${editingKeyCode}`}
+              defaultOpen={(modalFingerAssignments[editingKeyCode] ?? []).length > 0}
+              title={t("meKeybindings.fingerAssignment")}
+              summary={t("meKeybindings.sectionCount", { count: (modalFingerAssignments[editingKeyCode] ?? []).length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <FingerToggleGroup
-                value={editingKeyCode ? modalFingerAssignments[editingKeyCode] ?? [] : []}
+                value={modalFingerAssignments[editingKeyCode] ?? []}
                 disabled={!canEditPresetData}
                 onChange={(next) => {
-                  if (editingKeyCode) {
-                    modalUpdateFingerAssignment(editingKeyCode, next);
-                  }
+                  modalUpdateFingerAssignment(editingKeyCode, next);
                 }}
               />
-            </div>
+            </KeyDialogSection>
             )}
 
             {/* カスタムアクション（コントローラーモード以外） */}
             {editingKeyCode && !isControllerMode && (
-            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <div className="flex items-center justify-between">
-                <Label>{t("meKeybindings.customActionsTitle")}</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canEditPresetData}
-                  onClick={() => modalAddCustomActionForKey(editingKeyCode)}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  {t("meKeybindings.add")}
-                </Button>
-              </div>
+            <KeyDialogSection
+              key={`custom-${editingKeyCode}`}
+              defaultOpen={modalSelectedKeyCustomActions.length > 0}
+              title={t("meKeybindings.customActionsTitle")}
+              summary={t("meKeybindings.sectionCount", { count: modalSelectedKeyCustomActions.length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.customActionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-
               {modalSelectedKeyCustomActions.length > 0 ? (
                 <div className="space-y-2">
                   {modalSelectedKeyCustomActions.map((action) => (
@@ -2851,12 +2848,25 @@ export default function KeybindingsPage() {
                   {t("meKeybindings.noCustomActions")}
                 </p>
               )}
-            </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-sm:min-h-11"
+                disabled={!canEditPresetData}
+                onClick={() => modalAddCustomActionForKey(editingKeyCode)}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {t("meKeybindings.add")}
+              </Button>
+            </KeyDialogSection>
             )}
           </div>
           </div>
 
           <DialogFooter className="px-6 py-4 border-t bg-background sticky bottom-0 z-10">
+            {/* 2段階の確定（ここの「適用」はページへの反映、保存はページ下のバー）をダイアログ内で示す */}
+            <p className="text-xs text-muted-foreground sm:mr-auto sm:self-center">{t("meKeybindings.applyNote")}</p>
             <Button variant="outline" onClick={requestCloseKeyModal}>
               <X className="mr-2 h-4 w-4" />
               {t("meKeybindings.cancel")}
@@ -2889,8 +2899,6 @@ export default function KeybindingsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <UnsavedChangesDialog blocker={unsavedBlocker} />
 
       {/* プリセットからコピーダイアログ */}
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>

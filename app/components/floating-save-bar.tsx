@@ -3,6 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Save, Loader2, RotateCcw } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
+
+/**
+ * 未保存の変更を持ったまま離れるのを止める（アプリ内遷移は確認ダイアログ、タブ閉じ/リロードは beforeunload）。
+ * useBlocker は1ルーターに1つしか効かないので、自前で useUnsavedWarning を呼ぶ画面は
+ * FloatingSaveBar に `unsavedGuard={false}` を渡して、この子コンポーネント自体を描かない。
+ */
+function UnsavedGuard({ dirty }: { dirty: boolean }) {
+  const blocker = useUnsavedWarning(dirty);
+  return <UnsavedChangesDialog blocker={blocker} />;
+}
 
 interface FloatingSaveBarProps {
   hasChanges: boolean;
@@ -12,6 +24,11 @@ interface FloatingSaveBarProps {
   saveLabel?: string;
   resetLabel?: string;
   className?: string;
+  /**
+   * 未保存のまま離れるときの警告をこの保存バーが持つか（既定 true）。保存中（isSubmitting）は止めない。
+   * 画面側で useUnsavedWarning + UnsavedChangesDialog を自前で持つ間だけ false にする。
+   */
+  unsavedGuard?: boolean;
 }
 
 export function FloatingSaveBar({
@@ -22,13 +39,17 @@ export function FloatingSaveBar({
   saveLabel,
   resetLabel,
   className,
+  unsavedGuard = true,
 }: FloatingSaveBarProps) {
   // 既定ラベルは本体で解決する（既定引数は useT() より先に評価されるため）
   const t = useT();
   const save = saveLabel ?? t("common.saveChanges");
   const reset = resetLabel ?? t("common.discardChanges");
   return (
+    <>
+    {unsavedGuard && <UnsavedGuard dirty={hasChanges && !isSubmitting} />}
     <div
+      data-me-tour="save-bar"
       role="region"
       aria-label={t("common.saveBar")}
       aria-hidden={!hasChanges}
@@ -97,5 +118,6 @@ export function FloatingSaveBar({
         </Button>
       </div>
     </div>
+    </>
   );
 }

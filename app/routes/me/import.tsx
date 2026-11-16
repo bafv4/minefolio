@@ -7,10 +7,10 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ImportDialog } from "@/components/import-dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageSection } from "@/components/page-section";
+import { NoticeBanner } from "@/components/notice-banner";
 import { Badge } from "@/components/ui/badge";
 import { Keyboard, Settings, Info } from "lucide-react";
 import type { ParsedRemap } from "@/lib/import-parser";
@@ -49,9 +49,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     where: eq(keybindings.userId, user.id),
   });
 
+  // 取り込み先（編集中のプリセット）。プリセットが無いときは取り込みで新規作成される
+  const activePreset = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true, name: true },
+  });
+
   return {
     remapCount: remapCount.length,
     keybindingCount: keybindingCount.length,
+    activePresetName: activePreset?.name ?? null,
   };
 }
 
@@ -366,11 +373,12 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function ImportPage() {
   const t = useT();
-  const { remapCount, keybindingCount } = useLoaderData<typeof loader>();
+  const { remapCount, keybindingCount, activePresetName } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
+  const refresh = () => revalidator.revalidate();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("meImport.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -378,73 +386,61 @@ export default function ImportPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* リマップインポート */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Keyboard className="h-5 w-5" />
-              {t("meImport.remapTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meImport.remapDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm">
-              <p className="text-muted-foreground mb-2">{t("meImport.supportedFormat")}</p>
-              <div className="bg-muted p-2 rounded font-mono text-xs">
-                CapsLock::Ctrl<br />
-                a::b<br />
-                XButton1::e ; {t("meImport.ahkCommentExample")}
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {t("meImport.currentCountLabel")} <Badge variant="secondary">{remapCount}{t("meImport.countUnit")}</Badge>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+      <NoticeBanner tone="info" icon={Info}>
+        <p className="font-medium">{t("meImport.importInfoTitle")}</p>
+        <p>{t("meImport.importInfoDescription")}</p>
+        <p className="mt-1">
+          {activePresetName
+            ? t("meImport.targetPreset", { name: activePresetName })
+            : t("meImport.targetPresetNone")}
+        </p>
+      </NoticeBanner>
 
-        {/* Minecraft設定インポート */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t("meImport.minecraftTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meImport.minecraftDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm">
-              <p className="text-muted-foreground mb-2">{t("meImport.supportedFiles")}</p>
-              <ul className="list-disc list-inside text-xs space-y-1">
-                <li><code className="bg-muted px-1 rounded">options.txt</code> - {t("meImport.minecraftFolder")}</li>
-                <li><code className="bg-muted px-1 rounded">standardsettings.json</code> - StandardSettings Mod</li>
-              </ul>
+      {/* 取り込み元の選択はここだけ（ダイアログは選んだ取り込み元のファイル選択と確認だけ） */}
+      <div className="space-y-7 sm:space-y-8">
+        <PageSection
+          id="import-remap"
+          first
+          icon={<Keyboard className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meImport.remapTitle")}
+        >
+          <p className="text-sm text-muted-foreground">{t("meImport.remapDescription")}</p>
+          <div className="text-sm">
+            <p className="text-muted-foreground mb-2">{t("meImport.supportedFormat")}</p>
+            <div className="bg-muted p-2 rounded font-mono text-xs">
+              CapsLock::Ctrl<br />
+              a::b<br />
+              XButton1::e ; {t("meImport.ahkCommentExample")}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {t("meImport.currentCountLabel")} <Badge variant="secondary">{keybindingCount}{t("meImport.countUnit")}</Badge>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              {t("meImport.currentCountLabel")} <Badge variant="secondary">{remapCount}{t("meImport.countUnit")}</Badge>
+            </span>
+            <ImportDialog source="remap" targetPresetName={activePresetName} onSuccess={refresh} />
+          </div>
+        </PageSection>
 
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>{t("meImport.importInfoTitle")}</AlertTitle>
-        <AlertDescription>
-          {t("meImport.importInfoDescription")}
-        </AlertDescription>
-      </Alert>
-
-      <div className="flex justify-center">
-        <ImportDialog onSuccess={() => revalidator.revalidate()} />
+        <PageSection
+          id="import-minecraft"
+          icon={<Settings className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meImport.minecraftTitle")}
+        >
+          <p className="text-sm text-muted-foreground">{t("meImport.minecraftDescription")}</p>
+          <div className="text-sm">
+            <p className="text-muted-foreground mb-2">{t("meImport.supportedFiles")}</p>
+            <ul className="list-disc list-inside text-xs space-y-1">
+              <li><code className="bg-muted px-1 rounded">options.txt</code> - {t("meImport.minecraftFolder")}</li>
+              <li><code className="bg-muted px-1 rounded">standardsettings.json</code> - StandardSettings Mod</li>
+            </ul>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              {t("meImport.currentCountLabel")} <Badge variant="secondary">{keybindingCount}{t("meImport.countUnit")}</Badge>
+            </span>
+            <ImportDialog source="minecraft" targetPresetName={activePresetName} onSuccess={refresh} />
+          </div>
+        </PageSection>
       </div>
     </div>
   );

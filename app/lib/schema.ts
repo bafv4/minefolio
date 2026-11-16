@@ -101,6 +101,12 @@ export const users = sqliteTable("users", {
   // bio / shortBio の自動翻訳を許可するか（docs/translation.md）。既定オン、オフにすると既存の翻訳行も削除する。
   // DB 既定を true にしているのは、列追加前から存在する全ユーザーを「許可」として扱うため（バックフィル不要）。
   allowAutoTranslation: integer("allow_auto_translation", { mode: "boolean" }).default(true).notNull(),
+
+  // /me の初回ツアーを終えた（またはスキップした）日時。null の間は初めて /me を開いたときに1回だけ出す。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  meTourCompletedAt: integer("me_tour_completed_at", { mode: "timestamp" }),
+  // /me/edit の「はじめに」チェックリストを閉じた日時。null の間は手順が未完のときだけ表示する。
+  meChecklistDismissedAt: integer("me_checklist_dismissed_at", { mode: "timestamp" }),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),

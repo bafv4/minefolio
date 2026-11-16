@@ -17,7 +17,9 @@ import { decodePresetSearchCraftLoops } from "@/lib/preset-read";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
+import { EmptyState } from "@/components/empty-state";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,8 +54,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -989,6 +990,9 @@ export default function PresetsPage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  // 絶対時刻はブラウザの TZ で描くため、ハイドレーション後にだけ出す（SSR はサーバーの TZ になる）
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [newPresetName, setNewPresetName] = useState("");
   const [newPresetDescription, setNewPresetDescription] = useState("");
   const [sourceType, setSourceType] = useState<"current" | "copy">("current");
@@ -1045,7 +1049,7 @@ export default function PresetsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("mePresets.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -1054,12 +1058,11 @@ export default function PresetsPage() {
       </div>
 
       {/* プリセット一覧 */}
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="text-base">{t("mePresets.listTitle")}</CardTitle>
-            <CardDescription>{t("mePresets.listDescription")}</CardDescription>
-          </div>
+      <PageSection
+        id="presets-list"
+        first
+        title={t("mePresets.listTitle")}
+        action={
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
             if (!open) {
@@ -1070,7 +1073,7 @@ export default function PresetsPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto h-11 sm:h-10">
+              <Button className="h-11 sm:h-10">
                 <Plus className="h-4 w-4 mr-2" />
                 {t("mePresets.newPreset")}
               </Button>
@@ -1170,8 +1173,9 @@ export default function PresetsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </CardHeader>
-        <CardContent>
+        }
+      >
+          <p className="text-sm text-muted-foreground">{t("mePresets.listDescription")}</p>
           {presets.length > 0 ? (
             <div className="space-y-3">
               {presets.map((preset) => {
@@ -1184,6 +1188,15 @@ export default function PresetsPage() {
                 const keybindingsCount = preset.keybindingsCount;
                 const itemLayoutsCount = preset.itemLayoutsCount;
                 const searchCraftsCount = preset.searchCraftsCount;
+                // サーバーは他のプリセットが残るとき、メイン・編集中の削除を拒否する（事前に防ぐ）
+                const deleteBlockedReason =
+                  presets.length > 1
+                    ? preset.isMain
+                      ? t("mePresets.cannotDeleteMain")
+                      : preset.isActive
+                        ? t("mePresets.cannotDeleteActive")
+                        : null
+                    : null;
 
                 return (
                   <div
@@ -1243,7 +1256,7 @@ export default function PresetsPage() {
 
                         {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制（pace-feed-card と同じ対処） */}
                         <p className="text-xs text-muted-foreground mt-2" suppressHydrationWarning>
-                          {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
+                          {t("mePresets.updatedPrefix")} {formatRelativeDate(t, new Date(preset.updatedAt))}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1251,7 +1264,7 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
                               <Pencil className="h-4 w-4 sm:mr-1" />
                               <span className="hidden sm:inline">{t("mePresets.edit")}</span>
                             </Button>
@@ -1261,16 +1274,40 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="set-main" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
                               <Star className="h-4 w-4 sm:mr-1" />
                               <span className="hidden sm:inline">{t("mePresets.setMain")}</span>
                             </Button>
                           </fetcher.Form>
                         )}
+                        {deleteBlockedReason ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0} className="inline-flex rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled
+                                  aria-label={t("mePresets.deleteAria", { name: preset.name })}
+                                  className="size-11 sm:size-8 text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                </Button>
+                                <span className="sr-only">{deleteBlockedReason}</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">{deleteBlockedReason}</TooltipContent>
+                          </Tooltip>
+                        ) : (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive touch-manipulation">
-                              <Trash2 className="h-4 w-4" />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t("mePresets.deleteAria", { name: preset.name })}
+                              className="size-11 sm:size-8 text-destructive hover:text-destructive touch-manipulation"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -1297,6 +1334,7 @@ export default function PresetsPage() {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1304,27 +1342,21 @@ export default function PresetsPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <Save className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-lg font-medium">{t("mePresets.emptyTitle")}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {t("mePresets.emptyDescription")}
-              </p>
-            </div>
+            <EmptyState
+              icon={<Save className="h-12 w-12" />}
+              title={t("mePresets.emptyTitle")}
+              description={t("mePresets.emptyDescription")}
+            />
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* 変更履歴 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <History className="h-5 w-5" />
-            {t("mePresets.historyTitle")}
-          </CardTitle>
-          <CardDescription>{t("mePresets.historyDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <PageSection
+        id="presets-history"
+        icon={<History className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("mePresets.historyTitle")}
+      >
+          <p className="text-sm text-muted-foreground">{t("mePresets.historyDescription")}</p>
           {history.length > 0 ? (
             <div className="space-y-2">
               {history.map((entry) => (
@@ -1332,16 +1364,26 @@ export default function PresetsPage() {
                   key={entry.id}
                   className="flex items-start gap-3 py-2 border-b last:border-0"
                 >
-                  <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm">{entry.changeDescription}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <Badge variant="outline" className="text-xs">
                         {changeTypeLabels[entry.changeType] ?? entry.changeType}
                       </Badge>
-                      <span className="text-xs text-muted-foreground" suppressHydrationWarning>
-                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
-                      </span>
+                      <time
+                        dateTime={new Date(entry.createdAt).toISOString()}
+                        className="text-xs text-muted-foreground tabular-nums"
+                        suppressHydrationWarning
+                      >
+                        {mounted && (
+                          <>
+                            {new Date(entry.createdAt).toLocaleString(locale === "en" ? "en-US" : "ja-JP", { dateStyle: "medium", timeStyle: "short" })}
+                            {" · "}
+                          </>
+                        )}
+                        {formatRelativeDate(t, new Date(entry.createdAt))}
+                      </time>
                     </div>
                   </div>
                 </div>
@@ -1352,8 +1394,7 @@ export default function PresetsPage() {
               {t("mePresets.noHistory")}
             </p>
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
     </div>
   );
 }

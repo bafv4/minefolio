@@ -269,7 +269,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | プレイするバージョン | エディション別チェックボックス複数選択 | 常時 |
 | カテゴリ | チップ複数選択 | 常時 |
 | メインバージョン / メインカテゴリ | 選択済みから各1つ | 常時（メインバージョンのエディション → プロフィールの Java/Bedrock バッジを決定） |
-| 入力方法 | 3値 Select（`users.inputMethod`。`/me/edit` から移管しバッジと一本化） | 常時 |
+| 入力方法 | 3値 Select（`users.inputMethod`。`/me/edit` から移管しバッジと一本化。**編集の場所は playstyle に一本化**し、`/me/devices` からは外す方針。説明文から `/me/keybindings` / `/me/devices` の編集モードへリンクする） | 常時 |
 | ホットバー切替方法 | 4値: ホットキー/ホットキー(時々ホイール)/マウスホイール(時々ホットキー)/マウスホイール | 常時 |
 | サーチクラフト | 3値: する/少しだけする/しない | 常時（「しない」でプロフィールのSCタブを非表示） |
 | ゲーム言語（読み取り表示） | `player_configs.gameLanguage`（`/me/devices` への誘導リンクのみ、この画面では編集不可） | サーチクラフト ≠ 「しない」 |
@@ -631,11 +631,19 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
   - Speedrun.com記録: 下記「Speedrun.com記録のピン留め」参照
 - 切替UI: ガイド=`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）、記録=`/me/records` の編集ダイアログのSwitch、動画=`/me/edit` の動画ダイアログのSwitch、Speedrun.com記録=`/me/records` のピンアイコンボタン
 
+### /me/records（記録の管理）
+
+欄区切り（`PageSection`）。「Speedrun.com 記録」欄（ユーザー名設定時のみ）と「カスタム記録」欄の2つ。
+
+- **保存の仕方**: Speedrun.com 記録の非表示・ピン留めは下書き → `FloatingSaveBar`（下の「Speedrun.com記録のピン留め」）。カスタム記録の追加・編集・削除はダイアログで確定する即時操作。**削除は `AlertDialog` で確認**してから送る。追加・編集ダイアログにキャンセルボタンあり
+- **カテゴリ（`category_records.category`）**: プロフィールのハイライトが、プレイスタイルのメインカテゴリ（rsg / ssg / aa / ce / ranked）の記録を前方一致（`recordMatchesMainCategory`、`profile-highlights.ts`）で選ぶために使われるので、入力欄は残している。画面では**カテゴリ（選択式。`CATEGORY_KEYS`）＋サブカテゴリ（任意の自由入力）**に分けて入力し、`app/lib/record-category.ts` の `buildRecordCategory` が `rsg_any` の形に組み立てて `category` として送る（既存の記録の編集では、開いた時点のキー・サブカテゴリから変更が無ければ `resolveRecordCategory` が元の値をそのまま送る。`RSG-any` 等が表示名だけの変更で `rsg_any` に正規化され、`rsg-any` と `rsg_any` を両方持つ走者で重複エラーになるのを防ぐ）（action は従来どおり `category` 1本を受ける）。既存の自由入力は `splitRecordCategory` が前方一致で分け、どのキーにも属さない値は「その他」＋全体として保つ（組み立て直しても同じ値）。`(userId, category, recordType)` は一意なので、同じカテゴリ・サブカテゴリで2件目を作ると `meRecords.categoryDuplicate` を返す（500 にしない）。列はそのまま（`categoryRefId` は手入力の記録では未使用）
+- 操作ボタンはすべて名前つき（記録名入りの `aria-label`）で、md 未満は 44px
+
 ### Speedrun.com記録のピン留め（軽量実装）
 
 Speedrun.comのPBはDBにキャッシュされず、プロフィール表示のたびにSpeedrun.com APIから直接取得される（`category_records` に行を持たない）ため、他のピン留めと違い `category_records.isPinned` を使えない。代わりに `users.pinnedSpeedrunRecords`（JSON配列、ピン留めするrun IDの一覧。`hiddenSpeedrunRecords` と同じ形式）で管理する。
 
-- 管理: `/me/records` の「Speedrun.com 記録」セクションで、各カードの右上にピン留め（`Pin`アイコン）と表示/非表示（`Eye`/`EyeOff`アイコン）の2つのトグルボタンが並ぶ。`_action: "toggleSpeedrunRecordPin"` でトグル
+- 管理: `/me/records` の「Speedrun.com 記録」欄で、各タイルの右上にピン留め（`Pin`）と表示/非表示（`Eye`/`EyeOff`）の2つのトグルボタンが並ぶ（`aria-pressed` ＋記録名入りの `aria-label`、md 未満は 44px）。押しても**即保存はせず下書きに積み**、`FloatingSaveBar`（離脱の警告つき）の保存で `_action: "saveSpeedrunFlags"`（`hidden` / `pinned` に run ID の JSON 配列。サーバーが重複・空文字を除いて上限 500 件で検証し、2列を1回の update で置き換える）が呼ばれる。`updatedAt` はピン留めの集合が変わったときだけ進める。下書きは保存済みの内容（集合）が変わったときだけ取り直す（カスタム記録の追加・削除でも loader が再検証されるため、参照ではなく内容で比べる）。純粋関数は `app/lib/run-id-list.ts`（`sameRunIdSet` / `parseRunIdListInput`）。保存中（`isSavingFlags`）は2つのトグルを `disabled` にする（保存後の再取得で下書きが保存済みの値に取り直されるため、保存中に押した操作が消えるのを防ぐ）。保存は「リスト全体で上書き」なので、別タブの古い画面から保存すると後勝ちで他方の変更が消える
 - 表示: プロフィールの活動・記録タブで、非表示記録を除外した後、ピン留めを先頭に安定ソートしてから最大6件表示（`StatsContent` 内）。ピン留めカードは `md:col-span-2` + 枠線強調 + タイム拡大（`text-3xl`）+ ピンアイコン
 - 非表示（`hiddenSpeedrunRecords`）と独立して管理されるため、非表示にした記録をピン留めすることも技術的には可能だが、非表示である以上プロフィールには表示されない
 
@@ -805,7 +813,11 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
 
-「プレイヤー情報」カードに残るのは `mainPlatform` / `role` の2フィールドのみ（2カラムグリッド）。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。カード下部に「/me/playstyle に移動しました」の誘導リンク（`meEdit.movedToPlaystyle`）を表示する。詳細は上記「プレイスタイル」を参照
+画面は欄区切り（`PageSection`、ui.md 4章）。h1 ＞ 欄 h2 ＞ 欄の中の小見出し h3 の段。欄は「MCID・スキン」「基本情報」「Speedrun.com 連携」「ソーシャルリンク」「動画」「プロフィール設定」「危険な操作」。危険な操作は欄区切りの中に `NoticeBanner tone="error"` で削除の行を置く（箱の入れ子はしない）。最初の欄を包む要素に `data-me-tour="edit-form"`（ツアーの対象、[me-common.md](./me-common.md)）。
+
+「基本情報」に残るのは `mainPlatform` / `role` の2フィールドのみ。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。移行期の誘導リンクは廃止した。詳細は上記「プレイスタイル」を参照
+
+「表示設定」の `showPacemanOnHome` / `showTwitchOnHome` / `showYoutubeOnHome` は**自分の分を全員のホームに出すかの公開範囲**（サーバーが全員のホームから除外する）で、文言も「（全員に表示）」と明示する。`showRankedStats` / `showPacemanStats` は自分のプロフィールの活動・記録タブ（閲覧者に表示）
 
 ### /me/edit の保存方式（保存バーでの一括保存）
 
@@ -817,7 +829,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **サーバー処理**（`app/lib/profile-edit.server.ts` の `saveProfileBatch`）: ① 検証（形式 → 既存データを読んだ「最終状態」の検証〈所有確認・同一プラットフォーム重複・動画10件上限〉→ MCID 重複と Mojang 照合）→ ② DB 書き込みを**単一トランザクション**（MCID/slug 更新・slug 履歴・お気に入り追従・リンク〈削除→更新→作成〉・動画〈削除→更新→作成→並び〉・プロフィール列）→ ③ commit 後に外部キャッシュのキック（`scheduleSocialLinkKicks` 等。保存が失敗したら一切走らない）。①で失敗したら DB は1行も変わらない。他ユーザーの ID の更新はエラー、削除は無視する（IDOR 防止）
 - **MCID の Mojang 照合は二段構え**: ダイアログ確定時に `GET /api/me/mcid-check?mcid=`（認証必須・DB 非変更。形式 → 重複 → Mojang の順。`fetchUuidFromMcid` のキャッシュはインスタンス内メモリのため、Vercel では確認時と保存時で別インスタンスになり、Mojang を2回照合することがある。大文字小文字違いの MCID は `uuid` が同じになるため、`users.uuid` の他ユーザー使用も `taken` として弾く）で確認し、**確認できたものだけ**下書きに載せる（UUID・アバターのプレビュー可）。保存時にもサーバーが必ず再照合する（クライアントの結果は信用しない）。保存時に失敗したら `fieldErrors.mcid`（`mcidNotFound` / `mcidTaken` / `mcidVerifyFailed`）を返し、**他の変更も含め何も保存せず**、下書きはそのまま残る（MCID カード内に赤い Alert を出して再入力・再試行できる）。Bedrock 版は自己申告で Mojang 照合なし（形式検証のみ）
 - **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する
-- **未保存検知・離脱ガード**: `useUnsavedWarning(hasChanges)` は1つのまま、`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
+- **未保存検知・離脱ガード**: `FloatingSaveBar` が内蔵する離脱ガード（`unsavedGuard` 既定 true。内部で `useUnsavedWarning` ＋ `UnsavedChangesDialog`。この画面は自前では持たない）が `hasChanges`（保存中は止めない）を見る。`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
 - **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
 - **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
 - **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action に残るのは `save_all`（`saveProfileBatch`）・`import_legacy`・`delete_account` のみ

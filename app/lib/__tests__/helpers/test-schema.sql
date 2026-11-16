@@ -662,7 +662,9 @@ CREATE TABLE `users` (
 	`pinned_speedrun_records` text,
 	`rta_started_year_month` text,
 	`onboarding_completed` integer DEFAULT true NOT NULL,
-	`allow_auto_translation` integer DEFAULT true NOT NULL
+	`allow_auto_translation` integer DEFAULT true NOT NULL,
+	`me_tour_completed_at` integer,
+	`me_checklist_dismissed_at` integer
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);

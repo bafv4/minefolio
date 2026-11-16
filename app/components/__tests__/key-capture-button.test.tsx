@@ -187,3 +187,26 @@ describe("KeyCaptureButton", () => {
     });
   });
 });
+
+describe("KeyCaptureButton の名前（ariaLabel）", () => {
+  it("ariaLabel を渡すと、見えている値の前に付いた名前になる（「Q」だけにならない）", async () => {
+    await act(async () => {
+      root.render(
+        createElement(KeyCaptureButton, {
+          value: "KeyQ",
+          placeholder: "変更先",
+          keyboardLayout: "US",
+          onCapture: () => {},
+          allowModifiers: true,
+          ariaLabel: "変更元のキー",
+        }),
+      );
+    });
+    expect(button().getAttribute("aria-label")).toBe("変更元のキー: Q");
+  });
+
+  it("ariaLabel が無いときは aria-label を付けない（従来どおり見えている文字が名前）", async () => {
+    await renderButton(false);
+    expect(button().hasAttribute("aria-label")).toBe(false);
+  });
+});

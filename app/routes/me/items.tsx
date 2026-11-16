@@ -11,7 +11,8 @@ import { getEnv } from "@/lib/env.server";
 import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -439,6 +440,7 @@ function ItemSlotEditButton({
           <div className="flex gap-2">
             <Input
               placeholder={t("meItems.searchItems")}
+              aria-label={t("meItems.searchItems")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
@@ -447,7 +449,7 @@ function ItemSlotEditButton({
               value={selectedCategory}
               onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
             >
-              <SelectTrigger className="w-40">
+              <SelectTrigger aria-label={t("meItems.categoryAria")} className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -486,7 +488,9 @@ function ItemSlotEditButton({
                   <button
                     type="button"
                     onClick={() => toggleItem(itemId)}
-                    className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
+                    aria-label={getLocalizedItemName(itemId, locale)}
+                    aria-pressed={isItemSelected(itemId)}
+                    className={`w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
                       isItemSelected(itemId)
                         ? "border-primary bg-primary/20"
                         : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -576,6 +580,8 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
   onDuplicate: (id: string) => void;
 }) {
   const t = useT();
+  // 配置の名前（未入力の行でも読み上げが「の削除」だけにならないよう代わりの語を使う）
+  const layoutName = segment.trim() || t("meItems.unnamedLayout");
 
   return (
     <>
@@ -593,20 +599,32 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
               variant="ghost"
               size="sm"
               onClick={() => onDuplicate(layoutId)}
-              aria-label={t("meItems.duplicate")}
+              aria-label={t("meItems.duplicateAria", { name: layoutName })}
+              className="max-sm:size-11"
             >
-              <Copy className="h-4 w-4" />
+              <Copy className="h-4 w-4" aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("meItems.duplicate")}</TooltipContent>
         </Tooltip>
-        <Button variant="ghost" size="sm" onClick={onToggleExpanded}>
-          <Edit className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleExpanded}
+          aria-label={t("meItems.toggleNotesAria", { name: layoutName })}
+          className="max-sm:size-11"
+        >
+          <Edit className="h-4 w-4" aria-hidden="true" />
         </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <Trash2 className="h-4 w-4 text-destructive" />
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={t("meItems.deleteLayoutAria", { name: layoutName })}
+              className="max-sm:size-11"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -742,10 +760,10 @@ function EditableLayoutRow({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meItems.dragHandle")}
-          className="flex shrink-0 items-center justify-center text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing"
+          aria-label={t("meItems.dragHandleAria", { name: layout.segment.trim() || t("meItems.unnamedLayout") })}
+          className="flex size-8 max-sm:size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <LayoutRowHeader
           layoutId={layout.id}
@@ -777,15 +795,14 @@ function EditableLayoutRow({
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meItems.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meItems.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -944,7 +961,7 @@ export default function ItemLayoutsPage() {
   const existingSegments = useMemo(() => layouts.map((l) => l.segment), [layouts]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meItems.pageTitle")}</h1>
@@ -968,7 +985,13 @@ export default function ItemLayoutsPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
+      <div inert={!hasPresets}>
+      <PageSection
+        id="item-layouts"
+        icon={<Package className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("meItems.itemLayouts")}
+        className={cn(!hasPresets && "pointer-events-none opacity-50")}
+      >
       {layouts.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-background/80">
           <DndContext
@@ -1018,11 +1041,12 @@ export default function ItemLayoutsPage() {
           }
         />
       )}
+      </PageSection>
       </div>
       </PresetSwitchLock>
 
       <FloatingSaveBar
-        hasChanges={hasChanges}
+        hasChanges={hasChanges && hasPresets}
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}

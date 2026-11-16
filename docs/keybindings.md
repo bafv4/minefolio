@@ -378,13 +378,27 @@ type ControllerSettings = {
 
 ### 入力方法
 
-`users.inputMethod` で入力方法を管理する。
+`users.inputMethod` で入力方法を管理する。**編集は `/me/playstyle` に一本化**しており、`/me/devices` は今の値の表示と playstyle へのリンクだけを持つ（`/me/devices` の action は `inputMethod` を受け付けない。旧 `saveInputMethod` も廃止）。
 
 | 値 | ラベル | 短縮 |
 |---|---|---|
 | keyboard_mouse | キーボード/マウス | KBM |
 | controller | コントローラー | Controller |
 | touch | タッチ | Touch |
+
+### /me/devices の画面構成（UI）
+
+欄は `PageSection`（h2）の欄区切り: 入力方法（今の値の表示＋「プレイスタイルで変更する」リンクのみ）→ コントローラー／キーボード／マウス（入力方法に応じて出し分け）→ ゲーム内設定。Select（キーボードのレイアウト・Windows ポインター速度）とゲーム言語の Combobox は `id` を付けて `Label htmlFor` と結び、ゲーム内感度（%）の欄には sr-only のラベルを付ける。プリセット未作成時の案内は `NoticeBanner`。
+
+### /me/keybindings の画面構成（UI）
+
+- 見出しの段は h1（ページ名）→ h2（`PageSection`: キーボードビュー／コントローラービュー／各タブの欄）→ h3（操作割り当てのグループ名）。欄は `PageSection` の欄区切り（箱なし）。操作割り当ての欄の見出しは `keybindings-actions-heading` の id を持ち、スキップリンクの移動先を兼ねる。
+- 離脱時の警告は `FloatingSaveBar` が内蔵する（`docs/me-common.md`）。画面側で `useUnsavedWarning` は持たない。
+- 行ごとの確定結果の読み上げは、ページに1つだけの `role="status" aria-live="polite"` 領域で行う（`KeybindingRow` の `onAnnounce`）。
+- **キー編集ダイアログ**は段階的に見せる（`components/keybindings/key-dialog-section.tsx` の `KeyDialogSection`、標準の `<details>`）。操作割り当ては常に開き、リマップ・指・カスタムアクションは中身（そのキーの件数）があるときだけ初期表示で開く。各段の見出し行に件数の要約を出す。フッターに「「適用」はこの画面への反映。ページ下の保存で確定します」を示す（2段階の確定）。
+- **モバイルのキー押下**: `KeyInfoTrigger` は、キー自身が押下の操作を持つ（`onKeyClick` / `onButtonClick` があり、`interactive`）ときは、モバイルでも情報ダイアログの DialogTrigger で包まない（編集ダイアログと2枚同時に開くため）。閲覧（走者画面・一覧）は従来どおり、モバイルは Dialog・デスクトップは Tooltip。
+- **リマップの入力の名前**: `KeyCaptureButton` の `ariaLabel` で「変更元のキー: Q」のような名前にする。リマップ行の削除・出力種別・文字入力にも名前を付ける。
+- **キー上の操作名チップ**は `text-[10px] leading-snug`（`cn()` の tailwind-merge は `text-[10px]` が後ろの `leading-*` を落とすため、`leading-snug` を後ろに置く）。
 
 ---
 

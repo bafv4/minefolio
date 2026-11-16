@@ -1796,3 +1796,10 @@ body {
 .guide-content mark:not([style*="background"]) {
   background-color: var(--guide-bg-legacy-yellow);
 }
+
+/* /me の初回ツアーが指している要素の強調（components/me/me-tour.tsx。brand＝現在地） */
+[data-me-tour-active] {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: var(--radius-lg, 0.5rem);
+}

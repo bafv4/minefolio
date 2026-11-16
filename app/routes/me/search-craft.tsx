@@ -11,7 +11,8 @@ import { getEnv } from "@/lib/env.server";
 import { users, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -432,15 +433,14 @@ export async function action({ request }: Route.ActionArgs) {
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meSearchCraft.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meSearchCraft.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -609,7 +609,7 @@ export default function SearchCraftPage() {
   }, [presets]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meSearchCraft.pageTitle")}</h1>
@@ -617,13 +617,32 @@ export default function SearchCraftPage() {
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
-            <Link to="/my-guides/templates">
-              <Share2 className="mr-2 h-4 w-4" />
-              {t("meSearchCraft.publishAsTemplate")}
-            </Link>
-          </Button>
+        <div className="flex flex-col gap-1.5 sm:items-end">
+          {crafts.length === 0 ? (
+            // エントリが無いと公開できる物が無いので、押せなくして理由を出す
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                aria-describedby="publish-template-reason"
+                className="w-full sm:w-auto h-11 sm:h-10"
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                {t("meSearchCraft.publishAsTemplate")}
+              </Button>
+              <p id="publish-template-reason" className="text-xs text-muted-foreground">
+                {t("meSearchCraft.publishNeedsEntry")}
+              </p>
+            </>
+          ) : (
+            <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
+              <Link to="/my-guides/templates">
+                <Share2 className="mr-2 h-4 w-4" />
+                {t("meSearchCraft.publishAsTemplate")}
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -641,7 +660,12 @@ export default function SearchCraftPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
+      <div inert={!hasPresets}>
+      <PageSection
+        id="search-craft-list"
+        title={t("meSearchCraft.listTitle")}
+        className={cn(!hasPresets && "pointer-events-none opacity-50")}
+      >
       <SearchCraftTimingBoard
         crafts={crafts}
         onCraftsChange={setCrafts}
@@ -651,11 +675,12 @@ export default function SearchCraftPage() {
         createCraft={createCraft}
         createLoop={createLoop}
       />
+      </PageSection>
       </div>
       </PresetSwitchLock>
 
       <FloatingSaveBar
-        hasChanges={hasChanges}
+        hasChanges={hasChanges && hasPresets}
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}

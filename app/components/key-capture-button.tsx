@@ -64,6 +64,7 @@ export function KeyCaptureButton({
   onCapture,
   allowModifiers = false,
   className,
+  ariaLabel,
 }: {
   value: string;
   placeholder: string;
@@ -71,6 +72,8 @@ export function KeyCaptureButton({
   onCapture: (keyCode: string) => void;
   allowModifiers?: boolean;
   className?: string;
+  /** 何のキーを入れる欄か（例: 「変更元のキー」）。見えている値の前に付け、「Q」だけの名前にならないようにする */
+  ariaLabel?: string;
 }) {
   const t = useT();
   const [isCapturing, setIsCapturing] = useState(false);
@@ -86,9 +89,20 @@ export function KeyCaptureButton({
     (e.currentTarget as HTMLElement).blur();
   };
 
+  const visibleText = isCapturing
+    ? allowModifiers && heldModifiers.length > 0
+      ? `${heldModifiers.join(" + ")} + …`
+      : t(allowModifiers ? "meKeybindings.pressKeyWithModifiers" : "meKeybindings.pressKey")
+    : value
+      ? allowModifiers
+        ? getKeyCombinationLabel(t, value, keyboardLayout)
+        : getKeyLabel(t, value, keyboardLayout)
+      : placeholder;
+
   return (
     <button
       type="button"
+      aria-label={ariaLabel ? `${ariaLabel}: ${visibleText}` : undefined}
       data-key-capturing={isCapturing ? "true" : undefined}
       onFocus={() => setIsCapturing(true)}
       onBlur={() => {
@@ -144,7 +158,7 @@ export function KeyCaptureButton({
         if (allowModifiers && MOUSE_SIDE_BUTTON_CODES[e.button]) e.preventDefault();
       }}
       className={cn(
-        "min-w-28 h-9 px-3 rounded-md border text-sm font-mono transition-colors",
+        "min-w-28 h-9 max-sm:h-11 px-3 rounded-md border text-sm font-mono transition-colors",
         "bg-secondary/50 hover:bg-secondary/70",
         "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
         isCapturing ? "border-primary" : "border-input",

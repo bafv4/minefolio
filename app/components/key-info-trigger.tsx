@@ -300,10 +300,16 @@ export function KeyInfoTrigger({
   children,
   info,
   alwaysShow = false,
+  interactive = false,
 }: {
   children: ReactNode;
   info: KeyInfoData;
   alwaysShow?: boolean;
+  /**
+   * 子のキー自身が押下の操作を持つ（編集モード）とき true。モバイルで情報ダイアログを
+   * DialogTrigger で重ねない（編集ダイアログと2枚同時に開いてしまうため）。デスクトップの Tooltip は残す。
+   */
+  interactive?: boolean;
 }) {
   const hasInfo =
     (info.bindings?.length ?? 0) > 0 ||
@@ -315,6 +321,8 @@ export function KeyInfoTrigger({
   const isMobile = useMediaQuery("(max-width: 767px)", false);
 
   if (!alwaysShow && !hasInfo) return <>{children}</>;
+
+  if (isMobile && interactive) return <>{children}</>;
 
   if (isMobile) {
     return (

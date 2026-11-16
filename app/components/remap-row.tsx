@@ -83,16 +83,18 @@ function RemapTypeSelect({
   onChange,
   heightClass = "h-9",
   disabledTypes,
+  ariaLabel,
 }: {
   value: KeyRemapType;
   onChange: (value: KeyRemapType) => void;
   heightClass?: "h-9" | "h-8";
   disabledTypes?: KeyRemapType[];
+  ariaLabel: string;
 }) {
   const t = useT();
   return (
     <Select value={value} onValueChange={(v: KeyRemapType) => onChange(v)}>
-      <SelectTrigger className={cn("w-28 text-sm", heightClass)}>
+      <SelectTrigger aria-label={ariaLabel} className={cn("w-28 text-sm max-sm:h-11", heightClass)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -138,6 +140,7 @@ export function RemapRow({
               value={remap.remapType ?? "unset"}
               onChange={(value) => onUpdate(index, { remapType: value })}
               disabledTypes={disabledRemapTypes}
+              ariaLabel={t("remapType.label")}
             />
             <div className="h-9 w-px shrink-0 bg-border" aria-hidden />
           </>
@@ -150,6 +153,7 @@ export function RemapRow({
           keyboardLayout={keyboardLayout}
           onCapture={(key) => onUpdate(index, { sourceKey: key })}
           allowModifiers={true}
+          ariaLabel={t("meKeybindings.remapSourceAria")}
         />
 
         <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -158,7 +162,7 @@ export function RemapRow({
           value={selectedOutputType}
           onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
-          <SelectTrigger className="w-24 h-9 text-sm">
+          <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-9 max-sm:h-11 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -173,7 +177,8 @@ export function RemapRow({
             value={remap.targetKey ?? ""}
             onChange={(e) => onUpdate(index, { targetKey: e.target.value })}
             placeholder={t("meKeybindings.enterCharacter")}
-            className="w-40 h-9 font-mono text-center text-sm"
+            aria-label={t("meKeybindings.remapTargetCharAria")}
+            className="w-40 h-9 max-sm:h-11 font-mono text-center text-sm"
           />
         ) : selectedOutputType === "keyboard" ? (
           <KeyCaptureButton
@@ -183,6 +188,7 @@ export function RemapRow({
             onCapture={(key) => onUpdate(index, { targetKey: key })}
             allowModifiers={false}
             className="w-40"
+            ariaLabel={t("meKeybindings.remapTargetAria")}
           />
         ) : null}
 
@@ -190,10 +196,11 @@ export function RemapRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-9 w-9 p-0 text-destructive hover:text-destructive ml-auto"
+          aria-label={t("meKeybindings.remapDeleteAria")}
+          className="size-9 max-sm:size-11 p-0 text-destructive hover:text-destructive ml-auto"
           onClick={() => onDelete(index)}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -245,7 +252,8 @@ export function ModifierToggleGroup({
             type="button"
             variant={currentModifiers.includes(mod) ? "default" : "outline"}
             size="sm"
-            className="h-7 px-2 text-xs"
+            aria-pressed={currentModifiers.includes(mod)}
+            className="h-7 px-2 text-xs max-sm:h-11 max-sm:min-w-11"
             onClick={() => toggleModifier(mod)}
           >
             {MODIFIER_LABELS[mod]}
@@ -302,10 +310,11 @@ export function DialogRemapRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+          aria-label={t("meKeybindings.remapDeleteAria")}
+          className="size-7 max-sm:size-11 p-0 text-destructive hover:text-destructive ml-auto"
           onClick={() => onDelete(index)}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -318,7 +327,7 @@ export function DialogRemapRow({
           value={selectedOutputType}
           onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
-          <SelectTrigger className="w-24 h-8 text-sm">
+          <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-8 max-sm:h-11 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -335,7 +344,8 @@ export function DialogRemapRow({
               onUpdate(index, { targetKey: e.target.value });
             }}
             placeholder={t("meKeybindings.enterCharacter")}
-            className="w-40 h-8 font-mono text-center text-sm"
+            aria-label={t("meKeybindings.remapTargetCharAria")}
+            className="w-40 h-8 max-sm:h-11 font-mono text-center text-sm"
           />
         ) : selectedOutputType === "keyboard" ? (
           <KeyCaptureButton
@@ -345,6 +355,7 @@ export function DialogRemapRow({
             onCapture={(key) => onUpdate(index, { targetKey: key })}
             allowModifiers={false}
             className="w-40 h-8"
+            ariaLabel={t("meKeybindings.remapTargetAria")}
           />
         ) : null}
       </div>
@@ -358,6 +369,7 @@ export function DialogRemapRow({
             onChange={(value) => onUpdate(index, { remapType: value })}
             heightClass="h-8"
             disabledTypes={disabledRemapTypes}
+            ariaLabel={t("remapType.label")}
           />
         </div>
       )}

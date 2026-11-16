@@ -364,7 +364,8 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                       value={variation.str}
                       onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
                       placeholder="scr"
-                      className="font-mono h-8 w-32"
+                      aria-label={t("meSearchCraft.searchLabel")}
+                      className="font-mono h-8 max-sm:h-11 w-32"
                     />
                     <Button
                       type="button"
@@ -435,7 +436,8 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           value={craft.comment || ""}
           onChange={(e) => onUpdate(craft.id, { ...craft, comment: e.target.value || null })}
           placeholder={t("meSearchCraft.commentOptional")}
-          className="h-8 text-sm"
+          aria-label={t("meSearchCraft.commentOptional")}
+          className="h-8 max-sm:h-11 text-sm"
         />
       </div>
 
@@ -448,8 +450,13 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
         }}
       >
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="shrink-0">
-            <Trash2 className="h-4 w-4 text-destructive" />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t("meSearchCraft.deleteEntryAria")}
+            className="shrink-0 max-sm:size-11"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
@@ -538,10 +545,10 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meSearchCraft.dragHandle")}
-          className="flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+          aria-label={`${t("meSearchCraft.dragHandle")} (${index + 1})`}
+          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <span className="w-5 text-xs font-mono text-muted-foreground/60 text-right">
           {index + 1}
@@ -731,7 +738,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
     <div className="rounded-xl border border-border/70 bg-background/80">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         {meta && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />}
-        <span className="text-sm font-semibold">{label}</span>
+        <h3 className="text-sm font-semibold">{label}</h3>
         <span className="text-xs text-muted-foreground">{crafts.length}</span>
       </div>
 
@@ -761,14 +768,22 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                   isCraftZoneOver && "border-primary bg-primary/5 text-primary",
                 )}
               >
-                {t("meSearchCraft.emptyBlockHint")}
+                {t("meSearchCraft.emptyBlockMark")}
               </div>
             )}
           </SortableContext>
         </div>
 
-        <Button type="button" variant="outline" size="sm" onClick={() => onAddCraft(timing)}>
-          <Plus className="mr-2 h-4 w-4" />
+        {/* 見える文言は「アイテム追加」のまま。7区間に同じ名前のボタンが並ぶので、読み上げ名にだけ区間名を入れる */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="max-sm:min-h-11"
+          aria-label={t("meSearchCraft.addCraftAria", { timing: label })}
+          onClick={() => onAddCraft(timing)}
+        >
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           {t("meSearchCraft.addCraft")}
         </Button>
 
@@ -811,21 +826,20 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
           </div>
         )}
 
-        <div className="space-y-1">
+        {/* Loop はエントリが2件以上で作れる。足りない間は押せないボタンを7区間に並べず、ボード上部の説明1文に任せる */}
+        {totalCraftCount >= 2 && (
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="max-sm:min-h-11"
+            aria-label={t("meSearchCraft.addLoopAria", { timing: label })}
             onClick={() => onAddLoop(timing)}
-            disabled={totalCraftCount < 2}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
             {t("meSearchCraft.addLoop")}
           </Button>
-          {totalCraftCount < 2 && (
-            <p className="text-xs text-muted-foreground">{t("meSearchCraft.loopNeedTwoEntries")}</p>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1111,6 +1125,11 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       onDragCancel={handleDragCancel}
     >
       <div className="space-y-4">
+        {/* 操作の説明は区間ごとに繰り返さず、ここで1回だけ出す */}
+        <p className="text-xs text-muted-foreground">
+          {t("meSearchCraft.boardHint")}
+          {totalCraftCount < 2 && ` ${t("meSearchCraft.loopNeedTwoEntries")}`}
+        </p>
         {BLOCK_TIMINGS.map((timing) => (
           <TimingBlock
             key={timing ?? "__none"}

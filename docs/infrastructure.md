@@ -217,6 +217,13 @@ MCSRer Hotkeys（旧サービス）からのデータインポート機能。
 - `users.hasImported` フラグでインポート済みかどうかを管理
 - `LEGACY_API_URL` 環境変数で旧APIのURLを指定
 
+#### ページ（`/me/import`）の構成
+
+- 取り込み元（リマップ＝AutoHotkey／Minecraft 設定）の選択は**ページの2つの欄（`PageSection`）だけ**で行う。各欄の「インポート」ボタンが、その取り込み元専用の `ImportDialog`（`source` 引数）を開く。ダイアログ内にタブは持たない（ページとの重複を避けるため）。
+- 注意文・完了・エラーは `NoticeBanner`（shadcn `Alert` は使わない）。
+- 取り込み先（編集中のプリセット名。無いときは取り込みで新規作成される旨）をページとダイアログに示す（loader の `activePresetName`）。
+- ダイアログの閉じる×は、`showCloseButton={false}` と自前の `DialogClose`（md 未満 44px）で押せる範囲を広げている（共有の `ui/dialog.tsx` は変えない）。
+
 ---
 
 ## CSVエクスポート

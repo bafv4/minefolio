@@ -150,20 +150,67 @@ describe("action - 登録上限（50件）", () => {
   });
 });
 
-describe("action - toggleSpeedrunRecord と updatedAt", () => {
-  it("非表示の切替は hiddenSpeedrunRecords だけ更新し、updatedAt（最近の更新）を進めない", async () => {
+describe("action - saveSpeedrunFlags（非表示・ピン留めの下書き保存）", () => {
+  function flagsForm(hidden: unknown, pinned: unknown): FormData {
+    const fd = new FormData();
+    fd.set("_action", "saveSpeedrunFlags");
+    fd.set("hidden", JSON.stringify(hidden));
+    fd.set("pinned", JSON.stringify(pinned));
+    return fd;
+  }
+
+  it("非表示だけが変わったときは updatedAt（最近の更新）を進めない", async () => {
     const past = new Date("2020-01-01T00:00:00Z");
     const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", updatedAt: past });
     signInAs("discord-runner");
 
-    const fd = new FormData();
-    fd.set("_action", "toggleSpeedrunRecord");
-    fd.set("runId", "run-1");
-    const res = await callAction(fd);
+    const res = await callAction(flagsForm(["run-1"], []));
 
     expect(res).toMatchObject({ success: true });
     const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
     expect(JSON.parse(after!.hiddenSpeedrunRecords ?? "[]")).toEqual(["run-1"]);
     expect(after!.updatedAt?.getTime()).toBe(past.getTime());
+  });
+
+  it("ピン留めが変わったときは updatedAt を進め、両方の一覧をまとめて置き換える", async () => {
+    const past = new Date("2020-01-01T00:00:00Z");
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", updatedAt: past });
+    signInAs("discord-runner");
+
+    await callAction(flagsForm(["h1"], ["p1", "p2"]));
+    const res = await callAction(flagsForm([], ["p2"]));
+
+    expect(res).toMatchObject({ success: true });
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+    expect(JSON.parse(after!.hiddenSpeedrunRecords ?? "[]")).toEqual([]);
+    expect(JSON.parse(after!.pinnedSpeedrunRecords ?? "[]")).toEqual(["p2"]);
+    expect(after!.updatedAt!.getTime()).toBeGreaterThan(past.getTime());
+  });
+
+  it("不正な入力はエラーにして何も書き換えない", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    const fd = new FormData();
+    fd.set("_action", "saveSpeedrunFlags");
+    fd.set("hidden", "not json");
+    fd.set("pinned", "[]");
+    const res = await callAction(fd);
+
+    expect(res.error).toBeTruthy();
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+    expect(after!.hiddenSpeedrunRecords ?? null).toBeNull();
+  });
+});
+
+describe("action - 同じカテゴリの記録", () => {
+  it("同じカテゴリで2件目を作ろうとすると categoryDuplicate エラーになる（500 にしない）", async () => {
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+
+    const first = await callAction(baseCreateFormData({ category: "rsg_any" }));
+    expect(first).toMatchObject({ success: true });
+    const second = await callAction(baseCreateFormData({ category: "rsg_any" }));
+    expect(second.error).toBeTruthy();
   });
 });

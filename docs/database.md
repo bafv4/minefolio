@@ -259,6 +259,8 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `rta_started_year_month` | text? | `"YYYY-MM"` |
 | `onboarding_completed` | bool | 既定 **true**。初期設定ウィザード（`/onboarding`）を完了したか。既定 true は列追加前の既存ユーザーを完了済みとして扱うため（バックフィル不要）で、ウィザード開始時の insert だけが `false` を入れる。反映は `scripts/add-onboarding-completed-column.ts` |
 | `allow_auto_translation` | bool | 既定 **true**。bio / shortBio の自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `userBio` の翻訳行を削除する。既定 true は既存ユーザーを「許可」として扱うため。反映は `scripts/add-allow-auto-translation-columns.ts` |
+| `me_tour_completed_at` | timestamp | nullable。`/me` の初回ツアーを終えた（またはスキップした）日時。null の間は初めて `/me` を開いたときに1回だけ出す。反映は `scripts/add-me-guide-columns.ts`（詳細: [me-common.md](./me-common.md)） |
+| `me_checklist_dismissed_at` | timestamp | nullable。`/me/edit` の「はじめに」チェックリストを閉じた日時。反映は同スクリプト |
 
 索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
 

@@ -357,3 +357,28 @@ describe("action - 変更履歴の公開影響（preset_id）", () => {
     expect(deviceRows.filter((h) => h.presetId === null)).toHaveLength(1);
   });
 });
+
+describe("action - 入力方法は /me/playstyle に一本化", () => {
+  it("inputMethod を送っても users.inputMethod は書き換えない（編集は playstyle 側）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const before = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+
+    const res = await callAction(baseFormData(preset.id, { inputMethod: "controller" }));
+
+    expect(res).toEqual({ success: true });
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+    expect(after?.inputMethod).toBe(before?.inputMethod);
+  });
+
+  it("プリセットが無いときの保存（旧 saveInputMethod）は他の保存と同じくプリセット必須で拒否する", async () => {
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+    const fd = new FormData();
+    fd.set("_action", "saveInputMethod");
+    fd.set("inputMethod", "controller");
+
+    const res = await callAction(fd);
+
+    expect(res.error).toBeTruthy();
+  });
+});

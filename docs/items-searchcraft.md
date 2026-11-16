@@ -86,10 +86,11 @@ import {
 
 ### 編集UI
 
-全レイアウトを1枚のカード（`rounded-xl border border-border/70 bg-background/80`）にまとめ、セグメントごとに `divide-y divide-border/60` の行として表示する。各行は操作行（D&Dドラッグハンドル → セグメント名 Combobox → 複製/メモ展開/削除ボタン）+ `ItemHotbar` によるホットバー編集 + メモで構成し、カード最下部（`border-t` 区切り）に「配置を追加」ボタン（outline / sm）を置く。
+ページは `PageSection`（h2「アイテム配置」）の欄区切りの中に置く。全レイアウトを1枚のカード（`rounded-xl border border-border/70 bg-background/80`）にまとめ、セグメントごとに `divide-y divide-border/60` の行として表示する。各行は操作行（D&Dドラッグハンドル → セグメント名 Combobox → 複製/メモ展開/削除ボタン）+ `ItemHotbar` によるホットバー編集 + メモで構成し、カード最下部（`border-t` 区切り）に「配置を追加」ボタン（outline / sm）を置く。
 
 - **アイテム選択**: スロットタイルをクリックすると Dialog が開き、検索 Input + カテゴリ別フィルタでアイテムを複数選択できる
 - **セグメント**: Combobox（プリセット名 + カスタム入力）で選択・入力する。既に使用中のプリセット名は自分自身を除き候補から除外される
+- **名前**: 複製・メモ開閉・削除・並べ替えハンドルは「「{セグメント名}」の…」の名前を持つ（`meItems.*Aria`）。スロットのアイテム選択ダイアログの各アイテムボタンもアイテム名を名前に持つ（`aria-pressed`）。md 未満は 44px
 - **並べ替え**: `@dnd-kit` によるドラッグハンドル（GripVertical）で行単位の縦並べ替え。保存時の配列順がそのまま `displayOrder` として永続化される
 - **複製**: 行の複製ボタン（Copy アイコン）でセグメントを複製する。複製後の行はセグメント名を空にした状態で直後に挿入され、保存時の「セグメント名必須・重複禁止」バリデーションが再命名を強制する
 - **削除**: 確認 `AlertDialog` を経て削除する
@@ -223,7 +224,9 @@ const MAX_SEARCH_VARIATIONS = 5; // 1エントリあたりの上限（並べ替�
 - **クラフト行**: アイテムチップ + 追加ボタン、サーチ文字列 `Input`、「Shiftを押しながら」チェックボックス、入力キーのライブプレビュー（`remaps` 指定時）、コメント、削除（`AlertDialog`）。行UI自体に timing の選択コントロールは無い（timing はブロック帰属で決まる）
 - **タイミングの変更＝ブロック間D&D**: `@dnd-kit` のマルチコンテナ Sortable パターン（単一 `DndContext` + ブロックごとの `SortableContext` + 空ブロック用 `useDroppable` ゾーン）。ブロック間へドロップすると対象クラフトの `timing` が移動先ブロックの値に更新される。クラフトと繋ぎ方（Loop）は同一 `DndContext` を共有し、`collisionDetection` をドラッグ中の対象と同じドメイン（craft/loop）に絞り込むことで互いの干渉を防ぐ（`useDraggable`/`useDroppable` は最も近い祖先の `DndContext` にしか束縛できないため、ブロックカード内でクラフト行と Loop 行を同居させたまま完全に別の `DndContext` に分離することはできない）
 - **繋ぎ方（Loop）サブセクション**: 各ブロック内、クラフトリストの下に配置。Loop 行の編集UI（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` からエクスポート）はステップ選択・遷移行・プレビュー・コメント・削除を持つが、行ヘッダーに timing Select は無い（timing の変更はやはりブロック間D&D）。0件のブロックでは通常サブセクション自体を出さず、**Loop のドラッグ中のみ**全ブロックに破線のドロップゾーンを表示する
-- **ブロック内の追加ボタン**: 各ブロックに「クラフトを追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満なら disabled）を配置
+- **ブロック内の追加ボタン**: 各ブロックに「アイテム追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満の間は**ボタン自体を出さない**）を配置。見える文言は変えず、読み上げ名にだけ区間名を入れる（`meSearchCraft.addCraftAria` / `addLoopAria`、例「OW にアイテム追加」）。ブロック名は h3 の見出し
+- **操作の説明は1回だけ**: ボード上部に説明1文（`boardHint`。エントリが2件未満のときは `loopNeedTwoEntries` を続ける）を出し、区間ごとに繰り返さない。0件のブロックは「なし」の短い印（`emptyBlockMark`）の破線ゾーン（ドロップ先は維持）
+- `/me/search-craft` は、エントリが0件のとき「テンプレートとして公開」を無効にして理由を出す。ボードは `PageSection`（h2）の中に置く。サーチ文字列・コメント・削除・並べ替えハンドルには名前（aria-label）を付け、md 未満は 44px
 - **表示側（テンプレート詳細などの閲覧ビュー）の未知 timing**: enum 外の `timing` を持つクラフトは「その他（`other`）」グループとして描画し、件数と描画数を一致させる（`resolveCraftTiming()` / `groupCraftsByTiming()`、`app/lib/search-craft-templates.ts`。`search-craft-template-view.tsx` が使用）。`null` は従来どおり「指定なし」
 - **空ブロック**: クラフト0件のブロックは破線のプレースホルダを表示し、そのままドロップ先として機能する
 - **未知の timing**: 通常は起こらないが、`crafts`/`loops` の `timing` が7ブロックのいずれにも一致しない値だった場合、「指定なし」ブロックへ正規化して表示する（データは残るが未知キーのまま非表示になる、という黙った消失を避けるための防御）

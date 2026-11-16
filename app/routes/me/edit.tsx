@@ -1,11 +1,10 @@
 import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, redirect, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, useRouteLoaderData, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
-import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { MeChecklist } from "@/components/me/me-checklist";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -64,7 +63,10 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
+import { NoticeBanner } from "@/components/notice-banner";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -617,7 +619,7 @@ function UndoButton({ onClick, disabled, title }: { onClick: () => void; disable
   return (
     // 無効なボタンは title が出ないため、理由は外側の span に付ける
     <span title={title}>
-      <Button variant="ghost" size="sm" type="button" onClick={onClick} disabled={disabled}>
+      <Button variant="ghost" size="sm" type="button" className="min-h-11 sm:min-h-8" onClick={onClick} disabled={disabled}>
         <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
         {t("meEdit.undoChange")}
       </Button>
@@ -627,6 +629,11 @@ function UndoButton({ onClick, disabled, title }: { onClick: () => void; disable
 
 export default function EditProfilePage() {
   const t = useT();
+  // 「はじめに」（MeChecklist、first）が出ている間は、MCID 欄を first にしない（罫線の無い欄が2つ続くため）
+  // 閉じた直後は loader を再取得しない（記録は素の fetch）ので、閉じたことはこの画面の状態で持つ
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const layoutData = useRouteLoaderData("routes/me/_layout") as { checklist?: unknown } | undefined;
+  const hasChecklist = !checklistDismissed && layoutData?.checklist != null;
   const locale = useLocale();
   const { user, links, videos, legacyApiUrl, hasExistingData, translationEnabled } =
     useLoaderData<typeof loader>();
@@ -733,9 +740,6 @@ export default function EditProfilePage() {
   // 変更チェック（フォーム値 ＋ MCID・リンク・動画の下書き）
   const hasChanges =
     JSON.stringify(formValues) !== JSON.stringify(savedFormValues) || hasProfileChanges(savedDraft, draft);
-
-  // 未保存のままアプリ内遷移・タブ閉じをしようとしたら確認する
-  const blocker = useUnsavedWarning(hasChanges);
 
   // 入力変更ハンドラ
   const handleInputChange = useCallback((field: keyof typeof formValues, value: string) => {
@@ -1265,7 +1269,7 @@ export default function EditProfilePage() {
   );
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 pb-24 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("meEdit.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -1273,19 +1277,17 @@ export default function EditProfilePage() {
         </p>
       </div>
 
+      <MeChecklist onDismiss={() => setChecklistDismissed(true)} />
+
       {/* Legacy Import Card */}
       {legacyApiUrl && !importCompleted && !hasExistingData && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Download className="h-5 w-5" />
-              {t("meEdit.importFromLegacyTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meEdit.importFromLegacyDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <PageSection
+          id="edit-legacy-import"
+          first
+          icon={<Download className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meEdit.importFromLegacyTitle")}
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.importFromLegacyDesc")}</p>
             <importFetcher.Form method="post">
               <input type="hidden" name="_action" value="import_legacy" />
               <Button type="submit" disabled={isImporting || hasChanges}>
@@ -1305,23 +1307,22 @@ export default function EditProfilePage() {
             {hasChanges && (
               <p className="mt-2 text-xs text-muted-foreground">{t("meEdit.importDisabledDirty")}</p>
             )}
-          </CardContent>
-        </Card>
+        </PageSection>
       )}
 
-      <div className="space-y-6">
-        {/* MCID & Skin Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("meEdit.mcidSkinTitle")}</CardTitle>
-            <CardDescription>
-              {t("meEdit.mcidSkinDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      <div className="space-y-7 sm:space-y-8">
+        {/* MCID & Skin Section（ツアーの「プロフィール編集」の指す先） */}
+        <div data-me-tour="edit-form">
+        <PageSection
+          id="edit-mcid-skin"
+          first={!(legacyApiUrl && !importCompleted && !hasExistingData) && !hasChecklist}
+          title={t("meEdit.mcidSkinTitle")}
+          className="space-y-6"
+        >
+            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.mcidSkinDesc")}</p>
             {/* MCID設定（下書き。保存バーで保存するまで反映されない） */}
             <div className="space-y-3">
-              <Label>{t("meEdit.minecraftIdTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("meEdit.minecraftIdTitle")}</h3>
               {draft.mcid.value ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-4 min-w-0">
@@ -1339,26 +1340,26 @@ export default function EditProfilePage() {
                   <div className="flex shrink-0 flex-wrap gap-2">
                     {isMcidChanged && <UndoButton onClick={handleMcidUndo} disabled={isSubmitting} />}
                     {renderMcidDialog(
-                      <Button variant="outline" size="sm" disabled={isSubmitting}>
+                      <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                         <Pencil className="mr-2 h-4 w-4" />
                         {t("meEdit.change")}
                       </Button>,
                     )}
-                    <Button variant="ghost" size="sm" type="button" onClick={handleMcidRemove} disabled={isSubmitting}>
+                    <Button variant="ghost" size="sm" type="button" className="min-h-11 sm:min-h-8" onClick={handleMcidRemove} disabled={isSubmitting}>
                       <Trash2 className="mr-2 h-4 w-4" />
                       {t("meEdit.delete")}
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
                     {savedDraft.mcid.value ? t("meEdit.mcidPendingRemove") : t("meEdit.mcidNotConfigured")}
                   </p>
                   <div className="flex shrink-0 gap-2">
                     {isMcidChanged && <UndoButton onClick={handleMcidUndo} />}
                     {renderMcidDialog(
-                      <Button size="sm" disabled={isSubmitting}>
+                      <Button size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                         <Plus className="mr-2 h-4 w-4" />
                         {t("meEdit.setMcid")}
                       </Button>,
@@ -1378,9 +1379,9 @@ export default function EditProfilePage() {
 
             {/* Bedrock版MCID（Xboxゲーマータグ）。自己申告のためMojang検証はせず、slug・スキンには影響しない。下書き（保存バーで保存するまで反映されない） */}
             <div className="space-y-3">
-              <Label>{t("meEdit.bedrockMcidTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("meEdit.bedrockMcidTitle")}</h3>
               <p className="text-sm text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
-              <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 {draft.bedrockMcid ? (
                   <div className="min-w-0">
                     <p className="truncate font-medium">@{draft.bedrockMcid}</p>
@@ -1404,7 +1405,7 @@ export default function EditProfilePage() {
                     }}
                   >
                     <DialogTrigger asChild>
-                      <Button variant={draft.bedrockMcid ? "outline" : "default"} size="sm" disabled={isSubmitting}>
+                      <Button variant={draft.bedrockMcid ? "outline" : "default"} size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                         {draft.bedrockMcid ? (
                           <Pencil className="mr-2 h-4 w-4" />
                         ) : (
@@ -1455,7 +1456,7 @@ export default function EditProfilePage() {
                   {draft.bedrockMcid && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" disabled={isSubmitting}>
+                        <Button variant="ghost" size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                           <Trash2 className="mr-2 h-4 w-4" />
                           {t("meEdit.delete")}
                         </Button>
@@ -1494,7 +1495,7 @@ export default function EditProfilePage() {
 
             {/* Custom Skin Upload */}
             <div className="space-y-3">
-              <Label>{t("skinUploader.customSkinTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("skinUploader.customSkinTitle")}</h3>
               <p className="text-sm text-muted-foreground">
                 {t("skinUploader.customSkinDesc")}
               </p>
@@ -1518,7 +1519,7 @@ export default function EditProfilePage() {
 
             {/* Custom Cape Upload */}
             <div className="space-y-3">
-              <Label>{t("capeUploader.customCapeTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("capeUploader.customCapeTitle")}</h3>
               <p className="text-sm text-muted-foreground">
                 {t("capeUploader.customCapeDesc")}
               </p>
@@ -1647,15 +1648,11 @@ export default function EditProfilePage() {
               </RadioGroup>
               <p className="text-xs text-muted-foreground">{t("meEdit.capeDisplayHint")}</p>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
+        </div>
 
         {/* Basic Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("meEdit.basicInfo")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection id="edit-basic" title={t("meEdit.basicInfo")} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="displayName">{t("meEdit.displayName")}</Label>
               <Input
@@ -1736,7 +1733,7 @@ export default function EditProfilePage() {
             </div>
 
             {translationEnabled && (
-              <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 p-3">
+              <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="allowAutoTranslation" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.allowAutoTranslation")}
@@ -1809,7 +1806,7 @@ export default function EditProfilePage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-9 shrink-0 text-muted-foreground"
+                    className="size-11 shrink-0 text-muted-foreground sm:size-9"
                     aria-label={t("meEdit.rtaStartedClear")}
                     onClick={clearRtaStarted}
                   >
@@ -1866,26 +1863,15 @@ export default function EditProfilePage() {
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              <Link to="/me/playstyle" className="underline underline-offset-2">
-                {t("meEdit.movedToPlaystyle")}
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
+        </PageSection>
 
         {/* Speedrun.com連携 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ExternalLink className="h-5 w-5" />
-              {t("meEdit.speedrunIntegration")}
-            </CardTitle>
-            <CardDescription>
-              {t("meEdit.speedrunIntegrationDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <PageSection
+          id="edit-speedrun"
+          icon={<ExternalLink className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meEdit.speedrunIntegration")}
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.speedrunIntegrationDesc")}</p>
             <div className="space-y-2">
               <Label htmlFor="speedruncomUsername">{t("meEdit.speedrunUsername")}</Label>
               <div className="flex items-center">
@@ -1905,25 +1891,17 @@ export default function EditProfilePage() {
                 {t("meEdit.speedrunUsernameHint")}
               </p>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
 
         {/* Social Links Section（下書き。保存バーで一括保存） */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Share2 className="h-5 w-5" />
-                  {t("meEdit.socialLinks")}
-                </CardTitle>
-                <CardDescription>
-                  {t("meEdit.socialLinksDesc")}
-                </CardDescription>
-              </div>
+        <PageSection
+          id="edit-social"
+          icon={<Share2 className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meEdit.socialLinks")}
+          action={
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={handleOpenCreate} disabled={isSubmitting}>
+                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={handleOpenCreate} disabled={isSubmitting}>
                     <Plus className="mr-2 h-4 w-4" />
                     {t("meEdit.add")}
                   </Button>
@@ -1940,9 +1918,9 @@ export default function EditProfilePage() {
                   />
                 </DialogContent>
               </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
+          }
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.socialLinksDesc")}</p>
             {draft.links.length > 0 || deletedLinks.length > 0 ? (
               <div className="space-y-2">
                 {draft.links.map((link) => {
@@ -1980,10 +1958,10 @@ export default function EditProfilePage() {
                           {link.id !== null && isLinkEdited(link) && (
                             <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
                           )}
-                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -2021,33 +1999,27 @@ export default function EditProfilePage() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Share2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
-                <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
-              </div>
+              <EmptyState
+                size="compact"
+                icon={<Share2 className="h-5 w-5" />}
+                title={t("meEdit.noSocialLinks")}
+                description={t("meEdit.noSocialLinksHint")}
+              />
             )}
-          </CardContent>
-        </Card>
+        </PageSection>
 
         {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継）。下書き（保存バーで一括保存） */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Video className="h-5 w-5" />
-                  {t("meEdit.videos")}
-                </CardTitle>
-                <CardDescription>
-                  {t("meEdit.videosDesc")}
-                </CardDescription>
-              </div>
+        <PageSection
+          id="edit-videos"
+          icon={<Video className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meEdit.videos")}
+          action={
               <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
+                    className="min-h-11 sm:min-h-8"
                     onClick={handleOpenVideoCreate}
                     disabled={isSubmitting || draft.videos.length >= MAX_PROFILE_VIDEOS}
                   >
@@ -2067,9 +2039,9 @@ export default function EditProfilePage() {
                   />
                 </DialogContent>
               </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
+          }
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.videosDesc")}</p>
             {draft.videos.length > 0 || deletedVideos.length > 0 ? (
               <div className="space-y-2">
                 {draft.videos.map((video, index) => {
@@ -2112,6 +2084,7 @@ export default function EditProfilePage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="size-11 sm:size-9"
                             aria-label={t("meEdit.moveUpItemAria", { label: videoLabel })}
                             type="button"
                             disabled={isSubmitting || index === 0}
@@ -2122,6 +2095,7 @@ export default function EditProfilePage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="size-11 sm:size-9"
                             aria-label={t("meEdit.moveDownItemAria", { label: videoLabel })}
                             type="button"
                             disabled={isSubmitting || index === draft.videos.length - 1}
@@ -2129,10 +2103,10 @@ export default function EditProfilePage() {
                           >
                             <ArrowDown className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.editItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleOpenVideoEdit(video)}>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.editItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleOpenVideoEdit(video)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" type="button" aria-label={t("meEdit.removeItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleVideoRemove(video.key)}>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.removeItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleVideoRemove(video.key)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -2164,28 +2138,22 @@ export default function EditProfilePage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Video className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">{t("meEdit.noVideos")}</p>
-                <p className="text-xs mt-1">
-                  {user.featuredVideoUrl
-                    ? t("meEdit.noVideosLegacyHint")
-                    : t("meEdit.noVideosHint")}
-                </p>
-              </div>
+              <EmptyState
+                size="compact"
+                icon={<Video className="h-5 w-5" />}
+                title={t("meEdit.noVideos")}
+                description={user.featuredVideoUrl ? t("meEdit.noVideosLegacyHint") : t("meEdit.noVideosHint")}
+              />
             )}
-          </CardContent>
-        </Card>
+        </PageSection>
 
         {/* Profile Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t("meEdit.profileSettings")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection
+          id="edit-settings"
+          icon={<Settings className="h-5 w-5 text-primary" aria-hidden="true" />}
+          title={t("meEdit.profileSettings")}
+          className="space-y-4"
+        >
             <div className="space-y-2">
               <Label htmlFor="profileVisibility">{t("meEdit.profileVisibility")}</Label>
               <Select
@@ -2231,16 +2199,14 @@ export default function EditProfilePage() {
               </p>
             </div>
 
-            <Separator className="my-4" />
-
-            <div className="space-y-3">
-              <Label>{t("meEdit.displaySettings")}</Label>
+            <div className="space-y-3 pt-2">
+              <h3 className="text-base font-semibold">{t("meEdit.displaySettings")}</h3>
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.displaySettingsHint")}
               </p>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showPacemanOnHome")}
                   </Label>
@@ -2253,7 +2219,7 @@ export default function EditProfilePage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showTwitchOnHome")}
                   </Label>
@@ -2266,7 +2232,7 @@ export default function EditProfilePage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showYoutubeOnHome")}
                   </Label>
@@ -2279,7 +2245,7 @@ export default function EditProfilePage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showRankedStats")}
                   </Label>
@@ -2292,7 +2258,7 @@ export default function EditProfilePage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showPacemanStats")}
                   </Label>
@@ -2306,32 +2272,26 @@ export default function EditProfilePage() {
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
 
-        {/* Floating Save Bar */}
+        {/* Floating Save Bar（離脱時の警告も保存バーが持つ） */}
         <FloatingSaveBar
           hasChanges={hasChanges}
           isSubmitting={isSubmitting}
           onSave={handleSave}
           onReset={handleReset}
         />
-        <UnsavedChangesDialog blocker={blocker} />
       </div>
 
       {/* Danger Zone */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5" />
-            {t("meEdit.dangerZone")}
-          </CardTitle>
-          <CardDescription>
-            {t("meEdit.dangerZoneDesc")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border border-destructive/30 rounded-lg bg-destructive/5">
+      <PageSection
+        id="edit-danger"
+        icon={<AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />}
+        title={t("meEdit.dangerZone")}
+      >
+        <p className="text-sm text-muted-foreground">{t("meEdit.dangerZoneDesc")}</p>
+        <NoticeBanner tone="error" role="status" className="items-center">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1 basis-56">
               <p className="font-medium">{t("meEdit.deleteAccount")}</p>
               <p className="text-sm text-muted-foreground">
@@ -2416,8 +2376,8 @@ export default function EditProfilePage() {
               </DialogContent>
             </Dialog>
           </div>
-        </CardContent>
-      </Card>
+        </NoticeBanner>
+      </PageSection>
     </div>
   );
 }

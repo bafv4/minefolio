@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useFetcher, useRevalidator, Link } from "react-router";
 import { Settings, Copy, Check, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
@@ -57,6 +58,7 @@ export function PresetSelector({
   const t = useT();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+  const selectId = useId();
   // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす
   const isSwitching = fetcher.state !== "idle";
   const lastRevalidatedAt = useRef(0);
@@ -99,7 +101,7 @@ export function PresetSelector({
         <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm">{t("mePresets.noPresetWarning")}</span>
           <Link to="/me/presets" className="shrink-0">
-            <Button size="sm" className="w-full sm:w-auto">
+            <Button size="sm" className="w-full sm:w-auto max-sm:min-h-11">
               {t("mePresets.createPreset")}
             </Button>
           </Link>
@@ -133,9 +135,9 @@ export function PresetSelector({
           <Settings className="h-4 w-4" />
         </div>
         <div className="flex flex-col gap-1 min-w-0 flex-1">
-          <span className="text-xs font-medium text-muted-foreground">
+          <Label htmlFor={selectId} className="text-xs font-medium text-muted-foreground">
             {t("mePresets.selectorLabel")}
-          </span>
+          </Label>
           <TooltipProvider delayDuration={150}>
             <Tooltip open={dropdownDisabled && hasChanges ? undefined : false}>
               <TooltipTrigger asChild>
@@ -145,7 +147,7 @@ export function PresetSelector({
                     onValueChange={handleChange}
                     disabled={dropdownDisabled}
                   >
-                    <SelectTrigger className="h-9 w-full">
+                    <SelectTrigger id={selectId} className="h-9 w-full max-sm:h-11">
                       {isSwitching ? (
                         <div className="flex items-center gap-2 text-sm">
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -195,7 +197,7 @@ export function PresetSelector({
                     size="sm"
                     onClick={onCopyFromOther}
                     disabled={copyDisabled}
-                    className="w-full sm:w-auto"
+                    className="w-full sm:w-auto max-sm:min-h-11"
                   >
                     <Copy className="h-4 w-4 sm:mr-2" />
                     <span className="hidden sm:inline">{t("mePresets.copyFromOtherPreset")}</span>
@@ -212,7 +214,7 @@ export function PresetSelector({
           </TooltipProvider>
         )}
         <Link to="/me/presets" className="shrink-0">
-          <Button variant="ghost" size="sm" aria-label={t("mePresets.managePresets")}>
+          <Button variant="ghost" size="sm" aria-label={t("mePresets.managePresets")} className="max-sm:size-11">
             <span className="hidden sm:inline">{t("mePresets.managePresets")}</span>
             <Settings className="h-4 w-4 sm:hidden" />
           </Button>

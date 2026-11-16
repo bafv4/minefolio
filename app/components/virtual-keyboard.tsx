@@ -794,7 +794,7 @@ function VirtualKeyboardComponent({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
-                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
@@ -828,7 +828,7 @@ function VirtualKeyboardComponent({
               {filteredBindings.map((binding, i) => (
                 <span
                   key={i}
-                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]", chipClass)}
+                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug", chipClass)}
                 >
                   {getShortActionLabel(t, binding.action)}
                 </span>
@@ -852,7 +852,7 @@ function VirtualKeyboardComponent({
     );
 
     return (
-      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info} interactive={!!onKeyClick}>
         {renderedKey}
       </KeyInfoTrigger>
     );
@@ -1060,7 +1060,7 @@ function VirtualKeyboardComponent({
                     <span
                       key={i}
                       className={cn(
-                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
+                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                         chipClass,
                       )}
                     >
@@ -1082,7 +1082,7 @@ function VirtualKeyboardComponent({
             layout,
           };
           return (
-            <KeyInfoTrigger key={ck.code} info={info} alwaysShow>
+            <KeyInfoTrigger key={ck.code} info={info} alwaysShow interactive={!!onKeyClick}>
               {keyElement}
             </KeyInfoTrigger>
           );
@@ -1335,7 +1335,7 @@ export function VirtualMouse({
               <span
                 key={i}
                 className={cn(
-                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
+                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                   chipClass
                 )}
               >
@@ -1356,7 +1356,7 @@ export function VirtualMouse({
       fingers: showFingerAssignments ? fingers : undefined,
     };
     return (
-      <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom}>
+      <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom} interactive={!!onButtonClick}>
         {buttonElement}
       </KeyInfoTrigger>
     );
@@ -1587,7 +1587,7 @@ export function VirtualNumpad({
           <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span key={i} className={cn(
-                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] leading-snug text-[10px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
@@ -1606,7 +1606,7 @@ export function VirtualNumpad({
       fingers: showFingerAssignments ? fingers : undefined,
     };
     return (
-      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info} interactive={!!onKeyClick}>
         {keyElement}
       </KeyInfoTrigger>
     );

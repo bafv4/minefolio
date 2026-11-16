@@ -538,7 +538,8 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
           value={loop.comment || ""}
           onChange={(e) => onUpdate(loop.id, { ...loop, comment: e.target.value || null })}
           placeholder={t("meSearchCraft.commentOptional")}
-          className="h-8 text-sm"
+          aria-label={t("meSearchCraft.commentOptional")}
+          className="h-8 max-sm:h-11 text-sm"
         />
       </div>
     </>
@@ -592,10 +593,10 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meSearchCraft.dragHandle")}
-          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+          aria-label={`${t("meSearchCraft.dragHandle")} (${index + 1})`}
+          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground/60">
           {index + 1}
@@ -603,8 +604,13 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="ml-auto shrink-0">
-              <Trash2 className="h-4 w-4 text-destructive" />
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
+              className="ml-auto shrink-0 max-sm:size-11"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>

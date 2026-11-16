@@ -11,7 +11,8 @@ import { users, playstyles } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -165,7 +166,7 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
 
   // 入力方法（users.inputMethod。プレイスタイルとは別テーブルだがこのページでまとめて編集する）。
-  // 検証は me/devices の saveInputMethod と同形（共通ヘルパー parseInputMethodInput）
+  // 検証は me/devices の入力方法の保存と同形（共通ヘルパー parseInputMethodInput）
   const inputMethodResult = parseInputMethodInput(formData.get("inputMethod"));
   if (!inputMethodResult.ok) {
     return { error: t("mePlaystyle.errorInvalidOption") };
@@ -425,23 +426,22 @@ export default function PlaystylePage() {
   const showBastionField = hasBastionVersions(formValues.versions);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 pb-24 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("mePlaystyle.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("mePlaystyle.pageDescription")}</p>
       </div>
 
       {/* プレイ内容 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5" />
-            {t("mePlaystyle.sectionPlayContent")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3">
-            <Label>{t("mePlaystyle.versions")}</Label>
+      <PageSection
+        id="playstyle-content"
+        first
+        icon={<Layers className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("mePlaystyle.sectionPlayContent")}
+        className="space-y-6"
+      >
+          <fieldset className="space-y-3 min-w-0">
+            <legend className="mb-3 text-sm font-medium leading-none">{t("mePlaystyle.versions")}</legend>
             {(
               [
                 ["Java", JAVA_VERSION_KEYS],
@@ -454,7 +454,7 @@ export default function PlaystylePage() {
                   {keys.map((key) => (
                     <label
                       key={key}
-                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
+                      className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 sm:min-h-0"
                     >
                       <Checkbox
                         checked={formValues.versions.includes(key)}
@@ -466,7 +466,7 @@ export default function PlaystylePage() {
                 </div>
               </div>
             ))}
-          </div>
+          </fieldset>
 
           <div className="space-y-2">
             <Label htmlFor="mainVersion">{t("mePlaystyle.mainVersion")}</Label>
@@ -495,8 +495,8 @@ export default function PlaystylePage() {
           </div>
 
           <div className="space-y-2">
-            <Label>{t("mePlaystyle.categories")}</Label>
-            <div className="flex flex-wrap gap-2">
+            <Label id="categories-label">{t("mePlaystyle.categories")}</Label>
+            <div role="group" aria-labelledby="categories-label" className="flex flex-wrap gap-2">
               {CATEGORIES.map((cat) => {
                 const selected = formValues.categories.includes(cat.value);
                 return (
@@ -505,6 +505,8 @@ export default function PlaystylePage() {
                     type="button"
                     variant={selected ? "default" : "outline"}
                     size="sm"
+                    aria-pressed={selected}
+                    className="min-h-11 sm:min-h-8"
                     onClick={() => handleToggleCategory(cat.value)}
                   >
                     {categoryLabel(t, cat.value)}
@@ -539,18 +541,15 @@ export default function PlaystylePage() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* 操作 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="h-5 w-5" />
-            {t("mePlaystyle.sectionControls")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <PageSection
+        id="playstyle-controls"
+        icon={<SlidersHorizontal className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("mePlaystyle.sectionControls")}
+        className="space-y-6"
+      >
           <div className="space-y-2">
             <Label htmlFor="inputMethod">{t("mePlaystyle.inputMethod")}</Label>
             <Select
@@ -568,7 +567,17 @@ export default function PlaystylePage() {
                 <SelectItem value="touch">{t("mePlaystyle.inputMethodTouch")}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t("mePlaystyle.inputMethodHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("mePlaystyle.inputMethodHintBefore")}
+              <Link to="/me/keybindings" className="text-primary underline underline-offset-2">
+                {t("meLayout.keybindings")}
+              </Link>
+              {" / "}
+              <Link to="/me/devices" className="text-primary underline underline-offset-2">
+                {t("meLayout.devices")}
+              </Link>
+              {t("mePlaystyle.inputMethodHintAfter")}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -592,10 +601,10 @@ export default function PlaystylePage() {
           {showKbmFields && (
             <>
               <div className="space-y-2">
-                <Label>{t("mePlaystyle.clickMethods")}</Label>
-                <div className="flex flex-wrap gap-4">
+                <Label id="click-methods-label">{t("mePlaystyle.clickMethods")}</Label>
+                <div role="group" aria-labelledby="click-methods-label" className="flex flex-wrap gap-x-4 gap-y-1">
                   {CLICK_METHOD_OPTIONS.map((opt) => (
-                    <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <label key={opt.value} className="flex min-h-11 items-center gap-2 text-sm cursor-pointer sm:min-h-8">
                       <Checkbox
                         checked={formValues.clickMethods.includes(opt.value)}
                         onCheckedChange={() => handleToggleClickMethod(opt.value)}
@@ -643,18 +652,15 @@ export default function PlaystylePage() {
               </PlaystyleSelectField>
             </>
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* テクニック */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            {t("mePlaystyle.sectionTechnique")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <PageSection
+        id="playstyle-technique"
+        icon={<Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />}
+        title={t("mePlaystyle.sectionTechnique")}
+        className="space-y-6"
+      >
           <PlaystyleSelectField
             field="itemLayoutPolicy"
             labelKey="mePlaystyle.itemLayoutPolicy"
@@ -719,8 +725,7 @@ export default function PlaystylePage() {
               className="w-full sm:w-72"
             />
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       <FloatingSaveBar
         hasChanges={hasChanges}
