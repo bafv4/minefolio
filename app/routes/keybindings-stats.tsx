@@ -9,6 +9,7 @@ import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
+import { useT } from "@/hooks/use-locale";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 
@@ -41,12 +42,13 @@ export async function loader() {
 }
 
 export default function KeybindingsStatsPage() {
+  const t = useT();
   const { stats } = useLoaderData<typeof loader>();
   // ビュー切替（→ /keybindings, /keybindings/visual）中は本体をスケルトンに差し替える
   const { isTabSwitching, targetPathname } = useTabNavigation();
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <KeybindingsPageTitle />
+      <KeybindingsPageTitle title={t("keybindingsStats.title")} />
       <ViewSwitcher />
       {isTabSwitching ? (
         <TabContentSkeleton

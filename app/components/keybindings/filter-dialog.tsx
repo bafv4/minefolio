@@ -1,7 +1,7 @@
 // ユーザー絞り込み + 数値範囲フィルタを1つに統合したモーダル。
 // - ユーザー絞り込み: 表示するユーザーを検索してリスト登録（即時反映）
 // - 数値フィルタ: DPI / 感度 / 振り向きの範囲（ドラフト → 適用で反映）
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { SENSITIVITY_PERCENT_MAX } from "@/lib/mouse-settings";
 import { SlidersHorizontal, X } from "lucide-react";
 import {
@@ -112,7 +112,7 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
+        <Button variant="outline" size="sm" className="gap-1.5 max-md:min-h-11">
           <SlidersHorizontal className="h-4 w-4" />
           {t("keybindings.filter")}
           {totalActive > 0 && (
@@ -138,7 +138,6 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               players={players}
               selected={draftUsers}
               onToggle={toggleDraftUser}
-              onClear={() => setDraftUsers([])}
             />
           </div>
 
@@ -157,8 +156,6 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               max={draftDpiMax}
               onMin={setDraftDpiMin}
               onMax={setDraftDpiMax}
-              placeholderMin="400"
-              placeholderMax="3200"
               inputMin={1}
             />
             <FilterRange
@@ -167,8 +164,6 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               max={draftSensMax}
               onMin={setDraftSensMin}
               onMax={setDraftSensMax}
-              placeholderMin="0"
-              placeholderMax={String(SENSITIVITY_PERCENT_MAX)}
               suffix="%"
               inputMin={0}
               inputMax={SENSITIVITY_PERCENT_MAX}
@@ -180,8 +175,6 @@ export function FilterDialog({ players }: { players: UserFilterPlayer[] }) {
               max={draftCm360Max}
               onMin={setDraftCm360Min}
               onMax={setDraftCm360Max}
-              placeholderMin="10"
-              placeholderMax="60"
               suffix="cm"
               inputMin={0}
             />
@@ -213,8 +206,6 @@ function FilterRange({
   max,
   onMin,
   onMax,
-  placeholderMin,
-  placeholderMax,
   suffix,
   inputMin,
   inputMax,
@@ -225,8 +216,6 @@ function FilterRange({
   max: string;
   onMin: (v: string) => void;
   onMax: (v: string) => void;
-  placeholderMin?: string;
-  placeholderMax?: string;
   suffix?: string;
   /** number input の min 属性（入力可能な下限） */
   inputMin?: number;
@@ -236,19 +225,29 @@ function FilterRange({
   hint?: string;
 }) {
   const t = useT();
+  const id = useId();
+  const minId = `${id}-min`;
+  const maxId = `${id}-max`;
+  // 見える見出しは範囲全体の名前。最小・最大の欄はそれぞれ sr-only の Label で区別する
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
+    <div role="group" aria-labelledby={`${id}-group`} className="space-y-2">
+      <span id={`${id}-group`} className="block text-sm leading-none font-medium">
+        {label}
+      </span>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
+          <Label htmlFor={minId} className="sr-only">
+            {t("keybindings.rangeMinOf", { label })}
+          </Label>
           <Input
+            id={minId}
             type="number"
             inputMode="decimal"
             min={inputMin}
             max={inputMax}
             value={min}
             onChange={(e) => onMin(e.target.value)}
-            placeholder={placeholderMin}
+            placeholder={t("keybindings.rangeMin")}
           />
           {suffix && (
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
@@ -258,14 +257,18 @@ function FilterRange({
         </div>
         <span className="text-muted-foreground text-sm">{t("common.rangeSeparator")}</span>
         <div className="relative flex-1">
+          <Label htmlFor={maxId} className="sr-only">
+            {t("keybindings.rangeMaxOf", { label })}
+          </Label>
           <Input
+            id={maxId}
             type="number"
             inputMode="decimal"
             min={inputMin}
             max={inputMax}
             value={max}
             onChange={(e) => onMax(e.target.value)}
-            placeholder={placeholderMax}
+            placeholder={t("keybindings.rangeMax")}
           />
           {suffix && (
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">

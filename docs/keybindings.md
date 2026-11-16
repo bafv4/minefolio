@@ -385,7 +385,7 @@ type ControllerSettings = {
 | ルート | ファイル | 内容 |
 |---|---|---|
 | `/keybindings`（既定） | `routes/keybindings.tsx` | テーブルビュー。サブタブ（`tab`）で表示内容を変更 |
-| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け |
+| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け。h1 / `<title>` は「操作設定ビジュアル」 |
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
 - 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる
@@ -396,7 +396,7 @@ type ControllerSettings = {
 | タブ (`tab`) | 内容 |
 |---|---|
 | movement | 移動: forward, back, left, right, jump, sneak, sprint |
-| inventory | インベントリ: hotbar（**1〜9 をすべて横一列で表示・折り返しなし**。デフォルト幅広め）, swapHands, inventory, pickBlock, drop |
+| inventory | インベントリ: hotbar（1〜9 をすべて表示。長いカスタムキー名で幅を超える場合は折り返して 9 枠目まで見せる）, swapHands, inventory, pickBlock, drop |
 | combat-ui | 戦闘・UI: attack, use, togglePerspective, chat, command, fullscreen |
 | remaps | キーリマップ一覧 |
 | custom-actions | カスタムアクション一覧 |
@@ -405,11 +405,19 @@ type ControllerSettings = {
 - 列定義は `COLUMN_PRESETS`（`keybindings-columns.tsx`）でプリセット名＝タブ名として管理する
 - **各カラムはドラッグでリサイズ可能**（TanStack Table の `columnResizeMode: "onChange"`）。`KeybindingsTable` は `getSize()` から `grid-template-columns` を算出する
 - テーブルは **TanStack Table v9**（`useTable`）。使う機能だけを `keybindingsTableFeatures`（`keybindings-columns.tsx`）に明示登録している（`rowSortingFeature` ＋ `sortedRowModel` / `columnSizingFeature` / `columnResizingFeature`、ソート関数は数値列用の `basic` のみ）。列定義の型は `KeybindingsColumnDef`（= `ColumnDef<KeybindingsFeatures, KeybindingsRow>`）。列の可視性機能は使わないため `getAllLeafColumns()` / `row.getAllCells()` で描画する。リサイズ中の列幅は `table.state.columnSizing`（v8 の `getState()` は廃止）
-- ヘッダーは折り返さない（`whitespace-nowrap` + `truncate`）。セルは `overflow-hidden` で列幅にクリップ
+- **表は仮想化しない**（走者は高々数百・タブごとに 1 表）。role は `table`（`rowgroup` / `row` / `columnheader` / `cell`、並べ替え中の列に `aria-sort`、`aria-rowcount` / `aria-rowindex`）。SSR でも全行が出る。0 件は表を描かず `KeybindingsEmptyState`（共有 `EmptyState`）
+- ヘッダーは折り返して全文を読めるようにする。セルは `overflow-hidden` で列幅にクリップ。マウス列の見出しは翻訳キー（`keybindings.columnWinSens` 等。モバイルの短縮は `columnSensShort` / `columnTurnShort`）。未設定の表記は「-」に統一
+- **見出し行は本体の横スクロール枠の外**に置き、本体の `scrollLeft` に CSS 変数 `--kb-scroll-left` で追従させる（走者列だけ打ち消して固定）。md 未満は本体の縦スクロール枠を外してページのスクロールに任せ、見出しは `top-[64px]` でページに貼り付く。md 以上は本体が `max-h-[70vh]` の縦スクロール枠。貼り付きのため、表の `Tabs` ルートは `overflow-clip`（既定の `overflow-hidden` はスクロールコンテナになり sticky を止める）
+- 走者列の幅は CSS 変数 `--kb-runner-col`（md 未満 96px / md 以上 224px。リサイズ後は px）。走者セルは両方の頭を描いて CSS で出し分ける（`useMediaQuery` は使わない）
+- md 未満のツールバー: ビュー切替は全幅の 3 分割で、件数・フィルターは次の行（`ViewSwitcher`。DOM は 1 つで CSS により並べ替え）。サブタブは `TabsList scrollFade`（`ui/tabs.tsx` の opt-in。続きがある側の端にフェード）。タップ領域は 44px（`max-md:h-11` / `max-md:min-h-11`）
+- 件数表示は、いま見えている表の行数（タブごと。マウスタブは設定のある走者のみ）。ビジュアルは絞り込み後の全走者
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 
 - **統合フィルターモーダル**（`FilterDialog`）: ユーザー絞り込みと数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
   - ユーザー絞り込み（`users` パラメータ）: 表示するユーザーを検索してリスト登録する横断フィルター（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
+  - 効いている数値範囲は `UserFilterChips` の行に「DPI 400〜800 ×」のチップで出し、そこから外せる。「フィルタをクリア」はチップ行の 1 か所（ダイアログ内はフッターの 1 つ）
+  - ユーザー検索欄の Enter は、矢印キー・ポインタで候補に触れるまで無効（cmdk が先頭の候補を自動選択してしまうため）
+  - 数値欄は最小・最大それぞれに sr-only の `Label` を `id` で結ぶ（プレースホルダは「最小」「最大」）
   - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
   - 各入力欄は number input の `min` / `max` 属性で有効範囲を示し（DPI: `min=1`、感度: `0〜200`、振り向き: `min=0`）、感度欄には有効範囲の補足テキスト（`keybindings.sensitivityRangeHint`）を常時表示する（`FilterRange` の `inputMin` / `inputMax` / `hint`）
   - 「適用」時に **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
@@ -422,6 +430,7 @@ type ControllerSettings = {
     - 警告・「-」理由の吹き出しは共有コンポーネント `HintTip`（`app/components/hint-tip.tsx`）が担う。ポインタ端末（マウス等）は Tooltip（ホバー/フォーカス）、タッチ端末（`pointer: coarse`）は Popover（タップ）に自動で出し分ける（`KeyInfoTrigger` と同じ方針）。SR 向けにトリガーは `<button aria-label="{説明文}">` で実装する
   - **0件になったときの空状態**（`KeybindingsEmptyState`、表・カードビュー共通）: 有効なフィルタが1つでもある場合は理由が伝わる文言（`keybindings.emptyFiltered`）とその場でフィルタを一括解除できる「クリア」ボタン（`clearFilters()`、ソート・タブは維持）を出す。フィルタなしで0件（そもそも登録者がいない）なら従来どおり `keybindings.noPlayers`
 - プレイヤー名クリックでプロフィールページへ遷移
+- **ビジュアルカードビュー**: キーボード（実寸 1120px）とマウスを走者画面のモバイル表示と同じ `KeyboardScaledPreview` で包み、カード幅に収まるよう縮小する（スケール上限 1。タップ/クリックで実寸の Dialog。縮小中は inert でツールチップは効かない）。マウスはキーボードの下に置き、カード幅 1360px 以上（`@container`）のときだけ横に並べる。並び順は表と同じ URL の `sort`（`sortKeybindingsRows`。未設定は末尾）。**描画は 20 人ずつ**（「さらに表示」。メモリ内の state のみ）。画面外のカードは IntersectionObserver で可視化されるまでキーボードを描かない
 - ビジュアルカードビューは指割り当てを描画するため、loader で `playerConfig.fingerAssignments` を取得する
 - **視聴者ロール（`role = "viewer"`）のユーザーは一覧から除外される**（v1.4.0〜）
 
@@ -429,7 +438,11 @@ type ControllerSettings = {
 
 キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。`loadKeybindingsStats`（`lib/keybindings-stats.server.ts`）の集計結果は60秒インメモリキャッシュされる（内部的には対象アクション分を `inArray` で1クエリにまとめて取得し、JS側で集計）。
 
-「登録走者数」「キーバインド設定者数」「マウス設定者数」の集計からは視聴者ロールを除外している（v1.4.0〜）。
+視聴者ロールは集計から除外している（v1.4.0〜）。h1 は「操作設定統計」。
+
+- 概要の人数は母集団が違うので、名前と注記で区別する: **登録走者数**（操作設定を登録している公開走者。`/keybindings` の一覧と同じ母集団で、`loadKeybindingsListPlayers` の件数）／**キー配置の登録者**・**マウス設定の登録者**（ライブの `keybindings` / `playerConfigs`（DPI あり）テーブルを数える）／**公開プロフィール**（公開設定の全走者）。割合は母集団が揃わないため出さない
+- 注意: 一覧は「メインプリセットが非アクティブならそのスナップショット」を、統計の集計はライブテーブルを元にする（今は未統一）
+- サブタブ（キーボード／マウス）は URL の `statsTab`（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要はタイル（`rounded-xl bg-secondary/50`）
 
 #### 感度分布（`SENSITIVITY_RANGES`）
 

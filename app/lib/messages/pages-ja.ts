@@ -749,7 +749,6 @@ export const PAGES_JA = {
     turnDistanceRange: "振り向き (cm/180)",
     clearFilter: "フィルタをクリア",
     customMultiplier: "カスタム係数",
-    noValue: "値なし",
     sensitivityOutOfRange:
       "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます。統計の集計からも除外されます",
     /** Windows ポインター速度が係数テーブル（1〜20）外のとき */
@@ -779,14 +778,46 @@ export const PAGES_JA = {
     viewTable: "表",
     viewVisual: "ビジュアル",
     viewStats: "統計",
+    /** ビジュアル表示のタイトル・ページ名 */
+    visualTitle: "操作設定ビジュアル",
+    visualMetaTitle: "操作設定ビジュアル - Minefolio",
+    /** ビジュアル表示: 描画人数を区切る「さらに表示」と、キーボードの拡大 */
+    showMore: "さらに {count} 人を表示",
+    shownCount: "{shown} / {total} 人を表示中",
+    expandKeyboard: "{name} のキー配置を拡大",
+    /** 表の見出し（マウスタブ。短縮表示はモバイル用） */
+    columnWinSens: "Win Sens",
+    columnCursorSpeed: "カーソル速度",
+    columnRawInput: "Raw Input",
+    columnMouseAccel: "マウス加速",
+    columnSensShort: "感度",
+    columnTurnShort: "振り向き",
+    /** 0 件の説明（EmptyState） */
+    emptyFilteredHint: "フィルタを解除するか、条件を変えてみてください。",
+    emptyHint: "この表に載せる設定を登録した走者がまだいません。",
+    /** フィルタ: 範囲チップ・数値欄 */
+    removeFilterChip: "「{label}」の絞り込みを外す",
+    rangeMin: "最小",
+    rangeMax: "最大",
+    rangeMinOf: "{label}の最小",
+    rangeMaxOf: "{label}の最大",
+    /** 表のアクセシブルネーム（タブ名と組にして使う） */
+    tableLabel: "操作設定の表: {tab}",
   },
   keybindingsStats: {
+    title: "操作設定統計",
     metaTitle: "操作設定統計 - Minefolio",
     description: "RTA走者の操作設定・キー配置の統計情報を確認できます。",
+    overviewHeading: "概要",
     registeredCount: "登録走者数",
+    registeredCountNote: "操作設定を登録している公開走者（一覧と同じ）",
+    publicProfiles: "公開プロフィール",
+    publicProfilesNote: "公開設定の走者すべて",
     emptyDialog: "該当する走者はいません",
-    keybindingsRegistered: "キーバインド登録者",
-    mouseRegistered: "マウス設定登録者",
+    keybindingsRegistered: "キー配置の登録者",
+    keybindingsRegisteredNote: "現在の設定にキー割り当てがある公開走者",
+    mouseRegistered: "マウス設定の登録者",
+    mouseRegisteredNote: "現在の設定に DPI がある公開走者",
     keyboardTab: "キーボード",
     mouseTab: "マウス",
     dpiDistribution: "DPI分布",

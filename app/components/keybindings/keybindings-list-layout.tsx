@@ -18,6 +18,7 @@ import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { KeybindingsTable } from "./keybindings-table";
 import { CardView } from "./card-view";
+import { sortKeybindingsRows } from "./keybindings-columns";
 import { UserFilterChips } from "./user-filter";
 import type { KeybindingsRow, PresetKey } from "./keybindings-columns";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
@@ -25,14 +26,14 @@ import type { Tab } from "@/lib/keybindings-search-params";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 
-/** ページ共通タイトル（全ビューで同一） */
-export function KeybindingsPageTitle() {
+/** ページ共通タイトル。h1 はビュー（表 / ビジュアル / 統計）の名前、説明文は共通 */
+export function KeybindingsPageTitle({ title }: { title?: string }) {
   const t = useT();
   return (
     <div>
       <h1 className="text-2xl font-bold flex items-center gap-2">
         <Keyboard className="h-6 w-6" />
-        {t("keybindings.title")}
+        {title ?? t("keybindings.title")}
       </h1>
       <p className="text-sm text-muted-foreground mt-1">
         {t("keybindings.description")}
@@ -92,9 +93,21 @@ export function KeybindingsListLayout({
     mouse: mousePlayersFiltered,
   };
 
+  // ビジュアルは表と同じ並べ替え（URL の sort）で並べる
+  const { sort } = filters;
+  const visualPlayers = useMemo(
+    () => sortKeybindingsRows(filteredPlayers, sort),
+    [filteredPlayers, sort],
+  );
+  // 件数は、いま見えている表の行数（タブごとに母集団が違う）。ビジュアルは絞り込み後の全走者
+  const visibleCount =
+    mode === "visual" ? filteredPlayers.length : rowsByTab[tab].length;
+
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <KeybindingsPageTitle />
+      <KeybindingsPageTitle
+        title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
+      />
 
       {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
       <div className="flex flex-col gap-3">
@@ -103,7 +116,7 @@ export function KeybindingsListLayout({
             <>
               <span className="text-sm text-muted-foreground tabular-nums">
                 {t("keybindings.countText", {
-                  count: filteredPlayers.length,
+                  count: visibleCount,
                   suffix: t("keybindings.countSuffix"),
                 })}
               </span>
@@ -121,16 +134,18 @@ export function KeybindingsListLayout({
             variant={targetPathname === "/keybindings" ? "table" : "cards"}
           />
         ) : mode === "visual" ? (
-          <CardView players={filteredPlayers} />
+          <CardView players={visualPlayers} />
         ) : (
           <Tabs
             value={tab}
             onValueChange={(v) => filters.setTab(v as Tab)}
-            className="w-full"
+            // overflow-clip: 既定の overflow-hidden はスクロールコンテナになり、md 未満で表の見出しを
+            // ページに貼り付ける sticky を止めてしまう（clip は角丸の切り抜きだけ残す）
+            className="w-full overflow-clip"
           >
-            <TabsList>
+            <TabsList scrollFade>
               {TAB_ITEMS.map(({ value, labelKey, icon: Icon, color }) => (
-                <TabsTrigger key={value} value={value} className="gap-1.5">
+                <TabsTrigger key={value} value={value} className="gap-1.5 max-md:h-11">
                   <Icon
                     className="h-4 w-4"
                     style={color ? { color } : undefined}
@@ -140,7 +155,7 @@ export function KeybindingsListLayout({
               ))}
             </TabsList>
 
-            {TAB_ITEMS.map(({ value }) => (
+            {TAB_ITEMS.map(({ value, labelKey }) => (
               <TabsContent
                 key={value}
                 value={value}
@@ -149,6 +164,7 @@ export function KeybindingsListLayout({
                 <KeybindingsTable
                   rows={rowsByTab[value]}
                   preset={value as PresetKey}
+                  label={t(labelKey)}
                 />
               </TabsContent>
             ))}

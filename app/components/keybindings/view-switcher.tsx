@@ -31,8 +31,10 @@ const serialize = createSerializer(keybindingsParsers);
 
 /**
  * ビュー切替タブ（表 / ビジュアル / 統計）。
- * 全幅のベースライン行として描画され、`actions` に渡した要素（件数表示・
+ * md 以上: 全幅のベースライン行として描画され、`actions` に渡した要素（件数表示・
  * フィルターボタン等）は同じ行の右端・ベースラインの上に並ぶ。
+ * md 未満: タブ行は全幅を 3 等分し（「統計」が画面外に押し出されない）、actions は次の行へ移す
+ * （DOM は 1 つのまま CSS で並べ替える）。
  * タブ部分は横スクロール可能（狭い画面でも見切れない）。
  * 仕組みは ui/tabs.tsx と同じ: 行の border-b がベースライン、スクローラーを
  * -mb-px で 1px 重ね、アクティブタブの bg がベースラインを覆ってページ面に開く。
@@ -50,7 +52,9 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
     : location.pathname;
 
   return (
-    <div className="flex w-full items-end gap-3 border-b border-border">
+    <div className="flex w-full flex-col gap-3 md:flex-row md:items-end md:border-b md:border-border">
+      {/* タブ行。md 未満はこの行自身がベースライン（border-b）を持ち、md 以上は外側の行が持つ */}
+      <div className="flex items-end border-b border-border md:min-w-0 md:flex-1 md:border-b-0">
       {/* relative ラッパ: カスタムスクロールバーの位置基準。-mb-px で行の
           ベースラインに 1px 重ね、アクティブタブの bg が線を覆う */}
       <div className="relative -mb-px min-w-0 flex-1">
@@ -78,7 +82,7 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
               role="tab"
               aria-selected={isActive}
               className={cn(
-                "relative inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-lg border border-border px-3 text-sm font-medium transition-colors",
+                "relative inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg border border-border px-3 text-sm font-medium transition-colors max-md:flex-1 md:h-9",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 "before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-0.5 before:rounded-full",
                 isActive
@@ -94,9 +98,12 @@ export function ViewSwitcher({ actions }: { actions?: ReactNode }) {
       </div>
       {scrollbar}
       </div>
+      </div>
       {actions && (
-        // タブ列ラッパと同じ h-9 + -mb-px に固定 — actions の有無で行の高さ（＝タブの位置）が変わらないようにする
-        <div className="-mb-px flex h-9 shrink-0 items-center gap-3">{actions}</div>
+        // md 以上: タブ列ラッパと同じ h-9 + -mb-px に固定 — actions の有無で行の高さ（＝タブの位置）が変わらないようにする
+        <div className="flex shrink-0 items-center justify-between gap-3 md:-mb-px md:h-9 md:justify-end">
+          {actions}
+        </div>
       )}
     </div>
   );

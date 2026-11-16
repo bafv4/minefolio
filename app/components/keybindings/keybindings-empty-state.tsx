@@ -1,33 +1,38 @@
 // /keybindings の 0 件表示（表・ビジュアル共通）。
 // フィルタで 0 件になった場合は理由が伝わる文言に切り替え、その場で解除できる導線を出す。
-import { X } from "lucide-react";
+import { Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useT } from "@/hooks/use-locale";
-import { cn } from "@/lib/utils";
 
-export function KeybindingsEmptyState({ className }: { className?: string }) {
+export function KeybindingsEmptyState() {
   const t = useT();
   const { hasActiveFilters, clearFilters } = useKeybindingsFilters();
 
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center gap-3 py-12 text-sm text-muted-foreground",
-        className,
-      )}
-    >
-      <p>
-        {hasActiveFilters
-          ? t("keybindings.emptyFiltered")
-          : t("keybindings.noPlayers")}
-      </p>
-      {hasActiveFilters && (
-        <Button variant="outline" size="sm" onClick={clearFilters}>
-          <X className="h-4 w-4 mr-1" />
-          {t("keybindings.clearFilter")}
-        </Button>
-      )}
+    <div className="p-4">
+      <EmptyState
+        icon={<Users className="h-12 w-12" />}
+        title={
+          hasActiveFilters
+            ? t("keybindings.emptyFiltered")
+            : t("keybindings.noPlayers")
+        }
+        description={
+          hasActiveFilters
+            ? t("keybindings.emptyFilteredHint")
+            : t("keybindings.emptyHint")
+        }
+        action={
+          hasActiveFilters ? (
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              <X className="h-4 w-4" />
+              {t("keybindings.clearFilter")}
+            </Button>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

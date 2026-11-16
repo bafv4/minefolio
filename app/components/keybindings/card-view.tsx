@@ -1,12 +1,19 @@
-// /keybindings の「ビジュアル」カードビュー（view=grid）。
-// 各ランナーをカードで一覧し、読み取り専用のコンパクトな VirtualKeyboard で
-// キー配置を視覚的にスキャンできるようにする。発見・参考用途が主目的。
+// /keybindings/visual の「ビジュアル」カードビュー。
+// 各ランナーをカードで一覧し、読み取り専用の仮想キーボードでキー配置を視覚的にスキャンできるようにする。
+// 発見・参考用途が主目的。
+//
+// キーボード（実寸 1120px）はカード幅に収まるよう縮小して描く。走者画面のモバイル表示と同じ
+// KeyboardScaledPreview を使い、タップ/クリックで実寸の全画面 Dialog が開く（縮小中はツールチップ等の
+// 操作は inert。細部は Dialog で見る）。マウスは、キーボードと横に並べても収まる幅があるときだけ横に置き、
+// そうでなければキーボードの下に置く。
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, WandSparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
 import {
   VirtualKeyboard,
   VirtualMouse,
@@ -25,10 +32,18 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { parseFingerAssignments } from "@/lib/preset-read";
 
+/**
+ * 一度に描くカード数。縮小しても 1 枚は約 500px あり、157 人を全部描くとページが 8 万 px 近くになるため、
+ * 「さらに表示」で足していく（状態はメモリのみ。URL や localStorage には残さない）。
+ */
+const PAGE_SIZE = 20;
+
 export function CardView({ players }: { players: KeybindingsRow[] }) {
+  const t = useT();
   // Trigger/Chat 表示切替は全カード共通（プロフィールページと同じセグメント）。
   // 種別付き（trigger/chat）リマップを持つプレイヤーが1人もいなければ両表示が同一のため出さない
   const [remapView, setRemapView] = useState<RemapContext>("trigger");
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const hasTypedRemaps = useMemo(
     () =>
       players.some((p) =>
@@ -38,11 +53,12 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
   );
 
   if (players.length === 0) {
-    return <KeybindingsEmptyState className="rounded-lg border bg-card" />;
+    return <KeybindingsEmptyState />;
   }
 
-  // キーボードは原寸（baseSize 60）で描画し横はみ出しはカード内スクロールで吸収するため、
-  // カードは 1 カラムで縦に積む（プロフィール画面と同じ表示方針）。
+  const shown = players.slice(0, limit);
+  const remaining = players.length - shown.length;
+
   return (
     <div className="flex flex-col gap-4">
       {hasTypedRemaps && (
@@ -50,9 +66,23 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
           <RemapViewToggle value={remapView} onChange={setRemapView} />
         </div>
       )}
-      {players.map((player, index) => (
+      {shown.map((player, index) => (
         <RunnerKeyboardCard key={player.id} player={player} remapView={remapView} index={index} />
       ))}
+      {remaining > 0 && (
+        <div className="flex flex-col items-center gap-2 py-2">
+          <p className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+            {t("keybindings.shownCount", { shown: shown.length, total: players.length })}
+          </p>
+          <Button
+            variant="outline"
+            className="min-h-11 sm:min-h-8"
+            onClick={() => setLimit((n) => n + PAGE_SIZE)}
+          >
+            {t("keybindings.showMore", { count: Math.min(PAGE_SIZE, remaining) })}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -127,68 +157,74 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
 
   const remapCount = player.keyRemaps.length;
   const customActionCount = player.customActions.length;
+  const name = getLocalizedDisplayName(player, locale);
 
   return (
     <Card
       ref={cardRef}
-      className="flex flex-col [content-visibility:auto] [contain-intrinsic-size:auto_560px]"
+      className="flex flex-col gap-3 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_520px]"
     >
-      <CardHeader className="py-3">
+      <CardHeader className="px-5">
         <div className="flex items-center gap-2 min-w-0">
-          <Link
-            to={`/player/${player.slug}`}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 flex-1"
-          >
-            <MinecraftAvatar
-              uuid={player.uuid}
-              skinUrl={player.customSkinUrl}
-              size={32}
-              className="rounded-sm shrink-0"
-            />
-            <p className="font-medium text-sm truncate">
-              {getLocalizedDisplayName(player, locale)}
-            </p>
-          </Link>
+          <h2 className="min-w-0 flex-1 text-base font-semibold">
+            <Link
+              to={`/player/${player.slug}`}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
+            >
+              <MinecraftAvatar
+                uuid={player.uuid}
+                skinUrl={player.customSkinUrl}
+                size={32}
+                alt=""
+                className="rounded-lg shrink-0"
+              />
+              <span className="truncate">{name}</span>
+            </Link>
+          </h2>
           <Badge variant="outline" className="text-[10px] shrink-0">
             {layout.replace("_", " ")}
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 pb-4 flex flex-col gap-3">
-        {/* キーボード + マウス（カスタムボタン含む）。広い画面では横並び。読み取り専用。
-            画面外のカードは IntersectionObserver で可視化されるまでプレースホルダーに留め、
-            VirtualKeyboard/VirtualMouse の生成コストを可視分のみに抑える。 */}
+      <CardContent className="px-5 flex flex-col gap-3">
+        {/* キーボード + マウス（カスタムボタン含む）を、カード幅に収まるよう縮小して描く。読み取り専用。
+            タップ/クリックで実寸の Dialog が開く。画面外のカードは IntersectionObserver で可視化されるまで
+            プレースホルダーに留め、VirtualKeyboard/VirtualMouse の生成コストを可視分のみに抑える。
+            @container: 縮小せずにキーボードとマウスが横に並ぶ幅（約 1360px）があるときだけ横並び */}
         {visible ? (
-          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-            <div className="custom-scrollbar overflow-x-auto pb-1 min-w-0 lg:flex-1">
-              <VirtualKeyboard
-                layout={layout}
-                keybindings={keybindingsMap}
-                fingerAssignments={fingerAssignments}
-                remaps={remaps}
-                customActions={player.customActions}
-                customKeys={customKeyboardKeys}
-                showActionLabels
-                showFingerAssignments
-                showRemaps
-                hideNumpad
-              />
-            </div>
-            <div className="custom-scrollbar overflow-x-auto pb-1 shrink-0">
-              <VirtualMouse
-                keybindings={keybindingsMap}
-                fingerAssignments={fingerAssignments}
-                remaps={remaps}
-                customActions={player.customActions}
-                customButtons={customButtons}
-                showActionLabels
-                showFingerAssignments
-                showRemaps
-              />
-            </div>
+          <div className="@container">
+            <KeyboardScaledPreview
+              dialogTitle={name}
+              expandLabel={t("keybindings.expandKeyboard", { name })}
+            >
+              <div className="flex flex-col items-start gap-4 @min-[1360px]:flex-row">
+                <VirtualKeyboard
+                  layout={layout}
+                  keybindings={keybindingsMap}
+                  fingerAssignments={fingerAssignments}
+                  remaps={remaps}
+                  customActions={player.customActions}
+                  customKeys={customKeyboardKeys}
+                  showActionLabels
+                  showFingerAssignments
+                  showRemaps
+                  hideNumpad
+                />
+                <VirtualMouse
+                  keybindings={keybindingsMap}
+                  fingerAssignments={fingerAssignments}
+                  remaps={remaps}
+                  customActions={player.customActions}
+                  customButtons={customButtons}
+                  showActionLabels
+                  showFingerAssignments
+                  showRemaps
+                />
+              </div>
+            </KeyboardScaledPreview>
           </div>
         ) : (
-          <div className="h-[420px] rounded-md bg-muted/30 animate-pulse" />
+          <div aria-hidden className="h-[300px] rounded-lg bg-muted/30 animate-pulse" />
         )}
 
         {/* マウス要約 + リマップ/カスタムアクション件数 */}

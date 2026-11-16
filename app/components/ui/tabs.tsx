@@ -18,11 +18,19 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
   )
 }
 
-function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
+function TabsList({
+  className,
+  scrollFade = false,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List> & {
+  /** true なら、タブ列が横にあふれて続きがある側の端にフェードを出す（既定は出さない） */
+  scrollFade?: boolean
+}) {
   // ネイティブのスクロールバーは帯内に高さを取りタブがベースラインから浮くため
   // 非表示にし、代わりにレイアウト高さを取らないオーバーレイのカスタム
   // スクロールバー（スクロール可能時のみ表示・ドラッグ可）をラッパに重ねる。
-  const { scrollerRef, scrollbar, isScrollable } = useTabScrollbar()
+  const { scrollerRef, scrollbar, isScrollable, canScrollStart, canScrollEnd } =
+    useTabScrollbar()
   return (
     // ラッパは非スクロールの relative 親（つまみの位置基準 + z-[1] の持ち主）。
     // List の -mb-px でラッパの高さが 1px 縮み、List の描画がラッパ下端から
@@ -47,6 +55,26 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
         {...props}
       />
       {scrollbar}
+      {scrollFade && (
+        // フェードの色は帯の見た目の色（カード面 bg-card の上の bg-muted/40）。muted をそのまま使うと
+        // 帯より濃い（ライトでは暗い）四角が端に見える
+        <>
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[color-mix(in_oklch,var(--muted)_40%,var(--card))] to-transparent transition-opacity",
+              canScrollStart ? "opacity-100" : "opacity-0"
+            )}
+          />
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[color-mix(in_oklch,var(--muted)_40%,var(--card))] to-transparent transition-opacity",
+              canScrollEnd ? "opacity-100" : "opacity-0"
+            )}
+          />
+        </>
+      )}
     </div>
   )
 }

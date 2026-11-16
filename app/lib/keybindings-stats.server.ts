@@ -13,6 +13,7 @@ import {
 } from "./mouse-settings";
 import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
+import { loadKeybindingsListPlayers } from "./keybindings-list.server";
 // 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
 import { SENSITIVITY_PERCENT_BINS, UNASSIGNED_INPUT_KEY } from "./keybindings-stats-shared";
 
@@ -152,7 +153,11 @@ export interface KeybindingsStatsData {
   cm180Stats: Cm180Stats;
   sensitivityStats: SensitivityStats;
   rawInputStats: RawInputStats;
-  totalPlayers: number;
+  /** 登録走者数: 操作設定を登録している公開走者（/keybindings の一覧と同じ母集団） */
+  registeredPlayers: number;
+  /** 公開プロフィール数: 公開設定の走者すべて（設定の有無を問わない） */
+  publicProfiles: number;
+  /** ライブの keybindings テーブルに行がある公開走者（一覧と違い、メインプリセットのスナップショットは見ない） */
   playersWithKeybindings: number;
   playersWithMouseSettings: number;
 }
@@ -181,8 +186,9 @@ export async function loadKeybindingsStats(
     f3InputRemaps,
     usersWithKeybindingsData,
     mouseConfigs,
+    listPlayers,
   ] = await Promise.all([
-    // 総走者数
+    // 公開プロフィール数
     db
       .select({ count: sql<number>`count(*)` })
       .from(users)
@@ -261,8 +267,11 @@ export async function loadKeybindingsStats(
       .from(playerConfigs)
       .innerJoin(users, eq(playerConfigs.userId, users.id))
       .where(publicCondition),
+    // 一覧（/keybindings）と同じ母集団。ローダー側で 1 分キャッシュされる
+    loadKeybindingsListPlayers(db),
   ]);
-  const totalPlayers = totalResult?.count ?? 0;
+  const publicProfiles = totalResult?.count ?? 0;
+  const registeredPlayers = listPlayers.length;
   const playersWithKeybindings = keybindingCountResult?.count ?? 0;
   const playersWithMouseSettings = mouseCountResult?.count ?? 0;
 
@@ -517,7 +526,8 @@ export async function loadKeybindingsStats(
     cm180Stats,
     sensitivityStats,
     rawInputStats,
-    totalPlayers,
+    registeredPlayers,
+    publicProfiles,
     playersWithKeybindings,
     playersWithMouseSettings,
   };

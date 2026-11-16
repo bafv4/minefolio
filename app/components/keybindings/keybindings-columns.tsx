@@ -117,7 +117,7 @@ function actionColumn(t: Translator, action: string): KeybindingsColumnDef {
       />
     ),
     enableSorting: false,
-    size: 88,
+    size: 104,
     minSize: 56,
     meta: { align: "center" as const },
   };
@@ -238,12 +238,65 @@ const windowsMultiplier = (config: MouseConfig): number | null => {
   return config.windowsSpeed;
 };
 
+/** 並べ替えキー（列 id・URL の sort）→ 行の値。未設定は undefined（表・ビジュアルで共有） */
+const SORT_ACCESSORS: Record<string, (row: KeybindingsRow) => number | undefined> = {
+  "mouse.dpi": (row) => forSort(row.playerConfig?.mouseDpi),
+  "mouse.sensitivity": (row) => forSort(sensitivityPercent(row.playerConfig)),
+  "mouse.cm360": (row) => {
+    const config = row.playerConfig;
+    if (!config) return undefined;
+    return forSort(
+      calculateCm360(
+        config.mouseDpi,
+        config.gameSensitivity,
+        config.rawInput,
+        config.windowsSpeed,
+        config.windowsSpeedMultiplier,
+      ),
+    );
+  },
+  "mouse.windowsSpeed": (row) => forSort(windowsMultiplier(row.playerConfig)),
+  "mouse.cursorSpeed": (row) => {
+    const config = row.playerConfig;
+    if (!config) return undefined;
+    return forSort(
+      calculateCursorSpeed(
+        config.mouseDpi,
+        config.windowsSpeed,
+        config.windowsSpeedMultiplier,
+      ),
+    );
+  },
+};
+
+/**
+ * 表の並べ替え（URL の sort）と同じ順で行を並べる（ビジュアル表示用）。
+ * 未設定は昇順・降順どちらでも末尾。未知のキー・sort なしは元の順を返す。
+ */
+export function sortKeybindingsRows<R extends KeybindingsRow>(
+  rows: R[],
+  sort: { key: string; direction: "asc" | "desc" } | null,
+): R[] {
+  const accessor = sort ? SORT_ACCESSORS[sort.key] : undefined;
+  if (!sort || !accessor) return rows;
+  const dir = sort.direction === "desc" ? -1 : 1;
+  return rows
+    .map((row, index) => ({ row, index, value: accessor(row) }))
+    .sort((a, b) => {
+      if (a.value === undefined && b.value === undefined) return a.index - b.index;
+      if (a.value === undefined) return 1;
+      if (b.value === undefined) return -1;
+      return a.value === b.value ? a.index - b.index : (a.value - b.value) * dir;
+    })
+    .map((x) => x.row);
+}
+
 const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   runnerColumn(t),
   {
     id: "mouse.dpi",
     header: () => "DPI",
-    accessorFn: (row) => forSort(row.playerConfig?.mouseDpi),
+    accessorFn: SORT_ACCESSORS["mouse.dpi"],
     cell: ({ row }) => <DpiCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -259,13 +312,13 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
             <span className="hidden sm:inline">
               {t("keybindings.inGameSensitivityRange")}
             </span>
-            <span className="sm:hidden">Sens</span>
+            <span className="sm:hidden">{t("keybindings.columnSensShort")}</span>
           </span>
         </TooltipTrigger>
         <TooltipContent>{t("keybindings.inGameSensitivityRange")}</TooltipContent>
       </Tooltip>
     ),
-    accessorFn: (row) => forSort(sensitivityPercent(row.playerConfig)),
+    accessorFn: SORT_ACCESSORS["mouse.sensitivity"],
     cell: ({ row }) => <SensitivityCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -281,25 +334,13 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
             <span className="hidden sm:inline">
               {t("keybindings.turnDistanceRange")}
             </span>
-            <span className="sm:hidden">Turn</span>
+            <span className="sm:hidden">{t("keybindings.columnTurnShort")}</span>
           </span>
         </TooltipTrigger>
         <TooltipContent>{t("keybindings.turnDistanceRange")}</TooltipContent>
       </Tooltip>
     ),
-    accessorFn: (row) => {
-      const config = row.playerConfig;
-      if (!config) return undefined;
-      return forSort(
-        calculateCm360(
-          config.mouseDpi,
-          config.gameSensitivity,
-          config.rawInput,
-          config.windowsSpeed,
-          config.windowsSpeedMultiplier,
-        ),
-      );
-    },
+    accessorFn: SORT_ACCESSORS["mouse.cm360"],
     cell: ({ row }) => <Cm360Cell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -308,8 +349,8 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   },
   {
     id: "mouse.windowsSpeed",
-    header: () => "Win Sens",
-    accessorFn: (row) => forSort(windowsMultiplier(row.playerConfig)),
+    header: () => t("keybindings.columnWinSens"),
+    accessorFn: SORT_ACCESSORS["mouse.windowsSpeed"],
     cell: ({ row }) => <WindowsSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -318,18 +359,8 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   },
   {
     id: "mouse.cursorSpeed",
-    header: () => "Cursor Speed",
-    accessorFn: (row) => {
-      const config = row.playerConfig;
-      if (!config) return undefined;
-      return forSort(
-        calculateCursorSpeed(
-          config.mouseDpi,
-          config.windowsSpeed,
-          config.windowsSpeedMultiplier,
-        ),
-      );
-    },
+    header: () => t("keybindings.columnCursorSpeed"),
+    accessorFn: SORT_ACCESSORS["mouse.cursorSpeed"],
     cell: ({ row }) => <CursorSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
@@ -338,7 +369,7 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   },
   {
     id: "mouse.rawInput",
-    header: () => "Raw Input",
+    header: () => t("keybindings.columnRawInput"),
     cell: ({ row }) => <RawInputCell config={row.original.playerConfig} />,
     enableSorting: false,
     size: 100,
@@ -346,7 +377,7 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
   },
   {
     id: "mouse.accel",
-    header: () => "Mouse Accel",
+    header: () => t("keybindings.columnMouseAccel"),
     cell: ({ row }) => <AccelerationCell config={row.original.playerConfig} />,
     enableSorting: false,
     size: 120,

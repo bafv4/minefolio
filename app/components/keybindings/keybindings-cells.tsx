@@ -51,50 +51,34 @@ export type PlayerSummary = {
  * 走者セル（左端 sticky）
  * ========================================================== */
 
-export function RunnerCell({
-  player,
-  variant = "default",
-}: {
-  player: PlayerSummary;
-  /** compact: モバイル向け縦並び（頭を大きめ＋名前を下に小さく） */
-  variant?: "default" | "compact";
-}) {
+export function RunnerCell({ player }: { player: PlayerSummary }) {
   const locale = useLocale();
   const name = getLocalizedDisplayName(player, locale);
 
-  if (variant === "compact") {
-    return (
-      <Link
-        to={`/player/${player.slug}`}
-        className="flex flex-col items-center gap-1 hover:opacity-80 transition-opacity w-full min-w-0 text-center"
-      >
-        <MinecraftAvatar
-          uuid={player.uuid}
-          skinUrl={player.customSkinUrl}
-          size={40}
-          className="rounded-sm shrink-0"
-        />
-        <span className="w-full truncate text-xs font-medium leading-tight">
-          {name}
-        </span>
-      </Link>
-    );
-  }
-
+  // md 未満は縦並び（頭を大きめ＋名前を下に小さく）、md 以上は横並び。幅で描き分けずに
+  // 両方の頭を描いて CSS で出し分ける（SSR とずれない）。名前が隣にあるので alt は空
   return (
     <Link
       to={`/player/${player.slug}`}
-      className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 w-full"
+      className="flex w-full min-w-0 flex-col items-center gap-1 text-center transition-opacity hover:opacity-80 md:flex-row md:gap-2 md:text-left"
     >
       <MinecraftAvatar
         uuid={player.uuid}
         skinUrl={player.customSkinUrl}
-        size={28}
-        className="rounded-sm shrink-0"
+        size={40}
+        alt=""
+        className="shrink-0 rounded-xl md:hidden"
       />
-      <div className="min-w-0">
-        <p className="font-medium text-sm truncate">{name}</p>
-      </div>
+      <MinecraftAvatar
+        uuid={player.uuid}
+        skinUrl={player.customSkinUrl}
+        size={32}
+        alt=""
+        className="hidden shrink-0 rounded-lg md:block"
+      />
+      <span className="w-full min-w-0 truncate text-xs font-medium leading-snug md:text-sm">
+        {name}
+      </span>
     </Link>
   );
 }
@@ -216,7 +200,8 @@ export function HotbarSummaryCell({
   }
 
   return (
-    <div className="flex flex-nowrap items-end gap-1">
+    // 長いカスタムキー名があっても 9 枠目が切れないよう折り返す（行の高さは実測で追従）
+    <div className="flex flex-wrap items-end gap-x-1 gap-y-1.5">
       {slots.map(({ n, keyCode }) => (
         <span key={n} className="inline-flex flex-col items-center gap-0.5">
           <span className="text-[10px] leading-none text-muted-foreground">{n}</span>
@@ -390,9 +375,7 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
   if (config?.windowsSpeed != null) {
     return <WinSensValue windowsSpeed={config.windowsSpeed} className="font-mono text-sm" />;
   }
-  return (
-    <span className="text-muted-foreground/40">{t("keybindings.noValue")}</span>
-  );
+  return <span className="text-muted-foreground/40">-</span>;
 }
 
 export function CursorSpeedCell({ config }: { config: MouseConfig }) {
