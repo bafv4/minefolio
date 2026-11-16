@@ -489,9 +489,10 @@ function SearchCraftEmbedBody({
   const collapsible = countSearchCraftGroups(rows, loopTimings) > 1;
 
   return (
-    <div className="space-y-3 p-4">
-      <KeyBadgeLegend showCraftMarker={loops.length > 0} />
+    <div className="p-4">
       <SearchCraftGroupedList
+        // 凡例は「すべて開く」と同じ行に置く（別の行に積むと一覧の上が空く）
+        toolbarStart={<KeyBadgeLegend showCraftMarker={loops.length > 0} />}
         framed={false}
         collapsible={collapsible}
         // lg 未満は、先頭のグループが長いときは全部閉じて始める。lg 以上は全部開く（テンプレート詳細と同じ）

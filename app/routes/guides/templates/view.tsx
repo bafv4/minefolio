@@ -770,11 +770,11 @@ export default function TemplateViewPage() {
             </span>
           </label>
         )}
-        <KeyBadgeLegend showCraftMarker={loops.length > 0} />
         {/* 記事内の埋め込み（guide-embeds.tsx の SearchCraftEmbedBody）と同じ開閉と枠: グループは箱にせず
             見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、lg 以上は全部開いて、lg 未満は先頭が長ければ全部閉じて始める。
-            閉じた本体も DOM に残す（ページ内検索で見つかる） */}
+            閉じた本体も DOM に残す（ページ内検索で見つかる）。凡例は「すべて開く」と同じ行に置く */}
         <SearchCraftGroupedList
+          toolbarStart={<KeyBadgeLegend showCraftMarker={loops.length > 0} />}
           framed={false}
           collapsible={countSearchCraftGroups(parsedSearchCrafts, searchCraftLoopTimings) > 1}
           openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}

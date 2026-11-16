@@ -275,7 +275,13 @@ export function SearchCraftGroupedList({
   openFirstMaxCount,
   openAllFromLg = false,
   keepClosedMounted = false,
+  toolbarStart,
 }: {
+  /**
+   * 一覧の上の行の左に置く物（凡例など）。「すべて開く／すべて閉じる」と同じ行に並べ、凡例と開閉ボタンが
+   * 別々の行に積まれて一覧の上が空くのを防ぐ。幅が足りなければ折り返す
+   */
+  toolbarStart?: ReactNode;
   crafts: SearchCraftRowData[];
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
@@ -409,7 +415,7 @@ export function SearchCraftGroupedList({
   };
 
   if (!hasAnyTiming) {
-    return (
+    const card = (
       <SearchCraftGroupCard
         crafts={crafts}
         remaps={remaps}
@@ -420,34 +426,47 @@ export function SearchCraftGroupedList({
         extra={renderGroupExtra?.(null)}
       />
     );
+    return toolbarStart ? (
+      <div className={framed ? "space-y-4" : "space-y-5"}>
+        {toolbarStart}
+        {card}
+      </div>
+    ) : (
+      card
+    );
   }
 
   const allOpen = groups.length > 0 && groups.every((g) => openKeys.has(g.groupKey));
   const expandAllLabel = (open: boolean) =>
     open ? t("playerProfile.searchCraftCollapseAll") : t("playerProfile.searchCraftExpandAll");
+  const showToggleAll = collapsible && groups.length > 1;
 
   return (
     <div className={framed ? "space-y-4" : "space-y-5"}>
-      {collapsible && groups.length > 1 && (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            // モバイルは押せる範囲を 44px に（見た目の行の高さは負のマージンで変えない。ui.md 9 章）
-            className="-my-2 h-11 text-xs text-muted-foreground sm:my-0 sm:h-7"
-            onClick={() => setUserOpenKeys(allOpen ? new Set() : allKeys())}
-          >
-            {cssOpenAtLg ? (
-              // 幅が未確定の間は、lg 以上（全部開いている）の文言を CSS で出し分ける
-              <>
-                <span className="lg:hidden">{expandAllLabel(allOpen)}</span>
-                <span className="hidden lg:inline">{expandAllLabel(true)}</span>
-              </>
-            ) : (
-              expandAllLabel(allOpen)
-            )}
-          </Button>
+      {(showToggleAll || toolbarStart) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {toolbarStart && <div className="min-w-0">{toolbarStart}</div>}
+          {showToggleAll && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              // モバイルは押せる範囲を 44px に（見た目の行の高さは負のマージンで変えない。ui.md 9 章）。
+              // 凡例が折り返して1行に収まらないときも右に寄せる
+              className="-my-2 ml-auto h-11 text-xs text-muted-foreground sm:my-0 sm:h-7"
+              onClick={() => setUserOpenKeys(allOpen ? new Set() : allKeys())}
+            >
+              {cssOpenAtLg ? (
+                // 幅が未確定の間は、lg 以上（全部開いている）の文言を CSS で出し分ける
+                <>
+                  <span className="lg:hidden">{expandAllLabel(allOpen)}</span>
+                  <span className="hidden lg:inline">{expandAllLabel(true)}</span>
+                </>
+              ) : (
+                expandAllLabel(allOpen)
+              )}
+            </Button>
+          )}
         </div>
       )}
       {groups.map((g) => (
