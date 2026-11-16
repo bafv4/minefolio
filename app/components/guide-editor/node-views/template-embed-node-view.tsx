@@ -16,17 +16,18 @@ import {
   type TemplateEmbedMeta,
 } from "../lib/template-embed-meta";
 import { getEmbedEditContext } from "../lib/embed-edit-context";
-import { EmbedNodeActions, EMBED_NODE_CARD_CLASS } from "./embed-node-actions";
+import { EmbedNodeActions, EMBED_NODE_CARD_CLASS, deleteEmbedNode } from "./embed-node-actions";
 
 interface Props {
   node: { attrs: Record<string, string> };
   editor: Editor;
   selected: boolean;
   deleteNode: () => void;
+  getPos: () => number | undefined;
   updateAttributes: (attrs: Record<string, unknown>) => void;
 }
 
-export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, deleteNode, updateAttributes }: Props) {
+export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, deleteNode, getPos, updateAttributes }: Props) {
   const t = useT();
   const locale = useLocale();
   const templateId = node.attrs.templateId;
@@ -99,7 +100,7 @@ export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, delet
           onEdit={() =>
             getEmbedEditContext(editor)?.editTemplateEmbed((nextId) => updateAttributes({ templateId: nextId }))
           }
-          onDelete={deleteNode}
+          onDelete={() => deleteEmbedNode(editor, getPos, deleteNode)}
         />
       </div>
     </NodeViewWrapper>

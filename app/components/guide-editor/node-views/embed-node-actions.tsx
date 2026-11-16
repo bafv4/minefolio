@@ -2,10 +2,27 @@
 // ノードを選択しているとき・ホバーしているとき・中にフォーカスがあるときに見せる。
 // 押した処理は onClick で行い、onMouseDown では preventDefault だけする（エディタのフォーカスと選択を奪わない）。
 // ボタン要素なので Enter / Space でも押せる（Tiptap の NodeView は BUTTON 上のイベントを ProseMirror に渡さない）。
+import type { Editor } from "@tiptap/core";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2 } from "lucide-react";
+
+/**
+ * 削除ボタンの処理。消したあとはエディタの、消えたノードの位置にフォーカスを戻す。
+ * キーボード（Enter / Space）で押すと、ボタンごとノードが消えてフォーカスが body に落ち、
+ * 続く Ctrl+Z もエディタに届かなくなるため（マウスは onMouseDown の preventDefault でエディタに残る）
+ */
+export function deleteEmbedNode(editor: Editor, getPos: () => number | undefined, deleteNode: () => void) {
+  const pos = getPos();
+  deleteNode();
+  if (typeof pos === "number") {
+    editor.commands.setTextSelection(Math.min(pos, editor.state.doc.content.size));
+  }
+  // Tiptap の focus コマンドは requestAnimationFrame で遅らせるので、ボタンが DOM から外れた直後に
+  // body へ落ちたフォーカスを、同期で view に戻す
+  editor.view.focus();
+}
 
 /** 埋め込み NodeView の外枠（EmbedNodeActions の表示条件に使う group を含む） */
 export const EMBED_NODE_CARD_CLASS = "relative group my-2 rounded-lg border bg-card p-4";

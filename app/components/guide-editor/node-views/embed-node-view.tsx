@@ -12,13 +12,14 @@ import { cn } from "@/lib/utils";
 import { useEmbedUser } from "../lib/embed-user-cache";
 import { getEmbedEditContext } from "../lib/embed-edit-context";
 import { EmbedSummary, type EmbedKind } from "../panels/embed-summary";
-import { EmbedNodeActions, EMBED_NODE_CARD_CLASS } from "./embed-node-actions";
+import { EmbedNodeActions, EMBED_NODE_CARD_CLASS, deleteEmbedNode } from "./embed-node-actions";
 
 interface EmbedNodeViewProps {
   node: { attrs: Record<string, string | null> };
   editor: Editor;
   selected: boolean;
   deleteNode: () => void;
+  getPos: () => number | undefined;
   updateAttributes: (attrs: Record<string, unknown>) => void;
 }
 
@@ -27,6 +28,7 @@ function EmbedNodeView({
   editor,
   selected,
   deleteNode,
+  getPos,
   updateAttributes,
   kind,
   icon: Icon,
@@ -55,7 +57,9 @@ function EmbedNodeView({
             <EmbedSummary kind={kind} state={state} userQuery={userSlug} presetName={presetName} />
           </div>
         </div>
-        <EmbedNodeActions selected={selected} label={label} onEdit={onEdit} onDelete={deleteNode} />
+        <EmbedNodeActions selected={selected} label={label} onEdit={onEdit}
+          onDelete={() => deleteEmbedNode(editor, getPos, deleteNode)}
+        />
       </div>
     </NodeViewWrapper>
   );
