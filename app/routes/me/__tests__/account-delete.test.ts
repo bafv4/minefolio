@@ -1,4 +1,4 @@
-// /me/edit の action の delete_account（アカウント削除）の回帰テスト。
+// /me/account の action の delete_account（アカウント削除）の回帰テスト。
 //
 // 派生データ（favorites の孤児行・content_translations）が users 行の削除と一緒に
 // 正しく消え、他ユーザーのデータには波及しないことを実 DB で固定する。
@@ -36,7 +36,7 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
-import { action } from "../edit";
+import { action } from "../account";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL", "BLOB_READ_WRITE_TOKEN"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -44,7 +44,7 @@ const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>
 let db: TestDb;
 
 function makeRequest(formData: FormData): Request {
-  return new Request("https://minefolio.app/me/edit", {
+  return new Request("https://minefolio.app/me/account", {
     method: "POST",
     body: formData,
   });

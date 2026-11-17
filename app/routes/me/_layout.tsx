@@ -19,6 +19,7 @@ import {
   Loader2,
   Save,
   Upload,
+  UserCog,
   X,
   ChevronsDown,
 } from "lucide-react";
@@ -96,6 +97,7 @@ function navLinkClass({ isActive, isPending }: { isActive: boolean; isPending: b
 const secondaryNavItems = [
   { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Save },
   { to: "/me/import", labelKey: "meLayout.import" as const, icon: Upload },
+  { to: "/me/account", labelKey: "meLayout.account" as const, icon: UserCog },
 ];
 
 export default function MeLayout() {

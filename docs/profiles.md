@@ -69,6 +69,8 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 
 デフォルト値: `public`
 
+変更は `/me/account`「公開とアカウント」の保存バーで確定する（[/me/edit の保存方式](#medit-の保存方式保存バーでの一括保存)）。
+
 ---
 
 ## スラッグ (URL識別子)
@@ -556,9 +558,12 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 - **ソーシャルリンク欄からの操作** → `speedruncomUsername` に反映: リンクの作成・更新で
   platform が `speedruncom` なら identifier を `speedruncomUsername` にセット、別プラットフォームへ
   変更した場合はクリア、`speedruncom` リンクを削除した場合もクリア
-- **基本情報フォーム（Speedrun.com連携欄）からの操作** → `speedruncom` ソーシャルリンクに反映: 値を
+- **`speedruncomUsername` を直接送る経路** → `speedruncom` ソーシャルリンクに反映: 値を
   設定/変更すると `social_links` に `speedruncom` 行を作成・更新（identifier が同じ場合は書き込みしない）、
-  空にすると該当行を削除する
+  空にすると該当行を削除する。**`/me/edit` の UI の入口はソーシャルリンクだけ**で、「Speedrun.com 連携」欄は
+  「ソーシャルリンクの Speedrun.com から読み取り中: xxx」の表示のみ（未設定ならソーシャルリンクへの案内）。
+  この経路は、リンク行が無く列だけが入っている既存データや、直接送られた値の同期のために残している。
+  フォームに `speedruncomUsername` が**無い**保存（`/me/account` など）では、列・リンク行・ランキング再取得のどれにも触れない
 
 どちらの経路で設定しても、ソーシャルリンク一覧・公開プロフィールの `SocialLinksCard` の両方に反映される。
 
@@ -821,18 +826,26 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### /me/edit の保存方式（保存バーでの一括保存）
 
-`/me/edit` の編集内容は**すべて下部の保存バー（`FloatingSaveBar`）で一括保存**する。対象はプロフィール列のフォーム値に加え、**Java 版 / Bedrock 版 MCID の設定・削除、ソーシャルリンクの追加・編集・削除、動画の追加・編集・削除・並び替え**。例外として、**アカウント削除（`delete_account`）とレガシーインポート（`import_legacy`）は編集ではないので即時実行のまま**。スキン/マントのアップロード・削除も保存バーとは別に即時保存される（別 API）。完了時はページを再読込せず、返ってきた新しい URL だけをローカル state（`customSkinUrl` / `customCapeUrl`）へ反映して画面（アバター・プレビュー）を更新する（再読込・loader 再検証をすると未保存の下書きが消えるため。下書きは保たれる）。
+プロフィールの編集は **2 ページに分かれ**、それぞれ**下部の保存バー（`FloatingSaveBar`）で自分の項目だけを一括保存**する。
+
+| ページ | 内容 | 送る項目（`app/lib/profile-edit-scope.ts`） |
+|---|---|---|
+| `/me/edit`「プロフィール」（訪問者が走者画面で見る中身） | MCID（Java / Bedrock）・スキン・マント・ポーズ・基本情報・Speedrun.com 連携（表示のみ）・ソーシャルリンク・動画 | `displayName` `displayNameAlphabet` `bio` `shortBio` `location` `pronouns` `allowAutoTranslation` `rtaStartedYearMonth` `mainPlatform` `role` `profilePose` `slimSkin` `capeDisplay` `speedruncomUsername`（リンクから決まる値）＋ `changes`（MCID・Bedrock・リンク・動画の差分） |
+| `/me/account`「公開とアカウント」 | プロフィール設定（公開範囲・既定タブ・表示設定）・旧データ取り込み（`import_legacy`）・危険な操作（アカウント削除 `delete_account`） | `profileVisibility` `defaultProfileTab` `showPacemanOnHome` `showTwitchOnHome` `showYoutubeOnHome` `showRankedStats` `showPacemanStats` |
+
+- **送られた項目だけを更新する**: 保存本体（`saveProfileBatch`）は、フォームに**無い**項目を触らない（`undefined` = 未送信。空欄は空文字で送られ、`null` として保存される）。`/me/account` の保存が `/me/edit` の項目（基本情報・MCID・リンク・動画・Speedrun.com 連携）を空にしたり、`updatedAt` を進めたり、外部キャッシュのキックを走らせたりしない（逆も同じ）。commit 後の副作用（非公開なら訳文行を消す・公開への切替で外部キャッシュを追いつかせる）は、送られた公開範囲、無ければ保存済みの値で判定する。テストは `app/routes/me/__tests__/account.test.ts`
+- **`/me/edit` の即時保存**: アカウント削除・レガシーインポートは編集ではないので `/me/account` で即時実行する。スキン/マントのアップロード・削除も保存バーとは別に即時保存される（別 API）。アップロード欄に「アップロードと削除は、すぐに公開へ反映されます（ページ下の保存とは別です）」の 1 文を出す。完了時はページを再読込せず、返ってきた新しい URL だけをローカル state（`customSkinUrl` / `customCapeUrl`）へ反映して画面（アバター・プレビュー）を更新する（再読込・loader 再検証をすると未保存の下書きが消えるため。下書きは保たれる）。完了時はページを再読込せず、返ってきた新しい URL だけをローカル state（`customSkinUrl` / `customCapeUrl`）へ反映して画面（アバター・プレビュー）を更新する（再読込・loader 再検証をすると未保存の下書きが消えるため。下書きは保たれる）。
 
 - **下書き（draft）**: MCID・リンク・動画はクライアントの下書き状態にだけ持つ（`app/lib/profile-edit-draft.ts` の `ProfileDraft`。純関数でテスト済み）。ダイアログの確定は下書きの更新だけで、サーバーへは送らない。各ダイアログに「保存バーで保存するまで反映されません」の案内を出し、未保存の行には「未保存」バッジ、削除予定の行は取り消し線＋「取り消す」を出す。項目単位の取り消しと、保存バーの「変更を破棄」（フォーム値＋下書き全体を保存済みへ戻す）がある
 - **一時ID**: 新規のリンク・動画はクライアント生成の一時キー（`new-<uuid>`）を持つ。サーバーの ID としては使わず、サーバーが `createId()` で採番する。一時キーは `order`（動画は `new:<key>`）とエラー位置（`fieldErrors`）の参照にだけ使う。保存成功後は loader の再取得結果で下書き・保存済み両方を作り直す（実 ID に置き換わる）
 - **送信**: 保存バーの保存で `_action=save_all` ＋ プロフィール列 ＋ `changes`（JSON。`ProfileChanges`。差分が無ければ省略）を **1リクエスト**で送る。`_action` 未指定（従来の保存）も同じ経路で、`changes` が無いときはプロフィール列だけを保存する。`changes` は zod で検証し、不正なら何も保存しない
 - **サーバー処理**（`app/lib/profile-edit.server.ts` の `saveProfileBatch`）: ① 検証（形式 → 既存データを読んだ「最終状態」の検証〈所有確認・同一プラットフォーム重複・動画10件上限〉→ MCID 重複と Mojang 照合）→ ② DB 書き込みを**単一トランザクション**（MCID/slug 更新・slug 履歴・お気に入り追従・リンク〈削除→更新→作成〉・動画〈削除→更新→作成→並び〉・プロフィール列）→ ③ commit 後に外部キャッシュのキック（`scheduleSocialLinkKicks` 等。保存が失敗したら一切走らない）。①で失敗したら DB は1行も変わらない。他ユーザーの ID の更新はエラー、削除は無視する（IDOR 防止）
 - **MCID の Mojang 照合は二段構え**: ダイアログ確定時に `GET /api/me/mcid-check?mcid=`（認証必須・DB 非変更。形式 → 重複 → Mojang の順。`fetchUuidFromMcid` のキャッシュはインスタンス内メモリのため、Vercel では確認時と保存時で別インスタンスになり、Mojang を2回照合することがある。大文字小文字違いの MCID は `uuid` が同じになるため、`users.uuid` の他ユーザー使用も `taken` として弾く）で確認し、**確認できたものだけ**下書きに載せる（UUID・アバターのプレビュー可）。保存時にもサーバーが必ず再照合する（クライアントの結果は信用しない）。保存時に失敗したら `fieldErrors.mcid`（`mcidNotFound` / `mcidTaken` / `mcidVerifyFailed`）を返し、**他の変更も含め何も保存せず**、下書きはそのまま残る（MCID カード内に赤い Alert を出して再入力・再試行できる）。Bedrock 版は自己申告で Mojang 照合なし（形式検証のみ）
-- **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する。保存時のエラー（クライアントの事前検証〈RTA歴の片方だけ選択〉とサーバーが返した `fieldErrors` の両方）は、ページ順で最初のエラー欄（`edit-error-*` の id、RTA歴は Select）へスクロールしてフォーカスする（`prefers-reduced-motion` ではなめらかにしない。保存バーの裏は `scroll-padding` が避ける）。Select（RTA歴の年月・主なプラットフォーム・役割・公開範囲・既定タブ）の `SelectValue` には今の値の表示文字を子として渡す（Radix は SSR で選択中の文字を描けず、サーバー HTML が空になるため）。表示設定のスイッチ行は `max-w-2xl` で幅を詰める
+- **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する。保存時のエラー（クライアントの事前検証〈RTA歴の片方だけ選択〉とサーバーが返した `fieldErrors` の両方）は、ページ順で最初のエラー欄（`edit-error-*` の id、RTA歴は Select）へスクロールしてフォーカスする（`prefers-reduced-motion` ではなめらかにしない。保存バーの裏は `scroll-padding` が避ける）。Select（`/me/edit` の RTA歴の年月・主なプラットフォーム・役割、`/me/account` の公開範囲・既定タブ）の `SelectValue` には今の値の表示文字を子として渡す（Radix は SSR で選択中の文字を描けず、サーバー HTML が空になるため）。表示設定のスイッチ行は `max-w-2xl` で幅を詰める
 - **未保存検知・離脱ガード**: `FloatingSaveBar` が内蔵する離脱ガード（`unsavedGuard` 既定 true。内部で `useUnsavedWarning` ＋ `UnsavedChangesDialog`。この画面は自前では持たない）が `hasChanges`（保存中は止めない）を見る。`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
-- **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
-- **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
-- **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action に残るのは `save_all`（`saveProfileBatch`）・`import_legacy`・`delete_account` のみ
+- **アカウント削除**（`/me/account`）: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
+- **レガシーインポート**（`/me/account`。キー配置等が無い走者にだけ案内）: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
+- **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action は `save_all`（`saveProfileBatch`）のみ、`/me/account` の action は `save_all`（同じ `saveProfileBatch`）・`import_legacy`・`delete_account` のみ
 - **モバイル表示と追加ダイアログ**: MCID 行はモバイルでボタンが下に縦積みになり（`sm` 以上は横並び）、MCID は長くても折り返して全体を表示する。ソーシャルリンク追加・動画追加ダイアログにはキャンセルボタン（`DialogClose`）を置く
 - **共有モジュール**: MCID 検証と slug 変更は `app/lib/mcid-change.server.ts`（`verifyMcidForUser` / `applyMcidSlugChange`。onboarding も同じものを使い、uuid の重複チェックを含む）、入力上限と検証は `app/lib/profile-edit-validation.ts`（`PROFILE_FIELD_LIMITS` / `validateProfileTextFields` / `validateLinkInput` / `linksTouchSpeedrun`）
 
@@ -840,8 +853,8 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 `users.updatedAt` はホームの「最近の更新」と、お気に入り走者の動きの「プロフィールを更新」の元になる。**プロフィールの内容が変わったときだけ**進め、露出を減らす操作・表示設定の変更では進めない（非公開化や非表示にした操作が、かえって「更新」として目立たないようにするため）。
 
-- 進める: `/me/edit` の保存で、MCID・Bedrock MCID・表示名・表示名のアルファベット表記・自己紹介（`bio` / `shortBio`）・場所・代名詞・ポーズ・スリム・マント・既定タブ・メインプラットフォーム・ロール・RTA 歴・speedrun.com ユーザー名、ソーシャルリンク、動画（追加・削除・内容変更・並び替え）のいずれかが**既存値と違う**とき。記録（`category_records`）の追加・編集、speedrun.com 記録のピン留め切替
-- 進めない: `/me/edit` の保存で変化した列が `profileVisibility` / `showPacemanOnHome` / `showTwitchOnHome` / `showYoutubeOnHome` / `showRankedStats` / `showPacemanStats` / `allowAutoTranslation` だけのとき（何も変わらない保存も同様）、`/me/records` の speedrun.com 記録の非表示切替、ホームの並び順保存
+- 進める: `/me/edit`（と既定タブは `/me/account`）の保存で、MCID・Bedrock MCID・表示名・表示名のアルファベット表記・自己紹介（`bio` / `shortBio`）・場所・代名詞・ポーズ・スリム・マント・既定タブ・メインプラットフォーム・ロール・RTA 歴・speedrun.com ユーザー名、ソーシャルリンク、動画（追加・削除・内容変更・並び替え）のいずれかが**既存値と違う**とき。記録（`category_records`）の追加・編集、speedrun.com 記録のピン留め切替
+- 進めない: `/me/edit` / `/me/account` の保存で変化した列が `profileVisibility` / `showPacemanOnHome` / `showTwitchOnHome` / `showYoutubeOnHome` / `showRankedStats` / `showPacemanStats` / `allowAutoTranslation` だけのとき（何も変わらない保存も同様）、`/me/records` の speedrun.com 記録の非表示切替、ホームの並び順保存
 - 判定は送信値ではなく既存値との差分で行う（`saveProfileBatch` の `contentChanged`）。
 
 ### 自己紹介の自動翻訳の許可

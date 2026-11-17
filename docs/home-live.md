@@ -194,7 +194,7 @@ DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がc
 即時反映するトリガーが `app/lib/targeted-refresh.server.ts` に集約されている。action がレスポンスを返した
 「後」に `runAfterResponse()`（内部は `@vercel/functions` の `waitUntil()`）でバックグラウンド実行するため、
 保存の応答速度には影響しない。各関数は内部でエラーを握り、失敗しても action を失敗・ブロックさせない
-（fire-and-forget）。呼び出し元は `app/routes/me/edit.tsx`。
+（fire-and-forget）。呼び出し元は `app/routes/me/edit.tsx`（保存本体は `app/lib/profile-edit.server.ts`。`/me/account` の保存も同じ本体を通るが、リンク・MCID を送らないのでキックは走らない）。
 
 | トリガー | 実行内容 |
 |---|---|

@@ -15,7 +15,7 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 ## 担当領域
 
 - **公開プロフィール**: `/player/:slug`, `/player/:slug/stats`（slug は MCID または `@内部ID`）
-- **自分の設定ページ**: `/me`（index / `edit` / `records`）、`me/_layout.tsx`（サイドバー）
+- **自分の設定ページ**: `/me`（index / `edit` / `account` / `playstyle` / `records`）、`me/_layout.tsx`（サイドバー）
 - **閲覧・比較**: `/browse`, `/compare`, `/random-player`, `/secret-grid`
 - **お気に入り**: `/favorites`
 - **スキン/アバター**: `api/skin`, `api/me/skin`, `api/me/skin/upload-token`

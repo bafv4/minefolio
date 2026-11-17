@@ -1293,7 +1293,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     importCompletedWithDetail: "Import complete: {detail}",
     importCompletedNoData: "Import complete (no data)",
     pageTitle: "Edit profile",
-    pageDescription: "Update your public profile information.",
+    pageDescription: "Update what appears on your runner page (MCID, skin, basic info, links, and videos). Changes here are drafts and are confirmed by saving at the bottom of the page.",
+    uploadImmediateNote: "Uploads and deletions take effect immediately (separately from the save at the bottom of the page).",
     importFromLegacyTitle: "Import data from MCSRer Hotkeys",
     importFromLegacyDesc:
       "You can import the controls and settings you registered on the old MCSRer Hotkeys.",
@@ -1379,11 +1380,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     role: "Role",
     speedrunIntegration: "Speedrun.com integration",
     speedrunIntegrationDesc:
-      "Set your Speedrun.com username to show your records on the Stats tab. Adding a Speedrun.com social link sets this automatically.",
-    speedrunUsername: "Speedrun.com username",
-    speedrunUsernameExample: "e.g. Feinberg",
-    speedrunUsernameHint:
-      "Enter it directly, or add a Speedrun.com social link below",
+      "Records shown on the Stats tab are read from the Speedrun.com username in your social links.",
+    speedrunLinkedFrom: "Reading from the Speedrun.com social link: {username}",
+    speedrunLinkedNone: "Not set. Add Speedrun.com to your social links below to set it.",
     videos: "Videos",
     videosDesc: "Manage the YouTube videos shown on your profile (up to 10).",
     videoDialogAddTitle: "Add video",
@@ -1549,8 +1548,15 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     errorDescription: "An error occurred while loading the page. Please reload.",
     reloadPage: "Reload page",
   },
+  meAccount: {
+    title: "Visibility & account - Minefolio",
+    pageTitle: "Visibility & account",
+    pageDescription:
+      "Change your visibility, default tab, and display settings, and manage your account. Setting changes are drafts and are confirmed by saving at the bottom of the page.",
+  },
   meLayout: {
     editProfile: "Edit profile",
+    account: "Visibility & account",
     playstyle: "Playstyle",
     records: "Records",
     keybindings: "Controls",

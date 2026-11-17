@@ -1,5 +1,5 @@
-// /me/edit の「保存バーでの一括保存」本体（プロフィール列・MCID・リンク・動画を1リクエスト・1トランザクションで保存する）。
-// 仕様は docs/profiles.md「/me/edit の保存方式」。
+// /me/edit と /me/account の「保存バーでの一括保存」本体（プロフィール列・MCID・リンク・動画を1リクエスト・1トランザクションで保存する）。
+// 仕様は docs/profiles.md「/me/edit の保存方式」。送られた項目だけを更新する（どのページがどの項目を送るかは profile-edit-scope.ts）。
 //
 // 流れ: ①検証（DB に触れない形式検証 → 既存データを読んだ最終状態の検証 → Mojang 照合）→
 //       ②DB 書き込みを単一トランザクションで実施 → ③commit 後に外部キャッシュのキック（失敗しても保存は成功扱い）。
@@ -129,76 +129,104 @@ export function scheduleSocialLinkDeleteKicks(userId: string, link: { platform: 
 // プロフィール列のパース・検証
 // ============================================
 
+/**
+ * フォームから読んだプロフィール列。**`undefined` は「送られていない（列を更新しない）」**。
+ * /me/edit と /me/account が別の列だけを送るため（列の振り分けは app/lib/profile-edit-scope.ts）、
+ * 送られていない列を null や false で上書きしてはいけない。null は「空にする」（送られた空欄）
+ */
 type ProfileFields = {
-  displayName: string | null;
-  displayNameAlphabet: string | null;
-  bio: string | null;
-  location: string | null;
-  pronouns: string | null;
-  profileVisibility: "public" | "unlisted" | "private";
-  profilePose: "standing" | "walking" | "waving";
-  slimSkin: boolean;
-  /** 未送信・不正値は null（列を更新対象から外す） */
-  capeDisplay: CapeDisplay | null;
-  defaultProfileTab: ProfileTabValue;
-  mainPlatform: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
-  role: "viewer" | "runner" | null;
-  shortBio: string | null;
-  rtaStartedYearMonth: string | null;
-  speedruncomUsername: string | null;
-  showPacemanOnHome: boolean;
-  showTwitchOnHome: boolean;
-  showYoutubeOnHome: boolean;
-  showRankedStats: boolean;
-  showPacemanStats: boolean;
-  /** 未送信は null（列を更新対象から外す） */
-  allowAutoTranslation: boolean | null;
+  displayName?: string | null;
+  displayNameAlphabet?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  pronouns?: string | null;
+  profileVisibility?: "public" | "unlisted" | "private";
+  profilePose?: "standing" | "walking" | "waving";
+  slimSkin?: boolean;
+  capeDisplay?: CapeDisplay;
+  defaultProfileTab?: ProfileTabValue;
+  mainPlatform?: "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other" | null;
+  role?: "viewer" | "runner" | null;
+  shortBio?: string | null;
+  rtaStartedYearMonth?: string | null;
+  speedruncomUsername?: string | null;
+  showPacemanOnHome?: boolean;
+  showTwitchOnHome?: boolean;
+  showYoutubeOnHome?: boolean;
+  showRankedStats?: boolean;
+  showPacemanStats?: boolean;
+  allowAutoTranslation?: boolean;
 };
 
 function parseProfileFields(formData: FormData, t: Translator): { error: string } | { fields: ProfileFields } {
-  const displayName = (formData.get("displayName") as string)?.trim() || null;
-  const displayNameAlphabet = (formData.get("displayNameAlphabet") as string)?.trim() || null;
-  const bio = (formData.get("bio") as string)?.trim() || null;
-  const location = (formData.get("location") as string)?.trim() || null;
-  const pronouns = (formData.get("pronouns") as string)?.trim() || null;
-  const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
-  const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
-  const slimSkin = formData.get("slimSkin") === "true";
-  // マント表示。未送信（null）・不正値は列を更新対象から外す（null や既定値で上書きしない）
-  const capeDisplayRaw = formData.get("capeDisplay");
+  const has = (name: string) => formData.has(name);
+  // 文字列欄: 送られていれば trim・空→null、送られていなければ undefined
+  const text = (name: string): string | null | undefined =>
+    has(name) ? (String(formData.get(name) ?? "").trim() || null) : undefined;
+  const flag = (name: string): boolean | undefined => (has(name) ? formData.get(name) === "true" : undefined);
+
+  const displayName = text("displayName");
+  const displayNameAlphabet = text("displayNameAlphabet");
+  const bio = text("bio");
+  const location = text("location");
+  const pronouns = text("pronouns");
+  const shortBio = text("shortBio");
+  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
+  const rtaStartedYearMonth = text("rtaStartedYearMonth");
+  const speedruncomUsername = text("speedruncomUsername");
+
+  const profileVisibility = has("profileVisibility")
+    ? (formData.get("profileVisibility") as "public" | "unlisted" | "private")
+    : undefined;
+  const profilePose = has("profilePose")
+    ? (formData.get("profilePose") as "standing" | "walking" | "waving")
+    : undefined;
+  const slimSkin = flag("slimSkin");
+  // マント表示。不正値は保存を拒否する（空文字も不正値）
+  const capeDisplayRaw = has("capeDisplay") ? formData.get("capeDisplay") : undefined;
   const capeDisplay =
     typeof capeDisplayRaw === "string" && CAPE_DISPLAYS.includes(capeDisplayRaw)
       ? (capeDisplayRaw as CapeDisplay)
-      : null;
+      : undefined;
   // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
   // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
-  const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
-  const mainPlatform = (formData.get("mainPlatform") as ProfileFields["mainPlatform"]) || null;
-  const role = (formData.get("role") as "viewer" | "runner") || null;
-  const shortBio = (formData.get("shortBio") as string)?.trim() || null;
-  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
-  const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
-  const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
-  const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
-  const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
-  const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
-  const showRankedStats = formData.get("showRankedStats") === "true";
-  const showPacemanStats = formData.get("showPacemanStats") === "true";
-  // 自己紹介の自動翻訳の許可。未送信（null）・不正値は列を更新対象から外す（既定値で上書きしない）
-  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
+  const defaultProfileTab = has("defaultProfileTab")
+    ? (formData.get("defaultProfileTab") as ProfileTabValue)
+    : undefined;
+  // 空文字は「未設定にする」（null）
+  const mainPlatform = has("mainPlatform")
+    ? ((formData.get("mainPlatform") as ProfileFields["mainPlatform"]) || null)
+    : undefined;
+  const role = has("role") ? ((formData.get("role") as "viewer" | "runner") || null) : undefined;
+  const showPacemanOnHome = flag("showPacemanOnHome");
+  const showTwitchOnHome = flag("showTwitchOnHome");
+  const showYoutubeOnHome = flag("showYoutubeOnHome");
+  const showRankedStats = flag("showRankedStats");
+  const showPacemanStats = flag("showPacemanStats");
+  // 自己紹介の自動翻訳の許可。不正値は保存を拒否する
+  const allowAutoTranslationRaw = has("allowAutoTranslation") ? formData.get("allowAutoTranslation") : undefined;
   const allowAutoTranslation =
-    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
+    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : undefined;
 
-  const textError = validateProfileTextFields({ displayName, displayNameAlphabet, bio, location, shortBio, pronouns });
+  const textError = validateProfileTextFields({
+    displayName: displayName ?? null,
+    displayNameAlphabet: displayNameAlphabet ?? null,
+    bio: bio ?? null,
+    location: location ?? null,
+    shortBio: shortBio ?? null,
+    pronouns: pronouns ?? null,
+  });
   if (textError) return { error: t(textError) };
-  if (!VISIBILITIES.includes(profileVisibility)) return { error: t("meEdit.invalidOption") };
-  if (profilePose !== null && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
-  if (capeDisplayRaw !== null && capeDisplay === null) return { error: t("meEdit.invalidOption") };
-  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
+  if (profileVisibility !== undefined && !VISIBILITIES.includes(profileVisibility)) {
     return { error: t("meEdit.invalidOption") };
   }
-  if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) return { error: t("meEdit.invalidOption") };
-  if (role !== null && !ROLES.includes(role)) return { error: t("meEdit.invalidOption") };
+  if (profilePose !== undefined && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
+  if (capeDisplayRaw !== undefined && capeDisplay === undefined) return { error: t("meEdit.invalidOption") };
+  if (allowAutoTranslationRaw !== undefined && allowAutoTranslation === undefined) {
+    return { error: t("meEdit.invalidOption") };
+  }
+  if (mainPlatform && !PLATFORMS.includes(mainPlatform)) return { error: t("meEdit.invalidOption") };
+  if (role && !ROLES.includes(role)) return { error: t("meEdit.invalidOption") };
   if (speedruncomUsername && speedruncomUsername.length > PROFILE_FIELD_LIMITS.speedruncomUsername) {
     return { error: t("meEdit.speedrunUsernameMax") };
   }
@@ -468,12 +496,17 @@ export async function saveProfileBatch({
   // 同じ保存に speedrun.com リンクの追加/変更/削除が含まれる場合は「リンクの変更を優先」し、
   // 列の値は最終状態の speedrun.com リンクの identifier から決める（現行の即時保存と同じ挙動）。
   // speedrun.com に関わるリンク変更が無いときだけフォームの値を使い、social_links へ逆方向同期する
+  // フォームの speedruncomUsername が送られていない（/me/account の保存など）かつリンクの変更も無いときは、
+  // 列・social_links・ランキングのいずれにも触れない（undefined = 未送信）
   const srLinkChanged = linksTouchSpeedrun(
     { create: linkCreates, update: validLinkUpdates, delete: linkDeletes },
     (id) => linkById.get(id)?.platform,
   );
   const finalSrLink = finalLinks.find((l) => l.platform === "speedruncom");
-  const speedruncomUsername = srLinkChanged ? (finalSrLink?.identifier ?? null) : fields.speedruncomUsername;
+  const speedruncomUsername: string | null | undefined = srLinkChanged
+    ? (finalSrLink?.identifier ?? null)
+    : fields.speedruncomUsername;
+  const srTouched = speedruncomUsername !== undefined;
 
   // ---- 動画の最終並び（id の配列）。新規は先に id を採番して order の `new:<key>` を解決する ----
   const newVideoIds = new Map(videoCreates.map((v) => [v.key, createId()]));
@@ -496,25 +529,28 @@ export async function saveProfileBatch({
   // ホームの「最近の更新」等に出てしまうため updatedAt を進めない。それ以外の列・リンク・動画の変化は内容の変化。
   // 判定は送信値ではなく既存値との差分で行う
   const nn = <T,>(v: T | null | undefined) => v ?? null;
+  // 送られていない列（undefined）は変化なし
+  const differs = <T,>(next: T | null | undefined, current: T | null | undefined) =>
+    next !== undefined && nn(next) !== nn(current);
   const userContentChanged =
     mcidSet !== null ||
     mcidRemove ||
     bedrockSet !== null ||
     bedrockRemove ||
-    nn(fields.displayName) !== nn(user.displayName) ||
-    nn(fields.displayNameAlphabet) !== nn(user.displayNameAlphabet) ||
-    nn(fields.bio) !== nn(user.bio) ||
-    nn(fields.location) !== nn(user.location) ||
-    nn(fields.pronouns) !== nn(user.pronouns) ||
-    fields.profilePose !== user.profilePose ||
-    fields.slimSkin !== user.slimSkin ||
-    (fields.capeDisplay !== null && fields.capeDisplay !== user.capeDisplay) ||
-    fields.defaultProfileTab !== user.defaultProfileTab ||
-    nn(fields.mainPlatform) !== nn(user.mainPlatform) ||
-    nn(fields.role) !== nn(user.role) ||
-    nn(fields.shortBio) !== nn(user.shortBio) ||
-    nn(fields.rtaStartedYearMonth) !== nn(user.rtaStartedYearMonth) ||
-    nn(speedruncomUsername) !== nn(user.speedruncomUsername);
+    differs(fields.displayName, user.displayName) ||
+    differs(fields.displayNameAlphabet, user.displayNameAlphabet) ||
+    differs(fields.bio, user.bio) ||
+    differs(fields.location, user.location) ||
+    differs(fields.pronouns, user.pronouns) ||
+    differs(fields.profilePose, user.profilePose) ||
+    differs(fields.slimSkin, user.slimSkin) ||
+    differs(fields.capeDisplay, user.capeDisplay) ||
+    differs(fields.defaultProfileTab, user.defaultProfileTab) ||
+    differs(fields.mainPlatform, user.mainPlatform) ||
+    differs(fields.role, user.role) ||
+    differs(fields.shortBio, user.shortBio) ||
+    differs(fields.rtaStartedYearMonth, user.rtaStartedYearMonth) ||
+    differs(speedruncomUsername, user.speedruncomUsername);
   const linksChanged =
     linkCreates.length > 0 ||
     linkDeletes.length > 0 ||
@@ -529,6 +565,7 @@ export async function saveProfileBatch({
     }) ||
     // speedrun.com 列 → リンクの逆方向同期で social_links が変わる場合
     (!srLinkChanged &&
+      srTouched &&
       (speedruncomUsername
         ? existingLinks.find((l) => l.platform === "speedruncom")?.identifier !== speedruncomUsername
         : existingLinks.some((l) => l.platform === "speedruncom")));
@@ -599,7 +636,7 @@ export async function saveProfileBatch({
       if (srLinkChanged) {
         // 解決済みIDを残すと cron/即時更新が旧アカウントを見続けるため、値が変わったらリセットする
         if (speedruncomUsername !== user.speedruncomUsername) userSet.speedruncomId = null;
-      } else {
+      } else if (srTouched) {
         const existingSr = existingLinks.find((l) => l.platform === "speedruncom");
         if (speedruncomUsername) {
           if (!existingSr) {
@@ -653,35 +690,38 @@ export async function saveProfileBatch({
         }
       }
 
-      // プロフィール列
-      await tx
-        .update(users)
-        .set({
-          displayName: fields.displayName,
-          displayNameAlphabet: fields.displayNameAlphabet,
-          bio: fields.bio,
-          location: fields.location,
-          pronouns: fields.pronouns,
-          profileVisibility: fields.profileVisibility,
-          profilePose: fields.profilePose,
-          slimSkin: fields.slimSkin,
-          ...(fields.capeDisplay ? { capeDisplay: fields.capeDisplay } : {}),
-          defaultProfileTab: fields.defaultProfileTab,
-          mainPlatform: fields.mainPlatform,
-          role: fields.role,
-          shortBio: fields.shortBio,
-          rtaStartedYearMonth: fields.rtaStartedYearMonth,
-          speedruncomUsername,
-          showPacemanOnHome: fields.showPacemanOnHome,
-          showTwitchOnHome: fields.showTwitchOnHome,
-          showYoutubeOnHome: fields.showYoutubeOnHome,
-          showRankedStats: fields.showRankedStats,
-          showPacemanStats: fields.showPacemanStats,
-          ...(fields.allowAutoTranslation !== null ? { allowAutoTranslation: fields.allowAutoTranslation } : {}),
-          ...userSet,
-          ...(contentChanged ? { updatedAt: now } : {}),
-        })
-        .where(eq(users.id, user.id));
+      // プロフィール列。送られていない列（undefined）は更新対象に含めない
+      const columns: Partial<typeof users.$inferInsert> = {
+        displayName: fields.displayName,
+        displayNameAlphabet: fields.displayNameAlphabet,
+        bio: fields.bio,
+        location: fields.location,
+        pronouns: fields.pronouns,
+        profileVisibility: fields.profileVisibility,
+        profilePose: fields.profilePose,
+        slimSkin: fields.slimSkin,
+        capeDisplay: fields.capeDisplay,
+        defaultProfileTab: fields.defaultProfileTab,
+        mainPlatform: fields.mainPlatform,
+        role: fields.role,
+        shortBio: fields.shortBio,
+        rtaStartedYearMonth: fields.rtaStartedYearMonth,
+        speedruncomUsername,
+        showPacemanOnHome: fields.showPacemanOnHome,
+        showTwitchOnHome: fields.showTwitchOnHome,
+        showYoutubeOnHome: fields.showYoutubeOnHome,
+        showRankedStats: fields.showRankedStats,
+        showPacemanStats: fields.showPacemanStats,
+        allowAutoTranslation: fields.allowAutoTranslation,
+      };
+      const set: Partial<typeof users.$inferInsert> = {
+        ...Object.fromEntries(Object.entries(columns).filter(([, v]) => v !== undefined)),
+        ...userSet,
+        ...(contentChanged ? { updatedAt: now } : {}),
+      };
+      if (Object.keys(set).length > 0) {
+        await tx.update(users).set(set).where(eq(users.id, user.id));
+      }
     });
   } catch (e) {
     console.error("Profile save error:", e);
@@ -701,7 +741,8 @@ export async function saveProfileBatch({
 
   // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
   // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない）
-  if ((fields.allowAutoTranslation ?? user.allowAutoTranslation) === false || fields.profileVisibility === "private") {
+  const effectiveVisibility = fields.profileVisibility ?? user.profileVisibility;
+  if ((fields.allowAutoTranslation ?? user.allowAutoTranslation) === false || effectiveVisibility === "private") {
     await removeUserBioTranslations(db, user.id);
   } else {
     scheduleUserBioTranslation(db, user.id);
@@ -766,13 +807,13 @@ export async function saveProfileBatch({
   }
 
   // speedrun.com リンク経由でない speedruncomUsername の変更（基本情報フォーム側）もランキングを即時更新する
-  if (!srLinkChanged && speedruncomUsername !== user.speedruncomUsername) {
+  if (!srLinkChanged && srTouched && speedruncomUsername !== user.speedruncomUsername) {
     runAfterResponse(refreshSrcRankingsForUser(user.id));
   }
 
   // 非公開→公開への切り替え時は、非公開中はcron対象外で取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる
   // （連携有無の検索もレスポンスを遅らせないようbackground側で行う）
-  if (user.profileVisibility !== "public" && fields.profileVisibility === "public") {
+  if (user.profileVisibility !== "public" && effectiveVisibility === "public") {
     const mcidAtSave = effectiveMcid;
     runAfterResponse(
       (async () => {

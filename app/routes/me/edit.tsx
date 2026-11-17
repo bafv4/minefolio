@@ -1,7 +1,7 @@
-import { createTranslator, type MessageKey } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, useRouteLoaderData, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, useRouteLoaderData, type ShouldRevalidateFunctionArgs } from "react-router";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { MeChecklist } from "@/components/me/me-checklist";
@@ -11,23 +11,11 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
-import {
-  users,
-  socialLinks,
-  profileVideos,
-  keybindings,
-  playerConfigs,
-  itemLayouts,
-  searchCrafts,
-  keyRemaps,
-} from "@/lib/schema";
-import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, asc, sql } from "drizzle-orm";
+import { users, socialLinks, profileVideos } from "@/lib/schema";
+import { eq, asc } from "drizzle-orm";
 import { safeExternalHref } from "@/lib/safe-url";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
-import { importFromLegacy } from "@/lib/legacy-import";
 import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
-import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
 import {
   MAX_PROFILE_VIDEOS,
@@ -65,7 +53,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageSection } from "@/components/page-section";
-import { NoticeBanner } from "@/components/notice-banner";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,9 +100,6 @@ import {
   ExternalLink,
   Share2,
   Video,
-  Settings,
-  AlertTriangle,
-  Download,
   Pin,
   ArrowUp,
   ArrowDown,
@@ -159,30 +143,13 @@ export async function loader({ request }: Route.LoaderArgs) {
         orderBy: [asc(profileVideos.displayOrder)],
       },
     },
-    // キー配置等のデータが存在するか（レガシーインポート案内の出し分けにだけ使う）。
-    // 中身は不要なので EXISTS で users 取得と同じ 1 往復に畳み、関連データ全件をクライアントへ返さない
-    // ※ RQB の extras では列参照が非修飾（"id"）で出力され、サブクエリ側の列と衝突して常に false になるため、
-    //   外側の users.id はルート別名で明示的に修飾する（loader テストが相関を固定している）
-    extras: {
-      hasExistingData: sql<number>`(
-        exists(select 1 from ${keybindings} where ${keybindings.userId} = "users"."id")
-        or exists(select 1 from ${playerConfigs} where ${playerConfigs.userId} = "users"."id")
-        or exists(select 1 from ${itemLayouts} where ${itemLayouts.userId} = "users"."id")
-        or exists(select 1 from ${searchCrafts} where ${searchCrafts.userId} = "users"."id")
-        or exists(select 1 from ${keyRemaps} where ${keyRemaps.userId} = "users"."id")
-      )`.as("has_existing_data"),
-    },
   });
 
   if (!user) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  const { hasExistingData: hasExistingDataRaw, ...userRow } = user;
-  const hasExistingData = Boolean(hasExistingDataRaw);
-
-  // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
-  const legacyApiUrl = env.LEGACY_API_URL;
+  const userRow = user;
 
   // 自動翻訳が無効（ANTHROPIC_API_KEY 未設定）のときは許可スイッチを出さない（真偽値だけをクライアントへ渡す）
   const translationEnabled = isTranslationEnabled();
@@ -191,8 +158,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     user: userRow,
     links: user.socialLinks,
     videos: user.profileVideos,
-    legacyApiUrl,
-    hasExistingData,
     translationEnabled,
   };
 }
@@ -261,55 +226,9 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-
-  // レガシーインポート
-  if (actionType === "import_legacy") {
-    const legacyApiUrl = env.LEGACY_API_URL;
-    if (!legacyApiUrl) {
-      return { error: t("meEdit.legacyApiNotConfigured"), action: "import" };
-    }
-
-    if (!user.mcid) {
-      return { error: t("meEdit.mcidNotSetForImport"), action: "import" };
-    }
-
-    const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
-    if (result.success) {
-      return {
-        success: true,
-        action: "import",
-        keybindingsImported: result.keybindingsImported,
-        customKeysImported: result.customKeysImported,
-        remapsImported: result.remapsImported,
-        fingerAssignmentsImported: result.fingerAssignmentsImported,
-        settingsImported: result.settingsImported,
-      };
-    } else {
-      return { error: result.error ?? t("meEdit.importFailed"), action: "import" };
-    }
-  }
-
-  // アカウント削除
-  if (actionType === "delete_account") {
-    const confirmText = (formData.get("confirmText") as string)?.trim();
-    const expectedText = user.mcid || user.slug;
-
-    if (confirmText !== expectedText) {
-      return { error: t("meEdit.deleteConfirmMismatch"), action: "delete" };
-    }
-
-    // 派生データの削除（翻訳キャッシュ・favorites孤児行）と本体削除（users + better-auth
-    // 3テーブル）を単一トランザクションで原子化する（app/lib/content-cleanup.server.ts）。
-    // トランザクション成功後、Vercel Blob 実体の削除は内部で runAfterResponse 経由でスケジュールされる。
-    await deleteUserAccount(db, { user, sessionUserId: session.user.id });
-
-    // Redirect to home after deletion
-    return redirect("/");
-  }
-
   // プロフィール情報の更新（保存バーの一括保存。`save_all` と `_action` 未指定は同じ経路）。
-  // 本体は app/lib/profile-edit.server.ts。`changes`（JSON）に MCID・リンク・動画の差分が載る
+  // 本体は app/lib/profile-edit.server.ts。`changes`（JSON）に MCID・リンク・動画の差分が載る。
+  // このページの項目だけを送る（公開範囲・既定タブ・表示設定は /me/account。profile-edit-scope.ts）
   return saveProfileBatch({ db, t, user, formData });
 }
 
@@ -334,17 +253,6 @@ const platformOptions = [
   { value: "twitter", label: "Twitter/X", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "x.com/" },
   { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholderKey: null, prefix: "" },
 ] as const;
-
-// 既定タブ Select のラベル。値の集合・順序は SELECTABLE_PROFILE_TABS（@/lib/profile-tabs）が単一情報源
-const DEFAULT_PROFILE_TAB_LABEL_KEYS: Record<SelectableProfileTabValue, MessageKey> = {
-  profile: "meEdit.tabProfile",
-  stats: "meEdit.tabStats",
-  playstyle: "meEdit.tabPlaystyle",
-  keybindings: "meEdit.tabKeybindings",
-  devices: "meEdit.tabDevices",
-  items: "meEdit.tabItems",
-  searchcraft: "meEdit.tabSearchcraft",
-};
 
 function getPlatformIcon(platform: string) {
   switch (platform) {
@@ -635,11 +543,8 @@ export default function EditProfilePage() {
   const layoutData = useRouteLoaderData("routes/me/_layout") as { checklist?: unknown } | undefined;
   const hasChecklist = !checklistDismissed && layoutData?.checklist != null;
   const locale = useLocale();
-  const { user, links, videos, legacyApiUrl, hasExistingData, translationEnabled } =
-    useLoaderData<typeof loader>();
+  const { user, links, videos, translationEnabled } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const deleteFetcher = useFetcher<typeof action>();
-  const importFetcher = useFetcher<typeof action>();
 
   // MCID・リンク・動画は保存バーで保存するまで下書き（draft）にだけ持ち、保存時に差分を1リクエストで送る
   // （docs/profiles.md「/me/edit の保存方式」）。savedDraft は dirty 判定・取り消しの基準
@@ -651,12 +556,10 @@ export default function EditProfilePage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMcidDialogOpen, setIsMcidDialogOpen] = useState(false);
   const [isBedrockMcidDialogOpen, setIsBedrockMcidDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<DraftLink | null>(null);
   const [editingVideo, setEditingVideo] = useState<DraftVideo | null>(null);
-  const [confirmText, setConfirmText] = useState("");
   const [newMcid, setNewMcid] = useState("");
   const [mcidCheck, setMcidCheck] = useState<{ status: "idle" | "checking" | "error"; message?: string }>({
     status: "idle",
@@ -668,7 +571,6 @@ export default function EditProfilePage() {
   const [selectedPose, setSelectedPose] = useState<PoseName>(
     (user.profilePose as PoseName) ?? "waving"
   );
-  const [importCompleted, setImportCompleted] = useState(false);
 
   // RTA歴（"YYYY-MM"）を年・月のセレクト値に分解する。未回答・不正値は両方 ""（未選択）
   const initialRtaStarted = parseRtaStartedYearMonth(user.rtaStartedYearMonth ?? "");
@@ -700,22 +602,15 @@ export default function EditProfilePage() {
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
-    profileVisibility: user.profileVisibility ?? "public",
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     capeDisplay: (user.capeDisplay as CapeDisplay) ?? "cape",
-    defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
     rtaStartedYear: initialRtaStartedYear,
     rtaStartedMonth: initialRtaStartedMonth,
     speedruncomUsername: user.speedruncomUsername ?? "",
-    showPacemanOnHome: user.showPacemanOnHome ?? true,
-    showTwitchOnHome: user.showTwitchOnHome ?? true,
-    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
-    showRankedStats: user.showRankedStats ?? true,
-    showPacemanStats: user.showPacemanStats ?? true,
     allowAutoTranslation: user.allowAutoTranslation ?? true,
   });
 
@@ -739,13 +634,6 @@ export default function EditProfilePage() {
     runner: t("meEdit.roleRunner"),
     viewer: t("meEdit.roleViewer"),
   };
-  const visibilityLabels: Record<string, string> = {
-    public: t("meEdit.profilePublic"),
-    unlisted: t("meEdit.profileUnlisted"),
-    private: t("meEdit.profilePrivate"),
-  };
-  const defaultTabKey = DEFAULT_PROFILE_TAB_LABEL_KEYS[formValues.defaultProfileTab as SelectableProfileTabValue];
-  const defaultTabLabel = defaultTabKey ? t(defaultTabKey) : undefined;
 
   // エラーの欄へスクロールしてフォーカスする（保存バーの裏は scroll-padding が避ける）。
   // 対象が描画されていなければ何もしない
@@ -862,11 +750,9 @@ export default function EditProfilePage() {
     formData.set("bio", formValues.bio);
     formData.set("location", formValues.location);
     formData.set("pronouns", formValues.pronouns);
-    formData.set("profileVisibility", formValues.profileVisibility);
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("capeDisplay", formValues.capeDisplay);
-    formData.set("defaultProfileTab", formValues.defaultProfileTab);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
     formData.set("shortBio", formValues.shortBio);
@@ -880,11 +766,6 @@ export default function EditProfilePage() {
     // フォーム欄の手入力値ではなくリンクの下書きから決めた値を送り、「保存済み」としても扱う
     const speedruncomUsername = resolveSpeedrunUsernameForSave(savedDraft, draft, formValues.speedruncomUsername);
     formData.set("speedruncomUsername", speedruncomUsername);
-    formData.set("showPacemanOnHome", String(formValues.showPacemanOnHome));
-    formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
-    formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
-    formData.set("showRankedStats", String(formValues.showRankedStats));
-    formData.set("showPacemanStats", String(formValues.showPacemanStats));
     // 機能無効時はスイッチを出さないので送らない（action は未送信なら列を上書きしない）
     if (translationEnabled) {
       formData.set("allowAutoTranslation", String(formValues.allowAutoTranslation));
@@ -916,14 +797,9 @@ export default function EditProfilePage() {
 
   // 保存中〜保存後の再取得（loading）が終わるまでは idle にならない（二重送信で新規行が重複するのを防ぐ）
   const isSubmitting = fetcher.state !== "idle";
-  const isDeleting = deleteFetcher.state === "submitting";
-  const isImporting = importFetcher.state === "submitting";
   const data = fetcher.data;
-  const deleteData = deleteFetcher.data;
-  const importData = importFetcher.data;
 
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
-  const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
 
   // 保存成功後に基準値を更新（レスポンスごとに1回だけ。送信時点の値を使うので保存中の入力は未保存のまま残る）
   const handledSaveDataRef = useRef<typeof fetcher.data>(undefined);
@@ -979,39 +855,6 @@ export default function EditProfilePage() {
       if (targetId) focusErrorTarget(targetId);
     }
   }, [data, focusErrorTarget]);
-
-  // インポート結果のトースト
-  useEffect(() => {
-    if (!importData || importData === prevImportDataRef.current) return;
-    prevImportDataRef.current = importData;
-
-    if ("success" in importData && importData.action === "import") {
-      const parts: string[] = [];
-      if ("keybindingsImported" in importData && (importData.keybindingsImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedKeybindingsCount", { count: importData.keybindingsImported ?? 0 }));
-      }
-      if ("customKeysImported" in importData && (importData.customKeysImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedCustomKeysCount", { count: importData.customKeysImported ?? 0 }));
-      }
-      if ("remapsImported" in importData && (importData.remapsImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedRemapsCount", { count: importData.remapsImported ?? 0 }));
-      }
-      if ("fingerAssignmentsImported" in importData && importData.fingerAssignmentsImported) {
-        parts.push(t("meEdit.importedFingerAssignments"));
-      }
-      if ("settingsImported" in importData && importData.settingsImported) {
-        parts.push(t("meEdit.importedSettings"));
-      }
-      if (parts.length > 0) {
-        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join(t("common.listSeparatorComma")) }));
-      } else {
-        toast.success(t("meEdit.importCompletedNoData"));
-      }
-      setImportCompleted(true);
-    } else if ("error" in importData && importData.action === "import") {
-      toast.error(importData.error);
-    }
-  }, [importData]);
 
   // ---- 下書きの操作（保存は保存バーでまとめて行う） ----
   const isMcidChanged = draft.mcid.value !== savedDraft.mcid.value;
@@ -1327,43 +1170,12 @@ export default function EditProfilePage() {
 
       <MeChecklist onDismiss={() => setChecklistDismissed(true)} />
 
-      {/* Legacy Import Card */}
-      {legacyApiUrl && !importCompleted && !hasExistingData && (
-        <PageSection
-          id="edit-legacy-import"
-          first
-          icon={<Download className="h-5 w-5 text-primary" aria-hidden="true" />}
-          title={t("meEdit.importFromLegacyTitle")}
-        >
-            <p className="text-sm text-muted-foreground">{t("meEdit.importFromLegacyDesc")}</p>
-            <importFetcher.Form method="post">
-              <input type="hidden" name="_action" value="import_legacy" />
-              <Button type="submit" disabled={isImporting || hasChanges}>
-                {isImporting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("meEdit.importing")}
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    {t("meEdit.importData")}
-                  </>
-                )}
-              </Button>
-            </importFetcher.Form>
-            {hasChanges && (
-              <p className="mt-2 text-xs text-muted-foreground">{t("meEdit.importDisabledDirty")}</p>
-            )}
-        </PageSection>
-      )}
-
       <div className="space-y-7 sm:space-y-8">
         {/* MCID & Skin Section（ツアーの「プロフィール編集」の指す先） */}
         <div data-me-tour="edit-form">
         <PageSection
           id="edit-mcid-skin"
-          first={!(legacyApiUrl && !importCompleted && !hasExistingData) && !hasChecklist}
+          first={!hasChecklist}
           title={t("meEdit.mcidSkinTitle")}
           className="space-y-6"
         >
@@ -1561,6 +1373,7 @@ export default function EditProfilePage() {
                 onUploadComplete={(url) => setCustomSkinUrl(url)}
                 onDelete={() => setCustomSkinUrl(null)}
               />
+              <p className="text-xs text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
             </div>
 
             <Separator />
@@ -1585,6 +1398,7 @@ export default function EditProfilePage() {
                 onUploadComplete={(url) => setCustomCapeUrl(url)}
                 onDelete={() => setCustomCapeUrl(null)}
               />
+              <p className="text-xs text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
             </div>
 
             {/* Pose Selection - show when user has uuid OR custom skin */}
@@ -1605,7 +1419,7 @@ export default function EditProfilePage() {
                         key={pose}
                         value={pose}
                         className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
-                          ? "border-primary bg-primary/5"
+                          ? "border-brand bg-brand/5"
                           : "border-muted hover:border-muted-foreground/30"
                           }`}
                       >
@@ -1649,8 +1463,8 @@ export default function EditProfilePage() {
               >
                 <RadioGroupPrimitive.Item
                   value="default"
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
-                    ? "bg-primary text-primary-foreground"
+                  className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${!formValues.slimSkin
+                    ? "bg-brand text-brand-foreground"
                     : "hover:bg-muted"
                     }`}
                 >
@@ -1658,8 +1472,8 @@ export default function EditProfilePage() {
                 </RadioGroupPrimitive.Item>
                 <RadioGroupPrimitive.Item
                   value="slim"
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
-                    ? "bg-primary text-primary-foreground"
+                  className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${formValues.slimSkin
+                    ? "bg-brand text-brand-foreground"
                     : "hover:bg-muted"
                     }`}
                 >
@@ -1683,8 +1497,8 @@ export default function EditProfilePage() {
                   <RadioGroupPrimitive.Item
                     key={option}
                     value={option}
-                    className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.capeDisplay === option
-                      ? "bg-primary text-primary-foreground"
+                    className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${formValues.capeDisplay === option
+                      ? "bg-brand text-brand-foreground"
                       : "hover:bg-muted"
                       }`}
                   >
@@ -1934,25 +1748,14 @@ export default function EditProfilePage() {
           title={t("meEdit.speedrunIntegration")}
         >
             <p className="text-sm text-muted-foreground">{t("meEdit.speedrunIntegrationDesc")}</p>
-            <div className="space-y-2">
-              <Label htmlFor="speedruncomUsername">{t("meEdit.speedrunUsername")}</Label>
-              <div className="flex items-center">
-                <span className="text-sm text-muted-foreground mr-2 shrink-0">
-                  speedrun.com/users/
-                </span>
-                <Input
-                  id="speedruncomUsername"
-                  value={formValues.speedruncomUsername}
-                  onChange={(e) => handleInputChange("speedruncomUsername", e.target.value)}
-                  placeholder={t("meEdit.speedrunUsernameExample")}
-                  maxLength={PROFILE_FIELD_LIMITS.speedruncomUsername}
-                  className="flex-1"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.speedrunUsernameHint")}
-              </p>
-            </div>
+            {/* 設定の入口はソーシャルリンクの Speedrun.com だけ。ここは読み取り結果の表示（下書きのリンクに追従する） */}
+            <p className="text-sm" id="speedruncom-linked">
+              {formValues.speedruncomUsername ? (
+                t("meEdit.speedrunLinkedFrom", { username: formValues.speedruncomUsername })
+              ) : (
+                <span className="text-muted-foreground">{t("meEdit.speedrunLinkedNone")}</span>
+              )}
+            </p>
         </PageSection>
 
         {/* Social Links Section（下書き。保存バーで一括保存） */}
@@ -2217,133 +2020,6 @@ export default function EditProfilePage() {
             )}
         </PageSection>
 
-        {/* Profile Settings */}
-        <PageSection
-          id="edit-settings"
-          icon={<Settings className="h-5 w-5 text-primary" aria-hidden="true" />}
-          title={t("meEdit.profileSettings")}
-          className="space-y-4"
-        >
-            <div className="space-y-2">
-              <Label htmlFor="profileVisibility">{t("meEdit.profileVisibility")}</Label>
-              <Select
-                value={formValues.profileVisibility}
-                onValueChange={(value) => handleInputChange("profileVisibility", value)}
-              >
-                <SelectTrigger id="profileVisibility" className="w-full">
-                  <SelectValue>{visibilityLabels[formValues.profileVisibility]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="public">
-                    {t("meEdit.profilePublic")}
-                  </SelectItem>
-                  <SelectItem value="unlisted">
-                    {t("meEdit.profileUnlisted")}
-                  </SelectItem>
-                  <SelectItem value="private">
-                    {t("meEdit.profilePrivate")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="defaultProfileTab">{t("meEdit.defaultTab")}</Label>
-              <Select
-                value={formValues.defaultProfileTab}
-                onValueChange={(value) => handleInputChange("defaultProfileTab", value)}
-              >
-                <SelectTrigger id="defaultProfileTab" className="w-full">
-                  <SelectValue>{defaultTabLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {SELECTABLE_PROFILE_TABS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(DEFAULT_PROFILE_TAB_LABEL_KEYS[value])}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.defaultTabHint")}
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <h3 className="text-base font-semibold">{t("meEdit.displaySettings")}</h3>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.displaySettingsHint")}
-              </p>
-
-              <div className="max-w-2xl space-y-3">
-                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
-                  <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showPacemanOnHome")}
-                  </Label>
-                  <Switch
-                    id="showPacemanOnHome"
-                    checked={formValues.showPacemanOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanOnHome: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
-                  <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showTwitchOnHome")}
-                  </Label>
-                  <Switch
-                    id="showTwitchOnHome"
-                    checked={formValues.showTwitchOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showTwitchOnHome: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
-                  <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showYoutubeOnHome")}
-                  </Label>
-                  <Switch
-                    id="showYoutubeOnHome"
-                    checked={formValues.showYoutubeOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showYoutubeOnHome: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
-                  <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showRankedStats")}
-                  </Label>
-                  <Switch
-                    id="showRankedStats"
-                    checked={formValues.showRankedStats}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showRankedStats: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
-                  <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showPacemanStats")}
-                  </Label>
-                  <Switch
-                    id="showPacemanStats"
-                    checked={formValues.showPacemanStats}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanStats: checked }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-        </PageSection>
-
         {/* Floating Save Bar（離脱時の警告も保存バーが持つ） */}
         <FloatingSaveBar
           hasChanges={hasChanges}
@@ -2352,102 +2028,6 @@ export default function EditProfilePage() {
           onReset={handleReset}
         />
       </div>
-
-      {/* Danger Zone */}
-      <PageSection
-        id="edit-danger"
-        icon={<AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />}
-        title={t("meEdit.dangerZone")}
-      >
-        <p className="text-sm text-muted-foreground">{t("meEdit.dangerZoneDesc")}</p>
-        <NoticeBanner tone="error" role="status" className="items-center">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 flex-1 basis-56">
-              <p className="font-medium">{t("meEdit.deleteAccount")}</p>
-              <p className="text-sm text-muted-foreground">
-                {t("meEdit.deleteAccountDesc")}
-              </p>
-            </div>
-            <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
-              setIsDeleteDialogOpen(open);
-              if (!open) setConfirmText("");
-            }}>
-              <DialogTrigger asChild>
-                <Button variant="destructive">
-                  {t("meEdit.deleteAccount")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-destructive">
-                    <AlertTriangle className="h-5 w-5" />
-                    {t("meEdit.confirmDeleteTitle")}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {t("meEdit.confirmDeleteDesc")}
-                  </DialogDescription>
-                </DialogHeader>
-                <deleteFetcher.Form method="post">
-                  <input type="hidden" name="_action" value="delete_account" />
-                  <div className="space-y-4 py-4">
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        {t("meEdit.cannotUndo")}
-                        {hasChanges && <> {t("meEdit.deleteDiscardNote")}</>}
-                      </AlertDescription>
-                    </Alert>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmText">
-                        {t("meEdit.confirmInput", { value: user.mcid || user.slug })}
-                      </Label>
-                      <Input
-                        id="confirmText"
-                        name="confirmText"
-                        value={confirmText}
-                        onChange={(e) => setConfirmText(e.target.value)}
-                        placeholder={user.mcid || user.slug}
-                        autoComplete="off"
-                      />
-                    </div>
-                    {deleteData && "error" in deleteData && deleteData.action === "delete" && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{deleteData.error}</AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsDeleteDialogOpen(false)}
-                    >
-                      {t("meEdit.cancel")}
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="destructive"
-                      disabled={confirmText !== (user.mcid || user.slug) || isDeleting}
-                      // 削除後の遷移を未保存警告（useBlocker）に止められないよう、下書きを先に破棄する
-                      onClick={handleReset}
-                    >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {t("meEdit.deleting")}
-                        </>
-                      ) : (
-                        t("meEdit.deletePermanently")
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </deleteFetcher.Form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </NoticeBanner>
-      </PageSection>
     </div>
   );
 }

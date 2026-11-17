@@ -35,7 +35,7 @@
 | 変更対象 | ワーカー |
 |---|---|
 | `/keybindings*`・`/playground`・`/me/{keybindings,devices,presets,import,items,search-craft}`／仮想キーボード・リマップ・プリセット・サーチクラフト | `keybindings-worker` |
-| `/player/:slug*`・`/me/{index,edit,playstyle,records}`・`/browse`・`/compare`・`/favorites`・`/random-player`／スキン・アバター・リアクション | `profiles-worker` |
+| `/player/:slug*`・`/me/{index,edit,account,playstyle,records}`・`/browse`・`/compare`・`/favorites`・`/random-player`／スキン・アバター・リアクション | `profiles-worker` |
 | `/guides/*`・`/my-guides/*`／TipTap エディタ・ガイド画像・いいね | `guides-worker` |
 | `/`（ホーム）・`/paces`・`/live`・`/videos`・`/rankings`・`/stats`／`api/cron/*`・PaceMan・外部統計 | `rankings-worker` |
 | `/login`・`/onboarding`・`/developers*`・`/feedback`・`api/*`（cron 以外）・共通レイアウト・`app/root.tsx`・`app/app.css`・**`app/lib/schema.ts`** | `platform-worker` |
