@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ import {
   X,
   GripVertical,
   Repeat,
+  Search,
 } from "lucide-react";
 import {
   DndContext,
@@ -873,7 +875,13 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   keyboardLayout,
   createCraft,
   createLoop,
+  emptyState = false,
 }: {
+  /**
+   * true のとき、クラフトが0件の間は区間のブロックを出さず、最初の1件を足す入口だけの
+   * 空状態を出す（/me/search-craft 用。Playground・テンプレートエディタは既定の false のまま）
+   */
+  emptyState?: boolean;
   crafts: T[];
   onCraftsChange: (next: T[]) => void;
   loops: L[];
@@ -1114,6 +1122,38 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   const isLoopDragging = activeDrag?.type === "loop";
   const totalCraftCount = crafts.length;
 
+  // 空状態の「最初のアイテムを追加」を押すとボタンごと消えるので、フォーカスを新しい1件目の入力欄へ移す
+  const boardRef = useRef<HTMLDivElement>(null);
+  const focusFirstEntryRef = useRef(false);
+  useEffect(() => {
+    if (!focusFirstEntryRef.current || totalCraftCount === 0) return;
+    focusFirstEntryRef.current = false;
+    boardRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, [totalCraftCount]);
+
+  if (emptyState && totalCraftCount === 0) {
+    return (
+      <EmptyState
+        icon={<Search className="h-12 w-12" aria-hidden="true" />}
+        title={t("meSearchCraft.emptyBoardTitle")}
+        description={t("meSearchCraft.emptyBoardDescription")}
+        action={
+          <Button
+            type="button"
+            className="max-sm:min-h-11"
+            onClick={() => {
+              focusFirstEntryRef.current = true;
+              handleAddCraft(null);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("meSearchCraft.addFirstEntry")}
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
     <DndContext
       id={dndContextId}
@@ -1124,7 +1164,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="space-y-4">
+      <div ref={boardRef} className="space-y-4">
         {/* 操作の説明は区間ごとに繰り返さず、ここで1回だけ出す */}
         <p className="text-xs text-muted-foreground">
           {t("meSearchCraft.boardHint")}

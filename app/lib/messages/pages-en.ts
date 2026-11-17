@@ -2063,7 +2063,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     addLoopAria: "Add loop to {timing}",
     deleteEntryAria: "Delete this entry",
     deleteLoopAria: "Delete loop {index}",
-    publishNeedsEntry: "Add at least one search-craft entry to publish a template.",
+    emptyBoardTitle: "No search crafts yet",
+    emptyBoardDescription: "Add your first item to arrange and edit them by stage. You can publish them as a template once you have at least one.",
+    addFirstEntry: "Add your first item",
     listTitle: "Search crafts by segment",
   },
   /** Key-press-order visualization modal (search-craft-key-sequence-dialog.tsx). Shared by both

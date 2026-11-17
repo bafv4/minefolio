@@ -2031,7 +2031,9 @@ export const PAGES_JA = {
     addLoopAria: "{timing} にLoopを追加",
     deleteEntryAria: "このエントリを削除",
     deleteLoopAria: "Loop {index} を削除",
-    publishNeedsEntry: "サーチクラフトのエントリが1件以上あるとテンプレートとして公開できます。",
+    emptyBoardTitle: "サーチクラフトはまだありません",
+    emptyBoardDescription: "最初のアイテムを追加すると、区間ごとに並べて編集できます。1件以上あるとテンプレートとして公開できます。",
+    addFirstEntry: "最初のアイテムを追加",
     listTitle: "区間ごとのサーチクラフト",
   },
   /** キー入力順の可視化モーダル（search-craft-key-sequence-dialog.tsx）。

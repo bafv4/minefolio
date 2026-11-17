@@ -26,7 +26,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
     );
   }
   return (
-    <div className="rounded-xl border border-dashed bg-card/50 text-center py-12 text-muted-foreground">
+    <div className="rounded-xl border border-dashed bg-card/50 px-4 text-center py-12 sm:px-6 text-muted-foreground">
       <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <div className="space-y-1">
         <Title className="text-lg font-medium text-foreground">{title}</Title>

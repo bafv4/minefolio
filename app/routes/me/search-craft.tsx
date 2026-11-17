@@ -617,33 +617,15 @@ export default function SearchCraftPage() {
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>
-        <div className="flex flex-col gap-1.5 sm:items-end">
-          {crafts.length === 0 ? (
-            // エントリが無いと公開できる物が無いので、押せなくして理由を出す
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                disabled
-                aria-describedby="publish-template-reason"
-                className="w-full sm:w-auto h-11 sm:h-10"
-              >
-                <Share2 className="mr-2 h-4 w-4" />
-                {t("meSearchCraft.publishAsTemplate")}
-              </Button>
-              <p id="publish-template-reason" className="text-xs text-muted-foreground">
-                {t("meSearchCraft.publishNeedsEntry")}
-              </p>
-            </>
-          ) : (
-            <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
-              <Link to="/my-guides/templates">
-                <Share2 className="mr-2 h-4 w-4" />
-                {t("meSearchCraft.publishAsTemplate")}
-              </Link>
-            </Button>
-          )}
-        </div>
+        {/* エントリが無いうちは公開できる物が無いので、ボタンは出さない（空状態が理由を伝える） */}
+        {crafts.length > 0 && (
+          <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
+            <Link to="/my-guides/templates">
+              <Share2 className="mr-2 h-4 w-4" />
+              {t("meSearchCraft.publishAsTemplate")}
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* プリセットセレクター */}
@@ -674,6 +656,7 @@ export default function SearchCraftPage() {
         remaps={remaps}
         createCraft={createCraft}
         createLoop={createLoop}
+        emptyState
       />
       </PageSection>
       </div>
