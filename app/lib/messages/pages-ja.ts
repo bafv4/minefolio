@@ -1728,6 +1728,7 @@ export const PAGES_JA = {
     gameLanguage: "言語",
     importedSuccessfully: "設定が正常にインポートされました。",
     importButton: "インポート",
+    importButtonAria: "インポート: {name}",
     legacyNotFound: "レガシーデータが見つかりません",
     legacyImportFailed: "インポート中にエラーが発生しました",
     /** 設定インポートのダイアログ（components/import-dialog.tsx） */
@@ -2058,6 +2059,10 @@ export const PAGES_JA = {
     presetDeleted: "プリセットを削除しました",
     lastPresetDeleteWarning: "このプリセットは最後の1件です。削除すると現在の設定（キー配置・デバイス設定・アイテム配置・サーチクラフト等）もすべて削除されます。",
     deleteAria: "プリセット「{name}」を削除",
+    editAria: "プリセット「{name}」を編集する",
+    setMainAria: "プリセット「{name}」をメインに設定",
+    notMainNotice: "このプリセットはメインではないため、保存しても走者画面には出ません",
+    setMainDisabledHint: "未保存の変更があります。保存または破棄してからメインに設定してください",
     cannotDeleteActive: "編集中のプリセットは削除できません。別のプリセットを編集対象にしてから削除してください。",
     cannotDeleteMain: "メインのプリセットは削除できません。先に別のプリセットをメインに設定してください。",
     mainBadge: "メイン",

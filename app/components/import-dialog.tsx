@@ -194,7 +194,13 @@ export function ImportDialog({ source, targetPresetName, onSuccess }: ImportDial
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" className="max-sm:min-h-11">
+        <Button
+          variant="outline"
+          className="max-sm:min-h-11"
+          aria-label={t("meImport.importButtonAria", {
+            name: source === "remap" ? t("meImport.remapTitle") : t("meImport.minecraftTitle"),
+          })}
+        >
           <Upload className="h-4 w-4 mr-2" />
           {t("meImport.importButton")}
         </Button>

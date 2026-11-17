@@ -1264,7 +1264,7 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.editAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
                               <Pencil className="h-4 w-4 sm:mr-1" />
                               <span className="hidden sm:inline">{t("mePresets.edit")}</span>
                             </Button>
@@ -1274,7 +1274,7 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="set-main" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.setMainAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
                               <Star className="h-4 w-4 sm:mr-1" />
                               <span className="hidden sm:inline">{t("mePresets.setMain")}</span>
                             </Button>

@@ -1748,6 +1748,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     gameLanguage: "Language",
     importedSuccessfully: "Your settings were imported.",
     importButton: "Import",
+    importButtonAria: "Import: {name}",
     legacyNotFound: "No legacy data found",
     legacyImportFailed: "An error occurred during the import",
     dialogTitle: "Import settings",
@@ -2091,6 +2092,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     lastPresetDeleteWarning:
       "This is your last preset. Deleting it also deletes your current settings (controls, devices, item layouts, search-craft, and so on).",
     deleteAria: "Delete preset \"{name}\"",
+    editAria: "Edit preset \"{name}\"",
+    setMainAria: "Set preset \"{name}\" as main",
+    notMainNotice: "This preset is not your main preset, so saving changes will not show them on your runner page",
+    setMainDisabledHint: "You have unsaved changes. Save or discard them before setting as main",
     cannotDeleteActive:
       "You can't delete the preset you're editing. Switch to another preset first.",
     cannotDeleteMain:
