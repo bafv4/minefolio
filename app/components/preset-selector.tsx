@@ -174,7 +174,12 @@ export function PresetSelector({
                           <span className="truncate">…</span>
                         </div>
                       ) : (
-                        <SelectValue placeholder={t("mePresets.selectorPlaceholder")} />
+                        <SelectValue placeholder={t("mePresets.selectorPlaceholder")}>
+                          {/* Radix は SSR では選択項目の文字を描けないので、HTML の時点から値が入るよう明示する */}
+                          {activePreset
+                            ? `${activePreset.name}${activePreset.isMain ? t("mePresets.mainSuffix") : ""}`
+                            : undefined}
+                        </SelectValue>
                       )}
                     </SelectTrigger>
                     <SelectContent>

@@ -194,6 +194,9 @@ async function restoreSearchCraftLoopsFromSnapshot(
   );
 }
 
+// 旧実装が apply-preset（編集先の切替）で記録した履歴の文言（ja / en）。% は名前部分
+const LEGACY_APPLY_HISTORY_PATTERNS = ["プリセット「%」を適用しました", 'Applied preset "%"'];
+
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -244,7 +247,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
     }),
     db.query.configHistory.findMany({
-      where: eq(configHistory.userId, user.id),
+      // 「編集先の切替」は履歴に出さない。今は記録しないが、過去の行（旧文言「…を適用しました」）が
+      // 残っているため、文言で除外する（既存データは書き換えない）
+      where: and(
+        eq(configHistory.userId, user.id),
+        ...LEGACY_APPLY_HISTORY_PATTERNS.map((p) => sql`${configHistory.changeDescription} not like ${p}`),
+      ),
       orderBy: [desc(configHistory.createdAt)],
       limit: 20,
       // 履歴表示が使う列だけ（previous_data / new_data の JSON は送らない）
@@ -819,13 +827,6 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
 
-    // 現在の設定をバックアップ（履歴用）。apply-preset で必要なのは
-    // user.keybindings だけのため、8リレーション付きではなくこの1本だけ取得する
-    const liveKeybindings = await db.query.keybindings.findMany({
-      where: eq(keybindings.userId, user.id),
-    });
-    const previousKeybindings = JSON.stringify(liveKeybindings);
-
     await db.transaction(async (tx) => {
       // ライブテーブル全クリア（フルシンク）
       // playerConfigs も削除対象に含める（残すと playerConfigData=null のプリセット適用時に
@@ -964,17 +965,7 @@ export async function action({ request }: Route.ActionArgs) {
         .set({ isActive: true, updatedAt: now })
         .where(eq(configPresets.id, presetId));
 
-      // 履歴に記録
-      await tx.insert(configHistory).values({
-        id: createId(),
-        userId: user.id,
-        changeType: "preset_switch",
-        changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
-        previousData: previousKeybindings,
-        newData: preset.keybindingsData,
-        // 編集対象の切替は公開内容を変えない（presetId は入れない）
-        createdAt: now,
-      });
+      // 編集先の切替は変更履歴に記録しない（公開内容も設定内容も変えないため、履歴が切替の繰り返しで埋まる）
     });
 
     return { success: true, message: t("mePresets.appliedPreset", { name: preset.name }) };
@@ -1047,6 +1038,9 @@ export default function PresetsPage() {
     remap: t("mePresets.remap"),
     preset_switch: t("mePresets.preset"),
   };
+
+  // 種別がすべて同じ（例: 全行「プリセット」）なら、ラベルは情報にならないので出さない
+  const showHistoryTypeLabel = new Set(history.map((h) => h.changeType)).size > 1;
 
   return (
     <div className="space-y-7 sm:space-y-8">
@@ -1259,14 +1253,14 @@ export default function PresetsPage() {
                           {t("mePresets.updatedPrefix")} {formatRelativeDate(t, new Date(preset.updatedAt))}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                         {!preset.isActive && (
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.editAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
-                              <Pencil className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">{t("mePresets.edit")}</span>
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.editAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11">
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                              {t("mePresets.edit")}
                             </Button>
                           </fetcher.Form>
                         )}
@@ -1274,9 +1268,9 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="set-main" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.setMainAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11 max-sm:min-w-11">
-                              <Star className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">{t("mePresets.setMain")}</span>
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.setMainAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11">
+                              <Star className="h-4 w-4" aria-hidden="true" />
+                              {t("mePresets.setMain")}
                             </Button>
                           </fetcher.Form>
                         )}
@@ -1368,9 +1362,11 @@ export default function PresetsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm">{entry.changeDescription}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs">
-                        {changeTypeLabels[entry.changeType] ?? entry.changeType}
-                      </Badge>
+                      {showHistoryTypeLabel && (
+                        <Badge variant="outline" className="text-xs">
+                          {changeTypeLabels[entry.changeType] ?? entry.changeType}
+                        </Badge>
+                      )}
                       <time
                         dateTime={new Date(entry.createdAt).toISOString()}
                         className="text-xs text-muted-foreground tabular-nums"
